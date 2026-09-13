@@ -27,11 +27,11 @@ export interface GitHubPublicationProposalStore {
 
 const proposalRowSchema = z
   .object({
-    proposalDigest: z.string(),
-    kind: z.enum(["fresh-repository", "draft-pull-request"]),
-    idempotencyKey: z.string(),
-    proposal: z.unknown(),
     createdAt: z.date(),
+    idempotencyKey: z.string(),
+    kind: z.enum(["fresh-repository", "draft-pull-request"]),
+    proposal: z.unknown(),
+    proposalDigest: z.string(),
   })
   .strict();
 
@@ -75,11 +75,11 @@ export function parseGitHubPublicationProposalRow(input: unknown): GitHubPublica
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function proposalValues(proposal: GitHubPublicationProposal, now: Date) {
   return {
-    proposalDigest: proposal.digest,
-    kind: proposalKind(proposal),
-    idempotencyKey: proposal.idempotencyKey,
-    proposal,
     createdAt: now,
+    idempotencyKey: proposal.idempotencyKey,
+    kind: proposalKind(proposal),
+    proposal,
+    proposalDigest: proposal.digest,
   };
 }
 

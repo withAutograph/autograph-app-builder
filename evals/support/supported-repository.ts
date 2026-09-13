@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 
 export const SUPPORTED_TEMPLATE_WORKFLOW_FIXTURE = [
   "jobs:",
@@ -35,15 +35,15 @@ export const SUPPORTED_TEMPLATE_WORKFLOW_FIXTURE = [
  */
 export const ARRUSTED_COMPONENT_COMPOSITION_MANIFEST = `${JSON.stringify(
   {
-    version: 1,
     kind: "arrusted-component-composition-v1",
-    publicImports: ["@autograph/components", "@autograph/compositions", "@autograph/icons"],
-    tokenEntrypoints: ["@autograph/design-system/tokens.css"],
     providers: ["@autograph/components/providers"],
+    publicImports: ["@autograph/components", "@autograph/compositions", "@autograph/icons"],
     routeGlue: {
       allowedFiles: ["app/layout.tsx", "app/page.tsx"],
       allowedStyleFiles: [],
     },
+    tokenEntrypoints: ["@autograph/design-system/tokens.css"],
+    version: 1,
   },
   null,
   2,
@@ -69,11 +69,11 @@ function fixtureGit(root: string, args: string[]): void {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createSupportedRepositoryFixture(): string {
   if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION === "1")
-    mkdirSync(join(tmpdir(), "autograph-app-builder-branch-publication"), {
-      recursive: true,
+    mkdirSync(path.join(tmpdir(), "autograph-app-builder-branch-publication"), {
       mode: 0o700,
+      recursive: true,
     });
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "app-builder-eval-repository-")));
+  const root = realpathSync(mkdtempSync(path.join(tmpdir(), "app-builder-eval-repository-")));
   const files: Record<string, string> = {
     ".config/mise/config.toml": [
       '[tasks."create:app"]',
@@ -91,22 +91,6 @@ export function createSupportedRepositoryFixture(): string {
       '[tasks."app:test"]',
       'run = \'bun .config/mise/scripts/repository/app-validation.ts test "$usage_app" "$usage_shard"\'',
     ].join("\n"),
-    ".config/mise/tasks/repository/exec": [
-      "#!/usr/bin/env bash",
-      `exec mise exec -- bun ".config/mise/scripts/repository/$1" "\${@:2}"`,
-      "",
-    ].join("\n"),
-    ".github/workflows/cd.yml": SUPPORTED_TEMPLATE_WORKFLOW_FIXTURE,
-    "microfrontends.json": "{}\n",
-    "package.json": `${JSON.stringify(
-      {
-        name: "@autograph/supported-repository-fixture",
-        private: true,
-        dependencies: { next: "16.1.6" },
-      },
-      null,
-      2,
-    )}\n`,
     ".config/mise/scripts/repository/app-contract.ts": 'const source = { runtime: "nextjs" };\n',
     ".config/mise/scripts/repository/app-identity.ts": `const scope = "@autograph/\${appId}";\n`,
     ".config/mise/scripts/repository/app-validation.ts": "export {};\n",
@@ -118,14 +102,30 @@ export function createSupportedRepositoryFixture(): string {
       'const preflight = "mise run repository:preflight";',
       'const validation = ["mise run app:check-build <app-id>", "mise run app:test <app-id> <shard>"];',
     ].join("\n"),
+    ".config/mise/tasks/repository/exec": [
+      "#!/usr/bin/env bash",
+      `exec mise exec -- bun ".config/mise/scripts/repository/$1" "\${@:2}"`,
+      "",
+    ].join("\n"),
     ".config/turbo/generators/config.ts": 'const scope = "autograph";\n',
     ".config/turbo/generators/create-app.ts": "export {};\n",
     ".config/turbo/generators/templates/app/next.config.ts.hbs": "export default {};\n",
+    ".github/workflows/cd.yml": SUPPORTED_TEMPLATE_WORKFLOW_FIXTURE,
     "docs/component-composition.json": ARRUSTED_COMPONENT_COMPOSITION_MANIFEST,
+    "microfrontends.json": "{}\n",
+    "package.json": `${JSON.stringify(
+      {
+        dependencies: { next: "16.1.6" },
+        name: "@autograph/supported-repository-fixture",
+        private: true,
+      },
+      null,
+      2,
+    )}\n`,
   };
-  for (const [path, content] of Object.entries(files)) {
-    const absolute = join(root, path);
-    mkdirSync(join(absolute, ".."), { recursive: true });
+  for (const [relativePath, content] of Object.entries(files)) {
+    const absolute = path.join(root, relativePath);
+    mkdirSync(path.join(absolute, ".."), { recursive: true });
     writeFileSync(absolute, content);
   }
   fixtureGit(root, ["init", "-b", "main"]);

@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import path from "node:path";
 
 import type { UiPreviewInput } from "../../../lib/agent/ui-preview";
 import { validateUiPreview } from "../../../lib/agent/ui-preview";
@@ -16,8 +16,8 @@ interface ExampleConfig {
 }
 
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
-async function text(root: string, path: string) {
-  return readFile(resolve(root, path), "utf-8");
+async function text(root: string, relativePath: string) {
+  return readFile(path.resolve(root, relativePath), "utf-8");
 }
 
 const exampleManifests: Record<
@@ -33,7 +33,86 @@ const exampleManifests: Record<
     | "implementationNotes"
   >
 > = {
+  "compensation-planning": {
+    assumptions: [
+      {
+        id: "calculation-basis",
+        routes: ["/"],
+        statement:
+          "The proposed increase and employer tax rate apply to base salary; bonus and benefits remain fixed.",
+      },
+    ],
+    decisions: [
+      {
+        id: "review-after-edit",
+        routes: ["/"],
+        statement:
+          "A planning decision can be recorded only after valid edited assumptions are applied.",
+      },
+    ],
+    fixtureFacts: [
+      {
+        id: "synthetic-proposal",
+        routes: ["/"],
+        statement:
+          "Taylor Nguyen has a synthetic L5 draft with editable cost and policy assumptions.",
+      },
+    ],
+    implementationNotes: [
+      {
+        productionMeaning:
+          "Production must calculate authoritative current and proposed totals from governed compensation inputs.",
+        routes: ["/"],
+        visibleElement: "Editable assumptions and calculated package comparison",
+      },
+    ],
+    openQuestions: [
+      {
+        id: "band-policy",
+        routes: ["/"],
+        statement:
+          "The fixture does not define whether an amount above midpoint needs an additional approval.",
+      },
+    ],
+    productionComponents: ["Button", "Card", "PageHeader", "StatusPill", "Typography"].map(
+      (name) => ({ name, source: "@autograph/components" as const }),
+    ),
+    productionCompositions: [{ name: "SchemaFormComposition", source: "@autograph/compositions" }],
+  },
   "spend-import-review": {
+    assumptions: [
+      {
+        id: "in-memory-effects",
+        routes: ["/"],
+        statement:
+          "Mapping, save, and exception resolution effects exist only in the preview session.",
+      },
+    ],
+    decisions: [
+      {
+        id: "mapping-first",
+        routes: ["/"],
+        statement:
+          "A reviewer sees derived preview rows and counts from the current mapping before the simulated save.",
+      },
+    ],
+    fixtureFacts: [
+      {
+        id: "synthetic-batch",
+        routes: ["/"],
+        statement:
+          "The AP export has 42 synthetic rows: 38 initially ready and 4 requiring human review.",
+      },
+    ],
+    implementationNotes: [
+      {
+        productionMeaning:
+          "Production must derive imported records and review counts from the accepted mapping while preserving source evidence.",
+        routes: ["/"],
+        visibleElement: "Derived import preview and save outcome",
+      },
+    ],
+    openQuestions: [],
     productionComponents: [
       "Button",
       "Card",
@@ -48,85 +127,6 @@ const exampleManifests: Record<
     productionCompositions: [
       { name: "DataTableComposition", source: "@autograph/compositions" },
       { name: "RecordDetailPanel", source: "@autograph/compositions" },
-    ],
-    fixtureFacts: [
-      {
-        id: "synthetic-batch",
-        statement:
-          "The AP export has 42 synthetic rows: 38 initially ready and 4 requiring human review.",
-        routes: ["/"],
-      },
-    ],
-    decisions: [
-      {
-        id: "mapping-first",
-        statement:
-          "A reviewer sees derived preview rows and counts from the current mapping before the simulated save.",
-        routes: ["/"],
-      },
-    ],
-    assumptions: [
-      {
-        id: "in-memory-effects",
-        statement:
-          "Mapping, save, and exception resolution effects exist only in the preview session.",
-        routes: ["/"],
-      },
-    ],
-    openQuestions: [],
-    implementationNotes: [
-      {
-        visibleElement: "Derived import preview and save outcome",
-        productionMeaning:
-          "Production must derive imported records and review counts from the accepted mapping while preserving source evidence.",
-        routes: ["/"],
-      },
-    ],
-  },
-  "compensation-planning": {
-    productionComponents: ["Button", "Card", "PageHeader", "StatusPill", "Typography"].map(
-      (name) => ({ name, source: "@autograph/components" as const }),
-    ),
-    productionCompositions: [{ name: "SchemaFormComposition", source: "@autograph/compositions" }],
-    fixtureFacts: [
-      {
-        id: "synthetic-proposal",
-        statement:
-          "Taylor Nguyen has a synthetic L5 draft with editable cost and policy assumptions.",
-        routes: ["/"],
-      },
-    ],
-    decisions: [
-      {
-        id: "review-after-edit",
-        statement:
-          "A planning decision can be recorded only after valid edited assumptions are applied.",
-        routes: ["/"],
-      },
-    ],
-    assumptions: [
-      {
-        id: "calculation-basis",
-        statement:
-          "The proposed increase and employer tax rate apply to base salary; bonus and benefits remain fixed.",
-        routes: ["/"],
-      },
-    ],
-    openQuestions: [
-      {
-        id: "band-policy",
-        statement:
-          "The fixture does not define whether an amount above midpoint needs an additional approval.",
-        routes: ["/"],
-      },
-    ],
-    implementationNotes: [
-      {
-        visibleElement: "Editable assumptions and calculated package comparison",
-        productionMeaning:
-          "Production must calculate authoritative current and proposed totals from governed compensation inputs.",
-        routes: ["/"],
-      },
     ],
   },
 };
@@ -148,30 +148,30 @@ export async function loadDesignQualityExample(
   ]);
   const input: UiPreviewInput = {
     appId: config.appId,
-    routes: [config.route],
+    catalogGaps: [],
     files: [
-      { path: config.entry, content: source },
-      { path: config.stateTarget, content: stateSource },
+      { content: source, path: config.entry },
+      { content: stateSource, path: config.stateTarget },
       {
-        path: "src/fixture.ts",
         content: `import type { ${id === "spend-import-review" ? "SpendFixture" : "CompensationFixture"} as Fixture } from ${JSON.stringify(`./${config.stateTarget.split("/").at(-1)?.replace(/\.ts$/u, "")}`)};\nconst fixture: Fixture = ${fixtureSource.trim()};\nexport default fixture;\n`,
+        path: "src/fixture.ts",
       },
     ],
-    catalogGaps: [],
     manifest: {
-      version: 1,
+      productionIcons: [],
       screens: [
         {
+          entry: config.entry,
           id,
+          route: config.route,
           title:
             id === "spend-import-review" ? "Spend import review" : "Compensation planning review",
-          route: config.route,
-          entry: config.entry,
         },
       ],
-      productionIcons: [],
+      version: 1,
       ...exampleManifests[id],
     },
+    routes: [config.route],
   };
   validateUiPreview(input);
   return input;

@@ -88,13 +88,13 @@ export type PreparedVercelAccess =
     };
 
 const unavailable = (): PreparedVercelAccess => ({
-  status: "provider-unavailable",
   action: "retry",
   retryable: true,
+  status: "provider-unavailable",
 });
 const reconnect = (): PreparedVercelAccess => ({
-  status: "authorization-required",
   action: "reconnect",
+  status: "authorization-required",
 });
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -156,24 +156,23 @@ export async function readPreparedVercelAccess(input: {
         project.scope.id !== binding.scopeId ||
         project.scope.type !== binding.scopeType)
     )
-      return { status: "resource-unavailable", action: "review-selection" };
-    const path = project
-      ? `/v9/projects/${encodeURIComponent(project.projectId)}`
-      : binding.scopeType === "team"
-        ? `/v2/teams/${encodeURIComponent(binding.scopeId)}`
-        : "/v2/user";
+      return { action: "review-selection", status: "resource-unavailable" };
+    let path = "/v2/user";
+    if (project) path = `/v9/projects/${encodeURIComponent(project.projectId)}`;
+    else if (binding.scopeType === "team")
+      path = `/v2/teams/${encodeURIComponent(binding.scopeId)}`;
     const url = new URL(`${input.apiOrigin ?? "https://api.vercel.com"}${path}`);
     if (project && binding.scopeType === "team") url.searchParams.set("teamId", binding.scopeId);
     const response = await (input.fetch ?? fetch)(url, {
-      method: "GET",
-      redirect: "error",
       cache: "no-store",
-      signal: AbortSignal.timeout(20_000),
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${token}`,
         "User-Agent": "autograph-app-builder",
       },
+      method: "GET",
+      redirect: "error",
+      signal: AbortSignal.timeout(20_000),
     });
     // Classify status before reading provider bodies, which can contain secrets
     // or an HTML outage page. Match the existing provider credential semantics.
@@ -183,7 +182,7 @@ export async function readPreparedVercelAccess(input: {
     }
     if (response.status === 404) {
       await response.body?.cancel();
-      return { status: "resource-unavailable", action: "review-selection" };
+      return { action: "review-selection", status: "resource-unavailable" };
     }
     if ([401, 403].includes(response.status)) {
       await response.body?.cancel();
@@ -195,17 +194,17 @@ export async function readPreparedVercelAccess(input: {
     }
     const body = await boundedJson(response);
     const scope: VercelScope = {
-      installationId,
-      type: binding.scopeType,
       id: binding.scopeId,
+      installationId,
       slug: binding.slug,
+      type: binding.scopeType,
     };
     if (project) {
       const observed = z
         .object({
+          accountId: z.string().min(1).optional(),
           id: z.string().min(1),
           name: z.string().min(1),
-          accountId: z.string().min(1).optional(),
         })
         .parse(body);
       if (
@@ -214,9 +213,9 @@ export async function readPreparedVercelAccess(input: {
       )
         return unavailable();
       return {
-        status: "ready",
-        scope,
         project: { id: observed.id, name: observed.name },
+        scope,
+        status: "ready",
       };
     }
     const observed =
@@ -224,7 +223,7 @@ export async function readPreparedVercelAccess(input: {
         ? z.object({ id: z.string() }).parse(body)
         : z.object({ user: z.object({ id: z.string() }) }).parse(body).user;
     if (observed.id !== binding.scopeId) return unavailable();
-    return { status: "ready", scope };
+    return { scope, status: "ready" };
   } catch {
     return unavailable();
   }
@@ -249,8 +248,8 @@ export function createPreparedAppContextReader(input: {
         ? input
             .github(sessionAuth, withPreparedGitHubSelection({ repository }, intent))
             .catch((): RepositoryAccessResult => ({
-              status: "provider-unavailable",
               repository: parseRepositoryReference(repository),
+              status: "provider-unavailable",
             }))
         : Promise.resolve(),
       input.vercel(sessionAuth, intent).catch(unavailable),
@@ -268,48 +267,6 @@ export function createPreparedAppContextReader(input: {
     // Explicit projection: never spread auth, credentials, raw provider payloads,
     // or the provisioning journal into durable model-visible output.
     return {
-      status: "prepared" as const,
-      app: {
-        name: intent.appName,
-        id: intent.appId,
-        brief: intent.brief,
-        modelId: intent.modelId,
-        connections: [...intent.connections],
-      },
-      repository: {
-        requestedName: intent.repository.requestedName,
-        private: intent.repository.private,
-        ...(repository ? { fullName: repository } : {}),
-      },
-      resources: {
-        github:
-          intent.provisioning?.github.status === "succeeded"
-            ? {
-                repositoryId: intent.provisioning.github.repositoryId,
-                fullName: intent.provisioning.github.fullName,
-                installationId: intent.provisioning.github.installationId,
-              }
-            : undefined,
-        vercel:
-          intent.provisioning?.vercel.status === "succeeded"
-            ? {
-                projectId: intent.provisioning.vercel.projectId,
-                name: intent.provisioning.vercel.name,
-                installationId: intent.provisioning.vercel.installationId,
-                scope: {
-                  id: intent.provisioning.vercel.scope.id,
-                  type: intent.provisioning.vercel.scope.type,
-                  slug: intent.provisioning.vercel.scope.slug,
-                },
-              }
-            : undefined,
-      },
-      provisioning: intent.provisioning
-        ? {
-            github: intent.provisioning.github.status,
-            vercel: intent.provisioning.vercel.status,
-          }
-        : undefined,
       access: {
         github: github
           ? {
@@ -317,9 +274,9 @@ export function createPreparedAppContextReader(input: {
               ...(github.status === "ready"
                 ? {
                     scope: {
-                      installationId: github.scope.installationId,
                       accountLogin: github.scope.accountLogin,
                       accountType: github.scope.accountType,
+                      installationId: github.scope.installationId,
                     },
                   }
                 : {}),
@@ -339,6 +296,48 @@ export function createPreparedAppContextReader(input: {
             ? { ...vercel, reconnectUrl: reconnectUrl("vercel") }
             : vercel,
       },
+      app: {
+        brief: intent.brief,
+        connections: [...intent.connections],
+        id: intent.appId,
+        modelId: intent.modelId,
+        name: intent.appName,
+      },
+      provisioning: intent.provisioning
+        ? {
+            github: intent.provisioning.github.status,
+            vercel: intent.provisioning.vercel.status,
+          }
+        : undefined,
+      repository: {
+        private: intent.repository.private,
+        requestedName: intent.repository.requestedName,
+        ...(repository ? { fullName: repository } : {}),
+      },
+      resources: {
+        github:
+          intent.provisioning?.github.status === "succeeded"
+            ? {
+                fullName: intent.provisioning.github.fullName,
+                installationId: intent.provisioning.github.installationId,
+                repositoryId: intent.provisioning.github.repositoryId,
+              }
+            : undefined,
+        vercel:
+          intent.provisioning?.vercel.status === "succeeded"
+            ? {
+                installationId: intent.provisioning.vercel.installationId,
+                name: intent.provisioning.vercel.name,
+                projectId: intent.provisioning.vercel.projectId,
+                scope: {
+                  id: intent.provisioning.vercel.scope.id,
+                  slug: intent.provisioning.vercel.scope.slug,
+                  type: intent.provisioning.vercel.scope.type,
+                },
+              }
+            : undefined,
+      },
+      status: "prepared" as const,
     };
   };
 }
@@ -347,13 +346,13 @@ export function createPreparedAppContextReader(input: {
 export async function readPreparedAppContext(sessionAuth: unknown) {
   const { readPreparedHandoffContext } = await import("./handoff-context");
   return createPreparedAppContextReader({
-    readHandoff: readPreparedHandoffContext,
     async github(auth, value) {
       const { repositoryAccessRuntimeForSession } =
         await import("./deployment-repository-access-runtime");
       const runtime = await repositoryAccessRuntimeForSession(auth);
       return runtime.classify(value);
     },
+    readHandoff: readPreparedHandoffContext,
     async vercel(auth, intent) {
       const { authority, principal } = exactForwardedSessionAuthority(auth);
       const [
@@ -372,8 +371,8 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
         import("../integrations/provider-emulation-fetch"),
       ]);
       return readPreparedVercelAccess({
-        intent,
         authority,
+        intent,
         async readCredential(value) {
           const environment = providerEmulationEnvironment(process.env);
           const config = readVercelIntegrationEnvironment(environment);
@@ -391,8 +390,8 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
             throw new Error("Provider authority is unavailable.");
           return readActiveVercelInstallationToken({
             ...value,
-            database,
             config,
+            database,
           });
         },
         ...(() => {

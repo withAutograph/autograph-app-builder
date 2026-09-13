@@ -19,10 +19,10 @@ const runtimeRequirementIds = new Set<string>(
 
 export const runtimeReceiptSchema = z
   .object({
-    schemaVersion: z.literal("self-reproduction-runtime-receipt/v1"),
-    producer: z.literal("evaluator"),
-    side,
     observation: observationSchema,
+    producer: z.literal("evaluator"),
+    schemaVersion: z.literal("self-reproduction-runtime-receipt/v1"),
+    side,
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -35,24 +35,24 @@ export const runtimeReceiptSchema = z
 
 export const captureReceiptSchema = z
   .object({
-    side,
-    viewport: z.object({
-      name: z.enum(desktopViewports.map((item) => item.name)),
-      width: z.number().int().positive(),
-      height: z.number().int().positive(),
-    }),
-    state: z.enum(captureStates),
-    requirementId,
+    artifacts: observationSchema.shape.artifacts,
+    assertions: observationSchema.shape.assertions,
     disposition: z.enum([
       "observed",
       "missing-functionality",
       "infrastructure-unavailable",
       "not-run",
     ]),
-    reason: z.string().min(1),
-    assertions: observationSchema.shape.assertions,
-    artifacts: observationSchema.shape.artifacts,
     method: observationSchema.shape.method,
+    reason: z.string().min(1),
+    requirementId,
+    side,
+    state: z.enum(captureStates),
+    viewport: z.object({
+      height: z.number().int().positive(),
+      name: z.enum(desktopViewports.map((item) => item.name)),
+      width: z.number().int().positive(),
+    }),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -85,8 +85,8 @@ export interface ParityReceiptInput {
 // assessParity. Candidate-authored summaries never enter this boundary.
 export function parityEvidenceFromReceipts(input: ParityReceiptInput): ParityEvidence {
   const observations: Record<(typeof sides)[number], Observation[]> = {
-    reference: [],
     candidate: [],
+    reference: [],
   };
   for (const raw of input.runtimeReceipts ?? []) {
     const receipt = runtimeReceiptSchema.parse(raw);
@@ -98,11 +98,11 @@ export function parityEvidenceFromReceipts(input: ParityReceiptInput): ParityEvi
     observations[receiptSide].push(observation);
   }
   return parityEvidenceSchema.parse({
-    schemaVersion: parityVersion,
-    runId: input.runId,
-    producer: "evaluator",
-    fixtureVersion: 1,
-    reference: { ...input.reference, observations: observations.reference },
     candidate: { ...input.candidate, observations: observations.candidate },
+    fixtureVersion: 1,
+    producer: "evaluator",
+    reference: { ...input.reference, observations: observations.reference },
+    runId: input.runId,
+    schemaVersion: parityVersion,
   });
 }

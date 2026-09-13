@@ -22,9 +22,9 @@ describe("Preview Better Auth UI", () => {
   it("serializes complete and repeated auth-page search parameters", () => {
     const search = serializeAuthPageSearchParams({
       callbackURL: ["/workspace?source=one#first", "/workspace?source=two#second"],
-      redirectTo: "/auth/setting-up?callbackURL=%2Ffinal%3Fsource%3Dnested",
-      passkey: "unavailable",
       omitted: undefined,
+      passkey: "unavailable",
+      redirectTo: "/auth/setting-up?callbackURL=%2Ffinal%3Fsource%3Dnested",
     });
     const parsed = new URLSearchParams(search);
 
@@ -155,9 +155,9 @@ describe("Preview Better Auth UI", () => {
       value: { location: { search } },
     });
     const request = {
-      method: "POST",
+      body: JSON.stringify({ callbackURL: "/", provider: "github" }),
       headers: new Headers({ "content-type": "application/json" }),
-      body: JSON.stringify({ provider: "github", callbackURL: "/" }),
+      method: "POST",
     };
     const clientPlugin = oauthProviderClient();
     const onRequest = clientPlugin.fetchPlugins?.[0]?.hooks?.onRequest;

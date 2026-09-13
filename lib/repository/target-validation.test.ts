@@ -14,59 +14,59 @@ import {
 const digest = (value: string) => value.repeat(64).slice(0, 64);
 
 const apply: TargetApplyReceipt = {
-  version: 2,
-  sourceSha: "1".repeat(40),
-  sourceTree: "0".repeat(40),
-  sourceReceiptDigest: digest("1"),
-  eligibilityDigest: digest("2"),
-  workspaceDigest: digest("3"),
   appSpecDigest: digest("4"),
   appSpecPath: "prototype/example/app-spec.md",
+  appliedByCallId: "apply-call",
+  applyRoot: "/workspace/repository",
   artifactRevision: digest("5"),
+  changedContentDigest: digest("0"),
+  changes: [],
+  command: {
+    exitCode: 0,
+    name: "create-app",
+    stderrDigest: digest("2"),
+    stdoutDigest: digest("1"),
+  },
+  dependencyCacheContentDigest: digest("a"),
+  dependencyCacheDigest: `sha256:${digest("9")}`,
   dependencyReceiptDigest: digest("6"),
+  digest: digest("5"),
+  eligibilityDigest: digest("2"),
   identityDigest: digest("7"),
   imageDigest: `fixture@sha256:${digest("8")}`,
-  dependencyCacheDigest: `sha256:${digest("9")}`,
-  dependencyCacheContentDigest: digest("a"),
-  proposalDigest: digest("b"),
-  applyRoot: "/workspace/repository",
   planningTreeDigest: digest("c"),
-  preparedTreeDigest: digest("d"),
-  preTree: [],
   postTree: [],
-  preTreeDigest: digest("e"),
   postTreeDigest: digest("f"),
-  changes: [],
-  changedContentDigest: digest("0"),
-  command: {
-    name: "create-app",
-    exitCode: 0,
-    stdoutDigest: digest("1"),
-    stderrDigest: digest("2"),
-  },
-  appliedByCallId: "apply-call",
+  preTree: [],
+  preTreeDigest: digest("e"),
+  preparedTreeDigest: digest("d"),
+  proposalDigest: digest("b"),
+  sourceReceiptDigest: digest("1"),
+  sourceSha: "1".repeat(40),
+  sourceTree: "0".repeat(40),
   status: "applied",
   targetReceipt: {
-    version: 1,
     appId: "example",
     contractPath: "apps/example/app.contract.json",
-    workspacePath: "apps/example",
-    topology: {
-      path: "microfrontends.json",
-      oldDigest: digest("3"),
-      newDigest: digest("4"),
-    },
     mutations: ["apps/example", "microfrontends.json"],
-    recovered: false,
     omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
+    recovered: false,
+    topology: {
+      newDigest: digest("4"),
+      oldDigest: digest("3"),
+      path: "microfrontends.json",
+    },
+    version: 1,
+    workspacePath: "apps/example",
   },
-  digest: digest("5"),
+  version: 2,
+  workspaceDigest: digest("3"),
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sandboxFixture() {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  const run = vi.fn(async () => ({ exitCode: 0, stdout: "", stderr: "" }));
+  const run = vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: "" }));
   return {
     run,
     sandbox: {
@@ -82,16 +82,16 @@ describe("target validation", () => {
   it("reports a missing package script with bounded sanitized command output", async () => {
     const { sandbox } = sandboxFixture();
     const result = await executeProposalBoundValidation({
-      sandbox,
-      apply,
       appId: "example",
+      apply,
       attempt: createTargetValidationAttempt(apply, "missing-script"),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       executor: async () => ({
         exitCode: 1,
-        stdout: "",
         stderr: 'error: Script not found "check"\nsecret-test-value',
+        stdout: "",
       }),
+      sandbox,
     });
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected a command failure");
@@ -121,22 +121,22 @@ describe("target validation", () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const execute = vi.fn(async () => ({
       exitCode: 0,
-      stdout: "passed",
       stderr: "",
+      stdout: "passed",
     }));
 
     const result = await executeProposalBoundValidation({
-      sandbox,
-      executor: execute,
+      appId: "example",
       apply: currentApply,
       attempt,
-      appId: "example",
       dependencyLayout: {
-        version: 1,
         kind: "fixture",
         roots: [],
+        version: 1,
         workspaceLinks: [],
       },
+      executor: execute,
+      sandbox,
     });
 
     expect(result.ok).toBe(true);
@@ -148,29 +148,29 @@ describe("target validation", () => {
     const attempt = createTargetValidationAttempt(apply, "validation-call");
 
     const result = await executeProposalBoundValidation({
-      sandbox,
+      appId: "example",
+      apply,
+      attempt,
+      dependencyLayout: {
+        kind: "fixture",
+        roots: [],
+        version: 1,
+        workspaceLinks: [],
+      },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       executor: async () => ({
         exitCode: 1,
-        stdout: "",
         stderr: "repository command failed",
+        stdout: "",
       }),
-      apply,
-      attempt,
-      appId: "example",
-      dependencyLayout: {
-        version: 1,
-        kind: "fixture",
-        roots: [],
-        workspaceLinks: [],
-      },
+      sandbox,
     });
 
     expect(result).toMatchObject({
       ok: false,
       receipt: {
+        commandFailure: { exitCode: 1, name: "check-build" },
         reason: "command-failed",
-        commandFailure: { name: "check-build", exitCode: 1 },
       },
     });
   });
@@ -183,24 +183,24 @@ describe("target validation", () => {
     ).toEqual([
       {
         code: "TS2593",
-        path: "apps/stock-exceptions/app/page.test.tsx",
-        line: 1,
         column: 1,
+        line: 1,
         message: "A referenced name is missing; inspect its declaration or import.",
+        path: "apps/stock-exceptions/app/page.test.tsx",
       },
       {
         code: "TS2304",
-        path: "apps/stock-exceptions/app/page.test.tsx",
-        line: 2,
         column: 1,
+        line: 2,
         message: "A referenced name is missing; inspect its declaration or import.",
+        path: "apps/stock-exceptions/app/page.test.tsx",
       },
       {
         code: "VITEST",
-        path: "apps/stock-exceptions/app/__tests__/page.test.tsx",
-        line: 8,
         column: 5,
+        line: 8,
         message: "Test assertion failed at this location.",
+        path: "apps/stock-exceptions/app/__tests__/page.test.tsx",
       },
     ]);
   });
@@ -210,19 +210,19 @@ describe("target validation", () => {
       .fn()
       .mockResolvedValueOnce({
         exitCode: 1,
-        stdout: "package.json Formatting issues found",
         stderr: "Formatting issues found",
+        stdout: "package.json Formatting issues found",
       })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: "fixed", stderr: "" })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: "checked", stderr: "" })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: "built", stderr: "" });
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "fixed" })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "checked" })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "built" });
     const sandbox = { run } as unknown as SandboxSession;
     const executor = sandboxValidationCommandExecutor();
 
     const result = await executor({
-      sandbox,
       appId: "example",
       command: "mise run app:check-build example",
+      sandbox,
       validationRoot: "/workspace/repository",
     });
 

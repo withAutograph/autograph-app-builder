@@ -73,10 +73,10 @@ const requiredTargets: SpendTarget[] = ["vendor_name", "amount", "transaction_da
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function initialSpendState(fixture: SpendFixture): SpendState {
   return {
-    stage: "mapping",
     mapping: Object.fromEntries(
       Object.entries(fixture.fieldMapping).map(([target, source]) => [source, target]),
     ) as SpendMapping,
+    stage: "mapping",
   };
 }
 
@@ -109,18 +109,18 @@ export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping)
     const date = mappedValue(row.source, mapping, "transaction_date");
     const sourceRef = mappedValue(row.source, mapping, "source_record_ref");
     return {
-      id: row.id,
-      vendor: vendor === undefined ? "Not mapped" : String(vendor),
       amount:
         typeof amount === "number"
           ? new Intl.NumberFormat("en-US", {
-              style: "currency",
               currency: String(currency),
+              style: "currency",
             }).format(amount)
           : "Not mapped",
       date: date === undefined ? "Not mapped" : String(date),
-      sourceRef: sourceRef === undefined ? "Not imported" : String(sourceRef),
+      id: row.id,
       result: complete && !row.issue ? "Ready" : "Needs review",
+      sourceRef: sourceRef === undefined ? "Not imported" : String(sourceRef),
+      vendor: vendor === undefined ? "Not mapped" : String(vendor),
     } satisfies SpendPreviewRow;
   });
   const ready = complete
@@ -129,13 +129,13 @@ export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping)
   const needsReview = fixture.import.rows - ready;
   const ignored = Object.values(mapping).filter((value) => value === "ignore").length;
   return {
-    rows,
-    ready,
-    needsReview,
     mappingSummary:
       ignored === 0
         ? "All source columns are included."
         : `${ignored} source ${ignored === 1 ? "column is" : "columns are"} excluded.`,
+    needsReview,
+    ready,
+    rows,
   };
 }
 
@@ -147,22 +147,22 @@ export function reduceSpendState(state: SpendState, action: SpendAction): SpendS
       if (source !== action.source && target === action.target && target !== "ignore")
         mapping[source] = "ignore";
     mapping[action.source] = action.target;
-    return { stage: "mapping", mapping };
+    return { mapping, stage: "mapping" };
   }
-  if (action.type === "preview-requested") return { ...state, stage: "preview", saved: undefined };
+  if (action.type === "preview-requested") return { ...state, saved: undefined, stage: "preview" };
   if (action.type === "save-requested") {
     const preview = deriveSpendPreview(action.fixture, state.mapping);
     const saved = {
       imported: preview.ready,
-      reviewQueue: preview.needsReview,
-      message: `${preview.ready} rows imported into the simulated spend register. ${preview.needsReview} rows remain in human review.`,
       mapping: { ...state.mapping },
+      message: `${preview.ready} rows imported into the simulated spend register. ${preview.needsReview} rows remain in human review.`,
+      reviewQueue: preview.needsReview,
     };
-    return { ...state, stage: "saved", saved };
+    return { ...state, saved, stage: "saved" };
   }
   if (action.type === "review-requested") return { ...state, stage: "review" };
   if (action.type === "match-selected")
-    return { ...state, selectedMatchId: action.id, decision: undefined };
+    return { ...state, decision: undefined, selectedMatchId: action.id };
   if (action.type === "decision-deferred") return { ...state, decision: "deferred" };
   if (action.type === "decision-applied" && state.selectedMatchId)
     return {
@@ -172,8 +172,8 @@ export function reduceSpendState(state: SpendState, action: SpendAction): SpendS
         ? {
             ...state.saved,
             imported: state.saved.imported + 1,
-            reviewQueue: Math.max(0, state.saved.reviewQueue - 1),
             message: `${state.saved.imported + 1} rows are now included in the simulated spend register. ${Math.max(0, state.saved.reviewQueue - 1)} rows remain in human review.`,
+            reviewQueue: Math.max(0, state.saved.reviewQueue - 1),
           }
         : undefined,
     };
@@ -182,15 +182,17 @@ export function reduceSpendState(state: SpendState, action: SpendAction): SpendS
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function spendActionModel(state: SpendState) {
+  let result: string | undefined;
+  if (state.decision === "resolved") {
+    result = "Simulated decision recorded.";
+  } else if (state.decision === "deferred") {
+    result = "Left unresolved for follow-up.";
+  }
+
   return {
-    saveEnabled: state.stage === "preview",
     applyEnabled:
       state.stage === "review" && Boolean(state.selectedMatchId) && state.decision === undefined,
-    result:
-      state.decision === "resolved"
-        ? "Simulated decision recorded."
-        : state.decision === "deferred"
-          ? "Left unresolved for follow-up."
-          : undefined,
+    result,
+    saveEnabled: state.stage === "preview",
   };
 }

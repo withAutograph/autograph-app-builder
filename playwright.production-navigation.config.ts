@@ -3,21 +3,21 @@ import { defineConfig, devices } from "playwright/test";
 import { readNavigationFixture } from "./e2e/production-navigation/fixture";
 
 export default defineConfig({
+  fullyParallel: false,
+  globalTimeout: 8 * 60_000,
+  outputDir: "test-results/production-navigation",
+  reporter: "list",
+  retries: 0,
   testDir: "./e2e/production-navigation",
   testMatch: "**/*.spec.ts",
-  outputDir: "test-results/production-navigation",
-  workers: 1,
-  fullyParallel: false,
-  retries: 0,
   timeout: 60_000,
-  globalTimeout: 8 * 60_000,
-  reporter: "list",
   use: {
     ...devices["Desktop Chrome"],
     baseURL: readNavigationFixture().origin,
     ignoreHTTPSErrors: true,
-    serviceWorkers: "block",
     screenshot: "only-on-failure",
+    serviceWorkers: "block",
     trace: "retain-on-failure",
   },
+  workers: 1,
 });

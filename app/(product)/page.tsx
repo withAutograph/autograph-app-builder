@@ -146,8 +146,8 @@ async function HomeContent({ searchParams }: PageProps) {
       });
   const integrations = await loadBuilderIntegrationState(
     {
-      environment: process.env,
       authenticated: true as const,
+      environment: process.env,
       organizationId: user.user.organizationId,
       userId: user.user.id,
       workspaceId: user.user.workspaceId,

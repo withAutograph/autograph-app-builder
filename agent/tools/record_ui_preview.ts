@@ -19,8 +19,7 @@ import prepareWorkspace from "./prepare_workspace";
 
 export default defineTool({
   description:
-    "Create or revise the Browser prototype from readable, formatted React source composed only from current Arrusted public components and compositions. Before the first call, inspect_repository must establish the exact public exports and props. Use capitalized component/composition/icon imports and inventory each exact name and source in the manifest; never infer an icon name (for example, use the exported ChevronLeft rather than an invented ArrowLeft). Lowercase package helpers such as buttonClassName are unsupported preview imports even when exported by the package. Use Button and its public props instead. Never author raw button, input, select, textarea, dialog, or table JSX, even inline in route files. Keep catalogGaps empty. Export a default screen component from each screen entry. Navigation must set location.hash to an exact manifest screen route (for example #/employees), preserving the preview pathname; the renderer reacts to hashchange, not pathname-only pushState. Every enabled action must produce its intended fixture-backed visible result. Follow design-app references/interactions.md and verify the rendered controls in the Browser; compilation alone does not prove they work. If this tool reports an import, syntax, or compilation error, repair the source and call record_ui_preview again; call accept_ui_preview only after this tool returns a current valid revision. When revising, set baseRevision to the prior UI preview revision returned by this tool, never an outer artifact or document digest. The renderer includes the actual Arrusted theme automatically: do not invent or import components/styles.css or components/tokens.css. It installs missing repository dependencies automatically when compilation requires them, and never replaces unavailable components with custom HTML. Use in local and hosted creation before recording the product decisions and complete app specification.",
-  inputSchema: uiPreviewInputSchema,
+    "Create or revise the Browser prototype from readable, formatted React source composed only from current Arrusted public components and compositions. Before the first call, inspect-repository must establish the exact public exports and props. Use capitalized component/composition/icon imports and inventory each exact name and source in the manifest; never infer an icon name (for example, use the exported ChevronLeft rather than an invented ArrowLeft). Lowercase package helpers such as buttonClassName are unsupported preview imports even when exported by the package. Use Button and its public props instead. Never author raw button, input, select, textarea, dialog, or table JSX, even inline in route files. Keep catalogGaps empty. Export a default screen component from each screen entry. Navigation must set location.hash to an exact manifest screen route (for example #/employees), preserving the preview pathname; the renderer reacts to hashchange, not pathname-only pushState. Every enabled action must produce its intended fixture-backed visible result. Follow design-app references/interactions.md and verify the rendered controls in the Browser; compilation alone does not prove they work. If this tool reports an import, syntax, or compilation error, repair the source and call record_ui_preview again; call accept-ui-preview only after this tool returns a current valid revision. When revising, set baseRevision to the prior UI preview revision returned by this tool, never an outer artifact or document digest. The renderer includes the actual Arrusted theme automatically: do not invent or import components/styles.css or components/tokens.css. It installs missing repository dependencies automatically when compilation requires them, and never replaces unavailable components with custom HTML. Use in local and hosted creation before recording the product decisions and complete app specification.",
   async execute(input, ctx) {
     validateUiPreview(input);
     if (appBuilderWorkflowState.get().phase === "empty") {
@@ -45,51 +44,52 @@ export default defineTool({
     const previewHtml = await renderUiPreview(input, await ctx.getSandbox());
     const recorded = recordPrototypeArtifactRevision({
       artifacts: current.artifacts,
-      path: `prototype/${input.appId}/index.html`,
-      mediaType: "text/html",
-      content: previewHtml,
-      sessionId: ctx.session.id,
       callId: ctx.callId,
+      content: previewHtml,
+      mediaType: "text/html",
+      path: `prototype/${input.appId}/index.html`,
+      sessionId: ctx.session.id,
     });
     const uiPreview = {
       appId: input.appId,
-      revision,
-      sourceDigest,
       catalogDigest: current.workspace.eligibilityDigest,
-      sourceSha: current.workspace.sourceSha,
-      sourceTree: current.workspace.sourceTree,
-      routes: [...input.routes].toSorted(),
-      files: [...input.files].toSorted((left, right) => left.path.localeCompare(right.path)),
-      manifest: input.manifest,
       catalogGaps: [...input.catalogGaps].toSorted((left, right) =>
         left.path.localeCompare(right.path),
       ),
-      previewHtml,
       createdByCallId: ctx.callId,
+      files: [...input.files].toSorted((left, right) => left.path.localeCompare(right.path)),
+      manifest: input.manifest,
+      previewHtml,
+      revision,
+      routes: [...input.routes].toSorted(),
+      sourceDigest,
+      sourceSha: current.workspace.sourceSha,
+      sourceTree: current.workspace.sourceTree,
     } as const;
     updateExactWorkflow({
       expected: current,
       operation: "UI preview recording",
       transition: () => ({
-        version: APP_BUILDER_WORKFLOW_VERSION,
+        artifacts: recorded.artifacts,
+        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
         phase: "ui_previewed",
         preparedByCallId: current.preparedByCallId,
-        workspace: current.workspace,
         sourceReceipt: current.sourceReceipt,
-        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-        artifacts: recorded.artifacts,
         uiPreview,
+        version: APP_BUILDER_WORKFLOW_VERSION,
+        workspace: current.workspace,
       }),
     });
     return {
       appId: uiPreview.appId,
-      revision: uiPreview.revision,
-      routes: uiPreview.routes,
-      fidelity: "arrusted-component-catalog" as const,
-      functionality: "fixtures-only" as const,
       content: uiPreview.previewHtml,
       digest: createHash("sha256").update(uiPreview.previewHtml).digest("hex"),
+      fidelity: "arrusted-component-catalog" as const,
+      functionality: "fixtures-only" as const,
       reused: prior?.revision === revision,
+      revision: uiPreview.revision,
+      routes: uiPreview.routes,
     };
   },
+  inputSchema: uiPreviewInputSchema,
 });

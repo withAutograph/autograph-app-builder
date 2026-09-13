@@ -28,9 +28,12 @@ describe("documentation registry", () => {
     const install = getDocument("install-autograph");
     expect(install).toBeDefined();
     expect(getDocument("private-plan")).toBeUndefined();
-    expect(getAdjacentDocuments(install!)).toMatchObject({
-      previous: { slug: "overview" },
+    if (!install) {
+      throw new Error("Expected install-autograph document to be defined");
+    }
+    expect(getAdjacentDocuments(install)).toMatchObject({
       next: { slug: "connect-access" },
+      previous: { slug: "overview" },
     });
   });
 });

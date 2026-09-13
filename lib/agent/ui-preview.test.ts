@@ -10,58 +10,58 @@ import { uiPreviewRendererFiles } from "./ui-preview-renderer";
 
 const preview = {
   appId: "review-inbox",
-  routes: ["/", "/requests"],
+  catalogGaps: [],
   files: [
     {
-      path: "src/routes/index.tsx",
       content:
         'import { Button } from "@autograph/components"; export default function Page() { return <Button>Review</Button>; }',
+      path: "src/routes/index.tsx",
     },
   ],
   manifest: {
-    version: 1 as const,
-    screens: [
-      {
-        id: "overview",
-        title: "Review inbox",
-        route: "/",
-        entry: "src/routes/index.tsx",
-      },
-      {
-        id: "requests",
-        title: "Requests",
-        route: "/requests",
-        entry: "src/routes/index.tsx",
-      },
-    ],
-    productionComponents: [{ name: "Button", source: "@autograph/components" as const }],
-    productionCompositions: [],
-    productionIcons: [],
-    fixtureFacts: [{ id: "request-count", statement: "Three requests", routes: ["/"] }],
-    decisions: [],
     assumptions: [
       {
         id: "queue-first",
-        statement: "Reviewers start in a queue",
         routes: ["/"],
+        statement: "Reviewers start in a queue",
+      },
+    ],
+    decisions: [],
+    fixtureFacts: [{ id: "request-count", routes: ["/"], statement: "Three requests" }],
+    implementationNotes: [
+      {
+        productionMeaning: "Begins a reviewed decision workflow",
+        routes: ["/"],
+        visibleElement: "Review button",
       },
     ],
     openQuestions: [
       {
         id: "bulk-review",
-        statement: "Should reviewers act on multiple requests?",
         routes: ["/requests"],
+        statement: "Should reviewers act on multiple requests?",
       },
     ],
-    implementationNotes: [
+    productionComponents: [{ name: "Button", source: "@autograph/components" as const }],
+    productionCompositions: [],
+    productionIcons: [],
+    screens: [
       {
-        visibleElement: "Review button",
-        productionMeaning: "Begins a reviewed decision workflow",
-        routes: ["/"],
+        entry: "src/routes/index.tsx",
+        id: "overview",
+        route: "/",
+        title: "Review inbox",
+      },
+      {
+        entry: "src/routes/index.tsx",
+        id: "requests",
+        route: "/requests",
+        title: "Requests",
       },
     ],
+    version: 1 as const,
   },
-  catalogGaps: [],
+  routes: ["/", "/requests"],
 };
 
 describe("component-backed UI preview policy", () => {
@@ -71,9 +71,9 @@ describe("component-backed UI preview policy", () => {
         ...preview,
         files: [
           {
-            path: "src/routes/index.tsx",
             content:
               'import type { SchemaFormValue } from "@autograph/compositions"; import { Button as Action, type ButtonProps } from "@autograph/components"; export default function Page() { return <Action>Review</Action>; }',
+            path: "src/routes/index.tsx",
           },
         ],
       }),
@@ -100,7 +100,7 @@ describe("component-backed UI preview policy", () => {
     expect(() =>
       validateUiPreview({
         ...preview,
-        files: [{ path: "src/routes/index.tsx", content }],
+        files: [{ content, path: "src/routes/index.tsx" }],
       }),
     ).toThrow(message);
   });
@@ -112,8 +112,8 @@ describe("component-backed UI preview policy", () => {
         files: [
           ...preview.files,
           {
-            path: "src/components/ReviewRail.tsx",
             content: "export const ReviewRail = () => null;",
+            path: "src/components/ReviewRail.tsx",
           },
         ],
       }),
@@ -128,8 +128,8 @@ describe("component-backed UI preview policy", () => {
           ...preview,
           files: [
             {
-              path: "src/routes/index.tsx",
               content: `export default function Page() { return <${tag} />; }`,
+              path: "src/routes/index.tsx",
             },
           ],
         }),
@@ -142,9 +142,9 @@ describe("component-backed UI preview policy", () => {
       ...preview,
       files: [
         {
-          path: "src/routes/index.tsx",
           content:
             'import { buttonClassName } from "@autograph/components"; export default function Page() { return <a className={buttonClassName()} href="/requests">Review</a>; }',
+          path: "src/routes/index.tsx",
         },
       ],
     };
@@ -182,7 +182,6 @@ describe("component-backed UI preview policy", () => {
         ...preview,
         files: [
           {
-            path: "src/routes/index.tsx",
             content: `import { useState } from "react";
 import { Button } from "@autograph/components";
 export default function Page() {
@@ -192,6 +191,7 @@ export default function Page() {
     <Button disabled={remaining === 0} onClick={() => setRemaining(remaining - 1)}>Review next</Button>
   </section>;
 }`,
+            path: "src/routes/index.tsx",
           },
         ],
       }),
@@ -204,9 +204,9 @@ export default function Page() {
         ...preview,
         files: [
           {
-            path: "src/routes/index.tsx",
             content:
               'import { DataTableComposition } from "@autograph/compositions"; export default function Page() { return <DataTableComposition />; }',
+            path: "src/routes/index.tsx",
           },
         ],
       }),
@@ -221,9 +221,9 @@ export default function Page() {
         ...preview,
         files: [
           {
-            path: "src/routes/index.tsx",
             content:
               'import { ArrowLeft } from "@autograph/icons"; export default function Page() { return <ArrowLeft />; }',
+            path: "src/routes/index.tsx",
           },
         ],
         manifest: {
@@ -241,8 +241,8 @@ export default function Page() {
         ...preview,
         files: [
           {
-            path: "src/routes/index.tsx",
             content: `export default function Page() { return <main>${"x".repeat(2100)}</main>; }`,
+            path: "src/routes/index.tsx",
           },
         ],
         manifest: { ...preview.manifest, productionComponents: [] },
@@ -256,8 +256,8 @@ export default function Page() {
         ...preview,
         files: [
           {
-            path: "src/routes/index.tsx",
             content: `export default function Page() { return <main>${"x".repeat(2100)}<button>Submit</button></main>; }`,
+            path: "src/routes/index.tsx",
           },
         ],
         manifest: { ...preview.manifest, productionComponents: [] },
@@ -273,8 +273,8 @@ export default function Page() {
         assumptions: [
           {
             id: "queue-first",
-            statement: "Reviewers start from an exceptions-only queue",
             routes: ["/"],
+            statement: "Reviewers start from an exceptions-only queue",
           },
         ],
       },
@@ -284,7 +284,7 @@ export default function Page() {
 
   it("keeps internal context and draft behavior out of Browser transport", () => {
     const bundle = uiPreviewRendererFiles(preview);
-    const html = bundle.files.find(({ path }) => path === "entry.tsx")!.content;
+    const html = bundle.files.find(({ path }) => path === "entry.tsx")?.content;
     expect(html).not.toContain("Context");
     expect(html).not.toContain("Draft spec");
     expect(html).not.toContain("implementationNotes");
@@ -293,22 +293,22 @@ export default function Page() {
 
   it("does not make documented catalog gaps a custom-component escape hatch", () => {
     const local = {
-      path: "src/components/ReviewRail.tsx",
       content:
         'import { Button } from "@autograph/components"; export const ReviewRail = () => <Button>Review</Button>;',
+      path: "src/components/ReviewRail.tsx",
     };
     expect(() =>
       validateUiPreview({
         ...preview,
-        files: [...preview.files, local],
         catalogGaps: [
           {
+            composes: [{ name: "Button", source: "@autograph/components" }],
             path: local.path,
             reason: "No public review-rail composition supports this workflow.",
-            composes: [{ name: "Button", source: "@autograph/components" }],
             tokens: ["--color-background", "--space-4"],
           },
         ],
+        files: [...preview.files, local],
       }),
     ).toThrow(/existing Arrusted components/u);
   });
@@ -328,15 +328,15 @@ export default function Page() {
     expect(() =>
       validateUiPreview({
         ...preview,
-        files: [...preview.files, { path: "src/components/ReviewRail.tsx", content }],
         catalogGaps: [
           {
+            composes: [{ name: "Button", source: "@autograph/components" }],
             path: "src/components/ReviewRail.tsx",
             reason: "No public review-rail composition supports this workflow.",
-            composes: [{ name: "Button", source: "@autograph/components" }],
             tokens: ["--color-background"],
           },
         ],
+        files: [...preview.files, { content, path: "src/components/ReviewRail.tsx" }],
       }),
     ).toThrow(message);
   });

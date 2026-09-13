@@ -5,11 +5,11 @@ import { planAcceptedAppSpec } from "./accepted-spec-planning";
 describe("planAcceptedAppSpec", () => {
   it("continues an accepted non-vendor Stock Exceptions design without model tool selection", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const plan = vi.fn(async () => undefined);
+    const plan = vi.fn(async () => {});
     await planAcceptedAppSpec({
       phase: "app_spec_accepted",
-      planComplete: false,
       plan,
+      planComplete: false,
     });
 
     expect(plan).toHaveBeenCalledOnce();
@@ -17,12 +17,12 @@ describe("planAcceptedAppSpec", () => {
 
   it("does not invoke planning again after the accepted design is already planned", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const plan = vi.fn(async () => undefined);
+    const plan = vi.fn(async () => {});
 
     await planAcceptedAppSpec({
       phase: "planned",
-      planComplete: true,
       plan,
+      planComplete: true,
     });
 
     expect(plan).not.toHaveBeenCalled();

@@ -87,8 +87,8 @@ export async function exactLocalPublicationProposal(input: {
     throw new Error("Local publication accepts only the original existing-repository source.");
   const proposal = await deriveLocalPublicationProposal({
     destinationPath: input.destinationPath,
-    sourceReceipt: workflow.sourceReceipt,
     review: workflow.reviewReceipt,
+    sourceReceipt: workflow.sourceReceipt,
   });
   if (
     proposal.destinationPath !== workflow.sourceReceipt.sourcePath ||
@@ -104,10 +104,6 @@ export async function exactLocalPublicationProposal(input: {
 export default defineTool({
   description:
     "Read the exact local-publication proposal for an explicitly selected allowed existing checkout. It verifies destination identity, base SHA, clean approved paths, and preimages without writing, committing, or publishing remotely.",
-  inputSchema: z.strictObject({
-    destinationPath: z.string().min(1),
-    expectedReviewDigest: digest,
-  }),
   async execute(input) {
     const workflow = publicationWorkflow();
     const durable = await readLocalPublicationJournal(input.destinationPath);
@@ -122,9 +118,9 @@ export default defineTool({
     if (workflow.phase === "publication_pending" && durable === undefined)
       return {
         ...workflow.publicationProposal,
-        workflowPhase: workflow.phase,
-        transactionWindow: "before-journal" as const,
         retryAllowed: false,
+        transactionWindow: "before-journal" as const,
+        workflowPhase: workflow.phase,
       };
     if (workflow.phase === "publication_failed" && durable === undefined) {
       assertCanonicalLocalPublicationJournal(workflow.publicationReceipt);
@@ -134,9 +130,9 @@ export default defineTool({
         );
       return {
         ...workflow.publicationReceipt,
-        workflowPhase: workflow.phase,
         durableJournal: "absent" as const,
         retryAllowed: false,
+        workflowPhase: workflow.phase,
       };
     }
     if (durable?.status === "succeeded") {
@@ -149,23 +145,27 @@ export default defineTool({
         );
       await verifyPublishedChangeSet({
         receipt: durable,
-        sourceReceipt: workflow.sourceReceipt,
         review: workflow.reviewReceipt,
+        sourceReceipt: workflow.sourceReceipt,
       });
       return {
         ...durable,
-        workflowPhase: workflow.phase,
         recoveryAllowed: workflow.phase === "publication_pending",
+        workflowPhase: workflow.phase,
       };
     }
     if (durable?.status === "pending" || durable?.status === "failed")
       return {
         ...durable,
-        workflowPhase: workflow.phase,
-        retryAllowed: false,
         recoveryAllowed: workflow.phase === "publication_pending" && durable.status === "failed",
+        retryAllowed: false,
+        workflowPhase: workflow.phase,
       };
     const proposal = await exactLocalPublicationProposal(input);
     return { ...proposal, workflowPhase: workflow.phase };
   },
+  inputSchema: z.strictObject({
+    destinationPath: z.string().min(1),
+    expectedReviewDigest: digest,
+  }),
 });

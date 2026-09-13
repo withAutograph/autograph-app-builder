@@ -36,28 +36,28 @@ export function createPostgresGitHubUserCredentialStore(input: {
 }): GitHubUserCredentialStore {
   const parse = (row: typeof hostedGitHubUserCredentials.$inferSelect) => {
     const authority = hostedTenantAuthoritySchema.parse({
-      issuer: row.issuer,
       audience: row.audience,
-      workspaceId: row.workspaceId,
+      issuer: row.issuer,
       ownerUserId: row.ownerUserId,
+      workspaceId: row.workspaceId,
     });
     if (row.keyVersion !== input.config.keyVersion)
       throw new Error("github-credential-key-version");
     return {
-      providerUserId: row.providerUserId,
+      active: row.active,
       providerLogin: row.providerLogin,
+      providerUserId: row.providerUserId,
+      revision: row.revision,
       tokens: decryptGitHubUserTokens({
-        encryptedCredential: row.encryptedCredential,
-        credentialIv: row.credentialIv,
-        credentialTag: row.credentialTag,
-        key: input.config.key,
         associatedData: githubCredentialAssociatedData({
           authority,
           providerUserId: row.providerUserId,
         }),
+        credentialIv: row.credentialIv,
+        credentialTag: row.credentialTag,
+        encryptedCredential: row.encryptedCredential,
+        key: input.config.key,
       }),
-      revision: row.revision,
-      active: row.active,
       updatedAt: row.updatedAt,
     };
   };
@@ -66,26 +66,34 @@ export function createPostgresGitHubUserCredentialStore(input: {
       const authority = hostedTenantAuthoritySchema.parse(value.authority);
       const tokens = githubUserTokenSetSchema.parse(value.tokens);
       const encrypted = encryptGitHubUserTokens({
-        tokens,
-        key: input.config.key,
         associatedData: githubCredentialAssociatedData({
           authority,
           providerUserId: value.providerUserId,
         }),
+        key: input.config.key,
+        tokens,
       });
       const rows = await input.database
         .insert(hostedGitHubUserCredentials)
         .values({
           ...authority,
-          providerUserId: value.providerUserId,
-          providerLogin: value.providerLogin,
+          active: true,
           ...encrypted,
           keyVersion: input.config.keyVersion,
+          providerLogin: value.providerLogin,
+          providerUserId: value.providerUserId,
           revision: 1,
-          active: true,
           updatedAt: value.now,
         })
         .onConflictDoUpdate({
+          set: {
+            active: true,
+            ...encrypted,
+            keyVersion: input.config.keyVersion,
+            providerLogin: value.providerLogin,
+            revision: 1,
+            updatedAt: value.now,
+          },
           target: [
             hostedGitHubUserCredentials.issuer,
             hostedGitHubUserCredentials.audience,
@@ -93,18 +101,21 @@ export function createPostgresGitHubUserCredentialStore(input: {
             hostedGitHubUserCredentials.ownerUserId,
             hostedGitHubUserCredentials.providerUserId,
           ],
-          set: {
-            providerLogin: value.providerLogin,
-            ...encrypted,
-            keyVersion: input.config.keyVersion,
-            revision: 1,
-            active: true,
-            updatedAt: value.now,
-          },
         })
         .returning();
       if (!rows[0]) throw new Error("github-credential-not-durable");
       return parse(rows[0]);
+    },
+    async deactivate(value) {
+      const authority = hostedTenantAuthoritySchema.parse(value.authority);
+      const rows = await input.database
+        .update(hostedGitHubUserCredentials)
+        .set({ active: false, updatedAt: value.now })
+        .where(predicate(authority, value.providerUserId))
+        .returning({
+          providerUserId: hostedGitHubUserCredentials.providerUserId,
+        });
+      return rows.length;
     },
     async read(value) {
       const authority = hostedTenantAuthoritySchema.parse(value.authority);
@@ -119,20 +130,20 @@ export function createPostgresGitHubUserCredentialStore(input: {
       const authority = hostedTenantAuthoritySchema.parse(value.authority);
       const tokens = githubUserTokenSetSchema.parse(value.tokens);
       const encrypted = encryptGitHubUserTokens({
-        tokens,
-        key: input.config.key,
         associatedData: githubCredentialAssociatedData({
           authority,
           providerUserId: value.providerUserId,
         }),
+        key: input.config.key,
+        tokens,
       });
       const rows = await input.database
         .update(hostedGitHubUserCredentials)
         .set({
           ...encrypted,
+          active: true,
           keyVersion: input.config.keyVersion,
           revision: value.expectedRevision + 1,
-          active: true,
           updatedAt: value.now,
         })
         .where(
@@ -144,17 +155,6 @@ export function createPostgresGitHubUserCredentialStore(input: {
         )
         .returning();
       return rows[0] ? parse(rows[0]) : undefined;
-    },
-    async deactivate(value) {
-      const authority = hostedTenantAuthoritySchema.parse(value.authority);
-      const rows = await input.database
-        .update(hostedGitHubUserCredentials)
-        .set({ active: false, updatedAt: value.now })
-        .where(predicate(authority, value.providerUserId))
-        .returning({
-          providerUserId: hostedGitHubUserCredentials.providerUserId,
-        });
-      return rows.length;
     },
   };
 }

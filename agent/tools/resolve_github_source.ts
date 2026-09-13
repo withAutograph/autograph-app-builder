@@ -28,10 +28,9 @@ const inputSchema = z.strictObject({
 });
 
 export default defineTool({
+  approval: never(),
   description:
     "Automatically resolve and prepare one supported existing GitHub repository. It independently confirms tenant-bound GitHub access, parks on the Store In authorization flow when access is missing, re-reads the selected installation and exact default-branch SHA/tree, and materializes the eligible source in the isolated workspace. It never creates, pushes, branches, opens a PR, or alters a release gate.",
-  inputSchema,
-  approval: never(),
   async execute(input, ctx) {
     const initialWorkflow = appBuilderWorkflowState.get();
     const initialSource = sourceWorkflowState.get();
@@ -43,16 +42,16 @@ export default defineTool({
     const prepared = await runtime.prepareExistingSource({
       ...input,
       access: access.access,
-      currentAccessReceipt: access.receipt,
-      sessionId: ctx.session.id,
       callId: ctx.callId,
+      currentAccessReceipt: access.receipt,
       // Source credentials are resolved first. The backend consumes the
       // server-owned context while `getSandbox()` creates the provider
       // session, so Vercel performs the Git clone itself.
-      sandbox: () => ctx.getSandbox(),
       ...(initialSource.phase === "empty" || initialSource.githubSource === undefined
         ? {}
         : { currentGitHubSource: initialSource.githubSource }),
+      sandbox: () => ctx.getSandbox(),
+      sessionId: ctx.session.id,
     });
     assertExactImmutableGitHubSourceReceipt(prepared.githubSource);
     repositoryAccessReceiptState.update((current) => {
@@ -74,10 +73,10 @@ export default defineTool({
         return current;
       }
       return {
-        version: APP_BUILDER_SOURCE_VERSION,
+        githubSource: prepared.githubSource,
         phase: "reviewed",
         receipt: prepared.sourceReceipt,
-        githubSource: prepared.githubSource,
+        version: APP_BUILDER_SOURCE_VERSION,
       };
     });
     appBuilderWorkflowState.update((current) => {
@@ -92,22 +91,23 @@ export default defineTool({
         return current;
       }
       return {
-        version: APP_BUILDER_WORKFLOW_VERSION,
+        artifacts: [],
+        githubSource: prepared.githubSource,
         phase: "prepared",
         preparedByCallId: ctx.callId,
-        workspace: prepared.workspace,
         sourceReceipt: prepared.sourceReceipt,
-        githubSource: prepared.githubSource,
-        artifacts: [],
+        version: APP_BUILDER_WORKFLOW_VERSION,
+        workspace: prepared.workspace,
       };
     });
     return {
-      repository: access.access.repository,
-      scope: access.access.scope,
-      repositoryAccessReceiptDigest: prepared.accessReceipt.digest,
       githubSource: prepared.githubSource,
+      repository: access.access.repository,
+      repositoryAccessReceiptDigest: prepared.accessReceipt.digest,
+      scope: access.access.scope,
       sourceReceipt: prepared.sourceReceipt,
       workspace: prepared.workspace,
     };
   },
+  inputSchema,
 });

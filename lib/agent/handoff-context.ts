@@ -14,7 +14,7 @@ export function createPreparedHandoffReader(input: {
 }) {
   return async (sessionAuth: unknown) => {
     const handoffId = sourceHandoffIdForSessionAuth(sessionAuth);
-    if (handoffId === undefined) return undefined;
+    if (handoffId === undefined) return;
     const { authority } = exactForwardedSessionAuthority(sessionAuth);
     if (!(await input.isActiveMember(authority))) throw new BuilderHandoffUnavailableError();
     const stored = await input.read({ authority, handoffId });
@@ -49,12 +49,12 @@ async function createDeploymentPreparedHandoffReader() {
   const config = readPreviewOAuthRuntimeConfig(process.env);
   const database = openHostedPostgresDatabase(config.databaseUrl);
   const membership = createPostgresPreviewOrganizationAuthority(database, {
-    issuer: config.issuer,
     audience: config.resource,
+    issuer: config.issuer,
   });
   const read = createPreparedHandoffReader({
-    read: createPostgresBuilderHandoffStore(database).read,
     isActiveMember: (value) => membership.isActiveMember(value),
+    read: createPostgresBuilderHandoffStore(database).read,
   });
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   return async (sessionAuth: unknown) => {
@@ -71,7 +71,7 @@ let deploymentReader: ReturnType<typeof createDeploymentPreparedHandoffReader> |
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readPreparedHandoffContext(sessionAuth: unknown) {
-  if (sourceHandoffIdForSessionAuth(sessionAuth) === undefined) return undefined;
+  if (sourceHandoffIdForSessionAuth(sessionAuth) === undefined) return;
   // Preserve the shared lazy promise while clearing it after a failed creation.
   // oxlint-disable promise/prefer-await-to-callbacks
   // oxlint-disable-next-line promise/prefer-await-to-callbacks

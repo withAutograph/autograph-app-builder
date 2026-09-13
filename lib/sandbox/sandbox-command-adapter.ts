@@ -10,15 +10,11 @@ export function createAuthorizedSandboxSession(input: {
   };
   return {
     id: input.session.id,
-    resolvePath: (path) => input.session.resolvePath(path),
-    setNetworkPolicy: (policy) => input.session.setNetworkPolicy(policy),
-    removePath: (options) => input.session.removePath(options),
-    readFile: (options) => input.session.readFile(options),
     readBinaryFile: (options) => input.session.readBinaryFile(options),
+    readFile: (options) => input.session.readFile(options),
     readTextFile: (options) => input.session.readTextFile(options),
-    writeFile: (options) => input.session.writeFile(options),
-    writeBinaryFile: (options) => input.session.writeBinaryFile(options),
-    writeTextFile: (options) => input.session.writeTextFile(options),
+    removePath: (options) => input.session.removePath(options),
+    resolvePath: (path) => input.session.resolvePath(path),
     async run(options) {
       await authorize();
       // Vercel Sandbox owns command streaming and the explicit caller abort
@@ -26,6 +22,7 @@ export function createAuthorizedSandboxSession(input: {
       // between an Arrusted operation and its provider runtime.
       return input.session.run(options);
     },
+    setNetworkPolicy: (policy) => input.session.setNetworkPolicy(policy),
     async spawn(options) {
       await authorize();
       // Keep the signed-user boundary while delegating process semantics to
@@ -34,6 +31,9 @@ export function createAuthorizedSandboxSession(input: {
       // artificial gate.
       return input.session.spawn(options);
     },
+    writeBinaryFile: (options) => input.session.writeBinaryFile(options),
+    writeFile: (options) => input.session.writeFile(options),
+    writeTextFile: (options) => input.session.writeTextFile(options),
   };
 }
 
@@ -45,13 +45,13 @@ function wrapHandle<SO>(input: {
   return {
     ...input.handle,
     session: createAuthorizedSandboxSession({
-      session: input.handle.session,
       authorize: input.authorize,
+      session: input.handle.session,
     }),
     async useSessionFn(options) {
       return createAuthorizedSandboxSession({
-        session: await input.handle.useSessionFn(options),
         authorize: input.authorize,
+        session: await input.handle.useSessionFn(options),
       });
     },
   };
@@ -64,14 +64,14 @@ export function createAuthorizedSandboxBackend<BO, SO>(input: {
   authorizeSessionCommand: (sessionId: string) => Promise<unknown>;
 }): SandboxBackend<BO, SO> {
   return {
-    name: `${input.backend.name}-authorized`,
     async create(createInput) {
       const handle = await input.backend.create(createInput);
       return wrapHandle({
-        handle,
         authorize: () => input.authorizeSessionCommand(createInput.sessionKey),
+        handle,
       });
     },
+    name: `${input.backend.name}-authorized`,
     prewarm(prewarmInput) {
       const { bootstrap } = prewarmInput;
       return input.backend.prewarm({

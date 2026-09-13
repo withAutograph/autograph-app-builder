@@ -9,14 +9,13 @@ import { createReviewedChangeSetReceipt } from "@/lib/repository/reviewed-change
 export default defineTool({
   description:
     "Record the current reviewed change summary after repository validation succeeds. This is internal and never publishes or changes an external repository.",
-  inputSchema: z.strictObject({}),
   async execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "validated" && state.phase !== "reviewed")
       throw new Error("Run the repository validation before reviewing its changes.");
     const changeSet = await exactNormalizedChangeSet({
-      state,
       sandbox: await ctx.getSandbox(),
+      state,
     });
     if (state.phase === "reviewed") {
       const expectedReceipt = createReviewedChangeSetReceipt(
@@ -32,20 +31,20 @@ export default defineTool({
     }
     const receipt = createReviewedChangeSetReceipt(changeSet, ctx.callId);
     appBuilderWorkflowState.update(() => ({
-      version: APP_BUILDER_WORKFLOW_VERSION,
+      appSpec: state.appSpec,
+      applyReceipt: state.applyReceipt,
+      artifacts: state.artifacts,
+      dependencyReceipt: state.dependencyReceipt,
+      ...(state.githubSource === undefined ? {} : { githubSource: state.githubSource }),
+      identityReceipt: state.identityReceipt,
       phase: "reviewed",
       preparedByCallId: state.preparedByCallId,
-      workspace: state.workspace,
-      sourceReceipt: state.sourceReceipt,
-      ...(state.githubSource === undefined ? {} : { githubSource: state.githubSource }),
-      artifacts: state.artifacts,
-      appSpec: state.appSpec,
-      dependencyReceipt: state.dependencyReceipt,
-      identityReceipt: state.identityReceipt,
       proposal: state.proposal,
-      applyReceipt: state.applyReceipt,
-      validationReceipt: state.validationReceipt,
       reviewReceipt: receipt,
+      sourceReceipt: state.sourceReceipt,
+      validationReceipt: state.validationReceipt,
+      version: APP_BUILDER_WORKFLOW_VERSION,
+      workspace: state.workspace,
     }));
     return {
       ...receipt,
@@ -53,4 +52,5 @@ export default defineTool({
       reused: false,
     };
   },
+  inputSchema: z.strictObject({}),
 });

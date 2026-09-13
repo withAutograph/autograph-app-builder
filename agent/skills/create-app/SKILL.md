@@ -55,7 +55,7 @@ app-owned files and reuse the same component-backed preview flow.
    approval for source inspection, workspace preparation, or prototypes.
    Preserve unrelated changes.
    For a hosted existing repository named as `owner/name`, use only
-   `resolve_github_source`; it owns the current access readback, source
+   `resolve-github-source`; it owns the current access readback, source
    inspection, and isolated preparation without a preceding access tool. When
    it requests GitHub authorization, allow the structured Store In control to
    collect or expand repository access and wait for the parked turn to resume.
@@ -63,7 +63,7 @@ app-owned files and reuse the same component-backed preview flow.
    settings changes, or other access mechanics in chat. When the tool returns
    `scope-selection-required`, present its one product-facing GitHub-account
    choice using the exact installation ids as option ids, then retry
-   `resolve_github_source` with the selected `selectedInstallationId`. Do not
+   `resolve-github-source` with the selected `selectedInstallationId`. Do not
    make scopes selectable inside an authorization request.
 4. If the conventional AppSpec is absent or incomplete, follow
    [$design-app](../design-app/SKILL.md) in this same task. Synthesize its
@@ -72,7 +72,7 @@ app-owned files and reuse the same component-backed preview flow.
    errors, repair completeness and retry automatically. Ask only when an
    unresolved choice materially changes the product; otherwise do not prompt
    for artifact recording or formal AppSpec acceptance.
-5. Follow [$plan-app-creation](../plan-app-creation/SKILL.md) automatically to
+5. Follow [$plan_app_creation](../plan-app-creation/SKILL.md) automatically to
    produce the canonical validated proposal. A prose outline is not a plan:
    never finish an app-creation turn or claim the plan is ready until
    `plan_app_creation` succeeds for the current artifact bytes. If the visual

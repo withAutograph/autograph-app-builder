@@ -11,47 +11,47 @@ function browser() {
   const close = vi.fn(() => Promise.resolve());
   const page = {};
   return {
-    value: {
-      newContext: () => Promise.resolve({ newPage: () => Promise.resolve(page), close }),
-    } as never,
-    page,
     close,
+    page,
+    value: {
+      newContext: () => Promise.resolve({ close, newPage: () => Promise.resolve(page) }),
+    } as never,
   };
 }
 
 const adapter = {
-  reviewSource: () =>
-    Promise.resolve({
-      ready: true as const,
-      reason: "Reviewed against installed Next 16.3.4 docs.",
-      assertions: [],
-      artifacts: [],
-    }),
   exerciseBrowser: (_page: unknown, id: string) => {
     const requirement = frameworkMatrix.find((row) => row.id === id)!;
     return Promise.resolve({
-      reason: "Browser assertions completed.",
       artifacts: [],
       assertions: requirement.assertions.map((assertion) => ({
+        artifacts: [],
+        detail: "Observed runtime behavior.",
         id: assertion,
         passed: true,
-        detail: "Observed runtime behavior.",
-        artifacts: [],
       })),
+      reason: "Browser assertions completed.",
     });
   },
   instantNavigationRecipe: () =>
     Promise.resolve({
+      artifacts: [],
       ready: true as const,
       recipe: {
         baseURL: "http://candidate.test",
         destinationPath: "/docs",
-        sourcePath: "/",
         linkSelector: "a[href='/docs']",
-        shellSelector: "main",
         resolvedSelector: "article",
+        shellSelector: "main",
+        sourcePath: "/",
       },
+    }),
+  reviewSource: () =>
+    Promise.resolve({
       artifacts: [],
+      assertions: [],
+      ready: true as const,
+      reason: "Reviewed against installed Next 16.3.4 docs.",
     }),
 };
 
@@ -61,9 +61,9 @@ describe("trusted framework evidence", () => {
     const fixture = browser();
     const runInstant = vi.fn(() => Promise.resolve());
     const result = await runTrustedFrameworkEvidence({
+      adapters: { candidate: adapter as never },
       browser: fixture.value,
       outputRoot,
-      adapters: { candidate: adapter as never },
       runInstant,
     });
     expect(result.observations.candidate).toHaveLength(frameworkMatrix.length);
@@ -86,19 +86,19 @@ describe("trusted framework evidence", () => {
     const outputRoot = await mkdtemp(join(tmpdir(), "self-reproduction-framework-missing-"));
     const fixture = browser();
     const result = await runTrustedFrameworkEvidence({
-      browser: fixture.value,
-      outputRoot,
       adapters: {
         candidate: {
           ...adapter,
           instantNavigationRecipe: () =>
             Promise.resolve({
-              ready: false as const,
               disposition: "infrastructure-unavailable" as const,
+              ready: false as const,
               reason: "Production instant-navigation runtime was unavailable.",
             }),
         } as never,
       },
+      browser: fixture.value,
+      outputRoot,
       runInstant: vi.fn(() => Promise.resolve()),
     });
     expect(

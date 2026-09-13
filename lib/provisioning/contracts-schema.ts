@@ -9,10 +9,14 @@ const instant = z.string().datetime({ offset: true });
 
 export const builderProvisionRequestSchema = z
   .object({
-    version: z.literal(1),
-    requestId: z.string().uuid(),
-    operation: z.enum(["github", "vercel"]),
     appName: z.string().trim().min(1).max(120),
+    operation: z.enum(["github", "vercel"]),
+    providers: z
+      .object({
+        githubInstallationId: decimal.optional(),
+        vercelInstallationId: z.string().min(1).max(256).optional(),
+      })
+      .strict(),
     repository: z
       .object({
         name: z
@@ -24,27 +28,23 @@ export const builderProvisionRequestSchema = z
         private: z.boolean(),
       })
       .strict(),
-    providers: z
-      .object({
-        githubInstallationId: decimal.optional(),
-        vercelInstallationId: z.string().min(1).max(256).optional(),
-      })
-      .strict(),
+    requestId: z.string().uuid(),
+    version: z.literal(1),
   })
   .strict()
   .superRefine((value, context) => {
     if (value.operation === "github" && value.providers.githubInstallationId === undefined) {
       context.addIssue({
         code: "custom",
-        path: ["providers", "githubInstallationId"],
         message: "GitHub provisioning requires a selected installation.",
+        path: ["providers", "githubInstallationId"],
       });
     }
     if (value.operation === "vercel" && value.providers.vercelInstallationId === undefined) {
       context.addIssue({
         code: "custom",
-        path: ["providers", "vercelInstallationId"],
         message: "Vercel provisioning requires a selected installation.",
+        path: ["providers", "vercelInstallationId"],
       });
     }
   });
@@ -53,7 +53,6 @@ export type BuilderProvisionRequest = z.infer<typeof builderProvisionRequestSche
 
 const failureSchema = z
   .object({
-    status: z.literal("failed"),
     code: z.enum([
       "configuration_unavailable",
       "credential_unavailable",
@@ -66,14 +65,15 @@ const failureSchema = z
       "postcondition_failed",
     ]),
     retryable: z.boolean(),
+    status: z.literal("failed"),
   })
   .strict();
 
 const skippedSchema = z
   .object({
-    status: z.literal("skipped"),
     code: z.enum(["not_selected", "github_required", "feature_disabled"]),
     retryable: z.boolean(),
+    status: z.literal("skipped"),
   })
   .strict();
 
@@ -84,69 +84,69 @@ const githubStarterBaseSchema = z.object({
 
 const githubClonedStarterSchema = githubStarterBaseSchema
   .extend({
-    repository: z.string().url().startsWith("https://github.com/"),
-    ref: z.literal("refs/heads/main"),
+    contractDigest: sha256,
+    eligibilityDigest: sha256,
     method: z.literal("git-clone-v1"),
     readinessDigest: sha256,
     receiptVersion: z.literal(4),
+    ref: z.literal("refs/heads/main"),
+    repository: z.string().url().startsWith("https://github.com/"),
     sourceReceiptDigest: sha256,
-    eligibilityDigest: sha256,
-    contractDigest: sha256,
   })
   .strict();
 
 const githubLegacyStarterSchema = githubStarterBaseSchema
   .extend({
-    repository: z.string().url().startsWith("https://github.com/").optional(),
-    ref: z.literal("refs/heads/main").optional(),
-    method: z.literal("starter-archive-v3").optional(),
-    archiveSha256: sha256.optional(),
     archiveBytes: z.number().int().positive().optional(),
+    archiveSha256: sha256.optional(),
     manifestSha256: sha256.optional(),
+    method: z.literal("starter-archive-v3").optional(),
+    ref: z.literal("refs/heads/main").optional(),
+    repository: z.string().url().startsWith("https://github.com/").optional(),
   })
   .strict();
 
 export const githubProvisionSuccessSchema = z
   .object({
-    status: z.literal("succeeded"),
-    installationId: decimal,
-    repositoryId: decimal,
-    owner: z.string().min(1),
-    name: z.string().min(1),
-    fullName: z.string().min(3),
-    url: z.string().url().startsWith("https://github.com/"),
-    scope: z
-      .object({
-        type: z.enum(["organization", "user"]),
-        id: decimal,
-        login: z.string().min(1),
-      })
-      .strict(),
-    visibility: z.enum(["public", "private"]),
     defaultBranch: z.literal("main"),
+    fullName: z.string().min(3),
     headSha: objectId,
     headTree: objectId,
+    installationId: decimal,
+    name: z.string().min(1),
+    owner: z.string().min(1),
+    repositoryId: decimal,
+    scope: z
+      .object({
+        id: decimal,
+        login: z.string().min(1),
+        type: z.enum(["organization", "user"]),
+      })
+      .strict(),
     starter: z.union([githubClonedStarterSchema, githubLegacyStarterSchema]),
+    status: z.literal("succeeded"),
+    url: z.string().url().startsWith("https://github.com/"),
+    visibility: z.enum(["public", "private"]),
   })
   .strict();
 
 export const vercelProvisionSuccessSchema = z
   .object({
-    status: z.literal("succeeded"),
-    installationId: z.string().min(1),
-    projectId: z.string().min(1),
-    name: z.string().min(1),
     dashboardUrl: z.string().url().startsWith("https://vercel.com/"),
+    framework: z.literal("nextjs"),
+    installationId: z.string().min(1),
+    linkedGitHubRepository: z.string().min(3).optional(),
+    name: z.string().min(1),
+    projectId: z.string().min(1),
+    rootDirectory: z.string().regex(/^apps\/[a-z][a-z0-9-]*$/u),
     scope: z
       .object({
-        type: z.enum(["team", "user"]),
         id: z.string().min(1),
         slug: z.string().min(1),
+        type: z.enum(["team", "user"]),
       })
       .strict(),
-    framework: z.literal("nextjs"),
-    rootDirectory: z.string().regex(/^apps\/[a-z][a-z0-9-]*$/u),
-    linkedGitHubRepository: z.string().min(3).optional(),
+    status: z.literal("succeeded"),
   })
   .strict();
 
@@ -163,14 +163,14 @@ export const vercelProvisionResultSchema = z.union([
 
 export const builderProvisionResponseSchema = z
   .object({
-    version: z.literal(1),
-    requestId: z.string().uuid(),
-    requestDigest: sha256,
     appId: builderAppIdSchema,
-    status: z.enum(["pending", "settled"]),
     github: githubProvisionResultSchema,
-    vercel: vercelProvisionResultSchema,
+    requestDigest: sha256,
+    requestId: z.string().uuid(),
+    status: z.enum(["pending", "settled"]),
     updatedAt: instant,
+    vercel: vercelProvisionResultSchema,
+    version: z.literal(1),
   })
   .strict();
 
@@ -184,8 +184,8 @@ export type BuilderProvisionResponse = z.infer<typeof builderProvisionResponseSc
  */
 export const builderProvisionProjectionSchema = z
   .object({
-    revision: z.number().int().positive(),
     provisioning: builderProvisionResponseSchema,
+    revision: z.number().int().positive(),
   })
   .strict();
 

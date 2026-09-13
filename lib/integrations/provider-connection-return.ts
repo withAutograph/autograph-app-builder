@@ -38,8 +38,8 @@ export function parseProviderConnectionReturn(input: {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function providerConnectionReturnFromFormData(formData: FormData): ProviderConnectionReturn {
   return parseProviderConnectionReturn({
-    returnTo: formData.get("returnTo")?.toString(),
     resumeKey: formData.get("resumeKey")?.toString(),
+    returnTo: formData.get("returnTo")?.toString(),
   });
 }
 

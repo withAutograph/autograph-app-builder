@@ -22,8 +22,8 @@ describe("passkeyClientError", () => {
     });
 
     expect(error).toMatchObject({
-      name: "AUTH_CANCELLED",
       message: "Passkey authentication was cancelled.",
+      name: "AUTH_CANCELLED",
     });
   });
 
@@ -33,7 +33,7 @@ describe("passkeyClientError", () => {
         data: null,
         error: { code: "ERROR_CEREMONY_ABORTED", message: "Cancelled." },
       }),
-    ).toMatchObject({ name: "ERROR_CEREMONY_ABORTED", message: "Cancelled." });
+    ).toMatchObject({ message: "Cancelled.", name: "ERROR_CEREMONY_ABORTED" });
   });
 });
 
@@ -63,12 +63,12 @@ describe("passkey onboarding conflict detection", () => {
 
   it("reads the conflict code from a thrown BetterFetchError shape", () => {
     const error = Object.assign(new Error("Conflict"), {
-      status: 409,
-      statusText: "Conflict",
       error: {
         code: PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED,
         message: "The current session is already authenticated.",
       },
+      status: 409,
+      statusText: "Conflict",
     });
 
     expect(passkeyErrorCode(error)).toBe(PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED);

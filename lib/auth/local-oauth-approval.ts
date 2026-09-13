@@ -10,13 +10,13 @@ export type LocalOAuthProvider = z.infer<typeof localOAuthProviderSchema>;
 const scalar = z.string().min(1).max(2048);
 const authorizationSchema = z
   .object({
-    response_type: z.literal("code"),
     client_id: scalar,
-    state: z.string().min(20).max(512),
-    scope: z.string().max(1024).default(""),
-    redirect_uri: z.string().url().max(2048),
     code_challenge: z.string().min(20).max(256).optional(),
     code_challenge_method: z.literal("S256").optional(),
+    redirect_uri: z.string().url().max(2048),
+    response_type: z.literal("code"),
+    scope: z.string().max(1024).default(""),
+    state: z.string().min(20).max(512),
   })
   .strict()
   .superRefine((value, context) => {
@@ -32,10 +32,10 @@ export type LocalOAuthAuthorization = z.infer<typeof authorizationSchema>;
 
 const approvalRelaySchema = z
   .object({
-    provider: localOAuthProviderSchema,
-    origin: z.string().url(),
     authorization: authorizationSchema,
     expiresAt: z.number().int().positive(),
+    origin: z.string().url(),
+    provider: localOAuthProviderSchema,
   })
   .strict();
 
@@ -89,22 +89,22 @@ export function parseLocalOAuthAuthorization(input: {
   ) {
     throw new Error("Local OAuth authorization binding is invalid.");
   }
-  return { provider, authorization };
+  return { authorization, provider };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function localOAuthProviderDetails(provider: LocalOAuthProvider) {
   return provider === "github"
     ? {
-        name: "GitHub",
         account: "Autograph Developer",
         handle: "@autograph-dev",
+        name: "GitHub",
         scope: "Read your profile and verified email address",
       }
     : {
-        name: "Vercel",
         account: "Autograph Developer",
         handle: "autograph-dev",
+        name: "Vercel",
         scope: "Read your profile and verified email address",
       };
 }

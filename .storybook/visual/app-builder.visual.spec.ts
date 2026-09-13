@@ -21,7 +21,7 @@ async function openAnonymousStory(page: Page) {
 }
 
 test.describe("App Builder Storybook flows — desktop", () => {
-  test.use({ viewport: { width: 1280, height: 900 } });
+  test.use({ viewport: { height: 900, width: 1280 } });
 
   test("authenticated", async ({ page }) => {
     await openAuthenticatedStory(page);

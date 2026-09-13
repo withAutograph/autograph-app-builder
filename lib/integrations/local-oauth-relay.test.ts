@@ -6,11 +6,11 @@ describe("local Vercel OAuth relay", () => {
     const secret = "s".repeat(32);
     const value = signLocalVercelRelay(
       {
-        state: "a".repeat(32),
         configurationId: "icfg_1",
-        teamId: "team_1",
-        origin: "https://branch-one.vercel.app",
         expiresAt: 2000,
+        origin: "https://branch-one.vercel.app",
+        state: "a".repeat(32),
+        teamId: "team_1",
       },
       secret,
     );

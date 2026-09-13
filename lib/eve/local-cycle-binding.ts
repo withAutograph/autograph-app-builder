@@ -1,13 +1,13 @@
 import { randomBytes } from "node:crypto";
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { rename, rm, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, resolve } from "node:path";
+import pathModule from "node:path";
 
 const cyclePattern = /^[a-f0-9]{64}$/u;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalCyclePath(path: string) {
-  if (!isAbsolute(path) || resolve(path) !== path) {
+  if (!pathModule.isAbsolute(path) || pathModule.resolve(path) !== path) {
     throw new Error("The local Eve cycle binding path was not canonical.");
   }
   return path;
@@ -35,7 +35,7 @@ export function readLocalEveCycleBinding(path: string) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function rotateLocalEveCycleBinding(path: string) {
   canonicalCyclePath(path);
-  const parent = dirname(path);
+  const parent = pathModule.dirname(path);
   const parentInfo = lstatSync(parent);
   if (
     realpathSync(parent) !== parent ||

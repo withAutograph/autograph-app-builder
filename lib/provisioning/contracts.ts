@@ -12,11 +12,11 @@ export function builderProvisionRequestDigest(input: BuilderProvisionRequest): s
   return createHash("sha256")
     .update(
       JSON.stringify({
-        version: request.version,
-        requestId: request.requestId,
         appName: request.appName,
-        repository: request.repository,
         providers: request.providers,
+        repository: request.repository,
+        requestId: request.requestId,
+        version: request.version,
       }),
     )
     .digest("hex");
@@ -29,17 +29,17 @@ export function initialBuilderProvisionResponse(
 ): BuilderProvisionResponse {
   const request = builderProvisionRequestSchema.parse(input);
   return builderProvisionResponseSchema.parse({
-    version: 1,
-    requestId: request.requestId,
-    requestDigest: builderProvisionRequestDigest(request),
     appId: deriveBuilderAppId(request.appName),
-    status: "pending",
     github: request.providers.githubInstallationId
-      ? { status: "failed", code: "provider_unavailable", retryable: true }
-      : { status: "skipped", code: "not_selected", retryable: false },
-    vercel: request.providers.vercelInstallationId
-      ? { status: "failed", code: "provider_unavailable", retryable: true }
-      : { status: "skipped", code: "not_selected", retryable: false },
+      ? { code: "provider_unavailable", retryable: true, status: "failed" }
+      : { code: "not_selected", retryable: false, status: "skipped" },
+    requestDigest: builderProvisionRequestDigest(request),
+    requestId: request.requestId,
+    status: "pending",
     updatedAt: now.toISOString(),
+    vercel: request.providers.vercelInstallationId
+      ? { code: "provider_unavailable", retryable: true, status: "failed" }
+      : { code: "not_selected", retryable: false, status: "skipped" },
+    version: 1,
   });
 }

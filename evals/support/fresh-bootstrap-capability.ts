@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import nodePath from "node:path";
 
 import type {
   ExecutableIdentity,
@@ -34,13 +34,13 @@ async function identity(path: string): Promise<PathIdentity> {
   const canonical = await realpath(path);
   const value = await lstat(canonical);
   return {
-    path: canonical,
     device: String(value.dev),
     inode: String(value.ino),
-    uid: String(value.uid),
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     mode: (value.mode & 0o777).toString(8),
     nlink: String(value.nlink),
+    path: canonical,
+    uid: String(value.uid),
   };
 }
 
@@ -66,23 +66,23 @@ export async function createFreshBootstrapEvalCapability(): Promise<{
   ) {
     const capability = await productionFreshBootstrapCapability();
     return {
-      capability,
       allowedRoot: capability.allowedRoot.path,
+      capability,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
       cleanup: async () => {
         // The production capability owns no local resources.
       },
     };
   }
-  const owner = await realpath(await mkdtemp(join(tmpdir(), "app-builder-fresh-eval-")));
+  const owner = await realpath(await mkdtemp(nodePath.join(tmpdir(), "app-builder-fresh-eval-")));
   await chmod(owner, 0o700);
-  const stateRoot = join(owner, "state");
-  const allowedRoot = join(owner, "destinations");
+  const stateRoot = nodePath.join(owner, "state");
+  const allowedRoot = nodePath.join(owner, "destinations");
   await mkdir(stateRoot, { mode: 0o700 });
   await mkdir(allowedRoot, { mode: 0o700 });
   const selectedLock = existsSync("/usr/bin/flock")
-    ? ({ strategy: "flock", path: "/usr/bin/flock" } as const)
-    : ({ strategy: "lockf", path: "/usr/bin/lockf" } as const);
+    ? ({ path: "/usr/bin/flock", strategy: "flock" } as const)
+    : ({ path: "/usr/bin/lockf", strategy: "lockf" } as const);
   const [systemGit, systemPython, systemNode, lockHelper] = await Promise.all([
     canonicalFreshBootstrapHelperPath(existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git"),
     canonicalFreshBootstrapHelperPath(
@@ -94,20 +94,20 @@ export async function createFreshBootstrapEvalCapability(): Promise<{
   return {
     allowedRoot,
     capability: {
-      kind: "fresh-bootstrap-local-v1",
-      stateRoot: await identity(stateRoot),
       allowedRoot: await identity(allowedRoot),
-      systemGit,
-      systemPython,
-      systemGitIdentity: await executableIdentity(systemGit),
-      systemPythonIdentity: await executableIdentity(systemPython),
-      systemNode,
-      systemNodeIdentity: await executableIdentity(systemNode),
-      lockStrategy: selectedLock.strategy,
+      authority: "structural-test-injection",
+      kind: "fresh-bootstrap-local-v1",
       lockHelper,
       lockHelperIdentity: await executableIdentity(lockHelper),
-      authority: "structural-test-injection",
+      lockStrategy: selectedLock.strategy,
+      stateRoot: await identity(stateRoot),
+      systemGit,
+      systemGitIdentity: await executableIdentity(systemGit),
+      systemNode,
+      systemNodeIdentity: await executableIdentity(systemNode),
+      systemPython,
+      systemPythonIdentity: await executableIdentity(systemPython),
     },
-    cleanup: () => rm(owner, { recursive: true, force: true }),
+    cleanup: () => rm(owner, { force: true, recursive: true }),
   };
 }

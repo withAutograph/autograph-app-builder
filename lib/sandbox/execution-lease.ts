@@ -11,17 +11,14 @@ const sha256Digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 
 export const sandboxExecutionLeaseSchema = z
   .object({
-    version: z.literal(1),
-    principal: hostedPrincipalSchema,
-    adapterSessionId: hostedIdentifierSchema,
-    providerSandboxId: hostedIdentifierSchema,
-    epoch: z.number().int().positive(),
-    state: z.enum(["active", "released", "orphaned"]),
-    policyDigest: sha256Digest,
     acquiredAtEpochMs: z.number().int().nonnegative(),
-    heartbeatAtEpochMs: z.number().int().nonnegative(),
+    adapterSessionId: hostedIdentifierSchema,
+    epoch: z.number().int().positive(),
     expiresAtEpochMs: z.number().int().positive(),
-    releasedAtEpochMs: z.number().int().nonnegative().optional(),
+    heartbeatAtEpochMs: z.number().int().nonnegative(),
+    policyDigest: sha256Digest,
+    principal: hostedPrincipalSchema,
+    providerSandboxId: hostedIdentifierSchema,
     releaseReason: z
       .enum([
         "waiting",
@@ -33,6 +30,9 @@ export const sandboxExecutionLeaseSchema = z
         "expired",
       ])
       .optional(),
+    releasedAtEpochMs: z.number().int().nonnegative().optional(),
+    state: z.enum(["active", "released", "orphaned"]),
+    version: z.literal(1),
   })
   .strict()
   .superRefine((lease, context) => {
@@ -147,16 +147,16 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
       return { disposition: "existing", lease: structuredClone(existing) };
     }
     const lease = sandboxExecutionLeaseSchema.parse({
-      version: 1,
-      principal,
-      adapterSessionId,
-      providerSandboxId,
-      epoch: (existing?.epoch ?? 0) + 1,
-      state: "active",
-      policyDigest,
       acquiredAtEpochMs: input.nowEpochMs,
-      heartbeatAtEpochMs: input.nowEpochMs,
+      adapterSessionId,
+      epoch: (existing?.epoch ?? 0) + 1,
       expiresAtEpochMs: input.nowEpochMs + input.policy.lease.ttlMs,
+      heartbeatAtEpochMs: input.nowEpochMs,
+      policyDigest,
+      principal,
+      providerSandboxId,
+      state: "active",
+      version: 1,
     });
     this.leases.set(key, lease);
     return { disposition: "acquired", lease: structuredClone(lease) };
@@ -186,13 +186,13 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     const key = sandboxLeaseKey(input.principal, input.adapterSessionId);
     const current = await this.assertCurrent({
       ...input,
-      providerSandboxId: this.leases.get(key)?.providerSandboxId ?? "missing",
       policyDigest: this.leases.get(key)?.policyDigest ?? "sha256:missing",
+      providerSandboxId: this.leases.get(key)?.providerSandboxId ?? "missing",
     });
     const lease = sandboxExecutionLeaseSchema.parse({
       ...current,
-      heartbeatAtEpochMs: input.nowEpochMs,
       expiresAtEpochMs: input.nowEpochMs + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+      heartbeatAtEpochMs: input.nowEpochMs,
     });
     this.leases.set(key, lease);
     return structuredClone(lease);
@@ -210,9 +210,9 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
     if (current.state !== "active") return structuredClone(current);
     const lease = sandboxExecutionLeaseSchema.parse({
       ...current,
-      state: "released",
-      releasedAtEpochMs: input.nowEpochMs,
       releaseReason: input.reason,
+      releasedAtEpochMs: input.nowEpochMs,
+      state: "released",
     });
     this.leases.set(key, lease);
     return structuredClone(lease);
@@ -231,11 +231,11 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
       throw new Error("The sandbox execution lease authority is stale.");
     }
     return this.release({
-      principal: input.principal,
       adapterSessionId: input.adapterSessionId,
       epoch: current.epoch,
-      reason: input.reason,
       nowEpochMs: input.nowEpochMs,
+      principal: input.principal,
+      reason: input.reason,
     });
   }
 
@@ -253,8 +253,8 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
         continue;
       const lease = sandboxExecutionLeaseSchema.parse({
         ...current,
-        state: "orphaned",
         epoch: current.state === "orphaned" ? current.epoch + 1 : current.epoch,
+        state: "orphaned",
       });
       this.leases.set(key, lease);
       claimed.push(structuredClone(lease));
@@ -278,9 +278,9 @@ export class InMemorySandboxExecutionLeaseStore implements SandboxExecutionLease
       input.providerOutcome === "stopped"
         ? {
             ...current,
-            state: "released",
-            releasedAtEpochMs: input.nowEpochMs,
             releaseReason: "expired",
+            releasedAtEpochMs: input.nowEpochMs,
+            state: "released",
           }
         : current,
     );
@@ -297,8 +297,8 @@ export async function reconcileExpiredSandboxLeases(input: {
   limit?: number;
 }) {
   const leases = await input.store.claimExpired({
-    nowEpochMs: input.nowEpochMs,
     limit: input.limit ?? 32,
+    nowEpochMs: input.nowEpochMs,
   });
   const stopped: string[] = [];
   const providerFailed: string[] = [];
@@ -318,8 +318,8 @@ export async function reconcileExpiredSandboxLeases(input: {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const settled = await input.store.settleRecovery({
         lease,
-        providerOutcome,
         nowEpochMs: input.nowEpochMs,
+        providerOutcome,
       });
       if (settled === null) settlementRaced.push(digest);
       else if (providerOutcome === "stopped") stopped.push(digest);
@@ -329,9 +329,9 @@ export async function reconcileExpiredSandboxLeases(input: {
   }
   return {
     claimed: leases.length,
-    stopped,
     providerFailed,
     settlementFailed,
     settlementRaced,
+    stopped,
   } as const;
 }

@@ -102,9 +102,9 @@ export function encryptGitHubUserTokens(input: {
   cipher.setAAD(Buffer.from(input.associatedData));
   const encrypted = Buffer.concat([cipher.update(JSON.stringify(tokens), "utf-8"), cipher.final()]);
   return {
-    encryptedCredential: encrypted.toString("base64"),
     credentialIv: iv.toString("base64"),
     credentialTag: cipher.getAuthTag().toString("base64"),
+    encryptedCredential: encrypted.toString("base64"),
   };
 }
 

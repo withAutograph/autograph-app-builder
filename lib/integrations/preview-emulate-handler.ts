@@ -1,3 +1,5 @@
+import { setImmediate } from "node:timers/promises";
+
 import { createEmulateHandler } from "@emulators/adapter-next";
 import * as github from "@emulators/github";
 import * as vercel from "@emulators/vercel";
@@ -22,20 +24,20 @@ function required(value: string | undefined, name: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPreviewEmulateHandler(input: {
-  emulation: PreviewProviderEmulation;
   databaseUrl: string;
+  emulation: PreviewProviderEmulation;
   githubAppPrivateKey?: string;
 }) {
   const seed = providerEmulationSeed({
-    origin: input.emulation.canonicalOrigin,
     githubAppPrivateKey: input.githubAppPrivateKey,
     githubClientId: input.emulation.githubClientId,
     githubClientSecret: input.emulation.githubClientSecret,
-    vercelClientId: input.emulation.vercelClientId,
-    vercelClientSecret: input.emulation.vercelClientSecret,
+    origin: input.emulation.canonicalOrigin,
     // Dynamic Preview callback origins are intentionally validated by the
     // app's canonical-origin gate rather than a seeded GitHub OAuth app.
     strictGitHubOAuth: false,
+    vercelClientId: input.emulation.vercelClientId,
+    vercelClientSecret: input.emulation.vercelClientSecret,
   });
   const persistence = createPreviewEmulatePersistence({
     namespace: input.emulation.namespace,
@@ -44,6 +46,14 @@ export function createPreviewEmulateHandler(input: {
   let pendingPersistence = Promise.resolve();
   let persistenceRevision = 0;
   const emulateHandler = createEmulateHandler({
+    persistence: {
+      load: persistence.load,
+      save(state) {
+        persistenceRevision += 1;
+        pendingPersistence = persistence.save(state);
+        return pendingPersistence;
+      },
+    },
     services: {
       github: {
         emulator: github,
@@ -52,14 +62,6 @@ export function createPreviewEmulateHandler(input: {
       vercel: {
         emulator: vercel,
         seed: seed.vercel as unknown as Record<string, unknown>,
-      },
-    },
-    persistence: {
-      load: persistence.load,
-      save(state) {
-        persistenceRevision += 1;
-        pendingPersistence = persistence.save(state);
-        return pendingPersistence;
       },
     },
   });
@@ -81,9 +83,7 @@ export function createPreviewEmulateHandler(input: {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await pendingPersistence;
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        await new Promise<void>((resolve) => {
-          setImmediate(resolve);
-        });
+        await setImmediate();
         stableTurns = revision === persistenceRevision ? stableTurns + 1 : 0;
       }
       return response;
@@ -100,11 +100,11 @@ function handler(environment: NodeJS.ProcessEnv) {
   if (!emulation) return;
   if (active?.namespace === emulation.namespace) return active.handler;
   const created = createPreviewEmulateHandler({
-    emulation,
     databaseUrl: required(environment.DATABASE_URL, "DATABASE_URL"),
+    emulation,
     githubAppPrivateKey: environment.EMULATE_PREVIEW_GITHUB_APP_PRIVATE_KEY,
   });
-  active = { namespace: emulation.namespace, handler: created };
+  active = { handler: created, namespace: emulation.namespace };
   return created;
 }
 

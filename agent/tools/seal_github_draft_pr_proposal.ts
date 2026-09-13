@@ -10,11 +10,6 @@ const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 export default defineTool({
   description:
     "Read the exact reviewed workflow and fresh GitHub default-branch observation, then durably seal a draft pull-request proposal. This performs no branch, push, pull-request, release-gate, or repository mutation.",
-  inputSchema: z.strictObject({
-    expectedGitHubSourceDigest: digest,
-    expectedReviewDigest: digest,
-    title: z.string().trim().min(1).max(120),
-  }),
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "reviewed" || state.githubSource === undefined)
@@ -29,8 +24,8 @@ export default defineTool({
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
     const proposal = await runtime.sealDraftPullRequestProposal({
       githubSource: state.githubSource,
-      source: sourceReceiptEvidence(state.sourceReceipt),
       review: state.reviewReceipt,
+      source: sourceReceiptEvidence(state.sourceReceipt),
       title: input.title,
     });
     if (
@@ -50,13 +45,18 @@ export default defineTool({
         return {
           ...latest,
           githubDraftProposal: {
+            githubSourceDigest: latest.githubSource.digest,
             proposal,
             sourceReceiptDigest: latest.sourceReceipt.digest,
-            githubSourceDigest: latest.githubSource.digest,
           },
         };
       },
     });
     return proposal;
   },
+  inputSchema: z.strictObject({
+    expectedGitHubSourceDigest: digest,
+    expectedReviewDigest: digest,
+    title: z.string().trim().min(1).max(120),
+  }),
 });

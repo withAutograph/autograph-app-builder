@@ -16,6 +16,7 @@ describe("self-reproduction artifact prerequisite", () => {
   );
   it("does not infer acceptance from prose or missing status", () => {
     expect(() => assertAcceptedAppSpec("The AppSpec is ready.")).toThrow("unavailable");
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Exercise missing status through the required input argument.
     expect(() => assertAcceptedAppSpec(undefined)).toThrow("unavailable");
   });
 });

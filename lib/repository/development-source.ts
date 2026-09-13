@@ -1,5 +1,5 @@
 import { lstatSync, realpathSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import nodePath from "node:path";
 
 import { isHostedVercelRuntime } from "../sandbox/backend";
 import { inspectSourceReceipt } from "./source-receipt";
@@ -37,7 +37,7 @@ function required(environment: Environment, name: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactDevelopmentSourceRoot(path: string) {
-  if (!isAbsolute(path) || resolve(path) !== path || realpathSync(path) !== path)
+  if (!nodePath.isAbsolute(path) || nodePath.resolve(path) !== path || realpathSync(path) !== path)
     throw new Error("Development source root was not canonical.");
   const info = lstatSync(path);
   if (!info.isDirectory() || info.isSymbolicLink())

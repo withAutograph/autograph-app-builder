@@ -51,9 +51,7 @@ describe("sandbox toolchain contract", () => {
   });
 
   it("changes the template key when the configured immutable image changes", () => {
-    expect(sandboxRevalidationKey(undefined)).toBe(
-      "autograph-app-builder-toolchain-v2:local:unconfigured",
-    );
+    expect(sandboxRevalidationKey()).toBe("autograph-app-builder-toolchain-v2:local:unconfigured");
     expect(sandboxRevalidationKey(image)).toContain(image);
   });
 });

@@ -7,8 +7,8 @@ import { AppShell } from "@/components/app-shell";
 import "../globals.css";
 
 export const metadata: Metadata = {
-  title: "Autograph App Builder",
   description: "Design, plan, create, and validate supported apps with Autograph App Builder.",
+  title: "Autograph App Builder",
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

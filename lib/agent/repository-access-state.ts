@@ -18,23 +18,23 @@ const repositoryPart = z
   .regex(/^[A-Za-z0-9_.-]+$/u);
 
 const repositoryAccessReceiptUnsignedSchema = z.strictObject({
-  version: z.literal(REPOSITORY_ACCESS_RECEIPT_VERSION),
-  sessionId: z.string().min(1).max(255),
+  confirmedByCallId: z.string().min(1).max(255),
+  providerAccessDigest: digest,
   repository: z.strictObject({
-    repositoryId: decimal,
-    owner: repositoryPart,
-    name: repositoryPart,
     defaultBranch: z.string().min(1).max(255),
     headSha: objectId,
     headTree: objectId,
+    name: repositoryPart,
+    owner: repositoryPart,
+    repositoryId: decimal,
   }),
   scope: z.strictObject({
-    installationId: decimal,
     accountLogin: z.string().min(1).max(100),
     accountType: z.enum(["Organization", "User"]),
+    installationId: decimal,
   }),
-  providerAccessDigest: digest,
-  confirmedByCallId: z.string().min(1).max(255),
+  sessionId: z.string().min(1).max(255),
+  version: z.literal(REPOSITORY_ACCESS_RECEIPT_VERSION),
 });
 
 const receiptDigest = (value: z.infer<typeof repositoryAccessReceiptUnsignedSchema>) =>
@@ -47,8 +47,8 @@ export const repositoryAccessReceiptSchema = repositoryAccessReceiptUnsignedSche
     if (actualDigest !== receiptDigest(unsigned))
       context.addIssue({
         code: "custom",
-        path: ["digest"],
         message: "Repository access receipt digest is invalid.",
+        path: ["digest"],
       });
   });
 
@@ -58,18 +58,18 @@ type ReadyRepositoryAccess = Extract<RepositoryAccessResult, { status: "ready" }
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function receiptObservation(input: { sessionId: string; access: ReadyRepositoryAccess }) {
   return {
-    version: REPOSITORY_ACCESS_RECEIPT_VERSION,
-    sessionId: input.sessionId,
+    providerAccessDigest: input.access.accessDigest,
     repository: {
-      repositoryId: input.access.repository.repositoryId,
-      owner: input.access.repository.owner,
-      name: input.access.repository.name,
       defaultBranch: input.access.repository.defaultBranch,
       headSha: input.access.repository.headSha,
       headTree: input.access.repository.headTree,
+      name: input.access.repository.name,
+      owner: input.access.repository.owner,
+      repositoryId: input.access.repository.repositoryId,
     },
     scope: input.access.scope,
-    providerAccessDigest: input.access.accessDigest,
+    sessionId: input.sessionId,
+    version: REPOSITORY_ACCESS_RECEIPT_VERSION,
   } as const;
 }
 
@@ -88,11 +88,11 @@ export function recordRepositoryAccessReceipt(input: {
   if (
     current !== undefined &&
     JSON.stringify({
-      version: current.version,
-      sessionId: current.sessionId,
+      providerAccessDigest: current.providerAccessDigest,
       repository: current.repository,
       scope: current.scope,
-      providerAccessDigest: current.providerAccessDigest,
+      sessionId: current.sessionId,
+      version: current.version,
     }) === JSON.stringify(observation)
   )
     return current;
@@ -157,5 +157,5 @@ export function assertResolvedSourceMatchesRepositoryAccess(input: {
 
 export const repositoryAccessReceiptState = defineState<RepositoryAccessReceipt | undefined>(
   "autograph-app-builder.repository-access.v1",
-  () => undefined,
+  () => [][0],
 );

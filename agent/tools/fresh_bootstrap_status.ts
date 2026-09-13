@@ -38,16 +38,15 @@ function freshWorkflow() {
 }
 
 const inputSchema = z.strictObject({
-  expectedReviewDigest: freshBootstrapDigest,
   destinationPath: z.string().startsWith("/"),
   expectedPrestate: z.enum(["absent", "empty-directory"]),
+  expectedReviewDigest: freshBootstrapDigest,
   repositoryIdentity: freshBootstrapIdentitySchema,
 });
 
 export default defineTool({
   description:
     "Read or derive the exact approval-bound proposal for atomically publishing the reviewed fresh-template result as a new local repository. It fails closed unless the mise-owned host capability is enabled; it may reconcile durable workflow state but never mutates a target, provider, release, or remote.",
-  inputSchema,
   async execute(input, ctx) {
     const capability = await currentFreshBootstrapCapability();
     const workflow = freshWorkflow();
@@ -58,26 +57,28 @@ export default defineTool({
     const readOverlayFile = async (path: string) =>
       await sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` });
     const sourceWorkspace = await freshBootstrapSourceWorkspace({
-      sandbox,
       receipt: workflow.sourceReceipt,
+      sandbox,
       workspace: workflow.workspace,
     });
-    const proposal =
-      workflow.phase === "reviewed"
-        ? await deriveFreshBootstrapProposal({
-            capability,
-            destinationPath: input.destinationPath,
-            expectedPrestate: input.expectedPrestate,
-            repositoryIdentity: input.repositoryIdentity,
-            sourceReceipt: workflow.sourceReceipt,
-            review: workflow.reviewReceipt,
-            protectedPaths: [process.cwd()],
-            readOverlayFile,
-            sourceWorkspace,
-          })
-        : workflow.phase === "fresh_bootstrap_pending"
-          ? workflow.freshBootstrapProposal
-          : proposalFromFreshBootstrapJournal(workflow.freshBootstrapReceipt);
+    let proposal;
+    if (workflow.phase === "reviewed") {
+      proposal = await deriveFreshBootstrapProposal({
+        capability,
+        destinationPath: input.destinationPath,
+        expectedPrestate: input.expectedPrestate,
+        protectedPaths: [process.cwd()],
+        readOverlayFile,
+        repositoryIdentity: input.repositoryIdentity,
+        review: workflow.reviewReceipt,
+        sourceReceipt: workflow.sourceReceipt,
+        sourceWorkspace,
+      });
+    } else if (workflow.phase === "fresh_bootstrap_pending") {
+      proposal = workflow.freshBootstrapProposal;
+    } else {
+      proposal = proposalFromFreshBootstrapJournal(workflow.freshBootstrapReceipt);
+    }
     if (
       proposal.destinationPath !== input.destinationPath ||
       JSON.stringify(proposal.repositoryIdentity) !== JSON.stringify(input.repositoryIdentity) ||
@@ -89,18 +90,18 @@ export default defineTool({
     if (journal === undefined)
       return {
         ...proposal,
-        workflowPhase: workflow.phase,
         retryAllowed: workflow.phase === "reviewed",
+        workflowPhase: workflow.phase,
       };
     if (!exactFreshBootstrapProposalMatch(proposalFromFreshBootstrapJournal(journal), proposal))
       throw new Error("The fresh-bootstrap journal belongs to another proposal.");
     if (journal.status === "succeeded") {
       await verifyFreshBootstrap({
         capability,
-        receipt: journal,
-        sourceReceipt: workflow.sourceReceipt,
-        review: workflow.reviewReceipt,
         readOverlayFile,
+        receipt: journal,
+        review: workflow.reviewReceipt,
+        sourceReceipt: workflow.sourceReceipt,
         sourceWorkspace,
       });
       if (workflow.phase !== "published_fresh_bootstrap")
@@ -116,15 +117,15 @@ export default defineTool({
               throw new Error("The workflow cannot reconcile fresh-bootstrap success.");
             return {
               ...current,
-              phase: "published_fresh_bootstrap",
               freshBootstrapReceipt: journal,
+              phase: "published_fresh_bootstrap",
             };
           },
         });
       return {
         ...journal,
-        workflowPhase: "published_fresh_bootstrap",
         reused: true,
+        workflowPhase: "published_fresh_bootstrap",
       };
     }
     if (journal.status === "failed" && workflow.phase !== "fresh_bootstrap_failed")
@@ -136,8 +137,8 @@ export default defineTool({
             throw new Error("The workflow cannot reconcile fresh-bootstrap failure.");
           return {
             ...current,
-            phase: "fresh_bootstrap_failed",
             freshBootstrapReceipt: journal,
+            phase: "fresh_bootstrap_failed",
           };
         },
       });
@@ -150,18 +151,19 @@ export default defineTool({
             throw new Error("The workflow cannot reconcile fresh-bootstrap pending state.");
           return {
             ...current,
-            phase: "fresh_bootstrap_pending",
-            freshBootstrapProposal: proposal,
             freshBootstrapCallId: journal.publishedByCallId,
+            freshBootstrapProposal: proposal,
+            phase: "fresh_bootstrap_pending",
           };
         },
       });
     return {
       ...journal,
+      recoveryAllowed: true,
+      retryAllowed: false,
       workflowPhase:
         journal.status === "failed" ? "fresh_bootstrap_failed" : "fresh_bootstrap_pending",
-      retryAllowed: false,
-      recoveryAllowed: true,
     };
   },
+  inputSchema,
 });

@@ -16,25 +16,25 @@ describe("planning from the current checkout", () => {
     });
     const executor = vi.fn(fixtureTargetCommandExecutor());
     const sandbox = {
+      readTextFile,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      removePath: vi.fn(async () => {}),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       run: vi.fn(async ({ command }: { command: string }) => ({
         exitCode: command.startsWith("test -d") ? 1 : 0,
-        stdout: "",
         stderr: "",
+        stdout: "",
       })),
-      readTextFile,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      writeTextFile: vi.fn(async () => undefined),
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      removePath: vi.fn(async () => undefined),
+      writeTextFile: vi.fn(async () => {}),
     } as unknown as SandboxSession;
     const result = await executeTargetIdentityAndPlanning({
-      sandbox,
-      executor,
       appId: "stock-exceptions",
-      artifactRevision: "a".repeat(64),
-      appSpecDigest: "b".repeat(64),
       appSpecContent: "Stock Exceptions product design",
+      appSpecDigest: "b".repeat(64),
+      artifactRevision: "a".repeat(64),
+      executor,
+      sandbox,
     });
     expect(result.proposal.contract.appId).toBe("stock-exceptions");
     expect(executor.mock.calls.map(([request]) => request.command)).toEqual([
@@ -47,30 +47,30 @@ describe("planning from the current checkout", () => {
     const executor = vi.fn(fixtureTargetCommandExecutor());
     const sandbox = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      removePath: vi.fn(async () => {}),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       run: vi.fn(async ({ command }: { command: string }) => ({
         exitCode: command.startsWith("test -d") ? 1 : 0,
-        stdout: "",
         stderr: "",
+        stdout: "",
       })),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      writeTextFile: vi.fn(async () => undefined),
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      removePath: vi.fn(async () => undefined),
+      writeTextFile: vi.fn(async () => {}),
     } as unknown as SandboxSession;
 
     const result = await executeTargetIdentityAndPlanning({
-      sandbox,
-      executor,
       appId: "stock-exceptions",
-      artifactRevision: "a".repeat(64),
-      appSpecDigest: "b".repeat(64),
       appSpecContent: "Stock Exceptions product design",
+      appSpecDigest: "b".repeat(64),
+      artifactRevision: "a".repeat(64),
+      executor,
       existingAppChanges: [
         {
-          path: "apps/stock-exceptions/app/page.tsx",
           content: "new component",
+          path: "apps/stock-exceptions/app/page.tsx",
         },
       ],
+      sandbox,
     });
 
     expect(result.proposal).not.toHaveProperty("operation");
@@ -84,39 +84,39 @@ describe("planning from the current checkout", () => {
     const before = Buffer.from("old component");
     const sandbox = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      run: vi.fn(async ({ command }: { command: string }) => ({
-        exitCode: 0,
-        stdout: command.startsWith("stat ") ? "755\n" : "",
-        stderr: "",
-      })),
+      readBinaryFile: vi.fn(async () => before),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       readTextFile: vi.fn(async () => null),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      readBinaryFile: vi.fn(async () => before),
+      removePath: vi.fn(async () => {}),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      writeTextFile: vi.fn(async () => undefined),
+      run: vi.fn(async ({ command }: { command: string }) => ({
+        exitCode: 0,
+        stderr: "",
+        stdout: command.startsWith("stat ") ? "755\n" : "",
+      })),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      removePath: vi.fn(async () => undefined),
+      writeTextFile: vi.fn(async () => {}),
     } as unknown as SandboxSession;
     const result = await executeTargetIdentityAndPlanning({
-      sandbox,
-      executor: fixtureTargetCommandExecutor(),
       appId: "vendor",
-      artifactRevision: "a".repeat(64),
-      appSpecDigest: "b".repeat(64),
       appSpecContent: "Improve Vendor",
-      existingAppChanges: [{ path: "apps/vendor/app/page.tsx", content: "new component" }],
+      appSpecDigest: "b".repeat(64),
+      artifactRevision: "a".repeat(64),
+      executor: fixtureTargetCommandExecutor(),
+      existingAppChanges: [{ content: "new component", path: "apps/vendor/app/page.tsx" }],
+      sandbox,
     });
     expect(result.proposal).toMatchObject({
-      operation: "iterate-existing-app",
       iteration: {
         changes: [
           {
+            after: { content: "new component", mode: "755" },
             before: { mode: "755" },
-            after: { mode: "755", content: "new component" },
           },
         ],
       },
+      operation: "iterate-existing-app",
     });
     expect(sandbox.readBinaryFile).toHaveBeenCalledWith({
       path: "repository/apps/vendor/app/page.tsx",
@@ -129,25 +129,25 @@ describe("planning from the current checkout", () => {
     "copies current files without requiring an inspection manifest (%s)",
     async (manifest) => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      const run = vi.fn(async () => ({ exitCode: 0, stdout: "", stderr: "" }));
+      const run = vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: "" }));
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const readTextFile = vi.fn(async () => manifest);
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      const writeTextFile = vi.fn(async () => undefined);
+      const writeTextFile = vi.fn(async () => {});
       const sandbox = {
-        run,
         readTextFile,
-        writeTextFile,
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        removePath: vi.fn(async () => undefined),
+        removePath: vi.fn(async () => {}),
+        run,
+        writeTextFile,
       } as unknown as SandboxSession;
 
       const result = await materializePlanningOverlay({
-        sandbox,
-        artifactRevision: "a".repeat(64),
         appId: "stock-exceptions",
         appSpecContent: "Stock Exceptions product design",
         appSpecDigest: "b".repeat(64),
+        artifactRevision: "a".repeat(64),
+        sandbox,
       });
 
       expect(readTextFile).not.toHaveBeenCalled();
@@ -166,24 +166,24 @@ describe("planning from the current checkout", () => {
   it("reports an actual checkout copy failure", async () => {
     const sandbox = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      removePath: vi.fn(async () => {}),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       run: vi.fn(async ({ command }: { command: string }) => ({
         exitCode: command.startsWith("cp ") ? 1 : 0,
-        stdout: "",
         stderr: "",
+        stdout: "",
       })),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      writeTextFile: vi.fn(async () => undefined),
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      removePath: vi.fn(async () => undefined),
+      writeTextFile: vi.fn(async () => {}),
     } as unknown as SandboxSession;
 
     await expect(
       materializePlanningOverlay({
-        sandbox,
-        artifactRevision: "a".repeat(64),
         appId: "stock-exceptions",
         appSpecContent: "Stock Exceptions product design",
         appSpecDigest: "b".repeat(64),
+        artifactRevision: "a".repeat(64),
+        sandbox,
       }),
     ).rejects.toThrow("source copy");
   });

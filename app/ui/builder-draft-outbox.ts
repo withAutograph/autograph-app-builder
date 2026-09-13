@@ -39,48 +39,48 @@ const memoryFallback = new Map<string, unknown>();
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    request.addEventListener("success", () => resolve(request.result), {
-      once: true,
-    });
-    request.addEventListener("error", () => reject(request.error), {
-      once: true,
-    });
+  const { promise, reject, resolve } = Promise.withResolvers<T>();
+  request.addEventListener("success", () => resolve(request.result), {
+    once: true,
   });
+  request.addEventListener("error", () => reject(request.error), {
+    once: true,
+  });
+  return promise;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function transactionResult(transaction: IDBTransaction): Promise<void> {
-  return new Promise((resolve, reject) => {
-    transaction.addEventListener("complete", () => resolve(), { once: true });
-    transaction.addEventListener("abort", () => reject(transaction.error), {
-      once: true,
-    });
-    transaction.addEventListener("error", () => reject(transaction.error), {
-      once: true,
-    });
+function transactionResult(transaction: IDBTransaction): Promise<undefined> {
+  const { promise, reject, resolve } = Promise.withResolvers<undefined>();
+  transaction.addEventListener("complete", () => resolve(undefined as undefined), { once: true });
+  transaction.addEventListener("abort", () => reject(transaction.error), {
+    once: true,
   });
+  transaction.addEventListener("error", () => reject(transaction.error), {
+    once: true,
+  });
+  return promise;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = factory.open(databaseName, 1);
-    request.addEventListener(
-      "upgradeneeded",
-      () => {
-        const database = request.result;
-        if (!database.objectStoreNames.contains(storeName)) database.createObjectStore(storeName);
-      },
-      { once: true },
-    );
-    request.addEventListener("success", () => resolve(request.result), {
-      once: true,
-    });
-    request.addEventListener("error", () => reject(request.error), {
-      once: true,
-    });
+  const { promise, reject, resolve } = Promise.withResolvers<IDBDatabase>();
+  const request = factory.open(databaseName, 1);
+  request.addEventListener(
+    "upgradeneeded",
+    () => {
+      const database = request.result;
+      if (!database.objectStoreNames.contains(storeName)) database.createObjectStore(storeName);
+    },
+    { once: true },
+  );
+  request.addEventListener("success", () => resolve(request.result), {
+    once: true,
   });
+  request.addEventListener("error", () => reject(request.error), {
+    once: true,
+  });
+  return promise;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -97,7 +97,7 @@ export function createBuilderDraftOutbox<T>(
   options: BuilderDraftOutboxOptions,
 ): BuilderDraftOutbox<T> {
   const factory = options.indexedDB === undefined ? defaultFactory() : options.indexedDB;
-  let operations = Promise.resolve();
+  let operations: Promise<unknown> = Promise.resolve();
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function serial<Result>(operation: () => Promise<Result>): Promise<Result> {
@@ -107,8 +107,8 @@ export function createBuilderDraftOutbox<T>(
     // Keep the queue usable after either outcome.
     // oxlint-disable-next-line promise/prefer-await-to-then
     operations = result.then(
-      () => undefined,
-      () => undefined,
+      () => null,
+      () => null,
     );
     return result;
   }
@@ -132,50 +132,16 @@ export function createBuilderDraftOutbox<T>(
   }
 
   return {
-    read: () =>
-      serial(() =>
-        withDatabase(
-          async (database) => {
-            const transaction = database.transaction(storeName, "readonly");
-            const result = await requestResult(transaction.objectStore(storeName).get(options.key));
-            await transactionResult(transaction);
-            return result as BuilderDraftOutboxEntry<T> | undefined;
-          },
-          () => memoryFallback.get(options.key) as BuilderDraftOutboxEntry<T> | undefined,
-        ),
-      ),
-    write: (entry) =>
+    clear: () =>
       serial(() =>
         withDatabase(
           async (database) => {
             const transaction = database.transaction(storeName, "readwrite");
-            transaction.objectStore(storeName).put(entry, options.key);
+            transaction.objectStore(storeName).delete(options.key);
             await transactionResult(transaction);
           },
           () => {
-            memoryFallback.set(options.key, entry);
-          },
-        ),
-      ),
-    clearIfMutationId: (mutationId) =>
-      serial(() =>
-        withDatabase(
-          async (database) => {
-            const transaction = database.transaction(storeName, "readwrite");
-            const store = transaction.objectStore(storeName);
-            const entry = (await requestResult(store.get(options.key))) as
-              | BuilderDraftOutboxEntry<T>
-              | undefined;
-            const cleared = entry?.mutationId === mutationId;
-            if (cleared) store.delete(options.key);
-            await transactionResult(transaction);
-            return cleared;
-          },
-          () => {
-            const entry = memoryFallback.get(options.key) as BuilderDraftOutboxEntry<T> | undefined;
-            if (entry?.mutationId !== mutationId) return false;
             memoryFallback.delete(options.key);
-            return true;
           },
         ),
       ),
@@ -201,16 +167,50 @@ export function createBuilderDraftOutbox<T>(
           },
         ),
       ),
-    clear: () =>
+    clearIfMutationId: (mutationId) =>
       serial(() =>
         withDatabase(
           async (database) => {
             const transaction = database.transaction(storeName, "readwrite");
-            transaction.objectStore(storeName).delete(options.key);
+            const store = transaction.objectStore(storeName);
+            const entry = (await requestResult(store.get(options.key))) as
+              | BuilderDraftOutboxEntry<T>
+              | undefined;
+            const cleared = entry?.mutationId === mutationId;
+            if (cleared) store.delete(options.key);
+            await transactionResult(transaction);
+            return cleared;
+          },
+          () => {
+            const entry = memoryFallback.get(options.key) as BuilderDraftOutboxEntry<T> | undefined;
+            if (entry?.mutationId !== mutationId) return false;
+            memoryFallback.delete(options.key);
+            return true;
+          },
+        ),
+      ),
+    read: () =>
+      serial(() =>
+        withDatabase(
+          async (database) => {
+            const transaction = database.transaction(storeName, "readonly");
+            const result = await requestResult(transaction.objectStore(storeName).get(options.key));
+            await transactionResult(transaction);
+            return result as BuilderDraftOutboxEntry<T> | undefined;
+          },
+          () => memoryFallback.get(options.key) as BuilderDraftOutboxEntry<T> | undefined,
+        ),
+      ),
+    write: (entry) =>
+      serial(() =>
+        withDatabase(
+          async (database) => {
+            const transaction = database.transaction(storeName, "readwrite");
+            transaction.objectStore(storeName).put(entry, options.key);
             await transactionResult(transaction);
           },
           () => {
-            memoryFallback.delete(options.key);
+            memoryFallback.set(options.key, entry);
           },
         ),
       ),

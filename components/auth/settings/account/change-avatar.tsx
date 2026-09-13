@@ -112,7 +112,7 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
 
         <DropdownMenu>
           <DropdownMenuTrigger
-            className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
+            className={cn(buttonVariants({ size: "sm", variant: "secondary" }))}
             disabled={!session || isPending}
           >
             {isPending && <Spinner />}

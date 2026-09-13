@@ -22,7 +22,7 @@ describe("non-authorizing structural test protocol relay", () => {
       },
     });
     // oxlint-enable promise/prefer-await-to-callbacks
-    const relay = relayBoundedFrames({ source, target, expectedFrames: 2 });
+    const relay = relayBoundedFrames({ expectedFrames: 2, source, target });
     source.write('{"version":');
     source.write("2}\n");
     source.end('{"nonce":"abc"}\n');
@@ -35,7 +35,7 @@ describe("non-authorizing structural test protocol relay", () => {
     for (const sourceText of ["x".repeat(4097), "{}\n{}\n", "{}"] as const) {
       const source = new PassThrough();
       const target = new PassThrough();
-      const relay = relayBoundedFrames({ source, target, expectedFrames: 1 });
+      const relay = relayBoundedFrames({ expectedFrames: 1, source, target });
       source.end(sourceText);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(relay).rejects.toThrow(/Protocol/u);

@@ -28,11 +28,11 @@ export async function saveActiveBuilderDraft(input: SaveActiveBuilderDraftInput)
     saveActiveBuilderDraftInputSchema.parse(input),
   );
   return {
+    concurrent: saved.concurrent,
     draftId: saved.row.draftId,
+    idempotent: saved.idempotent,
     revision: saved.row.revision,
     updatedAt: saved.row.updatedAt.toISOString(),
-    idempotent: saved.idempotent,
-    concurrent: saved.concurrent,
   };
 }
 

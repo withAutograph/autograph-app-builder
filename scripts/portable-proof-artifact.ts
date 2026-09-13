@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { lstat, readFile, realpath } from "node:fs/promises";
-import { basename, join, relative, resolve, sep } from "node:path";
+import nodePath from "node:path";
 import { gunzipSync } from "node:zlib";
 
 import { z } from "zod";
@@ -22,10 +22,14 @@ const digestRecord = z.record(z.string().min(1), hash);
 
 export const portableReleaseReceiptSchema = z
   .object({
+    archive: z.object({ name: z.string().min(1), sha256: hash }).strict(),
+    auxiliaryFiles: digestRecord,
+    codexMarketplaceArchive: z.object({ name: z.string().min(1), sha256: hash }).strict(),
+    codexMarketplaceAssets: digestRecord,
+    coreFiles: digestRecord,
+    endpoint: z.string().url().startsWith("https://"),
     format: z.literal("autograph-portable-plugin-release-v3"),
-    specification: z.literal("1.0.0"),
     name: z.literal("app-builder"),
-    version: z.literal("0.2.12"),
     source: z
       .object({
         repository: z.literal("https://github.com/withAutograph/autograph-app-builder"),
@@ -33,12 +37,7 @@ export const portableReleaseReceiptSchema = z
         tree: sourceHash,
       })
       .strict(),
-    endpoint: z.string().url().startsWith("https://"),
-    archive: z.object({ name: z.string().min(1), sha256: hash }).strict(),
-    codexMarketplaceArchive: z.object({ name: z.string().min(1), sha256: hash }).strict(),
-    codexMarketplaceAssets: digestRecord,
-    coreFiles: digestRecord,
-    auxiliaryFiles: digestRecord,
+    specification: z.literal("1.0.0"),
     tools: z.tuple([
       z.literal("autograph_start"),
       z.literal("autograph_get"),
@@ -46,6 +45,7 @@ export const portableReleaseReceiptSchema = z
       z.literal("autograph_respond"),
       z.literal("autograph_cancel"),
     ]),
+    version: z.literal("0.2.12"),
   })
   .strict();
 
@@ -95,11 +95,11 @@ export function archiveFiles(archive: Uint8Array) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function regularFile(path: string) {
-  const info = await lstat(path);
+async function regularFile(filePath: string) {
+  const info = await lstat(filePath);
   if (!info.isFile() || info.isSymbolicLink())
-    throw new Error(`Expected a regular non-symbolic file: ${basename(path)}`);
-  return readFile(path);
+    throw new Error(`Expected a regular non-symbolic file: ${nodePath.basename(filePath)}`);
+  return readFile(filePath);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -108,10 +108,10 @@ function git(repositoryRoot: string, ...args: string[]) {
     cwd: repositoryRoot,
     encoding: "utf-8",
     env: {
-      PATH: "/usr/bin:/bin",
       HOME: process.env.HOME,
       LC_ALL: "C",
       NODE_ENV: "production",
+      PATH: "/usr/bin:/bin",
     },
   }).trim();
 }
@@ -129,10 +129,10 @@ export async function verifyPortableProofArtifact(input: {
   installRoot: string;
   repositoryRoot: string;
 }) {
-  const releaseRoot = await realpath(resolve(input.releaseRoot));
-  const installRoot = await realpath(resolve(input.installRoot));
-  const repositoryRoot = await realpath(resolve(input.repositoryRoot));
-  const receiptPath = join(releaseRoot, "release-receipt.json");
+  const releaseRoot = await realpath(nodePath.resolve(input.releaseRoot));
+  const installRoot = await realpath(nodePath.resolve(input.installRoot));
+  const repositoryRoot = await realpath(nodePath.resolve(input.repositoryRoot));
+  const receiptPath = nodePath.join(releaseRoot, "release-receipt.json");
   const receiptBytes = await regularFile(receiptPath);
   const receipt = portableReleaseReceiptSchema.parse(JSON.parse(receiptBytes.toString("utf-8")));
   const origin = releaseEndpoint(new URL(receipt.endpoint).origin);
@@ -148,10 +148,10 @@ export async function verifyPortableProofArtifact(input: {
   const archiveName = `${receipt.name}-${receipt.version}.tar.gz`;
   if (
     receipt.archive.name !== archiveName ||
-    basename(receipt.archive.name) !== receipt.archive.name
+    nodePath.basename(receipt.archive.name) !== receipt.archive.name
   )
     throw new Error("Release archive basename was invalid.");
-  const archive = await regularFile(join(releaseRoot, receipt.archive.name));
+  const archive = await regularFile(nodePath.join(releaseRoot, receipt.archive.name));
   if (sha256(archive) !== receipt.archive.sha256)
     throw new Error("Release archive digest did not match its receipt.");
   const archived = archiveFiles(archive);
@@ -160,25 +160,25 @@ export async function verifyPortableProofArtifact(input: {
     if (receipt.coreFiles[path] !== sha256(bytes))
       throw new Error(`Archive core digest drifted at ${path}.`);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const loose = await regularFile(join(releaseRoot, path));
+    const loose = await regularFile(nodePath.join(releaseRoot, path));
     if (sha256(loose) !== receipt.coreFiles[path])
       throw new Error(`Loose core file drifted at ${path}.`);
   }
   const marketplaceArchiveName = `${receipt.name}-codex-marketplace-${receipt.version}.tar.gz`;
   if (
     receipt.codexMarketplaceArchive.name !== marketplaceArchiveName ||
-    basename(receipt.codexMarketplaceArchive.name) !== receipt.codexMarketplaceArchive.name
+    nodePath.basename(receipt.codexMarketplaceArchive.name) !== receipt.codexMarketplaceArchive.name
   )
     throw new Error("Codex marketplace archive basename was invalid.");
   const marketplaceArchive = await regularFile(
-    join(releaseRoot, receipt.codexMarketplaceArchive.name),
+    nodePath.join(releaseRoot, receipt.codexMarketplaceArchive.name),
   );
   if (sha256(marketplaceArchive) !== receipt.codexMarketplaceArchive.sha256)
     throw new Error("Codex marketplace archive digest did not match its receipt.");
   const marketplaceFiles = archiveFiles(marketplaceArchive);
   const marketplacePrefix = `plugins/${receipt.name}/`;
   for (const path of archived.keys()) {
-    const relativePath = relative(receipt.name, path);
+    const relativePath = nodePath.relative(receipt.name, path);
     if (!marketplaceFiles.has(`${marketplacePrefix}${relativePath}`))
       throw new Error(`Codex marketplace omitted portable core file ${relativePath}.`);
   }
@@ -189,26 +189,27 @@ export async function verifyPortableProofArtifact(input: {
   ])
     if (!marketplaceFiles.has(required)) throw new Error(`Codex marketplace omitted ${required}.`);
   const marketplaceAdapterPath = `${marketplacePrefix}.mcp.json`;
-  const marketplaceAdapter = JSON.parse(
-    Buffer.from(marketplaceFiles.get(marketplaceAdapterPath)!).toString("utf-8"),
-  );
+  const marketplaceAdapterBytes = marketplaceFiles.get(marketplaceAdapterPath);
+  if (!marketplaceAdapterBytes)
+    throw new Error(`Codex marketplace omitted ${marketplaceAdapterPath}.`);
+  const marketplaceAdapter = JSON.parse(Buffer.from(marketplaceAdapterBytes).toString("utf-8"));
   if (
     JSON.stringify(marketplaceAdapter) !==
     JSON.stringify({
       mcpServers: {
         "app-builder": {
+          oauth_resource: receipt.endpoint,
           type: "http",
           url: receipt.endpoint,
-          oauth_resource: receipt.endpoint,
         },
       },
     })
   )
     throw new Error("Codex marketplace adapter must declare exactly one /mcp server.");
   const codexManifestPath = `${marketplacePrefix}.codex-plugin/plugin.json`;
-  const codexManifest = JSON.parse(
-    Buffer.from(marketplaceFiles.get(codexManifestPath)!).toString("utf-8"),
-  );
+  const codexManifestBytes = marketplaceFiles.get(codexManifestPath);
+  if (!codexManifestBytes) throw new Error(`Codex marketplace omitted ${codexManifestPath}.`);
+  const codexManifest = JSON.parse(Buffer.from(codexManifestBytes).toString("utf-8"));
   if (
     codexManifest.name !== receipt.name ||
     codexManifest.version !== "0.2.12" ||
@@ -234,9 +235,9 @@ export async function verifyPortableProofArtifact(input: {
     codexMarketplaceAssetPaths.push(path);
     const sourceDigest = sha256(
       readTrackedTreeBlob({
+        path: reference.slice(2),
         repositoryRoot,
         tree: receipt.source.tree,
-        path: reference.slice(2),
       }).bytes,
     );
     if (receipt.codexMarketplaceAssets[path] !== sourceDigest || sha256(content) !== sourceDigest)
@@ -254,78 +255,76 @@ export async function verifyPortableProofArtifact(input: {
   exactKeys(receipt.auxiliaryFiles, auxiliaryPaths);
   for (const path of auxiliaryPaths) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const bytes = await regularFile(join(releaseRoot, path));
+    const bytes = await regularFile(nodePath.join(releaseRoot, path));
     if (receipt.auxiliaryFiles[path] !== sha256(bytes))
       throw new Error(`Auxiliary file drifted at ${path}.`);
   }
-  const coreRoot = join(releaseRoot, receipt.name);
+  const coreRoot = nodePath.join(releaseRoot, receipt.name);
   await validateAgentPluginPackage({
-    pluginRoot: coreRoot,
-    repositoryRoot,
-    release: true,
     packageKind: "generated-artifact",
+    pluginRoot: coreRoot,
+    release: true,
+    repositoryRoot,
   });
   for (const client of ["codex", "cursor", "vscode"] as const) {
-    const clientRoot = join(installRoot, client);
-    const installedRoot = join(clientRoot, receipt.name);
+    const clientRoot = nodePath.join(installRoot, client);
+    const installedRoot = nodePath.join(clientRoot, receipt.name);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await validateAgentPluginPackage({
-      pluginRoot: installedRoot,
-      repositoryRoot,
-      release: true,
       packageKind: "generated-artifact",
+      pluginRoot: installedRoot,
+      release: true,
+      repositoryRoot,
     });
     for (const [path, expectedDigest] of Object.entries(receipt.coreFiles)) {
-      const relativePath = relative(receipt.name, path);
-      if (relativePath.startsWith(`..${sep}`) || relativePath === "..")
+      const relativePath = nodePath.relative(receipt.name, path);
+      if (relativePath.startsWith(`..${nodePath.sep}`) || relativePath === "..")
         throw new Error("Core receipt path escaped the plugin root.");
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      if (sha256(await regularFile(join(installedRoot, relativePath))) !== expectedDigest)
+      if (sha256(await regularFile(nodePath.join(installedRoot, relativePath))) !== expectedDigest)
         throw new Error(`${client} installed core drifted at ${relativePath}.`);
     }
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+    const clientHarnessBytes = await regularFile(nodePath.join(clientRoot, "client-harness.json"));
     const harness = z
       .object({
-        format: z.literal("agent-plugins-client-harness-v2"),
         client: z.literal(client),
-        pluginRoot: z.literal("./app-builder"),
+        format: z.literal("agent-plugins-client-harness-v2"),
         mcp: z.literal("./app-builder/mcp.json"),
+        oauth: z
+          .object({
+            protectedResourceMetadata: z.literal(`${origin}/.well-known/oauth-protected-resource`),
+          })
+          .strict(),
+        pluginRoot: z.literal("./app-builder"),
         transport: z
           .object({
             type: z.literal("streamable-http"),
             url: z.literal(receipt.endpoint),
           })
           .strict(),
-        oauth: z
-          .object({
-            protectedResourceMetadata: z.literal(`${origin}/.well-known/oauth-protected-resource`),
-          })
-          .strict(),
       })
       .strict()
-      .parse(
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        JSON.parse((await regularFile(join(clientRoot, "client-harness.json"))).toString("utf-8")),
-      );
+      .parse(JSON.parse(clientHarnessBytes.toString("utf-8")));
     if (harness.client !== client) throw new Error("Client adapter drifted.");
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+    const installationReceiptBytes = await regularFile(
+      nodePath.join(clientRoot, "installation-receipt.json"),
+    );
     const installation = z
       .object({
-        format: z.literal("agent-plugins-offline-installation-v1"),
         client: z.literal(client),
+        format: z.literal("agent-plugins-offline-installation-v1"),
+        pluginRoot: z.literal("./app-builder"),
         releaseArchive: z
           .object({
             name: z.literal(receipt.archive.name),
             sha256: z.literal(receipt.archive.sha256),
           })
           .strict(),
-        pluginRoot: z.literal("./app-builder"),
       })
       .strict()
-      .parse(
-        JSON.parse(
-          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-          (await regularFile(join(clientRoot, "installation-receipt.json"))).toString("utf-8"),
-        ),
-      );
+      .parse(JSON.parse(installationReceiptBytes.toString("utf-8")));
     if (installation.client !== client) throw new Error("Installed client receipt drifted.");
   }
   if (JSON.stringify(receipt.tools) !== JSON.stringify(TOOL_NAMES))

@@ -8,10 +8,10 @@ const strongAlgorithmSchema = z.enum(["RS256", "PS256", "ES256", "EdDSA"]);
 
 export const hostedMcpAuthConfigSchema = z
   .object({
-    issuer: z.string().url().startsWith("https://"),
-    audience: z.string().url().startsWith("https://"),
-    jwksUrl: z.string().url().startsWith("https://"),
     algorithm: strongAlgorithmSchema,
+    audience: z.string().url().startsWith("https://"),
+    issuer: z.string().url().startsWith("https://"),
+    jwksUrl: z.string().url().startsWith("https://"),
     resourceUrl: z.string().url().startsWith("https://"),
   })
   .strict()
@@ -25,16 +25,16 @@ export const hostedMcpAuthConfigSchema = z
       if (url.username || url.password || url.hash || url.search) {
         context.addIssue({
           code: "custom",
-          path: [field],
           message: `${field} cannot contain credentials, query, or fragment.`,
+          path: [field],
         });
       }
     }
     if (config.audience !== config.resourceUrl) {
       context.addIssue({
         code: "custom",
-        path: ["audience"],
         message: "audience must equal the protected resource URL.",
+        path: ["audience"],
       });
     }
     const issuer = new URL(config.issuer);
@@ -43,29 +43,29 @@ export const hostedMcpAuthConfigSchema = z
     if (issuer.pathname !== "/api/auth") {
       context.addIssue({
         code: "custom",
-        path: ["issuer"],
         message: "issuer must be the exact /api/auth URL.",
+        path: ["issuer"],
       });
     }
     if (resource.pathname !== "/mcp") {
       context.addIssue({
         code: "custom",
-        path: ["resourceUrl"],
         message: "resourceUrl must be the exact /mcp URL.",
+        path: ["resourceUrl"],
       });
     }
     if (issuer.origin !== resource.origin) {
       context.addIssue({
         code: "custom",
-        path: ["resourceUrl"],
         message: "issuer and resourceUrl must share one origin.",
+        path: ["resourceUrl"],
       });
     }
     if (jwks.origin !== issuer.origin || jwks.pathname !== "/api/auth/jwks") {
       context.addIssue({
         code: "custom",
-        path: ["jwksUrl"],
         message: "jwksUrl must be the exact issuer /api/auth/jwks URL.",
+        path: ["jwksUrl"],
       });
     }
   });
@@ -77,10 +77,10 @@ export function readHostedMcpAuthConfig(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): HostedMcpAuthConfig {
   return hostedMcpAuthConfigSchema.parse({
-    issuer: environment.MCP_OAUTH_ISSUER,
-    audience: environment.MCP_OAUTH_AUDIENCE,
-    jwksUrl: environment.MCP_OAUTH_JWKS_URL,
     algorithm: environment.MCP_OAUTH_ALGORITHM,
+    audience: environment.MCP_OAUTH_AUDIENCE,
+    issuer: environment.MCP_OAUTH_ISSUER,
+    jwksUrl: environment.MCP_OAUTH_JWKS_URL,
     resourceUrl: environment.MCP_RESOURCE_URL,
   });
 }
@@ -127,9 +127,8 @@ export function createRemoteJwksAccessTokenVerifier(input: {
   const configuredJwksUrl = new URL(config.jwksUrl);
   const fetchImplementation = input.fetchImplementation ?? fetch;
   const remoteJwks = createRemoteJWKSet(configuredJwksUrl, {
-    timeoutDuration: 5000,
-    cooldownDuration: 30_000,
     cacheMaxAge: 600_000,
+    cooldownDuration: 30_000,
     [customFetch]: async (url, options) => {
       if (url !== configuredJwksUrl.href) {
         throw new Error("Refusing an unexpected JWKS URL.");
@@ -143,6 +142,7 @@ export function createRemoteJwksAccessTokenVerifier(input: {
       }
       return response;
     },
+    timeoutDuration: 5000,
   });
 
   return {
@@ -157,25 +157,29 @@ export function createRemoteJwksAccessTokenVerifier(input: {
         throw new Error("Invalid protected token header.");
       }
       const { payload } = await jwtVerify(token, remoteJwks, {
-        issuer: config.issuer,
-        audience: config.audience,
         algorithms: [config.algorithm],
-        requiredClaims: ["iss", "aud", "sub", "exp", "iat", "nbf", "scope"],
+        audience: config.audience,
         clockTolerance: 0,
         currentDate: new Date(nowEpochSeconds * 1000),
+        issuer: config.issuer,
+        requiredClaims: ["iss", "aud", "sub", "exp", "iat", "nbf", "scope"],
       });
+      const { exp, iat, nbf } = payload;
       if (
         payload.iss !== config.issuer ||
         payload.aud !== config.audience ||
         typeof payload.sub !== "string" ||
-        !Number.isInteger(payload.exp) ||
-        !Number.isInteger(payload.iat) ||
-        !Number.isInteger(payload.nbf) ||
-        payload.exp! <= nowEpochSeconds ||
-        payload.nbf! > nowEpochSeconds ||
-        payload.iat! < payload.nbf! ||
-        payload.iat! > nowEpochSeconds ||
-        payload.exp! - payload.nbf! > 300 ||
+        typeof exp !== "number" ||
+        !Number.isInteger(exp) ||
+        typeof iat !== "number" ||
+        !Number.isInteger(iat) ||
+        typeof nbf !== "number" ||
+        !Number.isInteger(nbf) ||
+        exp <= nowEpochSeconds ||
+        nbf > nowEpochSeconds ||
+        iat < nbf ||
+        iat > nowEpochSeconds ||
+        exp - nbf > 300 ||
         typeof payload.scope !== "string" ||
         !oauthScopeTokenPattern.test(payload.scope) ||
         typeof payload.workspace_id !== "string"
@@ -183,11 +187,11 @@ export function createRemoteJwksAccessTokenVerifier(input: {
         throw new Error("Invalid verified token claims.");
       }
       return verifiedHostedClaimsSchema.parse({
-        issuer: payload.iss,
         audience: payload.aud,
+        issuer: payload.iss,
+        scopes: payload.scope.split(" "),
         subject: payload.sub,
         workspaceId: payload.workspace_id,
-        scopes: payload.scope.split(" "),
       });
     },
   };
@@ -197,9 +201,9 @@ export function createRemoteJwksAccessTokenVerifier(input: {
 export function protectedResourceMetadata(configInput: HostedMcpAuthConfig) {
   const config = hostedMcpAuthConfigSchema.parse(configInput);
   return {
-    resource: config.resourceUrl,
     authorization_servers: [config.issuer],
     bearer_methods_supported: ["header"],
+    resource: config.resourceUrl,
     scopes_supported: [
       "autograph:session",
       "autograph:start",
@@ -225,7 +229,6 @@ export function unauthorizedResponse(
   return Response.json(
     { error: "unauthorized" },
     {
-      status: 401,
       headers: {
         "Cache-Control": "no-store",
         "WWW-Authenticate": challenge(config, [
@@ -234,6 +237,7 @@ export function unauthorizedResponse(
           `scope="${scopes.join(" ")}"`,
         ]),
       },
+      status: 401,
     },
   );
 }
@@ -246,7 +250,6 @@ export function forbiddenResponse(
   return Response.json(
     { error: "forbidden" },
     {
-      status: 403,
       headers: {
         "Cache-Control": "no-store",
         "WWW-Authenticate": challenge(config, [
@@ -255,6 +258,7 @@ export function forbiddenResponse(
           `scope="${scopes.join(" ")}"`,
         ]),
       },
+      status: 403,
     },
   );
 }
@@ -263,7 +267,7 @@ export function forbiddenResponse(
 export function notFoundResponse(): Response {
   return Response.json(
     { error: "not_found" },
-    { status: 404, headers: { "Cache-Control": "no-store" } },
+    { headers: { "Cache-Control": "no-store" }, status: 404 },
   );
 }
 
@@ -271,6 +275,6 @@ export function notFoundResponse(): Response {
 export function unavailableResponse(): Response {
   return Response.json(
     { error: "service_unavailable" },
-    { status: 503, headers: { "Cache-Control": "no-store" } },
+    { headers: { "Cache-Control": "no-store" }, status: 503 },
   );
 }

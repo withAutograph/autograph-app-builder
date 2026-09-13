@@ -1,6 +1,6 @@
 import { chmodSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -13,25 +13,25 @@ import type { LocalOidcStartupInvocation } from "./local-oidc-startup";
 
 const NOW = 2_000_000_000;
 const PROJECT = {
-  projectId: "prj_app_builder",
   orgId: "team_autograph",
+  projectId: "prj_app_builder",
   projectName: "autograph-app-builder",
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function token(expiresAt = NOW + 3600): string {
   const claims = {
-    iss: "https://oidc.vercel.com/autographing",
     aud: "https://vercel.com/autographing",
-    sub: "owner:autographing:project:autograph-app-builder:environment:development",
-    iat: NOW - 10,
-    nbf: NOW - 10,
+    environment: "development",
     exp: expiresAt,
+    iat: NOW - 10,
+    iss: "https://oidc.vercel.com/autographing",
+    nbf: NOW - 10,
     owner: "autographing",
     owner_id: PROJECT.orgId,
     project: PROJECT.projectName,
     project_id: PROJECT.projectId,
-    environment: "development",
+    sub: "owner:autographing:project:autograph-app-builder:environment:development",
   };
   return [
     Buffer.from("{}", "utf-8").toString("base64url"),
@@ -42,33 +42,33 @@ function token(expiresAt = NOW + 3600): string {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function fixture(input: { expiresAt?: number; environmentMode?: number } = {}) {
-  const repositoryRoot = realpathSync(mkdtempSync(join(tmpdir(), "local-oidc-startup-")));
-  mkdirSync(join(repositoryRoot, ".vercel"), { mode: 0o700 });
-  writeFileSync(join(repositoryRoot, ".vercel/project.json"), `${JSON.stringify(PROJECT)}\n`, {
+  const repositoryRoot = realpathSync(mkdtempSync(path.join(tmpdir(), "local-oidc-startup-")));
+  mkdirSync(path.join(repositoryRoot, ".vercel"), { mode: 0o700 });
+  writeFileSync(path.join(repositoryRoot, ".vercel/project.json"), `${JSON.stringify(PROJECT)}\n`, {
     mode: 0o600,
   });
   writeFileSync(
-    join(repositoryRoot, ".env.local"),
+    path.join(repositoryRoot, ".env.local"),
     `VERCEL_OIDC_TOKEN=${token(input.expiresAt)}\n`,
     { mode: input.environmentMode ?? 0o600 },
   );
-  chmodSync(join(repositoryRoot, ".env.local"), input.environmentMode ?? 0o600);
+  chmodSync(path.join(repositoryRoot, ".env.local"), input.environmentMode ?? 0o600);
   return repositoryRoot;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function baseInput(repositoryRoot: string) {
   return {
-    repositoryRoot,
-    vercelExecutable: "/mise/vercel",
-    miseExecutable: "/mise/mise",
     environment: {
-      NODE_ENV: "test" as const,
       HOME: "/owner/home",
+      NODE_ENV: "test" as const,
       PATH: "/mise/node:/usr/bin:/bin",
       VERCEL_OIDC_TOKEN: "must-not-be-forwarded",
     },
+    miseExecutable: "/mise/mise",
     nowEpochSeconds: NOW,
+    repositoryRoot,
+    vercelExecutable: "/mise/vercel",
   };
 }
 
@@ -98,12 +98,12 @@ describe("local Development OIDC startup", () => {
         expect(invocation.environment).not.toHaveProperty("VERCEL_TOKEN");
         expect(invocation.environment).not.toHaveProperty("AI_GATEWAY_API_KEY");
         if (invocation.operation === "development-env-pull") {
-          writeFileSync(join(repositoryRoot, ".env.local"), `VERCEL_OIDC_TOKEN=${token()}\n`, {
+          writeFileSync(path.join(repositoryRoot, ".env.local"), `VERCEL_OIDC_TOKEN=${token()}\n`, {
             mode: 0o644,
           });
-          chmodSync(join(repositoryRoot, ".env.local"), 0o644);
+          chmodSync(path.join(repositoryRoot, ".env.local"), 0o644);
         } else {
-          chmodSync(join(repositoryRoot, ".env.local"), 0o600);
+          chmodSync(path.join(repositoryRoot, ".env.local"), 0o600);
         }
       },
     });
@@ -111,14 +111,14 @@ describe("local Development OIDC startup", () => {
     expect(result).toEqual({ refreshed: true });
     expect(invocations).toMatchObject([
       {
-        executable: "/mise/vercel",
         args: ["env", "pull", ".env.local", "--environment=development", "--yes"],
+        executable: "/mise/vercel",
         operation: "development-env-pull",
       },
       {
-        executable: "/mise/mise",
         args: ["run", "local:install-oidc"],
         environment: { MISE_BIN_PATH: "/mise/mise" },
+        executable: "/mise/mise",
         operation: "owner-bind",
       },
     ]);
@@ -126,7 +126,7 @@ describe("local Development OIDC startup", () => {
 
   it("does not refresh malformed or unsafe installed OIDC", () => {
     const repositoryRoot = fixture();
-    writeFileSync(join(repositoryRoot, ".env.local"), "VERCEL_OIDC_TOKEN=not-a-jwt\n", {
+    writeFileSync(path.join(repositoryRoot, ".env.local"), "VERCEL_OIDC_TOKEN=not-a-jwt\n", {
       mode: 0o600,
     });
     // Keep this command fixture scoped to the test setup.
@@ -182,27 +182,27 @@ describe("local Development OIDC startup", () => {
     const leaked = "secret-token-and-claims";
     expect(() =>
       runLocalOidcStartupCommand({
-        executable: "/bin/sh",
         args: ["-c", `printf '%s' '${leaked}' >&2; exit 1`],
         cwd: "/tmp",
         environment: {
+          HOME: "/tmp",
           NODE_ENV: "test",
           PATH: "/usr/bin:/bin",
-          HOME: "/tmp",
         },
+        executable: "/bin/sh",
         operation: "development-env-pull",
       }),
     ).toThrow("Local OIDC development-env-pull failed.");
     try {
       runLocalOidcStartupCommand({
-        executable: "/bin/sh",
         args: ["-c", `printf '%s' '${leaked}' >&2; exit 1`],
         cwd: "/tmp",
         environment: {
+          HOME: "/tmp",
           NODE_ENV: "test",
           PATH: "/usr/bin:/bin",
-          HOME: "/tmp",
         },
+        executable: "/bin/sh",
         operation: "development-env-pull",
       });
     } catch (error) {

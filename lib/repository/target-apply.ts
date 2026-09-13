@@ -19,22 +19,22 @@ const repositoryPath = z
 // command into a synthetic failure at five minutes.
 
 export const targetApplyCommandReceiptSchema = z.strictObject({
-  version: z.literal(1),
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
   contractPath: repositoryPath,
-  workspacePath: repositoryPath,
-  topology: z.strictObject({
-    path: z.literal("microfrontends.json"),
-    oldDigest: digestSchema,
-    newDigest: digestSchema,
-  }),
   mutations: z.tuple([repositoryPath, z.literal("microfrontends.json")]),
-  recovered: z.boolean(),
   omittedAuthorities: z.tuple([
     z.literal("provider-provisioning"),
     z.literal("deployment"),
     z.literal("production-readiness"),
   ]),
+  recovered: z.boolean(),
+  topology: z.strictObject({
+    newDigest: digestSchema,
+    oldDigest: digestSchema,
+    path: z.literal("microfrontends.json"),
+  }),
+  version: z.literal(1),
+  workspacePath: repositoryPath,
 });
 
 export type TargetApplyCommandReceipt = z.infer<typeof targetApplyCommandReceiptSchema>;
@@ -58,7 +58,7 @@ export function compareOverlayPaths(left: string, right: string): number {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function canonicalOverlayFiles(files: readonly OverlayFile[]): OverlayFile[] {
   return files
-    .map(({ path, mode, digest }) => ({ path, mode, digest }))
+    .map(({ path, mode, digest }) => ({ digest, mode, path }))
     .toSorted((left, right) => compareOverlayPaths(left.path, right.path));
 }
 
@@ -253,8 +253,8 @@ export async function materializeFreshApplyOverlay(input: {
   try {
     const proposalPath = `.app-builder/apply/${input.proposalDigest}/proposal.json`;
     await input.sandbox.writeTextFile({
-      path: proposalPath,
       content: `${JSON.stringify(input.proposal, null, 2)}\n`,
+      path: proposalPath,
     });
     const appSpecPath = input.proposal.contract.appSpec.path;
     const acceptedAppSpec = await input.sandbox.readBinaryFile({
@@ -266,16 +266,16 @@ export async function materializeFreshApplyOverlay(input: {
     )
       throw new Error("The planning overlay does not contain the exact accepted AppSpec.");
     return {
+      acceptedAppSpec,
+      appSpecPath,
       applyRoot: "/workspace/repository",
       proposalPath: `/workspace/${proposalPath}`,
-      appSpecPath,
-      acceptedAppSpec,
     };
   } catch (error) {
     await input.sandbox.removePath({
+      force: true,
       path: relativeRoot,
       recursive: true,
-      force: true,
     });
     throw error;
   }
@@ -292,10 +292,10 @@ async function restorePreparedAppSpecBaseline(input: {
   });
   const applyPath = `${input.applyRoot.replace(/^\/workspace\//u, "")}/${input.appSpecPath}`;
   if (prepared === null) {
-    await input.sandbox.removePath({ path: applyPath, force: true });
+    await input.sandbox.removePath({ force: true, path: applyPath });
     return;
   }
-  await input.sandbox.writeBinaryFile({ path: applyPath, content: prepared });
+  await input.sandbox.writeBinaryFile({ content: prepared, path: applyPath });
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -306,8 +306,8 @@ async function stageAcceptedAppSpec(input: {
   acceptedAppSpec: Uint8Array;
 }): Promise<void> {
   await input.sandbox.writeBinaryFile({
-    path: `${input.applyRoot.replace(/^\/workspace\//u, "")}/${input.appSpecPath}`,
     content: input.acceptedAppSpec,
+    path: `${input.applyRoot.replace(/^\/workspace\//u, "")}/${input.appSpecPath}`,
   });
 }
 
@@ -382,9 +382,9 @@ export async function inspectApplyOverlay(
       )
         throw new Error("The proposal apply overlay returned an invalid path receipt.");
       return {
-        path: match[3],
-        mode: match[1],
         digest: match[2],
+        mode: match[1],
+        path: match[3],
       };
     });
   const normalized = canonicalOverlayFiles(files);
@@ -415,28 +415,27 @@ export async function inspectFixtureApplyOverlay(
     )
       throw new Error("The prepared workspace manifest is invalid.");
     return {
-      path: candidate.path,
       mode: "mode" in candidate && candidate.mode === "100755" ? "755" : "644",
+      path: candidate.path,
     };
   });
   const candidates = [
     ...sourceFiles,
-    { path: `prototype/${appId}/app-spec.md`, mode: "644" },
-    { path: `apps/${appId}/app.contract.json`, mode: "644" },
-    { path: `apps/${appId}/app/page.tsx`, mode: "644" },
-    { path: `apps/${appId}/package.json`, mode: "644" },
+    { mode: "644", path: `prototype/${appId}/app-spec.md` },
+    { mode: "644", path: `apps/${appId}/app.contract.json` },
+    { mode: "644", path: `apps/${appId}/app/page.tsx` },
+    { mode: "644", path: `apps/${appId}/package.json` },
   ];
   const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
-  const files = (
-    await Promise.all(
-      candidates.map(async ({ path, mode }) => {
-        const content = await sandbox.readBinaryFile({
-          path: `${relativeRoot}/${path}`,
-        });
-        return content === null ? undefined : { path, mode, digest: sha256(content) };
-      }),
-    )
-  ).filter((file): file is OverlayFile => file !== undefined);
+  const candidateFiles = await Promise.all(
+    candidates.map(async ({ path, mode }) => {
+      const content = await sandbox.readBinaryFile({
+        path: `${relativeRoot}/${path}`,
+      });
+      return content === null ? undefined : { digest: sha256(content), mode, path };
+    }),
+  );
+  const files = candidateFiles.filter((file): file is OverlayFile => file !== undefined);
   const normalized = canonicalOverlayFiles(files);
   return {
     files: normalized,
@@ -456,17 +455,17 @@ export function overlayChanges(before: OverlaySnapshot, after: OverlaySnapshot):
       if (previous === undefined && current !== undefined)
         return [
           {
-            path,
+            after: { digest: current.digest, mode: current.mode },
             kind: "added",
-            after: { mode: current.mode, digest: current.digest },
+            path,
           },
         ];
       if (previous !== undefined && current === undefined)
         return [
           {
-            path,
+            before: { digest: previous.digest, mode: previous.mode },
             kind: "deleted",
-            before: { mode: previous.mode, digest: previous.digest },
+            path,
           },
         ];
       if (
@@ -476,10 +475,10 @@ export function overlayChanges(before: OverlaySnapshot, after: OverlaySnapshot):
       )
         return [
           {
-            path,
+            after: { digest: current.digest, mode: current.mode },
+            before: { digest: previous.digest, mode: previous.mode },
             kind: "modified",
-            before: { mode: previous.mode, digest: previous.digest },
-            after: { mode: current.mode, digest: current.digest },
+            path,
           },
         ];
       return [];
@@ -521,18 +520,18 @@ function parseTargetReceipt(
 function observedTargetReceipt(proposal: TargetProposal): TargetApplyCommandReceipt {
   const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
   return {
-    version: 1,
     appId: proposal.contract.appId,
     contractPath: proposal.futurePath,
-    workspacePath: proposal.plan.source.workspacePath,
-    topology: {
-      path: "microfrontends.json",
-      oldDigest,
-      newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
-    },
     mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
-    recovered: false,
     omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
+    recovered: false,
+    topology: {
+      newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
+      oldDigest,
+      path: "microfrontends.json",
+    },
+    version: 1,
+    workspacePath: proposal.plan.source.workspacePath,
   };
 }
 
@@ -554,32 +553,32 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
         )
           return {
             exitCode: 2,
-            stdout: "",
             stderr: "stale iteration preimage",
+            stdout: "",
           };
       }
       for (const change of proposal.iteration.changes)
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await sandbox.writeTextFile({
-          path: `${relativeRoot}/${change.path}`,
           content: change.after.content,
+          path: `${relativeRoot}/${change.path}`,
         });
       const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
       const receipt: TargetApplyCommandReceipt = {
-        version: 1,
         appId: proposal.contract.appId,
         contractPath: proposal.futurePath,
-        workspacePath: proposal.plan.source.workspacePath,
-        topology: {
-          path: "microfrontends.json",
-          oldDigest,
-          newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
-        },
         mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
-        recovered: false,
         omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
+        recovered: false,
+        topology: {
+          newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
+          oldDigest,
+          path: "microfrontends.json",
+        },
+        version: 1,
+        workspacePath: proposal.plan.source.workspacePath,
       };
-      return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
+      return { exitCode: 0, stderr: "", stdout: JSON.stringify(receipt) };
     }
     // The writable checkout is the execution environment. Prepared dependency
     // roots are only a cache optimization; a checkout-backed flow can have no
@@ -592,19 +591,20 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
     });
     if (install.exitCode !== 0) {
       const output = `${install.stderr}\n${install.stdout}`;
-      const reason = /lockfile had changes|frozen lockfile/iu.test(output)
-        ? "frozen-lockfile"
-        : /ENOSPC|no space left/iu.test(output)
-          ? "disk-space"
-          : /EACCES|permission denied/iu.test(output)
-            ? "permissions"
-            : /timed? out|timeout/iu.test(output)
-              ? "network-timeout"
-              : /failed to resolve|package not found|module not found/iu.test(output)
-                ? "package-resolution"
-                : /fetch|connection|certificate|network/iu.test(output)
-                  ? "network"
-                  : "unclassified";
+      let reason = "unclassified";
+      if (/lockfile had changes|frozen lockfile/iu.test(output)) {
+        reason = "frozen-lockfile";
+      } else if (/ENOSPC|no space left/iu.test(output)) {
+        reason = "disk-space";
+      } else if (/EACCES|permission denied/iu.test(output)) {
+        reason = "permissions";
+      } else if (/timed? out|timeout/iu.test(output)) {
+        reason = "network-timeout";
+      } else if (/failed to resolve|package not found|module not found/iu.test(output)) {
+        reason = "package-resolution";
+      } else if (/fetch|connection|certificate|network/iu.test(output)) {
+        reason = "network";
+      }
       console.error("[app-builder apply] repository install failed", {
         exitCode: install.exitCode,
         reason,
@@ -617,19 +617,20 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
     });
     if (generated.exitCode !== 0) {
       const output = `${generated.stderr}\n${generated.stdout}`;
-      const reason = /EACCES|permission denied/iu.test(output)
-        ? "permissions"
-        : /cannot find module|module_not_found|failed to resolve/iu.test(output)
-          ? "module-resolution"
-          : /timed? out|timeout/iu.test(output)
-            ? "timeout"
-            : /network|fetch|connection|certificate/iu.test(output)
-              ? "network"
-              : /format/iu.test(output)
-                ? "formatting"
-                : /lifecycle|validation|test|build/iu.test(output)
-                  ? "generated-app-validation"
-                  : "unclassified";
+      let reason = "unclassified";
+      if (/EACCES|permission denied/iu.test(output)) {
+        reason = "permissions";
+      } else if (/cannot find module|module_not_found|failed to resolve/iu.test(output)) {
+        reason = "module-resolution";
+      } else if (/timed? out|timeout/iu.test(output)) {
+        reason = "timeout";
+      } else if (/network|fetch|connection|certificate/iu.test(output)) {
+        reason = "network";
+      } else if (/format/iu.test(output)) {
+        reason = "formatting";
+      } else if (/lifecycle|validation|test|build/iu.test(output)) {
+        reason = "generated-app-validation";
+      }
       console.error("[app-builder apply] repository generator failed", {
         exitCode: generated.exitCode,
         reason,
@@ -647,25 +648,25 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
       for (const change of proposal.iteration.changes)
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await sandbox.writeTextFile({
-          path: `${relativeRoot}/${change.path}`,
           content: change.after.content,
+          path: `${relativeRoot}/${change.path}`,
         });
       const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
       const receipt: TargetApplyCommandReceipt = {
-        version: 1,
         appId,
         contractPath: proposal.futurePath,
-        workspacePath: proposal.plan.source.workspacePath,
-        topology: {
-          path: "microfrontends.json",
-          oldDigest,
-          newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
-        },
         mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
-        recovered: false,
         omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
+        recovered: false,
+        topology: {
+          newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
+          oldDigest,
+          path: "microfrontends.json",
+        },
+        version: 1,
+        workspacePath: proposal.plan.source.workspacePath,
       };
-      return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
+      return { exitCode: 0, stderr: "", stdout: JSON.stringify(receipt) };
     }
     await ensureSandboxDirectories(sandbox, [
       `${relativeRoot}/apps/${appId}`,
@@ -673,41 +674,41 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
       `${relativeRoot}/apps/shell`,
     ]);
     await sandbox.writeTextFile({
-      path: `${relativeRoot}/apps/${appId}/app.contract.json`,
       content: `${JSON.stringify(proposal.contract, null, 2)}\n`,
+      path: `${relativeRoot}/apps/${appId}/app.contract.json`,
     });
     await sandbox.writeTextFile({
-      path: `${relativeRoot}/apps/${appId}/package.json`,
       content: `${JSON.stringify({ name: `@autograph/${appId}` }, null, 2)}\n`,
+      path: `${relativeRoot}/apps/${appId}/package.json`,
     });
     await sandbox.writeTextFile({
-      path: `${relativeRoot}/apps/${appId}/app/page.tsx`,
       content:
         'import { Button, KpiCard, PageHeader } from "@autograph/components";\nimport { Check } from "@autograph/icons";\nimport "@autograph/design-system/tokens.css";\n\nexport default function Page() {\n  return <><PageHeader title="Vendor Review" /><KpiCard icon={Check} title="Ready" value={3} /><Button>Start Guided Review</Button></>;\n}\n',
+      path: `${relativeRoot}/apps/${appId}/app/page.tsx`,
     });
     await sandbox.writeTextFile({
-      path: `${relativeRoot}/microfrontends.json`,
       content: `${JSON.stringify({ applications: [appId] }, null, 2)}\n`,
+      path: `${relativeRoot}/microfrontends.json`,
     });
     if (appId === "apply-failure")
-      return { exitCode: 1, stdout: "", stderr: "fixture apply failure" };
+      return { exitCode: 1, stderr: "fixture apply failure", stdout: "" };
     const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
     const newDigest = proposal.plan.topology.proposedDigest ?? "1".repeat(64);
     const receipt: TargetApplyCommandReceipt = {
-      version: 1,
       appId,
       contractPath: proposal.futurePath,
-      workspacePath: proposal.plan.source.workspacePath,
-      topology: {
-        path: "microfrontends.json",
-        oldDigest,
-        newDigest,
-      },
       mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
-      recovered: false,
       omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
+      recovered: false,
+      topology: {
+        newDigest,
+        oldDigest,
+        path: "microfrontends.json",
+      },
+      version: 1,
+      workspacePath: proposal.plan.source.workspacePath,
     };
-    return { exitCode: 0, stdout: JSON.stringify(receipt), stderr: "" };
+    return { exitCode: 0, stderr: "", stdout: JSON.stringify(receipt) };
   };
 }
 
@@ -731,12 +732,12 @@ export async function executeProposalBoundApply(input: {
     throw new Error("The accepted AppSpec binding or path differs from the target proposal.");
   const snapshotter = input.snapshotter ?? inspectApplyOverlay;
   const overlay = await materializeFreshApplyOverlay({
-    sandbox: input.sandbox,
     artifactRevision: input.artifactRevision,
     dependencyLayout: input.dependencyLayout,
-    proposalDigest: input.binding.proposalDigest,
-    proposal: input.proposal,
     environment: input.environment,
+    proposal: input.proposal,
+    proposalDigest: input.binding.proposalDigest,
+    sandbox: input.sandbox,
   });
   if (input.dependencyLayout !== undefined)
     try {
@@ -744,9 +745,9 @@ export async function executeProposalBoundApply(input: {
         const target = `repository/${root.path}`;
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await input.sandbox.removePath({
+          force: true,
           path: target,
           recursive: true,
-          force: true,
         });
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const linked = await input.sandbox.run({
@@ -766,58 +767,58 @@ export async function executeProposalBoundApply(input: {
     planning = await snapshotter(input.sandbox, overlay.applyRoot);
     prepared = await snapshotter(input.sandbox, "/workspace/repository");
     await restorePreparedAppSpecBaseline({
-      sandbox: input.sandbox,
-      applyRoot: overlay.applyRoot,
       appSpecPath: overlay.appSpecPath,
+      applyRoot: overlay.applyRoot,
+      sandbox: input.sandbox,
     });
     before = await snapshotter(input.sandbox, overlay.applyRoot);
     await stageAcceptedAppSpec({
-      sandbox: input.sandbox,
-      applyRoot: overlay.applyRoot,
-      appSpecPath: overlay.appSpecPath,
       acceptedAppSpec: overlay.acceptedAppSpec,
+      appSpecPath: overlay.appSpecPath,
+      applyRoot: overlay.applyRoot,
+      sandbox: input.sandbox,
     });
   } catch (error) {
     await input.sandbox.removePath({
+      force: true,
       path: applyOverlayRoot(input.binding.proposalDigest),
       recursive: true,
-      force: true,
     });
     throw error;
   }
   let command: ApplyCommandResult;
   try {
     command = await input.executor({
-      sandbox: input.sandbox,
       appId: input.proposal.contract.appId,
       applyRoot: overlay.applyRoot,
-      proposalPath: overlay.proposalPath,
       proposal: input.proposal,
+      proposalPath: overlay.proposalPath,
+      sandbox: input.sandbox,
     });
   } catch (error) {
     command = {
       exitCode: -1,
-      stdout: "",
       stderr: error instanceof Error ? `${error.name}: ${error.message}` : "TargetApplyError",
+      stdout: "",
     };
   }
   const attemptBase = {
-    version: 2 as const,
     ...input.binding,
+    appliedByCallId: input.appliedByCallId,
     applyRoot: overlay.applyRoot,
-    planningTreeDigest: planning.treeDigest,
-    preparedTreeDigest: prepared.treeDigest,
-    preTree: before.files,
-    preTreeDigest: before.treeDigest,
     command: {
+      exitCode: command.exitCode,
       name: ("operation" in input.proposal ? "iterate-existing-app" : "create-app") as
         | "create-app"
         | "iterate-existing-app",
-      exitCode: command.exitCode,
-      stdoutDigest: sha256(command.stdout),
       stderrDigest: sha256(command.stderr),
+      stdoutDigest: sha256(command.stdout),
     },
-    appliedByCallId: input.appliedByCallId,
+    planningTreeDigest: planning.treeDigest,
+    preTree: before.files,
+    preTreeDigest: before.treeDigest,
+    preparedTreeDigest: prepared.treeDigest,
+    version: 2 as const,
   };
   let after: OverlaySnapshot;
   try {
@@ -825,13 +826,13 @@ export async function executeProposalBoundApply(input: {
   } catch {
     const unsigned = {
       ...attemptBase,
+      changedContentDigest: null,
+      changes: null,
       postTree: null,
       postTreeDigest: null,
-      changes: null,
-      changedContentDigest: null,
-      status: "partial-failure" as const,
       reason: "post-snapshot-failed" as const,
       recoveryRequired: true as const,
+      status: "partial-failure" as const,
     };
     return {
       ok: false,
@@ -843,19 +844,19 @@ export async function executeProposalBoundApply(input: {
     parseTargetReceipt(command, input.proposal) ?? observedTargetReceipt(input.proposal);
   const base = {
     ...attemptBase,
+    changedContentDigest: sha256(JSON.stringify(changes)),
+    changes,
     postTree: after.files,
     postTreeDigest: after.treeDigest,
-    changes,
-    changedContentDigest: sha256(JSON.stringify(changes)),
   };
   if (command.exitCode !== 0) {
     const commandOutput = `${command.stderr}\n${command.stdout}`;
     const unsigned = {
       ...base,
-      status: "partial-failure" as const,
+      commandFailureKind: commandFailureKind(commandOutput),
       reason: "command-failed" as const,
       recoveryRequired: true as const,
-      commandFailureKind: commandFailureKind(commandOutput),
+      status: "partial-failure" as const,
       ...(missingDependency(commandOutput) === undefined
         ? {}
         : { missingDependency: missingDependency(commandOutput) }),

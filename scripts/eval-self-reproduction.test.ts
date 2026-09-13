@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import nodePath from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -9,12 +9,12 @@ import { evidencePrefix } from "../evals/support/self-reproduction-evidence";
 
 const outputs: string[] = [];
 afterEach(() => {
-  for (const output of outputs.splice(0)) rmSync(output, { recursive: true, force: true });
+  for (const output of outputs.splice(0)) rmSync(output, { force: true, recursive: true });
 });
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function run(script: string) {
-  const output = mkdtempSync(join(tmpdir(), "self-reproduction-report-test-"));
+  const output = mkdtempSync(nodePath.join(tmpdir(), "self-reproduction-report-test-"));
   outputs.push(output);
   const result = spawnSync(
     process.execPath,
@@ -30,19 +30,19 @@ function run(script: string) {
       `--generator-arg=${script}`,
     ],
     {
-      cwd: resolve(import.meta.dirname, ".."),
+      cwd: nodePath.resolve(import.meta.dirname, ".."),
       encoding: "utf-8",
-      timeout: 30_000,
       env: {
-        PATH: process.env.PATH,
         HOME: process.env.HOME,
-        TMPDIR: process.env.TMPDIR,
         NODE_ENV: "test",
+        PATH: process.env.PATH,
+        TMPDIR: process.env.TMPDIR,
       },
+      timeout: 30_000,
     },
   );
   expect(result.error).toBeUndefined();
-  const report = JSON.parse(readFileSync(join(output, "report.json"), "utf-8"));
+  const report = JSON.parse(readFileSync(nodePath.join(output, "report.json"), "utf-8"));
   // All failure modes must produce the same reviewable bundle.
   for (const path of [
     "report.md",
@@ -57,16 +57,16 @@ function run(script: string) {
     "parity-evidence.json",
     "parity-assessment.json",
   ])
-    expect(() => readFileSync(join(output, path))).not.toThrow();
+    expect(() => readFileSync(nodePath.join(output, path))).not.toThrow();
   for (const path of ["brief.md", "answers.json"])
-    expect(readFileSync(join(output, "generator-input", path), "utf-8")).toBe(
-      readFileSync(resolve("evals/self-reproduction", path), "utf-8"),
+    expect(readFileSync(nodePath.join(output, "generator-input", path), "utf-8")).toBe(
+      readFileSync(nodePath.resolve("evals/self-reproduction", path), "utf-8"),
     );
-  expect(existsSync(join(output, "runtime-source"))).toBe(false);
-  expect(JSON.parse(readFileSync(join(output, "revisions.json"), "utf-8")).arrusted.status).toBe(
-    "unavailable",
-  );
-  return { result, report, output };
+  expect(existsSync(nodePath.join(output, "runtime-source"))).toBe(false);
+  expect(
+    JSON.parse(readFileSync(nodePath.join(output, "revisions.json"), "utf-8")).arrusted.status,
+  ).toBe("unavailable");
+  return { output, report, result };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -99,14 +99,14 @@ describe("native self-reproduction report orchestration", () => {
       `${emit(
         [
           {
-            kind: "event",
             event: {
-              type: "action.result",
               data: {
-                status: "failed",
                 result: { output: "AppSpec invalid", token: "private-secret" },
+                status: "failed",
               },
+              type: "action.result",
             },
+            kind: "event",
           },
         ],
         "failed",
@@ -114,7 +114,7 @@ describe("native self-reproduction report orchestration", () => {
     );
     expect(result.status).toBe(1);
     expect(report.generation.status).toBe("failed");
-    const transcript = readFileSync(join(output, "generation-transcript.jsonl"), "utf-8");
+    const transcript = readFileSync(nodePath.join(output, "generation-transcript.jsonl"), "utf-8");
     expect(transcript).toContain("AppSpec invalid");
     expect(transcript).not.toContain("private-secret");
     expect(report.generation.elapsedMs).toBeGreaterThanOrEqual(0);
@@ -129,31 +129,31 @@ describe("native self-reproduction report orchestration", () => {
 
   it("persists a candidate exported by the native reviewed change set", () => {
     const exportEvent = {
-      kind: "event",
       event: {
-        type: "action.result",
         data: {
-          toolName: "change_set_status",
           result: {
             exportFiles: [
               {
-                path: "apps/replica/app/page.tsx",
                 content: "export default function Page() { return null; }\n",
+                path: "apps/replica/app/page.tsx",
               },
             ],
           },
+          toolName: "change_set_status",
         },
+        type: "action.result",
       },
+      kind: "event",
     };
     const { result, report, output } = run(emit([exportEvent, { kind: "eval-completed" }]));
     expect(result.status).toBe(0);
     expect(report.candidate).toMatchObject({
+      provenance: "native reviewed change-set-status export",
       status: "available",
-      provenance: "native reviewed change_set_status export",
     });
-    expect(readFileSync(join(output, "candidate/apps/replica/app/page.tsx"), "utf-8")).toContain(
-      "export default function Page",
-    );
+    expect(
+      readFileSync(nodePath.join(output, "candidate/apps/replica/app/page.tsx"), "utf-8"),
+    ).toContain("export default function Page");
   });
 
   it("reports a completed native eval without claiming candidate or capture proof", () => {
@@ -162,8 +162,8 @@ describe("native self-reproduction report orchestration", () => {
     expect(report.generation.status).toBe("completed");
     expect(report.candidate.status).toBe("unavailable");
     expect(report.captures).toEqual([
-      { label: "reference", files: [], status: "unassessed: URL not supplied" },
-      { label: "candidate", files: [], status: "unassessed: URL not supplied" },
+      { files: [], label: "reference", status: "unassessed: URL not supplied" },
+      { files: [], label: "candidate", status: "unassessed: URL not supplied" },
     ]);
   });
 });

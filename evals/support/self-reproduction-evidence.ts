@@ -45,16 +45,16 @@ export function digest(content: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function evidenceCompletion(exitCode: number | null, records: Record<string, unknown>[]) {
-  if (exitCode !== 0) return { status: "failed", reason: "Native eval failed or was interrupted." };
+  if (exitCode !== 0) return { reason: "Native eval failed or was interrupted.", status: "failed" };
   if (!records.some((record) => record.kind === "eval-completed"))
     return {
-      status: "failed",
       reason: "Native eval exited without its completion receipt; evidence is incomplete.",
+      status: "failed",
     };
   if (!records.some((record) => record.kind === "event"))
     return {
-      status: "failed",
       reason: "Native eval produced no transcript/tool events; evidence is incomplete.",
+      status: "failed",
     };
   return { status: "completed" };
 }
@@ -90,6 +90,10 @@ export function evidenceSink(
     }
   }
   return {
+    end() {
+      if (pending) line(pending);
+      pending = "";
+    },
     write(chunk: string) {
       pending += chunk;
       let index: number;
@@ -97,10 +101,6 @@ export function evidenceSink(
         line(pending.slice(0, index));
         pending = pending.slice(index + 1);
       }
-    },
-    end() {
-      if (pending) line(pending);
-      pending = "";
     },
   };
 }
@@ -121,27 +121,29 @@ function changeSetStatusOutput(
       }
     | undefined;
   if (event?.type !== "action.result" || !event.data?.result) return undefined;
-  if (event.data.result.toolName === "change_set_status") {
+  if (["change-set-status", "change_set_status"].includes(event.data.result.toolName as string)) {
     const { output } = event.data.result;
     return output && typeof output === "object" && !Array.isArray(output)
       ? (output as Record<string, unknown>)
       : undefined;
   }
-  return event.data.toolName === "change_set_status" ? event.data.result : undefined;
+  return ["change-set-status", "change_set_status"].includes(event.data.toolName as string)
+    ? event.data.result
+    : undefined;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function candidateExportProvenanceFromEvidence(
   records: readonly Record<string, unknown>[],
-): "native reviewed change_set_status export" | "native unreviewed validation-failed export" {
+): "native reviewed change-set-status export" | "native unreviewed validation-failed export" {
   for (const record of records.toReversed()) {
     const output = changeSetStatusOutput(record);
     if (Array.isArray(output?.exportFiles))
       return output?.status === "validation_failed"
         ? "native unreviewed validation-failed export"
-        : "native reviewed change_set_status export";
+        : "native reviewed change-set-status export";
   }
-  return "native reviewed change_set_status export";
+  return "native reviewed change-set-status export";
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -166,7 +168,7 @@ export function candidateExportFromEvidence(
       )
         return undefined;
       paths.add(path);
-      validated.push({ path, content });
+      validated.push({ content, path });
     }
     const appRoots = new Set(
       validated.flatMap((file) => {

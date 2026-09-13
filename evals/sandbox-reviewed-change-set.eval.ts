@@ -17,7 +17,6 @@ export default defineEval({
   description:
     "The exact digest sandbox applies and validates one supported-source proposal, then records the reviewed change set without publication.",
   tags: ["sandbox-image-proof", "reviewed-change-set"],
-  timeoutMs: 360_000,
   async test(t) {
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
     if (repository === undefined || repository.length === 0)
@@ -65,7 +64,7 @@ export default defineEval({
 
     for (const tool of [
       "publish_reviewed_change_set",
-      "publish_reviewed_change_set_to_branch_worktree",
+      "publish-reviewed-change-set_to_branch_worktree",
       "publish_fresh_repository",
       "publish_github_change_set",
       "bash",
@@ -75,10 +74,7 @@ export default defineEval({
 
     process.stdout.write(
       `${JSON.stringify({
-        version: 1,
-        terminalPhase: "reviewed",
         browserPreview: true,
-        sourceKind: "supported-existing-repository",
         publicationAttempted: false,
         requiredTools: [
           "inspect_source",
@@ -93,7 +89,11 @@ export default defineEval({
           "accept_change_set",
           "artifact_workflow_status",
         ],
+        sourceKind: "supported-existing-repository",
+        terminalPhase: "reviewed",
+        version: 1,
       })}\n`,
     );
   },
+  timeoutMs: 360_000,
 });

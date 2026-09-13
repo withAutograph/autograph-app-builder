@@ -39,8 +39,8 @@ export async function GET(request: Request, context: { params: Promise<{ provide
     );
   } catch {
     return new Response("Invalid local OAuth approval", {
-      status: 400,
       headers: { "Cache-Control": "no-store" },
+      status: 400,
     });
   }
 }
@@ -63,8 +63,8 @@ export async function POST(request: Request, context: { params: Promise<{ provid
     );
   } catch {
     return new Response("Invalid local OAuth approval", {
-      status: 400,
       headers: { "Cache-Control": "no-store" },
+      status: 400,
     });
   }
 }

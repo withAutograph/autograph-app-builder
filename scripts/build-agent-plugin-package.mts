@@ -1,20 +1,20 @@
-import { resolve } from "node:path";
+import path from "node:path";
 import {
   buildAgentPluginPackage,
   validateAgentPluginPackage,
 } from "../lib/plugin/agent-plugin-package";
 
-const repositoryRoot = resolve(".");
-const outputRoot = resolve(repositoryRoot, ".artifacts/agent-plugin/app-builder");
+const repositoryRoot = path.resolve(".");
+const outputRoot = path.resolve(repositoryRoot, ".artifacts/agent-plugin/app-builder");
 await validateAgentPluginPackage({
+  packageKind: "source",
   pluginRoot: repositoryRoot,
   repositoryRoot,
-  packageKind: "source",
 });
-await buildAgentPluginPackage({ repositoryRoot, outputRoot });
+await buildAgentPluginPackage({ outputRoot, repositoryRoot });
 await validateAgentPluginPackage({
+  packageKind: "generated-artifact",
   pluginRoot: outputRoot,
   repositoryRoot,
-  packageKind: "generated-artifact",
 });
 console.log(`Built portable Agent Plugin: ${outputRoot}`);

@@ -60,7 +60,7 @@ async function firstVisible(locators: Locator[]) {
         .catch(() => false)
     )
       return locator.first();
-  return undefined;
+  return;
 }
 
 function semanticCandidateAdapter(candidateUrl: string): TrustedBrowserWorkflowAdapter {

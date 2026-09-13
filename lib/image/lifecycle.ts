@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { isAbsolute, resolve } from "node:path";
+import path from "node:path";
 
 export const IMAGE_PLATFORM = "linux/arm64";
 export const IMAGE_OS = "linux";
@@ -35,27 +35,27 @@ export const IMAGE_TOOL_VERSIONS = {
 
 export type ImageTool = keyof typeof IMAGE_TOOL_VERSIONS;
 
-export function imageToolVersionCommand(tool: ImageTool): CommandSpec {
-  return {
-    program: tool,
-    args: tool === "docker-buildx" ? ["version"] : ["--version"],
-  };
-}
+export const imageToolVersionCommand = (tool: ImageTool): CommandSpec => ({
+  args: tool === "docker-buildx" ? ["version"] : ["--version"],
+  program: tool,
+});
 
-export function assertExactImageToolVersion(tool: ImageTool, output: string): void {
+export const assertExactImageToolVersion = (tool: ImageTool, output: string): void => {
   const expected = IMAGE_TOOL_VERSIONS[tool];
   const normalized = output.trim();
   const escaped = expected.replaceAll(".", "[.]");
-  const valid =
-    tool === "docker"
-      ? new RegExp(`^Docker version ${escaped},`, "u").test(normalized)
-      : tool === "docker-buildx"
-        ? new RegExp(`\\bv${escaped}(?:\\s|$)`, "u").test(normalized)
-        : tool === "msb"
-          ? normalized === `msb ${expected}` || normalized === `Microsandbox CLI v${expected}`
-          : normalized === `${tool === "node" ? "v" : ""}${expected}`;
+  let valid: boolean;
+  if (tool === "docker") {
+    valid = new RegExp(`^Docker version ${escaped},`, "u").test(normalized);
+  } else if (tool === "docker-buildx") {
+    valid = new RegExp(`\\bv${escaped}(?:\\s|$)`, "u").test(normalized);
+  } else if (tool === "msb") {
+    valid = normalized === `msb ${expected}` || normalized === `Microsandbox CLI v${expected}`;
+  } else {
+    valid = normalized === `${tool === "node" ? "v" : ""}${expected}`;
+  }
   if (!valid) throw new Error(`${tool} version does not match ${expected}.`);
-}
+};
 
 export type ImageProvenance = Readonly<{
   version: 1;
@@ -108,54 +108,58 @@ const hash = (value: string | Uint8Array) => createHash("sha256").update(value).
 
 const canonical = (value: unknown): string => JSON.stringify(value);
 
-function exactSha(value: string, pattern: RegExp, label: string): void {
+const exactSha = (value: string, pattern: RegExp, label: string): void => {
   if (!pattern.test(value)) throw new Error(`${label} is malformed.`);
-}
+};
 
-export function assertCanonicalRoot(
+export const assertCanonicalRoot = (
   inputPath: string,
   observedRealPath: string,
   label: string,
-): void {
-  if (!isAbsolute(inputPath) || resolve(inputPath) !== inputPath || observedRealPath !== inputPath)
+): void => {
+  if (
+    !path.isAbsolute(inputPath) ||
+    path.resolve(inputPath) !== inputPath ||
+    observedRealPath !== inputPath
+  )
     throw new Error(`${label} must be an absolute canonical no-link path.`);
-}
+};
 
-export function assertCleanStatus(status: string, label: string): void {
+export const assertCleanStatus = (status: string, label: string): void => {
   if (status !== "") throw new Error(`${label} must have no dirty paths.`);
-}
+};
 
-export function assertProofRuntimeIgnoredInventory(status: string): void {
+export const assertProofRuntimeIgnoredInventory = (status: string): void => {
   const ignored = status.split("\n").filter((line) => line.startsWith("!! "));
   if (ignored.length !== 1 || ignored[0] !== "!! node_modules/")
     throw new Error("Proof runtime permits only the exact Builder node_modules/ ignored entry.");
-}
+};
 
-export function assertStandaloneGitMetadata(isDirectory: boolean, label: string): void {
+export const assertStandaloneGitMetadata = (isDirectory: boolean, label: string): void => {
   if (!isDirectory)
     throw new Error(
       `${label} image execution requires a clean standalone checkout with a .git directory.`,
     );
-}
+};
 
-export function assertNoSecretMaterial(value: unknown, path = "receipt"): void {
+export const assertNoSecretMaterial = (value: unknown, receiptPath = "receipt"): void => {
   if (typeof value === "string") {
-    if (secretValue.test(value)) throw new Error(`${path} contains secret-like material.`);
+    if (secretValue.test(value)) throw new Error(`${receiptPath} contains secret-like material.`);
     return;
   }
   if (Array.isArray(value)) {
     for (const [index, entry] of value.entries())
-      assertNoSecretMaterial(entry, `${path}[${index}]`);
+      assertNoSecretMaterial(entry, `${receiptPath}[${index}]`);
     return;
   }
   if (typeof value !== "object" || value === null) return;
   for (const [key, entry] of Object.entries(value)) {
-    if (secretKey.test(key)) throw new Error(`${path}.${key} is a forbidden secret field.`);
-    assertNoSecretMaterial(entry, `${path}.${key}`);
+    if (secretKey.test(key)) throw new Error(`${receiptPath}.${key} is a forbidden secret field.`);
+    assertNoSecretMaterial(entry, `${receiptPath}.${key}`);
   }
-}
+};
 
-export function createExactImageProvenance(input: ExactProvenanceInput): ImageProvenance {
+export const createExactImageProvenance = (input: ExactProvenanceInput): ImageProvenance => {
   exactSha(input.expectedBuilderCommit, sha40, "Expected Builder commit");
   exactSha(input.expectedBuilderTree, sha40, "Expected Builder tree");
   exactSha(input.expectedDockerfileSha256, sha256, "Expected Dockerfile digest");
@@ -183,43 +187,42 @@ export function createExactImageProvenance(input: ExactProvenanceInput): ImagePr
     throw new Error("The exact target-file digest set is incomplete.");
   const tag = `${IMAGE_REPOSITORY}:dockerfile-${input.dockerfileSha256.slice(0, 12)}-arrusted-${ARRUSTED_IMAGE_TARGET_SHA.slice(0, 8)}-arm64-v2`;
   const unsigned = {
-    version: 1 as const,
+    arrusted: {
+      commit: ARRUSTED_IMAGE_TARGET_SHA,
+      root: input.arrustedRoot,
+      tree: ARRUSTED_IMAGE_TARGET_TREE,
+    },
     builder: {
+      commit: input.observedBuilderCommit,
       root: input.builderRoot,
       stateRoot: input.stateRoot,
-      commit: input.observedBuilderCommit,
       tree: input.observedBuilderTree,
-    },
-    arrusted: {
-      root: input.arrustedRoot,
-      commit: ARRUSTED_IMAGE_TARGET_SHA,
-      tree: ARRUSTED_IMAGE_TARGET_TREE,
     },
     dockerfile: {
       path: "containers/eve-sandbox/Dockerfile" as const,
       sha256: input.dockerfileSha256,
     },
     image: {
-      repository: IMAGE_REPOSITORY,
       platform: IMAGE_PLATFORM,
-      tag,
+      repository: IMAGE_REPOSITORY,
       revision: input.observedBuilderCommit,
+      tag,
       version: IMAGE_VERSION,
     },
     targetFiles: Object.fromEntries(targetFileEntries),
+    version: 1 as const,
   } as const;
   const provenance = { ...unsigned, digest: hash(canonical(unsigned)) };
   assertNoSecretMaterial(provenance);
   return provenance;
-}
+};
 
-export function imageBuildCommand(
+export const imageBuildCommand = (
   provenance: ImageProvenance,
   sanitizedTargetRoot: string,
-): CommandSpec {
+): CommandSpec => {
   assertCanonicalRoot(sanitizedTargetRoot, sanitizedTargetRoot, "Sanitized Arrusted build context");
   return {
-    program: "docker-buildx",
     args: [
       "build",
       "--platform",
@@ -235,99 +238,83 @@ export function imageBuildCommand(
       "--load",
       provenance.builder.root,
     ],
+    program: "docker-buildx",
   };
-}
+};
 
-export function localImageInspectionCommand(provenance: ImageProvenance): CommandSpec {
-  return {
-    program: "docker",
-    args: ["image", "inspect", "--platform", IMAGE_PLATFORM, provenance.image.tag],
-  };
-}
+export const localImageInspectionCommand = (provenance: ImageProvenance): CommandSpec => ({
+  args: ["image", "inspect", "--platform", IMAGE_PLATFORM, provenance.image.tag],
+  program: "docker",
+});
 
-export function imagePushCommand(provenance: ImageProvenance): CommandSpec {
-  return { program: "docker", args: ["push", provenance.image.tag] };
-}
+export const imagePushCommand = (provenance: ImageProvenance): CommandSpec => ({
+  args: ["push", provenance.image.tag],
+  program: "docker",
+});
 
-export function assertGhcrUsername(username: string): void {
+export const assertGhcrUsername = (username: string): void => {
   if (!/^[A-Za-z0-9-]{1,39}$/u.test(username)) throw new Error("GHCR username is malformed.");
-}
+};
 
-export function exactDigestReference(reference: string): string {
+export const exactDigestReference = (reference: string): string => {
   if (!digestReference.test(reference))
     throw new Error("The image reference must be the fixed GHCR repository at an exact digest.");
   return reference;
-}
+};
 
-export function remoteIndexCommand(reference: string): CommandSpec {
-  return {
-    program: "docker-buildx",
-    args: ["imagetools", "inspect", "--raw", exactDigestReference(reference)],
-  };
-}
+export const remoteIndexCommand = (reference: string): CommandSpec => ({
+  args: ["imagetools", "inspect", "--raw", exactDigestReference(reference)],
+  program: "docker-buildx",
+});
 
-export function remoteDescriptorCommand(provenance: ImageProvenance): CommandSpec {
-  return {
-    program: "docker-buildx",
-    args: ["imagetools", "inspect", provenance.image.tag, "--format", "{{json .Manifest}}"],
-  };
-}
+export const remoteDescriptorCommand = (provenance: ImageProvenance): CommandSpec => ({
+  args: ["imagetools", "inspect", provenance.image.tag, "--format", "{{json .Manifest}}"],
+  program: "docker-buildx",
+});
 
-export function remoteManifestCommand(reference: string): CommandSpec {
-  return {
-    program: "docker-buildx",
-    args: ["imagetools", "inspect", "--raw", exactDigestReference(reference)],
-  };
-}
+export const remoteManifestCommand = (reference: string): CommandSpec => ({
+  args: ["imagetools", "inspect", "--raw", exactDigestReference(reference)],
+  program: "docker-buildx",
+});
 
-export function remoteImageCommand(reference: string): CommandSpec {
-  return {
-    program: "docker-buildx",
-    args: ["imagetools", "inspect", exactDigestReference(reference), "--format", "{{json .Image}}"],
-  };
-}
+export const remoteImageCommand = (reference: string): CommandSpec => ({
+  args: ["imagetools", "inspect", exactDigestReference(reference), "--format", "{{json .Image}}"],
+  program: "docker-buildx",
+});
 
-export function imagePreloadCommand(reference: string): CommandSpec {
-  return {
-    program: "msb",
-    args: ["pull", exactDigestReference(reference), "--materialize", "all"],
-  };
-}
+export const imagePreloadCommand = (reference: string): CommandSpec => ({
+  args: ["pull", exactDigestReference(reference), "--materialize", "all"],
+  program: "msb",
+});
 
-export function prepareProofRuntimeCommand(): CommandSpec {
-  return {
-    program: "pnpm",
-    args: ["install", "--force", "--frozen-lockfile", "--ignore-scripts"],
-  };
-}
+export const prepareProofRuntimeCommand = (): CommandSpec => ({
+  args: ["install", "--force", "--frozen-lockfile", "--ignore-scripts"],
+  program: "pnpm",
+});
 
-export function inspectProofRuntimeCommand(): CommandSpec {
-  return {
-    program: "pnpm",
-    args: ["list", "--depth", "Infinity", "--json"],
-  };
-}
+export const inspectProofRuntimeCommand = (): CommandSpec => ({
+  args: ["list", "--depth", "Infinity", "--json"],
+  program: "pnpm",
+});
 
-export function sandboxProofCommand(reference: string, sourceRoot: string): CommandSpec {
-  return {
-    program: "node",
-    launcher: "trusted-node",
-    args: [
-      "--import",
-      "tsx",
-      "scripts/run-eve-eval.mts",
-      "--gate-a-profile",
-      "sandbox",
-      "--gate-a-image",
-      exactDigestReference(reference),
-      "--gate-a-source-root",
-      sourceRoot,
-      "sandbox-identity-planning",
-      "--strict",
-      "--skip-report",
-    ],
-  };
-}
+export const sandboxProofCommand = (reference: string, sourceRoot: string): CommandSpec => ({
+  args: [
+    "--import",
+    "tsx",
+    "scripts/run-eve-eval.mts",
+    "--gate-a-profile",
+    "sandbox",
+    "--gate-a-image",
+    exactDigestReference(reference),
+    "--gate-a-source-root",
+    sourceRoot,
+    "sandbox-identity-planning",
+    "--strict",
+    "--skip-report",
+  ],
+  launcher: "trusted-node",
+  program: "node",
+});
 
 interface ImageInspect {
   Id?: unknown;
@@ -344,13 +331,13 @@ interface ImageInspect {
   };
 }
 
-function hasExactKeys(value: object, expected: readonly string[]): boolean {
+const hasExactKeys = (value: object, expected: readonly string[]): boolean => {
   const actual = Object.keys(value).toSorted();
   const wanted = [...expected].toSorted();
   return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
-}
+};
 
-export function parseLocalImageInspection(
+export const parseLocalImageInspection = (
   raw: string,
   provenance: ImageProvenance,
 ): Readonly<{
@@ -359,7 +346,7 @@ export function parseLocalImageInspection(
   revision: string;
   imageId: string;
   rootFsLayers: readonly string[];
-}> {
+}> => {
   const parsed = JSON.parse(raw) as unknown;
   if (!Array.isArray(parsed) || parsed.length !== 1)
     throw new Error("Local image inspection returned an unexpected image set.");
@@ -399,26 +386,24 @@ export function parseLocalImageInspection(
   )
     throw new Error("Local image inspection did not return exact rootfs layers.");
   return {
-    platform: IMAGE_PLATFORM,
-    tag: provenance.image.tag,
-    revision: provenance.builder.commit,
     imageId: image.Id,
+    platform: IMAGE_PLATFORM,
+    revision: provenance.builder.commit,
     rootFsLayers: rootFsLayers as string[],
+    tag: provenance.image.tag,
   };
-}
+};
 
 const ociIndexMediaType = "application/vnd.oci.image.index.v1+json";
 const ociManifestMediaType = "application/vnd.oci.image.manifest.v1+json";
 const ociConfigMediaType = "application/vnd.oci.image.config.v1+json";
 const ociLayerMediaType = "application/vnd.oci.image.layer.v1.tar+gzip";
 
-function isExactDigest(value: unknown): value is string {
-  return typeof value === "string" && /^sha256:[0-9a-f]{64}$/u.test(value);
-}
+const isExactDigest = (value: unknown): value is string =>
+  typeof value === "string" && /^sha256:[0-9a-f]{64}$/u.test(value);
 
-function isPositiveSize(value: unknown): value is number {
-  return Number.isSafeInteger(value) && Number(value) > 0;
-}
+const isPositiveSize = (value: unknown): value is number =>
+  Number.isSafeInteger(value) && Number(value) > 0;
 
 interface RemotePlatform {
   architecture?: unknown;
@@ -465,10 +450,12 @@ export type RemoteIndexSelection = Readonly<{
   attestationManifestDigest: string;
 }>;
 
-export function parseRemoteIndexDescriptor(descriptorRaw: string): Readonly<{
+export const parseRemoteIndexDescriptor = (
+  descriptorRaw: string,
+): Readonly<{
   indexDigest: string;
   indexReference: string;
-}> {
+}> => {
   const descriptor = JSON.parse(descriptorRaw) as RemoteIndex;
   if (!isExactDigest(descriptor.digest))
     throw new Error("Remote registry inspection did not return an exact manifest digest.");
@@ -484,20 +471,20 @@ export function parseRemoteIndexDescriptor(descriptorRaw: string): Readonly<{
     indexDigest: descriptor.digest,
     indexReference: exactDigestReference(`${IMAGE_REPOSITORY}@${descriptor.digest}`),
   };
-}
+};
 
-function assertOciContentDigest(raw: string, expectedDigest: string, label: string): void {
+const assertOciContentDigest = (raw: string, expectedDigest: string, label: string): void => {
   if (raw.length === 0 || raw.endsWith("\n") || raw.endsWith("\r"))
     throw new Error(`${label} did not return exact unframed OCI JSON bytes.`);
   if (`sha256:${hash(raw)}` !== expectedDigest)
     throw new Error(`${label} bytes do not match the declared digest.`);
-}
+};
 
-export function parseRemoteIndexInspection(
+export const parseRemoteIndexInspection = (
   descriptorRaw: string,
   indexRaw: string,
   localImageId: string,
-): RemoteIndexSelection {
+): RemoteIndexSelection => {
   if (!isExactDigest(localImageId)) throw new Error("Local image identity is not an exact digest.");
   const descriptor = JSON.parse(descriptorRaw) as RemoteIndex;
   const index = JSON.parse(indexRaw) as RemoteIndex;
@@ -559,16 +546,16 @@ export function parseRemoteIndexInspection(
     `${IMAGE_REPOSITORY}@${platformEntry.digest as string}`,
   );
   return {
+    attestationManifestDigest: attestationEntry.digest,
     indexDigest: descriptor.digest,
     indexReference,
     platformManifestDigest: platformEntry.digest as string,
     platformManifestSize: platformEntry.size as number,
     platformReference,
-    attestationManifestDigest: attestationEntry.digest,
   };
-}
+};
 
-export function parseRemoteImageInspection(
+export const parseRemoteImageInspection = (
   manifestRaw: string,
   imageRaw: string,
   provenance: ImageProvenance,
@@ -585,7 +572,7 @@ export function parseRemoteImageInspection(
   attestationManifestDigest: string;
   attestationPolicy: "descriptor-bound-not-trusted";
   revision: string;
-}> {
+}> => {
   if (
     !isExactDigest(local.imageId) ||
     selection.platformManifestDigest !== local.imageId ||
@@ -644,19 +631,17 @@ export function parseRemoteImageInspection(
   )
     throw new Error("Remote image rootfs identity does not match the inspected local image.");
   return {
+    attestationManifestDigest: selection.attestationManifestDigest,
+    attestationPolicy: "descriptor-bound-not-trusted",
     digest: selection.platformManifestDigest,
-    reference: selection.platformReference,
     indexDigest: selection.indexDigest,
     indexReference: selection.indexReference,
     platform: IMAGE_PLATFORM,
     platformManifestDigest: selection.platformManifestDigest,
     platformReference: selection.platformReference,
-    attestationManifestDigest: selection.attestationManifestDigest,
-    attestationPolicy: "descriptor-bound-not-trusted",
+    reference: selection.platformReference,
     revision: provenance.builder.commit,
   };
-}
+};
 
-export function hashArtifact(content: string | Uint8Array): string {
-  return hash(content);
-}
+export const hashArtifact = (content: string | Uint8Array): string => hash(content);

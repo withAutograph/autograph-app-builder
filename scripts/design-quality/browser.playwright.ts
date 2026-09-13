@@ -1,5 +1,6 @@
 import { expect, test } from "playwright/test";
 import { capturePreview, measurePage, measureStyles } from "./browser";
+import { once } from "node:events";
 import { createServer } from "node:http";
 import { collectClassTokenEvidence, collectIntrinsicClassSignatures } from "./class-evidence";
 import { collectCssRuleEvidence } from "./css-evidence";
@@ -9,31 +10,29 @@ test("an unavailable preview is not captured or scored as an empty design", asyn
     response.writeHead(404);
     response.end();
   });
-  await new Promise<void>((resolve) => {
-    server.listen(0, "127.0.0.1", resolve);
-  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
   try {
     const address = server.address();
     if (!address || typeof address === "string") throw new Error("No listener");
     await expect(
       capturePreview({
-        url: `http://127.0.0.1:${address.port}/missing`,
         output: test.info().outputDir,
-        tokens: {},
         scenarios: [],
+        tokens: {},
+        url: `http://127.0.0.1:${address.port}/missing`,
       }),
     ).rejects.toThrow("Preview returned HTTP 404");
   } finally {
-    await new Promise<void>((resolve) => {
-      server.close(() => resolve());
-    });
+    server.close();
+    await once(server, "close");
   }
 });
 // Authored calibration candidates, not human-validated aesthetic gold labels.
 test("measurements distinguish concrete defects from intentional layout", async ({ page }) => {
   await page.addInitScript("globalThis.__name = (value) => value;");
   await page.goto("about:blank");
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ height: 844, width: 390 });
   await page.setContent(
     `<!doctype html><html lang="en"><title>Good reference</title><main><h1>Inventory</h1><label>Location<select><option>All</option></select></label><div style="width:200px;overflow:auto"><table style="width:500px"><thead><tr><th>Item</th><th>Quantity</th></tr></thead><tbody><tr><td>Bottle</td><td>8</td></tr></tbody></table></div><button>Request stock</button></main></html>`,
   );
@@ -72,8 +71,8 @@ test("reports intentional vertical scrolling as a diagnostic", async ({ page }) 
   const vertical = measured.intentionalScrollContainers.find((item) => item.axis === "y");
   expect(vertical).toMatchObject({
     axis: "y",
-    scrollHeight: 240,
     clientHeight: 80,
+    scrollHeight: 240,
   });
 });
 
@@ -85,8 +84,8 @@ test("settles a finite border transition before style evidence", async ({ page }
   </style><div class="panel">Stock</div>`);
   await page.locator(".panel").evaluate((element) => element.classList.add("selected"));
   const styles = await measureStyles(page, {
-    "--color-border-subtle": "rgb(41, 41, 41)",
     "--color-action-primary-ink": "rgb(77, 95, 193)",
+    "--color-border-subtle": "rgb(41, 41, 41)",
   });
   expect(
     await page.locator(".panel").evaluate((element) => getComputedStyle(element).borderTopColor),
@@ -102,7 +101,7 @@ test("style evidence uses the active theme and reports diversified DOM coverage"
   page,
 }) => {
   await page.goto("about:blank");
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ height: 900, width: 1440 });
   await page.setContent(`<!doctype html><style>
     :root { --theme-text: rgb(20, 20, 20) }
     .dark { --theme-text: rgb(230, 230, 230) }
@@ -137,9 +136,9 @@ test("browser signature attribution is reviewer evidence, not score provenance",
   </style><section class="generated-card tokenized">Stock</section>`);
   const generated = collectIntrinsicClassSignatures([
     {
-      path: "src/Stock.tsx",
       content:
         'export function Stock(){ return <section className="generated-card tokenized">Stock</section> }',
+      path: "src/Stock.tsx",
     },
   ]);
   const candidate = await measureStyles(
@@ -160,9 +159,9 @@ test("browser signature attribution is reviewer evidence, not score provenance",
   ).toBe(true);
   const sharedDynamic = collectIntrinsicClassSignatures([
     {
-      path: "packages/design-systems/Card.tsx",
       content:
         'const classes = "generated-card tokenized"; export function Card(){ return <section className={classes}>Shared</section> }',
+      path: "packages/design-systems/Card.tsx",
     },
   ]);
   // Dynamic shared classes do not appear in the static inventory, which is why
@@ -238,9 +237,9 @@ test("reports a unique escaped utility token as a shared reviewer candidate", as
   </style><button data-selected="true" class="data-[selected=true]:shadow-[inset_3px_0_0_var(--color-action-primary)] extra">Stock</button>`);
   const sharedTokens = collectClassTokenEvidence([
     {
-      path: "packages/design-systems/RecordList.tsx",
       content:
         'export function RecordList(){ return <button className={cx("data-[selected=true]:shadow-[inset_3px_0_0_var(--color-action-primary)]", focusRing)}>Stock</button> }',
+      path: "packages/design-systems/RecordList.tsx",
     },
   ]);
   const styles = await measureStyles(
@@ -279,7 +278,7 @@ test("attributes an anonymous live stylesheet only through an exact supplied CSS
   await page.setContent(
     `<style>:root { --color-text-primary: rgb(20, 20, 20) }${css}</style><main class="screen">Stock</main>`,
   );
-  const rules = collectCssRuleEvidence([{ path: "src/screen.css", content: css }]);
+  const rules = collectCssRuleEvidence([{ content: css, path: "src/screen.css" }]);
   const styles = await measureStyles(
     page,
     { "--color-text-primary": "rgb(20, 20, 20)" },
@@ -306,25 +305,25 @@ test("attributes a matched stylesheet declaration through its CSS source map", a
   const authoredCss = ".origin { color: var(--color-text-primary); }";
   const compiledCss = ".screen { color: var(--color-text-primary); }";
   const map = JSON.stringify({
-    version: 3,
+    mappings: "SAAU",
     sources: ["src/generated.css"],
     sourcesContent: [authoredCss],
     // CDP begins the declaration range at its preceding space (column 9),
     // while the authored declaration itself begins at column 10.
-    mappings: "SAAU",
+    version: 3,
   });
   await page.route("http://example.test/page", (route) => route.fulfill({ body: "" }));
   await page.route("http://example.test/generated.css.map", (route) =>
-    route.fulfill({ contentType: "application/json", body: map }),
+    route.fulfill({ body: map, contentType: "application/json" }),
   );
   await page.route("http://example.test/compiled.css", (route) =>
     route.fulfill({
-      contentType: "text/css",
       body: `${compiledCss}\n/*# sourceMappingURL=/generated.css.map */`,
+      contentType: "text/css",
     }),
   );
   await page.goto("http://example.test/page");
-  const sourceFiles = [{ path: "src/generated.css", content: authoredCss }];
+  const sourceFiles = [{ content: authoredCss, path: "src/generated.css" }];
   const sourceRules = collectCssRuleEvidence(sourceFiles);
   await page.setContent(`<style>${compiledCss}</style><main class="screen">Stock</main>`);
   const withoutMap = await measureStyles(
@@ -374,23 +373,23 @@ test("reports an exactly mapped shared declaration as shared without scoring cre
   const authoredCss = ".origin { color: var(--color-text-primary); }";
   const compiledCss = ".screen { color: var(--color-text-primary); }";
   const map = JSON.stringify({
-    version: 3,
+    mappings: "SAAU",
     sources: [sharedPath],
     sourcesContent: [authoredCss],
-    mappings: "SAAU",
+    version: 3,
   });
   await page.route("http://example.test/page", (route) => route.fulfill({ body: "" }));
   await page.route("http://example.test/shared.css.map", (route) =>
-    route.fulfill({ contentType: "application/json", body: map }),
+    route.fulfill({ body: map, contentType: "application/json" }),
   );
   await page.route("http://example.test/compiled.css", (route) =>
     route.fulfill({
-      contentType: "text/css",
       body: `${compiledCss}\n/*# sourceMappingURL=/shared.css.map */`,
+      contentType: "text/css",
     }),
   );
   await page.goto("http://example.test/page");
-  const sharedFiles = [{ path: sharedPath, content: authoredCss }];
+  const sharedFiles = [{ content: authoredCss, path: sharedPath }];
   const withoutMap = await measureStyles(
     page,
     { "--color-text-primary": "rgb(20, 20, 20)" },
@@ -440,23 +439,23 @@ test("keeps multiple mapped cascade declarations unknown", async ({ page }) => {
   const compiledCss =
     ".screen { color: var(--color-text-primary); }\n.screen { color: var(--color-text-primary); }";
   const map = JSON.stringify({
-    version: 3,
+    mappings: "SAAU;SAAA",
     sources: [sharedPath],
     sourcesContent: [authoredCss],
-    mappings: "SAAU;SAAA",
+    version: 3,
   });
   await page.route("http://example.test/page", (route) => route.fulfill({ body: "" }));
   await page.route("http://example.test/ambiguous.css.map", (route) =>
-    route.fulfill({ contentType: "application/json", body: map }),
+    route.fulfill({ body: map, contentType: "application/json" }),
   );
   await page.route("http://example.test/ambiguous.css", (route) =>
     route.fulfill({
-      contentType: "text/css",
       body: `${compiledCss}\n/*# sourceMappingURL=/ambiguous.css.map */`,
+      contentType: "text/css",
     }),
   );
   await page.goto("http://example.test/page");
-  const sharedFiles = [{ path: sharedPath, content: authoredCss }];
+  const sharedFiles = [{ content: authoredCss, path: sharedPath }];
   await measureStyles(
     page,
     { "--color-text-primary": "rgb(20, 20, 20)" },
@@ -493,19 +492,19 @@ test("does not trust mismatched CSS source-map content", async ({ page }) => {
   const authoredCss = ".origin { color: var(--color-text-primary); }";
   const compiledCss = ".screen { color: var(--color-text-primary); }";
   const map = JSON.stringify({
-    version: 3,
+    mappings: "SAAU",
     sources: ["src/generated.css"],
     sourcesContent: [".origin { color: red; }"],
-    mappings: "SAAU",
+    version: 3,
   });
   await page.route("http://example.test/page", (route) => route.fulfill({ body: "" }));
   await page.route("http://example.test/generated.css.map", (route) =>
-    route.fulfill({ contentType: "application/json", body: map }),
+    route.fulfill({ body: map, contentType: "application/json" }),
   );
   await page.route("http://example.test/compiled.css", (route) =>
     route.fulfill({
-      contentType: "text/css",
       body: `${compiledCss}\n/*# sourceMappingURL=/generated.css.map */`,
+      contentType: "text/css",
     }),
   );
   await page.goto("http://example.test/page");
@@ -519,9 +518,9 @@ test("does not trust mismatched CSS source-map content", async ({ page }) => {
     ["src/generated.css"],
     [],
     undefined,
-    collectCssRuleEvidence([{ path: "src/generated.css", content: authoredCss }]),
+    collectCssRuleEvidence([{ content: authoredCss, path: "src/generated.css" }]),
     [],
-    [{ path: "src/generated.css", content: authoredCss }],
+    [{ content: authoredCss, path: "src/generated.css" }],
   );
   expect(
     styles.observations.some(

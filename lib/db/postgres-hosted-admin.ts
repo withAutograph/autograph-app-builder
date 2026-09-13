@@ -162,45 +162,16 @@ async function deleteExpired(
     .returning({ providerUserId: hostedGitHubUserCredentials.providerUserId });
 
   return {
+    authorizationStateRowsDeleted: githubStates.length + vercelStates.length,
+    integrationRowsDeleted: provisioningJournals.length + githubCredentials.length,
     operationRowsDeleted: operations.length,
     sessionRowsDeleted: sessions.length,
-    integrationRowsDeleted: provisioningJournals.length + githubCredentials.length,
-    authorizationStateRowsDeleted: githubStates.length + vercelStates.length,
   };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresHostedAdminStore(database: Database): HostedAdminStore {
   return {
-    async seedMembership({ authority, now }) {
-      const rows = await database
-        .insert(hostedWorkspaceMemberships)
-        .values({ ...authority, active: true, updatedAt: now })
-        .onConflictDoUpdate({
-          target: [
-            hostedWorkspaceMemberships.issuer,
-            hostedWorkspaceMemberships.audience,
-            hostedWorkspaceMemberships.workspaceId,
-            hostedWorkspaceMemberships.ownerUserId,
-          ],
-          set: { active: true, updatedAt: now },
-        })
-        .returning({ workspaceId: hostedWorkspaceMemberships.workspaceId });
-      if (rows.length !== 1) {
-        throw new Error("Hosted membership activation was not durable.");
-      }
-      return { membershipRowsAffected: 1 };
-    },
-
-    async revokeMembership({ authority, now }) {
-      const rows = await database
-        .update(hostedWorkspaceMemberships)
-        .set({ active: false, updatedAt: now })
-        .where(and(membershipPredicate(authority), eq(hostedWorkspaceMemberships.active, true)))
-        .returning({ workspaceId: hostedWorkspaceMemberships.workspaceId });
-      return { membershipRowsAffected: rows.length };
-    },
-
     applyRetention(input) {
       return database.transaction((transaction) => deleteExpired(transaction, input));
     },
@@ -280,18 +251,47 @@ export function createPostgresHostedAdminStore(database: Database): HostedAdminS
           throw new Error("Hosted membership deletion was not durable.");
         }
         return {
-          membershipRowsDeleted: 1,
-          operationRowsDeleted: operations.length,
-          sessionRowsDeleted: sessions.length,
+          authorizationStateRowsDeleted: githubStates.length + vercelStates.length,
           integrationRowsDeleted:
             githubInstallations.length +
             githubBindings.length +
             githubCredentials.length +
             provisioningJournals.length +
             vercelInstallations.length,
-          authorizationStateRowsDeleted: githubStates.length + vercelStates.length,
+          membershipRowsDeleted: 1,
+          operationRowsDeleted: operations.length,
+          sessionRowsDeleted: sessions.length,
         };
       });
+    },
+
+    async revokeMembership({ authority, now }) {
+      const rows = await database
+        .update(hostedWorkspaceMemberships)
+        .set({ active: false, updatedAt: now })
+        .where(and(membershipPredicate(authority), eq(hostedWorkspaceMemberships.active, true)))
+        .returning({ workspaceId: hostedWorkspaceMemberships.workspaceId });
+      return { membershipRowsAffected: rows.length };
+    },
+
+    async seedMembership({ authority, now }) {
+      const rows = await database
+        .insert(hostedWorkspaceMemberships)
+        .values({ ...authority, active: true, updatedAt: now })
+        .onConflictDoUpdate({
+          set: { active: true, updatedAt: now },
+          target: [
+            hostedWorkspaceMemberships.issuer,
+            hostedWorkspaceMemberships.audience,
+            hostedWorkspaceMemberships.workspaceId,
+            hostedWorkspaceMemberships.ownerUserId,
+          ],
+        })
+        .returning({ workspaceId: hostedWorkspaceMemberships.workspaceId });
+      if (rows.length !== 1) {
+        throw new Error("Hosted membership activation was not durable.");
+      }
+      return { membershipRowsAffected: 1 };
     },
   };
 }

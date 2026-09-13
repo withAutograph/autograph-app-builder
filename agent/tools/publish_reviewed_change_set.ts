@@ -25,47 +25,46 @@ import { hasTestCapability } from "@/lib/testing/test-capability";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const file = z.strictObject({
-  mode: z.string().regex(/^[0-7]{3,4}$/u),
   digest,
+  mode: z.string().regex(/^[0-7]{3,4}$/u),
 });
 const change = z.strictObject({
-  path: z.string().min(1),
-  kind: z.enum(["added", "modified", "deleted"]),
-  before: file.optional(),
   after: file.optional(),
+  before: file.optional(),
+  kind: z.enum(["added", "modified", "deleted"]),
+  path: z.string().min(1),
 });
 const publication = z.strictObject({
-  digest,
+  approvedPaths: z.array(z.string().min(1)),
+  baseSha: z.string().regex(/^[0-9a-f]{40}$/u),
+  changeSetDigest: digest,
+  changes: z.array(change),
+  contractDigest: digest,
   destinationPath: z.string().min(1),
-  rootIdentity: z.strictObject({ device: z.string(), inode: z.string() }),
-  gitDirectoryPath: z.string().min(1),
+  digest,
+  executionPaths: z.array(z.string().min(1)),
   gitDirectoryIdentity: z.strictObject({
     device: z.string(),
     inode: z.string(),
   }),
-  sourceReceiptDigest: digest,
-  sourceTree: z.string().regex(/^[0-9a-f]{40}$/u),
-  contractDigest: digest,
-  baseSha: z.string().regex(/^[0-9a-f]{40}$/u),
+  gitDirectoryPath: z.string().min(1),
   headReference: z.string().min(1),
   indexFileDigest: digest,
-  remoteDigest: digest,
-  reviewDigest: digest,
-  changeSetDigest: digest,
-  approvedPaths: z.array(z.string().min(1)),
-  executionPaths: z.array(z.string().min(1)),
-  changes: z.array(change),
   intendedOutcome: z.literal("apply-reviewed-change-set-locally"),
   preconditionStatusDigest: digest,
+  remoteDigest: digest,
+  reviewDigest: digest,
+  rootIdentity: z.strictObject({ device: z.string(), inode: z.string() }),
+  sourceReceiptDigest: digest,
+  sourceTree: z.string().regex(/^[0-9a-f]{40}$/u),
   unrelatedProjectionDigest: digest,
   version: z.literal(2),
 });
 
 export default defineTool({
+  approval: always(),
   description:
     "Apply one exact separately reviewed change set to one approved existing local checkout. This approval-bound operation writes only approved paths, never commits or changes Git history, and never publishes remotely.",
-  inputSchema: z.strictObject({ publication }),
-  approval: always(),
   async execute({ publication: expected }, ctx) {
     if (process.env.APP_BUILDER_LOCAL_PUBLICATION !== "1")
       throw new Error(
@@ -106,8 +105,8 @@ export default defineTool({
         throw new Error("The durable success does not exactly bind the pending workflow.");
       await verifyPublishedChangeSet({
         receipt: stored,
-        sourceReceipt: workflow.sourceReceipt,
         review: workflow.reviewReceipt,
+        sourceReceipt: workflow.sourceReceipt,
       });
       if (workflow.phase === "publication_pending") {
         updateExactWorkflow({
@@ -202,8 +201,8 @@ export default defineTool({
         return {
           ...current,
           phase: "publication_pending",
-          publicationProposal: proposal,
           publicationCallId: ctx.callId,
+          publicationProposal: proposal,
         };
       },
     });
@@ -217,8 +216,6 @@ export default defineTool({
     const relativeRoot = workflow.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
     const result = await publishReviewedChangeSet({
       proposal,
-      sourceReceipt: workflow.sourceReceipt,
-      review: workflow.reviewReceipt,
       publishedByCallId: ctx.callId,
       readOverlayFile: (path) =>
         hasTestCapability("simulated-publication") &&
@@ -227,6 +224,8 @@ export default defineTool({
           : ctx
               .getSandbox()
               .then((sandbox) => sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` })),
+      review: workflow.reviewReceipt,
+      sourceReceipt: workflow.sourceReceipt,
       ...(hasTestCapability("simulated-publication") &&
       workflow.appSpec.appId === "publication-interruption"
         ? {
@@ -281,8 +280,8 @@ export default defineTool({
     const expectedPending = {
       ...workflow,
       phase: "publication_pending" as const,
-      publicationProposal: proposal,
       publicationCallId: ctx.callId,
+      publicationProposal: proposal,
     };
     updateExactWorkflow({
       expected: expectedPending,
@@ -315,4 +314,5 @@ export default defineTool({
       );
     return { ...result.receipt, reused: false };
   },
+  inputSchema: z.strictObject({ publication }),
 });

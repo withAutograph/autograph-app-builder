@@ -51,10 +51,10 @@ export function parseLifecycleArguments(
   };
   const approval: LifecycleApproval = {
     arrustedRoot: required("--arrusted-root"),
-    stateRoot: required("--state-root"),
     builderCommit: required("--builder-commit"),
     builderTree: required("--builder-tree"),
     dockerfileSha256: required("--dockerfile-sha256"),
+    stateRoot: required("--state-root"),
   };
   const image = action === "preload" || action === "prove" ? required("--image") : undefined;
   const username = action === "login" ? required("--username") : undefined;
@@ -76,12 +76,20 @@ export async function runImageLifecycleTask(
   if (action === "verify-sources") return verifyImageSources(approval);
   if (action === "build") return buildImage(approval);
   if (action === "inspect-local") return inspectLocalImage(approval);
-  if (action === "login") return loginGhcr(approval, username!);
+  if (action === "login") {
+    if (username === undefined)
+      throw new Error("Missing required image lifecycle argument --username.");
+    return loginGhcr(approval, username);
+  }
   if (action === "push") return pushImage(approval);
   if (action === "inspect-remote") return inspectRemoteImage(approval);
-  if (action === "preload") return preloadImage(approval, image!);
+  if (action === "preload") {
+    if (image === undefined) throw new Error("Missing required image lifecycle argument --image.");
+    return preloadImage(approval, image);
+  }
   if (action === "prepare-proof-runtime") return prepareProofRuntime(approval);
-  return proveSandboxImage(approval, image!);
+  if (image === undefined) throw new Error("Missing required image lifecycle argument --image.");
+  return proveSandboxImage(approval, image);
 }
 
 const [, entrypoint] = process.argv;

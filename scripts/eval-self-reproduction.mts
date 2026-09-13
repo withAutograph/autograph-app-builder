@@ -970,7 +970,9 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
           "utf-8",
         )
           .then((value) => JSON.parse(value) as WorkflowEvidence)
-          .catch(() => undefined);
+          .catch((): undefined => {
+            // Candidate-authored workflow evidence is optional.
+          });
         if (workflowEvidence) await jsonFile("workflow-results.json", workflowEvidence);
       } catch (error) {
         candidateFiles = undefined;

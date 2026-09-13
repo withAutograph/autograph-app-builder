@@ -48,17 +48,17 @@ describe("exact forwarded session authority", () => {
   it("returns one exact current and initiating tenant authority", () => {
     expect(exactForwardedSessionAuthority({ current: auth(), initiator: auth() })).toEqual({
       authority: {
-        issuer: "https://builder.example.test/api/auth",
         audience: "https://builder.example.test/mcp",
-        workspaceId: "workspace_1",
+        issuer: "https://builder.example.test/api/auth",
         ownerUserId: "user_1",
+        workspaceId: "workspace_1",
       },
       principal: {
-        issuer: "https://builder.example.test/api/auth",
         audience: "https://builder.example.test/mcp",
-        workspaceId: "workspace_1",
+        issuer: "https://builder.example.test/api/auth",
         ownerUserId: "user_1",
         scopes: ["eve:start"],
+        workspaceId: "workspace_1",
       },
     });
   });

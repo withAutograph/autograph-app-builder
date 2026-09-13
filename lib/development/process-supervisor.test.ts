@@ -25,7 +25,7 @@ describe("development process supervision", () => {
     const stopping = waitForDevelopmentShutdown(shutdown.signal, shutdown.exitCode);
 
     signals.emit("SIGTERM");
-    expect(await stopping).toEqual({ kind: "stop", code: 143 });
+    expect(await stopping).toEqual({ code: 143, kind: "stop" });
     await stopDevelopmentChild(child);
     expect(await exited).toBe(1);
     shutdown.dispose();
@@ -38,7 +38,7 @@ describe("development process supervision", () => {
     const shutdown = createDevelopmentShutdown(signals);
     const stopping = waitForDevelopmentShutdown(shutdown.signal, shutdown.exitCode);
     signals.emit("SIGINT");
-    expect(await stopping).toEqual({ kind: "stop", code: 130 });
+    expect(await stopping).toEqual({ code: 130, kind: "stop" });
     shutdown.dispose();
   });
 
@@ -70,8 +70,8 @@ describe("development process supervision", () => {
     const groupSignals: Parameters<typeof process.kill>[1][] = [];
     Object.defineProperties(child, {
       exitCode: { value: null, writable: true },
-      signalCode: { value: null, writable: true },
       pid: { value: 43_210 },
+      signalCode: { value: null, writable: true },
     });
     child.kill = ((signal?: NodeJS.Signals | number) => {
       directSignals.push(signal);
@@ -85,8 +85,8 @@ describe("development process supervision", () => {
 
     try {
       await stopDevelopmentChild(child, {
-        processGroup: true,
         gracefulTimeoutMs: 1,
+        processGroup: true,
       });
       expect(directSignals).toEqual(["SIGTERM"]);
       expect(groupSignals).toEqual(["SIGKILL"]);
@@ -124,8 +124,8 @@ describe("development process supervision", () => {
       { detached: true, stdio: "ignore" },
     );
     await stopDevelopmentChild(child, {
-      processGroup: true,
       gracefulTimeoutMs: 1100,
+      processGroup: true,
     });
     await waitForDevelopmentPortRelease(port, { timeoutMs: 2000 });
   });

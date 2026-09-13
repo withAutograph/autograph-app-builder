@@ -157,7 +157,9 @@ export async function startSelfReproductionReferenceRuntime(input: {
       }
     }
     if (server) {
-      await run(["run", "auth-e2e:reset"], "reference-cleanup").catch(() => undefined);
+      await run(["run", "auth-e2e:reset"], "reference-cleanup").catch(() => {
+        // Cleanup is best effort after stopping the isolated server.
+      });
       server = undefined;
     }
   };

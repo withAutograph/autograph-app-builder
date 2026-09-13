@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import path from "node:path";
 
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
@@ -19,7 +19,7 @@ const databaseUrl = readPrivateDatabaseUrl(0);
 const sql = postgres(databaseUrl, hostedTaskPostgresOptions);
 try {
   await migrate(drizzle(sql), {
-    migrationsFolder: resolve("drizzle"),
+    migrationsFolder: path.resolve("drizzle"),
   });
 } finally {
   await sql.end({ timeout: 5 });

@@ -54,18 +54,33 @@ test("passkeys are added, renamed, and protected through stock settings UI", asy
     await addDialog.getByLabel("Name").fill("Backup passkey");
     await addDialog.getByRole("button", { name: "Add passkey" }).click();
     await expect(page.getByText("Backup passkey")).toBeVisible();
-    await expect.poll(async () => (await applicationCounts()).passkeys).toBe(2);
+    await expect
+      .poll(async () => {
+        const counts = await applicationCounts();
+        return counts.passkeys;
+      })
+      .toBe(2);
 
     await page.getByRole("button", { name: "Delete passkey Primary passkey" }).click();
     const deleteDialog = page.getByRole("alertdialog");
     await deleteDialog.getByRole("button", { name: "Delete passkey" }).click();
     await expect(page.getByText("Primary passkey")).toHaveCount(0);
-    await expect.poll(async () => (await applicationCounts()).passkeys).toBe(1);
+    await expect
+      .poll(async () => {
+        const counts = await applicationCounts();
+        return counts.passkeys;
+      })
+      .toBe(1);
 
     await page.getByRole("button", { name: "Delete passkey Backup passkey" }).click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Delete passkey" }).click();
     await expect(page.getByText("Add another passkey before deleting this one.")).toBeVisible();
-    await expect.poll(async () => (await applicationCounts()).passkeys).toBe(1);
+    await expect
+      .poll(async () => {
+        const counts = await applicationCounts();
+        return counts.passkeys;
+      })
+      .toBe(1);
   } finally {
     if (!page.isClosed()) await authenticator?.dispose();
   }

@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -23,22 +23,70 @@ const object = "b".repeat(40);
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function unsigned(): PromotionReceiptUnsigned {
   return {
-    format: "autograph-release-promotion-v1",
-    builder: {
-      repository: "https://github.com/withAutograph/autograph-app-builder",
-      commit: object,
-      tree: "c".repeat(40),
-      clean: true,
+    arrusted: { clean: true, commit: "d".repeat(40), tree: "e".repeat(40) },
+    bindings: {
+      deployment: "production",
+      endpoint: "deployed",
+      execution: "release",
+      marketplace: "release",
+      oauth: "hosted",
     },
-    arrusted: { commit: "d".repeat(40), tree: "e".repeat(40), clean: true },
+    builder: {
+      clean: true,
+      commit: object,
+      repository: "https://github.com/withAutograph/autograph-app-builder",
+      tree: "c".repeat(40),
+    },
+    deployment: {
+      outputTreeSha256: "8".repeat(64),
+      projectBindingSha256: "9".repeat(64),
+      root: "deployment",
+    },
+    endpoint: "https://app-builder.withautograph.com/mcp",
+    format: "autograph-release-promotion-v1",
+    image: {
+      archive: "image.oci.tar",
+      archiveSha256: "7".repeat(64),
+      localTag: `${IMAGE_REPOSITORY}:candidate-${digest.slice(0, 16)}`,
+      manifestDigest: `sha256:${digest}`,
+      publicationTag: `${IMAGE_REPOSITORY}:release-${digest.slice(0, 16)}`,
+      reference: `${IMAGE_REPOSITORY}@sha256:${digest}`,
+    },
+    package: {
+      archive: "package/app-builder-0.2.12.tar.gz",
+      archiveSha256: "4".repeat(64),
+      checksums: "package/SHA256SUMS",
+      checksumsSha256: "6".repeat(64),
+      marketplaceArchive: "package/app-builder-codex-marketplace-0.2.12.tar.gz",
+      marketplaceArchiveSha256: "5".repeat(64),
+      receipt: "package/release-receipt.json",
+      receiptSha256: "3".repeat(64),
+      root: "package",
+      version: "0.2.12",
+    },
     platform: {
+      closureSha256: "2".repeat(64),
+      dockerfileSha256: "1".repeat(64),
       image: "linux/arm64",
       sanitizedSourceEntriesSha256: digest,
       sanitizedSourceEntryCount: 10,
-      dockerfileSha256: "1".repeat(64),
-      closureSha256: "2".repeat(64),
     },
-    endpoint: "https://app-builder.withautograph.com/mcp",
+    proofs: {
+      create: {
+        browserPreview: true,
+        eval: "sandbox-reviewed-change-set",
+        outputSha256: "a".repeat(64),
+        publicationAttempted: false,
+        terminalPhase: "reviewed",
+      },
+      iteration: {
+        browserPreview: true,
+        eval: "sandbox-existing-iteration",
+        outputSha256: "b".repeat(64),
+        publicationAttempted: false,
+        terminalPhase: "reviewed",
+      },
+    },
     tools: [
       "autograph_start",
       "autograph_get",
@@ -46,97 +94,49 @@ function unsigned(): PromotionReceiptUnsigned {
       "autograph_respond",
       "autograph_cancel",
     ],
-    package: {
-      version: "0.2.12",
-      root: "package",
-      receipt: "package/release-receipt.json",
-      receiptSha256: "3".repeat(64),
-      archive: "package/app-builder-0.2.12.tar.gz",
-      archiveSha256: "4".repeat(64),
-      marketplaceArchive: "package/app-builder-codex-marketplace-0.2.12.tar.gz",
-      marketplaceArchiveSha256: "5".repeat(64),
-      checksums: "package/SHA256SUMS",
-      checksumsSha256: "6".repeat(64),
-    },
-    image: {
-      archive: "image.oci.tar",
-      archiveSha256: "7".repeat(64),
-      manifestDigest: `sha256:${digest}`,
-      reference: `${IMAGE_REPOSITORY}@sha256:${digest}`,
-      localTag: `${IMAGE_REPOSITORY}:candidate-${digest.slice(0, 16)}`,
-      publicationTag: `${IMAGE_REPOSITORY}:release-${digest.slice(0, 16)}`,
-    },
-    deployment: {
-      root: "deployment",
-      outputTreeSha256: "8".repeat(64),
-      projectBindingSha256: "9".repeat(64),
-    },
-    proofs: {
-      create: {
-        eval: "sandbox-reviewed-change-set",
-        terminalPhase: "reviewed",
-        browserPreview: true,
-        publicationAttempted: false,
-        outputSha256: "a".repeat(64),
-      },
-      iteration: {
-        eval: "sandbox-existing-iteration",
-        terminalPhase: "reviewed",
-        browserPreview: true,
-        publicationAttempted: false,
-        outputSha256: "b".repeat(64),
-      },
-    },
-    bindings: {
-      execution: "release",
-      oauth: "hosted",
-      endpoint: "deployed",
-      marketplace: "release",
-      deployment: "production",
-    },
   };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function candidate() {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "promotion-")));
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "promotion-")));
   await chmod(root, 0o700);
-  await mkdir(join(root, "package"), { mode: 0o700 });
-  await mkdir(join(root, "deployment/.vercel/output"), {
-    recursive: true,
+  await mkdir(path.join(root, "package"), { mode: 0o700 });
+  await mkdir(path.join(root, "deployment/.vercel/output"), {
     mode: 0o700,
+    recursive: true,
   });
   const packageArchive = Buffer.from("portable-package");
   const marketplaceArchive = Buffer.from("marketplace-package");
   const checksums = Buffer.from("checksums\n");
-  await writeFile(join(root, "package/app-builder-0.2.12.tar.gz"), packageArchive);
+  await writeFile(path.join(root, "package/app-builder-0.2.12.tar.gz"), packageArchive);
   await writeFile(
-    join(root, "package/app-builder-codex-marketplace-0.2.12.tar.gz"),
+    path.join(root, "package/app-builder-codex-marketplace-0.2.12.tar.gz"),
     marketplaceArchive,
   );
-  await writeFile(join(root, "package/SHA256SUMS"), checksums);
-  await writeFile(join(root, "deployment/.vercel/output/config.json"), "{}\n");
+  await writeFile(path.join(root, "package/SHA256SUMS"), checksums);
+  await writeFile(path.join(root, "deployment/.vercel/output/config.json"), "{}\n");
   const projectBinding = Buffer.from('{"projectId":"prj_test"}\n');
-  await writeFile(join(root, "deployment/.vercel/project.json"), projectBinding);
+  await writeFile(path.join(root, "deployment/.vercel/project.json"), projectBinding);
 
   const manifest = Buffer.from(
     JSON.stringify({
-      schemaVersion: 2,
       config: { digest: `sha256:${"1".repeat(64)}` },
       layers: [{ digest: `sha256:${"2".repeat(64)}` }],
+      schemaVersion: 2,
     }),
   );
   const manifestDigest = `sha256:${sha256(manifest)}`;
   const index = Buffer.from(
     JSON.stringify({
-      schemaVersion: 2,
       manifests: [
         {
           digest: manifestDigest,
           mediaType: "application/vnd.oci.image.manifest.v1+json",
-          platform: { os: "linux", architecture: "arm64" },
+          platform: { architecture: "arm64", os: "linux" },
         },
       ],
+      schemaVersion: 2,
     }),
   );
   const imageArchive = deterministicTar(
@@ -145,57 +145,57 @@ async function candidate() {
       [`blobs/sha256/${manifestDigest.slice(7)}`, manifest],
     ]),
   );
-  await writeFile(join(root, "image.oci.tar"), imageArchive);
+  await writeFile(path.join(root, "image.oci.tar"), imageArchive);
 
   const values = unsigned();
   values.image = {
     archive: "image.oci.tar",
     archiveSha256: sha256(imageArchive),
-    manifestDigest,
-    reference: `${IMAGE_REPOSITORY}@${manifestDigest}`,
     localTag: `${IMAGE_REPOSITORY}:candidate-${manifestDigest.slice(7, 23)}`,
+    manifestDigest,
     publicationTag: `${IMAGE_REPOSITORY}:release-${manifestDigest.slice(7, 23)}`,
+    reference: `${IMAGE_REPOSITORY}@${manifestDigest}`,
   };
   const packageReceipt = {
-    format: "autograph-portable-plugin-release-v3",
-    specification: "1.0.0",
-    name: "app-builder",
-    version: "0.2.12",
-    source: {
-      repository: values.builder.repository,
-      sha: values.builder.commit,
-      tree: values.builder.tree,
-    },
-    endpoint: values.endpoint,
     archive: {
       name: "app-builder-0.2.12.tar.gz",
       sha256: sha256(packageArchive),
     },
+    auxiliaryFiles: {},
     codexMarketplaceArchive: {
       name: "app-builder-codex-marketplace-0.2.12.tar.gz",
       sha256: sha256(marketplaceArchive),
     },
     codexMarketplaceAssets: {},
     coreFiles: {},
-    auxiliaryFiles: {},
+    endpoint: values.endpoint,
+    format: "autograph-portable-plugin-release-v3",
+    name: "app-builder",
+    source: {
+      repository: values.builder.repository,
+      sha: values.builder.commit,
+      tree: values.builder.tree,
+    },
+    specification: "1.0.0",
     tools: TOOL_NAMES,
+    version: "0.2.12",
   };
   const packageReceiptBytes = Buffer.from(`${JSON.stringify(packageReceipt, null, 2)}\n`);
-  await writeFile(join(root, "package/release-receipt.json"), packageReceiptBytes);
+  await writeFile(path.join(root, "package/release-receipt.json"), packageReceiptBytes);
   values.package = {
     ...values.package,
-    receiptSha256: sha256(packageReceiptBytes),
     archiveSha256: sha256(packageArchive),
-    marketplaceArchiveSha256: sha256(marketplaceArchive),
     checksumsSha256: sha256(checksums),
+    marketplaceArchiveSha256: sha256(marketplaceArchive),
+    receiptSha256: sha256(packageReceiptBytes),
   };
   values.deployment = {
-    root: "deployment",
-    outputTreeSha256: await immutableTreeDigest(join(root, "deployment/.vercel/output")),
+    outputTreeSha256: await immutableTreeDigest(path.join(root, "deployment/.vercel/output")),
     projectBindingSha256: sha256(projectBinding),
+    root: "deployment",
   };
   await writeFile(
-    join(root, "promotion-receipt.json"),
+    path.join(root, "promotion-receipt.json"),
     `${JSON.stringify(sealPromotionReceipt(values), null, 2)}\n`,
   );
   return root;
@@ -248,17 +248,17 @@ describe("release promotion contract", () => {
   });
 
   it("requires clean committed Builder and Arrusted sources", async () => {
-    const root = await realpath(await mkdtemp(join(tmpdir(), "release-clean-")));
+    const root = await realpath(await mkdtemp(path.join(tmpdir(), "release-clean-")));
     await chmod(root, 0o700);
-    await writeFile(join(root, "source.txt"), "clean\n");
+    await writeFile(path.join(root, "source.txt"), "clean\n");
     const git = (...args: string[]) =>
       execFileSync("/usr/bin/git", args, {
         cwd: root,
         env: {
-          PATH: "/usr/bin:/bin",
           HOME: "/dev/null",
           LC_ALL: "C",
           NODE_ENV: "test",
+          PATH: "/usr/bin:/bin",
         },
       });
     git("init", "-q");
@@ -277,7 +277,7 @@ describe("release promotion contract", () => {
     await expect(exactCleanGitSource(root, "Arrusted")).resolves.toMatchObject({
       root,
     });
-    await writeFile(join(root, "source.txt"), "dirty\n");
+    await writeFile(path.join(root, "source.txt"), "dirty\n");
     await expect(exactCleanGitSource(root, "Arrusted")).rejects.toThrow("must be clean");
   });
 
@@ -288,20 +288,20 @@ describe("release promotion contract", () => {
     });
 
     const packageMutation = await candidate();
-    await writeFile(join(packageMutation, "package/app-builder-0.2.12.tar.gz"), "changed");
+    await writeFile(path.join(packageMutation, "package/app-builder-0.2.12.tar.gz"), "changed");
     await expect(verifyPromotionCandidate({ candidateRoot: packageMutation })).rejects.toThrow(
       "bytes drifted",
     );
 
     const imageMutation = await candidate();
-    await writeFile(join(imageMutation, "image.oci.tar"), "changed");
+    await writeFile(path.join(imageMutation, "image.oci.tar"), "changed");
     await expect(verifyPromotionCandidate({ candidateRoot: imageMutation })).rejects.toThrow(
       "bytes drifted",
     );
 
     const deploymentMutation = await candidate();
     await writeFile(
-      join(deploymentMutation, "deployment/.vercel/output/config.json"),
+      path.join(deploymentMutation, "deployment/.vercel/output/config.json"),
       '{"changed":true}\n',
     );
     await expect(verifyPromotionCandidate({ candidateRoot: deploymentMutation })).rejects.toThrow(
@@ -310,7 +310,7 @@ describe("release promotion contract", () => {
 
     const bindingMutation = await candidate();
     await writeFile(
-      join(bindingMutation, "deployment/.vercel/project.json"),
+      path.join(bindingMutation, "deployment/.vercel/project.json"),
       '{"projectId":"other"}\n',
     );
     await expect(verifyPromotionCandidate({ candidateRoot: bindingMutation })).rejects.toThrow(
@@ -318,7 +318,7 @@ describe("release promotion contract", () => {
     );
 
     const receiptMutation = await candidate();
-    const receiptPath = join(receiptMutation, "promotion-receipt.json");
+    const receiptPath = path.join(receiptMutation, "promotion-receipt.json");
     const receipt = JSON.parse(await readFile(receiptPath, "utf-8")) as {
       digest: string;
     };

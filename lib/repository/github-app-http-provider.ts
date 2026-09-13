@@ -36,9 +36,9 @@ export type GitHubAppHttpProviderConfig = z.infer<typeof configSchema>;
 const credentialsSchema = configSchema.omit({ installationId: true });
 export type GitHubAppHttpProviderCredentials = z.infer<typeof credentialsSchema>;
 
-export function parseGitHubAppHttpProviderCredentials(
+export const parseGitHubAppHttpProviderCredentials = (
   input: unknown,
-): GitHubAppHttpProviderCredentials {
+): GitHubAppHttpProviderCredentials => {
   const parsed = credentialsSchema.safeParse(input);
   if (!parsed.success) throw new Error("GitHub App provider configuration is invalid.");
   try {
@@ -48,9 +48,9 @@ export function parseGitHubAppHttpProviderCredentials(
     throw new Error("GitHub App provider configuration is invalid.");
   }
   return parsed.data;
-}
+};
 
-export function parseGitHubAppHttpProviderConfig(input: unknown): GitHubAppHttpProviderConfig {
+export const parseGitHubAppHttpProviderConfig = (input: unknown): GitHubAppHttpProviderConfig => {
   const parsed = configSchema.safeParse(input);
   if (!parsed.success) throw new Error("GitHub App provider configuration is invalid.");
   const credentials = parseGitHubAppHttpProviderCredentials({
@@ -58,7 +58,7 @@ export function parseGitHubAppHttpProviderConfig(input: unknown): GitHubAppHttpP
     privateKey: parsed.data.privateKey,
   });
   return { ...credentials, installationId: parsed.data.installationId };
-}
+};
 
 export interface GitHubPublicationFile {
   path: string;
@@ -85,22 +85,21 @@ interface PermissionSnapshot {
 
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+const record = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
-function property(value: unknown, key: string): unknown {
+const property = (value: unknown, key: string): unknown => {
   if (!record(value) || !(key in value)) throw new Error("invalid-response");
   return value[key];
-}
+};
 
-function stringProperty(value: unknown, key: string): string {
+const stringProperty = (value: unknown, key: string): string => {
   const result = property(value, key);
   if (typeof result !== "string") throw new Error("invalid-response");
   return result;
-}
+};
 
-function decimalProperty(value: unknown, key: string): string {
+const decimalProperty = (value: unknown, key: string): string => {
   const result = property(value, key);
   if (
     (typeof result !== "number" || !Number.isSafeInteger(result) || result < 1) &&
@@ -108,32 +107,30 @@ function decimalProperty(value: unknown, key: string): string {
   )
     throw new Error("invalid-response");
   return String(result);
-}
+};
 
-function safeRepositoryIdNumber(value: string): number {
+const safeRepositoryIdNumber = (value: string): number => {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < 1 || String(parsed) !== value)
     throw new Error("invalid-response");
   return parsed;
-}
+};
 
-function booleanProperty(value: unknown, key: string): boolean {
+const booleanProperty = (value: unknown, key: string): boolean => {
   const result = property(value, key);
   if (typeof result !== "boolean") throw new Error("invalid-response");
   return result;
-}
+};
 
-function arrayProperty(value: unknown, key: string): unknown[] {
+const arrayProperty = (value: unknown, key: string): unknown[] => {
   const result = property(value, key);
   if (!Array.isArray(result)) throw new Error("invalid-response");
   return result;
-}
+};
 
-function encodePath(value: string): string {
-  return value.split("/").map(encodeURIComponent).join("/");
-}
+const encodePath = (value: string): string => value.split("/").map(encodeURIComponent).join("/");
 
-function validateFile(file: GitHubPublicationFile): void {
+const validateFile = (file: GitHubPublicationFile): void => {
   if (
     !safeSourcePath(file.path) ||
     (file.mode !== "100644" && file.mode !== "100755") ||
@@ -141,9 +138,11 @@ function validateFile(file: GitHubPublicationFile): void {
     file.content.byteLength > MAX_FILE_BYTES
   )
     throw new Error("invalid-material");
-}
+};
 
-function canonicalFiles(input: readonly GitHubPublicationFile[]): readonly GitHubPublicationFile[] {
+const canonicalFiles = (
+  input: readonly GitHubPublicationFile[],
+): readonly GitHubPublicationFile[] => {
   if (input.length === 0 || input.length > MAX_FILES) throw new Error("invalid-material");
   const paths = new Set<string>();
   let totalBytes = 0;
@@ -161,20 +160,18 @@ function canonicalFiles(input: readonly GitHubPublicationFile[]): readonly GitHu
   }
   if (totalBytes > MAX_TOTAL_MATERIAL_BYTES) throw new Error("invalid-material");
   return [...input].toSorted((left, right) => compareOverlayPaths(left.path, right.path));
-}
+};
 
-function permissionRequest(permission: PermissionSnapshot) {
-  return {
-    metadata: "read" as const,
-    contents: permission.contents,
-    ...(permission.workflows === "write" ? { workflows: "write" as const } : {}),
-    ...(permission.pullRequests === "write" ? { pull_requests: "write" as const } : {}),
-    ...(permission.administration === "write" ? { administration: "write" as const } : {}),
-    actions_variables: "read" as const,
-  };
-}
+const permissionRequest = (permission: PermissionSnapshot) => ({
+  actions_variables: "read" as const,
+  contents: permission.contents,
+  metadata: "read" as const,
+  ...(permission.workflows === "write" ? { workflows: "write" as const } : {}),
+  ...(permission.pullRequests === "write" ? { pull_requests: "write" as const } : {}),
+  ...(permission.administration === "write" ? { administration: "write" as const } : {}),
+});
 
-function normalizedPermissions(value: unknown): PermissionSnapshot {
+const normalizedPermissions = (value: unknown): PermissionSnapshot => {
   if (!record(value)) throw new Error("invalid-response");
   const allowed = new Set([
     "metadata",
@@ -201,73 +198,72 @@ function normalizedPermissions(value: unknown): PermissionSnapshot {
   )
     throw new Error("invalid-response");
   return {
-    metadata,
-    contents,
-    workflows,
-    pullRequests,
     administration,
+    contents,
+    metadata,
+    pullRequests,
     variables,
+    workflows,
   };
-}
+};
 
-function requestId(value: string): string {
-  return /^[A-Za-z0-9_-]{1,128}$/u.test(value) ? value : sha256(value).slice(0, 32);
-}
+const requestId = (value: string): string =>
+  /^[A-Za-z0-9_-]{1,128}$/u.test(value) ? value : sha256(value).slice(0, 32);
 
 // Keep provider helpers scoped to the provider factory's contract.
 // oxlint-disable-next-line unicorn/consistent-function-scoping
-export function createGitHubAppHttpProvider(input: {
+export const createGitHubAppHttpProvider = (input: {
   config: GitHubAppHttpProviderConfig;
   fetch?: Fetch;
   now?: () => number;
-}): GitHubAppHttpProvider {
+}): GitHubAppHttpProvider => {
   const config = parseGitHubAppHttpProviderConfig(input.config);
   const request = input.fetch ?? fetch;
   const app = createGitHubApp({
     appId: config.appId,
-    privateKey: config.privateKey,
     fetch: request,
+    privateKey: config.privateKey,
   });
 
-  async function github(requestInput: {
+  const github = async (requestInput: {
     method?: "GET" | "POST";
     path: string;
     authorization: string;
     body?: unknown;
     expected: readonly number[];
-  }): Promise<{ status: number; body: unknown; requestId: string }> {
+  }): Promise<{ status: number; body: unknown; requestId: string }> => {
     try {
       const response = await createGitHubTokenOctokit({
-        token: requestInput.authorization,
         fetch: request,
+        token: requestInput.authorization,
       }).request(`${requestInput.method ?? "GET"} ${requestInput.path}`, {
         ...(record(requestInput.body) ? requestInput.body : {}),
       });
       if (!requestInput.expected.includes(response.status))
         throw new Error(`github-status-${response.status}`);
       return {
-        status: response.status,
         body: response.data,
         requestId: requestId(String(response.headers["x-github-request-id"] ?? "github")),
+        status: response.status,
       };
     } catch (error) {
       const status = record(error) ? error.status : undefined;
       const response = record(error) ? error.response : undefined;
       if (typeof status === "number" && requestInput.expected.includes(status))
         return {
-          status,
           body: record(response) ? response.data : undefined,
           requestId: requestId(
             record(response) && record(response.headers)
               ? String(response.headers["x-github-request-id"] ?? "github")
               : "github",
           ),
+          status,
         };
       throw new Error("github-request-failed", { cause: error });
     }
-  }
+  };
 
-  async function installation() {
+  const installation = async () => {
     const { data } = await app.octokit.request("GET /app/installations/{installation_id}", {
       installation_id: Number(config.installationId),
     });
@@ -281,23 +277,23 @@ export function createGitHubAppHttpProvider(input: {
     )
       throw new Error("invalid-response");
     return {
-      installationId: config.installationId,
       accountId: decimalProperty(account, "id"),
       accountLogin: stringProperty(account, "login"),
       accountType: accountType as "Organization" | "User",
+      installationId: config.installationId,
       repositorySelection: selection,
     };
-  }
+  };
 
-  async function token(permissions: PermissionSnapshot, repositoryIds?: readonly string[]) {
+  const token = async (permissions: PermissionSnapshot, repositoryIds?: readonly string[]) => {
     const authentication = await app.octokit.auth({
-      type: "installation",
       installationId: config.installationId,
       permissions: permissionRequest(permissions),
       ...(repositoryIds === undefined
         ? {}
         : { repositoryIds: repositoryIds.map(safeRepositoryIdNumber) }),
       refresh: true,
+      type: "installation",
     });
     const value = stringProperty(authentication, "token");
     if (value.length < 20 || value.length > 512) throw new Error("invalid-response");
@@ -305,16 +301,16 @@ export function createGitHubAppHttpProvider(input: {
     if (JSON.stringify(granted) !== JSON.stringify(permissions))
       throw new Error("invalid-response");
     return value;
-  }
+  };
 
-  async function repositoryReadToken(repositoryId: string) {
+  const repositoryReadToken = async (repositoryId: string) => {
     decimal.parse(repositoryId);
     const authentication = await app.octokit.auth({
-      type: "installation",
       installationId: config.installationId,
       permissions: { contents: "read" },
-      repositoryIds: [safeRepositoryIdNumber(repositoryId)],
       refresh: true,
+      repositoryIds: [safeRepositoryIdNumber(repositoryId)],
+      type: "installation",
     });
     const value = stringProperty(authentication, "token");
     if (value.length < 20 || value.length > 512) throw new Error("invalid-response");
@@ -327,17 +323,19 @@ export function createGitHubAppHttpProvider(input: {
     )
       throw new Error("invalid-response");
     return value;
-  }
+  };
 
-  async function selectedRepositories(permissions: PermissionSnapshot): Promise<readonly string[]> {
+  const selectedRepositories = async (
+    permissions: PermissionSnapshot,
+  ): Promise<readonly string[]> => {
     const accessToken = await token(permissions);
     const ids: string[] = [];
     for (let page = 1; ; page += 1) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await github({
-        path: `/installation/repositories?per_page=100&page=${page}`,
         authorization: accessToken,
         expected: [200],
+        path: `/installation/repositories?per_page=100&page=${page}`,
       });
       const repositories = arrayProperty(response.body, "repositories");
       ids.push(...repositories.map((repository) => decimalProperty(repository, "id")));
@@ -345,19 +343,19 @@ export function createGitHubAppHttpProvider(input: {
       if (repositories.length < 100) break;
     }
     return [...new Set(ids)].toSorted();
-  }
+  };
 
-  async function repositoryById(
+  const repositoryById = async (
     repositoryId: string,
     ref: string,
     permissions: PermissionSnapshot,
-  ) {
+  ) => {
     decimal.parse(repositoryId);
     const accessToken = await token(permissions, [repositoryId]);
     const repositoryResponse = await github({
-      path: `/repositories/${repositoryId}`,
       authorization: accessToken,
       expected: [200],
+      path: `/repositories/${repositoryId}`,
     });
     const owner = property(repositoryResponse.body, "owner");
     const repositoryOwner = stringProperty(owner, "login");
@@ -365,9 +363,9 @@ export function createGitHubAppHttpProvider(input: {
     if (!name.safeParse(repositoryOwner).success || !name.safeParse(repositoryName).success)
       throw new Error("invalid-response");
     const commit = await github({
-      path: `/repos/${encodeURIComponent(repositoryOwner)}/${encodeURIComponent(repositoryName)}/commits/${encodePath(ref)}`,
       authorization: accessToken,
       expected: [200],
+      path: `/repos/${encodeURIComponent(repositoryOwner)}/${encodeURIComponent(repositoryName)}/commits/${encodePath(ref)}`,
     });
     const commitData = property(commit.body, "commit");
     const tree = property(commitData, "tree");
@@ -375,9 +373,9 @@ export function createGitHubAppHttpProvider(input: {
     for (let page = 1; page <= 10; page += 1) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const variables = await github({
-        path: `/repos/${encodeURIComponent(repositoryOwner)}/${encodeURIComponent(repositoryName)}/actions/variables?per_page=100&page=${page}`,
         authorization: accessToken,
         expected: [200],
+        path: `/repos/${encodeURIComponent(repositoryOwner)}/${encodeURIComponent(repositoryName)}/actions/variables?per_page=100&page=${page}`,
       });
       const pageVariables = arrayProperty(variables.body, "variables");
       variableNames.push(...pageVariables.map((value) => stringProperty(value, "name")));
@@ -386,72 +384,72 @@ export function createGitHubAppHttpProvider(input: {
     }
     if (!booleanProperty(repositoryResponse.body, "private")) throw new Error("invalid-response");
     return {
-      repositoryId,
-      owner: repositoryOwner,
-      name: repositoryName,
-      visibility: "private" as const,
+      accessToken,
       defaultBranch: stringProperty(repositoryResponse.body, "default_branch"),
       headSha: objectId.parse(stringProperty(commit.body, "sha")),
       headTree: objectId.parse(stringProperty(tree, "sha")),
+      name: repositoryName,
+      owner: repositoryOwner,
+      repositoryId,
       repositoryVariableNames: variableNames.toSorted(),
-      accessToken,
+      visibility: "private" as const,
     };
-  }
+  };
 
-  async function repositoryByName(
+  const repositoryByName = async (
     owner: string,
     repositoryName: string,
     permissions: PermissionSnapshot,
-  ) {
+  ) => {
     if (!name.safeParse(owner).success || !name.safeParse(repositoryName).success)
       throw new Error("invalid-destination");
     const accessToken = await token(permissions);
     let response;
     try {
       response = await github({
-        path: `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repositoryName)}`,
         authorization: accessToken,
         expected: [200, 404],
+        path: `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repositoryName)}`,
       });
     } catch {
       throw new Error("github-request-failed");
     }
-    if (response.status === 404) return undefined;
+    if (response.status === 404) return;
     const repositoryId = decimalProperty(response.body, "id");
     return repositoryById(
       repositoryId,
       stringProperty(response.body, "default_branch"),
       permissions,
     );
-  }
+  };
 
-  async function createBlob(
+  const createBlob = async (
     owner: string,
     repositoryName: string,
     accessToken: string,
     file: GitHubPublicationFile,
-  ): Promise<string> {
+  ): Promise<string> => {
     const response = await github({
-      method: "POST",
-      path: `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repositoryName)}/git/blobs`,
       authorization: accessToken,
       body: {
         content: Buffer.from(file.content).toString("base64"),
         encoding: "base64",
       },
       expected: [201],
+      method: "POST",
+      path: `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repositoryName)}/git/blobs`,
     });
     return objectId.parse(stringProperty(response.body, "sha"));
-  }
+  };
 
-  async function createTree(treeInput: {
+  const createTree = async (treeInput: {
     owner: string;
     repositoryName: string;
     accessToken: string;
     files: readonly GitHubPublicationFile[];
     deletions?: readonly string[];
     baseTree?: string;
-  }): Promise<string> {
+  }): Promise<string> => {
     const entries: {
       path: string;
       mode: "100644" | "100755";
@@ -460,9 +458,8 @@ export function createGitHubAppHttpProvider(input: {
     }[] = [];
     for (const file of treeInput.files) {
       entries.push({
-        path: file.path,
         mode: file.mode,
-        type: "blob",
+        path: file.path,
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         sha: await createBlob(
           treeInput.owner,
@@ -470,54 +467,53 @@ export function createGitHubAppHttpProvider(input: {
           treeInput.accessToken,
           file,
         ),
+        type: "blob",
       });
     }
     const response = await github({
-      method: "POST",
-      path: `/repos/${encodeURIComponent(treeInput.owner)}/${encodeURIComponent(treeInput.repositoryName)}/git/trees`,
       authorization: treeInput.accessToken,
       body: {
         ...(treeInput.baseTree === undefined ? {} : { base_tree: treeInput.baseTree }),
         tree: [
           ...entries,
           ...(treeInput.deletions ?? []).map((path) => ({
-            path,
             mode: "100644",
-            type: "blob",
+            path,
             sha: null,
+            type: "blob",
           })),
         ],
       },
       expected: [201],
+      method: "POST",
+      path: `/repos/${encodeURIComponent(treeInput.owner)}/${encodeURIComponent(treeInput.repositoryName)}/git/trees`,
     });
     return objectId.parse(stringProperty(response.body, "sha"));
-  }
+  };
 
   // Keep the repository projection local to this provider.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
-  function publicRepositorySnapshot(snapshot: Awaited<ReturnType<typeof repositoryById>>) {
-    return {
-      repositoryId: snapshot.repositoryId,
-      owner: snapshot.owner,
-      name: snapshot.name,
-      visibility: snapshot.visibility,
-      defaultBranch: snapshot.defaultBranch,
-      headSha: snapshot.headSha,
-      headTree: snapshot.headTree,
-      repositoryVariableNames: snapshot.repositoryVariableNames,
-    };
-  }
+  const publicRepositorySnapshot = (snapshot: Awaited<ReturnType<typeof repositoryById>>) => ({
+    defaultBranch: snapshot.defaultBranch,
+    headSha: snapshot.headSha,
+    headTree: snapshot.headTree,
+    name: snapshot.name,
+    owner: snapshot.owner,
+    repositoryId: snapshot.repositoryId,
+    repositoryVariableNames: snapshot.repositoryVariableNames,
+    visibility: snapshot.visibility,
+  });
 
-  async function repositorySnapshotForProposal(
+  const repositorySnapshotForProposal = async (
     proposal: DraftPullRequestProposal,
     permissions: PermissionSnapshot,
-  ) {
+  ) => {
     const snapshot = await repositoryById(proposal.repositoryId, proposal.baseBranch, permissions);
     return {
-      snapshot: publicRepositorySnapshot(snapshot),
       accessToken: snapshot.accessToken,
+      snapshot: publicRepositorySnapshot(snapshot),
     };
-  }
+  };
 
   return {
     async acquireRepositoryReadCredential({ repositoryId }) {
@@ -527,135 +523,34 @@ export function createGitHubAppHttpProvider(input: {
         throw new Error("GitHub provider operation failed.");
       }
     },
-    async inspectInstallation({ requestedPermissions }) {
-      const identity = await installation();
-      const selectedRepositoryIds = await selectedRepositories(requestedPermissions);
-      return {
-        ...identity,
-        selectedRepositoryIds,
-        grantedPermissions: requestedPermissions,
-      };
-    },
-
-    async inspectRepository({ repositoryId, ref }) {
-      const permissions: PermissionSnapshot = {
-        metadata: "read",
-        contents: "read",
-        workflows: "none",
-        pullRequests: "none",
-        administration: "none",
-        variables: "read",
-      };
-      const snapshot = await repositoryById(repositoryId, ref, permissions);
-      return publicRepositorySnapshot(snapshot);
-    },
-
-    async inspectRepositoryByName({ owner, name: repositoryName }) {
-      const permissions: PermissionSnapshot = {
-        metadata: "read",
-        contents: "read",
-        workflows: "none",
-        pullRequests: "none",
-        administration: "none",
-        variables: "read",
-      };
-      const snapshot = await repositoryByName(owner, repositoryName, permissions);
-      if (snapshot === undefined) return undefined;
-      const response = await github({
-        path: `/repositories/${snapshot.repositoryId}`,
-        authorization: snapshot.accessToken,
-        expected: [200],
-      });
-      return {
-        ...publicRepositorySnapshot(snapshot),
-        archived: booleanProperty(response.body, "archived"),
-      };
-    },
-
-    async inspectDestination({ owner, name: repositoryName }) {
-      const permissions: PermissionSnapshot = {
-        metadata: "read",
-        contents: "write",
-        workflows: "write",
-        pullRequests: "none",
-        administration: "write",
-        variables: "read",
-      };
-      const snapshot = await repositoryByName(owner, repositoryName, permissions);
-      if (snapshot === undefined) return "absent";
-      return publicRepositorySnapshot(snapshot);
-    },
-
-    async inspectFreshRepositoryOutcome(proposal) {
-      assertExactFreshRepositoryProposal(proposal);
-      const permissions: PermissionSnapshot = {
-        metadata: "read",
-        contents: "write",
-        workflows: "write",
-        pullRequests: "none",
-        administration: "write",
-        variables: "read",
-      };
-      const snapshot = await repositoryByName(
-        proposal.destinationOwner,
-        proposal.destinationName,
-        permissions,
-      );
-      if (snapshot === undefined) return undefined;
-      const commit = await github({
-        path: `/repos/${encodeURIComponent(proposal.destinationOwner)}/${encodeURIComponent(proposal.destinationName)}/commits/${encodeURIComponent(proposal.defaultBranch)}`,
-        authorization: snapshot.accessToken,
-        expected: [200],
-      });
-      const parents = arrayProperty(commit.body, "parents").map((parent) =>
-        objectId.parse(stringProperty(parent, "sha")),
-      );
-      if (
-        !stringProperty(property(commit.body, "commit"), "message").includes(
-          `App-Builder-Idempotency: ${proposal.idempotencyKey}`,
-        )
-      )
-        throw new Error("fresh-repository-marker-mismatch");
-      const repository = publicRepositorySnapshot(snapshot);
-      return {
-        idempotencyKey: proposal.idempotencyKey,
-        repository,
-        initialCommit: {
-          sha: objectId.parse(stringProperty(commit.body, "sha")),
-          tree: repository.headTree,
-          parents,
-        },
-      };
-    },
-
     async createPrivateFreshHistoryRepository(proposal, content) {
       assertExactFreshRepositoryProposal(proposal);
       const identity = await installation();
       if (identity.accountLogin !== proposal.destinationOwner)
-        return { status: "rejected", code: "destination-owner" };
+        return { code: "destination-owner", status: "rejected" };
       let files: readonly GitHubPublicationFile[];
       try {
-        assertExactGitHubFreshRepositoryContent({ proposal, content });
+        assertExactGitHubFreshRepositoryContent({ content, proposal });
         files = canonicalFiles(
           content.files.map((file) => ({
-            path: file.path,
-            mode: file.mode,
             content: file.bytes,
+            mode: file.mode,
+            path: file.path,
           })),
         );
       } catch {
         return {
-          status: "rejected",
           code: "invalid-publication-material",
+          status: "rejected",
         };
       }
       const permissions: PermissionSnapshot = {
-        metadata: "read",
-        contents: "write",
-        workflows: "write",
-        pullRequests: "none",
         administration: "write",
+        contents: "write",
+        metadata: "read",
+        pullRequests: "none",
         variables: "read",
+        workflows: "write",
       };
       const accessToken = await token(permissions);
       const createPath =
@@ -663,62 +558,74 @@ export function createGitHubAppHttpProvider(input: {
           ? `/orgs/${encodeURIComponent(identity.accountLogin)}/repos`
           : "/user/repos";
       const created = await github({
-        method: "POST",
-        path: createPath,
         authorization: accessToken,
         body: {
+          auto_init: false,
           name: proposal.destinationName,
           private: true,
-          auto_init: false,
         },
         expected: [201],
+        method: "POST",
+        path: createPath,
       });
       const repositoryId = decimalProperty(created.body, "id");
       const repositoryToken = await token(permissions, [repositoryId]);
       const tree = await createTree({
-        owner: proposal.destinationOwner,
-        repositoryName: proposal.destinationName,
         accessToken: repositoryToken,
         files,
+        owner: proposal.destinationOwner,
+        repositoryName: proposal.destinationName,
       });
       if (tree !== proposal.sourceTree) throw new Error("source-tree-mismatch");
       const commit = await github({
-        method: "POST",
-        path: `/repos/${encodeURIComponent(proposal.destinationOwner)}/${encodeURIComponent(proposal.destinationName)}/git/commits`,
         authorization: repositoryToken,
         body: {
           message: `${proposal.initialCommitMessage}\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}`,
-          tree,
           parents: [],
+          tree,
         },
         expected: [201],
+        method: "POST",
+        path: `/repos/${encodeURIComponent(proposal.destinationOwner)}/${encodeURIComponent(proposal.destinationName)}/git/commits`,
       });
       const commitSha = objectId.parse(stringProperty(commit.body, "sha"));
       const reference = await github({
-        method: "POST",
-        path: `/repos/${encodeURIComponent(proposal.destinationOwner)}/${encodeURIComponent(proposal.destinationName)}/git/refs`,
         authorization: repositoryToken,
         body: { ref: `refs/heads/${proposal.defaultBranch}`, sha: commitSha },
         expected: [201],
+        method: "POST",
+        path: `/repos/${encodeURIComponent(proposal.destinationOwner)}/${encodeURIComponent(proposal.destinationName)}/git/refs`,
       });
-      return { status: "accepted", requestId: reference.requestId };
+      return { requestId: reference.requestId, status: "accepted" };
     },
-
+    async inspectDestination({ owner, name: repositoryName }) {
+      const permissions: PermissionSnapshot = {
+        administration: "write",
+        contents: "write",
+        metadata: "read",
+        pullRequests: "none",
+        variables: "read",
+        workflows: "write",
+      };
+      const snapshot = await repositoryByName(owner, repositoryName, permissions);
+      if (snapshot === undefined) return "absent";
+      return publicRepositorySnapshot(snapshot);
+    },
     async inspectDraftPublication(proposal) {
       assertExactDraftPullRequestProposal(proposal);
       const permissions: PermissionSnapshot = {
-        metadata: "read",
-        contents: "write",
-        workflows: "write",
-        pullRequests: "write",
         administration: "none",
+        contents: "write",
+        metadata: "read",
+        pullRequests: "write",
         variables: "read",
+        workflows: "write",
       };
       const { snapshot, accessToken } = await repositorySnapshotForProposal(proposal, permissions);
       const compare = await github({
-        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/compare/${encodeURIComponent(proposal.baseSha)}...${encodeURIComponent(snapshot.headSha)}`,
         authorization: accessToken,
         expected: [200],
+        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/compare/${encodeURIComponent(proposal.baseSha)}...${encodeURIComponent(snapshot.headSha)}`,
       });
       const changedPathsSinceBase = arrayProperty(compare.body, "files")
         .map((file) => stringProperty(file, "filename"))
@@ -727,17 +634,17 @@ export function createGitHubAppHttpProvider(input: {
       let branchSha: string | undefined;
       try {
         const branchResponse = await github({
-          path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/branches/${encodePath(proposal.branchName)}`,
           authorization: accessToken,
           expected: [200, 404],
+          path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/branches/${encodePath(proposal.branchName)}`,
         });
         if (branchResponse.status === 200) {
           const commit = property(branchResponse.body, "commit");
           branchSha = objectId.parse(stringProperty(commit, "sha"));
           const branchCommit = await github({
-            path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/commits/${branchSha}`,
             authorization: accessToken,
             expected: [200],
+            path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/commits/${branchSha}`,
           });
           const tree = property(property(branchCommit.body, "commit"), "tree");
           const markerMatches = stringProperty(
@@ -745,30 +652,30 @@ export function createGitHubAppHttpProvider(input: {
             "message",
           ).includes(`App-Builder-Idempotency: ${proposal.idempotencyKey}`);
           const branchCompare = await github({
-            path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/compare/${encodeURIComponent(proposal.baseSha)}...${encodeURIComponent(branchSha)}`,
             authorization: accessToken,
             expected: [200],
+            path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/compare/${encodeURIComponent(proposal.baseSha)}...${encodeURIComponent(branchSha)}`,
           });
           const normalizedChangedPaths = arrayProperty(branchCompare.body, "files")
             .map((file) => stringProperty(file, "filename"))
             .toSorted();
           branch = {
-            status: "present",
             branchName: proposal.branchName,
             branchSha,
             branchTree: objectId.parse(stringProperty(tree, "sha")),
-            normalizedChangedPaths,
             changedContentDigest: markerMatches ? proposal.changedContentDigest : "0".repeat(64),
             idempotencyKey: markerMatches ? proposal.idempotencyKey : "0".repeat(64),
+            normalizedChangedPaths,
+            status: "present",
           };
         }
       } catch {
         throw new Error("github-request-failed");
       }
       const pulls = await github({
-        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/pulls?state=open&head=${encodeURIComponent(`${proposal.owner}:${proposal.branchName}`)}&base=${encodeURIComponent(proposal.baseBranch)}&per_page=2`,
         authorization: accessToken,
         expected: [200],
+        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/pulls?state=open&head=${encodeURIComponent(`${proposal.owner}:${proposal.branchName}`)}&base=${encodeURIComponent(proposal.baseBranch)}&per_page=2`,
       });
       if (!Array.isArray(pulls.body)) throw new Error("invalid-response");
       const candidates = pulls.body;
@@ -783,28 +690,110 @@ export function createGitHubAppHttpProvider(input: {
         pull === undefined
           ? { status: "absent" as const }
           : {
-              status: "present" as const,
-              pullRequestId: decimalProperty(pull, "id"),
-              pullRequestNumber: Number(decimalProperty(pull, "number")),
-              draft: booleanProperty(pull, "draft"),
-              headRepositoryId: decimalProperty(property(property(pull, "head"), "repo"), "id"),
-              headBranch: stringProperty(property(pull, "head"), "ref"),
-              headSha: objectId.parse(stringProperty(property(pull, "head"), "sha")),
-              baseRepositoryId: decimalProperty(property(property(pull, "base"), "repo"), "id"),
               baseBranch: stringProperty(property(pull, "base"), "ref"),
+              baseRepositoryId: decimalProperty(property(property(pull, "base"), "repo"), "id"),
               baseSha: objectId.parse(stringProperty(property(pull, "base"), "sha")),
               changeSetDigest: exactPull ? proposal.changeSetDigest : "0".repeat(64),
+              draft: booleanProperty(pull, "draft"),
+              headBranch: stringProperty(property(pull, "head"), "ref"),
+              headRepositoryId: decimalProperty(property(property(pull, "head"), "repo"), "id"),
+              headSha: objectId.parse(stringProperty(property(pull, "head"), "sha")),
               idempotencyKey: exactPull ? proposal.idempotencyKey : "0".repeat(64),
+              pullRequestId: decimalProperty(pull, "id"),
+              pullRequestNumber: Number(decimalProperty(pull, "number")),
+              status: "present" as const,
             };
       return {
-        idempotencyKey: proposal.idempotencyKey,
-        repository: snapshot,
-        changedPathsSinceBase,
         branch,
+        changedPathsSinceBase,
+        idempotencyKey: proposal.idempotencyKey,
         pullRequest,
+        repository: snapshot,
       };
     },
-
+    async inspectFreshRepositoryOutcome(proposal) {
+      assertExactFreshRepositoryProposal(proposal);
+      const permissions: PermissionSnapshot = {
+        administration: "write",
+        contents: "write",
+        metadata: "read",
+        pullRequests: "none",
+        variables: "read",
+        workflows: "write",
+      };
+      const snapshot = await repositoryByName(
+        proposal.destinationOwner,
+        proposal.destinationName,
+        permissions,
+      );
+      if (snapshot === undefined) return;
+      const commit = await github({
+        authorization: snapshot.accessToken,
+        expected: [200],
+        path: `/repos/${encodeURIComponent(proposal.destinationOwner)}/${encodeURIComponent(proposal.destinationName)}/commits/${encodeURIComponent(proposal.defaultBranch)}`,
+      });
+      const parents = arrayProperty(commit.body, "parents").map((parent) =>
+        objectId.parse(stringProperty(parent, "sha")),
+      );
+      if (
+        !stringProperty(property(commit.body, "commit"), "message").includes(
+          `App-Builder-Idempotency: ${proposal.idempotencyKey}`,
+        )
+      )
+        throw new Error("fresh-repository-marker-mismatch");
+      const repository = publicRepositorySnapshot(snapshot);
+      return {
+        idempotencyKey: proposal.idempotencyKey,
+        initialCommit: {
+          parents,
+          sha: objectId.parse(stringProperty(commit.body, "sha")),
+          tree: repository.headTree,
+        },
+        repository,
+      };
+    },
+    async inspectInstallation({ requestedPermissions }) {
+      const identity = await installation();
+      const selectedRepositoryIds = await selectedRepositories(requestedPermissions);
+      return {
+        ...identity,
+        grantedPermissions: requestedPermissions,
+        selectedRepositoryIds,
+      };
+    },
+    async inspectRepository({ repositoryId, ref }) {
+      const permissions: PermissionSnapshot = {
+        administration: "none",
+        contents: "read",
+        metadata: "read",
+        pullRequests: "none",
+        variables: "read",
+        workflows: "none",
+      };
+      const snapshot = await repositoryById(repositoryId, ref, permissions);
+      return publicRepositorySnapshot(snapshot);
+    },
+    async inspectRepositoryByName({ owner, name: repositoryName }) {
+      const permissions: PermissionSnapshot = {
+        administration: "none",
+        contents: "read",
+        metadata: "read",
+        pullRequests: "none",
+        variables: "read",
+        workflows: "none",
+      };
+      const snapshot = await repositoryByName(owner, repositoryName, permissions);
+      if (snapshot === undefined) return;
+      const response = await github({
+        authorization: snapshot.accessToken,
+        expected: [200],
+        path: `/repositories/${snapshot.repositoryId}`,
+      });
+      return {
+        ...publicRepositorySnapshot(snapshot),
+        archived: booleanProperty(response.body, "archived"),
+      };
+    },
     async publishDraftPullRequest(proposal, content) {
       assertExactDraftPullRequestProposal(proposal);
       let changes: readonly {
@@ -814,19 +803,19 @@ export function createGitHubAppHttpProvider(input: {
         after?: GitHubPublicationFile;
       }[];
       try {
-        assertExactGitHubDraftPullRequestContent({ proposal, content });
+        assertExactGitHubDraftPullRequestContent({ content, proposal });
         changes = content.changes.map((change) => ({
-          path: change.path,
           kind: change.kind,
+          path: change.path,
           ...(change.kind === "added" ? {} : { before: change.before }),
           ...(change.kind === "deleted"
             ? {}
             : {
-                after: {
-                  path: change.path,
-                  mode: change.after.mode === "755" ? "100755" : "100644",
-                  content: change.after.bytes,
-                },
+                after: Object.fromEntries([
+                  ["path", change.path],
+                  ["mode", change.after.mode === "755" ? "100755" : "100644"],
+                  ["content", change.after.bytes],
+                ]),
               }),
         }));
         if (
@@ -839,7 +828,12 @@ export function createGitHubAppHttpProvider(input: {
         if (JSON.stringify(paths) !== JSON.stringify(proposal.approvedPaths))
           throw new Error("invalid-material");
         let totalBytes = 0;
-        const receiptChanges = changes
+        const receiptChanges: {
+          path: string;
+          kind: "added" | "modified" | "deleted";
+          before?: { mode: string; digest: string };
+          after?: { mode: string; digest: string };
+        }[] = changes
           .map((change) => {
             if (change.after !== undefined) validateFile(change.after);
             totalBytes += change.after?.content.byteLength ?? 0;
@@ -848,90 +842,91 @@ export function createGitHubAppHttpProvider(input: {
             const after =
               change.after === undefined
                 ? undefined
-                : {
-                    mode: change.after.mode === "100755" ? "755" : "644",
-                    digest: sha256(change.after.content),
-                  };
+                : Object.fromEntries([
+                    ["mode", change.after.mode === "100755" ? "755" : "644"],
+                    ["digest", sha256(change.after.content)],
+                  ]);
             if (
               (change.kind === "added" && (change.before !== undefined || after === undefined)) ||
               (change.kind === "deleted" && (change.before === undefined || after !== undefined)) ||
               (change.kind === "modified" && (change.before === undefined || after === undefined))
             )
               throw new Error("invalid-material");
-            return {
-              path: change.path,
-              kind: change.kind,
-              ...(change.before === undefined ? {} : { before: change.before }),
-              ...(after === undefined ? {} : { after }),
-            };
+            return Object.fromEntries([
+              ["path", change.path],
+              ["kind", change.kind],
+              ...(change.before === undefined ? [] : [["before", change.before]]),
+              ...(after === undefined ? [] : [["after", after]]),
+            ]) as (typeof receiptChanges)[number];
           })
           .toSorted((left, right) => compareOverlayPaths(left.path, right.path));
         if (totalBytes > MAX_TOTAL_MATERIAL_BYTES) throw new Error("invalid-material");
-        if (sha256(JSON.stringify(receiptChanges)) !== proposal.changedContentDigest)
+        if (sha256(JSON.stringify(receiptChanges)) !== proposal.changedContentDigest) {
           throw new Error("invalid-material");
+        }
       } catch {
         return {
-          status: "rejected",
           code: "invalid-publication-material",
+          status: "rejected",
         };
       }
       const permissions: PermissionSnapshot = {
-        metadata: "read",
-        contents: "write",
-        workflows: "write",
-        pullRequests: "write",
         administration: "none",
+        contents: "write",
+        metadata: "read",
+        pullRequests: "write",
         variables: "read",
+        workflows: "write",
       };
       const { snapshot, accessToken } = await repositorySnapshotForProposal(proposal, permissions);
       if (snapshot.headSha !== proposal.baseSha || snapshot.headTree !== proposal.baseTree)
-        return { status: "rejected", code: "stale-base" };
+        return { code: "stale-base", status: "rejected" };
       const files = changes.flatMap((change) => (change.after === undefined ? [] : [change.after]));
       const deletions = changes.flatMap((change) =>
         change.kind === "deleted" ? [change.path] : [],
       );
       const tree = await createTree({
+        accessToken,
+        baseTree: proposal.baseTree,
+        deletions,
+        files,
         owner: proposal.owner,
         repositoryName: proposal.name,
-        accessToken,
-        files,
-        deletions,
-        baseTree: proposal.baseTree,
       });
       const marker = `App-Builder-Idempotency: ${proposal.idempotencyKey}`;
       const commit = await github({
-        method: "POST",
-        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/commits`,
         authorization: accessToken,
         body: {
           message: `${proposal.title}\n\n${marker}`,
-          tree,
           parents: [proposal.baseSha],
+          tree,
         },
         expected: [201],
+        method: "POST",
+        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/commits`,
       });
       const commitSha = objectId.parse(stringProperty(commit.body, "sha"));
       const reference = await github({
-        method: "POST",
-        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/refs`,
         authorization: accessToken,
         body: { ref: `refs/heads/${proposal.branchName}`, sha: commitSha },
         expected: [201],
+        method: "POST",
+        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/refs`,
       });
       await github({
-        method: "POST",
-        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/pulls`,
         authorization: accessToken,
         body: {
-          title: proposal.title,
-          head: proposal.branchName,
           base: proposal.baseBranch,
           body: `<!-- ${marker} -->`,
           draft: true,
+          head: proposal.branchName,
+          title: proposal.title,
         },
         expected: [201],
+        method: "POST",
+        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/pulls`,
       });
-      return { status: "accepted", requestId: reference.requestId };
+      return { requestId: reference.requestId, status: "accepted" };
     },
   };
-}
+};

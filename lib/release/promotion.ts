@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { createReadStream } from "node:fs";
 import { lstat, readFile, readdir, realpath } from "node:fs/promises";
-import { basename, isAbsolute, join, relative, resolve as pathResolve, sep } from "node:path";
+import nodePath from "node:path";
 
 import { list as listTar } from "tar";
 import { z } from "zod";
@@ -18,7 +18,7 @@ const safePath = z
   .min(1)
   .refine(
     (value) =>
-      !isAbsolute(value) &&
+      !nodePath.isAbsolute(value) &&
       !value.includes("\\") &&
       value.split("/").every((part) => part !== "" && part !== "." && part !== ".."),
     "Candidate paths must be safe relative paths.",
@@ -33,75 +33,77 @@ const localImageTag = z
 
 const proofSchema = z
   .object({
+    browserPreview: z.literal(true),
     eval: z.union([
       z.literal("sandbox-reviewed-change-set"),
       z.literal("sandbox-existing-iteration"),
     ]),
-    terminalPhase: z.literal("reviewed"),
-    browserPreview: z.literal(true),
-    publicationAttempted: z.literal(false),
     outputSha256: hash,
+    publicationAttempted: z.literal(false),
+    terminalPhase: z.literal("reviewed"),
   })
   .strict();
 
 const promotionReceiptUnsignedSchema = z
   .object({
-    format: z.literal("autograph-release-promotion-v1"),
+    arrusted: z.object({ clean: z.literal(true), commit: gitObject, tree: gitObject }).strict(),
+    bindings: z
+      .object({
+        deployment: z.literal("production"),
+        endpoint: z.literal("deployed"),
+        execution: z.literal("release"),
+        marketplace: z.literal("release"),
+        oauth: z.literal("hosted"),
+      })
+      .strict(),
     builder: z
       .object({
-        repository: z.literal("https://github.com/withAutograph/autograph-app-builder"),
-        commit: gitObject,
-        tree: gitObject,
         clean: z.literal(true),
-      })
-      .strict(),
-    arrusted: z.object({ commit: gitObject, tree: gitObject, clean: z.literal(true) }).strict(),
-    platform: z
-      .object({
-        image: z.literal(IMAGE_PLATFORM),
-        sanitizedSourceEntriesSha256: hash,
-        sanitizedSourceEntryCount: z.number().int().positive(),
-        dockerfileSha256: hash,
-        closureSha256: hash,
-      })
-      .strict(),
-    endpoint: z.string().url().startsWith("https://").endsWith("/mcp"),
-    tools: z.tuple([
-      z.literal("autograph_start"),
-      z.literal("autograph_get"),
-      z.literal("autograph_send"),
-      z.literal("autograph_respond"),
-      z.literal("autograph_cancel"),
-    ]),
-    package: z
-      .object({
-        version: z.literal("0.2.12"),
-        root: safePath,
-        receipt: safePath,
-        receiptSha256: hash,
-        archive: safePath,
-        archiveSha256: hash,
-        marketplaceArchive: safePath,
-        marketplaceArchiveSha256: hash,
-        checksums: safePath,
-        checksumsSha256: hash,
-      })
-      .strict(),
-    image: z
-      .object({
-        archive: safePath,
-        archiveSha256: hash,
-        manifestDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
-        reference: exactImageReference,
-        localTag: localImageTag,
-        publicationTag: imageTag,
+        commit: gitObject,
+        repository: z.literal("https://github.com/withAutograph/autograph-app-builder"),
+        tree: gitObject,
       })
       .strict(),
     deployment: z
       .object({
-        root: safePath,
         outputTreeSha256: hash,
         projectBindingSha256: hash,
+        root: safePath,
+      })
+      .strict(),
+    endpoint: z.string().url().startsWith("https://").endsWith("/mcp"),
+    format: z.literal("autograph-release-promotion-v1"),
+    image: z
+      .object({
+        archive: safePath,
+        archiveSha256: hash,
+        localTag: localImageTag,
+        manifestDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
+        publicationTag: imageTag,
+        reference: exactImageReference,
+      })
+      .strict(),
+    package: z
+      .object({
+        archive: safePath,
+        archiveSha256: hash,
+        checksums: safePath,
+        checksumsSha256: hash,
+        marketplaceArchive: safePath,
+        marketplaceArchiveSha256: hash,
+        receipt: safePath,
+        receiptSha256: hash,
+        root: safePath,
+        version: z.literal("0.2.12"),
+      })
+      .strict(),
+    platform: z
+      .object({
+        closureSha256: hash,
+        dockerfileSha256: hash,
+        image: z.literal(IMAGE_PLATFORM),
+        sanitizedSourceEntriesSha256: hash,
+        sanitizedSourceEntryCount: z.number().int().positive(),
       })
       .strict(),
     proofs: z
@@ -114,15 +116,13 @@ const promotionReceiptUnsignedSchema = z
         }),
       })
       .strict(),
-    bindings: z
-      .object({
-        execution: z.literal("release"),
-        oauth: z.literal("hosted"),
-        endpoint: z.literal("deployed"),
-        marketplace: z.literal("release"),
-        deployment: z.literal("production"),
-      })
-      .strict(),
+    tools: z.tuple([
+      z.literal("autograph_start"),
+      z.literal("autograph_get"),
+      z.literal("autograph_send"),
+      z.literal("autograph_respond"),
+      z.literal("autograph_cancel"),
+    ]),
   })
   .strict();
 
@@ -159,19 +159,19 @@ function git(root: string, ...args: string[]) {
   return execFileSync("/usr/bin/git", ["-C", root, ...args], {
     encoding: "utf-8",
     env: {
-      PATH: "/usr/bin:/bin",
+      GIT_TERMINAL_PROMPT: "0",
       HOME: process.env.HOME,
       LC_ALL: "C",
       NODE_ENV: "production",
-      GIT_TERMINAL_PROMPT: "0",
+      PATH: "/usr/bin:/bin",
     },
   }).trim();
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function exactCleanGitSource(rootInput: string, label: string) {
-  if (!isAbsolute(rootInput)) throw new Error(`${label} root must be absolute.`);
-  const requested = pathResolve(rootInput);
+  if (!nodePath.isAbsolute(rootInput)) throw new Error(`${label} root must be absolute.`);
+  const requested = nodePath.resolve(rootInput);
   const root = await realpath(requested);
   const info = await lstat(root);
   if (
@@ -189,8 +189,8 @@ export async function exactCleanGitSource(rootInput: string, label: string) {
   if (git(root, "status", "--porcelain=v1", "--untracked-files=all") !== "")
     throw new Error(`${label} release source must be clean.`);
   return {
-    root,
     commit: git(root, "rev-parse", "HEAD"),
+    root,
     tree: git(root, "rev-parse", "HEAD^{tree}"),
   } as const;
 }
@@ -201,7 +201,6 @@ async function tarEntry(path: string, requested: string) {
   const pending: Promise<void>[] = [];
   await listTar({
     file: path,
-    strict: true,
     onReadEntry(entry) {
       if (entry.path !== requested) {
         entry.resume();
@@ -210,16 +209,13 @@ async function tarEntry(path: string, requested: string) {
       if (result !== undefined) throw new Error(`OCI archive repeated ${requested}.`);
       const chunks: Buffer[] = [];
       pending.push(
-        new Promise<void>((resolve, reject) => {
-          entry.on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
-          entry.on("error", reject);
-          entry.on("end", () => {
-            result = Buffer.concat(chunks);
-            resolve();
-          });
-        }),
+        (async () => {
+          for await (const chunk of entry) chunks.push(Buffer.from(chunk));
+          result = Buffer.concat(chunks);
+        })(),
       );
     },
+    strict: true,
   });
   await Promise.all(pending);
   if (result === undefined) throw new Error(`OCI archive omitted ${requested}.`);
@@ -260,7 +256,9 @@ export async function inspectOciCandidateArchive(path: string) {
   );
   if (candidates.length !== 1)
     throw new Error("Release OCI archive must contain one linux/arm64 image.");
-  const descriptor = candidates[0]!;
+  const [descriptor] = candidates;
+  if (descriptor === undefined)
+    throw new Error("Release OCI archive must contain one linux/arm64 image.");
   const manifestBytes = await tarEntry(
     path,
     `blobs/sha256/${descriptor.digest.slice("sha256:".length)}`,
@@ -281,21 +279,21 @@ export async function inspectOciCandidateArchive(path: string) {
   )
     throw new Error("Release OCI platform manifest was incomplete.");
   return {
-    manifestDigest: descriptor.digest,
     archiveSha256: await sha256File(path),
+    manifestDigest: descriptor.digest,
   } as const;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function treeEntries(root: string, current = root): Promise<string[]> {
   const paths: string[] = [];
-  for (const entry of (await readdir(current, { withFileTypes: true })).toSorted((left, right) =>
-    left.name.localeCompare(right.name),
-  )) {
-    const path = join(current, entry.name);
+  const entries = await readdir(current, { withFileTypes: true });
+  for (const entry of entries.toSorted((left, right) => left.name.localeCompare(right.name))) {
+    const entryPath = nodePath.join(current, entry.name);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    if (entry.isDirectory()) paths.push(...(await treeEntries(root, path)));
-    else if (entry.isFile() && !entry.isSymbolicLink()) paths.push(relative(root, path));
+    if (entry.isDirectory()) paths.push(...(await treeEntries(root, entryPath)));
+    else if (entry.isFile() && !entry.isSymbolicLink())
+      paths.push(nodePath.relative(root, entryPath));
     else throw new Error("Release deployment output contains a non-file entry.");
   }
   return paths;
@@ -309,9 +307,9 @@ export async function immutableTreeDigest(rootInput: string) {
   if (paths.length === 0) throw new Error("Release output tree was empty.");
   for (const path of paths) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const bytes = await readFile(join(root, path));
+    const bytes = await readFile(nodePath.join(root, path));
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const info = await lstat(join(root, path));
+    const info = await lstat(nodePath.join(root, path));
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     const mode = (info.mode & 0o777).toString(8).padStart(3, "0");
     digest.update(`${Buffer.byteLength(path)}\0${bytes.byteLength}\0${mode}\0${path}\0`);
@@ -322,14 +320,17 @@ export async function immutableTreeDigest(rootInput: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function within(root: string, path: string) {
-  const child = relative(root, path);
-  return child === "" || (child !== ".." && !child.startsWith(`..${sep}`) && !isAbsolute(child));
+  const child = nodePath.relative(root, path);
+  return (
+    child === "" ||
+    (child !== ".." && !child.startsWith(`..${nodePath.sep}`) && !nodePath.isAbsolute(child))
+  );
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function exactFile(root: string, path: string, expected: string) {
-  const absolute = pathResolve(root, path);
-  if (!within(root, absolute) || basename(path) === "")
+  const absolute = nodePath.resolve(root, path);
+  if (!within(root, absolute) || nodePath.basename(path) === "")
     throw new Error("Release receipt path escaped its candidate root.");
   let cursor = absolute;
   for (;;) {
@@ -338,7 +339,7 @@ async function exactFile(root: string, path: string, expected: string) {
     if (component.isSymbolicLink())
       throw new Error(`Release candidate path contained a link: ${path}`);
     if (cursor === root) break;
-    const parent = pathResolve(cursor, "..");
+    const parent = nodePath.resolve(cursor, "..");
     if (!within(root, parent)) throw new Error("Release candidate path escaped its root.");
     cursor = parent;
   }
@@ -355,10 +356,10 @@ export async function verifyPromotionCandidate(input: {
   candidateRoot: string;
   receiptPath?: string;
 }) {
-  const root = await realpath(pathResolve(input.candidateRoot));
+  const root = await realpath(nodePath.resolve(input.candidateRoot));
   const rootInfo = await lstat(root);
   if (
-    root !== pathResolve(input.candidateRoot) ||
+    root !== nodePath.resolve(input.candidateRoot) ||
     !rootInfo.isDirectory() ||
     rootInfo.isSymbolicLink() ||
     rootInfo.uid !== process.getuid?.() ||
@@ -372,7 +373,7 @@ export async function verifyPromotionCandidate(input: {
   const receiptBytes = await exactFile(
     root,
     receiptPath,
-    sha256(await readFile(join(root, receiptPath))),
+    sha256(await readFile(nodePath.join(root, receiptPath))),
   );
   const receipt = promotionReceiptSchema.parse(JSON.parse(receiptBytes.toString("utf-8")));
   const { digest, ...unsigned } = receipt;
@@ -399,45 +400,46 @@ export async function verifyPromotionCandidate(input: {
     exactFile(root, receipt.package.checksums, receipt.package.checksumsSha256),
     exactFile(root, receipt.image.archive, receipt.image.archiveSha256),
   ]);
-  const observedImage = await inspectOciCandidateArchive(join(root, receipt.image.archive));
+  const observedImage = await inspectOciCandidateArchive(
+    nodePath.join(root, receipt.image.archive),
+  );
   if (
     observedImage.manifestDigest !== receipt.image.manifestDigest ||
     observedImage.archiveSha256 !== receipt.image.archiveSha256
   )
     throw new Error("Release image archive identity drifted.");
-  const deploymentRoot = join(root, receipt.deployment.root);
+  const deploymentRoot = nodePath.join(root, receipt.deployment.root);
   if (
-    (await immutableTreeDigest(join(deploymentRoot, ".vercel/output"))) !==
+    (await immutableTreeDigest(nodePath.join(deploymentRoot, ".vercel/output"))) !==
       receipt.deployment.outputTreeSha256 ||
-    sha256(await readFile(join(deploymentRoot, ".vercel/project.json"))) !==
+    sha256(await readFile(nodePath.join(deploymentRoot, ".vercel/project.json"))) !==
       receipt.deployment.projectBindingSha256
   )
     throw new Error("Release deployment bytes or binding drifted.");
-  return { root, receipt, packageReceipt } as const;
+  return { packageReceipt, receipt, root } as const;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function releasePublicationCommands(receipt: PromotionReceipt) {
   return [
     {
-      tool: "docker" as const,
       args: ["load", "--input", receipt.image.archive],
+      tool: "docker" as const,
     },
     {
-      tool: "docker" as const,
       args: ["tag", receipt.image.localTag, receipt.image.publicationTag],
-    },
-    {
       tool: "docker" as const,
-      args: ["push", receipt.image.publicationTag],
     },
     {
-      tool: "vercel" as const,
+      args: ["push", receipt.image.publicationTag],
+      tool: "docker" as const,
+    },
+    {
       args: ["deploy", "--prebuilt", "--prod", "--yes"],
       cwd: receipt.deployment.root,
+      tool: "vercel" as const,
     },
     {
-      tool: "gh" as const,
       args: [
         "release",
         "create",
@@ -457,6 +459,7 @@ export function releasePublicationCommands(receipt: PromotionReceipt) {
         `Immutable promotion ${receipt.digest}`,
         "--prerelease",
       ],
+      tool: "gh" as const,
     },
   ] as const;
 }

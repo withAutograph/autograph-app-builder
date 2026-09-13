@@ -12,13 +12,9 @@ import { publicationContentSourceForReviewedWorkflow } from "@/lib/agent/github-
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 
 export default defineTool({
+  approval: always(),
   description:
     "After you approve creating a draft pull request, publish the current reviewed changes to GitHub. GitHub decides whether the account can write the repository and reports any real conflict or permission error. Approval is required only for this outward effect.",
-  inputSchema: z.strictObject({
-    expectedProposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-    approvalReceipt: approvalReceiptSchema,
-  }),
-  approval: always(),
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (
@@ -32,21 +28,25 @@ export default defineTool({
     assertApprovalReceipt({
       actual: input.approvalReceipt,
       phase: "publication",
-      target: approvalTargetFromGitHubSource(state.githubSource),
       subjectDigest: state.githubDraftProposal.proposal.digest,
+      target: approvalTargetFromGitHubSource(state.githubSource),
     });
     const sandbox = await ctx.getSandbox();
     const contentSource = await publicationContentSourceForReviewedWorkflow({
-      state,
       sandbox,
+      state,
     });
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
     return runtime.publishDraftPullRequest({
-      expectedProposalDigest: state.githubDraftProposal.proposal.digest,
       approvalReceipt: input.approvalReceipt,
-      review: state.reviewReceipt,
-      contentSource,
       approvedByCallId: ctx.callId,
+      contentSource,
+      expectedProposalDigest: state.githubDraftProposal.proposal.digest,
+      review: state.reviewReceipt,
     });
   },
+  inputSchema: z.strictObject({
+    approvalReceipt: approvalReceiptSchema,
+    expectedProposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+  }),
 });

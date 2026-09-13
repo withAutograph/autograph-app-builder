@@ -20,11 +20,6 @@ import acceptAppSpec from "./accept_app_spec";
 export default defineTool({
   description:
     "Record internal product decisions and implementation design without pausing for approval. Use record_ui_preview for visual content composed from Arrusted components; never author replacement HTML controls here. A complete design continues into planning automatically.",
-  inputSchema: z.object({
-    path: z.string().regex(prototypeArtifactPathPattern),
-    mediaType: z.enum(prototypeArtifactMediaTypes),
-    content: z.string().min(1).max(262_144),
-  }),
   async execute({ path, mediaType, content }, ctx) {
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "prototype artifact recording");
@@ -36,11 +31,8 @@ export default defineTool({
       );
     const recorded = recordPrototypeArtifactRevision({
       artifacts: current.artifacts,
-      path,
-      mediaType,
-      content,
-      sessionId: ctx.session.id,
       callId: ctx.callId,
+      content,
       expectedAppId:
         current.phase === "app_spec_accepted" ||
         current.phase === "dependencies_prepared" ||
@@ -53,6 +45,9 @@ export default defineTool({
         current.phase === "reviewed"
           ? current.appSpec.appId
           : undefined,
+      mediaType,
+      path,
+      sessionId: ctx.session.id,
     });
     if (!recorded.reused)
       updateExactWorkflow({
@@ -62,19 +57,19 @@ export default defineTool({
           if (current.phase === "ui_previewed" || current.phase === "ui_accepted")
             return { ...current, artifacts: recorded.artifacts };
           return {
-            version: APP_BUILDER_WORKFLOW_VERSION,
+            artifacts: recorded.artifacts,
             phase: "prepared",
             preparedByCallId: current.preparedByCallId,
-            workspace: current.workspace,
             sourceReceipt: current.sourceReceipt,
             ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-            artifacts: recorded.artifacts,
+            version: APP_BUILDER_WORKFLOW_VERSION,
+            workspace: current.workspace,
           };
         },
       });
     const buildReadyAppSpec = completeBuildReadyPrototypeAppSpec({
-      artifacts: recorded.artifacts,
       appId: recorded.artifact.appId,
+      artifacts: recorded.artifacts,
     });
     if (buildReadyAppSpec !== undefined) {
       // The model has completed the product-facing design. Continue the
@@ -96,4 +91,9 @@ export default defineTool({
       ...(buildReadyAppSpec === undefined ? {} : { implementationPlanReady: true }),
     };
   },
+  inputSchema: z.object({
+    content: z.string().min(1).max(262_144),
+    mediaType: z.enum(prototypeArtifactMediaTypes),
+    path: z.string().regex(prototypeArtifactPathPattern),
+  }),
 });

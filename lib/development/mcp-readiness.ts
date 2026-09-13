@@ -34,13 +34,13 @@ async function mcpRequest(input: {
   const requestTimeout = AbortSignal.timeout(5000);
   const signal = input.signal ? AbortSignal.any([input.signal, requestTimeout]) : requestTimeout;
   const response = await input.fetcher(input.endpoint, {
-    method: "POST",
+    body: JSON.stringify(input.body),
     headers: {
       accept: "application/json, text/event-stream",
       "content-type": "application/json",
       ...(input.sessionId ? { "mcp-session-id": input.sessionId } : {}),
     },
-    body: JSON.stringify(input.body),
+    method: "POST",
     signal,
   });
   if (!response.ok) throw new Error(`Development MCP returned HTTP ${response.status}.`);
@@ -57,38 +57,38 @@ export async function developmentMcpToolNames(input: {
 }) {
   const fetcher = input.fetcher ?? fetch;
   const initialized = await mcpRequest({
-    endpoint: input.endpoint,
-    fetcher,
-    signal: input.signal,
     body: {
-      jsonrpc: "2.0",
       id: 1,
+      jsonrpc: "2.0",
       method: "initialize",
       params: {
-        protocolVersion: "2025-03-26",
         capabilities: {},
         clientInfo: {
           name: "autograph-development-readiness",
           version: "1",
         },
+        protocolVersion: "2025-03-26",
       },
     },
+    endpoint: input.endpoint,
+    fetcher,
+    signal: input.signal,
   });
   if (initialized.body?.error)
     throw new Error(initialized.body.error.message ?? "Development MCP initialization failed.");
   await mcpRequest({
+    body: { jsonrpc: "2.0", method: "notifications/initialized" },
     endpoint: input.endpoint,
     fetcher,
-    signal: input.signal,
     sessionId: initialized.sessionId,
-    body: { jsonrpc: "2.0", method: "notifications/initialized" },
+    signal: input.signal,
   });
   const listed = await mcpRequest({
+    body: { id: 2, jsonrpc: "2.0", method: "tools/list", params: {} },
     endpoint: input.endpoint,
     fetcher,
-    signal: input.signal,
     sessionId: initialized.sessionId,
-    body: { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
+    signal: input.signal,
   });
   if (listed.body?.error)
     throw new Error(listed.body.error.message ?? "Development MCP tools/list failed.");

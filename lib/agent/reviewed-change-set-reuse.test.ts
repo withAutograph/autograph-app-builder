@@ -3,16 +3,16 @@ import { describe, expect, it } from "vitest";
 import { assertAtomicReviewedChangeSetReuse } from "./reviewed-change-set-reuse";
 
 const expected = {
-  digest: "a".repeat(64),
   changeSetDigest: "b".repeat(64),
+  digest: "a".repeat(64),
   reviewedByCallId: "review-call",
 };
 
 describe("reviewed change-set reuse", () => {
   const current = {
     expectedApplyDigest: "c".repeat(64),
-    expectedValidationDigest: "d".repeat(64),
     expectedReviewReceipt: expected,
+    expectedValidationDigest: "d".repeat(64),
   };
 
   it("permits an unchanged reviewed receipt", () => {
@@ -20,10 +20,10 @@ describe("reviewed change-set reuse", () => {
       assertAtomicReviewedChangeSetReuse({
         ...current,
         latest: {
-          phase: "reviewed",
           applyDigest: current.expectedApplyDigest,
-          validationDigest: current.expectedValidationDigest,
+          phase: "reviewed",
           reviewReceipt: expected,
+          validationDigest: current.expectedValidationDigest,
         },
       }),
     ).not.toThrow();
@@ -43,10 +43,10 @@ describe("reviewed change-set reuse", () => {
       assertAtomicReviewedChangeSetReuse({
         ...current,
         latest: {
-          phase: "reviewed",
           applyDigest: current.expectedApplyDigest,
-          validationDigest: current.expectedValidationDigest,
+          phase: "reviewed",
           reviewReceipt: { ...expected, digest: "e".repeat(64) },
+          validationDigest: current.expectedValidationDigest,
         },
       }),
     ).toThrow("changed concurrently");

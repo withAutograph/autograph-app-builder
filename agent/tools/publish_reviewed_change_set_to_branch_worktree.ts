@@ -13,12 +13,9 @@ import { exactBranchWorktreePublicationProposal } from "./branch_worktree_public
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
 export default defineTool({
+  approval: always(),
   description:
     "After a separate approval, create one deterministic branch and builder-owned worktree at the exact reviewed base and apply only the approved postimages there. It never mutates the original checkout, commits, pushes, publishes remotely, or invokes a provider or release operation.",
-  inputSchema: z.strictObject({
-    publication: branchWorktreePublicationProposalSchema,
-  }),
-  approval: always(),
   async execute({ publication: expected }, ctx) {
     if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "1")
       throw new Error("Branch-worktree publication is disabled on this host.");
@@ -36,22 +33,7 @@ export default defineTool({
     let pendingWorkflow: ReturnType<typeof appBuilderWorkflowState.get> | undefined;
     const relativeRoot = workflow.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
     const result = await publishReviewedChangeSetToBranchWorktree({
-      proposal,
-      sourceReceipt: workflow.sourceReceipt,
-      review: workflow.reviewReceipt,
-      publishedByCallId: ctx.callId,
-      readOverlayFile: (path) =>
-        ctx
-          .getSandbox()
-          .then((sandbox) => sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` })),
       hooks: {
-        beforePendingJournal:
-          hasTestCapability("simulated-publication") &&
-          workflow.appSpec.appId === "branch-publication-pre-journal-interruption"
-            ? () => {
-                throw new Error("Fixture interruption before durable branch publication intent.");
-              }
-            : undefined,
         afterPendingJournal: () => {
           updateExactWorkflow({
             expected: workflow,
@@ -61,14 +43,21 @@ export default defineTool({
                 throw new Error("The reviewed workflow changed before publication.");
               return {
                 ...current,
-                phase: "branch_publication_pending",
-                branchPublicationProposal: proposal,
                 branchPublicationCallId: ctx.callId,
+                branchPublicationProposal: proposal,
+                phase: "branch_publication_pending",
               };
             },
           });
           pendingWorkflow = appBuilderWorkflowState.get();
         },
+        beforePendingJournal:
+          hasTestCapability("simulated-publication") &&
+          workflow.appSpec.appId === "branch-publication-pre-journal-interruption"
+            ? () => {
+                throw new Error("Fixture interruption before durable branch publication intent.");
+              }
+            : undefined,
         ...(hasTestCapability("simulated-publication") &&
         workflow.appSpec.appId === "branch-publication-lost-response"
           ? {
@@ -87,6 +76,14 @@ export default defineTool({
             }
           : {}),
       },
+      proposal,
+      publishedByCallId: ctx.callId,
+      readOverlayFile: (path) =>
+        ctx
+          .getSandbox()
+          .then((sandbox) => sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` })),
+      review: workflow.reviewReceipt,
+      sourceReceipt: workflow.sourceReceipt,
     });
     if (pendingWorkflow === undefined)
       throw new Error("The durable branch publication intent was not bound to workflow state.");
@@ -104,16 +101,19 @@ export default defineTool({
         return result.status === "succeeded"
           ? {
               ...current,
-              phase: "published_branch_worktree",
               branchPublicationReceipt: result,
+              phase: "published_branch_worktree",
             }
           : {
               ...current,
-              phase: "branch_publication_failed",
               branchPublicationReceipt: result,
+              phase: "branch_publication_failed",
             };
       },
     });
     return result;
   },
+  inputSchema: z.strictObject({
+    publication: branchWorktreePublicationProposalSchema,
+  }),
 });

@@ -38,12 +38,22 @@ export function publicationContentSourceForReviewedWorkflow(input: {
       return new Map(observed.files.map((file) => [file.path, file]));
     })());
   return {
+    async readFile(path) {
+      const files = await observeApplyFiles();
+      const file = files.get(path);
+      if (file === undefined) return null;
+      const bytes = await input.sandbox.readBinaryFile({
+        path: `${relativeRoot}/${path}`,
+      });
+      if (bytes === null) return null;
+      return { bytes, digest: file.digest, mode: file.mode };
+    },
     async readFreshTree() {
       const prepared = await inspectSourceBoundSandboxWorkspace({
-        sandbox: input.sandbox,
-        receipt: input.state.sourceReceipt,
         expectedWorkspace: input.state.workspace,
         githubSource: input.state.githubSource,
+        receipt: input.state.sourceReceipt,
+        sandbox: input.sandbox,
       });
       const sourceFiles = await readPreparedSandboxSourceManifest(input.sandbox, prepared);
       const files = await Promise.all(
@@ -54,37 +64,27 @@ export function publicationContentSourceForReviewedWorkflow(input: {
           if (bytes === null || sha256(bytes) !== file.sha256)
             throw new Error("A prepared source file changed before publication.");
           return {
-            path: file.path,
+            bytes,
+            digest: file.sha256,
             mode: file.mode as "100644" | "100755",
             objectId: file.objectId,
-            digest: file.sha256,
-            bytes,
+            path: file.path,
           };
         }),
       );
       await inspectSourceBoundSandboxWorkspace({
-        sandbox: input.sandbox,
-        receipt: input.state.sourceReceipt,
         expectedWorkspace: input.state.workspace,
         githubSource: input.state.githubSource,
+        receipt: input.state.sourceReceipt,
+        sandbox: input.sandbox,
       });
       return {
-        version: 1 as const,
+        files,
         kind: "fresh-repository-source-tree" as const,
         sourceSha: prepared.sourceSha,
         sourceTree: prepared.sourceTree,
-        files,
+        version: 1 as const,
       };
-    },
-    async readFile(path) {
-      const files = await observeApplyFiles();
-      const file = files.get(path);
-      if (file === undefined) return null;
-      const bytes = await input.sandbox.readBinaryFile({
-        path: `${relativeRoot}/${path}`,
-      });
-      if (bytes === null) return null;
-      return { mode: file.mode, digest: file.digest, bytes };
     },
   };
 }

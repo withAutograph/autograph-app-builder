@@ -18,12 +18,15 @@ describe("high-fidelity design guidance", () => {
     const manifest = reference.match(/```json\n(?<manifest>[\s\S]*?)\n```/u)?.groups?.manifest;
     expect(content).toBeDefined();
     expect(manifest).toBeDefined();
+    if (manifest === undefined) {
+      throw new Error("Expected the reference to include a JSON manifest.");
+    }
     const input = uiPreviewInputSchema.parse({
       appId: "request-review",
-      routes: ["/"],
-      files: [{ path: "src/routes/index.tsx", content }],
       catalogGaps: [],
-      manifest: JSON.parse(manifest!),
+      files: [{ content, path: "src/routes/index.tsx" }],
+      manifest: JSON.parse(manifest),
+      routes: ["/"],
     });
     expect(() => validateUiPreview(input)).not.toThrow();
 
@@ -103,6 +106,6 @@ describe("high-fidelity design guidance", () => {
     );
     expect(reference).toMatch(/`ChevronLeft`; `ArrowLeft` is not an\s+export/u);
     expect(reference).toContain("Keep TSX formatted with normal line breaks");
-    expect(reference).toMatch(/Call `accept_ui_preview`\s+only after/u);
+    expect(reference).toMatch(/Call `accept-ui-preview`\s+only after/u);
   });
 });

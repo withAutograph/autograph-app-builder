@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import path from "node:path";
 
 import {
   acquireCanonicalArrustedTemplate,
@@ -14,7 +14,7 @@ import {
 } from "../../../../lib/eve/local-vercel-oidc";
 import { createHostedVercelBackend } from "../../../../lib/sandbox/vercel-backend";
 
-const repositoryRoot = resolve(import.meta.dirname, "../../../../");
+const repositoryRoot = path.resolve(import.meta.dirname, "../../../../");
 if (
   process.argv.length !== 2 ||
   process.cwd() !== repositoryRoot ||
@@ -31,8 +31,10 @@ const requiredEnvironmentKeys = [
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseQuotedEnvironmentValue(source: string, name: string): string {
   const matches = source.split(/\r?\n/u).filter((line) => line.startsWith(`${name}=`));
-  if (matches.length !== 1) throw new Error(`The Development environment is missing ${name}.`);
-  const encoded = matches[0]!.slice(name.length + 1);
+  const [match] = matches;
+  if (matches.length !== 1 || match === undefined)
+    throw new Error(`The Development environment is missing ${name}.`);
+  const encoded = match.slice(name.length + 1);
   let value: unknown;
   try {
     value = encoded.startsWith('"') ? JSON.parse(encoded) : encoded;
@@ -45,17 +47,17 @@ function parseQuotedEnvironmentValue(source: string, name: string): string {
 }
 
 const linkedProject = parseLinkedVercelProject(
-  readOwnerBoundLocalFile(resolve(repositoryRoot, ".vercel/project.json"), {
+  readOwnerBoundLocalFile(path.resolve(repositoryRoot, ".vercel/project.json"), {
     confidential: false,
   }),
 );
-const localEnvironment = readOwnerBoundLocalFile(resolve(repositoryRoot, ".env.local"), {
+const localEnvironment = readOwnerBoundLocalFile(path.resolve(repositoryRoot, ".env.local"), {
   confidential: true,
 });
 const token = validateLocalVercelOidcToken({
-  token: parseLocalVercelOidcToken(localEnvironment),
-  project: linkedProject,
   nowEpochSeconds: Math.floor(Date.now() / 1000),
+  project: linkedProject,
+  token: parseLocalVercelOidcToken(localEnvironment),
 });
 
 if (Object.hasOwn(process.env, "VERCEL_TOKEN") || Object.hasOwn(process.env, "AI_GATEWAY_API_KEY"))
@@ -84,24 +86,24 @@ try {
     templateKey: null,
   });
   const receipt = await acquireCanonicalArrustedTemplate({
-    sandbox: handle.session,
     callId: sessionKey,
+    sandbox: handle.session,
   });
   if (receipt.version !== 4)
     throw new Error("The canonical starter did not produce a cloned receipt.");
   const workspace = await inspectCanonicalArrustedSandboxWorkspace({
-    sandbox: handle.session,
     receipt,
+    sandbox: handle.session,
   });
   process.stdout.write(
     `${JSON.stringify({
+      contractDigest: receipt.contractDigest,
+      eligibilityDigest: receipt.eligibilityDigest,
       ok: true,
-      provider: "vercel-sandbox",
       project: linkedProject.projectName,
+      provider: "vercel-sandbox",
       sourceSha: receipt.sourceSha,
       sourceTree: receipt.sourceTree,
-      eligibilityDigest: receipt.eligibilityDigest,
-      contractDigest: receipt.contractDigest,
       workspaceDigest: workspace.workspaceDigest,
     })}\n`,
   );

@@ -8,9 +8,9 @@ import {
 } from "./provider-emulation-seed";
 
 const input = {
-  origin: "https://app-git-feature-team.vercel.app",
   githubClientId: "github-client",
   githubClientSecret: "g".repeat(20),
+  origin: "https://app-git-feature-team.vercel.app",
   vercelClientId: "vercel-client",
   vercelClientSecret: "v".repeat(20),
 };

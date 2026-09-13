@@ -59,10 +59,10 @@ test("anonymous brief continues through passkey signup into the builder", async 
     await expect(page.getByRole("heading", { name: "Build an app" })).toBeVisible();
     await expect(page.getByRole("group", { name: "Connections" })).toHaveCount(0);
     expect(await applicationCounts()).toMatchObject({
-      users: 1,
-      organizations: 1,
-      members: 1,
       activeSessions: 1,
+      members: 1,
+      organizations: 1,
+      users: 1,
     });
   } finally {
     await authenticator.dispose();
@@ -100,7 +100,11 @@ test("missing passkey keeps the permanent Sign Up link without entering setup", 
 }) => {
   const authenticator = await registerPasskey(context, page);
   await page.goto("/auth/sign-out");
-  await authenticator.removeCredential((await authenticator.credentials())[0]!.credentialId);
+  const [credential] = await authenticator.credentials();
+  if (!credential) {
+    throw new Error("Expected registered passkey credential");
+  }
+  await authenticator.removeCredential(credential.credentialId);
   const signUpLink = page.getByRole("link", { name: "Sign Up" });
   await expect(signUpLink).toBeVisible();
   await page.getByRole("button", { name: "Continue with Passkey" }).click();
@@ -112,7 +116,7 @@ test("missing passkey keeps the permanent Sign Up link without entering setup", 
     page.getByText("We couldn’t use an existing passkey. Continue to create a new one."),
   ).toHaveCount(0);
   await expect(page.getByText("Setting up your workspace")).toHaveCount(0);
-  expect(await applicationCounts()).toMatchObject({ users: 1, passkeys: 1 });
+  expect(await applicationCounts()).toMatchObject({ passkeys: 1, users: 1 });
   await authenticator.dispose();
 });
 

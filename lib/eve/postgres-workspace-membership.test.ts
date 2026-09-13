@@ -11,11 +11,11 @@ import {
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 
 const principal: HostedPrincipal = {
-  issuer: "https://identity.example.test",
   audience: "https://builder.example.test/mcp",
-  workspaceId: "workspace_1",
+  issuer: "https://identity.example.test",
   ownerUserId: "user_1",
   scopes: ["autograph:session"],
+  workspaceId: "workspace_1",
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -30,26 +30,26 @@ function databaseReturning<T extends Record<string, unknown>>(rows: T[]) {
   const select = vi.fn(() => ({ from }));
   return {
     database: { select } as unknown as Database,
-    select,
     from,
     innerJoin,
-    where,
     limit,
+    select,
+    where,
   };
 }
 
 describe("PostgreSQL workspace membership", () => {
   it.each([
     [[], false],
-    [[{ role: "revoked", banned: false }], false],
-    [[{ role: "member", banned: true }], false],
-    [[{ role: "member", banned: false }], true],
-    [[{ role: "admin", banned: false }], true],
-    [[{ role: "owner", banned: false }], true],
+    [[{ banned: false, role: "revoked" }], false],
+    [[{ banned: true, role: "member" }], false],
+    [[{ banned: false, role: "member" }], true],
+    [[{ banned: false, role: "admin" }], true],
+    [[{ banned: false, role: "owner" }], true],
     [
       [
-        { role: "member", banned: false },
-        { role: "member", banned: false },
+        { banned: false, role: "member" },
+        { banned: false, role: "member" },
       ],
       false,
     ],
@@ -77,13 +77,13 @@ describe("PostgreSQL workspace membership", () => {
 
   it.each([
     [[], undefined],
-    [[{ workspaceId: "workspace_1", role: "owner", banned: false }], "workspace_1"],
-    [[{ workspaceId: "workspace_1", role: "member", banned: true }], undefined],
-    [[{ workspaceId: "workspace_1", role: "revoked", banned: false }], undefined],
+    [[{ banned: false, role: "owner", workspaceId: "workspace_1" }], "workspace_1"],
+    [[{ banned: true, role: "member", workspaceId: "workspace_1" }], undefined],
+    [[{ banned: false, role: "revoked", workspaceId: "workspace_1" }], undefined],
     [
       [
-        { workspaceId: "workspace_1", role: "member", banned: false },
-        { workspaceId: "workspace_2", role: "member", banned: false },
+        { banned: false, role: "member", workspaceId: "workspace_1" },
+        { banned: false, role: "member", workspaceId: "workspace_2" },
       ],
       undefined,
     ],
@@ -91,8 +91,8 @@ describe("PostgreSQL workspace membership", () => {
     const fixture = databaseReturning([...rows]);
     await expect(
       createPostgresOAuthMembershipAuthority(fixture.database).activeWorkspaceForUser({
-        issuer: principal.issuer,
         audience: principal.audience,
+        issuer: principal.issuer,
         ownerUserId: principal.ownerUserId,
       }),
     ).resolves.toBe(expected);

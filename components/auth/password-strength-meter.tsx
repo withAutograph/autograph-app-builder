@@ -12,10 +12,10 @@ const STRENGTH_SEGMENTS = [1, 2, 3, 4] as const;
 type FilledLevel = Exclude<PasswordStrengthLevel, "empty">;
 
 const segmentColors: Record<FilledLevel, string> = {
-  weak: "bg-destructive",
   fair: "bg-amber-500",
   good: "bg-sky-500",
   strong: "bg-emerald-500",
+  weak: "bg-destructive",
 };
 
 export interface PasswordStrengthMeterProps {
@@ -44,10 +44,10 @@ export function PasswordStrengthMeter({ password, className }: PasswordStrengthM
   if (level === "empty") return null;
 
   const levelLabels: Record<FilledLevel, string> = {
-    weak: localization.auth.passwordWeak,
     fair: localization.auth.passwordFair,
     good: localization.auth.passwordGood,
     strong: localization.auth.passwordStrong,
+    weak: localization.auth.passwordWeak,
   };
 
   return (

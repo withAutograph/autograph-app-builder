@@ -9,54 +9,58 @@ import {
 import { TOOL_NAMES } from "./portable-release";
 
 const target = {
-  repositoryId: "1234",
-  repository: "withAutograph/proof-target",
+  appSpecDigest: "b".repeat(64),
   baseRef: "refs/heads/main",
   baseSha: "a".repeat(40),
-  headRef: "refs/heads/autograph/proof",
-  appSpecDigest: "b".repeat(64),
   changeSetDigest: "c".repeat(64),
+  headRef: "refs/heads/autograph/proof",
   proposalDigest: "d".repeat(64),
+  repository: "withAutograph/proof-target",
+  repositoryId: "1234",
 };
-const receipt = (phase: "appspec" | "change_set" | "publication") => ({
-  format: "autograph-eve-approval-receipt-v2" as const,
-  phase,
-  repositoryId: target.repositoryId,
-  repository: target.repository,
-  baseRef: target.baseRef,
-  baseSha: target.baseSha,
-  subjectDigest:
-    phase === "appspec"
-      ? target.appSpecDigest
-      : phase === "change_set"
-        ? target.changeSetDigest
-        : target.proposalDigest,
-  outcome:
-    phase === "appspec"
-      ? ("accept-appspec" as const)
-      : phase === "change_set"
-        ? ("accept-change-set" as const)
-        : ("create-draft-pr" as const),
-});
+const receipt = (phase: "appspec" | "change_set" | "publication") => {
+  let outcome: "accept-appspec" | "accept_change_set" | "create-draft-pr";
+  let subjectDigest: string;
+  if (phase === "appspec") {
+    outcome = "accept-appspec";
+    subjectDigest = target.appSpecDigest;
+  } else if (phase === "change_set") {
+    outcome = "accept_change_set";
+    subjectDigest = target.changeSetDigest;
+  } else {
+    outcome = "create-draft-pr";
+    subjectDigest = target.proposalDigest;
+  }
+  return {
+    baseRef: target.baseRef,
+    baseSha: target.baseSha,
+    format: "autograph-eve-approval-receipt-v2" as const,
+    outcome,
+    phase,
+    repository: target.repository,
+    repositoryId: target.repositoryId,
+    subjectDigest,
+  };
+};
 const scenario = hostedProofScenarioSchema.parse({
-  format: "autograph-hosted-client-proof-scenario-v2",
-  createPrompt: "Create a supported app and pause before publication.",
-  iterateMessage: "Iterate, validate, and publish the approved draft PR.",
-  cancelPrompt: "Begin a cancellable read-only design turn.",
-  target,
-  oauth: {
-    issuer: "https://issuer.autograph.dev",
-    audience: "https://preview.autograph.dev/mcp",
-    resource: "https://preview.autograph.dev/mcp",
-  },
-  questionResponses: [],
   approvalReceipts: (["appspec", "change_set", "publication"] as const).map((phase) => ({
-    requestTitle: `Approve ${phase}`,
     receipt: receipt(phase),
+    requestTitle: `Approve ${phase}`,
     response: "approve",
   })),
+  cancelPrompt: "Begin a cancellable read-only design turn.",
+  createPrompt: "Create a supported app and pause before publication.",
+  format: "autograph-hosted-client-proof-scenario-v2",
+  iterateMessage: "Iterate, validate, and publish the approved draft PR.",
   maxPolls: 8,
+  oauth: {
+    audience: "https://preview.autograph.dev/mcp",
+    issuer: "https://issuer.autograph.dev",
+    resource: "https://preview.autograph.dev/mcp",
+  },
   pollIntervalMs: 100,
+  questionResponses: [],
+  target,
 });
 
 // Keep the fixture token helper scoped to this proof test.
@@ -66,14 +70,14 @@ function jwt(subject: string, workspaceId: string) {
   // oxlint-disable-next-line unicorn/consistent-function-scoping
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   return `${encode({ alg: "RS256", kid: "proof" })}.${encode({
-    iss: scenario.oauth.issuer,
     aud: scenario.oauth.audience,
-    sub: subject,
-    workspace_id: workspaceId,
+    exp: 2100,
+    iss: scenario.oauth.issuer,
+    nbf: 1900,
     scope:
       "autograph:session autograph:start autograph:get autograph:send autograph:respond autograph:cancel",
-    nbf: 1900,
-    exp: 2100,
+    sub: subject,
+    workspace_id: workspaceId,
   })}.signature`;
 }
 const primaryToken = jwt("proof-user-primary", "workspace-primary");
@@ -88,7 +92,7 @@ const rpc = (id: unknown, result: unknown, status = 200) =>
           ...(id === undefined ? {} : { id }),
           result,
         }),
-    { status, headers: { "content-type": "application/json" } },
+    { headers: { "content-type": "application/json" }, status },
   );
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -100,10 +104,10 @@ function session(
   inputRequests?: unknown[],
 ) {
   return {
-    sessionId,
-    status,
     cursor,
     events,
+    sessionId,
+    status,
     ...(inputRequests === undefined ? {} : { inputRequests }),
   };
 }
@@ -132,9 +136,9 @@ function hostedFixture(
     const url = String(urlInput);
     if (url.endsWith("/.well-known/oauth-protected-resource"))
       return Response.json({
-        resource: options.metadataResource ?? scenario.oauth.resource,
         authorization_servers: [scenario.oauth.issuer],
         bearer_methods_supported: ["header"],
+        resource: options.metadataResource ?? scenario.oauth.resource,
         scopes_supported: [
           "autograph:session",
           "autograph:start",
@@ -148,18 +152,18 @@ function hostedFixture(
     const authorization = headers.get("authorization");
     if (authorization === null || authorization === "Bearer invalid-hosted-proof-token")
       return new Response("", {
-        status: 401,
         headers: {
           "www-authenticate":
             'Bearer error="invalid_token", resource_metadata="https://preview.autograph.dev/.well-known/oauth-protected-resource"',
         },
+        status: 401,
       });
     const secondary = authorization === `Bearer ${secondaryToken}`;
     const body = JSON.parse(String(init?.body));
     if (body.method === "initialize")
       return rpc(body.id, {
-        protocolVersion: "2025-03-26",
         capabilities: {},
+        protocolVersion: "2025-03-26",
         serverInfo: { name: "fixture", version: "1" },
       });
     if (body.method === "notifications/initialized")
@@ -182,17 +186,11 @@ function hostedFixture(
     };
     if (name === "autograph_start") {
       if (!secondary) primaryStartCount += 1;
-      return tool(
-        session(
-          secondary
-            ? "secondary-session"
-            : options.discardedStartRetryDrift && primaryStartCount === 1
-              ? "discarded-session-a"
-              : "primary-session",
-          "working",
-          0,
-        ),
-      );
+      let sessionId = "primary-session";
+      if (secondary) sessionId = "secondary-session";
+      else if (options.discardedStartRetryDrift && primaryStartCount === 1)
+        sessionId = "discarded-session-a";
+      return tool(session(sessionId, "working", 0));
     }
     if (name === "autograph_respond") {
       if (!Array.isArray(args.responses) || args.responses.length === 0)
@@ -231,7 +229,7 @@ function hostedFixture(
           "secondary-session",
           cancelRequested ? "cancelled" : "working",
           cancelRequested ? 1 : 0,
-          cancelRequested ? [{ type: "status", index: 0, status: "cancelled" }] : [],
+          cancelRequested ? [{ index: 0, status: "cancelled", type: "status" }] : [],
         ),
       );
     }
@@ -254,11 +252,11 @@ function hostedFixture(
               ? { ...expected, subjectDigest: "d".repeat(64) }
               : expected;
           return {
-            requestId: `approve-${phase}`,
-            kind: "approval",
-            title: `Approve ${phase}`,
-            description: JSON.stringify(described),
             allowFreeform: false,
+            description: JSON.stringify(described),
+            kind: "approval",
+            requestId: `approve-${phase}`,
+            title: `Approve ${phase}`,
           };
         });
         return tool(
@@ -267,9 +265,9 @@ function hostedFixture(
             "input_required",
             approved.size + 1,
             requests.map((request, index) => ({
-              type: "input_required",
               index: approved.size + index,
               request,
+              type: "input_required",
             })),
             requests,
           ),
@@ -278,31 +276,31 @@ function hostedFixture(
       if (!createIterated)
         return tool(
           session("primary-session", "waiting", 3, [
-            { type: "status", index: 2, status: "waiting" },
+            { index: 2, status: "waiting", type: "status" },
           ]),
         );
       const draft = {
-        format: "autograph-draft-pr-publication-receipt-v1",
-        url: "https://github.com/withAutograph/proof-target/pull/42",
-        draft: true,
-        repository: target.repository,
         baseRef: target.baseRef,
         baseSha: target.baseSha,
+        changeSetDigest: options.draftDigestDrift ? "e".repeat(64) : target.changeSetDigest,
+        draft: true,
+        format: "autograph-draft-pr-publication-receipt-v1",
         headRef: target.headRef,
         headSha: "d".repeat(40),
-        changeSetDigest: options.draftDigestDrift ? "e".repeat(64) : target.changeSetDigest,
         outcome: "draft-pr-created",
+        repository: target.repository,
+        url: "https://github.com/withAutograph/proof-target/pull/42",
       };
       const status = options.iterationStatus ?? "completed";
       return tool(
         session("primary-session", status, 5, [
           {
-            type: "assistant_message",
             index: 3,
-            turnId: "iterate",
             text: `AUTOGRAPH_DRAFT_PR_RECEIPT ${JSON.stringify(draft)}`,
+            turnId: "iterate",
+            type: "assistant_message",
           },
-          { type: "status", index: 4, status },
+          { index: 4, status, type: "status" },
         ]),
       );
     }
@@ -311,16 +309,16 @@ function hostedFixture(
 }
 
 const proofInput = (fetcher: typeof fetch) => ({
-  endpoint: scenario.oauth.resource,
-  token: primaryToken,
   crossTenantToken: secondaryToken,
+  endpoint: scenario.oauth.resource,
+  fetcher,
+  nowEpochSeconds: 2000,
+  permitApprovals: true,
+  releaseArchiveSha256: "1".repeat(64),
   scenario,
   sourceSha: "f".repeat(40),
   sourceTree: "0".repeat(40),
-  releaseArchiveSha256: "1".repeat(64),
-  permitApprovals: true,
-  nowEpochSeconds: 2000,
-  fetcher,
+  token: primaryToken,
 });
 
 describe("hosted portable fresh-client proof", () => {
@@ -328,11 +326,11 @@ describe("hosted portable fresh-client proof", () => {
     const sha256Target = { ...target, baseSha: "a".repeat(64) };
     const parsed = hostedProofScenarioSchema.parse({
       ...scenario,
-      target: sha256Target,
       approvalReceipts: scenario.approvalReceipts.map((approval) => ({
         ...approval,
         receipt: { ...approval.receipt, baseSha: sha256Target.baseSha },
       })),
+      target: sha256Target,
     });
     expect(parsed.target.baseSha).toHaveLength(64);
   });
@@ -341,20 +339,20 @@ describe("hosted portable fresh-client proof", () => {
     const result = await runHostedProof(proofInput(hostedFixture() as typeof fetch));
     expect(result.discoveredTools).toEqual(TOOL_NAMES);
     expect(result).toMatchObject({
-      missingAuthRejected: true,
-      invalidAuthRejected: true,
-      oauthMetadataBound: true,
-      idempotentStart: true,
-      discardedStartResponseRecovered: true,
-      responseCount: 3,
-      responseBatchCount: 2,
-      iterationProved: true,
-      publicationEvidenceProved: true,
-      staleSessionRejected: true,
-      mutualWorkspaceDenial: true,
       cancellationProved: true,
-      publicResponsesScanned: expect.any(Number),
+      discardedStartResponseRecovered: true,
+      idempotentStart: true,
+      invalidAuthRejected: true,
+      iterationProved: true,
+      missingAuthRejected: true,
+      mutualWorkspaceDenial: true,
+      oauthMetadataBound: true,
       publicResponseDisclosureScanDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      publicResponsesScanned: expect.any(Number),
+      publicationEvidenceProved: true,
+      responseBatchCount: 2,
+      responseCount: 3,
+      staleSessionRejected: true,
     });
     expect(Object.keys(result).some((key) => /discarded.*(?:digest|fingerprint)/iu.test(key))).toBe(
       false,
@@ -382,10 +380,10 @@ describe("hosted portable fresh-client proof", () => {
         result?: { structuredContent?: { events?: unknown[] } };
       };
       payload.result?.structuredContent?.events?.push({
-        type: "assistant_message",
         index: 99,
-        turnId: "leak",
         text: `private ${primaryToken} wrun_PRIVATE`,
+        turnId: "leak",
+        type: "assistant_message",
       });
       return Response.json(payload);
     };
@@ -430,26 +428,26 @@ describe("hosted portable fresh-client proof", () => {
     ).rejects.toThrow("metadata binding drifted");
     expect(() =>
       verifyWorkspaceTokenPair({
+        nowEpochSeconds: 2000,
         primary: primaryToken,
+        scenario,
         secondary: primaryToken,
-        scenario,
-        nowEpochSeconds: 2000,
       }),
     ).toThrow("two distinct subjects to two distinct workspaces");
     expect(() =>
       verifyWorkspaceTokenPair({
+        nowEpochSeconds: 2000,
         primary: primaryToken,
+        scenario,
         secondary: jwt("proof-user-primary", "workspace-secondary"),
-        scenario,
-        nowEpochSeconds: 2000,
       }),
     ).toThrow("two distinct subjects to two distinct workspaces");
     expect(() =>
       verifyWorkspaceTokenPair({
-        primary: primaryToken,
-        secondary: jwt("proof-user-secondary", "workspace-primary"),
-        scenario,
         nowEpochSeconds: 2000,
+        primary: primaryToken,
+        scenario,
+        secondary: jwt("proof-user-secondary", "workspace-primary"),
       }),
     ).toThrow("two distinct subjects to two distinct workspaces");
   });

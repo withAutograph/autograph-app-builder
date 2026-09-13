@@ -8,18 +8,18 @@ import { suffixedProviderName } from "./names";
 
 const projectSchema = z
   .object({
-    id: z.string().min(1),
-    name: z.string().min(1),
     framework: z.literal("nextjs"),
-    rootDirectory: z.string().min(1),
+    id: z.string().min(1),
     link: z
       .object({
-        type: z.literal("github"),
-        repo: z.string().min(1),
         org: z.string().min(1),
+        repo: z.string().min(1),
+        type: z.literal("github"),
       })
       .passthrough()
       .optional(),
+    name: z.string().min(1),
+    rootDirectory: z.string().min(1),
   })
   .passthrough();
 
@@ -44,7 +44,7 @@ export async function provisionVercelProject(input: {
   generateSuffix?: () => string;
 }): Promise<VercelProvisionResult> {
   if (input.githubSelected && input.github.status !== "succeeded") {
-    return { status: "skipped", code: "github_required", retryable: false };
+    return { code: "github_required", retryable: false, status: "skipped" };
   }
   const request = input.fetch ?? fetch;
   const query =
@@ -62,15 +62,15 @@ export async function provisionVercelProject(input: {
     let response: Response;
     try {
       response = await request(`https://api.vercel.com${args.path}${query}`, {
-        method: args.method ?? "GET",
-        redirect: "error",
-        signal: AbortSignal.timeout(20_000),
         headers: {
           Accept: "application/json",
           Authorization: `Bearer ${input.token}`,
           "Content-Type": "application/json",
           "User-Agent": "autograph-app-builder-provisioning",
         },
+        method: args.method ?? "GET",
+        redirect: "error",
+        signal: AbortSignal.timeout(20_000),
         ...(args.body === undefined ? {} : { body: JSON.stringify(args.body) }),
       });
     } catch {
@@ -89,14 +89,14 @@ export async function provisionVercelProject(input: {
     if (response.status === 401) throw new Error("credential-rejected");
     if (!args.expected.includes(response.status))
       throw new Error(`vercel-status-${response.status}`);
-    return { status: response.status, body };
+    return { body, status: response.status };
   }
 
   // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
   async function inspect(name: string) {
     return vercel({
-      path: `/v9/projects/${encodeURIComponent(name)}`,
       expected: [200, 404],
+      path: `/v9/projects/${encodeURIComponent(name)}`,
     });
   }
 
@@ -110,8 +110,8 @@ export async function provisionVercelProject(input: {
           ? baseName
           : suffixedProviderName({
               base: baseName,
-              suffix: (input.generateSuffix ?? suffix)(),
               maximumLength: 100,
+              suffix: (input.generateSuffix ?? suffix)(),
             });
       if (candidates.includes(candidate)) continue;
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -128,28 +128,28 @@ export async function provisionVercelProject(input: {
       if (before.status === 404) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const created = await vercel({
-          method: "POST",
-          path: "/v11/projects",
           body: {
-            name: candidate,
             framework: "nextjs",
+            name: candidate,
             rootDirectory: `apps/${input.appId}`,
             ...(linkedRepository
               ? {
                   gitRepository: {
-                    type: "github",
                     repo: linkedRepository,
+                    type: "github",
                   },
                 }
               : {}),
           },
           expected: [200, 201, 400, 403, 409],
+          method: "POST",
+          path: "/v11/projects",
         });
         if (created.status === 400 || created.status === 403) {
           return {
-            status: "failed",
             code: "provider_rejected",
             retryable: true,
+            status: "failed",
           };
         }
         if (created.status === 409) {
@@ -162,9 +162,9 @@ export async function provisionVercelProject(input: {
       const observed = await inspect(candidate);
       if (observed.status !== 200)
         return {
-          status: "failed",
           code: "postcondition_failed",
           retryable: false,
+          status: "failed",
         };
       const project = projectSchema.parse(observed.body);
       if (
@@ -175,35 +175,35 @@ export async function provisionVercelProject(input: {
         (linkedRepository === undefined && project.link !== undefined)
       )
         return {
-          status: "failed",
           code: "postcondition_failed",
           retryable: false,
+          status: "failed",
         };
       return {
-        status: "succeeded",
-        installationId: input.installation.installationId,
-        projectId: project.id,
-        name: project.name,
         dashboardUrl: `https://vercel.com/${input.installation.slug}/${project.name}`,
+        framework: "nextjs",
+        installationId: input.installation.installationId,
+        name: project.name,
+        projectId: project.id,
+        rootDirectory: project.rootDirectory,
         scope: {
-          type: input.installation.scopeType,
           id: input.installation.scopeId,
           slug: input.installation.slug,
+          type: input.installation.scopeType,
         },
-        framework: "nextjs",
-        rootDirectory: project.rootDirectory,
+        status: "succeeded",
         ...(linkedRepository ? { linkedGitHubRepository: linkedRepository } : {}),
       };
     }
-    return { status: "failed", code: "name_conflict", retryable: true };
+    return { code: "name_conflict", retryable: true, status: "failed" };
   } catch (error) {
     return {
-      status: "failed",
       code:
         error instanceof Error && error.message === "credential-rejected"
           ? "credential_unavailable"
           : "provider_unavailable",
       retryable: true,
+      status: "failed",
     };
   }
 }

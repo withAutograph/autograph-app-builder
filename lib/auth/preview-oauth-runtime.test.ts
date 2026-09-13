@@ -8,18 +8,18 @@ import {
 } from "./preview-oauth-runtime";
 
 const environment = {
-  EVE_HOSTED_ADAPTER: "1",
-  VERCEL_ENV: "preview",
-  EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
-  BETTER_AUTH_URL: "https://builder.example.test/api/auth",
-  MCP_RESOURCE_URL: "https://builder.example.test/mcp",
   BETTER_AUTH_SECRET: "a".repeat(32),
+  BETTER_AUTH_URL: "https://builder.example.test/api/auth",
   DATABASE_URL: "postgresql://runtime:secret@database.example.test/app",
+  EVE_HOSTED_ADAPTER: "1",
+  EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
   GITHUB_CLIENT_ID: "github-client-id",
   GITHUB_CLIENT_SECRET: "github-client-secret",
+  MCP_RESOURCE_URL: "https://builder.example.test/mcp",
+  PASSKEY_ONBOARDING: undefined,
   VERCEL_AUTH_CLIENT_ID: "vercel-client-id",
   VERCEL_AUTH_CLIENT_SECRET: "vercel-client-secret",
-  PASSKEY_ONBOARDING: undefined,
+  VERCEL_ENV: "preview",
 } as const;
 
 describe("Preview OAuth runtime configuration", () => {
@@ -30,12 +30,12 @@ describe("Preview OAuth runtime configuration", () => {
     expect(hostedRateLimit).toMatchObject({ max: 60 });
     expect(localRateLimit).toMatchObject({ max: 600 });
     expect(localRateLimit.customRules?.["/oauth2/token"]).toEqual({
-      window: 60,
       max: 180,
+      window: 60,
     });
     expect(localRateLimit).toMatchObject({
       customRules: {
-        "/sign-in/social": { window: 60, max: 60 },
+        "/sign-in/social": { max: 60, window: 60 },
       },
     });
     expect("/sign-in/social" in hostedRateLimit.customRules).toBe(false);
@@ -50,10 +50,10 @@ describe("Preview OAuth runtime configuration", () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn(async () =>
       Response.json({
-        sub: "vercel-user-1",
         email: "USER@EXAMPLE.COM",
         email_verified: true,
         name: "Example User",
+        sub: "vercel-user-1",
       }),
     );
 
@@ -62,24 +62,24 @@ describe("Preview OAuth runtime configuration", () => {
         {
           accessToken: "sensitive-access-token",
           idToken: idToken({
-            sub: "vercel-user-1",
             email: "user@example.com",
+            sub: "vercel-user-1",
           }),
         },
         fetchImplementation,
       ),
     ).resolves.toMatchObject({
-      sub: "vercel-user-1",
       email: "user@example.com",
       emailVerified: true,
       name: "Example User",
+      sub: "vercel-user-1",
     });
     expect(fetchImplementation).toHaveBeenCalledWith(
       "https://api.vercel.com/login/oauth/userinfo",
       expect.objectContaining({
+        headers: { Authorization: "Bearer sensitive-access-token" },
         method: "POST",
         redirect: "error",
-        headers: { Authorization: "Bearer sensitive-access-token" },
       }),
     );
   });
@@ -89,10 +89,10 @@ describe("Preview OAuth runtime configuration", () => {
     const fetchImplementation = vi.fn(async (url: string | URL) => {
       if (String(url) === "https://api.github.com/user") {
         return Response.json({
+          avatar_url: "https://avatars.example.test/user.png",
+          email: null,
           id: 123,
           login: "autograph-user",
-          email: null,
-          avatar_url: "https://avatars.example.test/user.png",
         });
       }
       return Response.json([
@@ -107,20 +107,20 @@ describe("Preview OAuth runtime configuration", () => {
         fetchImplementation as typeof fetch,
       ),
     ).resolves.toMatchObject({
+      data: { email: "user@example.com", id: 123 },
       user: {
-        name: "autograph-user",
         email: "user@example.com",
         emailVerified: true,
+        name: "autograph-user",
       },
-      data: { id: 123, email: "user@example.com" },
     });
     expect(fetchImplementation).toHaveBeenCalledWith(
       "https://api.github.com/user/emails",
       expect.objectContaining({
-        redirect: "error",
         headers: expect.objectContaining({
           Authorization: "Bearer sensitive-access-token",
         }),
+        redirect: "error",
       }),
     );
   });
@@ -145,25 +145,25 @@ describe("Preview OAuth runtime configuration", () => {
     {
       name: "unverified email",
       profile: {
-        sub: "vercel-user-1",
         email: "user@example.com",
         email_verified: false,
+        sub: "vercel-user-1",
       },
     },
     {
       name: "different subject",
       profile: {
-        sub: "vercel-user-2",
         email: "user@example.com",
         email_verified: true,
+        sub: "vercel-user-2",
       },
     },
     {
       name: "different email",
       profile: {
-        sub: "vercel-user-1",
         email: "other@example.com",
         email_verified: true,
+        sub: "vercel-user-1",
       },
     },
   ])("rejects Vercel UserInfo with $name", async ({ profile }) => {
@@ -172,8 +172,8 @@ describe("Preview OAuth runtime configuration", () => {
         {
           accessToken: "sensitive-access-token",
           idToken: idToken({
-            sub: "vercel-user-1",
             email: "user@example.com",
+            sub: "vercel-user-1",
           }),
         },
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -189,8 +189,8 @@ describe("Preview OAuth runtime configuration", () => {
         {
           accessToken: "sensitive-access-token",
           idToken: idToken({
-            sub: "vercel-user-1",
             email: "user@example.com",
+            sub: "vercel-user-1",
           }),
         },
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -202,8 +202,8 @@ describe("Preview OAuth runtime configuration", () => {
         {
           accessToken: "sensitive-access-token",
           idToken: idToken({
-            sub: "vercel-user-1",
             email: "user@example.com",
+            sub: "vercel-user-1",
           }),
         },
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -237,66 +237,66 @@ describe("Preview OAuth runtime configuration", () => {
   it("accepts Emulate credentials only through the explicit local gate", () => {
     expect(
       readPreviewOAuthRuntimeConfig({
-        EVE_HOSTED_ADAPTER: "1",
-        APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
-        APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
         APP_BUILDER_DATABASE_PORT: "54339",
-        PASSKEY_ONBOARDING: "local-preview-v1",
-        BETTER_AUTH_URL: "https://localhost:3001/api/auth",
-        MCP_RESOURCE_URL: "https://localhost:3001/mcp",
+        APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
+        APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
         BETTER_AUTH_SECRET: "a".repeat(32),
+        BETTER_AUTH_URL: "https://localhost:3001/api/auth",
+        EMULATE_GITHUB_REPOSITORY: "autograph-local/demo-app",
+        EMULATE_LOCAL_RELAY_SECRET: "a".repeat(32),
+        EMULATE_PROVIDER_TOKEN: "a".repeat(20),
+        EVE_HOSTED_ADAPTER: "1",
         GITHUB_CLIENT_ID: "local-github-client",
         GITHUB_CLIENT_SECRET: "local-github-secret".repeat(2),
+        GITHUB_EMULATOR_URL: "http://localhost:4001",
+        MCP_RESOURCE_URL: "https://localhost:3001/mcp",
+        PASSKEY_ONBOARDING: "local-preview-v1",
         VERCEL_AUTH_CLIENT_ID: "local-vercel-client",
         VERCEL_AUTH_CLIENT_SECRET: "local-vercel-secret".repeat(2),
         VERCEL_EMULATOR_URL: "http://localhost:4000",
-        GITHUB_EMULATOR_URL: "http://localhost:4001",
-        EMULATE_PROVIDER_TOKEN: "a".repeat(20),
-        EMULATE_GITHUB_REPOSITORY: "autograph-local/demo-app",
-        EMULATE_LOCAL_RELAY_SECRET: "a".repeat(32),
       }),
     ).toMatchObject({
-      environment: "local",
       databaseUrl: "postgresql://postgres@127.0.0.1:54339/autograph_app_builder",
+      environment: "local",
       passkeyOnboarding: {
+        deploymentId: "local",
         origin: "https://localhost:3001",
         rpId: "localhost",
-        deploymentId: "local",
         secureCookies: true,
       },
     });
     expect(() =>
       readPreviewOAuthRuntimeConfig({
         ...environment,
-        APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
         APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
-        VERCEL_EMULATOR_URL: "http://localhost:4000",
-        GITHUB_EMULATOR_URL: "http://localhost:4001",
-        EMULATE_PROVIDER_TOKEN: "a".repeat(20),
+        APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
         EMULATE_GITHUB_REPOSITORY: "autograph-local/demo-app",
         EMULATE_LOCAL_RELAY_SECRET: "a".repeat(32),
+        EMULATE_PROVIDER_TOKEN: "a".repeat(20),
+        GITHUB_EMULATOR_URL: "http://localhost:4001",
+        VERCEL_EMULATOR_URL: "http://localhost:4000",
       }),
     ).toThrow("Local provider emulation is unavailable");
 
     expect(() =>
       readPreviewOAuthRuntimeConfig({
-        EVE_HOSTED_ADAPTER: "1",
-        APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
-        APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
         APP_BUILDER_DATABASE_PORT: "not-a-port",
-        PASSKEY_ONBOARDING: "local-preview-v1",
-        BETTER_AUTH_URL: "https://localhost:3001/api/auth",
-        MCP_RESOURCE_URL: "https://localhost:3001/mcp",
+        APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
+        APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
         BETTER_AUTH_SECRET: "a".repeat(32),
+        BETTER_AUTH_URL: "https://localhost:3001/api/auth",
+        EMULATE_GITHUB_REPOSITORY: "autograph-local/demo-app",
+        EMULATE_LOCAL_RELAY_SECRET: "a".repeat(32),
+        EMULATE_PROVIDER_TOKEN: "a".repeat(20),
+        EVE_HOSTED_ADAPTER: "1",
         GITHUB_CLIENT_ID: "local-github-client",
         GITHUB_CLIENT_SECRET: "local-github-secret".repeat(2),
+        GITHUB_EMULATOR_URL: "http://localhost:4001",
+        MCP_RESOURCE_URL: "https://localhost:3001/mcp",
+        PASSKEY_ONBOARDING: "local-preview-v1",
         VERCEL_AUTH_CLIENT_ID: "local-vercel-client",
         VERCEL_AUTH_CLIENT_SECRET: "local-vercel-secret".repeat(2),
         VERCEL_EMULATOR_URL: "http://localhost:4000",
-        GITHUB_EMULATOR_URL: "http://localhost:4001",
-        EMULATE_PROVIDER_TOKEN: "a".repeat(20),
-        EMULATE_GITHUB_REPOSITORY: "autograph-local/demo-app",
-        EMULATE_LOCAL_RELAY_SECRET: "a".repeat(32),
       }),
     ).toThrow("Local authentication database port is invalid");
   });
@@ -305,24 +305,24 @@ describe("Preview OAuth runtime configuration", () => {
     expect(
       readPreviewOAuthRuntimeConfig({
         ...environment,
+        BETTER_AUTH_URL: undefined,
         GITHUB_CLIENT_ID: undefined,
         GITHUB_CLIENT_SECRET: undefined,
-        VERCEL_AUTH_CLIENT_ID: undefined,
-        VERCEL_AUTH_CLIENT_SECRET: undefined,
+        MCP_RESOURCE_URL: undefined,
         PASSKEY_ONBOARDING: "local-preview-v1",
         PASSKEY_PREVIEW_PROTECTION: "vercel-authentication",
+        VERCEL_AUTH_CLIENT_ID: undefined,
+        VERCEL_AUTH_CLIENT_SECRET: undefined,
         VERCEL_DEPLOYMENT_ID: "dpl_preview_123",
         VERCEL_URL: "builder.example.test",
-        BETTER_AUTH_URL: undefined,
-        MCP_RESOURCE_URL: undefined,
       }),
     ).toMatchObject({
       environment: "preview",
-      issuer: "https://builder.example.test/api/auth",
-      resource: "https://builder.example.test/mcp",
       githubClientId: undefined,
-      vercelClientId: undefined,
+      issuer: "https://builder.example.test/api/auth",
       passkeyOnboarding: { deploymentId: "dpl_preview_123" },
+      resource: "https://builder.example.test/mcp",
+      vercelClientId: undefined,
     });
   });
 
@@ -330,11 +330,11 @@ describe("Preview OAuth runtime configuration", () => {
     expect(() =>
       readPreviewOAuthRuntimeConfig({
         ...environment,
+        GITHUB_CLIENT_SECRET: undefined,
         PASSKEY_ONBOARDING: "local-preview-v1",
         PASSKEY_PREVIEW_PROTECTION: "vercel-authentication",
         VERCEL_DEPLOYMENT_ID: "dpl_preview_123",
         VERCEL_URL: "builder.example.test",
-        GITHUB_CLIENT_SECRET: undefined,
       }),
     ).toThrow("both client ID and client secret");
   });
@@ -342,18 +342,18 @@ describe("Preview OAuth runtime configuration", () => {
   it("starts locally for passkeys without OAuth provider credentials", () => {
     expect(
       readPreviewOAuthRuntimeConfig({
-        NODE_ENV: "development",
-        BETTER_AUTH_URL: "http://localhost:3000/api/auth",
         BETTER_AUTH_SECRET: "a".repeat(32),
+        BETTER_AUTH_URL: "http://localhost:3000/api/auth",
         DATABASE_URL: "postgresql://runtime:secret@localhost/app",
+        NODE_ENV: "development",
         PASSKEY_ONBOARDING: "local-preview-v1",
       }),
     ).toMatchObject({
       environment: "development",
-      hostedAdapter: "0",
       githubClientId: undefined,
-      vercelClientId: undefined,
+      hostedAdapter: "0",
       passkeyOnboarding: { deploymentId: "local" },
+      vercelClientId: undefined,
     });
   });
 
@@ -362,37 +362,37 @@ describe("Preview OAuth runtime configuration", () => {
       readPreviewOAuthRuntimeConfig({
         ...environment,
         APP_BUILDER_PREVIEW_PROVIDER_EMULATION: "1",
+        EMULATE_PREVIEW_GITHUB_CLIENT_ID: "preview-github-client",
+        EMULATE_PREVIEW_GITHUB_CLIENT_SECRET: "g".repeat(20),
+        EMULATE_PREVIEW_RELAY_SECRET: "r".repeat(32),
+        EMULATE_PREVIEW_VERCEL_CLIENT_ID: "preview-vercel-client",
+        EMULATE_PREVIEW_VERCEL_CLIENT_SECRET: "v".repeat(20),
         NODE_ENV: "production",
+        PASSKEY_ONBOARDING: "local-preview-v1",
+        PASSKEY_PREVIEW_PROTECTION: "vercel-authentication",
         VERCEL_BRANCH_URL: "app-git-feature-team.vercel.app",
+        VERCEL_DEPLOYMENT_ID: "dpl_preview_123",
         VERCEL_GIT_COMMIT_REF: "feature/provider-emulation",
         VERCEL_GIT_REPO_SLUG: "autograph-app-builder",
         VERCEL_PROJECT_ID: "prj_preview",
-        EMULATE_PREVIEW_RELAY_SECRET: "r".repeat(32),
-        EMULATE_PREVIEW_GITHUB_CLIENT_ID: "preview-github-client",
-        EMULATE_PREVIEW_GITHUB_CLIENT_SECRET: "g".repeat(20),
-        EMULATE_PREVIEW_VERCEL_CLIENT_ID: "preview-vercel-client",
-        EMULATE_PREVIEW_VERCEL_CLIENT_SECRET: "v".repeat(20),
-        PASSKEY_ONBOARDING: "local-preview-v1",
-        PASSKEY_PREVIEW_PROTECTION: "vercel-authentication",
-        VERCEL_DEPLOYMENT_ID: "dpl_preview_123",
         VERCEL_URL: "app-deployment-team.vercel.app",
       }),
     ).toMatchObject({
       environment: "preview",
+      githubClientId: "preview-github-client",
       issuer: "https://app-git-feature-team.vercel.app/api/auth",
+      passkeyOnboarding: {
+        deploymentId: "dpl_preview_123",
+        origin: "https://app-git-feature-team.vercel.app",
+        rpId: "app-git-feature-team.vercel.app",
+        secureCookies: true,
+      },
       resource: "https://app-git-feature-team.vercel.app/mcp",
       trustedOrigins: [
         "https://app-git-feature-team.vercel.app",
         "https://app-deployment-team.vercel.app",
       ],
-      githubClientId: "preview-github-client",
       vercelClientId: "preview-vercel-client",
-      passkeyOnboarding: {
-        origin: "https://app-git-feature-team.vercel.app",
-        rpId: "app-git-feature-team.vercel.app",
-        deploymentId: "dpl_preview_123",
-        secureCookies: true,
-      },
     });
   });
 
@@ -400,19 +400,19 @@ describe("Preview OAuth runtime configuration", () => {
     const emulatedPreview = {
       ...environment,
       APP_BUILDER_PREVIEW_PROVIDER_EMULATION: "1",
+      EMULATE_PREVIEW_GITHUB_CLIENT_ID: "preview-github-client",
+      EMULATE_PREVIEW_GITHUB_CLIENT_SECRET: "g".repeat(20),
+      EMULATE_PREVIEW_RELAY_SECRET: "r".repeat(32),
+      EMULATE_PREVIEW_VERCEL_CLIENT_ID: "preview-vercel-client",
+      EMULATE_PREVIEW_VERCEL_CLIENT_SECRET: "v".repeat(20),
       NODE_ENV: "production",
+      PASSKEY_ONBOARDING: "local-preview-v1",
+      PASSKEY_PREVIEW_PROTECTION: "vercel-authentication",
       VERCEL_BRANCH_URL: "app-git-feature-team.vercel.app",
+      VERCEL_DEPLOYMENT_ID: "dpl_preview_123",
       VERCEL_GIT_COMMIT_REF: "feature/provider-emulation",
       VERCEL_GIT_REPO_SLUG: "autograph-app-builder",
       VERCEL_PROJECT_ID: "prj_preview",
-      EMULATE_PREVIEW_RELAY_SECRET: "r".repeat(32),
-      EMULATE_PREVIEW_GITHUB_CLIENT_ID: "preview-github-client",
-      EMULATE_PREVIEW_GITHUB_CLIENT_SECRET: "g".repeat(20),
-      EMULATE_PREVIEW_VERCEL_CLIENT_ID: "preview-vercel-client",
-      EMULATE_PREVIEW_VERCEL_CLIENT_SECRET: "v".repeat(20),
-      PASSKEY_ONBOARDING: "local-preview-v1",
-      PASSKEY_PREVIEW_PROTECTION: "vercel-authentication",
-      VERCEL_DEPLOYMENT_ID: "dpl_preview_123",
       VERCEL_URL: "app-deployment-team.vercel.app",
     } as const;
 
@@ -441,16 +441,16 @@ describe("Preview OAuth runtime configuration", () => {
       readPreviewOAuthRuntimeConfig({
         ...environment,
         APP_BUILDER_PREVIEW_PROVIDER_EMULATION: "1",
+        EMULATE_PREVIEW_GITHUB_CLIENT_ID: "preview-github-client",
+        EMULATE_PREVIEW_GITHUB_CLIENT_SECRET: "g".repeat(20),
+        EMULATE_PREVIEW_RELAY_SECRET: "r".repeat(32),
+        EMULATE_PREVIEW_VERCEL_CLIENT_ID: "preview-vercel-client",
+        EMULATE_PREVIEW_VERCEL_CLIENT_SECRET: "v".repeat(20),
         NODE_ENV: "production",
         VERCEL_BRANCH_URL: "app-git-feature-team.vercel.app",
         VERCEL_GIT_COMMIT_REF: "feature/provider-emulation",
         VERCEL_GIT_REPO_SLUG: "autograph-app-builder",
         VERCEL_PROJECT_ID: "prj_preview",
-        EMULATE_PREVIEW_RELAY_SECRET: "r".repeat(32),
-        EMULATE_PREVIEW_GITHUB_CLIENT_ID: "preview-github-client",
-        EMULATE_PREVIEW_GITHUB_CLIENT_SECRET: "g".repeat(20),
-        EMULATE_PREVIEW_VERCEL_CLIENT_ID: "preview-vercel-client",
-        EMULATE_PREVIEW_VERCEL_CLIENT_SECRET: "v".repeat(20),
         VERCEL_URL: "attacker.example.com",
       }),
     ).toThrow();
@@ -460,8 +460,8 @@ describe("Preview OAuth runtime configuration", () => {
     expect(
       readPreviewOAuthRuntimeConfig({
         ...environment,
-        VERCEL_ENV: "production",
         EVE_HOSTED_VERCEL_ENVIRONMENT: "production",
+        VERCEL_ENV: "production",
       }),
     ).toMatchObject({ environment: "production" });
 

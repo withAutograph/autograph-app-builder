@@ -31,19 +31,19 @@ export async function resolveRepositoryAccessForTool(
     }
 > {
   const access = await runtime.classify(input);
-  if (access.status === "scope-selection-required") return { kind: "selection", access };
+  if (access.status === "scope-selection-required") return { access, kind: "selection" };
   if (access.status === "provider-unavailable")
     throw new ConnectionAuthorizationFailedError("github-repository-access", {
+      message: "GitHub could not confirm repository access. Try again shortly.",
       reason: "provider_unavailable",
       retryable: true,
-      message: "GitHub could not confirm repository access. Try again shortly.",
     });
   let confirmed: RepositoryAccessResult = access;
   if (access.status !== "ready") {
     const provider = runtime.authorization({
       ...input,
-      sessionId: ctx.session.id,
       requestId: ctx.callId,
+      sessionId: ctx.session.id,
     });
     const authOptions = {
       authKey: `github-repository:${ctx.session.id}:${input.repository.toLowerCase().replace("/", ":")}`,
@@ -60,9 +60,9 @@ export async function resolveRepositoryAccessForTool(
   }
   if (confirmed.status === "provider-unavailable")
     throw new ConnectionAuthorizationFailedError("github-repository-access", {
+      message: "GitHub could not confirm repository access. Try again shortly.",
       reason: "provider_unavailable",
       retryable: true,
-      message: "GitHub could not confirm repository access. Try again shortly.",
     });
   if (confirmed.status !== "ready") {
     throw new Error(
@@ -75,13 +75,13 @@ export async function resolveRepositoryAccessForTool(
   let recorded: RepositoryAccessReceipt | undefined;
   repositoryAccessReceiptState.update((current) => {
     recorded = recordRepositoryAccessReceipt({
+      access: ready,
+      confirmedByCallId: ctx.callId,
       current,
       sessionId: ctx.session.id,
-      confirmedByCallId: ctx.callId,
-      access: ready,
     });
     return recorded;
   });
   if (recorded === undefined) throw new Error("Confirmed repository access was not recorded.");
-  return { kind: "ready", access: confirmed, receipt: recorded };
+  return { access: confirmed, kind: "ready", receipt: recorded };
 }

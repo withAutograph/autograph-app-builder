@@ -14,10 +14,10 @@ export function resultFromHostedCheckpoint(
   const start = effectiveCursor - offset;
   const events = checkpoint.events.slice(start, start + limit);
   return eveSessionResultSchema.parse({
-    sessionId,
-    status: checkpoint.status === "working" ? "waiting" : checkpoint.status,
     cursor: Math.min(effectiveCursor + events.length, offset + checkpoint.events.length),
     events,
+    sessionId,
+    status: checkpoint.status === "working" ? "waiting" : checkpoint.status,
     ...(checkpoint.inputRequests === undefined ? {} : { inputRequests: checkpoint.inputRequests }),
     ...(checkpoint.prototype === undefined ? {} : { prototype: checkpoint.prototype }),
     ...(checkpoint.uiPreview === undefined ? {} : { uiPreview: checkpoint.uiPreview }),

@@ -13,20 +13,20 @@ describe("Vercel integration security", () => {
   it("encrypts tokens with version-independent AES-256-GCM material and bound associated data", () => {
     const key = randomBytes(32);
     const encrypted = encryptVercelToken({
-      token: "vercel-token-sentinel",
-      key,
       associatedData: "workspace/install-1",
+      key,
+      token: "vercel-token-sentinel",
     });
     expect(encrypted.encryptedToken).not.toContain("vercel-token-sentinel");
     expect(
       decryptVercelToken({
         ...encrypted,
-        key,
         associatedData: "workspace/install-1",
+        key,
       }),
     ).toBe("vercel-token-sentinel");
     expect(() =>
-      decryptVercelToken({ ...encrypted, key, associatedData: "other-tenant" }),
+      decryptVercelToken({ ...encrypted, associatedData: "other-tenant", key }),
     ).toThrow();
   });
 
@@ -34,53 +34,47 @@ describe("Vercel integration security", () => {
     const body = JSON.stringify({ type: "integration-configuration.removed" });
     const secret = "client-secret";
     const signature = createHmac("sha1", secret).update(body).digest("hex");
-    expect(verifyVercelWebhook({ body, signature, secret })).toBe(true);
-    expect(verifyVercelWebhook({ body: `${body} `, signature, secret })).toBe(false);
+    expect(verifyVercelWebhook({ body, secret, signature })).toBe(true);
+    expect(verifyVercelWebhook({ body: `${body} `, secret, signature })).toBe(false);
   });
 
   it.each(["/", "/handoff/ed5bc83d-a08f-42be-9635-4677fa7bdb32"] as const)(
     "binds a tenant-scoped team and preserves %s through callback and replay recovery",
     async (returnTo) => {
       const authority = {
-        issuer: "https://builder.example/api/auth",
         audience: "https://builder.example/mcp",
-        workspaceId: "workspace_one",
+        issuer: "https://builder.example/api/auth",
         ownerUserId: "user_one",
+        workspaceId: "workspace_one",
       };
       let consumed = false;
       const recoveredReturnState = {
-        returnTo,
         resumeKey: "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0",
+        returnTo,
       };
       const binds: unknown[] = [];
       const authorization = createVercelInstallationAuthorization({
         config: {
+          clientId: "client-id",
+          clientSecret: "client-secret",
           issuer: authority.issuer,
           resource: authority.audience,
           slug: "autograph-app-builder",
-          clientId: "client-id",
-          clientSecret: "client-secret",
           tokenKey: randomBytes(32),
           tokenKeyVersion: "v1",
         },
-        states: {
-          async create() {},
-          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-          async consume() {
-            if (consumed) return;
-            consumed = true;
-            return recoveredReturnState;
-          },
-          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-          async recover() {
-            return recoveredReturnState;
-          },
-        },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        fetch: (async (url) => {
+          if (String(url).endsWith("/v2/oauth/access_token"))
+            return Response.json({ access_token: "provider-token-sentinel" });
+          return Response.json({
+            billing: { plan: "pro" },
+            id: "team_1",
+            name: "Autograph",
+            slug: "autograph",
+          });
+        }) as typeof fetch,
         installations: {
-          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-          async list() {
-            return [];
-          },
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           async bind(input) {
             binds.push(input);
@@ -89,6 +83,10 @@ describe("Vercel integration security", () => {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           async deactivate() {
             return 0;
+          },
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+          async list() {
+            return [];
           },
         },
         membership: {
@@ -99,23 +97,27 @@ describe("Vercel integration security", () => {
         },
         nonce: () => "n".repeat(43),
         now: () => 1_800_000_000_000,
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        fetch: (async (url) => {
-          if (String(url).endsWith("/v2/oauth/access_token"))
-            return Response.json({ access_token: "provider-token-sentinel" });
-          return Response.json({
-            id: "team_1",
-            name: "Autograph",
-            slug: "autograph",
-            billing: { plan: "pro" },
-          });
-        }) as typeof fetch,
+        states: {
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+          async consume() {
+            if (consumed) return;
+            consumed = true;
+            return recoveredReturnState;
+          },
+          async create() {},
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+          async recover() {
+            return recoveredReturnState;
+          },
+        },
       });
       const redirect = await authorization.begin(authority);
       const state = new URL(redirect).searchParams.get("state");
+      expect(state).not.toBeNull();
+      if (state === null) throw new Error("Expected authorization redirect state");
       const callback = new URL("https://builder.example/vercel/installations/callback");
       callback.searchParams.set("code", "one-time-code");
-      callback.searchParams.set("state", state!);
+      callback.searchParams.set("state", state);
       callback.searchParams.set("configurationId", "icfg_1");
       callback.searchParams.set("teamId", "team_1");
       const result = await authorization.complete(callback.toString(), authority);

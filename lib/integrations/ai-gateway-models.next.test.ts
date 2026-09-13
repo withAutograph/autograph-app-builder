@@ -11,14 +11,14 @@ beforeEach(() => vi.clearAllMocks());
 
 describe("Next public catalog adapter", () => {
   it("caches only the public loader with explicit freshness", async () => {
-    vi.mocked(loadGatewayModels).mockResolvedValue({ status: "ready", entries: [], cached: false });
+    vi.mocked(loadGatewayModels).mockResolvedValue({ cached: false, entries: [], status: "ready" });
     await loadNextGatewayModels();
     expect(loadGatewayModels).toHaveBeenCalledWith();
     expect(cacheTag).toHaveBeenCalledWith("public-ai-gateway-models");
     expect(cacheLife).toHaveBeenCalledExactlyOnceWith({
-      stale: 300,
-      revalidate: 300,
       expire: 3600,
+      revalidate: 300,
+      stale: 300,
     });
   });
 
@@ -26,20 +26,20 @@ describe("Next public catalog adapter", () => {
     "retries %s without the normal five-minute lifetime",
     async (state) => {
       vi.mocked(loadGatewayModels).mockResolvedValue({
-        status: state === "unavailable" ? "unavailable" : "ready",
-        entries: [],
         cached: state === "fallback",
+        entries: [],
+        status: state === "unavailable" ? "unavailable" : "ready",
       });
       await loadNextGatewayModels();
-      expect(cacheLife).toHaveBeenCalledExactlyOnceWith({ stale: 30, revalidate: 1, expire: 60 });
+      expect(cacheLife).toHaveBeenCalledExactlyOnceWith({ expire: 60, revalidate: 1, stale: 30 });
     },
   );
 
   it("explicit server retry bypasses the cached scope", async () => {
     vi.mocked(loadGatewayModels).mockResolvedValue({
-      status: "unavailable",
-      entries: [],
       cached: false,
+      entries: [],
+      status: "unavailable",
     });
     await loadNextGatewayModels({ force: true });
     expect(loadGatewayModels).toHaveBeenCalledOnce();

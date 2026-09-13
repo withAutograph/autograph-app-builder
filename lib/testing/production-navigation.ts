@@ -13,20 +13,20 @@ const credential = z
   .max(512)
   .regex(/^[^\0\r\n]+$/u);
 const environmentSchema = z.object({
-  NODE_ENV: z.literal("production"),
   APP_BUILDER_PRODUCTION_NAVIGATION_ORIGIN: z.string().url(),
-  BETTER_AUTH_URL: z.string().url(),
-  MCP_RESOURCE_URL: z.string().url(),
   BETTER_AUTH_SECRET: secret,
+  BETTER_AUTH_URL: z.string().url(),
   DATABASE_URL: z.string().url().max(8192),
   GITHUB_CLIENT_ID: credential,
   GITHUB_CLIENT_SECRET: credential,
+  MCP_RESOURCE_URL: z.string().url(),
+  NODE_ENV: z.literal("production"),
   VERCEL_AUTH_CLIENT_ID: credential,
   VERCEL_AUTH_CLIENT_SECRET: credential,
 });
 
 /** Test artifact authority, not a runtime environment feature flag. */
-export function readProductionNavigationRuntimeConfig(
+export const readProductionNavigationRuntimeConfig = function readProductionNavigationRuntimeConfig(
   environment: Record<string, string | undefined>,
 ) {
   if (!productionNavigationArtifact) return null;
@@ -79,17 +79,17 @@ export function readProductionNavigationRuntimeConfig(
     throw new Error("Production navigation requires an isolated loopback fixture database.");
   }
   return {
-    hostedAdapter: "1" as const,
-    environment: "local" as const,
-    issuer: config.BETTER_AUTH_URL,
-    resource: config.MCP_RESOURCE_URL,
-    trustedOrigins: [origin.origin],
-    secret: config.BETTER_AUTH_SECRET,
     databaseUrl: config.DATABASE_URL,
+    environment: "local" as const,
     githubClientId: config.GITHUB_CLIENT_ID,
     githubClientSecret: config.GITHUB_CLIENT_SECRET,
+    hostedAdapter: "1" as const,
+    issuer: config.BETTER_AUTH_URL,
+    passkeyOnboarding: null,
+    resource: config.MCP_RESOURCE_URL,
+    secret: config.BETTER_AUTH_SECRET,
+    trustedOrigins: [origin.origin],
     vercelClientId: config.VERCEL_AUTH_CLIENT_ID,
     vercelClientSecret: config.VERCEL_AUTH_CLIENT_SECRET,
-    passkeyOnboarding: null,
   };
-}
+};

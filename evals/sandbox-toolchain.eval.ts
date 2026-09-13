@@ -2,8 +2,8 @@ import { defineEval } from "eve/evals";
 import { includes } from "eve/evals/expect";
 
 export default defineEval({
-  tags: ["sandbox-toolchain"],
   description: "The Eve agent reports the fixed sandbox toolchain allowlist without mutating it.",
+  tags: ["sandbox-toolchain"],
   async test(t) {
     const configured = process.env.APP_BUILDER_SANDBOX_IMAGE !== undefined;
     await t.send("Inspect the sandbox toolchain.");

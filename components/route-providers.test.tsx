@@ -21,11 +21,11 @@ describe("route-local auth configuration", () => {
   afterEach(() => vi.unstubAllEnvs());
 
   it.each([
-    { mode: "development", preview: false, emulated: false, credentials: false, enabled: true },
-    { mode: "production", preview: true, emulated: true, credentials: false, enabled: true },
-    { mode: "production", preview: true, emulated: false, credentials: false, enabled: false },
-    { mode: "production", preview: false, emulated: true, credentials: false, enabled: false },
-    { mode: "production", preview: false, emulated: false, credentials: true, enabled: true },
+    { credentials: false, emulated: false, enabled: true, mode: "development", preview: false },
+    { credentials: false, emulated: true, enabled: true, mode: "production", preview: true },
+    { credentials: false, emulated: false, enabled: false, mode: "production", preview: true },
+    { credentials: false, emulated: true, enabled: false, mode: "production", preview: false },
+    { credentials: true, emulated: false, enabled: true, mode: "production", preview: false },
   ] as const)(
     "resolves social provider visibility from the actual environment: %j",
     async (scenario) => {
@@ -41,7 +41,7 @@ describe("route-local auth configuration", () => {
         vi.stubEnv(key, scenario.credentials ? "test-configured" : undefined);
       }
       passkeysFlag.mockResolvedValue(false);
-      const { children: configuration } = RouteProviders({ fallback: null, children: null }).props;
+      const { children: configuration } = RouteProviders({ children: null, fallback: null }).props;
       const resolved = await configuration.type(configuration.props);
       expect(resolved.props.githubAuthEnabled).toBe(scenario.enabled);
       expect(resolved.props.vercelAuthEnabled).toBe(scenario.enabled);
@@ -54,7 +54,7 @@ describe("route-local auth configuration", () => {
       passkeysFlag.mockResolvedValue(enabled);
       const fallback = <h1>Create your Autograph account</h1>;
       const children = <p>Authenticated route content</p>;
-      const boundary = RouteProviders({ fallback, children });
+      const boundary = RouteProviders({ children, fallback });
 
       expect(boundary.type).toBe(Suspense);
       expect(boundary.props.fallback).toBe(fallback);

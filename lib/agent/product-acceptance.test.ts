@@ -13,15 +13,15 @@ describe("accepted product obligations", () => {
     expect(result.implementationPrompt).toContain(walkthrough);
     expect(result.implementationPrompt).not.toContain("Build handoff");
     expect(result).toMatchObject({
-      productStatus: "unassessed",
       appSpecDigest: "accepted-spec",
       evidence: [],
+      productStatus: "unassessed",
     });
   });
   it("does not invent obligations when the section is absent", () => {
     expect(
       productAcceptanceObligations({ content: "# Static prototype", digest: "spec" }),
-    ).toMatchObject({ walkthrough: "", productStatus: "unassessed" });
+    ).toMatchObject({ productStatus: "unassessed", walkthrough: "" });
   });
   it("preserves executable examples containing markdown headings", () => {
     const result = productAcceptanceObligations({

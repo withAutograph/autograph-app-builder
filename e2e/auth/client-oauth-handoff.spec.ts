@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { once } from "node:events";
 import { createServer } from "node:http";
 import type { Server } from "node:http";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -23,7 +24,7 @@ import {
 } from "../support/harness";
 
 // Authorization codes, browser cookies, and tokens must not enter artifacts.
-test.use({ trace: "off", screenshot: "off", video: "off" });
+test.use({ screenshot: "off", trace: "off", video: "off" });
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
 test.beforeEach(async () => resetApplicationState());
 let callbackServer: Server | undefined;
@@ -31,10 +32,8 @@ test.afterEach(async () => {
   const server = callbackServer;
   callbackServer = undefined;
   if (server?.listening) {
-    await new Promise<void>((resolve) => {
-      server.close(() => resolve());
-      server.closeAllConnections();
-    });
+    server.closeAllConnections();
+    await server.close();
   }
 });
 
@@ -53,8 +52,8 @@ async function exchange(page: Page, form: Record<string, string>): Promise<Token
   // parameters or raw provider errors in a failed assertion/report.
   try {
     const response = await page.request.post(`${issuer}/oauth2/token`, {
-      headers: { origin: appOrigin },
       form: { client_id: cursorClientId, resource, ...form },
+      headers: { origin: appOrigin },
       maxRedirects: 0,
     });
     if (response.status() !== 200) throw new Error("Token endpoint request failed.");
@@ -83,9 +82,9 @@ async function verifyOwner(page: Page, tokens: Tokens, ownerUserId: string, work
       tokens.access_token,
       createLocalJWKSet(await response.json()),
       {
-        issuer,
-        audience: resource,
         algorithms: ["ES256"],
+        audience: resource,
+        issuer,
       },
     );
     stage = "web owner comparison";
@@ -138,13 +137,14 @@ test("web login and both emulated connections survive Cursor consent, token refr
   }
   await page.locator("#app-brief").fill("Build an authenticate-once acceptance app.");
   await page.getByLabel("App Name").fill("OAuth Continuity");
-  await page.getByRole("radio", { name: "Cursor", exact: true }).check();
-  await page.getByRole("button", { name: "Create App", exact: true }).click();
+  await page.getByRole("radio", { exact: true, name: "Cursor" }).check();
+  await page.getByRole("button", { exact: true, name: "Create App" }).click();
   await expect(page).toHaveURL(/\/handoff\/[0-9a-f-]{36}$/u, {
     timeout: 30_000,
   });
   const handoffPath = new URL(page.url()).pathname;
-  const handoffId = handoffPath.split("/").at(-1)!;
+  const handoffId = handoffPath.split("/").at(-1);
+  if (!handoffId) throw new Error("OAuth handoff URL did not include an ID.");
   await page.getByText("Set up Autograph in Cursor", { exact: true }).click();
   await expect(page.getByRole("link", { name: "Add Autograph to Cursor" })).toBeVisible();
 
@@ -178,7 +178,7 @@ test("web login and both emulated connections survive Cursor consent, token refr
   // A loopback test receiver handles both consent's browser navigation and
   // repeat consent's HTTP redirect. It stands in for the desktop callback
   // listener only; no authorization response or token is fabricated.
-  callbackServer = createServer((request, response) => {
+  const server = createServer((request, response) => {
     const target = new URL(request.url ?? "/", cursorRedirectUri);
     if (request.method !== "GET" || target.pathname !== "/callback") {
       response.writeHead(404).end();
@@ -186,18 +186,19 @@ test("web login and both emulated connections survive Cursor consent, token refr
     }
     callback = target;
     response.writeHead(200, {
-      "content-type": "text/html",
       "cache-control": "no-store",
+      "content-type": "text/html",
       "referrer-policy": "no-referrer",
     });
     response.end("<!doctype html><title>OAuth callback received</title>");
   });
-  await new Promise<void>((resolve, reject) => {
-    callbackServer!.once("error", () =>
-      reject(new Error("Local OAuth callback port 8787 is unavailable.")),
-    );
-    callbackServer!.listen(8787, "127.0.0.1", resolve);
-  });
+  callbackServer = server;
+  server.listen(8787, "127.0.0.1");
+  try {
+    await once(server, "listening");
+  } catch {
+    throw new Error("Local OAuth callback port 8787 is unavailable.");
+  }
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function grant(first: boolean) {
@@ -206,14 +207,14 @@ test("web login and both emulated connections survive Cursor consent, token refr
     const state = randomBytes(24).toString("base64url");
     const url = new URL(`${issuer}/oauth2/authorize`);
     url.search = new URLSearchParams({
-      response_type: "code",
       client_id: cursorClientId,
-      redirect_uri: cursorRedirectUri,
-      scope: previewOAuthScopes.join(" "),
-      resource,
-      state,
       code_challenge: createHash("sha256").update(verifier).digest("base64url"),
       code_challenge_method: "S256",
+      redirect_uri: cursorRedirectUri,
+      resource,
+      response_type: "code",
+      scope: previewOAuthScopes.join(" "),
+      state,
     }).toString();
     try {
       await page.goto(url.toString());
@@ -225,21 +226,21 @@ test("web login and both emulated connections survive Cursor consent, token refr
       await expect.poll(() => new URL(page.url()).pathname).toBe("/auth/consent");
       expect(new URL(page.url()).searchParams.has("sig")).toBe(true);
       await expect(page.getByText("dev@autograph.local", { exact: true })).toBeVisible();
-      await page.getByRole("button", { name: "Allow", exact: true }).click();
+      await page.getByRole("button", { exact: true, name: "Allow" }).click();
     }
     await expect.poll(() => Boolean(callback), { timeout: 30_000 }).toBe(true);
     const received = callback as URL | undefined;
+    const code = received?.searchParams.get("code");
     if (
       !received ||
       received.searchParams.get("state") !== state ||
-      !received.searchParams.get("code") ||
+      !code ||
       received.searchParams.has("error")
     ) {
       throw new Error(
         "Cursor OAuth callback did not contain a valid state-bound authorization code.",
       );
     }
-    const code = received.searchParams.get("code")!;
     try {
       // Receiving the request precedes the browser committing the callback
       // document. Wait for that navigation before leaving it.
@@ -251,9 +252,9 @@ test("web login and both emulated connections survive Cursor consent, token refr
       throw new Error("OAuth callback navigation failed; URL omitted.");
     }
     return exchange(page, {
-      grant_type: "authorization_code",
       code,
       code_verifier: verifier,
+      grant_type: "authorization_code",
       redirect_uri: cursorRedirectUri,
     });
   }
@@ -276,10 +277,12 @@ test("web login and both emulated connections survive Cursor consent, token refr
   expect(after.githubInstallations).toBe(before.githubInstallations);
   expect(after.vercelInstallations).toBe(before.vercelInstallations);
   expect(after.sessions).toBe(before.sessions);
-  expect((await currentSession(page))?.user?.id === ownerUserId).toBe(true);
+  const finalSession = await currentSession(page);
+  expect(finalSession?.user?.id === ownerUserId).toBe(true);
   const handoff = await page.request.get(`/api/builder/handoffs/${handoffId}`);
   expect(handoff.ok()).toBe(true);
-  expect((await handoff.json()).status).toBe("prepared");
+  const handoffBody = await handoff.json();
+  expect(handoffBody.status).toBe("prepared");
   await expect(page.getByText("Continued in your app", { exact: false })).toHaveCount(0);
 
   // dev-emulated configures browser OAuth but not MCP_OAUTH_* or the hosted

@@ -12,9 +12,9 @@ export interface DocsDocument {
 
 export const docs: readonly DocsDocument[] = [
   {
+    description: "Learn how Autograph App Builder turns a product idea into a working application.",
     slug: "overview",
     title: "Welcome to Autograph",
-    description: "Learn how Autograph App Builder turns a product idea into a working application.",
     toc: [
       { id: "what-you-can-do", label: "What you can do" },
       { id: "your-first-app", label: "Your first app" },
@@ -22,9 +22,9 @@ export const docs: readonly DocsDocument[] = [
     ],
   },
   {
+    description: "Install Autograph App Builder and start your first Codex task.",
     slug: "install-autograph",
     title: "Install Autograph",
-    description: "Install Autograph App Builder and start your first Codex task.",
     toc: [
       { id: "confirm-the-installation", label: "Confirm the installation" },
       { id: "sign-in-when-prompted", label: "Sign in when prompted" },
@@ -35,9 +35,9 @@ export const docs: readonly DocsDocument[] = [
     ],
   },
   {
+    description: "Connect Autograph to the accounts and repositories you choose.",
     slug: "connect-access",
     title: "Connect accounts and access",
-    description: "Connect Autograph to the accounts and repositories you choose.",
     toc: [
       { id: "sign-in-to-autograph", label: "Sign in to Autograph" },
       { id: "give-repository-access", label: "Give repository access" },
@@ -49,9 +49,9 @@ export const docs: readonly DocsDocument[] = [
     ],
   },
   {
+    description: "Start with an outcome, review the product, and choose where it lives when ready.",
     slug: "create-an-app",
     title: "Create an app",
-    description: "Start with an outcome, review the product, and choose where it lives when ready.",
     toc: [
       { id: "start-with-the-outcome", label: "Start with the outcome" },
       { id: "review-and-refine", label: "Review and refine" },
@@ -60,10 +60,10 @@ export const docs: readonly DocsDocument[] = [
     ],
   },
   {
-    slug: "troubleshooting",
-    title: "Troubleshooting",
     description:
       "Resolve common installation, sign-in, repository, and provider connection issues.",
+    slug: "troubleshooting",
+    title: "Troubleshooting",
     toc: [
       {
         id: "autograph-is-not-available-in-a-task",
@@ -97,7 +97,7 @@ export function getDocument(slug: string) {
 export function getAdjacentDocuments(document: DocsDocument) {
   const index = docs.indexOf(document);
   return {
-    previous: index > 0 ? docs[index - 1] : undefined,
     next: index < docs.length - 1 ? docs[index + 1] : undefined,
+    previous: index > 0 ? docs[index - 1] : undefined,
   };
 }

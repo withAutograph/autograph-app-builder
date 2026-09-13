@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 
 import { analyzeSource, parseTokens } from "./source";
 import type { Reference } from "./reference";
@@ -45,8 +45,8 @@ describe("analyzeSource", () => {
         exports: {
           Button: {
             props: {
+              label: { primitiveKinds: ["string"], required: false },
               variant: { required: false, values: ["primary", "secondary"] },
-              label: { required: false, primitiveKinds: ["string"] },
             },
           },
         },
@@ -56,35 +56,35 @@ describe("analyzeSource", () => {
 
   it("uses selected public types, skips false branches, and labels unknown paths", () => {
     const report = analyzeSource({
-      tokenCss,
-      reference,
       files: [
         {
-          path: "app/page.tsx",
           content: `
         import { Button } from "@autograph/components";
         export function Page() { return <>{false ? <button /> : null}{ready ? <Button variant="other" {...props} /> : null}</>; }
       `,
+          path: "app/page.tsx",
         },
       ],
+      reference,
+      tokenCss,
     });
     expect(report.observations.some((o) => o.classification === "local-control")).toBe(false);
     expect(report.observations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          classification: "prop",
           dimension: "api",
           verdict: "nonconforming",
-          classification: "prop",
         }),
         expect.objectContaining({
+          classification: "spread-props",
           dimension: "api",
           verdict: "unassessed",
-          classification: "spread-props",
         }),
         expect.objectContaining({
+          classification: "dynamic-reachability",
           dimension: "component",
           verdict: "unassessed",
-          classification: "dynamic-reachability",
         }),
       ]),
     );
@@ -92,19 +92,19 @@ describe("analyzeSource", () => {
 
   it("does not score dead branches or unresolved imports as local replacements", () => {
     const report = analyzeSource({
-      tokenCss,
-      reference,
       files: [
         {
-          path: "app/page.tsx",
           content: `
         import { Button } from "@autograph/components";
         import { FancyControl } from "some-library";
         function LocalControl() { return <button />; }
         export function Page() { return <>{false && <Button variant="other" />}{true && <FancyControl />}</>; }
       `,
+          path: "app/page.tsx",
         },
       ],
+      reference,
+      tokenCss,
     });
     expect(report.observations.some((o) => o.summary.includes("outside the public variants"))).toBe(
       false,
@@ -124,24 +124,24 @@ describe("analyzeSource", () => {
 
   it("reports public component color overrides and excludes responsive dimensions", () => {
     const report = analyzeSource({
-      tokenCss,
-      reference,
       files: [
         {
-          path: "app/page.tsx",
           content: `
         import { Button } from "@autograph/components";
         export function Page() { return <Button style={{ color: "var(--color-bg-page)", maxWidth: "320px", gridTemplateColumns: "1fr 2fr" }} />; }
       `,
+          path: "app/page.tsx",
         },
       ],
+      reference,
+      tokenCss,
     });
     expect(report.observations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           classification: "token-reference",
-          verdict: "nonconforming",
           summary: expect.stringContaining("color treatment override"),
+          verdict: "nonconforming",
         }),
       ]),
     );
@@ -150,17 +150,17 @@ describe("analyzeSource", () => {
 
   it("credits only TypeScript-proven static primitive prop values", () => {
     const report = analyzeSource({
-      tokenCss,
-      reference,
       files: [
         {
-          path: "app/page.tsx",
           content: `
         import { Button } from "@autograph/components";
         export function Page() { const data = "x"; return <><Button label="OK" /><Button label={2} /><Button label={data} /></>; }
       `,
+          path: "app/page.tsx",
         },
       ],
+      reference,
+      tokenCss,
     });
     const labels = report.observations.filter(
       (o) => o.dimension === "api" && o.classification === "prop" && o.summary.includes("label"),
@@ -173,10 +173,10 @@ describe("analyzeSource", () => {
   });
 
   it("uses selected Arrusted types for nested object props", async () => {
-    const root = await mkdtemp(join(tmpdir(), "arrusted-types-"));
-    await mkdir(join(root, "core"), { recursive: true });
+    const root = await mkdtemp(path.join(tmpdir(), "arrusted-types-"));
+    await mkdir(path.join(root, "core"), { recursive: true });
     await writeFile(
-      join(root, "tsconfig.json"),
+      path.join(root, "tsconfig.json"),
       JSON.stringify({
         compilerOptions: {
           paths: { "@autograph/compositions": ["./core/compositions.tsx"] },
@@ -184,11 +184,16 @@ describe("analyzeSource", () => {
       }),
     );
     await writeFile(
-      join(root, "core", "compositions.tsx"),
+      path.join(root, "core", "compositions.tsx"),
       `export function DataTable(_props: { spec: { narrowLayout: "compact" | "full" } }) { return null; }`,
     );
     const report = analyzeSource({
-      tokenCss,
+      files: [
+        {
+          content: `import { DataTable } from "@autograph/compositions"; export function Page() { return <DataTable spec={{ narrowLayout: "wide" }} />; }`,
+          path: "app/page.tsx",
+        },
+      ],
       reference: {
         arrustedRoot: root,
         limitations: [],
@@ -198,19 +203,14 @@ describe("analyzeSource", () => {
           },
         },
       },
-      files: [
-        {
-          path: "app/page.tsx",
-          content: `import { DataTable } from "@autograph/compositions"; export function Page() { return <DataTable spec={{ narrowLayout: "wide" }} />; }`,
-        },
-      ],
+      tokenCss,
     });
     expect(report.observations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          classification: "prop",
           dimension: "api",
           verdict: "nonconforming",
-          classification: "prop",
         }),
       ]),
     );
@@ -218,10 +218,8 @@ describe("analyzeSource", () => {
 
   it("reports JSX imports, token evidence, and literal classifications", () => {
     const report = analyzeSource({
-      tokenCss,
       files: [
         {
-          path: "app/page.tsx",
           content: `
           import { Card as Surface, Unused } from "@autograph/components";
           import * as Icons from "@autograph/icons";
@@ -230,22 +228,24 @@ describe("analyzeSource", () => {
             return <Surface style={{ color: "var(--color-bg-page)", padding: "16px", width: "100%", display: "grid", margin: "0px" }} className="bg-[#fafafa] p-[12px]"><Icons.Check /><Logo /></Surface>;
           }
         `,
+          path: "app/page.tsx",
         },
       ],
+      tokenCss,
     });
 
     expect(report.imports).toEqual([
       {
+        localName: "Surface",
+        name: "Card",
         path: "app/page.tsx",
         source: "@autograph/components",
-        name: "Card",
-        localName: "Surface",
       },
       {
+        localName: "Icons",
+        name: "*",
         path: "app/page.tsx",
         source: "@autograph/icons",
-        name: "*",
-        localName: "Icons",
       },
     ]);
     expect(report.semanticVarRefs).toEqual(["--color-bg-page"]);
@@ -257,13 +257,13 @@ describe("analyzeSource", () => {
 
   it("keeps missing token references as evidence", () => {
     const report = analyzeSource({
-      tokenCss,
       files: [
         {
-          path: "app/page.tsx",
           content: `<main style={{ color: "var(--missing)" }} />`,
+          path: "app/page.tsx",
         },
       ],
+      tokenCss,
     });
     expect(report.tokenRefs).toEqual(["--missing"]);
     expect(report.undefinedTokens).toEqual(["--missing"]);
@@ -271,13 +271,13 @@ describe("analyzeSource", () => {
 
   it("analyzes CSS declaration values and exempts structural values", () => {
     const report = analyzeSource({
-      tokenCss,
       files: [
         {
-          path: "app/styles.css",
           content: `.panel { color: var(--color-bg-page); padding: 16px; margin: 0px; width: 100%; display: grid; border-color: #123456; }`,
+          path: "app/styles.css",
         },
       ],
+      tokenCss,
     });
     expect(report.semanticVarRefs).toEqual(["--color-bg-page"]);
     expect(report.matchingLiterals).toEqual(["16px"]);

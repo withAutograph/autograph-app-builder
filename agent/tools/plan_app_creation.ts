@@ -22,9 +22,6 @@ import {
 export default defineTool({
   description:
     "Create the implementation plan for the current product design. It prepares dependencies when needed, then runs the repository's normal planning commands. Repository inspection is best-effort context: ordinary source changes, new files, and differing project layouts do not block planning. This does not publish or otherwise change an external repository.",
-  inputSchema: z.object({
-    existingAppChanges: existingAppChangesSchema.optional(),
-  }),
   async execute({ existingAppChanges }, ctx) {
     const state = appBuilderWorkflowState.get();
     if (
@@ -37,8 +34,8 @@ export default defineTool({
         "Finalize the UI and accept a build-ready AppSpec before running target planning.",
       );
     const prepared = await prepareOrReuseDependencies({
-      current: state,
       callId: ctx.callId,
+      current: state,
       getSandbox: () => ctx.getSandbox(),
     });
     const current: DependencyReadyState = prepared.state;
@@ -60,31 +57,29 @@ export default defineTool({
       };
 
     const binding = {
-      sourceSha: current.workspace.sourceSha,
-      sourceTree: current.workspace.sourceTree,
-      sourceReceiptDigest: current.sourceReceipt.digest,
-      eligibilityDigest: current.workspace.eligibilityDigest,
-      workspaceDigest: current.workspace.workspaceDigest,
-      imageDigest: execution.imageDigest,
-      dependencyCacheDigest: execution.dependencyCacheDigest,
       appSpecDigest: current.appSpec.digest,
       artifactRevision: current.appSpec.artifactRevision,
+      dependencyCacheDigest: execution.dependencyCacheDigest,
+      eligibilityDigest: current.workspace.eligibilityDigest,
+      imageDigest: execution.imageDigest,
+      sourceReceiptDigest: current.sourceReceipt.digest,
+      sourceSha: current.workspace.sourceSha,
+      sourceTree: current.workspace.sourceTree,
+      workspaceDigest: current.workspace.workspaceDigest,
     };
     let identityReceipt: TargetIdentityReceipt | undefined =
       current.phase === "identity_resolved" ? current.identityReceipt : undefined;
     let workflowBeforeProposal = current;
     const result = await executeTargetIdentityAndPlanning({
-      sandbox,
-      executor: execution.fixture
-        ? fixtureTargetCommandExecutor()
-        : sandboxTargetCommandExecutor(sandbox),
       appId: current.appSpec.appId,
       appSpecContent: current.appSpec.content,
       appSpecDigest: current.appSpec.digest,
       artifactRevision: current.appSpec.artifactRevision,
-      existingAppChanges,
-      sourceReceipt: current.sourceReceipt,
       environment: process.env,
+      executor: execution.fixture
+        ? fixtureTargetCommandExecutor()
+        : sandboxTargetCommandExecutor(sandbox),
+      existingAppChanges,
       onIdentity(identity) {
         if (identityReceipt !== undefined) return;
         const unsigned = {
@@ -93,21 +88,22 @@ export default defineTool({
           identity,
           resolvedByCallId: ctx.callId,
         };
-        identityReceipt = {
+        const recordedIdentityReceipt = {
           ...unsigned,
           digest: sha256(JSON.stringify(unsigned)),
         };
+        identityReceipt = recordedIdentityReceipt;
         const identityState = {
-          version: APP_BUILDER_WORKFLOW_VERSION,
           phase: "identity_resolved",
           preparedByCallId: current.preparedByCallId,
-          workspace: current.workspace,
           sourceReceipt: current.sourceReceipt,
+          version: APP_BUILDER_WORKFLOW_VERSION,
+          workspace: current.workspace,
           ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-          artifacts: current.artifacts,
           appSpec: current.appSpec,
+          artifacts: current.artifacts,
           dependencyReceipt: current.dependencyReceipt,
-          identityReceipt: identityReceipt!,
+          identityReceipt: recordedIdentityReceipt,
         } as const;
         updateExactWorkflow({
           expected: current,
@@ -116,30 +112,32 @@ export default defineTool({
         });
         workflowBeforeProposal = identityState;
       },
+      sandbox,
+      sourceReceipt: current.sourceReceipt,
     });
     if (identityReceipt === undefined) throw new Error("Target identity receipt was not recorded.");
     const recordedIdentity = identityReceipt;
     const unsigned = {
       version: 1 as const,
       ...binding,
-      identityDigest: recordedIdentity.digest,
       contractDigest: result.contractDigest,
-      target: result.proposal,
+      identityDigest: recordedIdentity.digest,
       plannedByCallId: ctx.callId,
+      target: result.proposal,
     };
     const proposal = { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
     updateExactWorkflow({
       expected: workflowBeforeProposal,
       operation: "target proposal recording",
       transition: () => ({
-        version: APP_BUILDER_WORKFLOW_VERSION,
         phase: "planned",
         preparedByCallId: current.preparedByCallId,
-        workspace: current.workspace,
         sourceReceipt: current.sourceReceipt,
+        version: APP_BUILDER_WORKFLOW_VERSION,
+        workspace: current.workspace,
         ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-        artifacts: current.artifacts,
         appSpec: current.appSpec,
+        artifacts: current.artifacts,
         dependencyReceipt: current.dependencyReceipt,
         identityReceipt: recordedIdentity,
         proposal,
@@ -151,4 +149,7 @@ export default defineTool({
       reused: false,
     };
   },
+  inputSchema: z.object({
+    existingAppChanges: existingAppChangesSchema.optional(),
+  }),
 });

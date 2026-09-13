@@ -14,21 +14,24 @@ import {
 
 const secret = "p".repeat(32);
 const previewEnvironment = {
-  NODE_ENV: "production",
-  VERCEL_ENV: "preview",
-  VERCEL_URL: "preview.example.test",
-  VERCEL_DEPLOYMENT_ID: "deployment_123",
-  BETTER_AUTH_URL: "https://preview.example.test/api/auth",
   BETTER_AUTH_SECRET: secret,
+  BETTER_AUTH_URL: "https://preview.example.test/api/auth",
+  NODE_ENV: "production",
   PASSKEY_ONBOARDING: "local-preview-v1",
   PASSKEY_PREVIEW_PROTECTION: "vercel-authentication",
+  VERCEL_DEPLOYMENT_ID: "deployment_123",
+  VERCEL_ENV: "preview",
+  VERCEL_URL: "preview.example.test",
 } as const;
-const previewConfig = readPasskeyOnboardingConfig(previewEnvironment)!;
+const previewConfig = readPasskeyOnboardingConfig(previewEnvironment);
+if (!previewConfig) {
+  throw new Error("Expected Preview onboarding configuration");
+}
 const integrationConfig = {
   ...previewConfig,
+  deploymentId: "local",
   origin: "http://localhost:3000",
   rpId: "localhost",
-  deploymentId: "local",
   secureCookies: false,
 };
 const fixedNow = new Date("2026-08-30T12:00:00.000Z");
@@ -42,16 +45,16 @@ it("allows the emulated browser suite to raise only the onboarding-context limit
     onboardingContextRateLimitMax: 600,
   });
 
-  expect(hostedPlugin.rateLimit?.[0]).toMatchObject({ window: 60, max: 10 });
-  expect(emulatedPlugin.rateLimit?.[0]).toMatchObject({ window: 60, max: 600 });
+  expect(hostedPlugin.rateLimit?.[0]).toMatchObject({ max: 10, window: 60 });
+  expect(emulatedPlugin.rateLimit?.[0]).toMatchObject({ max: 600, window: 60 });
 });
 
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
 async function setupOnboarding(now: () => Date = () => fixedNow) {
   return getTestInstance(
     {
-      baseURL: integrationConfig.origin,
       basePath: "/api/auth",
+      baseURL: integrationConfig.origin,
       logger: { disabled: true },
       plugins: [
         createPasskeyOnboardingPlugin({ config: integrationConfig, now }),
@@ -74,18 +77,18 @@ async function insertOnboardingContext(
   },
 ) {
   await database.create({
-    model: "passkeyOnboarding",
     data: {
-      id: input.id,
-      tokenDigest: `digest-${input.id}`,
+      createdAt: new Date("2026-08-30T10:00:00.000Z"),
       deploymentId: input.deploymentId,
+      expiresAt: input.expiresAt,
+      id: input.id,
       origin: "https://other-preview.example.test",
       rpId: "other-preview.example.test",
+      tokenDigest: `digest-${input.id}`,
       userHandle: `user-${input.id}`,
-      createdAt: new Date("2026-08-30T10:00:00.000Z"),
-      expiresAt: input.expiresAt,
     },
     forceAllowId: true,
+    model: "passkeyOnboarding",
   });
 }
 
@@ -98,9 +101,9 @@ async function requestOnboardingContext(
   requestHeaders.set("origin", integrationConfig.origin);
   requestHeaders.set("content-type", "application/json");
   return fetchImplementation(`${integrationConfig.origin}/api/auth/passkey/onboarding-context`, {
-    method: "POST",
-    headers: requestHeaders,
     body: "{}",
+    headers: requestHeaders,
+    method: "POST",
   });
 }
 
@@ -114,12 +117,12 @@ async function requestRegistrationVerification(
   requestHeaders.set("origin", integrationConfig.origin);
   requestHeaders.set("content-type", "application/json");
   return fetchImplementation(`${integrationConfig.origin}/api/auth/passkey/verify-registration`, {
-    method: "POST",
-    headers: requestHeaders,
     body: JSON.stringify({
       response: {},
       ...(createSession ? { createSession } : {}),
     }),
+    headers: requestHeaders,
+    method: "POST",
   });
 }
 
@@ -127,36 +130,36 @@ describe("passkey-first onboarding authority", () => {
   it("enables exact loopback development and protected Preview bindings", () => {
     expect(
       readPasskeyOnboardingConfig({
-        NODE_ENV: "development",
-        BETTER_AUTH_URL: "http://localhost:3000/api/auth",
         BETTER_AUTH_SECRET: secret,
+        BETTER_AUTH_URL: "http://localhost:3000/api/auth",
+        NODE_ENV: "development",
         PASSKEY_ONBOARDING: "local-preview-v1",
       }),
     ).toMatchObject({
+      deploymentId: "local",
       origin: "http://localhost:3000",
       rpId: "localhost",
-      deploymentId: "local",
       secureCookies: false,
     });
     expect(readPasskeyOnboardingConfig(previewEnvironment)).toMatchObject({
+      deploymentId: "deployment_123",
       origin: "https://preview.example.test",
       rpId: "preview.example.test",
-      deploymentId: "deployment_123",
       secureCookies: true,
     });
     expect(
       readPasskeyOnboardingConfig({
-        NODE_ENV: "development",
-        APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
         APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
-        BETTER_AUTH_URL: "https://localhost:3001/api/auth",
+        APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
         BETTER_AUTH_SECRET: secret,
+        BETTER_AUTH_URL: "https://localhost:3001/api/auth",
+        NODE_ENV: "development",
         PASSKEY_ONBOARDING: "local-preview-v1",
       }),
     ).toMatchObject({
+      deploymentId: "local",
       origin: "https://localhost:3001",
       rpId: "localhost",
-      deploymentId: "local",
       secureCookies: true,
     });
     expect(
@@ -171,9 +174,9 @@ describe("passkey-first onboarding authority", () => {
     const branchEnvironment = {
       ...previewEnvironment,
       APP_BUILDER_PREVIEW_PROVIDER_EMULATION: "1",
-      VERCEL_URL: "app-deployment-team.vercel.app",
-      VERCEL_BRANCH_URL: "app-git-feature-team.vercel.app",
       BETTER_AUTH_URL: "https://app-git-feature-team.vercel.app/api/auth",
+      VERCEL_BRANCH_URL: "app-git-feature-team.vercel.app",
+      VERCEL_URL: "app-deployment-team.vercel.app",
     } as const;
 
     expect(
@@ -181,9 +184,9 @@ describe("passkey-first onboarding authority", () => {
         previewCanonicalOrigin: "https://app-git-feature-team.vercel.app",
       }),
     ).toMatchObject({
+      deploymentId: "deployment_123",
       origin: "https://app-git-feature-team.vercel.app",
       rpId: "app-git-feature-team.vercel.app",
-      deploymentId: "deployment_123",
       secureCookies: true,
     });
     expect(() => readPasskeyOnboardingConfig(branchEnvironment)).toThrow(
@@ -209,11 +212,11 @@ describe("passkey-first onboarding authority", () => {
 
   it("rejects HTTPS loopback without both local emulation gates", () => {
     const localHttps = {
-      NODE_ENV: "development",
-      APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
       APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
-      BETTER_AUTH_URL: "https://localhost:3001/api/auth",
+      APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
       BETTER_AUTH_SECRET: secret,
+      BETTER_AUTH_URL: "https://localhost:3001/api/auth",
+      NODE_ENV: "development",
       PASSKEY_ONBOARDING: "local-preview-v1",
     } as const;
     expect(() =>
@@ -274,7 +277,10 @@ describe("passkey-first onboarding authority", () => {
   });
 
   it("binds signed contexts to deployment, origin, RP ID, and expiry", () => {
-    const config = readPasskeyOnboardingConfig(previewEnvironment)!;
+    const config = readPasskeyOnboardingConfig(previewEnvironment);
+    if (!config) {
+      throw new Error("Expected Preview onboarding configuration");
+    }
     const issued = createPasskeyOnboardingToken(config, new Date("2026-08-30T12:00:00Z"));
     expect(
       verifyPasskeyOnboardingToken(issued.token, config, new Date("2026-08-30T12:04:59Z")),
@@ -302,19 +308,19 @@ describe("passkey-first onboarding authority", () => {
     const now = vi.fn(() => fixedNow);
     const { customFetchImpl, db } = await setupOnboarding(now);
     await insertOnboardingContext(db, {
-      id: "expired-other-deployment",
       deploymentId: "retired_deployment",
       expiresAt: new Date("2026-08-30T11:59:59.000Z"),
+      id: "expired-other-deployment",
     });
     await insertOnboardingContext(db, {
-      id: "boundary-other-deployment",
       deploymentId: "retired_deployment",
       expiresAt: fixedNow,
+      id: "boundary-other-deployment",
     });
     await insertOnboardingContext(db, {
-      id: "future-other-deployment",
       deploymentId: "other_deployment",
       expiresAt: new Date("2026-08-30T12:00:01.000Z"),
+      id: "future-other-deployment",
     });
 
     const response = await requestOnboardingContext(customFetchImpl);
@@ -345,7 +351,7 @@ describe("passkey-first onboarding authority", () => {
     const cleanupFailure = new Error("cleanup failed");
     const deleteMany = vi.fn().mockRejectedValue(cleanupFailure);
     const create = vi.fn();
-    const adapter = { deleteMany, create } as unknown as Parameters<
+    const adapter = { create, deleteMany } as unknown as Parameters<
       typeof issuePasskeyOnboardingContext
     >[0];
 
@@ -369,9 +375,9 @@ describe("passkey-first onboarding authority", () => {
     const now = vi.fn(() => fixedNow);
     const { customFetchImpl, db, signInWithTestUser } = await setupOnboarding(now);
     await insertOnboardingContext(db, {
-      id: "expired-before-session-conflict",
       deploymentId: "retired_deployment",
       expiresAt: new Date("2026-08-30T11:59:59.000Z"),
+      id: "expired-before-session-conflict",
     });
     const { headers } = await signInWithTestUser();
 
@@ -393,22 +399,22 @@ describe("passkey-first onboarding authority", () => {
 
   it("rejects nonempty onboarding authority for a session while preserving context-free enrollment", () => {
     expect(authenticatedPasskeyRegistration("user_1", null)).toEqual({
-      userId: "user_1",
       name: "Additional passkey",
+      userId: "user_1",
     });
     expect(authenticatedPasskeyRegistration("user_1", "")).toEqual({
-      userId: "user_1",
       name: "Additional passkey",
+      userId: "user_1",
     });
     expect(authenticatedPasskeyRegistration(undefined, "onboarding-context")).toBeNull();
 
     expect(() => authenticatedPasskeyRegistration("user_1", "onboarding-context")).toThrowError(
       expect.objectContaining({
-        status: "CONFLICT",
-        statusCode: 409,
         body: expect.objectContaining({
           code: PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED,
         }),
+        status: "CONFLICT",
+        statusCode: 409,
       }),
     );
   });

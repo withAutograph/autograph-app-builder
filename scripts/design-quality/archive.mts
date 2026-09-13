@@ -1,5 +1,5 @@
 import { copyFile, mkdir, readFile, readdir, writeFile as writeRawFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import path from "node:path";
 import { parseArgs } from "node:util";
 import { renderReport } from "./report";
 import { captureFilename } from "./archive-path";
@@ -7,15 +7,15 @@ import { readArchivedReport } from "./archive-entry";
 import { formatWithOxfmt } from "../format-with-oxfmt.mts";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function writeFile(path: string, content: string) {
-  await writeRawFile(path, await formatWithOxfmt(path, content));
+async function writeFile(filePath: string, content: string) {
+  await writeRawFile(filePath, await formatWithOxfmt(filePath, content));
 }
 
 const { values } = parseArgs({
   options: {
-    "report-dir": { type: "string" },
-    name: { type: "string" },
     help: { type: "boolean" },
+    name: { type: "string" },
+    "report-dir": { type: "string" },
   },
 });
 if (values.help) {
@@ -24,33 +24,33 @@ if (values.help) {
 }
 if (!values["report-dir"] || !values.name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(values.name))
   throw new Error("Supply --report-dir and a lowercase kebab-case --name");
-const input = resolve(values["report-dir"]);
-const report = JSON.parse(await readFile(join(input, "report.json"), "utf-8"));
+const input = path.resolve(values["report-dir"]);
+const report = JSON.parse(await readFile(path.join(input, "report.json"), "utf-8"));
 const timestamp = new Date(report.createdAt).toISOString();
 const date = timestamp.slice(0, 10);
 const time = timestamp.slice(11, 23).replaceAll(/[:.]/gu, "");
-const archiveRoot = resolve("docs/reports/design-quality");
+const archiveRoot = path.resolve("docs/reports/design-quality");
 const relative = `${date}/${values.name}-${time}Z`;
-const destination = join(archiveRoot, relative);
-await mkdir(join(archiveRoot, date), { recursive: true });
+const destination = path.join(archiveRoot, relative);
+await mkdir(path.join(archiveRoot, date), { recursive: true });
 // A report is a historical observation: never silently replace an existing run.
 await mkdir(destination);
 for (const capture of report.captures) {
   const filename = captureFilename(capture.name);
   // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-  await copyFile(join(input, filename), join(destination, filename));
+  await copyFile(path.join(input, filename), path.join(destination, filename));
   capture.path = filename;
 }
 report.archive = {
-  name: values.name,
-  evaluatedAt: timestamp,
   archivedAt: new Date().toISOString(),
+  evaluatedAt: timestamp,
+  name: values.name,
   note: "Saved generated preview; advisory model judgment, not human-calibrated ground truth. Local machine paths omitted.",
 };
-await writeFile(join(destination, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
-await writeFile(join(destination, "index.html"), renderReport(report));
+await writeFile(path.join(destination, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
+await writeFile(path.join(destination, "index.html"), renderReport(report));
 const md = (v: unknown) =>
-  String(v).replaceAll(/[<>|]/gu, (c) => ({ "<": "&lt;", ">": "&gt;", "|": "\\|" })[c]!);
+  String(v).replaceAll(/[<>|]/gu, (c) => ({ "<": "&lt;", ">": "&gt;", "|": "\\|" })[c] ?? c);
 const lines = [
   `# ${values.name} — ${timestamp}`,
   "",
@@ -136,7 +136,7 @@ for (const capture of report.captures)
 lines.push("## Limitations", "");
 for (const limitation of report.judge.limitations ?? []) lines.push(`- ${md(limitation)}`);
 for (const limitation of report.evaluationNotes ?? []) lines.push(`- ${md(limitation)}`);
-await writeFile(join(destination, "README.md"), `${lines.join("\n")}\n`);
+await writeFile(path.join(destination, "README.md"), `${lines.join("\n")}\n`);
 const rows: {
   path: string;
   name: string;
@@ -146,30 +146,32 @@ const rows: {
 for (const day of await readdir(archiveRoot, { withFileTypes: true })) {
   if (!day.isDirectory() || !/^\d{4}-\d{2}-\d{2}$/u.test(day.name)) continue;
   // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-  for (const run of await readdir(join(archiveRoot, day.name), {
+  for (const run of await readdir(path.join(archiveRoot, day.name), {
     withFileTypes: true,
   })) {
     if (!run.isDirectory()) continue;
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const saved = await readArchivedReport(join(archiveRoot, day.name, run.name));
+    const saved = await readArchivedReport(path.join(archiveRoot, day.name, run.name));
     if (saved === null) continue;
     rows.push({
-      path: `${day.name}/${run.name}`,
-      name: saved.archive.name,
       date: saved.createdAt,
+      name: saved.archive.name,
+      path: `${day.name}/${run.name}`,
       score: saved.judge.subjectiveScore ?? "not scored",
     });
   }
 }
 rows.sort((a, b) => b.date.localeCompare(a.date));
+const latest = rows.at(0);
+if (latest === undefined) throw new Error("Archived report index is unexpectedly empty");
 await writeFile(
-  join(archiveRoot, "README.md"),
+  path.join(archiveRoot, "README.md"),
   [
     "# Generated UI design reports",
     "",
     "Shared, advisory observations of generated previews. No pass threshold or runtime gate.",
     "",
-    `**Latest report:** [${rows[0]!.name}](${rows[0]!.path}/README.md)`,
+    `**Latest report:** [${latest.name}](${latest.path}/README.md)`,
     "",
     "## Convention",
     "",

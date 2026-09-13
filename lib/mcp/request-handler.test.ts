@@ -13,10 +13,10 @@ import {
 import type { HostedMcpRuntime } from "./request-handler";
 
 const auth = {
-  issuer: "https://builder.example.test/api/auth",
-  audience: "https://builder.example.test/mcp",
-  jwksUrl: "https://builder.example.test/api/auth/jwks",
   algorithm: "ES256" as const,
+  audience: "https://builder.example.test/mcp",
+  issuer: "https://builder.example.test/api/auth",
+  jwksUrl: "https://builder.example.test/api/auth/jwks",
   resourceUrl: "https://builder.example.test/mcp",
 };
 const exactTools = [
@@ -30,10 +30,8 @@ const exactTools = [
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function claims(input: Partial<VerifiedHostedClaims> = {}): VerifiedHostedClaims {
   return {
-    issuer: auth.issuer,
     audience: auth.audience,
-    subject: "user-one",
-    workspaceId: "workspace-one",
+    issuer: auth.issuer,
     scopes: [
       "autograph:session",
       "autograph:start",
@@ -42,13 +40,15 @@ function claims(input: Partial<VerifiedHostedClaims> = {}): VerifiedHostedClaims
       "autograph:respond",
       "autograph:cancel",
     ],
+    subject: "user-one",
+    workspaceId: "workspace-one",
     ...input,
   };
 }
 
 const transport: HostedEveTransport = {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  async start() {
+  async cancel() {
     throw new Error("Transport must not run while listing tools.");
   },
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -56,15 +56,15 @@ const transport: HostedEveTransport = {
     throw new Error("Transport must not run while listing tools.");
   },
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  async send() {
-    throw new Error("Transport must not run while listing tools.");
-  },
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async respond() {
     throw new Error("Transport must not run while listing tools.");
   },
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  async cancel() {
+  async send() {
+    throw new Error("Transport must not run while listing tools.");
+  },
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+  async start() {
     throw new Error("Transport must not run while listing tools.");
   },
 };
@@ -79,6 +79,15 @@ function runtime(
 ): HostedMcpRuntime {
   return {
     auth,
+    membership: {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      async isMember({ workspaceId }) {
+        return input.membership?.(workspaceId) ?? true;
+      },
+    },
+    now: () => 2_000_000_000_000,
+    store: new InMemoryHostedEveStore(),
+    transport,
     verifier: {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async verify() {
@@ -86,15 +95,6 @@ function runtime(
         return input.verifiedClaims ?? claims();
       },
     },
-    membership: {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      async isMember({ workspaceId }) {
-        return input.membership?.(workspaceId) ?? true;
-      },
-    },
-    store: new InMemoryHostedEveStore(),
-    transport,
-    now: () => 2_000_000_000_000,
   };
 }
 
@@ -105,35 +105,35 @@ function mcpRequest(
   params: Record<string, unknown> = {},
 ): Request {
   return new Request(auth.resourceUrl, {
-    method: "POST",
+    body: JSON.stringify({
+      id: 1,
+      jsonrpc: "2.0",
+      method,
+      params,
+    }),
     headers: {
       accept: "application/json, text/event-stream",
       "content-type": "application/json",
       ...headers,
     },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method,
-      params,
-    }),
+    method: "POST",
   });
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function mcpToolRequest(name: string, args: Record<string, unknown>): Request {
   return new Request(auth.resourceUrl, {
-    method: "POST",
+    body: JSON.stringify({
+      id: 1,
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: { arguments: args, name },
+    }),
     headers: {
       accept: "application/json, text/event-stream",
       "content-type": "application/json",
     },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "tools/call",
-      params: { name, arguments: args },
-    }),
+    method: "POST",
   });
 }
 
@@ -161,33 +161,28 @@ describe("branded public tool mapping", () => {
   it("redeems an opaque handoff once and returns the same session after a lost response", async () => {
     const calls: { operation: string; input: unknown }[] = [];
     const result = {
-      sessionId: "session-one",
-      status: "waiting" as const,
       cursor: 1,
       events: [],
+      sessionId: "session-one",
+      status: "waiting" as const,
     };
     const service = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      async start(input: Parameters<EveSessionService["start"]>[0]) {
-        calls.push({ operation: "start", input });
+      async cancel() {
         return result;
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async get(input: Parameters<EveSessionService["get"]>[0]) {
-        calls.push({ operation: "get", input });
-        return result;
-      },
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      async recoverStart(input: Parameters<NonNullable<EveSessionService["recoverStart"]>>[0]) {
-        calls.push({ operation: "recoverStart", input });
+        calls.push({ input, operation: "get" });
         return result;
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async list() {
-        return { kind: "session_list" as const, cursor: 0, sessions: [] };
+        return { cursor: 0, kind: "session_list" as const, sessions: [] };
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      async send() {
+      async recoverStart(input: Parameters<NonNullable<EveSessionService["recoverStart"]>>[0]) {
+        calls.push({ input, operation: "recoverStart" });
         return result;
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -195,7 +190,12 @@ describe("branded public tool mapping", () => {
         return result;
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      async cancel() {
+      async send() {
+        return result;
+      },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      async start(input: Parameters<EveSessionService["start"]>[0]) {
+        calls.push({ input, operation: "start" });
         return result;
       },
     } satisfies EveSessionService;
@@ -205,56 +205,56 @@ describe("branded public tool mapping", () => {
       redeemed = true;
     });
     const wrapped = withHostedBuilderHandoffs({
-      service,
-      principal: {
-        issuer: auth.issuer,
-        audience: auth.audience,
-        workspaceId: "workspace-one",
-        ownerUserId: "user-one",
-        scopes: claims().scopes,
-      },
       handoffs: {
+        bindSession,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        async recheckRepositoryAccess({ principal, repository }) {
+          calls.push({
+            input: { principal, repository },
+            operation: "recheckRepositoryAccess",
+          });
+          return { action: "update", status: "authorization-required" };
+        },
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async resolve({ authority, handoffId }) {
           expect(authority).toEqual({
-            issuer: auth.issuer,
             audience: auth.audience,
-            workspaceId: "workspace-one",
+            issuer: auth.issuer,
             ownerUserId: "user-one",
+            workspaceId: "workspace-one",
           });
           expect(handoffId).toBe("123e4567-e89b-42d3-a456-426614174000");
           return redeemed
-            ? { status: "redeemed" as const, sessionId: "session-one" }
+            ? { sessionId: "session-one", status: "redeemed" as const }
             : {
-                status: "unredeemed" as const,
-                prompt:
-                  "Build the server-owned handoff. Call resolve_repository_access before repository work.",
                 deterministicClientRequestId: `handoff:${"a".repeat(64)}`,
+                prompt:
+                  "Build the server-owned handoff. Call resolve-repository-access before repository work.",
                 record: {
-                  requestDigest: "a".repeat(64),
                   intent: {
                     repository: {
                       requestedName: "app-builder-dogfood",
                       resolvedFullName: "withAutograph/app-builder-dogfood",
                     },
                   },
+                  requestDigest: "a".repeat(64),
                 },
+                status: "unredeemed" as const,
               };
         },
-        bindSession,
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        async recheckRepositoryAccess({ principal, repository }) {
-          calls.push({
-            operation: "recheckRepositoryAccess",
-            input: { principal, repository },
-          });
-          return { status: "authorization-required", action: "update" };
-        },
       },
+      principal: {
+        audience: auth.audience,
+        issuer: auth.issuer,
+        ownerUserId: "user-one",
+        scopes: claims().scopes,
+        workspaceId: "workspace-one",
+      },
+      service,
     });
     const request = {
-      handoffId: "123e4567-e89b-42d3-a456-426614174000",
       clientRequestId: "caller-one",
+      handoffId: "123e4567-e89b-42d3-a456-426614174000",
     };
 
     await expect(wrapped.start(request)).resolves.toEqual(result);
@@ -262,30 +262,30 @@ describe("branded public tool mapping", () => {
     expect(bindSession).toHaveBeenCalledOnce();
     expect(calls).toEqual([
       {
-        operation: "recheckRepositoryAccess",
         input: {
           principal: {
-            issuer: auth.issuer,
             audience: auth.audience,
-            workspaceId: "workspace-one",
+            issuer: auth.issuer,
             ownerUserId: "user-one",
             scopes: claims().scopes,
+            workspaceId: "workspace-one",
           },
           repository: "withAutograph/app-builder-dogfood",
         },
+        operation: "recheckRepositoryAccess",
       },
       {
-        operation: "start",
         input: {
-          prompt:
-            "Build the server-owned handoff. Call resolve_repository_access before repository work.",
           clientRequestId: `handoff:${"a".repeat(64)}`,
+          prompt:
+            "Build the server-owned handoff. Call resolve-repository-access before repository work.",
           sourceHandoffId: "123e4567-e89b-42d3-a456-426614174000",
         },
+        operation: "start",
       },
       {
+        input: { cursor: 0, limit: 100, sessionId: "session-one" },
         operation: "recoverStart",
-        input: { sessionId: "session-one", cursor: 0, limit: 100 },
       },
     ]);
   });
@@ -294,73 +294,73 @@ describe("branded public tool mapping", () => {
     const start = vi.fn();
     const bindSession = vi.fn();
     const result = {
-      sessionId: "session-one",
-      status: "waiting" as const,
       cursor: 1,
       events: [],
+      sessionId: "session-one",
+      status: "waiting" as const,
     };
     const service = {
-      start,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      async list() {
-        return { kind: "session_list" as const, cursor: 0, sessions: [] };
+      async cancel() {
+        return result;
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async get() {
         return result;
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      async send() {
-        return result;
+      async list() {
+        return { cursor: 0, kind: "session_list" as const, sessions: [] };
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async respond() {
         return result;
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      async cancel() {
+      async send() {
         return result;
       },
+      start,
     } satisfies EveSessionService;
     const wrapped = withHostedBuilderHandoffs({
-      service,
-      principal: {
-        issuer: auth.issuer,
-        audience: auth.audience,
-        workspaceId: "workspace-one",
-        ownerUserId: "user-one",
-        scopes: claims().scopes,
-      },
       handoffs: {
+        bindSession,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        async recheckRepositoryAccess() {
+          return { status: "provider-unavailable" };
+        },
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async resolve() {
           return {
-            status: "unredeemed" as const,
-            prompt: "Build the server-owned handoff.",
             deterministicClientRequestId: `handoff:${"a".repeat(64)}`,
+            prompt: "Build the server-owned handoff.",
             record: {
-              requestDigest: "a".repeat(64),
               intent: {
                 repository: {
                   requestedName: "app-builder-dogfood",
                   resolvedFullName: "withAutograph/app-builder-dogfood",
                 },
               },
+              requestDigest: "a".repeat(64),
             },
+            status: "unredeemed" as const,
           };
         },
-        bindSession,
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        async recheckRepositoryAccess() {
-          return { status: "provider-unavailable" };
-        },
       },
+      principal: {
+        audience: auth.audience,
+        issuer: auth.issuer,
+        ownerUserId: "user-one",
+        scopes: claims().scopes,
+        workspaceId: "workspace-one",
+      },
+      service,
     });
 
     await expect(
       wrapped.start({
-        handoffId: "123e4567-e89b-42d3-a456-426614174000",
         clientRequestId: "caller-one",
+        handoffId: "123e4567-e89b-42d3-a456-426614174000",
       }),
     ).rejects.toThrow("Provider access is temporarily unavailable.");
     expect(start).not.toHaveBeenCalled();
@@ -369,10 +369,10 @@ describe("branded public tool mapping", () => {
 
   it("silently starts an opaque handoff after a current ready provider read", async () => {
     const result = {
-      sessionId: "session-one",
-      status: "waiting" as const,
       cursor: 1,
       events: [],
+      sessionId: "session-one",
+      status: "waiting" as const,
     };
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const start = vi.fn(async () => result);
@@ -382,64 +382,64 @@ describe("branded public tool mapping", () => {
       status: "ready" as const,
     }));
     const service = {
-      start,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      async list() {
-        return { kind: "session_list" as const, cursor: 0, sessions: [] };
+      async cancel() {
+        return result;
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async get() {
         return result;
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      async send() {
-        return result;
+      async list() {
+        return { cursor: 0, kind: "session_list" as const, sessions: [] };
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async respond() {
         return result;
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      async cancel() {
+      async send() {
         return result;
       },
+      start,
     } satisfies EveSessionService;
     const wrapped = withHostedBuilderHandoffs({
-      service,
-      principal: {
-        issuer: auth.issuer,
-        audience: auth.audience,
-        workspaceId: "workspace-one",
-        ownerUserId: "user-one",
-        scopes: claims().scopes,
-      },
       handoffs: {
+        bindSession,
+        recheckRepositoryAccess,
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async resolve() {
           return {
-            status: "unredeemed" as const,
-            prompt: "Build the server-owned handoff.",
             deterministicClientRequestId: `handoff:${"a".repeat(64)}`,
+            prompt: "Build the server-owned handoff.",
             record: {
-              requestDigest: "a".repeat(64),
               intent: {
                 repository: {
                   requestedName: "app-builder-dogfood",
                   resolvedFullName: "withAutograph/app-builder-dogfood",
                 },
               },
+              requestDigest: "a".repeat(64),
             },
+            status: "unredeemed" as const,
           };
         },
-        bindSession,
-        recheckRepositoryAccess,
       },
+      principal: {
+        audience: auth.audience,
+        issuer: auth.issuer,
+        ownerUserId: "user-one",
+        scopes: claims().scopes,
+        workspaceId: "workspace-one",
+      },
+      service,
     });
 
     await expect(
       wrapped.start({
-        handoffId: "123e4567-e89b-42d3-a456-426614174000",
         clientRequestId: "caller-one",
+        handoffId: "123e4567-e89b-42d3-a456-426614174000",
       }),
     ).resolves.toEqual(result);
     expect(recheckRepositoryAccess).toHaveBeenCalledOnce();
@@ -469,59 +469,59 @@ describe("branded public tool mapping", () => {
   it("maps each public operation to the unchanged Eve session service", async () => {
     const calls: { operation: string; input: unknown }[] = [];
     const result = {
-      sessionId: "session-one",
-      status: "waiting" as const,
       cursor: 1,
       events: [],
+      sessionId: "session-one",
+      status: "waiting" as const,
     };
     const service: EveSessionService = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      async start(input) {
-        calls.push({ operation: "start", input });
+      async cancel(input) {
+        calls.push({ input, operation: "cancel" });
+        return result;
+      },
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      async get(input) {
+        calls.push({ input, operation: "get" });
         return result;
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async list(input) {
-        calls.push({ operation: "list", input });
-        return { kind: "session_list", cursor: 0, sessions: [] };
+        calls.push({ input, operation: "list" });
+        return { cursor: 0, kind: "session_list", sessions: [] };
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      async get(input) {
-        calls.push({ operation: "get", input });
+      async respond(input) {
+        calls.push({ input, operation: "respond" });
         return result;
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async send(input) {
-        calls.push({ operation: "send", input });
+        calls.push({ input, operation: "send" });
         return result;
       },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      async respond(input) {
-        calls.push({ operation: "respond", input });
-        return result;
-      },
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      async cancel(input) {
-        calls.push({ operation: "cancel", input });
+      async start(input) {
+        calls.push({ input, operation: "start" });
         return result;
       },
     };
     const handler = createAutographMcpHandler(service);
     const invocations = [
-      ["autograph_start", { prompt: "Build an app", clientRequestId: "start-one" }],
-      ["autograph_get", { sessionId: "session-one", cursor: 0, limit: 25 }],
+      ["autograph_start", { clientRequestId: "start-one", prompt: "Build an app" }],
+      ["autograph_get", { cursor: 0, limit: 25, sessionId: "session-one" }],
       [
         "autograph_send",
         {
-          sessionId: "session-one",
-          message: "Use the compact layout",
           clientRequestId: "send-one",
+          message: "Use the compact layout",
+          sessionId: "session-one",
         },
       ],
       [
         "autograph_respond",
         {
-          sessionId: "session-one",
+          clientRequestId: "respond-one",
           responses: [
             { requestId: "approval-one", response: { kind: "approve" } },
             {
@@ -529,7 +529,7 @@ describe("branded public tool mapping", () => {
               response: { kind: "answer", value: "Compact" },
             },
           ],
-          clientRequestId: "respond-one",
+          sessionId: "session-one",
         },
       ],
       ["autograph_cancel", { sessionId: "session-one", turnId: "turn-one" }],
@@ -545,48 +545,48 @@ describe("branded public tool mapping", () => {
     }
 
     expect(calls).toEqual([
-      { operation: "start", input: invocations[0][1] },
-      { operation: "get", input: invocations[1][1] },
-      { operation: "send", input: invocations[2][1] },
-      { operation: "respond", input: invocations[3][1] },
-      { operation: "cancel", input: invocations[4][1] },
+      { input: invocations[0][1], operation: "start" },
+      { input: invocations[1][1], operation: "get" },
+      { input: invocations[2][1], operation: "send" },
+      { input: invocations[3][1], operation: "respond" },
+      { input: invocations[4][1], operation: "cancel" },
     ]);
   });
 
   it("lists recent sessions when autograph_get omits sessionId", async () => {
     const sessionResult = {
-      sessionId: "session-one",
-      status: "waiting" as const,
       cursor: 0,
       events: [],
+      sessionId: "session-one",
+      status: "waiting" as const,
     };
     const listed = {
-      kind: "session_list" as const,
       cursor: 1,
+      kind: "session_list" as const,
       sessions: [
         {
+          resumability: "live" as const,
           sessionId: "session-one",
-          title: "Vendor workspace",
           stage: "prototype" as const,
           status: "waiting" as const,
-          resumability: "live" as const,
+          title: "Vendor workspace",
           updatedAt: "2026-09-01T12:00:00.000Z",
         },
       ],
     };
     const service = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      start: vi.fn(async () => sessionResult),
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      list: vi.fn(async () => listed),
+      cancel: vi.fn(async () => sessionResult),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       get: vi.fn(async () => sessionResult),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      send: vi.fn(async () => sessionResult),
+      list: vi.fn(async () => listed),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       respond: vi.fn(async () => sessionResult),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      cancel: vi.fn(async () => sessionResult),
+      send: vi.fn(async () => sessionResult),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      start: vi.fn(async () => sessionResult),
     } satisfies EveSessionService;
     const handler = createAutographMcpHandler(service);
     const response = await handler(mcpToolRequest("autograph_get", { cursor: 0, limit: 25 }));
@@ -600,44 +600,44 @@ describe("branded public tool mapping", () => {
   it("returns a Browser-openable URL without attaching prototype UI", async () => {
     const content = "<!doctype html><html><body>Vendor queue</body></html>";
     const result = {
-      sessionId: "session-one",
-      status: "completed" as const,
       cursor: 1,
       events: [],
       prototype: {
-        path: "prototype/vendor-onboarding/index.html",
-        mediaType: "text/html" as const,
         content,
         digest: "e8385bab4b1d1c12641b37bdeec4e359c40a6f30016f724ec61b5b8b20ca8c0f",
+        mediaType: "text/html" as const,
+        path: "prototype/vendor-onboarding/index.html",
         revision: "b".repeat(64),
       },
+      sessionId: "session-one",
+      status: "completed" as const,
     };
     const service = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      start: vi.fn(async () => result),
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      list: vi.fn(async () => ({
-        kind: "session_list" as const,
-        cursor: 0,
-        sessions: [],
-      })),
+      cancel: vi.fn(async () => result),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       get: vi.fn(async () => result),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      send: vi.fn(async () => result),
+      list: vi.fn(async () => ({
+        cursor: 0,
+        kind: "session_list" as const,
+        sessions: [],
+      })),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       respond: vi.fn(async () => result),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      cancel: vi.fn(async () => result),
+      send: vi.fn(async () => result),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      start: vi.fn(async () => result),
     } satisfies EveSessionService;
     const handler = createAutographMcpHandler(service, {
       requestUrl: auth.resourceUrl,
     });
     const response = await handler(
       mcpToolRequest("autograph_get", {
-        sessionId: "session-one",
         cursor: 0,
         limit: 100,
+        sessionId: "session-one",
       }),
     );
     const callResult = await mcpResult<{
@@ -680,7 +680,6 @@ describe("request-scoped MCP service selection", () => {
     for (const tool of discovery.tools) {
       expect(tool._meta?.securitySchemes).toEqual([
         {
-          type: "oauth2",
           scopes: [
             "autograph:session",
             "autograph:start",
@@ -689,6 +688,7 @@ describe("request-scoped MCP service selection", () => {
             "autograph:respond",
             "autograph:cancel",
           ],
+          type: "oauth2",
         },
       ]);
     }
@@ -697,8 +697,8 @@ describe("request-scoped MCP service selection", () => {
 
     const protectedCall = await handler(
       mcpRequest({}, "tools/call", {
-        name: "autograph_get",
         arguments: { cursor: 0, limit: 20 },
+        name: "autograph_get",
       }),
     );
     expect(protectedCall.status).toBe(200);
@@ -721,9 +721,9 @@ describe("request-scoped MCP service selection", () => {
   it("does not fall back to local or unconfigured service in hosted mode", async () => {
     const handler = createMcpRequestHandler({
       environment: {
-        EVE_HOSTED_ADAPTER: "1",
         APP_BUILDER_LOCAL_ADAPTER: "0",
         EVE_AGENT_HOST: "http://127.0.0.1:9999",
+        EVE_HOSTED_ADAPTER: "1",
       },
     });
     const response = await handler(mcpRequest());
@@ -756,20 +756,20 @@ describe("request-scoped MCP service selection", () => {
     const responses = await Promise.all([
       handler(
         mcpRequest({}, "tools/call", {
-          name: "autograph_get",
           arguments: { cursor: 0, limit: 20 },
+          name: "autograph_get",
         }),
       ),
       handler(
         mcpRequest({ authorization: "Bearer two tokens" }, "tools/call", {
-          name: "autograph_get",
           arguments: { cursor: 0, limit: 20 },
+          name: "autograph_get",
         }),
       ),
       handler(
         mcpRequest({ authorization: "Basic token" }, "tools/call", {
-          name: "autograph_get",
           arguments: { cursor: 0, limit: 20 },
+          name: "autograph_get",
         }),
       ),
     ]);
@@ -794,18 +794,15 @@ describe("request-scoped MCP service selection", () => {
     });
     const invalidResponse = await invalid(
       mcpRequest({ authorization: "Bearer token" }, "tools/call", {
-        name: "autograph_get",
         arguments: { cursor: 0, limit: 20 },
+        name: "autograph_get",
       }),
     );
     expect(invalidResponse.status).toBe(200);
-    expect(
-      (
-        await mcpResult<{
-          _meta: { "mcp/www_authenticate": string[] };
-        }>(invalidResponse)
-      )._meta["mcp/www_authenticate"][0],
-    ).toContain('error="invalid_token"');
+    const invalidResult = await mcpResult<{
+      _meta: { "mcp/www_authenticate": string[] };
+    }>(invalidResponse);
+    expect(invalidResult._meta["mcp/www_authenticate"][0]).toContain('error="invalid_token"');
 
     const insufficient = createMcpRequestHandler({
       environment: { EVE_HOSTED_ADAPTER: "1" },
@@ -815,8 +812,8 @@ describe("request-scoped MCP service selection", () => {
     });
     const insufficientResponse = await insufficient(
       mcpRequest({ authorization: "Bearer token" }, "tools/call", {
-        name: "autograph_get",
         arguments: { cursor: 0, limit: 20 },
+        name: "autograph_get",
       }),
     );
     expect(insufficientResponse.status).toBe(200);
@@ -837,38 +834,38 @@ describe("request-scoped MCP service selection", () => {
       createMcpRequestHandler({
         environment: { EVE_HOSTED_ADAPTER: "1" },
         hostedRuntime: runtime({
-          verifiedClaims: claims({ workspaceId: "workspace-two" }),
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           membership: async () => false,
+          verifiedClaims: claims({ workspaceId: "workspace-two" }),
         }),
       }),
       createMcpRequestHandler({
         environment: { EVE_HOSTED_ADAPTER: "1" },
         hostedRuntime: runtime({
-          verifiedClaims: claims({ workspaceId: "workspace-two" }),
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           membership: async () => {
             throw new Error("store unavailable");
           },
+          verifiedClaims: claims({ workspaceId: "workspace-two" }),
         }),
       }),
-    ];
+    ] as const;
     const responses = [
-      await handlers[0]!(mcpRequest(requestHeaders, "tools/call")),
-      await handlers[1]!(mcpRequest(requestHeaders, "tools/call")),
+      await handlers[0](mcpRequest(requestHeaders, "tools/call")),
+      await handlers[1](mcpRequest(requestHeaders, "tools/call")),
     ];
     const projections = await Promise.all(
       responses.map(async (response) => ({
-        status: response.status,
-        cache: response.headers.get("cache-control"),
         body: await response.json(),
+        cache: response.headers.get("cache-control"),
+        status: response.status,
       })),
     );
     expect(new Set(projections.map((projection) => JSON.stringify(projection))).size).toBe(1);
     expect(projections[0]).toEqual({
-      status: 404,
-      cache: "no-store",
       body: { error: "not_found" },
+      cache: "no-store",
+      status: 404,
     });
   });
 
@@ -897,14 +894,14 @@ describe("request-scoped MCP service selection", () => {
     const [one, two] = await Promise.all([
       handler(
         mcpRequest({ authorization: "Bearer one" }, "tools/call", {
-          name: "autograph_get",
           arguments: { cursor: 0, limit: 20 },
+          name: "autograph_get",
         }),
       ),
       handler(
         mcpRequest({ authorization: "Bearer two" }, "tools/call", {
-          name: "autograph_get",
           arguments: { cursor: 0, limit: 20 },
+          name: "autograph_get",
         }),
       ),
     ]);
@@ -960,58 +957,58 @@ describe("request-scoped MCP service selection", () => {
     expect(toolResult.tools.map(({ name }) => name).toSorted()).toEqual(exactTools);
     expect(toolResult.tools.every(({ name }) => !name.startsWith("eve_"))).toBe(true);
     expect(Object.fromEntries(toolResult.tools.map(({ name, title }) => [name, title]))).toEqual({
-      autograph_start: "Start with Autograph App Builder",
-      autograph_get: "Check App Builder progress",
-      autograph_send: "Send App Builder feedback",
-      autograph_respond: "Answer App Builder questions",
       autograph_cancel: "Stop App Builder work",
+      autograph_get: "Check App Builder progress",
+      autograph_respond: "Answer App Builder questions",
+      autograph_send: "Send App Builder feedback",
+      autograph_start: "Start with Autograph App Builder",
     });
     expect(
       Object.fromEntries(toolResult.tools.map(({ name, description }) => [name, description])),
     ).toEqual({
-      autograph_start:
-        "Start reversible App Builder work and return immediately. This only manages an App Builder session; it cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
-      autograph_get:
-        "List recent app builds, or read the next page of one app build's progress and requests.",
-      autograph_send:
-        "Send additional direction to an App Builder session. This cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
-      autograph_respond:
-        "Answer the complete outstanding set of App Builder questions in one response. This cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
       autograph_cancel:
         "Request cancellation of the active App Builder session. This cannot publish, deploy, provision, or modify the user's repository.",
+      autograph_get:
+        "List recent app builds, or read the next page of one app build's progress and requests.",
+      autograph_respond:
+        "Answer the complete outstanding set of App Builder questions in one response. This cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
+      autograph_send:
+        "Send additional direction to an App Builder session. This cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
+      autograph_start:
+        "Start reversible App Builder work and return immediately. This only manages an App Builder session; it cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
     });
     expect(
       Object.fromEntries(toolResult.tools.map(({ name, annotations }) => [name, annotations])),
     ).toEqual({
-      autograph_start: {
-        readOnlyHint: false,
+      autograph_cancel: {
         destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false,
+        readOnlyHint: false,
       },
       autograph_get: {
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
         readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-      autograph_send: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
       },
       autograph_respond: {
-        readOnlyHint: false,
         destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false,
+        readOnlyHint: false,
       },
-      autograph_cancel: {
-        readOnlyHint: false,
+      autograph_send: {
         destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false,
+        readOnlyHint: false,
+      },
+      autograph_start: {
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+        readOnlyHint: false,
       },
     });
 
@@ -1025,20 +1022,20 @@ describe("request-scoped MCP service selection", () => {
     }>(resourceResponse);
     expect(resourceResult.resources).toContainEqual(
       expect.objectContaining({
-        name: "autograph-session",
-        title: "Autograph App Builder progress",
-        description: "Live progress and requests from Autograph App Builder.",
         _meta: {
           ui: {
-            prefersBorder: false,
             csp: {
-              connectDomains: [],
-              resourceDomains: [],
-              frameDomains: ["about:"],
               baseUriDomains: [],
+              connectDomains: [],
+              frameDomains: ["about:"],
+              resourceDomains: [],
             },
+            prefersBorder: false,
           },
         },
+        description: "Live progress and requests from Autograph App Builder.",
+        name: "autograph-session",
+        title: "Autograph App Builder progress",
       }),
     );
     const resourceMeta = resourceResult.resources[0]?._meta?.ui;

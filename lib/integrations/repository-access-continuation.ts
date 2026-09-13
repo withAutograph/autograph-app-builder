@@ -12,23 +12,23 @@ const opaqueRuntimeId = z.string().min(1).max(255);
 
 export const repositoryAccessContinuationSchema = z
   .object({
-    continuationDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     authority: hostedTenantAuthoritySchema,
-    sessionId: opaqueRuntimeId,
-    requestId: opaqueRuntimeId,
-    repository: z
-      .object({
-        owner: z.string().min(1).max(100),
-        name: z.string().min(1).max(100),
-        fullName: z.string().min(3).max(201),
-      })
-      .strict(),
-    selectedInstallationId: decimal.optional(),
+    authorizedAt: z.date().optional(),
     callbackUrl: z.string().url().max(4096),
+    consumedAt: z.date().optional(),
+    continuationDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     createdAt: z.date(),
     expiresAt: z.date(),
-    authorizedAt: z.date().optional(),
-    consumedAt: z.date().optional(),
+    repository: z
+      .object({
+        fullName: z.string().min(3).max(201),
+        name: z.string().min(1).max(100),
+        owner: z.string().min(1).max(100),
+      })
+      .strict(),
+    requestId: opaqueRuntimeId,
+    selectedInstallationId: decimal.optional(),
+    sessionId: opaqueRuntimeId,
   })
   .strict();
 
@@ -95,50 +95,14 @@ export function createRepositoryAccessContinuationService(input: {
     throw new Error("repository-access-continuation-lifetime-invalid");
 
   return {
-    async create(value: {
-      authority: z.infer<typeof hostedTenantAuthoritySchema>;
-      sessionId: string;
-      requestId: string;
-      repository: string;
-      selectedInstallationId?: string;
-      callbackUrl: string;
-    }) {
-      const authority = hostedTenantAuthoritySchema.parse(value.authority);
-      const repository = parseRepositoryReference(value.repository);
-      const callback = exactEveAuthorizationCallback({
-        callbackUrl: value.callbackUrl,
-        issuer: authority.issuer,
-      });
-      const continuationId = continuationIdSchema.parse(createId());
-      const createdAt = now();
-      const expiresAt = new Date(createdAt.getTime() + lifetimeMs);
-      const record = repositoryAccessContinuationSchema.parse({
-        continuationDigest: continuationDigest(continuationId),
-        authority,
-        sessionId: value.sessionId,
-        requestId: value.requestId,
-        repository,
-        ...(value.selectedInstallationId
-          ? {
-              selectedInstallationId: decimal.parse(value.selectedInstallationId),
-            }
-          : {}),
-        callbackUrl: callback.toString(),
-        createdAt,
-        expiresAt,
-      });
-      await input.store.create(record);
-      return { continuationId, expiresAt };
-    },
-
     async authorize(value: {
       authority: z.infer<typeof hostedTenantAuthoritySchema>;
       continuationId: string;
     }) {
       const continuationId = continuationIdSchema.parse(value.continuationId);
       const record = await input.store.authorize({
-        continuationDigest: continuationDigest(continuationId),
         authority: hostedTenantAuthoritySchema.parse(value.authority),
+        continuationDigest: continuationDigest(continuationId),
         now: now(),
       });
       if (!record) return;
@@ -146,6 +110,25 @@ export function createRepositoryAccessContinuationService(input: {
       callback.searchParams.set("provider", "github");
       callback.searchParams.set("status", "connected");
       return callback.toString();
+    },
+
+    async authorizedForSession(value: {
+      authority: z.infer<typeof hostedTenantAuthoritySchema>;
+      sessionId: string;
+    }) {
+      const authority = hostedTenantAuthoritySchema.parse(value.authority);
+      const records = await input.store.listAuthorizedForSession({
+        authority,
+        now: now(),
+        sessionId: opaqueRuntimeId.parse(value.sessionId),
+      });
+      return records.map((candidate) => ({
+        callbackUrl: exactEveAuthorizationCallback({
+          callbackUrl: candidate.callbackUrl,
+          issuer: authority.issuer,
+        }).toString(),
+        record: repositoryAccessContinuationSchema.parse(candidate),
+      }));
     },
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
@@ -159,37 +142,54 @@ export function createRepositoryAccessContinuationService(input: {
     }) {
       const continuationId = continuationIdSchema.parse(value.continuationId);
       return input.store.consume({
-        continuationDigest: continuationDigest(continuationId),
         authority: hostedTenantAuthoritySchema.parse(value.authority),
-        sessionId: opaqueRuntimeId.parse(value.sessionId),
-        requestId: opaqueRuntimeId.parse(value.requestId),
+        continuationDigest: continuationDigest(continuationId),
+        now: now(),
         repository: parseRepositoryReference(value.repository),
+        requestId: opaqueRuntimeId.parse(value.requestId),
         ...(value.selectedInstallationId
           ? {
               selectedInstallationId: decimal.parse(value.selectedInstallationId),
             }
           : {}),
-        now: now(),
+        sessionId: opaqueRuntimeId.parse(value.sessionId),
       });
     },
 
-    async authorizedForSession(value: {
+    async create(value: {
       authority: z.infer<typeof hostedTenantAuthoritySchema>;
+      callbackUrl: string;
+      repository: string;
+      requestId: string;
+      selectedInstallationId?: string;
       sessionId: string;
     }) {
       const authority = hostedTenantAuthoritySchema.parse(value.authority);
-      const records = await input.store.listAuthorizedForSession({
-        authority,
-        sessionId: opaqueRuntimeId.parse(value.sessionId),
-        now: now(),
+      const repository = parseRepositoryReference(value.repository);
+      const callback = exactEveAuthorizationCallback({
+        callbackUrl: value.callbackUrl,
+        issuer: authority.issuer,
       });
-      return records.map((candidate) => ({
-        record: repositoryAccessContinuationSchema.parse(candidate),
-        callbackUrl: exactEveAuthorizationCallback({
-          callbackUrl: candidate.callbackUrl,
-          issuer: authority.issuer,
-        }).toString(),
-      }));
+      const continuationId = continuationIdSchema.parse(createId());
+      const createdAt = now();
+      const expiresAt = new Date(createdAt.getTime() + lifetimeMs);
+      const record = repositoryAccessContinuationSchema.parse({
+        authority,
+        callbackUrl: callback.toString(),
+        continuationDigest: continuationDigest(continuationId),
+        createdAt,
+        expiresAt,
+        repository,
+        requestId: value.requestId,
+        ...(value.selectedInstallationId
+          ? {
+              selectedInstallationId: decimal.parse(value.selectedInstallationId),
+            }
+          : {}),
+        sessionId: value.sessionId,
+      });
+      await input.store.create(record);
+      return { continuationId, expiresAt };
     },
   };
 }

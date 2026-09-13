@@ -9,17 +9,17 @@ describe("sandbox backend selection", () => {
       expect(
         sandboxBackendPlan({
           environment: {
-            VERCEL: "1",
             EVE_HOSTED_ADAPTER: "1",
-            VERCEL_ENV: environmentName,
             EVE_HOSTED_VERCEL_ENVIRONMENT: environmentName,
+            VERCEL: "1",
+            VERCEL_ENV: environmentName,
           },
           fixture: false,
           localImageConfigured: true,
         }),
       ).toEqual({
-        kind: environmentName === "preview" ? "vercel-preview" : "vercel-production",
         blockers: [],
+        kind: environmentName === "preview" ? "vercel-preview" : "vercel-production",
       });
     },
   );
@@ -27,10 +27,10 @@ describe("sandbox backend selection", () => {
   it("does not bind the local microsandbox image into hosted execution", () => {
     const plan = sandboxBackendPlan({
       environment: {
-        VERCEL: "1",
         EVE_HOSTED_ADAPTER: "1",
-        VERCEL_ENV: "preview",
         EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
+        VERCEL: "1",
+        VERCEL_ENV: "preview",
       },
       fixture: false,
       localImageConfigured: true,
@@ -43,15 +43,15 @@ describe("sandbox backend selection", () => {
     expect(
       sandboxBackendPlan({
         environment: {
-          APP_BUILDER_EXECUTION_MODE: "development",
           APP_BUILDER_EXECUTION_BUNDLE: "local-development",
-          APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+          APP_BUILDER_EXECUTION_MODE: "development",
           APP_BUILDER_SANDBOX_IMAGE: "retired-image",
+          APP_BUILDER_SANDBOX_PROVIDER: "vercel",
         },
         fixture: false,
         localImageConfigured: true,
       }),
-    ).toEqual({ kind: "vercel-development", blockers: [] });
+    ).toEqual({ blockers: [], kind: "vercel-development" });
   });
 
   it("rejects partial Development bindings instead of falling back", () => {
@@ -62,8 +62,8 @@ describe("sandbox backend selection", () => {
         localImageConfigured: false,
       }),
     ).toEqual({
-      kind: "unsupported-development",
       blockers: ["Development execution requires the exact local Vercel Sandbox binding."],
+      kind: "unsupported-development",
     });
     expect(() =>
       selectSandboxDefinition("unsupported-development", {
@@ -78,16 +78,16 @@ describe("sandbox backend selection", () => {
     expect(
       sandboxBackendPlan({
         environment: {
-          APP_BUILDER_EXECUTION_MODE: "",
           APP_BUILDER_EXECUTION_BUNDLE: "",
+          APP_BUILDER_EXECUTION_MODE: "",
           APP_BUILDER_SANDBOX_PROVIDER: "",
         },
         fixture: false,
         localImageConfigured: false,
       }),
     ).toEqual({
-      kind: "local-just-bash",
       blockers: ["No immutable local sandbox image is configured."],
+      kind: "local-just-bash",
     });
   });
 
@@ -114,33 +114,33 @@ describe("sandbox backend selection", () => {
         fixture: false,
         localImageConfigured: true,
       }),
-    ).toEqual({ kind: "local-microsandbox", blockers: [] });
+    ).toEqual({ blockers: [], kind: "local-microsandbox" });
     expect(
       sandboxBackendPlan({
         environment: { VERCEL: "1", VERCEL_ENV: "production" },
         fixture: true,
         localImageConfigured: true,
       }),
-    ).toEqual({ kind: "fixture-just-bash", blockers: [] });
+    ).toEqual({ blockers: [], kind: "fixture-just-bash" });
   });
 
   it("fails closed when Vercel and the configured environment disagree", () => {
     expect(
       sandboxBackendPlan({
         environment: {
-          VERCEL: "1",
           EVE_HOSTED_ADAPTER: "1",
-          VERCEL_ENV: "production",
           EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
+          VERCEL: "1",
+          VERCEL_ENV: "production",
         },
         fixture: false,
         localImageConfigured: false,
       }),
     ).toEqual({
-      kind: "unsupported-vercel",
       blockers: [
         "The hosted App Builder sandbox requires an exact matching Preview or Production environment binding.",
       ],
+      kind: "unsupported-vercel",
     });
   });
 

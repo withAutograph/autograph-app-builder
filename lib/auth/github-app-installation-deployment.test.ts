@@ -5,10 +5,10 @@ import { GitHubInstallationAuthorizationError } from "./github-app-installation"
 import type { ProviderConnectionReturn } from "../integrations/provider-connection-return";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace_one",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "user_one",
+  workspaceId: "workspace_one",
 };
 
 afterEach(() => vi.restoreAllMocks());
@@ -20,49 +20,49 @@ function handlers(
 ) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const begin = vi.fn(async () => ({
-    version: 1 as const,
     action: "github-app.installation.begin" as const,
-    status: "redirect" as const,
-    redirectUrl: "https://github.com/apps/autograph-app-builder/installations/new?state=opaque",
-    stateDigest: "a".repeat(64),
     authorityDigest: "b".repeat(64),
     expiresAt: "2026-08-28T12:10:00.000Z",
+    redirectUrl: "https://github.com/apps/autograph-app-builder/installations/new?state=opaque",
+    stateDigest: "a".repeat(64),
+    status: "redirect" as const,
+    version: 1 as const,
   }));
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const complete = vi.fn(async () => ({
-    version: 1 as const,
+    accountType: "Organization" as const,
     action: "github-app.installation.complete" as const,
-    status: "bound" as const,
+    appliedAt: "2026-08-28T12:00:00.000Z",
     authorityDigest: "a".repeat(64),
-    stateDigest: "b".repeat(64),
     installationDigest: "c".repeat(64),
     providerUserDigest: "d".repeat(64),
-    accountType: "Organization" as const,
     repositorySelection: "selected" as const,
-    setupAction: "install" as const,
     returnState: { returnTo: "/" as const } as ProviderConnectionReturn,
-    appliedAt: "2026-08-28T12:00:00.000Z",
+    setupAction: "install" as const,
+    stateDigest: "b".repeat(64),
+    status: "bound" as const,
+    version: 1 as const,
   }));
   const route = createGitHubAppInstallationRouteHandlers({
-    origin: "https://builder.example",
     authorityForRequest,
     authorization: { begin, complete },
+    origin: "https://builder.example",
   });
-  return { route, begin, complete };
+  return { begin, complete, route };
 }
 
 describe("GitHub App installation routes", () => {
   it("accepts only a same-origin form POST before leaving Preview", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const { route, begin } = handlers();
     const response = await route.start(
       new Request("https://builder.example/github/installations/start", {
-        method: "POST",
-        headers: {
-          Origin: "https://builder.example",
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
         body: "",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Origin: "https://builder.example",
+        },
+        method: "POST",
       }),
     );
     expect(response.status).toBe(303);
@@ -72,12 +72,12 @@ describe("GitHub App installation routes", () => {
 
     const denied = await route.start(
       new Request("https://builder.example/github/installations/start", {
-        method: "POST",
-        headers: {
-          Origin: "https://attacker.example",
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
         body: "",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Origin: "https://attacker.example",
+        },
+        method: "POST",
       }),
     );
     expect(denied.headers.get("location")).toBe(
@@ -88,15 +88,15 @@ describe("GitHub App installation routes", () => {
 
   it("returns unauthenticated users to sign-in instead of a provider workspace error", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const { route } = handlers(async () => undefined);
+    const { route } = handlers(async () => {});
     const response = await route.start(
       new Request("https://builder.example/github/installations/start", {
-        method: "POST",
-        headers: {
-          Origin: "https://builder.example",
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
         body: "",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Origin: "https://builder.example",
+        },
+        method: "POST",
       }),
     );
 
@@ -112,12 +112,12 @@ describe("GitHub App installation routes", () => {
     });
     const response = await route.start(
       new Request("https://builder.example/github/installations/start", {
-        method: "POST",
-        headers: {
-          Origin: "https://builder.example",
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
         body: "",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Origin: "https://builder.example",
+        },
+        method: "POST",
       }),
     );
     expect(response.headers.get("location")).toBe(
@@ -136,7 +136,7 @@ describe("GitHub App installation routes", () => {
   });
 
   it("logs a sanitized token-exchange stage without exposing callback data", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const { route, complete } = handlers();
     complete.mockRejectedValueOnce(
       new GitHubInstallationAuthorizationError("token-exchange-non-2xx", "redirect_uri_mismatch"),
@@ -162,29 +162,29 @@ describe("GitHub App installation routes", () => {
     const resumeKey = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
     const response = await route.start(
       new Request("https://builder.example/github/installations/start", {
-        method: "POST",
+        body: new URLSearchParams({ resumeKey, returnTo: "/" }),
         headers: {
-          Origin: "https://builder.example",
           "Content-Type": "application/x-www-form-urlencoded",
+          Origin: "https://builder.example",
         },
-        body: new URLSearchParams({ returnTo: "/", resumeKey }),
+        method: "POST",
       }),
     );
     expect(response.status).toBe(303);
-    expect(begin).toHaveBeenCalledWith(authority, { returnTo: "/", resumeKey });
+    expect(begin).toHaveBeenCalledWith(authority, { resumeKey, returnTo: "/" });
     complete.mockResolvedValueOnce({
-      version: 1 as const,
+      accountType: "Organization" as const,
       action: "github-app.installation.complete" as const,
-      status: "bound" as const,
+      appliedAt: "2026-08-28T12:00:00.000Z",
       authorityDigest: "a".repeat(64),
-      stateDigest: "b".repeat(64),
       installationDigest: "c".repeat(64),
       providerUserDigest: "d".repeat(64),
-      accountType: "Organization" as const,
       repositorySelection: "selected" as const,
+      returnState: { resumeKey, returnTo: "/" },
       setupAction: "install" as const,
-      appliedAt: "2026-08-28T12:00:00.000Z",
-      returnState: { returnTo: "/", resumeKey },
+      stateDigest: "b".repeat(64),
+      status: "bound" as const,
+      version: 1 as const,
     });
     const callback = await route.callback(
       new Request("https://builder.example/github/installations/callback?state=opaque"),
@@ -197,21 +197,21 @@ describe("GitHub App installation routes", () => {
   it("redirects a connected repository-access continuation back to its parked Eve turn", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const complete = vi.fn(async () => ({
-      version: 1 as const,
+      accountType: "Organization" as const,
       action: "github-app.installation.complete" as const,
-      status: "bound" as const,
+      appliedAt: "2026-08-28T12:00:00.000Z",
       authorityDigest: "a".repeat(64),
-      stateDigest: "b".repeat(64),
       installationDigest: "c".repeat(64),
       providerUserDigest: "d".repeat(64),
-      accountType: "Organization" as const,
       repositorySelection: "selected" as const,
-      setupAction: "install" as const,
-      appliedAt: "2026-08-28T12:00:00.000Z",
       returnState: {
-        returnTo: "/" as const,
         resumeKey: "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0",
+        returnTo: "/" as const,
       },
+      setupAction: "install" as const,
+      stateDigest: "b".repeat(64),
+      status: "bound" as const,
+      version: 1 as const,
     }));
     const onConnected = vi.fn(
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -219,7 +219,6 @@ describe("GitHub App installation routes", () => {
         "https://builder.example/eve/v1/connections/github-repository-access/callback/attempt/token?provider=github&status=connected",
     );
     const route = createGitHubAppInstallationRouteHandlers({
-      origin: "https://builder.example",
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       authorityForRequest: async () => authority,
       authorization: {
@@ -227,6 +226,7 @@ describe("GitHub App installation routes", () => {
         complete,
       } as never,
       onConnected,
+      origin: "https://builder.example",
     });
     const response = await route.callback(
       new Request("https://builder.example/github/installations/callback?state=opaque"),

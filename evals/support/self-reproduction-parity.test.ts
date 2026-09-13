@@ -11,47 +11,53 @@ import { independenceAssertions } from "./self-reproduction-independence";
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function fixture(): ParityEvidence {
   return {
-    schemaVersion: parityVersion,
-    runId: "fixture-run",
-    producer: "evaluator",
-    fixtureVersion: 1,
-    reference: {
-      output: "available",
-      reason: "Reference checkout",
-      sourceRevision: "reference-revision",
-      observations: [],
-    },
     candidate: {
+      observations: [],
       output: "available",
       reason: "Exported candidate",
       sourceRevision: "candidate-revision",
-      observations: [],
     },
+    fixtureVersion: 1,
+    producer: "evaluator",
+    reference: {
+      observations: [],
+      output: "available",
+      reason: "Reference checkout",
+      sourceRevision: "reference-revision",
+    },
+    runId: "fixture-run",
+    schemaVersion: parityVersion,
   };
 }
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function observed(input: ParityEvidence, id: string) {
-  const row = requirements.find((item) => item.id === id)!;
+  const row = requirements.find((item) => item.id === id);
+  if (!row) {
+    throw new Error(`Unknown requirement: ${id}`);
+  }
   input.candidate.observations.push({
-    requirementId: id,
-    disposition: "observed",
-    reason: "Executed fixture",
-    method: row.kind === "framework" ? "source-and-browser" : "browser",
     artifacts: ["receipts/result.json"],
     assertions: row.assertions.map((assertion) => ({
+      artifacts: ["receipts/result.json"],
+      detail: "Observed expected transition",
       id: assertion,
       passed: true,
-      detail: "Observed expected transition",
-      artifacts: ["receipts/result.json"],
     })),
+    disposition: "observed",
+    method: row.kind === "framework" ? "source-and-browser" : "browser",
+    reason: "Executed fixture",
+    requirementId: id,
   });
-  return input.candidate.observations.at(-1)!;
+  const observation = input.candidate.observations.at(-1);
+  if (!observation) {
+    throw new Error("Expected an observation after adding one");
+  }
+  return observation;
 }
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function status(input: ParityEvidence, id: string, retained = true) {
-  return (await assessParity(input, () => Promise.resolve(retained))).rows.find(
-    (row) => row.side === "candidate" && row.requirementId === id,
-  )?.status;
+  const report = await assessParity(input, () => Promise.resolve(retained));
+  return report.rows.find((row) => row.side === "candidate" && row.requirementId === id)?.status;
 }
 
 describe("evaluator-owned parity assessment", () => {
@@ -67,7 +73,11 @@ describe("evaluator-owned parity assessment", () => {
     async (id) => {
       const input = fixture();
       const observation = observed(input, id);
-      observation.assertions.at(-1)!.passed = false;
+      const assertion = observation.assertions.at(-1);
+      if (!assertion) {
+        throw new Error("Expected an assertion after adding an observation");
+      }
+      assertion.passed = false;
       expect(await status(input, id)).toBe("failed");
     },
   );
@@ -118,33 +128,33 @@ describe("evaluator-owned parity assessment", () => {
     const input = fixture();
     const observation = observed(input, "independent-child");
     observation.assertions = independenceAssertions({
-      referenceOrigins: ["http://localhost:3000"],
-      browserOrigins: ["http://localhost:3001"],
-      serverOrigins: ["http://localhost:3000/api/create"],
-      referenceSourceExposed: false,
-      children: [{ artifactReadable: true, depth: 1 }],
       artifacts: ["receipts/egress.json"],
+      browserOrigins: ["http://localhost:3001"],
+      children: [{ artifactReadable: true, depth: 1 }],
+      referenceOrigins: ["http://localhost:3000"],
+      referenceSourceExposed: false,
+      serverOrigins: ["http://localhost:3000/api/create"],
     });
     expect(await status(input, "independent-child")).toBe("failed");
   });
   it("cannot prove independence without server visibility and generator-input provenance", async () => {
     const input = fixture();
     observed(input, "independent-child").assertions = independenceAssertions({
-      referenceOrigins: ["http://localhost:3000"],
+      artifacts: ["receipts/egress.json"],
       browserOrigins: ["http://localhost:3001"],
       children: [{ artifactReadable: true, depth: 1 }],
-      artifacts: ["receipts/egress.json"],
+      referenceOrigins: ["http://localhost:3000"],
     });
     expect(await status(input, "independent-child")).toBe("unassessed");
   });
   it("does not prove isolation against an unspecified reference backend", () => {
     const assertions = independenceAssertions({
-      referenceOrigins: [],
-      browserOrigins: [],
-      serverOrigins: [],
-      referenceSourceExposed: false,
-      children: [{ artifactReadable: true, depth: 1 }],
       artifacts: ["receipts/egress.json"],
+      browserOrigins: [],
+      children: [{ artifactReadable: true, depth: 1 }],
+      referenceOrigins: [],
+      referenceSourceExposed: false,
+      serverOrigins: [],
     });
     expect(assertions.some((item) => item.id === "no-reference-backend")).toBe(false);
   });

@@ -80,8 +80,8 @@ export const themePlugin = createAuthPlugin(
       useTheme:
         useTheme ??
         (() => ({
-          theme: base.theme,
           setTheme: base.setTheme,
+          theme: base.theme,
           themes: base.themes,
         })),
     };

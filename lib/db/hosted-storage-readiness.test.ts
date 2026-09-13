@@ -14,25 +14,25 @@ import {
 async function exactReadBack() {
   const contract = await loadHostedStorageContract(process.cwd());
   return {
-    transactionReadOnly: true as const,
-    migrations: contract.migrations.map(({ hash, createdAt }) => ({
-      hash,
-      createdAt,
-    })),
     columns: hostedStorageExpectedColumns.map(([table, column, type, notNull]) => ({
-      table,
       column,
-      type,
       notNull,
-    })),
-    indexes: hostedStorageExpectedIndexes.map(([table, name]) => ({
       table,
-      name,
+      type,
     })),
     constraints: hostedStorageExpectedConstraints.map(([table, name]) => ({
-      table,
       name,
+      table,
     })),
+    indexes: hostedStorageExpectedIndexes.map(([table, name]) => ({
+      name,
+      table,
+    })),
+    migrations: contract.migrations.map(({ hash, createdAt }) => ({
+      createdAt,
+      hash,
+    })),
+    transactionReadOnly: true as const,
   };
 }
 
@@ -48,7 +48,13 @@ describe("hosted storage read-only readiness", () => {
           if (leftTable !== rightTable) {
             return leftTable < rightTable ? -1 : 1;
           }
-          return leftName < rightName ? -1 : leftName > rightName ? 1 : 0;
+          if (leftName < rightName) {
+            return -1;
+          }
+          if (leftName > rightName) {
+            return 1;
+          }
+          return 0;
         }),
       );
     }
@@ -56,43 +62,43 @@ describe("hosted storage read-only readiness", () => {
 
   it("emits one sanitized receipt for the exact applied schema", async () => {
     const receipt = await verifyHostedStorageReadBack({
-      repositoryRoot: process.cwd(),
-      readBack: await exactReadBack(),
       observedAt: new Date("2026-08-27T02:00:00.000Z"),
+      readBack: await exactReadBack(),
+      repositoryRoot: process.cwd(),
     });
     expect(receipt).toMatchObject({
-      version: 1,
-      format: "autograph-hosted-storage-readiness-v1",
-      status: "schema-verified",
-      database: {
-        dialect: "postgresql",
-        verificationMode: "read-only-transaction",
-        maxConnections: 1,
-      },
-      migrations: {
-        count: 21,
-        exactOrder: true,
-        noPendingMigration: true,
-        additiveOnly: true,
-      },
       authority: {
-        tenantSessionPredicatesBound: true,
-        liveMembershipPredicateBound: true,
+        builderProvisionJournalCompareAndSetBound: true,
         githubJournalCompareAndSetBound: true,
         githubJournalExcludedFromTenantRetention: true,
-        builderProvisionJournalCompareAndSetBound: true,
         githubUserCredentialEnvelopeBound: true,
+        liveMembershipPredicateBound: true,
         oauthAuthorizationSchemaBound: true,
         sandboxExecutionLeaseBound: true,
-      },
-      rollback: {
-        destructiveMigrationDetected: false,
-        automaticDownMigrationAvailable: false,
-        providerRestorePointRequiredBeforeApply: true,
-        providerRestorePointStatus: "not-proven",
+        tenantSessionPredicatesBound: true,
       },
       containsSecrets: false,
       containsTenantIdentifiers: false,
+      database: {
+        dialect: "postgresql",
+        maxConnections: 1,
+        verificationMode: "read-only-transaction",
+      },
+      format: "autograph-hosted-storage-readiness-v1",
+      migrations: {
+        additiveOnly: true,
+        count: 21,
+        exactOrder: true,
+        noPendingMigration: true,
+      },
+      rollback: {
+        automaticDownMigrationAvailable: false,
+        destructiveMigrationDetected: false,
+        providerRestorePointRequiredBeforeApply: true,
+        providerRestorePointStatus: "not-proven",
+      },
+      status: "schema-verified",
+      version: 1,
     });
     expect(receipt.digest).toMatch(/^[0-9a-f]{64}$/u);
     const serialized = JSON.stringify(receipt);
@@ -104,26 +110,26 @@ describe("hosted storage read-only readiness", () => {
     const readBack = await exactReadBack();
     await expect(
       verifyHostedStorageReadBack({
-        repositoryRoot: process.cwd(),
+        observedAt: new Date(),
         readBack: {
           ...readBack,
           migrations: [...readBack.migrations].toReversed(),
         },
-        observedAt: new Date(),
+        repositoryRoot: process.cwd(),
       }),
     ).rejects.toThrow("migration order");
     await expect(
       verifyHostedStorageReadBack({
-        repositoryRoot: process.cwd(),
-        readBack: { ...readBack, indexes: readBack.indexes.slice(1) },
         observedAt: new Date(),
+        readBack: { ...readBack, indexes: readBack.indexes.slice(1) },
+        repositoryRoot: process.cwd(),
       }),
     ).rejects.toThrow("managed schema drifted");
     await expect(
       verifyHostedStorageReadBack({
-        repositoryRoot: process.cwd(),
-        readBack: { ...readBack, transactionReadOnly: false },
         observedAt: new Date(),
+        readBack: { ...readBack, transactionReadOnly: false },
+        repositoryRoot: process.cwd(),
       }),
     ).rejects.toThrow();
   });
@@ -151,9 +157,9 @@ describe("hosted storage read-only readiness", () => {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         verifyHostedStorageReadBack({
-          repositoryRoot: process.cwd(),
-          readBack: drifted,
           observedAt: new Date(),
+          readBack: drifted,
+          repositoryRoot: process.cwd(),
         }),
       ).rejects.toThrow("managed schema drifted");
     }

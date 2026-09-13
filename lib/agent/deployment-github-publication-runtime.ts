@@ -66,8 +66,8 @@ export function readDeploymentGitHubPublicationConfig(
     privateKey: environment.GITHUB_APP_PRIVATE_KEY,
   });
   return {
-    enabled: true,
     databaseUrl: parseHostedDatabaseUrl(environment.DATABASE_URL),
+    enabled: true,
     forwarderSubject,
     providerCredentials,
   };
@@ -100,6 +100,7 @@ export function createDeploymentGitHubPublicationRuntimeResolver(input: {
         }),
       ));
   return createHostedGitHubPublicationRuntimeResolver({
+    dependencies: input.resolverDependencies,
     enabled: true,
     openDatabase: () => openDatabase(config.databaseUrl),
     providerFactory: ({ installation }) =>
@@ -107,7 +108,6 @@ export function createDeploymentGitHubPublicationRuntimeResolver(input: {
         ...config.providerCredentials,
         installationId: installation.installationId,
       }),
-    dependencies: input.resolverDependencies,
   });
 }
 

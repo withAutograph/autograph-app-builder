@@ -9,6 +9,7 @@ vi.mock("flags", () => ({ encryptOverrides: vi.fn().mockResolvedValue("synthetic
 
 vi.mock("../../e2e/support/harness", async (importOriginal) => ({
   ...(await importOriginal<typeof Harness>()),
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- Vitest requires the resolved-value argument.
   resetApplicationState: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -19,9 +20,9 @@ describe("self-reproduction default workflow adapter", () => {
 
   it("binds each supplied runtime to evaluator-owned adapters", () => {
     const adapters = createWorkflowAdapters({
+      candidateUrl: "http://127.0.0.1:4173",
       outputRoot: "/tmp/evidence",
       referenceUrl: "https://localhost:3001",
-      candidateUrl: "http://127.0.0.1:4173",
     });
     expect(adapters.reference).toBeDefined();
     expect(adapters.candidate).toBeDefined();
@@ -34,8 +35,8 @@ describe("self-reproduction default workflow adapter", () => {
     });
     const prepared = await reference?.prepare({} as Page, "app-creation");
     expect(prepared).toEqual({
-      ready: false,
       disposition: "not-run",
+      ready: false,
       reason: "The checked-in reference adapter has no bounded real fixture for app-creation.",
     });
   });

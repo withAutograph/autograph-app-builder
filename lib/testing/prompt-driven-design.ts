@@ -5,10 +5,9 @@ export const renewalReviewDesignPrompt =
 
 export const renewalReviewUiPreview = {
   appId: "renewal-review",
-  routes: ["/"],
+  catalogGaps: [],
   files: [
     {
-      path: "src/routes/index.tsx",
       content: `import { useState } from "react";
 import { Button, PageHeader, PageTabs, StatusPill } from "@autograph/components";
 import { DataTableComposition } from "@autograph/compositions";
@@ -32,16 +31,38 @@ export default function RenewalReview() {
     <aside aria-label="Selected renewal"><h2>Northstar Health</h2><p>Usage is down 18% and the executive sponsor changed 12 days ago.</p><Button>Open account review</Button></aside>
   </main>;
 }`,
+      path: "src/routes/index.tsx",
     },
   ],
   manifest: {
-    version: 1,
-    screens: [
+    assumptions: [
       {
-        id: "renewal-queue",
-        title: "Renewal queue",
-        route: "/",
-        entry: "src/routes/index.tsx",
+        id: "queue-first",
+        routes: ["/"],
+        statement: "Customer-success managers start from a prioritized renewal queue.",
+      },
+    ],
+    decisions: [],
+    fixtureFacts: [
+      {
+        id: "renewal-window",
+        routes: ["/"],
+        statement: "The review window is 90 days and contains three renewals.",
+      },
+    ],
+    implementationNotes: [
+      {
+        productionMeaning:
+          "Navigates to evidence and recommended next actions for the selected account.",
+        routes: ["/"],
+        visibleElement: "Open account review",
+      },
+    ],
+    openQuestions: [
+      {
+        id: "intervention-owner",
+        routes: ["/"],
+        statement: "Should the first version assign an intervention owner?",
       },
     ],
     productionComponents: [
@@ -52,38 +73,17 @@ export default function RenewalReview() {
     ],
     productionCompositions: [{ name: "DataTableComposition", source: "@autograph/compositions" }],
     productionIcons: [],
-    fixtureFacts: [
+    screens: [
       {
-        id: "renewal-window",
-        statement: "The review window is 90 days and contains three renewals.",
-        routes: ["/"],
+        entry: "src/routes/index.tsx",
+        id: "renewal-queue",
+        route: "/",
+        title: "Renewal queue",
       },
     ],
-    decisions: [],
-    assumptions: [
-      {
-        id: "queue-first",
-        statement: "Customer-success managers start from a prioritized renewal queue.",
-        routes: ["/"],
-      },
-    ],
-    openQuestions: [
-      {
-        id: "intervention-owner",
-        statement: "Should the first version assign an intervention owner?",
-        routes: ["/"],
-      },
-    ],
-    implementationNotes: [
-      {
-        visibleElement: "Open account review",
-        productionMeaning:
-          "Navigates to evidence and recommended next actions for the selected account.",
-        routes: ["/"],
-      },
-    ],
+    version: 1,
   },
-  catalogGaps: [],
+  routes: ["/"],
 } satisfies UiPreviewInput;
 
 /** Browser transport derived from the React fixture. Visual semantics are

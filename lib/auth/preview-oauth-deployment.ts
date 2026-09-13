@@ -62,8 +62,8 @@ function getPreviewOAuthDeploymentRuntime(
   const organizationAuthority = createPostgresPreviewOrganizationAuthority(
     database,
     {
-      issuer: config.issuer,
       audience: config.resource,
+      issuer: config.issuer,
     },
     {
       isSelfServiceSignupEnabled: selfServiceSignupAuthority(
@@ -82,23 +82,23 @@ function getPreviewOAuthDeploymentRuntime(
         schema: databaseSchema,
         transaction: true,
       }),
-      membership: organizationAuthority,
-      userManagement: organizationAuthority,
       infrastructure: {
         environment: {
-          BETTER_AUTH_INFRASTRUCTURE: environment.BETTER_AUTH_INFRASTRUCTURE,
           BETTER_AUTH_API_KEY: environment.BETTER_AUTH_API_KEY,
+          BETTER_AUTH_INFRASTRUCTURE: environment.BETTER_AUTH_INFRASTRUCTURE,
         },
         organizationAuthorityReady:
           environment.BETTER_AUTH_ORGANIZATION_AUTHORITY_READY === "verified-v1",
       },
+      membership: organizationAuthority,
+      userManagement: organizationAuthority,
     });
   } catch (error) {
     throw new Error("preview-oauth-server", { cause: error });
   }
   deploymentRuntime = {
-    organizationAuthority,
     auth,
+    organizationAuthority,
     origin: new URL(config.resource).origin,
   };
   return deploymentRuntime;
@@ -177,8 +177,8 @@ export async function ensurePreviewSessionOrganization(input: {
   });
   if (current.session.activeOrganizationId !== ensured.organizationId) {
     const active = await input.auth.api.setActiveOrganization({
-      headers: input.headers,
       body: { organizationId: ensured.organizationId },
+      headers: input.headers,
     });
     if (active?.id !== ensured.organizationId) {
       throw new Error("Unable to activate the provisioned organization.");
@@ -186,8 +186,8 @@ export async function ensurePreviewSessionOrganization(input: {
   }
 
   return {
-    user: current.user,
     organization: ensured,
+    user: current.user,
   };
 }
 
@@ -223,10 +223,10 @@ export function createPreviewOAuthRequestHandler(input: {
         }
         console.info(
           JSON.stringify({
+            hasRedirect,
             level: "info",
             message: "preview_oauth_sign_in_response",
             status: response.status,
-            hasRedirect,
           }),
         );
       }
@@ -245,8 +245,8 @@ export function createPreviewOAuthRequestHandler(input: {
       return Response.json(
         { error: "preview_oauth_unavailable" },
         {
-          status: 503,
           headers: { "Cache-Control": "no-store" },
+          status: 503,
         },
       );
     }
@@ -264,8 +264,8 @@ export function createPreviewOAuthWellKnownHandler(input: {
     url.pathname = "/api/auth/.well-known/oauth-authorization-server";
     return requestHandler(
       new Request(url, {
-        method: "GET",
         headers: request.headers,
+        method: "GET",
       }),
     );
   };

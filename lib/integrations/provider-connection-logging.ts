@@ -27,14 +27,14 @@ export function logProviderConnectionFailure(input: {
 }) {
   console.error(
     JSON.stringify({
+      ...(input.diagnostic === undefined ? {} : { diagnostic: input.diagnostic }),
+      durationMs: Math.max(0, Date.now() - input.startedAt),
       level: "error",
       message: "provider_connection_failed",
-      provider: input.provider,
       phase: input.phase,
+      provider: input.provider,
       reason: input.reason,
-      ...(input.diagnostic === undefined ? {} : { diagnostic: input.diagnostic }),
       requestId: input.request.headers.get("x-vercel-id") ?? "unavailable",
-      durationMs: Math.max(0, Date.now() - input.startedAt),
     }),
   );
 }

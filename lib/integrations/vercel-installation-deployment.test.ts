@@ -4,19 +4,19 @@ import { createVercelInstallationDeploymentHandler } from "./vercel-installation
 
 describe("Vercel installation deployment route", () => {
   it("returns a visible configuration failure when provider activation is absent", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const handler = createVercelInstallationDeploymentHandler("start", {
       APP_ORIGIN: "https://builder.example",
     });
     const response = await handler(
       new Request("https://builder.example/vercel/installations/start", {
-        method: "POST",
+        body: "",
         headers: {
-          Origin: "https://builder.example",
           "Content-Type": "application/x-www-form-urlencoded",
+          Origin: "https://builder.example",
           "x-vercel-id": "iad1::safe-request-id",
         },
-        body: "",
+        method: "POST",
       }),
     );
 
@@ -30,18 +30,18 @@ describe("Vercel installation deployment route", () => {
   });
 
   it("rejects a cross-origin start before initializing provider state", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const handler = createVercelInstallationDeploymentHandler("start", {
       APP_ORIGIN: "https://builder.example",
     });
     const response = await handler(
       new Request("https://builder.example/vercel/installations/start", {
-        method: "POST",
-        headers: {
-          Origin: "https://attacker.example",
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
         body: "",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Origin: "https://attacker.example",
+        },
+        method: "POST",
       }),
     );
 

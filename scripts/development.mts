@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { lstat, mkdir, mkdtemp, realpath } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import nodePath from "node:path";
 
 import { createDevelopmentCycle } from "../lib/development/application-root";
 import {
@@ -39,11 +39,11 @@ import {
 import { loopbackDevelopmentOrigin } from "../lib/mcp/browser-preview";
 import { rotateLocalEveCycleBinding } from "../lib/eve/local-cycle-binding";
 
-const repositoryRoot = resolve(".");
+const repositoryRoot = nodePath.resolve(".");
 const developmentTools = {
-  node: HOSTED_NODE_VERSION,
   bun: HOSTED_BUN_VERSION,
   mise: HOSTED_MISE_VERSION,
+  node: HOSTED_NODE_VERSION,
   rust: HOSTED_RUST_VERSION,
 } as const;
 
@@ -64,7 +64,7 @@ function requiredEnvironment(name: string, description = "executable") {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function privateRoot(path: string) {
-  await mkdir(path, { recursive: true, mode: 0o700 });
+  await mkdir(path, { mode: 0o700, recursive: true });
   const canonical = await realpath(path);
   const info = await lstat(canonical);
   if (
@@ -87,28 +87,28 @@ function nextEnvironment(input: {
   runtimeHome: string;
 }) {
   return {
-    PATH: `${dirname(requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"))}:/usr/bin:/bin`,
-    HOME: input.runtimeHome,
-    TMPDIR: process.env.TMPDIR ?? "/tmp",
-    LANG: process.env.LANG ?? "C",
-    LC_ALL: process.env.LC_ALL ?? "C",
-    TZ: process.env.TZ ?? "UTC",
-    NODE_ENV: "development",
-    NEXT_TELEMETRY_DISABLED: "1",
-    APP_BUILDER_EXECUTION_MODE: "development",
+    AI_GATEWAY_API_KEY: "",
+    APP_BUILDER_DEVELOPMENT_ORIGIN: loopbackDevelopmentOrigin(input.nextPort),
     APP_BUILDER_EXECUTION_BUNDLE: "local-development",
-    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+    APP_BUILDER_EXECUTION_MODE: "development",
     APP_BUILDER_LOCAL_ADAPTER: "1",
     APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
     APP_BUILDER_LOCAL_EVE_CYCLE_FILE: input.cycleFile,
-    APP_BUILDER_DEVELOPMENT_ORIGIN: loopbackDevelopmentOrigin(input.nextPort),
-    EVE_HOSTED_ADAPTER: "0",
+    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
     EVE_AGENT_HOST: `http://127.0.0.1:${input.evePort}`,
+    EVE_HOSTED_ADAPTER: "0",
+    HOME: input.runtimeHome,
+    LANG: process.env.LANG ?? "C",
+    LC_ALL: process.env.LC_ALL ?? "C",
+    NEXT_TELEMETRY_DISABLED: "1",
+    NODE_ENV: "development" as const,
+    PATH: `${nodePath.dirname(requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"))}:/usr/bin:/bin`,
+    TMPDIR: process.env.TMPDIR ?? "/tmp",
+    TZ: process.env.TZ ?? "UTC",
     // Next's env loader preserves explicitly supplied values. Empty values
     // prevent .env.local from projecting provider credentials into this child.
     VERCEL_OIDC_TOKEN: "",
     VERCEL_TOKEN: "",
-    AI_GATEWAY_API_KEY: "",
   } satisfies NodeJS.ProcessEnv;
 }
 
@@ -121,19 +121,22 @@ function eveWrapperEnvironment(input: {
   runtimeHome: string;
   workflowData: string;
 }) {
-  return {
-    PATH: `${dirname(requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"))}:/usr/bin:/bin`,
+  const runtimeEnvironment = {
     HOME: input.runtimeHome,
-    TMPDIR: process.env.TMPDIR ?? "/tmp",
     LANG: process.env.LANG ?? "C",
     LC_ALL: process.env.LC_ALL ?? "C",
+    NODE_ENV: "production" as const,
+    PATH: `${nodePath.dirname(requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"))}:/usr/bin:/bin`,
+    TMPDIR: process.env.TMPDIR ?? "/tmp",
     TZ: process.env.TZ ?? "UTC",
-    NODE_ENV: "production",
+  };
+  return {
+    ...runtimeEnvironment,
     ...input.closed,
-    APP_BUILDER_DEV_RUNS_ROOT: input.runsRoot,
-    APP_BUILDER_DEV_SUPERVISOR_ROOT: input.supervisorRoot,
-    APP_BUILDER_DEV_RUNTIME_HOME: input.runtimeHome,
     APP_BUILDER_DEV_EVE_ROOT: input.applicationRoot,
+    APP_BUILDER_DEV_RUNS_ROOT: input.runsRoot,
+    APP_BUILDER_DEV_RUNTIME_HOME: input.runtimeHome,
+    APP_BUILDER_DEV_SUPERVISOR_ROOT: input.supervisorRoot,
     APP_BUILDER_EVE_PORT: new URL(input.closed.EVE_AGENT_HOST).port,
     // Eve's world-local queue must use the same explicitly selected loopback
     // endpoint as the public adapter.  Leaving this unset makes world-local
@@ -170,15 +173,15 @@ async function runEveCycle(input: {
     repositoryRoot,
     supervisorRoot: input.supervisorRoot,
   });
-  const activeRun = await realpath(await mkdtemp(join(input.runsRoot, "run-")));
+  const activeRun = await realpath(await mkdtemp(nodePath.join(input.runsRoot, "run-")));
   try {
     const snapshot = await createDevelopmentSnapshot({
-      sourceRoot: input.sourceRoot,
       runRoot: activeRun,
+      sourceRoot: input.sourceRoot,
     });
     const dependencyKey = await developmentDependencyKey({
-      sourceRoot: snapshot.root,
       platform: "linux/amd64",
+      sourceRoot: snapshot.root,
       tools: developmentTools,
     });
     const dependencyCacheHit = input.packageState.dependencyKey === dependencyKey;
@@ -198,75 +201,80 @@ async function runEveCycle(input: {
     }
     const runtimeFingerprint = await fingerprintDevelopmentRuntime(repositoryRoot);
     const packageFingerprint = await developmentPackageFingerprint({
-      repositoryRoot,
       port: input.nextPort,
+      repositoryRoot,
     });
     const packageReused =
       input.packageState.fingerprint === packageFingerprint &&
       input.packageState.result !== undefined;
     if (!packageReused) {
       input.packageState.result = await createDevelopmentPackage({
-        repositoryRoot,
         outputRoot: input.codexRoot,
         port: input.nextPort,
+        repositoryRoot,
       });
       input.packageState.fingerprint = packageFingerprint;
     }
     const packageResult = input.packageState.result;
     if (packageResult === undefined) throw new Error("Development package was unavailable.");
     const closed = developmentLaunchEnvironment({
-      sourceRoot: input.sourceRoot,
-      snapshotRoot: snapshot.root,
+      dependencyKey,
       destinationRoot: input.destinationRoot,
+      evePort: input.evePort,
+      fingerprint: snapshot.fingerprint,
+      snapshotRoot: snapshot.root,
+      sourceRoot: input.sourceRoot,
       sourceSha: snapshot.commit,
       sourceTree: snapshot.tree,
-      fingerprint: snapshot.fingerprint,
-      dependencyKey,
-      evePort: input.evePort,
     });
     const eve = spawn(
       requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
       [
         "--import",
         "tsx",
-        join(repositoryRoot, ".config/mise/scripts/repository/run-local-development-eve.mts"),
+        nodePath.join(
+          repositoryRoot,
+          ".config/mise/scripts/repository/run-local-development-eve.mts",
+        ),
       ],
       {
         cwd: repositoryRoot,
-        env: eveWrapperEnvironment({
-          closed,
-          applicationRoot: cycle.application.root,
-          runsRoot: input.runsRoot,
-          supervisorRoot: input.supervisorRoot,
-          runtimeHome: cycle.runtimeHome,
-          workflowData: cycle.workflowData,
-        }),
         // Eve starts a local server child of its own.  Put this wrapper and
         // every descendant in a separate process group so Ctrl+C cleans up
         // the whole Eve cycle instead of leaving its listener on the port.
         detached: process.platform !== "win32",
+        env: eveWrapperEnvironment({
+          applicationRoot: cycle.application.root,
+          closed,
+          runsRoot: input.runsRoot,
+          runtimeHome: cycle.runtimeHome,
+          supervisorRoot: input.supervisorRoot,
+          workflowData: cycle.workflowData,
+        }),
         stdio: "inherit",
       },
     );
     const watchers = new AbortController();
+    if (runtimeFingerprint === undefined)
+      throw new Error("Development runtime fingerprint is unavailable.");
     const sourceChanged = waitForDevelopmentSourceChange({
-      sourceRoot: input.sourceRoot,
       expectedFingerprint: snapshot.fingerprint,
       signal: watchers.signal,
+      sourceRoot: input.sourceRoot,
       // These derived promises are inputs to the shared race below.
       // oxlint-disable-next-line promise/prefer-await-to-then
-    }).then(() => ({ kind: "restart" as const, code: 0 }));
+    }).then(() => ({ code: 0, kind: "restart" as const }));
     const runtimeChanged = waitForDevelopmentRuntimeChange({
-      repositoryRoot,
       expectedFingerprint: runtimeFingerprint,
+      repositoryRoot,
       signal: watchers.signal,
       // oxlint-disable-next-line promise/prefer-await-to-then
-    }).then(() => ({ kind: "restart" as const, code: 0 }));
+    }).then(() => ({ code: 0, kind: "restart" as const }));
     // This derived promise is an input to the shared race below.
     // oxlint-disable-next-line promise/prefer-await-to-then
     const eveExited = developmentChildExit(eve).then((code) => ({
-      kind: "eve-exit" as const,
       code,
+      kind: "eve-exit" as const,
     }));
     const stopping = waitForDevelopmentShutdown(input.signal, input.shutdownExitCode);
     try {
@@ -274,7 +282,7 @@ async function runEveCycle(input: {
         waitForDevelopmentMcp({
           endpoint: packageResult.receipt.endpoint,
           signal: watchers.signal,
-        }).then(() => ({ kind: "ready" as const, code: 0 })),
+        }).then(() => ({ code: 0, kind: "ready" as const })),
         sourceChanged,
         runtimeChanged,
         eveExited,
@@ -291,14 +299,14 @@ async function runEveCycle(input: {
         });
       console.info(
         JSON.stringify({
-          event: "autograph.local.eve-cycle",
-          eveRestartMs: Math.round(performance.now() - cycleStartedAt),
-          persistentEveStateReused: false,
           cycleRoot: cycle.root,
-          packageReused,
-          snapshotDeltaFiles,
-          snapshotDeltaBytes,
           dependencyCache: dependencyCacheHit ? "hit" : "miss",
+          eveRestartMs: Math.round(performance.now() - cycleStartedAt),
+          event: "autograph.local.eve-cycle",
+          packageReused,
+          persistentEveStateReused: false,
+          snapshotDeltaBytes,
+          snapshotDeltaFiles,
         }),
       );
       input.packageState.dependencyKey = dependencyKey;
@@ -329,29 +337,29 @@ try {
   const args = parseDevelopmentArguments(process.argv.slice(2));
   const sourceRoot = await realpath(args.arrustedRoot);
   const artifactRoot = await privateRoot(
-    args.stateRoot ?? join(repositoryRoot, ".artifacts/development"),
+    args.stateRoot ?? nodePath.join(repositoryRoot, ".artifacts/development"),
   );
-  const stateRoot = await privateRoot(join(artifactRoot, "state"));
-  const cycleFile = join(stateRoot, "eve-cycle");
+  const stateRoot = await privateRoot(nodePath.join(artifactRoot, "state"));
+  const cycleFile = nodePath.join(stateRoot, "eve-cycle");
   await rotateLocalEveCycleBinding(cycleFile);
-  const cacheRoot = await privateRoot(join(artifactRoot, "cache"));
-  const runsRoot = await privateRoot(join(stateRoot, "runs"));
+  const cacheRoot = await privateRoot(nodePath.join(artifactRoot, "cache"));
+  const runsRoot = await privateRoot(nodePath.join(stateRoot, "runs"));
   // A completed invocation leaves its Eve runtime behind for diagnosis.  Give
   // every new `mise run dev` invocation a private supervisor root so starting
   // again never collides with that finished application tree. Each targeted
   // Eve restart receives a separate cycle root below this supervisor.
   const supervisorRoot = await privateRoot(
-    await realpath(await mkdtemp(join(runsRoot, "supervisor-"))),
+    await realpath(await mkdtemp(nodePath.join(runsRoot, "supervisor-"))),
   );
   const packageState: DevelopmentSupervisorState = {};
-  const nextHome = await privateRoot(join(stateRoot, "next-home"));
+  const nextHome = await privateRoot(nodePath.join(stateRoot, "next-home"));
   const destinationRoot = await privateRoot(
-    args.destinationRoot ?? join(artifactRoot, "destination"),
+    args.destinationRoot ?? nodePath.join(artifactRoot, "destination"),
   );
   next = spawn(
     requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
     [
-      join(repositoryRoot, "node_modules/next/dist/bin/next"),
+      nodePath.join(repositoryRoot, "node_modules/next/dist/bin/next"),
       "dev",
       "--hostname",
       "127.0.0.1",
@@ -372,25 +380,25 @@ try {
   // This derived promise is an input to the shared race below.
   // oxlint-disable-next-line promise/prefer-await-to-then
   const nextExited = developmentChildExit(next).then((code) => ({
-    kind: "next-exit" as const,
     code,
+    kind: "next-exit" as const,
   }));
   while (!shutdown.signal.aborted) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const outcome = await runEveCycle({
-      cycleFile,
-      sourceRoot,
-      runsRoot,
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      codexRoot: await privateRoot(join(cacheRoot, "codex")),
-      supervisorRoot,
-      packageState,
+      codexRoot: await privateRoot(nodePath.join(cacheRoot, "codex")),
+      cycleFile,
       destinationRoot,
-      nextPort: args.nextPort,
       evePort: args.evePort,
-      signal: shutdown.signal,
-      shutdownExitCode: shutdown.exitCode,
       nextExited,
+      nextPort: args.nextPort,
+      packageState,
+      runsRoot,
+      shutdownExitCode: shutdown.exitCode,
+      signal: shutdown.signal,
+      sourceRoot,
+      supervisorRoot,
     });
     if (outcome.kind === "next-exit" || outcome.kind === "eve-exit" || outcome.kind === "stop") {
       process.exitCode = outcome.code;

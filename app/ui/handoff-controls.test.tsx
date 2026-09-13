@@ -14,7 +14,7 @@ import {
 import { HandoffControls } from "./handoff-controls";
 import type { HandoffControlData } from "./handoff-controls";
 
-const navigation = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
+const navigation = vi.hoisted(() => ({ refresh: vi.fn(), replace: vi.fn() }));
 const renewal = vi.hoisted(() => ({ action: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
 vi.mock("@/app/actions/handoff-renewal", () => ({
@@ -24,13 +24,13 @@ vi.mock("@/app/actions/handoff-renewal", () => ({
 const id = "123e4567-e89b-42d3-a456-426614174001";
 const renewedId = "123e4567-e89b-42d3-a456-426614174002";
 const initial: HandoffControlData = {
-  version: 1,
-  handoffId: id,
-  expiresAt: "2030-01-01T00:00:00.000Z",
-  status: "prepared",
-  destination: "codex",
   cursorInstallReady: true,
+  destination: "codex",
+  expiresAt: "2030-01-01T00:00:00.000Z",
+  handoffId: id,
   mcpUrl: "https://builder.example/mcp",
+  status: "prepared",
+  version: 1,
 };
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -51,8 +51,9 @@ async function click(text: string) {
     (element) => element.textContent === text,
   );
   expect(button).toBeDefined();
+  if (!button) throw new Error(`Button not found: ${text}`);
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  await act(async () => button!.click());
+  await act(async () => button.click());
 }
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function visibility(value: "visible" | "hidden") {
@@ -81,12 +82,14 @@ describe("destination adapters", () => {
       const prompt = buildAppHandoffPrompt(id, destination);
       const url = new URL(buildAppHandoffUrl(destination, id));
       expect(url.searchParams.get(destination === "codex" ? "prompt" : "text")).toBe(prompt);
-      const payload = JSON.parse(
-        prompt.match(/autograph_start with (?<payload>\{[^\n]+\})\./u)![1]!,
-      );
+      const match = prompt.match(/autograph_start with (?<payload>\{[^\n]+\})\./u);
+      const serializedPayload = match?.groups?.payload;
+      expect(serializedPayload).toBeDefined();
+      if (!serializedPayload) throw new Error("Handoff prompt payload not found");
+      const payload = JSON.parse(serializedPayload);
       expect(payload).toEqual({
-        handoffId: id,
         clientRequestId: `web-handoff:${id}`,
+        handoffId: id,
       });
       expect(prompt).toContain("same Autograph account");
       expect(url.href.length).toBeLessThan(8000);
@@ -97,12 +100,18 @@ describe("destination adapters", () => {
   });
   it("emits only the canonical URL and public client ID when Cursor setup is ready", () => {
     expect(buildCursorInstallUrl(initial.mcpUrl, false)).toBeUndefined();
-    const url = new URL(buildCursorInstallUrl(initial.mcpUrl, true)!);
+    const installUrl = buildCursorInstallUrl(initial.mcpUrl, true);
+    expect(installUrl).toBeDefined();
+    if (!installUrl) throw new Error("Cursor install URL not found");
+    const url = new URL(installUrl);
     expect(url.protocol).toBe("cursor:");
     expect(url.pathname).toBe("/mcp/install");
-    expect(JSON.parse(atob(url.searchParams.get("config")!))).toEqual({
-      url: initial.mcpUrl,
+    const config = url.searchParams.get("config");
+    expect(config).toBeDefined();
+    if (!config) throw new Error("Cursor install config not found");
+    expect(JSON.parse(atob(config))).toEqual({
       auth: { CLIENT_ID: "autograph-cursor-desktop" },
+      url: initial.mcpUrl,
     });
     expect(() => buildCursorInstallUrl("https://user:secret@builder.example/mcp", true)).toThrow();
     expect(() => buildCursorInstallUrl("https://builder.example/mcp?token=secret", true)).toThrow();
@@ -127,7 +136,7 @@ describe("durable handoff controls", () => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning action mock
       renewal.action.mockImplementation(async () => {
         persisted = initial;
-        return { status: "renewed", handoff: initial };
+        return { handoff: initial, status: "renewed" };
       });
       const open = vi.spyOn(window, "open").mockReturnValue(null);
       const data = persisted;
@@ -137,7 +146,9 @@ describe("durable handoff controls", () => {
       const actionLabel = status === "expired" ? "Renew handoff" : "Open in Codex";
       const button = [...container.querySelectorAll("button")].find(
         (element) => element.textContent === actionLabel,
-      )!;
+      );
+      expect(button).toBeDefined();
+      if (!button) throw new Error(`Button not found: ${actionLabel}`);
       expect(button.disabled).toBe(true);
       expect(container.querySelector("input")?.matches(":disabled")).toBe(true);
       button.click();
@@ -229,8 +240,8 @@ describe("durable handoff controls", () => {
     vi.useFakeTimers();
     const data = {
       ...initial,
-      destination: "cursor" as const,
       cursorInstallReady: false,
+      destination: "cursor" as const,
     };
     const request = vi
       .spyOn(globalThis, "fetch")
@@ -254,8 +265,8 @@ describe("durable handoff controls", () => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       .mockImplementation(async () => Response.json(data));
     renewal.action.mockRejectedValueOnce(new Error("network unavailable")).mockResolvedValueOnce({
-      status: "renewed",
       handoff: { ...data, handoffId: renewedId },
+      status: "renewed",
     });
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     await render(data);
@@ -284,7 +295,7 @@ describe("durable handoff controls", () => {
     "reconciles a same-ID renewal immediately to %s without requiring a browser read",
     async (status) => {
       const expired = { ...initial, status: "expired" as const };
-      const renewed = { ...initial, status, expiresAt: "2031-01-01T00:00:00.000Z" };
+      const renewed = { ...initial, expiresAt: "2031-01-01T00:00:00.000Z", status };
       let persisted = false;
       const request = vi
         .spyOn(globalThis, "fetch")
@@ -294,8 +305,8 @@ describe("durable handoff controls", () => {
       renewal.action.mockImplementation(async () => {
         persisted = true;
         return {
-          status: "renewed",
           handoff: renewed,
+          status: "renewed",
         };
       });
       await render(expired);
@@ -323,9 +334,10 @@ describe("durable handoff controls", () => {
 
     expect(container.textContent).toContain("Sign in to continue your saved app");
     expect(container.querySelector("textarea")).toBeNull();
-    expect(new URL(container.querySelector("a")!.href).searchParams.get("callbackURL")).toBe(
-      `/handoff/${id}`,
-    );
+    const signIn = container.querySelector("a");
+    expect(signIn).toBeDefined();
+    if (!signIn) throw new Error("Sign-in link not found");
+    expect(new URL(signIn.href).searchParams.get("callbackURL")).toBe(`/handoff/${id}`);
   });
   it.each([401, 403, 404])(
     "preserves the continuation path and hides actions on access failure %s",
@@ -334,7 +346,9 @@ describe("durable handoff controls", () => {
         Response.json({ error: "unavailable" }, { status }),
       );
       await render();
-      const signIn = container.querySelector("a")!;
+      const signIn = container.querySelector("a");
+      expect(signIn).toBeDefined();
+      if (!signIn) throw new Error("Sign-in link not found");
       expect(new URL(signIn.href).searchParams.get("callbackURL")).toBe(`/handoff/${id}`);
       expect(container.querySelector("textarea")).toBeNull();
       expect(

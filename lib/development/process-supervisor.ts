@@ -1,5 +1,7 @@
 import type { ChildProcess } from "node:child_process";
+import { once } from "node:events";
 import { createConnection } from "node:net";
+import { setTimeout as delay } from "node:timers/promises";
 
 type DevelopmentSignal = "SIGINT" | "SIGTERM";
 
@@ -27,33 +29,26 @@ export function createDevelopmentShutdown(target: SignalTarget = process): Reado
   target.once("SIGINT", interrupt);
   target.once("SIGTERM", terminate);
   return {
-    signal: controller.signal,
-    exitCode: () => exitCode,
     dispose: () => {
       target.off("SIGINT", interrupt);
       target.off("SIGTERM", terminate);
     },
+    exitCode: () => exitCode,
+    signal: controller.signal,
   };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function waitForDevelopmentShutdown(signal: AbortSignal, exitCode: () => number) {
-  if (signal.aborted) return Promise.resolve({ kind: "stop" as const, code: exitCode() });
-  return new Promise<{ kind: "stop"; code: number }>((resolve) => {
-    signal.addEventListener("abort", () => resolve({ kind: "stop", code: exitCode() }), {
-      once: true,
-    });
-  });
+  if (signal.aborted) return Promise.resolve({ code: exitCode(), kind: "stop" as const });
+  return once(signal, "abort").then(() => ({ code: exitCode(), kind: "stop" as const }));
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentChildExit(child: ChildProcess) {
   if (child.exitCode !== null) return Promise.resolve(child.exitCode);
   if (child.signalCode !== null) return Promise.resolve(1);
-  return new Promise<number>((resolve, reject) => {
-    child.once("error", reject);
-    child.once("exit", (code, signal) => resolve(code ?? (signal ? 1 : 0)));
-  });
+  return once(child, "exit").then(([code, signal]) => (code as number | null) ?? (signal ? 1 : 0));
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -95,9 +90,7 @@ export async function stopDevelopmentChild(
     // detached listener on port 2000 even after the wrapper is gone. The group
     // still belongs solely to this development cycle, so force it only after
     // a window longer than Eve's own backstop.
-    await new Promise<void>((resolve) => {
-      setTimeout(() => resolve(), gracefulTimeoutMs);
-    });
+    await delay(gracefulTimeoutMs);
     signalProcessGroup("SIGKILL");
     if (!childExited) await exited;
     return;
@@ -106,9 +99,7 @@ export async function stopDevelopmentChild(
   if (childExited) return;
   const graceful = await Promise.race([
     exited.then(() => true),
-    new Promise<false>((resolve) => {
-      setTimeout(() => resolve(false), gracefulTimeoutMs);
-    }),
+    delay(gracefulTimeoutMs).then(() => false as const),
   ]);
   if (!graceful && child.exitCode === null && child.signalCode === null) {
     child.kill("SIGKILL");
@@ -125,21 +116,15 @@ export async function waitForDevelopmentPortRelease(
   const pollMs = options.pollMs ?? 50;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    const socket = createConnection({ host: "127.0.0.1", port });
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const occupied = await new Promise<boolean>((resolve) => {
-      const socket = createConnection({ host: "127.0.0.1", port });
-      const finish = (value: boolean) => {
-        socket.destroy();
-        resolve(value);
-      };
-      socket.once("connect", () => finish(true));
-      socket.once("error", () => finish(false));
-    });
+    const occupied = await once(socket, "connect")
+      .then(() => true)
+      .catch(() => false)
+      .finally(() => socket.destroy());
     if (!occupied) return;
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    await new Promise((resolve) => {
-      setTimeout(resolve, pollMs);
-    });
+    await delay(pollMs);
   }
   throw new Error(`Development Eve port ${port} was not released after shutdown.`);
 }

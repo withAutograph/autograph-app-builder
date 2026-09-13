@@ -48,12 +48,12 @@ function SessionAppContainer() {
   const refresh = useCallback(async () => {
     if (!result || !capabilities?.serverTools) return;
     const response = await app.callServerTool({
-      name: "autograph_get",
       arguments: {
-        sessionId: result.sessionId,
         cursor: result.cursor,
         limit: 100,
+        sessionId: result.sessionId,
       },
+      name: "autograph_get",
     });
     if (response.structuredContent) publishResult(response.structuredContent as EveSessionResult);
   }, [capabilities?.serverTools, result]);
@@ -69,8 +69,13 @@ function SessionAppContainer() {
       const now = Date.now();
       if (!automaticRefresh.current.claim(authorizationRequestKey, now)) return;
       // Refresh is deliberately fire-and-forget from the focus handler.
-      // oxlint-disable-next-line promise/prefer-await-to-then
-      void refresh().catch(() => undefined);
+      void (async () => {
+        try {
+          await refresh();
+        } catch (error) {
+          void error;
+        }
+      })();
     };
     window.addEventListener("focus", checkAfterReturn);
     document.addEventListener("visibilitychange", checkAfterReturn);
@@ -84,12 +89,12 @@ function SessionAppContainer() {
   async function respond(responses: SessionResponse[]) {
     if (!result || !capabilities?.serverTools) return;
     const response = await app.callServerTool({
-      name: "autograph_respond",
       arguments: {
-        sessionId: result.sessionId,
-        responses,
         clientRequestId: crypto.randomUUID(),
+        responses,
+        sessionId: result.sessionId,
       },
+      name: "autograph_respond",
     });
     if (response.isError) throw new Error("response rejected");
     if (response.structuredContent) publishResult(response.structuredContent as EveSessionResult);

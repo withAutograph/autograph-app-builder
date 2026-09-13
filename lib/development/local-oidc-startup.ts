@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { lstatSync, realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import path from "node:path";
 
 import {
   parseLinkedVercelProject,
@@ -40,14 +40,14 @@ function requiredEnvironmentValue(environment: NodeJS.ProcessEnv, name: "HOME" |
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function commandEnvironment(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
-    NODE_ENV: environment.NODE_ENV ?? "development",
+    CI: environment.CI ?? "",
     HOME: requiredEnvironmentValue(environment, "HOME"),
-    PATH: requiredEnvironmentValue(environment, "PATH"),
-    TMPDIR: environment.TMPDIR ?? "/tmp",
     LANG: environment.LANG ?? "C",
     LC_ALL: environment.LC_ALL ?? "C",
+    NODE_ENV: environment.NODE_ENV ?? "development",
+    PATH: requiredEnvironmentValue(environment, "PATH"),
+    TMPDIR: environment.TMPDIR ?? "/tmp",
     TZ: environment.TZ ?? "",
-    CI: environment.CI ?? "",
   };
 }
 
@@ -76,7 +76,7 @@ function sameProject(
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function readLinkedProject(repositoryRoot: string) {
   return parseLinkedVercelProject(
-    readOwnerBoundLocalFile(resolve(repositoryRoot, ".vercel/project.json"), {
+    readOwnerBoundLocalFile(path.resolve(repositoryRoot, ".vercel/project.json"), {
       confidential: false,
     }),
   );
@@ -94,12 +94,12 @@ function installedOidcNeedsRefresh(input: {
   }
   let environment: string;
   try {
-    environment = readOwnerBoundLocalFile(resolve(input.repositoryRoot, ".env.local"), {
+    environment = readOwnerBoundLocalFile(path.resolve(input.repositoryRoot, ".env.local"), {
       confidential: true,
     });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
-    const credentialPath = resolve(input.repositoryRoot, ".env.local");
+    const credentialPath = path.resolve(input.repositoryRoot, ".env.local");
     const stat = lstatSync(credentialPath);
     const ownerId = process.getuid?.();
     if (
@@ -120,10 +120,10 @@ function installedOidcNeedsRefresh(input: {
   }
   const token = parseLocalVercelOidcToken(environment);
   const claims = validateLocalVercelOidcClaims({
-    token,
-    project,
-    nowEpochSeconds: input.nowEpochSeconds,
     allowExpired: true,
+    nowEpochSeconds: input.nowEpochSeconds,
+    project,
+    token,
   });
   return claims.expiresAt <= input.nowEpochSeconds + MINIMUM_TOKEN_LIFETIME_SECONDS;
 }
@@ -143,10 +143,10 @@ function validateInstalledOidc(input: {
 export function runLocalOidcStartupCommand(invocation: LocalOidcStartupInvocation): void {
   const result = spawnSync(invocation.executable, [...invocation.args], {
     cwd: invocation.cwd,
-    env: invocation.environment,
     encoding: "utf-8",
-    stdio: ["ignore", "pipe", "pipe"],
+    env: invocation.environment,
     maxBuffer: 1024 * 1024,
+    stdio: ["ignore", "pipe", "pipe"],
   });
   if (result.error !== undefined || result.status !== 0) {
     throw new Error(`Local OIDC ${invocation.operation} failed.`);
@@ -166,7 +166,7 @@ export function ensureLocalDevelopmentOidc(input: {
   assertNoStaticCredential(environment);
 
   const repositoryRoot = realpathSync(input.repositoryRoot);
-  if (repositoryRoot !== resolve(input.repositoryRoot)) {
+  if (repositoryRoot !== path.resolve(input.repositoryRoot)) {
     throw new Error("Repository root was not canonical.");
   }
   const expectedProject = readLinkedProject(repositoryRoot);
@@ -174,9 +174,9 @@ export function ensureLocalDevelopmentOidc(input: {
 
   if (
     !installedOidcNeedsRefresh({
-      repositoryRoot,
-      nowEpochSeconds,
       expectedProject,
+      nowEpochSeconds,
+      repositoryRoot,
     })
   ) {
     return { refreshed: false };
@@ -186,17 +186,17 @@ export function ensureLocalDevelopmentOidc(input: {
   const childEnvironment = commandEnvironment(environment);
   try {
     runCommand({
-      executable: input.vercelExecutable,
       args: ["env", "pull", ".env.local", "--environment=development", "--yes"],
       cwd: repositoryRoot,
       environment: childEnvironment,
+      executable: input.vercelExecutable,
       operation: "development-env-pull",
     });
     runCommand({
-      executable: input.miseExecutable,
       args: ["run", "local:install-oidc"],
       cwd: repositoryRoot,
       environment: { ...childEnvironment, MISE_BIN_PATH: input.miseExecutable },
+      executable: input.miseExecutable,
       operation: "owner-bind",
     });
   } catch {
@@ -204,9 +204,9 @@ export function ensureLocalDevelopmentOidc(input: {
   }
 
   validateInstalledOidc({
-    repositoryRoot,
-    nowEpochSeconds,
     expectedProject,
+    nowEpochSeconds,
+    repositoryRoot,
   });
   return { refreshed: true };
 }

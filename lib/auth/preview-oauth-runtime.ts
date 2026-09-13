@@ -50,12 +50,12 @@ const databaseUrlSchema = z
 
 const vercelUserInfoSchema = z
   .object({
-    sub: z.string().min(1).max(512),
     email: z.string().email().max(320),
     email_verified: z.literal(true),
     name: z.string().min(1).max(512).optional(),
-    preferred_username: z.string().min(1).max(512).optional(),
     picture: z.string().url().max(2048).nullable().optional(),
+    preferred_username: z.string().min(1).max(512).optional(),
+    sub: z.string().min(1).max(512),
   })
   .passthrough();
 
@@ -65,10 +65,10 @@ const githubEmailsEndpoint = "https://api.github.com/user/emails";
 
 const githubProfileSchema = z
   .object({
+    avatar_url: z.string().url().max(2048).nullable().optional(),
     id: z.union([z.string().min(1), z.number().int().positive()]),
     login: z.string().min(1).max(256),
     name: z.string().min(1).max(512).nullable().optional(),
-    avatar_url: z.string().url().max(2048).nullable().optional(),
   })
   .passthrough();
 
@@ -129,14 +129,14 @@ export async function fetchVerifiedGitHubUserInfo(
   try {
     [profileResponse, emailsResponse] = await Promise.all([
       fetchImplementation(githubUserInfoEndpoint, {
-        headers,
         cache: "no-store",
+        headers,
         redirect: "error",
         signal: AbortSignal.timeout(5000),
       }),
       fetchImplementation(githubEmailsEndpoint, {
-        headers,
         cache: "no-store",
+        headers,
         redirect: "error",
         signal: AbortSignal.timeout(5000),
       }),
@@ -160,13 +160,13 @@ export async function fetchVerifiedGitHubUserInfo(
   if (!normalizedEmail) return null;
 
   return {
-    user: {
-      name: profile.data.name ?? profile.data.login,
-      email: normalizedEmail,
-      image: profile.data.avatar_url ?? undefined,
-      emailVerified: true,
-    },
     data: { ...profile.data, email: normalizedEmail },
+    user: {
+      email: normalizedEmail,
+      emailVerified: true,
+      image: profile.data.avatar_url ?? undefined,
+      name: profile.data.name ?? profile.data.login,
+    },
   };
 }
 
@@ -183,11 +183,6 @@ async function exchangeLocalEmulatedOAuthCode(input: {
   const response = await providerEmulationFetch(
     input.tokenUrl,
     {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
       body: new URLSearchParams({
         client_id: input.clientId,
         client_secret: input.clientSecret,
@@ -196,6 +191,11 @@ async function exchangeLocalEmulatedOAuthCode(input: {
         redirect_uri: input.redirectURI,
       }),
       cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      method: "POST",
       redirect: "error",
     },
     input.emulation,
@@ -212,10 +212,10 @@ async function exchangeLocalEmulatedOAuthCode(input: {
   }
   return {
     accessToken: body.access_token,
-    tokenType: typeof body.token_type === "string" ? body.token_type : undefined,
-    scopes: typeof body.scope === "string" ? body.scope.split(/\s+/u).filter(Boolean) : undefined,
     idToken: typeof body.id_token === "string" ? body.id_token : undefined,
     raw: body,
+    scopes: typeof body.scope === "string" ? body.scope.split(/\s+/u).filter(Boolean) : undefined,
+    tokenType: typeof body.token_type === "string" ? body.token_type : undefined,
   };
 }
 
@@ -245,9 +245,9 @@ export async function fetchVerifiedVercelUserInfo(
   let response: Response;
   try {
     response = await fetchImplementation(vercelUserInfoEndpoint, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${tokens.accessToken}` },
       cache: "no-store",
+      headers: { Authorization: `Bearer ${tokens.accessToken}` },
+      method: "POST",
       redirect: "error",
       signal: AbortSignal.timeout(5000),
     });
@@ -275,9 +275,9 @@ export async function fetchVerifiedVercelUserInfo(
 
   return {
     ...profile,
-    id: profile.sub,
     email,
     emailVerified: true,
+    id: profile.sub,
     image: profile.picture ?? undefined,
     name: profile.name ?? profile.preferred_username ?? email.slice(0, email.indexOf("@")),
   };
@@ -285,21 +285,12 @@ export async function fetchVerifiedVercelUserInfo(
 
 const previewOAuthRuntimeConfigSchema = z
   .object({
-    hostedAdapter: z.enum(["0", "1"]),
+    databaseUrl: databaseUrlSchema,
     environment: z.union([
       hostedDeploymentEnvironmentSchema,
       z.literal("local"),
       z.literal("development"),
     ]),
-    issuer: z.string().url(),
-    resource: z.string().url(),
-    trustedOrigins: z.array(z.string().url()).min(1).max(3).optional(),
-    secret: z
-      .string()
-      .min(32)
-      .max(512)
-      .refine((value) => !/[\0\r\n]/u.test(value)),
-    databaseUrl: databaseUrlSchema,
     githubClientId: z
       .string()
       .min(1)
@@ -312,6 +303,16 @@ const previewOAuthRuntimeConfigSchema = z
       .max(512)
       .refine((value) => !/[\0\r\n]/u.test(value))
       .optional(),
+    hostedAdapter: z.enum(["0", "1"]),
+    issuer: z.string().url(),
+    passkeyOnboarding: z.custom<PasskeyOnboardingConfig>().nullable(),
+    resource: z.string().url(),
+    secret: z
+      .string()
+      .min(32)
+      .max(512)
+      .refine((value) => !/[\0\r\n]/u.test(value)),
+    trustedOrigins: z.array(z.string().url()).min(1).max(3).optional(),
     vercelClientId: z
       .string()
       .min(1)
@@ -324,7 +325,6 @@ const previewOAuthRuntimeConfigSchema = z
       .max(512)
       .refine((value) => !/[\0\r\n]/u.test(value))
       .optional(),
-    passkeyOnboarding: z.custom<PasskeyOnboardingConfig>().nullable(),
   })
   .strict()
   .superRefine((config, context) => {
@@ -339,8 +339,8 @@ const previewOAuthRuntimeConfigSchema = z
     ) {
       context.addIssue({
         code: "custom",
-        path: ["issuer"],
         message: "Preview OAuth issuer must be the exact /api/auth URL.",
+        path: ["issuer"],
       });
     }
     if (
@@ -353,8 +353,8 @@ const previewOAuthRuntimeConfigSchema = z
     ) {
       context.addIssue({
         code: "custom",
-        path: ["resource"],
         message: "Preview OAuth resource must be same-origin exact /mcp.",
+        path: ["resource"],
       });
     }
     if (config.environment === "development") {
@@ -365,8 +365,8 @@ const previewOAuthRuntimeConfigSchema = z
       ) {
         context.addIssue({
           code: "custom",
-          path: ["environment"],
           message: "Development auth requires one loopback HTTP issuer.",
+          path: ["environment"],
         });
       }
       return;
@@ -378,8 +378,8 @@ const previewOAuthRuntimeConfigSchema = z
       if ((clientId === undefined) !== (clientSecret === undefined)) {
         context.addIssue({
           code: "custom",
-          path: [provider === "GitHub" ? "githubClientId" : "vercelClientId"],
           message: `${provider} auth requires both client ID and client secret.`,
+          path: [provider === "GitHub" ? "githubClientId" : "vercelClientId"],
         });
       }
     }
@@ -394,8 +394,8 @@ const previewOAuthRuntimeConfigSchema = z
     ) {
       context.addIssue({
         code: "custom",
-        path: ["hostedAdapter"],
         message: "Hosted auth requires the hosted adapter and HTTPS.",
+        path: ["hostedAdapter"],
       });
     }
     if (
@@ -407,9 +407,9 @@ const previewOAuthRuntimeConfigSchema = z
     ) {
       context.addIssue({
         code: "custom",
-        path: ["passkeyOnboarding"],
         message:
           "Hosted auth without passkey onboarding requires all GitHub and Vercel credentials.",
+        path: ["passkeyOnboarding"],
       });
     }
   });
@@ -423,12 +423,12 @@ export type PreviewOAuthRuntimeConfig = z.infer<typeof previewOAuthRuntimeConfig
  * retries instead of sharing the much smaller general Preview bucket.
  */
 export const previewOAuthRateLimit = {
-  enabled: true,
-  window: 60,
-  max: 60,
   customRules: {
-    "/oauth2/token": { window: 60, max: 180 },
+    "/oauth2/token": { max: 180, window: 60 },
   },
+  enabled: true,
+  max: 60,
+  window: 60,
 } satisfies NonNullable<BetterAuthOptions["rateLimit"]>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -436,14 +436,14 @@ export function authRateLimitForLocalEmulation(localEmulation: boolean) {
   return localEmulation
     ? {
         ...previewOAuthRateLimit,
-        max: 600,
         customRules: {
           ...previewOAuthRateLimit.customRules,
           // Better Auth applies a stricter three-request default to sign-in
           // routes. A complete emulated suite intentionally performs several
           // independent and returning OAuth sign-ins from one loopback client.
-          "/sign-in/social": { window: 60, max: 60 },
+          "/sign-in/social": { max: 60, window: 60 },
         },
+        max: 600,
       }
     : previewOAuthRateLimit;
 }
@@ -466,10 +466,15 @@ export function readPreviewOAuthRuntimeConfig(
         previewCanonicalOrigin: localEmulation.canonicalOrigin,
       });
       return previewOAuthRuntimeConfigSchema.parse({
-        hostedAdapter: resolvedEnvironment.EVE_HOSTED_ADAPTER,
+        databaseUrl: resolvedEnvironment.DATABASE_URL,
         environment: deploymentEnvironment,
+        githubClientId: resolvedEnvironment.GITHUB_CLIENT_ID,
+        githubClientSecret: resolvedEnvironment.GITHUB_CLIENT_SECRET,
+        hostedAdapter: resolvedEnvironment.EVE_HOSTED_ADAPTER,
         issuer: resolvedEnvironment.BETTER_AUTH_URL,
+        passkeyOnboarding,
         resource: resolvedEnvironment.MCP_RESOURCE_URL,
+        secret: resolvedEnvironment.BETTER_AUTH_SECRET,
         trustedOrigins: [
           ...new Set(
             [
@@ -478,13 +483,8 @@ export function readPreviewOAuthRuntimeConfig(
             ].filter((origin): origin is string => origin !== undefined),
           ),
         ],
-        secret: resolvedEnvironment.BETTER_AUTH_SECRET,
-        databaseUrl: resolvedEnvironment.DATABASE_URL,
-        githubClientId: resolvedEnvironment.GITHUB_CLIENT_ID,
-        githubClientSecret: resolvedEnvironment.GITHUB_CLIENT_SECRET,
         vercelClientId: resolvedEnvironment.VERCEL_AUTH_CLIENT_ID,
         vercelClientSecret: resolvedEnvironment.VERCEL_AUTH_CLIENT_SECRET,
-        passkeyOnboarding,
       });
     }
     const passkeyOnboarding = readPasskeyOnboardingConfig(environment);
@@ -493,18 +493,18 @@ export function readPreviewOAuthRuntimeConfig(
       throw new Error("Local authentication database port is invalid.");
     }
     return previewOAuthRuntimeConfigSchema.parse({
-      hostedAdapter: environment.EVE_HOSTED_ADAPTER,
-      environment: "local",
-      issuer: environment.BETTER_AUTH_URL,
-      resource: environment.MCP_RESOURCE_URL,
-      trustedOrigins: [localEmulation.canonicalOrigin],
-      secret: environment.BETTER_AUTH_SECRET,
       databaseUrl: `postgresql://postgres@127.0.0.1:${localDatabasePort}/autograph_app_builder`,
+      environment: "local",
       githubClientId: environment.GITHUB_CLIENT_ID,
       githubClientSecret: environment.GITHUB_CLIENT_SECRET,
+      hostedAdapter: environment.EVE_HOSTED_ADAPTER,
+      issuer: environment.BETTER_AUTH_URL,
+      passkeyOnboarding,
+      resource: environment.MCP_RESOURCE_URL,
+      secret: environment.BETTER_AUTH_SECRET,
+      trustedOrigins: [localEmulation.canonicalOrigin],
       vercelClientId: environment.VERCEL_AUTH_CLIENT_ID,
       vercelClientSecret: environment.VERCEL_AUTH_CLIENT_SECRET,
-      passkeyOnboarding,
     });
   }
   const passkeyOnboarding = readPasskeyOnboardingConfig(environment);
@@ -521,18 +521,18 @@ export function readPreviewOAuthRuntimeConfig(
   const resource =
     environment.MCP_RESOURCE_URL ?? (issuer ? `${new URL(issuer).origin}/mcp` : undefined);
   return previewOAuthRuntimeConfigSchema.parse({
-    hostedAdapter: localDevelopment ? "0" : environment.EVE_HOSTED_ADAPTER,
-    environment: deploymentEnvironment,
-    issuer,
-    resource,
-    trustedOrigins: resource ? [new URL(resource).origin] : [],
-    secret: environment.BETTER_AUTH_SECRET,
     databaseUrl: environment.DATABASE_URL,
+    environment: deploymentEnvironment,
     githubClientId: environment.GITHUB_CLIENT_ID,
     githubClientSecret: environment.GITHUB_CLIENT_SECRET,
+    hostedAdapter: localDevelopment ? "0" : environment.EVE_HOSTED_ADAPTER,
+    issuer,
+    passkeyOnboarding,
+    resource,
+    secret: environment.BETTER_AUTH_SECRET,
+    trustedOrigins: resource ? [new URL(resource).origin] : [],
     vercelClientId: environment.VERCEL_AUTH_CLIENT_ID,
     vercelClientSecret: environment.VERCEL_AUTH_CLIENT_SECRET,
-    passkeyOnboarding,
   });
 }
 
@@ -565,31 +565,27 @@ export function createPreviewOAuthServer(input: {
   const localProviderConfigs: GenericOAuthConfig[] = localEmulation
     ? [
         {
-          providerId: "github",
-          name: "GitHub",
+          accountIssuer: localEmulation.githubOrigin,
           authorizationUrl: `${resourceOrigin}/local-oauth/github/authorize`,
-          tokenUrl: `${localEmulation.githubOrigin}/login/oauth/access_token`,
           clientId: localGithubClientId,
           clientSecret: localGithubClientSecret,
-          tokenEndpointAuth: { method: "client_secret_post" },
-          accountIssuer: localEmulation.githubOrigin,
-          scopes: ["read:user", "user:email"],
+          disableSignUp: false,
           getToken: (data) =>
             exchangeLocalEmulatedOAuthCode({
-              tokenUrl: `${localEmulation.githubOrigin}/login/oauth/access_token`,
               clientId: localGithubClientId,
               clientSecret: localGithubClientSecret,
               code: data.code,
-              redirectURI: data.redirectURI,
               codeVerifier: data.codeVerifier,
               emulation: localEmulation,
+              redirectURI: data.redirectURI,
+              tokenUrl: `${localEmulation.githubOrigin}/login/oauth/access_token`,
             }),
           getUserInfo: async (tokens) => {
             const response = await providerEmulationFetch(
               `${localEmulation.githubOrigin}/user`,
               {
-                headers: { Authorization: `Bearer ${tokens.accessToken}` },
                 cache: "no-store",
+                headers: { Authorization: `Bearer ${tokens.accessToken}` },
                 redirect: "error",
               },
               localEmulation,
@@ -604,48 +600,45 @@ export function createPreviewOAuthServer(input: {
             };
             if (!profile.id || !profile.email) return null;
             return {
-              id: profile.id,
               email: profile.email,
               emailVerified: true,
-              name: profile.name ?? profile.login ?? profile.email,
+              id: profile.id,
               image: profile.avatar_url,
+              name: profile.name ?? profile.login ?? profile.email,
             };
           },
-          disableSignUp: false,
+          name: "GitHub",
           overrideUserInfo: false,
+          providerId: "github",
+          scopes: ["read:user", "user:email"],
+          tokenEndpointAuth: { method: "client_secret_post" },
+          tokenUrl: `${localEmulation.githubOrigin}/login/oauth/access_token`,
         },
         {
-          providerId: "vercel",
-          name: "Vercel",
+          accountIssuer: localEmulation.vercelOrigin,
+          accountSubject: ({ profile }) => String(profile.sub ?? ""),
           authorizationUrl: `${resourceOrigin}/local-oauth/vercel/authorize`,
-          tokenUrl: `${localEmulation.vercelOrigin}/login/oauth/token`,
           clientId: localVercelClientId,
           clientSecret: localVercelClientSecret,
-          tokenEndpointAuth: { method: "client_secret_post" },
-          accountIssuer: localEmulation.vercelOrigin,
-          scopes: ["openid", "email", "profile"],
-          // Emulate's Vercel authorization endpoint validates PKCE but its
-          // seeded installation flow does not retain the verifier. Keep this
-          // development-only client flow compatible with that emulator.
-          pkce: false,
+          disableSignUp: false,
           getToken: (data) =>
             exchangeLocalEmulatedOAuthCode({
-              tokenUrl: `${localEmulation.vercelOrigin}/login/oauth/token`,
               clientId: localVercelClientId,
               clientSecret: localVercelClientSecret,
               code: data.code,
-              redirectURI: data.redirectURI,
               codeVerifier: data.codeVerifier,
               emulation: localEmulation,
+              redirectURI: data.redirectURI,
+              tokenUrl: `${localEmulation.vercelOrigin}/login/oauth/token`,
             }),
           getUserInfo: async (tokens) => {
             const response = await providerEmulationFetch(
               `${localEmulation.vercelOrigin}/login/oauth/userinfo`,
               {
+                cache: "no-store",
                 headers: {
                   Authorization: `Bearer ${tokens.accessToken}`,
                 },
-                cache: "no-store",
                 redirect: "error",
               },
               localEmulation,
@@ -654,17 +647,24 @@ export function createPreviewOAuthServer(input: {
             const profile = vercelUserInfoSchema.safeParse(await response.json());
             if (!profile.success || !profile.data.email_verified) return null;
             return {
-              id: profile.data.sub,
-              sub: profile.data.sub,
               email: profile.data.email,
               emailVerified: true,
-              name: profile.data.name ?? profile.data.preferred_username ?? profile.data.email,
+              id: profile.data.sub,
               image: profile.data.picture ?? undefined,
+              name: profile.data.name ?? profile.data.preferred_username ?? profile.data.email,
+              sub: profile.data.sub,
             };
           },
-          accountSubject: ({ profile }) => String(profile.sub ?? ""),
-          disableSignUp: false,
+          name: "Vercel",
           overrideUserInfo: false,
+          // Emulate's Vercel authorization endpoint validates PKCE but its
+          // seeded installation flow does not retain the verifier. Keep this
+          // development-only client flow compatible with that emulator.
+          pkce: false,
+          providerId: "vercel",
+          scopes: ["openid", "email", "profile"],
+          tokenEndpointAuth: { method: "client_secret_post" },
+          tokenUrl: `${localEmulation.vercelOrigin}/login/oauth/token`,
         },
       ]
     : [];
@@ -675,70 +675,24 @@ export function createPreviewOAuthServer(input: {
     },
   );
   return betterAuth({
-    appName:
-      config.environment === "preview" ? "Autograph App Builder Preview" : "Autograph App Builder",
-    baseURL: resourceOrigin,
-    basePath: "/api/auth",
-    secret: config.secret,
-    database: input.database,
-    trustedOrigins: config.trustedOrigins ?? [resourceOrigin],
-    socialProviders: localEmulation
-      ? {}
-      : config.githubClientId && config.githubClientSecret
-        ? {
-            github: {
-              clientId: config.githubClientId,
-              clientSecret: config.githubClientSecret,
-              disableSignUp: false,
-              overrideUserInfoOnSignIn: false,
-              getUserInfo: async (tokens) => {
-                const result = await fetchVerifiedGitHubUserInfo(tokens);
-                if (result === null) return null;
-                return {
-                  ...result,
-                  // GitHub's own response contains additional profile fields
-                  // beyond the identity fields this boundary needs to inspect.
-                  data: result.data as GithubProfile,
-                };
-              },
-            },
-          }
-        : {},
-    user: {
-      validateUserInfo({ user, source }) {
-        const providerId = source.oauth?.providerId;
-        if (providerId === undefined) return;
-        if (
-          !new Set(["github", "vercel"]).has(providerId) ||
-          user.emailVerified !== true ||
-          typeof user.email !== "string" ||
-          user.email.trim().length === 0
-        ) {
-          return {
-            error: "verified_provider_identity_required",
-            errorDescription: "Use GitHub or Vercel with a verified email address.",
-          };
-        }
-      },
-    },
     account: {
       accountLinking: {
-        enabled: true,
-        disableImplicitLinking: false,
         allowDifferentEmails: true,
+        disableImplicitLinking: false,
+        enabled: true,
         updateUserInfoOnLink: false,
       },
     },
-    session: {
-      expiresIn: 60 * 60 * 8,
-      updateAge: 60 * 60,
-    },
-    rateLimit: authRateLimitForLocalEmulation(localEmulation !== undefined),
     advanced: {
       cookiePrefix:
         config.environment === "preview" ? "autograph_preview" : "autograph_app_builder",
       useSecureCookies: config.environment !== "development",
     },
+    appName:
+      config.environment === "preview" ? "Autograph App Builder Preview" : "Autograph App Builder",
+    basePath: "/api/auth",
+    baseURL: resourceOrigin,
+    database: input.database,
     plugins: [
       ...previewUserManagementPlugins(
         input.userManagement ?? {
@@ -762,16 +716,16 @@ export function createPreviewOAuthServer(input: {
         ? []
         : [
             jwt({
+              disableSettingJwtHeader: true,
               jwks: {
-                keyPairConfig: { alg: "ES256" },
                 jwksPath: "/jwks",
+                keyPairConfig: { alg: "ES256" },
               },
               jwt: {
-                issuer: config.issuer,
                 audience: config.resource,
                 expirationTime: "5m",
+                issuer: config.issuer,
               },
-              disableSettingJwtHeader: true,
             }),
             mcp(
               buildPreviewMcpOAuthOptions({
@@ -785,31 +739,77 @@ export function createPreviewOAuthServer(input: {
                   input.fetchClientMetadata ?? fetchPreviewClientMetadataResource,
               }),
             ),
-            ...(localEmulation
-              ? [genericOAuth({ config: localProviderConfigs })]
-              : config.vercelClientId && config.vercelClientSecret
-                ? [
-                    genericOAuth({
-                      config: [
-                        {
-                          providerId: "vercel",
-                          name: "Vercel",
-                          discoveryUrl: "https://vercel.com/.well-known/openid-configuration",
-                          requireIdTokenVerification: true,
-                          clientId: config.vercelClientId,
-                          clientSecret: config.vercelClientSecret,
-                          tokenEndpointAuth: { method: "client_secret_post" },
-                          scopes: ["openid", "email", "profile"],
-                          getUserInfo: fetchVerifiedVercelUserInfo,
-                          disableSignUp: false,
-                          overrideUserInfo: false,
-                        },
-                      ],
-                    }),
-                  ]
-                : []),
+            ...(() => {
+              if (localEmulation) return [genericOAuth({ config: localProviderConfigs })];
+              if (!config.vercelClientId || !config.vercelClientSecret) return [];
+              return [
+                genericOAuth({
+                  config: [
+                    {
+                      clientId: config.vercelClientId,
+                      clientSecret: config.vercelClientSecret,
+                      disableSignUp: false,
+                      discoveryUrl: "https://vercel.com/.well-known/openid-configuration",
+                      getUserInfo: fetchVerifiedVercelUserInfo,
+                      name: "Vercel",
+                      overrideUserInfo: false,
+                      providerId: "vercel",
+                      requireIdTokenVerification: true,
+                      scopes: ["openid", "email", "profile"],
+                      tokenEndpointAuth: { method: "client_secret_post" },
+                    },
+                  ],
+                }),
+              ];
+            })(),
           ]),
       nextCookies(),
     ],
+    rateLimit: authRateLimitForLocalEmulation(localEmulation !== undefined),
+    secret: config.secret,
+    session: {
+      expiresIn: 60 * 60 * 8,
+      updateAge: 60 * 60,
+    },
+    socialProviders: (() => {
+      if (localEmulation) return {};
+      if (!config.githubClientId || !config.githubClientSecret) return {};
+      return {
+        github: {
+          clientId: config.githubClientId,
+          clientSecret: config.githubClientSecret,
+          disableSignUp: false,
+          getUserInfo: async (tokens) => {
+            const result = await fetchVerifiedGitHubUserInfo(tokens);
+            if (result === null) return null;
+            return {
+              ...result,
+              // GitHub's own response contains additional profile fields
+              // beyond the identity fields this boundary needs to inspect.
+              data: result.data as GithubProfile,
+            };
+          },
+          overrideUserInfoOnSignIn: false,
+        },
+      };
+    })(),
+    trustedOrigins: config.trustedOrigins ?? [resourceOrigin],
+    user: {
+      validateUserInfo({ user, source }) {
+        const providerId = source.oauth?.providerId;
+        if (providerId === undefined) return;
+        if (
+          !new Set(["github", "vercel"]).has(providerId) ||
+          user.emailVerified !== true ||
+          typeof user.email !== "string" ||
+          user.email.trim().length === 0
+        ) {
+          return {
+            error: "verified_provider_identity_required",
+            errorDescription: "Use GitHub or Vercel with a verified email address.",
+          };
+        }
+      },
+    },
   });
 }

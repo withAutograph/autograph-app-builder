@@ -30,7 +30,50 @@ storybookQueryClient.setQueryDefaults(authQueryKeys.session, {
 });
 
 const preview: Preview = {
+  afterEach: ({ canvasElement, title }) => {
+    if (!usesCreateAppShell(title)) return;
+
+    expect(canvasElement.querySelector("[data-create-app-story-environment]")).toBeInTheDocument();
+  },
+  decorators: [
+    (Story, context) => (
+      <AppShell>
+        <AuthRouteProvider
+          githubAuthEnabled={false}
+          vercelAuthEnabled={false}
+          passkeysEnabled={false}
+        >
+          {usesCreateAppShell(context.title) ? (
+            <div className={appStyles.appShell} data-create-app-story-environment>
+              <Story />
+            </div>
+          ) : (
+            <Story />
+          )}
+        </AuthRouteProvider>
+      </AppShell>
+    ),
+  ],
+  loaders: [
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
+    async ({ parameters }) => {
+      storybookQueryClient.setQueryData(
+        authQueryKeys.session,
+        (parameters.authSession ?? null) as SessionData<typeof authClient>,
+      );
+
+      return {};
+    },
+  ],
   parameters: {
+    authSession: null,
+    controls: {
+      matchers: {
+        color: /(?<property>background|color)$/iu,
+        date: /Date$/iu,
+      },
+    },
+    nextjs: { appDirectory: true },
     options: {
       storySort: {
         order: [
@@ -65,49 +108,6 @@ const preview: Preview = {
         ],
       },
     },
-    authSession: null,
-    nextjs: { appDirectory: true },
-    controls: {
-      matchers: {
-        color: /(?<property>background|color)$/iu,
-        date: /Date$/iu,
-      },
-    },
-  },
-  loaders: [
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test callback
-    async ({ parameters }) => {
-      storybookQueryClient.setQueryData(
-        authQueryKeys.session,
-        (parameters.authSession ?? null) as SessionData<typeof authClient>,
-      );
-
-      return {};
-    },
-  ],
-  decorators: [
-    (Story, context) => (
-      <AppShell>
-        <AuthRouteProvider
-          githubAuthEnabled={false}
-          vercelAuthEnabled={false}
-          passkeysEnabled={false}
-        >
-          {usesCreateAppShell(context.title) ? (
-            <div className={appStyles.appShell} data-create-app-story-environment>
-              <Story />
-            </div>
-          ) : (
-            <Story />
-          )}
-        </AuthRouteProvider>
-      </AppShell>
-    ),
-  ],
-  afterEach: ({ canvasElement, title }) => {
-    if (!usesCreateAppShell(title)) return;
-
-    expect(canvasElement.querySelector("[data-create-app-story-environment]")).toBeInTheDocument();
   },
 };
 

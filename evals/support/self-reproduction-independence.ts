@@ -10,10 +10,10 @@ export function independenceAssertions(input: {
   artifacts: string[];
 }) {
   const assertion = (id: string, passed: boolean, detail: string) => ({
+    artifacts: input.artifacts,
+    detail,
     id,
     passed,
-    detail,
-    artifacts: input.artifacts,
   });
   const reference = new Set(input.referenceOrigins.map((origin) => new URL(origin).origin));
   const requested = [...input.browserOrigins, ...(input.serverOrigins ?? [])].map(
@@ -23,7 +23,7 @@ export function independenceAssertions(input: {
   return [
     assertion(
       "child-artifact-readable",
-      input.children.length === 1 && input.children[0]!.artifactReadable,
+      input.children.length === 1 && input.children.every((child) => child.artifactReadable),
       "Read the exported child artifact independently.",
     ),
     assertion(

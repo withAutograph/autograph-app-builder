@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -25,22 +25,22 @@ const now = 2_000_000_000;
 const realPnpmStoreEntry =
   "eve@0.44.4_@vercel+functions@3.9.5_ws@8.21.3__ai@7.0.79_zod@4.4.3__dotenv@17.4.2_drizzl_1358a224edaa8ba31fee79f308c3b7e1";
 const project = {
-  projectId: "prj_builder",
   orgId: "team_autographing",
+  projectId: "prj_builder",
   projectName: "autograph-app-builder",
 };
 const claims = {
-  iss: "https://oidc.vercel.com/autographing",
   aud: "https://vercel.com/autographing",
-  sub: "owner:autographing:project:autograph-app-builder:environment:development",
-  iat: now - 60,
-  nbf: now - 60,
+  environment: "development",
   exp: now + 3600,
+  iat: now - 60,
+  iss: "https://oidc.vercel.com/autographing",
+  nbf: now - 60,
   owner: "autographing",
   owner_id: project.orgId,
   project: project.projectName,
   project_id: project.projectId,
-  environment: "development",
+  sub: "owner:autographing:project:autograph-app-builder:environment:development",
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -57,18 +57,18 @@ describe("local Vercel OIDC binding", () => {
     const value = token();
     expect(
       validateLocalVercelOidcToken({
-        token: value,
-        project,
         nowEpochSeconds: now,
+        project,
+        token: value,
       }),
     ).toBe(value);
     expect(parseLinkedVercelProject(JSON.stringify(project))).toEqual(project);
     expect(parseLocalVercelOidcToken(`VERCEL_OIDC_TOKEN="${value}"\n`)).toBe(value);
     const receipt = JSON.stringify(
       validateLocalVercelOidcClaims({
-        token: value,
-        project,
         nowEpochSeconds: now,
+        project,
+        token: value,
       }),
     );
     for (const sensitive of [
@@ -83,21 +83,21 @@ describe("local Vercel OIDC binding", () => {
     }
     expect(JSON.parse(receipt)).toMatchObject({
       audienceBound: true,
-      subjectBound: true,
+      environment: "development",
       ownerBound: true,
       projectBound: true,
-      environment: "development",
+      subjectBound: true,
     });
   });
 
   it("does not require an unrelated user identity claim", () => {
     expect(
       validateLocalVercelOidcClaims({
-        token: token(),
-        project,
         nowEpochSeconds: now,
+        project,
+        token: token(),
       }),
-    ).toMatchObject({ projectBound: true, environment: "development" });
+    ).toMatchObject({ environment: "development", projectBound: true });
   });
 
   it.each([
@@ -112,9 +112,9 @@ describe("local Vercel OIDC binding", () => {
   ])("rejects a %s mismatch", (_name, override) => {
     expect(() =>
       validateLocalVercelOidcToken({
-        token: token({ ...claims, ...override }),
-        project,
         nowEpochSeconds: now,
+        project,
+        token: token({ ...claims, ...override }),
       }),
     ).toThrow();
   });
@@ -126,17 +126,17 @@ describe("local Vercel OIDC binding", () => {
     ).toThrow();
     expect(() =>
       validateLocalVercelOidcToken({
-        token: "header.not-json.signature",
-        project,
         nowEpochSeconds: now,
+        project,
+        token: "header.not-json.signature",
       }),
     ).toThrow("malformed");
   });
 
   it("rejects symlinked and permissive local credential inputs", () => {
-    const root = mkdtempSync(join(tmpdir(), "local-oidc-input-"));
-    const secret = join(root, "secret");
-    const linked = join(root, "linked");
+    const root = mkdtempSync(path.join(tmpdir(), "local-oidc-input-"));
+    const secret = path.join(root, "secret");
+    const linked = path.join(root, "linked");
     writeFileSync(secret, "value", { mode: 0o600 });
     expect(readOwnerBoundLocalFile(secret, { confidential: true })).toBe("value");
     chmodSync(secret, 0o644);
@@ -156,22 +156,25 @@ function installedEveFixture(
     bin?: string;
   } = {},
 ): string {
-  const root = mkdtempSync(join(tmpdir(), "installed-eve-"));
-  const packageRoot = join(root, `node_modules/.pnpm/${realPnpmStoreEntry}/node_modules/eve`);
-  mkdirSync(join(packageRoot, "bin"), { recursive: true });
-  writeFileSync(join(root, "package.json"), JSON.stringify({ dependencies: { eve: "0.44.4" } }));
+  const root = mkdtempSync(path.join(tmpdir(), "installed-eve-"));
+  const packageRoot = path.join(root, `node_modules/.pnpm/${realPnpmStoreEntry}/node_modules/eve`);
+  mkdirSync(path.join(packageRoot, "bin"), { recursive: true });
   writeFileSync(
-    join(packageRoot, "package.json"),
+    path.join(root, "package.json"),
+    JSON.stringify({ dependencies: { eve: "0.44.4" } }),
+  );
+  writeFileSync(
+    path.join(packageRoot, "package.json"),
     JSON.stringify({
+      bin: { eve: input.bin ?? "./bin/eve.js" },
       name: input.name ?? "eve",
       version: input.version ?? "0.44.4",
-      bin: { eve: input.bin ?? "./bin/eve.js" },
     }),
   );
-  writeFileSync(join(packageRoot, "bin/eve.js"), "#!/usr/bin/env node\n", {
+  writeFileSync(path.join(packageRoot, "bin/eve.js"), "#!/usr/bin/env node\n", {
     mode: 0o755,
   });
-  symlinkSync(`.pnpm/${realPnpmStoreEntry}/node_modules/eve`, join(root, "node_modules/eve"));
+  symlinkSync(`.pnpm/${realPnpmStoreEntry}/node_modules/eve`, path.join(root, "node_modules/eve"));
   return realpathSync(root);
 }
 
@@ -179,7 +182,7 @@ describe("installed Eve command identity", () => {
   it("accepts the real relative pnpm layout and exact 0.44.4 bin contract", () => {
     const root = installedEveFixture();
     expect(resolveInstalledEveCli(root)).toBe(
-      join(root, `node_modules/.pnpm/${realPnpmStoreEntry}/node_modules/eve/bin/eve.js`),
+      path.join(root, `node_modules/.pnpm/${realPnpmStoreEntry}/node_modules/eve/bin/eve.js`),
     );
   });
 
@@ -195,42 +198,50 @@ describe("installed Eve command identity", () => {
     ["absolute link", "/tmp/external-eve"],
     ["parent traversal", "../external-eve"],
   ])("rejects an %s", (_name, target) => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), "installed-eve-link-")));
-    mkdirSync(join(root, "node_modules/.pnpm"), { recursive: true });
-    writeFileSync(join(root, "package.json"), JSON.stringify({ dependencies: { eve: "0.44.4" } }));
-    symlinkSync(target, join(root, "node_modules/eve"));
+    const root = realpathSync(mkdtempSync(path.join(tmpdir(), "installed-eve-link-")));
+    mkdirSync(path.join(root, "node_modules/.pnpm"), { recursive: true });
+    writeFileSync(
+      path.join(root, "package.json"),
+      JSON.stringify({ dependencies: { eve: "0.44.4" } }),
+    );
+    symlinkSync(target, path.join(root, "node_modules/eve"));
     expect(() => resolveInstalledEveCli(root)).toThrow("link");
   });
 
   it("rejects a valid-looking pnpm link whose store entry resolves outside", () => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), "installed-eve-outside-")));
-    const outsideStore = realpathSync(mkdtempSync(join(tmpdir(), "installed-eve-outside-store-")));
+    const root = realpathSync(mkdtempSync(path.join(tmpdir(), "installed-eve-outside-")));
+    const outsideStore = realpathSync(
+      mkdtempSync(path.join(tmpdir(), "installed-eve-outside-store-")),
+    );
     const storeEntry = "eve@0.44.4_peer";
-    mkdirSync(join(root, "node_modules/.pnpm"), { recursive: true });
-    mkdirSync(join(outsideStore, "node_modules/eve"), { recursive: true });
-    writeFileSync(join(root, "package.json"), JSON.stringify({ dependencies: { eve: "0.44.4" } }));
-    symlinkSync(outsideStore, join(root, "node_modules/.pnpm", storeEntry));
-    symlinkSync(`.pnpm/${storeEntry}/node_modules/eve`, join(root, "node_modules/eve"));
+    mkdirSync(path.join(root, "node_modules/.pnpm"), { recursive: true });
+    mkdirSync(path.join(outsideStore, "node_modules/eve"), { recursive: true });
+    writeFileSync(
+      path.join(root, "package.json"),
+      JSON.stringify({ dependencies: { eve: "0.44.4" } }),
+    );
+    symlinkSync(outsideStore, path.join(root, "node_modules/.pnpm", storeEntry));
+    symlinkSync(`.pnpm/${storeEntry}/node_modules/eve`, path.join(root, "node_modules/eve"));
     expect(() => resolveInstalledEveCli(root)).toThrow("outside");
   });
 
   it("rejects a chained pnpm store root", () => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), "installed-eve-chain-")));
-    const external = realpathSync(mkdtempSync(join(tmpdir(), "installed-eve-external-")));
-    mkdirSync(join(root, "node_modules"));
-    symlinkSync(external, join(root, "node_modules/.pnpm"));
-    symlinkSync(".pnpm/eve@0.44.4_peer/node_modules/eve", join(root, "node_modules/eve"));
+    const root = realpathSync(mkdtempSync(path.join(tmpdir(), "installed-eve-chain-")));
+    const external = realpathSync(mkdtempSync(path.join(tmpdir(), "installed-eve-external-")));
+    mkdirSync(path.join(root, "node_modules"));
+    symlinkSync(external, path.join(root, "node_modules/.pnpm"));
+    symlinkSync(".pnpm/eve@0.44.4_peer/node_modules/eve", path.join(root, "node_modules/eve"));
     expect(() => resolveInstalledEveCli(root)).toThrow("owner-bound");
   });
 
   it("rejects a wrong 0.44.x pnpm version", () => {
     const wrongVersion = installedEveFixture();
-    const link = join(wrongVersion, "node_modules/eve");
+    const link = path.join(wrongVersion, "node_modules/eve");
     const wrongTarget = ".pnpm/eve@0.44.3_peer/node_modules/eve";
-    const wrongRoot = join(wrongVersion, "node_modules", wrongTarget);
-    mkdirSync(join(wrongRoot, "bin"), { recursive: true });
-    writeFileSync(join(wrongRoot, "package.json"), "{}");
-    writeFileSync(join(wrongRoot, "bin/eve.js"), "", { mode: 0o755 });
+    const wrongRoot = path.join(wrongVersion, "node_modules", wrongTarget);
+    mkdirSync(path.join(wrongRoot, "bin"), { recursive: true });
+    writeFileSync(path.join(wrongRoot, "package.json"), "{}");
+    writeFileSync(path.join(wrongRoot, "bin/eve.js"), "", { mode: 0o755 });
     unlinkSync(link);
     symlinkSync(wrongTarget, link);
     expect(() => resolveInstalledEveCli(wrongVersion)).toThrow("link");
@@ -244,7 +255,7 @@ describe("installed Eve command identity", () => {
     ["package", `node_modules/.pnpm/${realPnpmStoreEntry}/node_modules/eve`],
   ])("rejects a permissive %s directory", (_name, relativePath) => {
     const permissive = installedEveFixture();
-    chmodSync(join(permissive, relativePath), 0o777);
+    chmodSync(path.join(permissive, relativePath), 0o777);
     expect(() => resolveInstalledEveCli(permissive)).toThrow("owner-bound");
   });
 });

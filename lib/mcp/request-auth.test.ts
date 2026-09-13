@@ -9,10 +9,10 @@ import {
 } from "./request-auth";
 
 const config = hostedMcpAuthConfigSchema.parse({
-  issuer: "https://builder.example.test/api/auth",
-  audience: "https://builder.example.test/mcp",
-  jwksUrl: "https://builder.example.test/api/auth/jwks",
   algorithm: "ES256",
+  audience: "https://builder.example.test/mcp",
+  issuer: "https://builder.example.test/api/auth",
+  jwksUrl: "https://builder.example.test/api/auth/jwks",
   resourceUrl: "https://builder.example.test/mcp",
 });
 
@@ -62,9 +62,9 @@ describe("hosted MCP request authentication", () => {
 
   it("publishes closed protected-resource metadata", () => {
     expect(protectedResourceMetadata(config)).toEqual({
-      resource: config.resourceUrl,
       authorization_servers: [config.issuer],
       bearer_methods_supported: ["header"],
+      resource: config.resourceUrl,
       scopes_supported: [
         "autograph:session",
         "autograph:start",
@@ -78,7 +78,7 @@ describe("hosted MCP request authentication", () => {
 
   it("verifies exact issuer, audience, algorithm, kid, time, scope, and workspace claims", async () => {
     const { privateKey, publicKey } = await generateKeyPair("ES256");
-    const jwk = { ...(await exportJWK(publicKey)), kid: "key-1", alg: "ES256" };
+    const jwk = { ...(await exportJWK(publicKey)), alg: "ES256", kid: "key-1" };
     const fetchCalls: [string | URL | Request, RequestInit | undefined][] = [];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation: typeof fetch = async (url, options) => {
@@ -103,12 +103,12 @@ describe("hosted MCP request authentication", () => {
       .setExpirationTime(now + 60)
       .sign(privateKey);
 
-    await expect(verifier.verify({ token, nowEpochSeconds: now })).resolves.toEqual({
-      issuer: config.issuer,
+    await expect(verifier.verify({ nowEpochSeconds: now, token })).resolves.toEqual({
       audience: config.audience,
+      issuer: config.issuer,
+      scopes: ["autograph:session", "autograph:get"],
       subject: "user-one",
       workspaceId: "workspace-one",
-      scopes: ["autograph:session", "autograph:get"],
     });
     expect(fetchCalls).toHaveLength(1);
     expect(fetchCalls[0]?.[0]).toBe(config.jwksUrl);
@@ -135,7 +135,7 @@ describe("hosted MCP request authentication", () => {
     ["missing key id", { kid: undefined }],
   ])("rejects %s", async (_name, override) => {
     const { privateKey, publicKey } = await generateKeyPair("ES256");
-    const jwk = { ...(await exportJWK(publicKey)), kid: "key-1", alg: "ES256" };
+    const jwk = { ...(await exportJWK(publicKey)), alg: "ES256", kid: "key-1" };
     const verifier = createRemoteJwksAccessTokenVerifier({
       config,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -158,7 +158,7 @@ describe("hosted MCP request authentication", () => {
       .setNotBefore(override.notBefore ?? now - 1)
       .setExpirationTime(override.expirationTime ?? now + 60);
     const token = await signer.sign(privateKey);
-    await expect(verifier.verify({ token, nowEpochSeconds: now })).rejects.toThrow();
+    await expect(verifier.verify({ nowEpochSeconds: now, token })).rejects.toThrow();
   });
 
   it("refuses JWKS redirects", async () => {
@@ -168,8 +168,8 @@ describe("hosted MCP request authentication", () => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       fetchImplementation: async () =>
         new Response(null, {
-          status: 302,
           headers: { location: "https://other.example.test/jwks" },
+          status: 302,
         }),
     });
     const token = await new SignJWT({
@@ -184,7 +184,7 @@ describe("hosted MCP request authentication", () => {
       .setNotBefore(1_999_999_999)
       .setExpirationTime(2_000_000_060)
       .sign(privateKey);
-    await expect(verifier.verify({ token, nowEpochSeconds: 2_000_000_000 })).rejects.toThrow(
+    await expect(verifier.verify({ nowEpochSeconds: 2_000_000_000, token })).rejects.toThrow(
       "redirects",
     );
   });

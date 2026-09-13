@@ -4,9 +4,8 @@ import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
 import { BuildWithSection } from "./builder-destination";
 
 const meta = {
-  title: "Components/Create App/Sections/Build With",
+  args: { onChange: fn(), selected: "codex" },
   component: BuildWithSection,
-  args: { selected: "codex", onChange: fn() },
   decorators: [
     (Story) => (
       <CreateAppFormStoryLayout>
@@ -14,6 +13,7 @@ const meta = {
       </CreateAppFormStoryLayout>
     ),
   ],
+  title: "Components/Create App/Sections/Build With",
 } satisfies Meta<typeof BuildWithSection>;
 export default meta;
 type Story = StoryObj<typeof meta>;

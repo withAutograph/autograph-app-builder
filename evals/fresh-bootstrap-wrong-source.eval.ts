@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import path from "node:path";
 
 import { defineEval } from "eve/evals";
 import { includes } from "eve/evals/expect";
@@ -11,9 +11,9 @@ import { prepareReviewedWorkflow } from "./support/reviewed-workflow";
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
 
 export default defineEval({
-  tags: ["fresh-bootstrap-publication"],
   description:
     "Eve refuses fresh bootstrap for an existing-repository source without fallback mutation.",
+  tags: ["fresh-bootstrap-publication"],
   async test(t) {
     const repository = createSupportedRepositoryFixture();
     await prepareReviewedWorkflow(t, repository, "wrong-source-eval");
@@ -21,7 +21,7 @@ export default defineEval({
     try {
       await withFreshBootstrapTestCapability(fixture.capability, () =>
         t.send(
-          `Inspect fresh repository bootstrap at ${join(fixture.allowedRoot, "wrong-source")}.`,
+          `Inspect fresh repository bootstrap at ${path.join(fixture.allowedRoot, "wrong-source")}.`,
         ),
       );
       t.succeeded();

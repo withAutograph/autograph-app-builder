@@ -22,12 +22,12 @@ export function GET(): Response {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function OPTIONS(): Response {
   return new Response(null, {
-    status: 204,
     headers: {
       "Access-Control-Allow-Headers": "Authorization, Content-Type",
       "Access-Control-Allow-Methods": "GET, OPTIONS",
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Max-Age": "86400",
     },
+    status: 204,
   });
 }

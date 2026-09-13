@@ -1,5 +1,5 @@
 import { parse } from "postcss";
-import { posix } from "node:path";
+import path from "node:path";
 import ts from "typescript";
 
 import type { Observation } from "./evidence";
@@ -143,9 +143,9 @@ function collectCssFile(content: string, tokenRefs: string[], literals: string[]
 function position(source: ts.SourceFile, node: ts.Node) {
   const start = source.getLineAndCharacterOfPosition(node.getStart(source));
   return {
-    path: source.fileName,
-    line: start.line + 1,
     column: start.character + 1,
+    line: start.line + 1,
+    path: source.fileName,
   };
 }
 
@@ -233,12 +233,12 @@ function observation(
   classification?: string,
 ): Observation {
   return {
-    id,
     dimension,
-    verdict,
-    provenance: "generated",
     evidence: "static",
+    id,
+    provenance: "generated",
     summary,
+    verdict,
     ...(source ? { source } : {}),
     ...(classification ? { classification } : {}),
   };
@@ -318,13 +318,15 @@ export function analyzeSource({
         /\.css$/iu.test(statement.moduleSpecifier.text)
       )
         reachableCss.add(
-          posix.normalize(posix.join(posix.dirname(file.path), statement.moduleSpecifier.text)),
+          path.posix.normalize(
+            path.posix.join(path.posix.dirname(file.path), statement.moduleSpecifier.text),
+          ),
         );
   }
 
   for (const file of files) {
     if (/\.css$/iu.test(file.path)) {
-      if (!reachableCss.has(posix.normalize(file.path))) {
+      if (!reachableCss.has(path.posix.normalize(file.path))) {
         // Preserve the legacy inventory, but do not turn dead CSS into scored evidence.
         collectCssFile(file.content, tokenRefs, literals);
         limitations.push(
@@ -341,9 +343,9 @@ export function analyzeSource({
           !selector || [...referencedClasses].some((name) => selector.includes(`.${name}`));
         const source = declaration.source?.start
           ? {
-              path: file.path,
-              line: declaration.source.start.line,
               column: declaration.source.start.column,
+              line: declaration.source.start.line,
+              path: file.path,
             }
           : undefined;
         if (declaration.prop.startsWith("--")) {
@@ -417,19 +419,19 @@ export function analyzeSource({
       if (statement.importClause.name)
         if (isAutograph)
           imported.set(statement.importClause.name.text, {
-            source: moduleSource,
             name: "default",
+            source: moduleSource,
           });
         else unresolvedImports.add(statement.importClause.name.text);
       if (bindings && ts.isNamespaceImport(bindings))
-        if (isAutograph) imported.set(bindings.name.text, { source: moduleSource, name: "*" });
+        if (isAutograph) imported.set(bindings.name.text, { name: "*", source: moduleSource });
         else unresolvedImports.add(bindings.name.text);
       if (bindings && ts.isNamedImports(bindings))
         for (const item of bindings.elements)
           if (isAutograph)
             imported.set(item.name.text, {
-              source: moduleSource,
               name: item.propertyName?.text ?? item.name.text,
+              source: moduleSource,
             });
           else unresolvedImports.add(item.name.text);
     }
@@ -519,29 +521,30 @@ export function analyzeSource({
               collectCssLiterals(bracketed[1], literals);
               const refs: string[] = [];
               collectVarReferences(bracketed[1], refs);
-              for (const ref of refs)
+              for (const ref of refs) {
+                const overridesColorTreatment =
+                  item && /(?:^|:)(?:bg|text|border)-$/u.test(prefix) && ref.startsWith("--color-");
+                const usesSemanticToken = Object.hasOwn(tokens, ref) && isSemanticToken(ref);
+                let verdict: Observation["verdict"] = "unassessed";
+                let summary = `className references ${ref}, whose semantic status cannot be established.`;
+                if (overridesColorTreatment) {
+                  verdict = "nonconforming";
+                  summary = `Generated class overrides ${item.name}'s color treatment; prefer supported variants.`;
+                } else if (usesSemanticToken) {
+                  verdict = "conforming";
+                  summary = `className uses declared semantic token ${ref}.`;
+                }
                 observations.push(
                   observation(
                     `styling:class-var:${file.path}:${attribute.getStart(source)}:${ref}`,
                     "styling",
-                    item &&
-                      /(?:^|:)(?:bg|text|border)-$/u.test(prefix) &&
-                      ref.startsWith("--color-")
-                      ? "nonconforming"
-                      : Object.hasOwn(tokens, ref) && isSemanticToken(ref)
-                        ? "conforming"
-                        : "unassessed",
-                    item &&
-                      /(?:^|:)(?:bg|text|border)-$/u.test(prefix) &&
-                      ref.startsWith("--color-")
-                      ? `Generated class overrides ${item.name}'s color treatment; prefer supported variants.`
-                      : Object.hasOwn(tokens, ref) && isSemanticToken(ref)
-                        ? `className uses declared semantic token ${ref}.`
-                        : `className references ${ref}, whose semantic status cannot be established.`,
+                    verdict,
+                    summary,
                     position(source, attribute),
                     "token-reference",
                   ),
                 );
+              }
               const classLiterals: string[] = [];
               collectCssLiterals(bracketed[1], classLiterals);
               for (const literal of classLiterals)
@@ -593,25 +596,30 @@ export function analyzeSource({
               }
               const refs: string[] = [];
               collectVarReferences(value.text, refs);
-              for (const ref of refs)
+              for (const ref of refs) {
+                const overridesColorTreatment =
+                  item && /^(?:color|background|border)/iu.test(property.name.getText(source));
+                const usesSemanticToken = Object.hasOwn(tokens, ref) && isSemanticToken(ref);
+                let verdict: Observation["verdict"] = "unassessed";
+                let summary = `style references ${ref}, whose semantic status cannot be established.`;
+                if (overridesColorTreatment) {
+                  verdict = "nonconforming";
+                  summary = `Public ${item.name} receives a generated color treatment override.`;
+                } else if (usesSemanticToken) {
+                  verdict = "conforming";
+                  summary = `style uses declared semantic token ${ref}.`;
+                }
                 observations.push(
                   observation(
                     `styling:style-var:${file.path}:${property.getStart(source)}:${ref}`,
                     "styling",
-                    item && /^(?:color|background|border)/iu.test(property.name.getText(source))
-                      ? "nonconforming"
-                      : Object.hasOwn(tokens, ref) && isSemanticToken(ref)
-                        ? "conforming"
-                        : "unassessed",
-                    item && /^(?:color|background|border)/iu.test(property.name.getText(source))
-                      ? `Public ${item.name} receives a generated color treatment override.`
-                      : Object.hasOwn(tokens, ref) && isSemanticToken(ref)
-                        ? `style uses declared semantic token ${ref}.`
-                        : `style references ${ref}, whose semantic status cannot be established.`,
+                    verdict,
+                    summary,
                     position(source, property),
                     "token-reference",
                   ),
                 );
+              }
               const styleLiterals: string[] = [];
               collectCssLiterals(value.text, styleLiterals);
               for (const literal of styleLiterals) {
@@ -669,38 +677,37 @@ export function analyzeSource({
               const allowed = declaration.props[name].values;
               const acceptedPrimitives = declaration.props[name].primitiveKinds;
               const kind = literalKind(attribute);
+              let verdict: Observation["verdict"] = "unassessed";
+              let summary = `${item.name}.${name} is not a static primitive literal.`;
+              if (typed) {
+                const { reason: typedReason, verdict: typedVerdict } = typed;
+                verdict = typedVerdict;
+                summary = typedReason;
+              } else if (value === undefined) {
+                summary = `${item.name}.${name} is dynamic or spread-derived; its public variant cannot be verified statically.`;
+              } else if (kind) {
+                if (allowed) {
+                  if (allowed.includes(value)) {
+                    verdict = "conforming";
+                    summary = `${item.name}.${name} uses public variant ${JSON.stringify(value)}.`;
+                  } else {
+                    verdict = "nonconforming";
+                    summary = `${item.name}.${name} uses ${JSON.stringify(value)}, outside the public variants.`;
+                  }
+                } else if (acceptedPrimitives?.includes(kind)) {
+                  verdict = "conforming";
+                  summary = `${item.name}.${name} accepts static ${kind} values.`;
+                } else {
+                  summary = `${item.name}.${name}'s primitive type cannot be resolved.`;
+                  if (acceptedPrimitives) verdict = "nonconforming";
+                }
+              }
               observations.push(
                 observation(
                   `api:prop:${file.path}:${attribute.getStart(source)}:${name}`,
                   "api",
-                  typed
-                    ? typed.verdict
-                    : value === undefined
-                      ? "unassessed"
-                      : kind
-                        ? allowed
-                          ? allowed.includes(value)
-                            ? "conforming"
-                            : "nonconforming"
-                          : acceptedPrimitives
-                            ? acceptedPrimitives.includes(kind)
-                              ? "conforming"
-                              : "nonconforming"
-                            : "unassessed"
-                        : "unassessed",
-                  typed
-                    ? typed.reason
-                    : value === undefined
-                      ? `${item.name}.${name} is dynamic or spread-derived; its public variant cannot be verified statically.`
-                      : kind
-                        ? allowed
-                          ? allowed.includes(value)
-                            ? `${item.name}.${name} uses public variant ${JSON.stringify(value)}.`
-                            : `${item.name}.${name} uses ${JSON.stringify(value)}, outside the public variants.`
-                          : acceptedPrimitives?.includes(kind)
-                            ? `${item.name}.${name} accepts static ${kind} values.`
-                            : `${item.name}.${name}'s primitive type cannot be resolved.`
-                        : `${item.name}.${name} is not a static primitive literal.`,
+                  verdict,
+                  summary,
                   position(source, attribute),
                   "prop",
                 ),
@@ -784,7 +791,7 @@ export function analyzeSource({
     for (const entry of seenEntries) visit(entry, entry);
     for (const localName of unique([...usedInJsx].filter((name) => imported.has(name)))) {
       const item = imported.get(localName);
-      if (item) imports.push({ path: file.path, localName, ...item });
+      if (item) imports.push({ localName, path: file.path, ...item });
     }
   }
 
@@ -799,20 +806,20 @@ export function analyzeSource({
   const uniqueRefs = unique(tokenRefs);
 
   return {
+    generatedLiterals,
+    implementationDiagnostics,
     imports: imports.toSorted(
       (left, right) =>
         left.path.localeCompare(right.path) ||
         left.source.localeCompare(right.source) ||
         left.localName.localeCompare(right.localName),
     ),
-    tokenRefs: uniqueRefs,
-    semanticVarRefs: uniqueRefs.filter(isSemanticToken),
-    undefinedTokens: uniqueRefs.filter((name) => !Object.hasOwn(tokens, name)),
-    generatedLiterals,
-    matchingLiterals,
-    unknownLiterals,
-    observations: observations.toSorted((left, right) => left.id.localeCompare(right.id)),
-    implementationDiagnostics,
     limitations: unique(limitations),
+    matchingLiterals,
+    observations: observations.toSorted((left, right) => left.id.localeCompare(right.id)),
+    semanticVarRefs: uniqueRefs.filter(isSemanticToken),
+    tokenRefs: uniqueRefs,
+    undefinedTokens: uniqueRefs.filter((name) => !Object.hasOwn(tokens, name)),
+    unknownLiterals,
   };
 }

@@ -26,8 +26,8 @@ export async function GET(
       }),
     );
     return new Response("Invalid local OAuth approval", {
-      status: 400,
       headers: { "Cache-Control": "no-store" },
+      status: 400,
     });
   }
 }

@@ -21,27 +21,33 @@ function storage() {
       schema.oauthResource,
       [
         {
-          identifier: resource,
-          disabled: false,
           allowedScopes: [...previewOAuthScopes],
+          disabled: false,
+          identifier: resource,
         },
       ],
     ],
   ]);
+  const rowsFor = (table: unknown) => {
+    const tableRows = rows.get(table);
+    if (!tableRows) throw new Error("Unknown table");
+    return tableRows;
+  };
   const database = {
-    select: vi.fn(() => ({
-      from: (table: unknown) => ({
-        where: () => {
-          const result = Promise.resolve(rows.get(table)!);
-          return Object.assign(result, { limit: () => result });
-        },
-      }),
-    })),
     insert: vi.fn((table: unknown) => ({
       values: (row: Record<string, unknown>) => ({
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         onConflictDoNothing: async () => {
-          if (!rows.get(table)!.length) rows.get(table)!.push(row);
+          const tableRows = rowsFor(table);
+          if (!tableRows.length) tableRows.push(row);
+        },
+      }),
+    })),
+    select: vi.fn(() => ({
+      from: (table: unknown) => ({
+        where: () => {
+          const result = Promise.resolve(rowsFor(table));
+          return Object.assign(result, { limit: () => result });
         },
       }),
     })),
@@ -56,9 +62,9 @@ function storage() {
     },
   };
   return {
-    rows,
-    insert: database.insert,
     database: database as unknown as Parameters<typeof setupCursorClient>[0],
+    insert: database.insert,
+    rows,
   };
 }
 
@@ -69,8 +75,8 @@ describe("dedicated Cursor deployment registration", () => {
     expect(insert).not.toHaveBeenCalled();
     expect(await setupCursorClient(database, resource)).toEqual({
       clientId: cursorClientId,
-      resource,
       ready: true,
+      resource,
     });
     const registered = structuredClone(rows.get(schema.oauthClient));
     await setupCursorClient(database, resource);

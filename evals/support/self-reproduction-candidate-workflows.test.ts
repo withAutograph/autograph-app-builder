@@ -20,7 +20,7 @@ function browserFixture(
     click: vi.fn(),
     fill: vi.fn(),
     blur: vi.fn(),
-    waitFor: async () => undefined,
+    waitFor: async () => {},
     inputValue: async () => "Default draft value",
     count: async () => 0,
     allTextContents: async () => ["Synthetic control"],

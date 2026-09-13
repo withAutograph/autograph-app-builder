@@ -6,23 +6,23 @@ import { activeBuilderModelId } from "../integrations/active-model";
 
 const handoffId = "123e4567-e89b-42d3-a456-426614174001";
 const authority = {
-  issuer: "https://builder.example.test/api/auth",
   audience: "https://builder.example.test/mcp",
+  issuer: "https://builder.example.test/api/auth",
   ownerUserId: "user_1",
   workspaceId: "workspace_1",
 };
 const context = {
   attributes: {
-    "mcp:audience": authority.audience,
-    "mcp:workspace-id": authority.workspaceId,
-    "mcp:scopes": ["autograph:session"],
     "autograph:source-handoff-id": handoffId,
+    "mcp:audience": authority.audience,
+    "mcp:scopes": ["autograph:session"],
+    "mcp:workspace-id": authority.workspaceId,
   },
   authenticator: "mcp-oauth-jwks",
   issuer: authority.issuer,
   principalId: authority.ownerUserId,
-  subject: authority.ownerUserId,
   principalType: "user",
+  subject: authority.ownerUserId,
 };
 const sessionAuth = { current: context, initiator: context };
 
@@ -34,29 +34,32 @@ async function fixture() {
     now: () => new Date("2020-01-01T00:00:00Z"),
     store: {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      bindSession: async () => {},
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      read: async () => record,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       reserve: async (value) => {
         record = value;
         return { disposition: "created", record: value };
       },
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      read: async () => record,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      bindSession: async () => undefined,
     },
   });
   await handoffs.create({
     authority,
     creationRequestId: handoffId,
     intent: {
-      appName: "Accounts",
       appId: "accounts",
+      appName: "Accounts",
       brief: "Review accounts",
-      repository: { requestedName: "accounts", private: true },
-      modelId: activeBuilderModelId,
       connections: [],
+      modelId: activeBuilderModelId,
+      repository: { private: true, requestedName: "accounts" },
     },
   });
-  return record!;
+  if (!record) {
+    throw new Error("fixture failed to create handoff record");
+  }
+  return record;
 }
 
 describe("prepared session context", () => {
@@ -66,7 +69,7 @@ describe("prepared session context", () => {
     const read = vi.fn(async () => record);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const isActiveMember = vi.fn(async () => true);
-    const result = await createPreparedHandoffReader({ read, isActiveMember })(sessionAuth);
+    const result = await createPreparedHandoffReader({ isActiveMember, read })(sessionAuth);
     expect(result).toEqual(record.intent);
     expect(read).toHaveBeenCalledWith({ authority, handoffId });
     expect(isActiveMember).toHaveBeenCalledWith(authority);
@@ -77,25 +80,25 @@ describe("prepared session context", () => {
     const read = vi.fn(async () => record);
     await expect(
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      createPreparedHandoffReader({ read, isActiveMember: async () => false })(sessionAuth),
+      createPreparedHandoffReader({ isActiveMember: async () => false, read })(sessionAuth),
     ).rejects.toThrow("handoff is unavailable");
     expect(read).not.toHaveBeenCalled();
     await expect(
       createPreparedHandoffReader({
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        isActiveMember: async () => true,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         read: async () => ({
           ...record,
           authority: { ...authority, ownerUserId: "user_2" },
         }),
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        isActiveMember: async () => true,
       })(sessionAuth),
     ).rejects.toThrow("handoff is unavailable");
   });
   it("does not read credentials or storage for ordinary local sessions", async () => {
     const read = vi.fn();
     expect(
-      await createPreparedHandoffReader({ read, isActiveMember: vi.fn() })({
+      await createPreparedHandoffReader({ isActiveMember: vi.fn(), read })({
         current: null,
         initiator: null,
       }),

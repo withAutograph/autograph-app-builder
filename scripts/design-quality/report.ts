@@ -4,7 +4,8 @@ import type { Adherence, Observation } from "./evidence";
 export function escapeHtml(value: unknown) {
   return String(value).replaceAll(
     /[&<>"']/gu,
-    (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!,
+    (char) =>
+      ({ '"': "&quot;", "&": "&amp;", "'": "&#39;", "<": "&lt;", ">": "&gt;" })[char] ?? char,
   );
 }
 // Keep report rendering helpers scoped to the report artifact.
@@ -65,7 +66,7 @@ export function renderReport(report: {
   )
     .map(([group, title]) => {
       const entries = observations
-        .map((o, index) => ({ o, index }))
+        .map((o, index) => ({ index, o }))
         .filter(({ o }) =>
           group === "unknown"
             ? o.provenance === "unknown" ||
@@ -138,10 +139,11 @@ export function renderReport(report: {
   };
   const annotated = (c: { name: string; state: string; width?: number; height?: number }) => {
     const overlays = observations
-      .map((o, index) => ({ o, index }))
+      .map((o, index) => ({ index, o }))
       .filter(({ o }) => o.capture === c.name && o.region && o.verdict === "nonconforming")
       .map(({ o, index }) => {
-        const r = o.region!;
+        const r = o.region;
+        if (!r) return "";
         if (
           ![r.x, r.y, r.width, r.height, c.width, c.height].every(
             (v) => typeof v === "number" && Number.isFinite(v),
@@ -176,5 +178,5 @@ export function renderReport(report: {
           .join("")}</tbody></table>`
       : ""
   }${judge.strengths?.length ? `<h3>Strengths</h3><ul>${judge.strengths.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ul>` : ""}${judge.findings?.length ? `<h3>Recommended improvements</h3>${judge.findings.map((f, index) => `<article id="design-${index}"><h4>${escapeHtml(f.severity)} · <a href="#${escapeHtml(f.image)}">${escapeHtml(f.image)}</a></h4><p>${escapeHtml(f.explanation)}</p><p><strong>Improve:</strong> ${escapeHtml(f.improvement)}</p><small>Screenshot region: x ${f.region.x}, y ${f.region.y}, width ${f.region.width}, height ${f.region.height}</small></article>`).join("")}` : ""}`;
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Generated UI design report</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1100px;color:#222}h1,h2{line-height:1.2}img{max-width:100%;height:auto;display:block}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f4f4;padding:16px;border-radius:8px}section,article{margin:32px 0}summary{cursor:pointer}a{color:#334ba0}table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:12px;border-bottom:1px solid #ddd;vertical-align:top}.capture{position:relative}.region{position:absolute;border:2px dashed #a94700;box-sizing:border-box}.region:focus{outline:3px solid blue}</style><main><h1>Generated UI design report</h1><p>Advisory evaluation of an existing preview. Not a release gate or proof of backend behavior.</p><p>${escapeHtml(report.createdAt)} · <a href="report.json" download>Download full evidence JSON</a></p>${measuredSummary}<h2>AI design review</h2>${summary}<details><summary>Full scoring metadata and limitations</summary>${pretty(report.judge)}</details><details><summary>Generated-source evidence and reference diagnostics</summary>${pretty({ source: report.source, reference: report.reference })}</details>${report.captures.map((c) => `<section id="${escapeHtml(c.name)}"><h2>${escapeHtml(c.name)} — ${escapeHtml(c.state)}</h2>${annotated(c)}<details><summary>Browser findings and interactions</summary>${pretty({ measurements: c.measurements, interaction: c.interaction })}</details><details><summary>Token evidence and coverage</summary>${pretty(c.styles ?? "See initial state for style evidence")}</details></section>`).join("")}</main></html>`;
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Generated UI design report</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1100px;color:#222}h1,h2{line-height:1.2}img{max-width:100%;height:auto;display:block}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f4f4;padding:16px;border-radius:8px}section,article{margin:32px 0}summary{cursor:pointer}a{color:#334ba0}table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:12px;border-bottom:1px solid #ddd;vertical-align:top}.capture{position:relative}.region{position:absolute;border:2px dashed #a94700;box-sizing:border-box}.region:focus{outline:3px solid blue}</style><main><h1>Generated UI design report</h1><p>Advisory evaluation of an existing preview. Not a release gate or proof of backend behavior.</p><p>${escapeHtml(report.createdAt)} · <a href="report.json" download>Download full evidence JSON</a></p>${measuredSummary}<h2>AI design review</h2>${summary}<details><summary>Full scoring metadata and limitations</summary>${pretty(report.judge)}</details><details><summary>Generated-source evidence and reference diagnostics</summary>${pretty({ reference: report.reference, source: report.source })}</details>${report.captures.map((c) => `<section id="${escapeHtml(c.name)}"><h2>${escapeHtml(c.name)} — ${escapeHtml(c.state)}</h2>${annotated(c)}<details><summary>Browser findings and interactions</summary>${pretty({ interaction: c.interaction, measurements: c.measurements })}</details><details><summary>Token evidence and coverage</summary>${pretty(c.styles ?? "See initial state for style evidence")}</details></section>`).join("")}</main></html>`;
 }

@@ -20,7 +20,7 @@ export function createPostgresWorkspaceMembership(database: Database): HostedWor
       const principal = hostedPrincipalSchema.parse(principalInput);
       if (workspaceId !== principal.workspaceId) return false;
       const rows = await database
-        .select({ role: member.role, banned: user.banned })
+        .select({ banned: user.banned, role: member.role })
         .from(member)
         .innerJoin(organization, eq(member.organizationId, organization.id))
         .innerJoin(user, eq(member.userId, user.id))
@@ -54,9 +54,9 @@ export function createPostgresOAuthMembershipAuthority(database: Database) {
     }): Promise<string | undefined> {
       const rows = await database
         .select({
-          workspaceId: organization.workspaceId,
-          role: member.role,
           banned: user.banned,
+          role: member.role,
+          workspaceId: organization.workspaceId,
         })
         .from(member)
         .innerJoin(organization, eq(member.organizationId, organization.id))
@@ -84,11 +84,11 @@ export function createPostgresOAuthMembershipAuthority(database: Database) {
     }): Promise<boolean> {
       return createPostgresWorkspaceMembership(database).isMember({
         principal: {
-          issuer: input.issuer,
           audience: input.audience,
-          workspaceId: input.workspaceId,
+          issuer: input.issuer,
           ownerUserId: input.ownerUserId,
           scopes: ["autograph:session"],
+          workspaceId: input.workspaceId,
         },
         workspaceId: input.workspaceId,
       });

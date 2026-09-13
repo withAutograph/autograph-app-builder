@@ -16,7 +16,7 @@ describe("workspace onboarding", () => {
       value,
     });
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await expect(resolveWorkspaceOnboardingState(async () => undefined)).resolves.toEqual({
+    await expect(resolveWorkspaceOnboardingState(async () => {})).resolves.toEqual({
       status: "anonymous",
     });
   });

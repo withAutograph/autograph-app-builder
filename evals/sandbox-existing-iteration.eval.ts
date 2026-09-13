@@ -15,7 +15,6 @@ export default defineEval({
   description:
     "The exact candidate image inspects and iterates the existing Vendor application through review without publication.",
   tags: ["sandbox-image-proof", "existing-app-iteration"],
-  timeoutMs: 360_000,
   async test(t) {
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
     if (repository === undefined || repository.length === 0)
@@ -55,7 +54,7 @@ export default defineEval({
 
     for (const tool of [
       "publish_reviewed_change_set",
-      "publish_reviewed_change_set_to_branch_worktree",
+      "publish-reviewed-change-set_to_branch_worktree",
       "publish_fresh_repository",
       "publish_github_change_set",
       "bash",
@@ -65,14 +64,15 @@ export default defineEval({
 
     process.stdout.write(
       `${JSON.stringify({
-        version: 1,
-        terminalPhase: "reviewed",
+        appId: "vendor",
         browserPreview: true,
         operation: "iterate-existing-app",
         productOutcome: "tax-verification status is visible to operations",
-        appId: "vendor",
         publicationAttempted: false,
+        terminalPhase: "reviewed",
+        version: 1,
       })}\n`,
     );
   },
+  timeoutMs: 360_000,
 });

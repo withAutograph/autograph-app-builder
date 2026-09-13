@@ -18,12 +18,13 @@ ${renewalReviewDesignPrompt}`);
     t.toolOrder(["inspect_source", "prepare_workspace", "record_ui_preview"]);
     // A successful retry must not hide an invalid first preview. The default
     // calledTool matcher counts completed calls only.
-    t.calledTool("record_ui_preview", { status: "failed", count: 0 });
-    t.calledTool("record_ui_preview", { status: "rejected", count: 0 });
+    t.calledTool("record_ui_preview", { count: 0, status: "failed" });
+    t.calledTool("record_ui_preview", { count: 0, status: "rejected" });
     t.calledTool("record_ui_preview", { count: 1 });
     t.calledTool("record_ui_preview", {
+      count: 1,
       input: {
-        routes: ["/"],
+        catalogGaps: [],
         files: (value) =>
           Array.isArray(value) &&
           value.some(
@@ -53,9 +54,8 @@ ${renewalReviewDesignPrompt}`);
             (manifest.openQuestions?.length ?? 0) === 1
           );
         },
-        catalogGaps: [],
+        routes: ["/"],
       },
-      count: 1,
     });
     t.notCalledTool("record_prototype_artifact");
     t.notCalledTool("record_prototype_bundle");

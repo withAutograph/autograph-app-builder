@@ -43,7 +43,7 @@ export default defineEval({
       "validate_app_creation",
       "accept_change_set",
       "publish_reviewed_change_set",
-      "publish_reviewed_change_set_to_branch_worktree",
+      "publish-reviewed-change-set_to_branch_worktree",
       "prepare_fresh_template",
       "bash",
       "write_file",
@@ -52,8 +52,6 @@ export default defineEval({
 
     process.stdout.write(
       `${JSON.stringify({
-        version: 1,
-        terminalPhase: "planned",
         calledTools: [
           "inspect_source",
           "prepare_workspace",
@@ -68,11 +66,13 @@ export default defineEval({
           "validate_app_creation",
           "accept_change_set",
           "publish_reviewed_change_set",
-          "publish_reviewed_change_set_to_branch_worktree",
+          "publish-reviewed-change-set_to_branch_worktree",
           "prepare_fresh_template",
           "bash",
           "write_file",
         ],
+        terminalPhase: "planned",
+        version: 1,
       })}\n`,
     );
   },

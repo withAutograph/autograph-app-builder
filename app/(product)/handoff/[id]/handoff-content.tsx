@@ -123,8 +123,8 @@ export async function HandoffContent({ params }: { params: Promise<{ id: string 
             <HandoffProvisioningProgress
               handoffId={data.handoffId}
               initial={{
-                revision: data.provisioningRevision,
                 provisioning: intent.provisioning,
+                revision: data.provisioningRevision,
               }}
             />
           ) : null}

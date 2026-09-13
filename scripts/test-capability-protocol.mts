@@ -1,4 +1,5 @@
 import type { Readable, Writable } from "node:stream";
+import { finished } from "node:stream/promises";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function relayBoundedFrames(options: {
@@ -16,7 +17,7 @@ export async function relayBoundedFrames(options: {
   )
     throw new Error("Protocol relay configuration was invalid.");
 
-  await new Promise<void>((resolve, reject) => {
+  {
     let buffered = Buffer.alloc(0);
     let frames = 0;
     let settled = false;
@@ -27,8 +28,7 @@ export async function relayBoundedFrames(options: {
       if (settled) return;
       settled = true;
       options.source.destroy();
-      options.target.destroy();
-      reject(error);
+      options.target.destroy(error);
     };
     const finishIfComplete = () => {
       if (!sourceEnded || waitingForDrain || settled) return;
@@ -78,9 +78,9 @@ export async function relayBoundedFrames(options: {
     options.target.once("finish", () => {
       if (settled) return;
       settled = true;
-      resolve();
     });
     options.source.once("error", (error) => fail(error));
     options.target.once("error", (error) => fail(error));
-  });
+    await finished(options.target);
+  }
 }

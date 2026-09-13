@@ -31,7 +31,7 @@ export async function readSource(root: string, current = root): Promise<SourceFi
       const path = join(current, entry.name);
       if (entry.isDirectory()) return readSource(root, path);
       if (!entry.isFile() || !/\.(?:[cm]?tsx?|css|mdx?)$/u.test(entry.name)) return [];
-      return [{ path: relative(root, path), content: await readFile(path, "utf-8") }];
+      return [{ content: await readFile(path, "utf-8"), path: relative(root, path) }];
     }),
   );
   return sourceFiles.flat();
@@ -63,7 +63,7 @@ const codeExtensions = [
 function clientImportGraph(files: SourceFile[]) {
   const byPath = new Map(files.map((file) => [file.path.replaceAll("\\", "/"), file]));
   const resolveImport = (from: string, specifier: string) => {
-    if (!specifier.startsWith(".") && !specifier.startsWith("@/")) return undefined;
+    if (!specifier.startsWith(".") && !specifier.startsWith("@/")) return;
     const base = specifier.startsWith("@/")
       ? specifier.slice(2)
       : normalize(join(dirname(from), specifier)).replaceAll("\\", "/");
@@ -72,7 +72,7 @@ function clientImportGraph(files: SourceFile[]) {
         const candidate = `${prefix}${extension}`;
         if (byPath.has(candidate)) return candidate;
       }
-    return undefined;
+    return;
   };
   const dependencies = new Map<string, string[]>();
   for (const file of files) {
@@ -157,19 +157,19 @@ export function buildRequirements(
       ? (workflowEvidence?.[id]?.status ?? (has(expression) ? "unassessed" : "failed"))
       : "blocked";
   const workflow = (id: string, title: string, expression: RegExp, expected: string) => ({
-    id,
-    title,
-    expected,
     evidence: candidateAvailable
       ? [
           `Candidate source scan: ${has(expression) ? "matching implementation found" : "no matching implementation found"}.`,
           ...(workflowEvidence?.[id]?.evidence ? [workflowEvidence[id].evidence] : []),
         ]
       : ["Candidate generation output was unavailable."],
-    status: sourceStatus(id, expression),
+    expected,
+    id,
     likelyLayer: "Generated application",
     recommendation:
       "Exercise this workflow in the candidate runtime and retain the result in workflow-results.json.",
+    status: sourceStatus(id, expression),
+    title,
   });
   return [
     workflow(
@@ -223,13 +223,13 @@ export function frameworkRequirements(
     evidence: string,
     recommendation: string,
   ): Requirement => ({
-    id: `${side}-${id}`,
-    title,
-    expected: "Next.js 16.3 app-like implementation practice.",
-    status,
     evidence: [evidence],
+    expected: "Next.js 16.3 app-like implementation practice.",
+    id: `${side}-${id}`,
     likelyLayer: side === "reference" ? "Handwritten reference" : "Generated application",
     recommendation,
+    status,
+    title,
   });
   return [
     base(

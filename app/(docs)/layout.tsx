@@ -5,11 +5,11 @@ import type { ReactNode } from "react";
 import "../globals.css";
 
 export const metadata: Metadata = {
+  description: "Get started with Autograph App Builder, from installation to your first app.",
   title: {
     default: "Documentation | Autograph App Builder",
     template: "%s | Autograph App Builder",
   },
-  description: "Get started with Autograph App Builder, from installation to your first app.",
 };
 
 export default function DocsRootLayout({ children }: { children: ReactNode }) {

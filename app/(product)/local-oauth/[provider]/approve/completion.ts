@@ -15,11 +15,11 @@ export async function completeAuthorization(
     if (!emulation) throw new Error("Local authentication emulation is unavailable.");
     const appOrigin = emulation.canonicalOrigin;
     const parsed = parseLocalOAuthAuthorization({
-      provider,
-      values,
       appOrigin,
       emulation,
       githubClientId: emulation.githubClientId,
+      provider,
+      values,
       vercelClientId: emulation.vercelClientId,
     });
     const callback =
@@ -27,26 +27,26 @@ export async function completeAuthorization(
         ? new URL(`${emulation.githubOrigin}/login/oauth/callback`)
         : new URL(`${emulation.vercelOrigin}/oauth/authorize/callback`);
     const body = new URLSearchParams({
+      client_id: parsed.authorization.client_id,
       [parsed.provider === "github" ? "login" : "username"]: "autograph-dev",
       redirect_uri: parsed.authorization.redirect_uri,
       scope: parsed.authorization.scope,
       state: parsed.authorization.state,
-      client_id: parsed.authorization.client_id,
-      ...(parsed.authorization.code_challenge
+      ...(parsed.authorization.code_challenge && parsed.authorization.code_challenge_method
         ? {
             code_challenge: parsed.authorization.code_challenge,
-            code_challenge_method: parsed.authorization.code_challenge_method!,
+            code_challenge_method: parsed.authorization.code_challenge_method,
           }
         : {}),
     });
     const response = await providerEmulationFetch(
       callback,
       {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body,
-        redirect: "manual",
         cache: "no-store",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        method: "POST",
+        redirect: "manual",
       },
       emulation,
     );
@@ -55,9 +55,9 @@ export async function completeAuthorization(
       throw new Error("Emulated OAuth approval failed.");
     const destination = new URL(location);
     const callbackValidation = {
+      codeCount: destination.searchParams.getAll("code").length,
       origin: destination.origin === appOrigin,
       path: destination.pathname === `/api/auth/callback/${parsed.provider}`,
-      codeCount: destination.searchParams.getAll("code").length,
       stateCount: destination.searchParams.getAll("state").length,
       stateMatches: destination.searchParams.get("state") === parsed.authorization.state,
     };
@@ -81,9 +81,6 @@ export async function completeAuthorization(
   } catch (error) {
     console.error(
       JSON.stringify({
-        level: "error",
-        message: "local_oauth_approval_failed",
-        reason: error instanceof Error ? error.message : "unknown",
         databaseHost: (() => {
           try {
             return new URL(process.env.DATABASE_URL ?? "").hostname;
@@ -91,11 +88,14 @@ export async function completeAuthorization(
             return "invalid";
           }
         })(),
+        level: "error",
+        message: "local_oauth_approval_failed",
+        reason: error instanceof Error ? error.message : "unknown",
       }),
     );
     return new Response("Invalid local OAuth approval", {
-      status: 400,
       headers: { "Cache-Control": "no-store" },
+      status: 400,
     });
   }
 }

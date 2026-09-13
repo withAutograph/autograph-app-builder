@@ -3,24 +3,24 @@ import { originalCssSource } from "./css-source-map";
 
 describe("CSS source-map provenance", () => {
   const map = {
-    version: 3,
+    mappings: "AAAA;ACCA",
     sourceRoot: "../source",
     sources: ["src/generated.css", "packages/design-systems/shared.css"],
     // line 0 maps to generated.css:1, line 1 maps to shared.css:2.
-    mappings: "AAAA;ACCA",
+    version: 3,
   };
 
   it("attributes only the exact mapped declaration line", () => {
     expect(originalCssSource(map, 0, 14)).toEqual({
-      path: "../source/src/generated.css",
-      line: 1,
       column: 1,
+      line: 1,
+      path: "../source/src/generated.css",
       sourceIndex: 0,
     });
     expect(originalCssSource(map, 1, 14)).toEqual({
-      path: "../source/packages/design-systems/shared.css",
-      line: 2,
       column: 1,
+      line: 2,
+      path: "../source/packages/design-systems/shared.css",
       sourceIndex: 1,
     });
   });

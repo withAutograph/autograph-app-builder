@@ -22,8 +22,8 @@ async function VercelInstallationsContent({ searchParams }: Props) {
   const { status, reason, returnTo, resume } = await searchParams;
   const failureReason = parseProviderConnectionFailureReason(reason);
   const returnState = safeProviderConnectionReturn({
-    returnTo,
     resumeKey: resume,
+    returnTo,
   });
   return (
     <ProviderConnection

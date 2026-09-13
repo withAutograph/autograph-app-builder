@@ -7,8 +7,8 @@ import { DocsShell } from "./docs-shell";
 const [overview] = docs;
 
 export const metadata: Metadata = {
-  title: "Documentation",
   description: overview.description,
+  title: "Documentation",
 };
 
 export default function DocsPage() {

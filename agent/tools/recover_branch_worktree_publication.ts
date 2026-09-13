@@ -14,13 +14,9 @@ import {
 } from "@/lib/agent/branch-worktree-publication-schema";
 
 export default defineTool({
+  approval: always(),
   description:
     "After a distinct recovery approval, inspect and safely complete the exact durable branch-worktree intent. Recovery is bound to the failed or pending journal digest and refuses conflicting branch, worktree, source, index, remote, status, path, mode, or content state.",
-  inputSchema: z.strictObject({
-    publication: branchWorktreePublicationProposalSchema,
-    expectedJournalDigest: branchPublicationDigest,
-  }),
-  approval: always(),
   async execute({ publication, expectedJournalDigest }, ctx) {
     if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "1")
       throw new Error("Branch-worktree publication recovery is disabled on this host.");
@@ -38,15 +34,15 @@ export default defineTool({
       throw new Error("The recovery proposal changed after its durable intent.");
     const relativeRoot = workflow.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
     const result = await recoverBranchWorktreePublication({
-      proposal: expectedProposal,
-      sourceReceipt: workflow.sourceReceipt,
-      review: workflow.reviewReceipt,
-      recoveredByCallId: ctx.callId,
       expectedJournalDigest,
+      proposal: expectedProposal,
       readOverlayFile: (path) =>
         ctx
           .getSandbox()
           .then((sandbox) => sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` })),
+      recoveredByCallId: ctx.callId,
+      review: workflow.reviewReceipt,
+      sourceReceipt: workflow.sourceReceipt,
     });
     updateExactWorkflow({
       expected: workflow,
@@ -60,16 +56,20 @@ export default defineTool({
         return result.status === "succeeded"
           ? {
               ...current,
-              phase: "published_branch_worktree",
               branchPublicationReceipt: result,
+              phase: "published_branch_worktree",
             }
           : {
               ...current,
-              phase: "branch_publication_failed",
               branchPublicationReceipt: result,
+              phase: "branch_publication_failed",
             };
       },
     });
     return result;
   },
+  inputSchema: z.strictObject({
+    expectedJournalDigest: branchPublicationDigest,
+    publication: branchWorktreePublicationProposalSchema,
+  }),
 });

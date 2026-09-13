@@ -1,3 +1,5 @@
+import { setTimeout as delay } from "node:timers/promises";
+
 import { getBuilderProvisioningDeploymentHandler } from "@/lib/provisioning/deployment";
 import { builderProvisionProjectionSchema } from "@/lib/provisioning/contracts";
 import type { BuilderProvisionProjection } from "@/lib/provisioning/contracts";
@@ -35,7 +37,7 @@ export async function GET(request: Request) {
     handler(
       new Request(
         `${source.origin}/api/builder/provision?projection=1&requestId=${encodeURIComponent(requestId)}`,
-        { method: "GET", headers },
+        { headers, method: "GET" },
       ),
     );
 
@@ -49,22 +51,14 @@ export async function GET(request: Request) {
   const parsedCursor = /^[0-9]+$/u.test(cursor) ? Number(cursor) : 0;
   const lastEventId = Number.isSafeInteger(parsedCursor) ? parsedCursor : 0;
   let cancelled = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  const abortController = new AbortController();
   let lastWrite = Date.now();
-  const delay = (ms: number) =>
-    new Promise<void>((resolve) => {
-      timer = setTimeout(() => {
-        timer = undefined;
-        resolve();
-      }, ms);
-    });
 
   const stream = new ReadableStream<Uint8Array>({
     cancel() {
       // The polling loop observes this flag before and after each await.
       cancelled = true;
-      if (timer !== undefined) clearTimeout(timer);
-      timer = undefined;
+      abortController.abort();
     },
     async start(controller) {
       let lastRevision = Number.isSafeInteger(lastEventId) ? lastEventId : 0;
@@ -88,7 +82,7 @@ export async function GET(request: Request) {
             lastWrite = Date.now();
           }
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-          await delay(pollIntervalMs);
+          await delay(pollIntervalMs, undefined, { signal: abortController.signal });
           if (cancelled) return;
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const response = await read();

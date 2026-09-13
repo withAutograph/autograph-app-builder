@@ -30,7 +30,7 @@ function Harness({
   save: Parameters<typeof useBuilderDraftAutosave<Snapshot>>[0]["save"];
   onAcknowledged?: Parameters<typeof useBuilderDraftAutosave<Snapshot>>[0]["onAcknowledged"];
 }) {
-  const value = useBuilderDraftAutosave({ outbox, save, onAcknowledged, debounceMs: 10_000 });
+  const value = useBuilderDraftAutosave({ debounceMs: 10_000, onAcknowledged, outbox, save });
   useEffect(() => {
     autosave = value;
   }, [value]);
@@ -71,11 +71,11 @@ afterEach(async () => {
 describe("useBuilderDraftAutosave", () => {
   it("drains a snapshot queued after the save loop completes but before flush resumes", async () => {
     const outbox: BuilderDraftOutbox<Snapshot> = {
-      read: vi.fn(),
-      write: vi.fn(),
       clear: vi.fn(),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       clearIfMutationId: vi.fn(async () => true),
+      read: vi.fn(),
+      write: vi.fn(),
     };
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const save = vi.fn(async ({ mutationId, snapshot }) => ({
@@ -83,12 +83,12 @@ describe("useBuilderDraftAutosave", () => {
       revision: snapshot.brief === "first" ? 1 : 2,
     }));
     const value = await render({
-      outbox,
-      save,
       onAcknowledged: ({ revision }) => {
         if (revision === 1)
           queueMicrotask(() => autosave?.schedule({ brief: "completion-window" }));
       },
+      outbox,
+      save,
     });
     await act(async () => {
       value.schedule({ brief: "first" });
@@ -102,19 +102,19 @@ describe("useBuilderDraftAutosave", () => {
 
   it("restores pending recovery and reports acknowledgements after StrictMode effect replay", async () => {
     const entry = {
-      version: 1 as const,
+      baseRevision: 0,
+      createdAt: 1,
       mutationId: "recovered",
       snapshot: { brief: "recovered" },
-      createdAt: 1,
-      baseRevision: 0,
+      version: 1 as const,
     };
     const outbox: BuilderDraftOutbox<Snapshot> = {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      read: vi.fn(async () => entry),
-      write: vi.fn(),
       clear: vi.fn(),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       clearIfMutationId: vi.fn(async () => true),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      read: vi.fn(async () => entry),
+      write: vi.fn(),
     };
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const save = vi.fn(async ({ mutationId }) => ({
@@ -132,16 +132,13 @@ describe("useBuilderDraftAutosave", () => {
   });
 
   it("waits for the newest queued checkpoint before a provider flush resolves", async () => {
-    let resolveFirst: (() => void) | undefined;
-    const firstSave = new Promise<void>((resolve) => {
-      resolveFirst = resolve;
-    });
+    const { promise: firstSave, resolve: resolveFirst } = Promise.withResolvers<null>();
     const outbox: BuilderDraftOutbox<Snapshot> = {
-      read: vi.fn(),
-      write: vi.fn(),
       clear: vi.fn(),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       clearIfMutationId: vi.fn(async () => true),
+      read: vi.fn(),
+      write: vi.fn(),
     };
     const save = vi.fn(async ({ mutationId, snapshot }) => {
       if (snapshot.brief === "older") await firstSave;
@@ -160,7 +157,7 @@ describe("useBuilderDraftAutosave", () => {
 
       value.schedule({ brief: "newer" });
       const providerFlush = value.flush();
-      resolveFirst?.();
+      resolveFirst(null);
       await Promise.all([previousFlush, providerFlush]);
     });
 
@@ -178,13 +175,13 @@ describe("useBuilderDraftAutosave", () => {
   it("clears only the exact acknowledged outbox snapshot", async () => {
     let entry: BuilderDraftOutboxEntry<Snapshot> | undefined;
     const outbox: BuilderDraftOutbox<Snapshot> = {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      read: vi.fn(async () => entry),
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      write: vi.fn(async (next) => {
-        entry = next;
-      }),
       clear: vi.fn(),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      clearIfAcknowledged: vi.fn(async (acknowledgement) => {
+        if (entry?.mutationId !== acknowledgement.mutationId) return false;
+        entry = undefined;
+        return true;
+      }),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       clearIfMutationId: vi.fn(async (mutationId) => {
         if (entry?.mutationId !== mutationId) return false;
@@ -192,16 +189,13 @@ describe("useBuilderDraftAutosave", () => {
         return true;
       }),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      clearIfAcknowledged: vi.fn(async (acknowledgement) => {
-        if (entry?.mutationId !== acknowledgement.mutationId) return false;
-        entry = undefined;
-        return true;
+      read: vi.fn(async () => entry),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      write: vi.fn(async (next) => {
+        entry = next;
       }),
     };
-    let releaseFirst: (() => void) | undefined;
-    const first = new Promise<void>((resolve) => {
-      releaseFirst = resolve;
-    });
+    const { promise: first, resolve: releaseFirst } = Promise.withResolvers<null>();
     const save = vi.fn(async ({ mutationId, snapshot }) => {
       if (snapshot.brief === "first") await first;
       return { mutationId, revision: snapshot.brief === "first" ? 1 : 2 };
@@ -212,7 +206,7 @@ describe("useBuilderDraftAutosave", () => {
       value.schedule({ brief: "first" });
       const flushing = value.flush();
       value.schedule({ brief: "second" });
-      releaseFirst?.();
+      releaseFirst(null);
       await flushing;
     });
 
@@ -223,18 +217,18 @@ describe("useBuilderDraftAutosave", () => {
   it("discards queued recovery work superseded by a remote revision", async () => {
     let entry: BuilderDraftOutboxEntry<Snapshot> | undefined;
     const outbox: BuilderDraftOutbox<Snapshot> = {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      read: vi.fn(async () => entry),
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      write: vi.fn(async (next) => {
-        entry = next;
-      }),
       clear: vi.fn(),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       clearIfMutationId: vi.fn(async (mutationId) => {
         if (entry?.mutationId !== mutationId) return false;
         entry = undefined;
         return true;
+      }),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      read: vi.fn(async () => entry),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      write: vi.fn(async (next) => {
+        entry = next;
       }),
     };
     const value = await render({

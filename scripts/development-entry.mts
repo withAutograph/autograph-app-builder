@@ -1,25 +1,25 @@
 import { lstat, mkdir, realpath } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import path from "node:path";
 
 import { runWithDevelopmentLock } from "../lib/development/advisory-lock";
 import { parseDevelopmentArguments } from "../lib/development/local-mode";
 
-const repositoryRoot = resolve(".");
+const repositoryRoot = path.resolve(".");
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function privateRoot(path: string) {
-  await mkdir(path, { recursive: true, mode: 0o700 });
-  const canonical = await realpath(path);
+async function privateRoot(root: string) {
+  await mkdir(root, { mode: 0o700, recursive: true });
+  const canonical = await realpath(root);
   const info = await lstat(canonical);
   if (
-    canonical !== path ||
+    canonical !== root ||
     !info.isDirectory() ||
     info.isSymbolicLink() ||
     info.uid !== process.getuid?.() ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & 0o077) !== 0
   )
-    throw new Error(`Development root must be canonical, owner-only, and mode 0700: ${path}`);
+    throw new Error(`Development root must be canonical, owner-only, and mode 0700: ${root}`);
   return canonical;
 }
 
@@ -28,21 +28,21 @@ if (process.env.VERCEL_TOKEN !== undefined || process.env.AI_GATEWAY_API_KEY !==
 
 const args = parseDevelopmentArguments(process.argv.slice(2));
 const artifactRoot = await privateRoot(
-  args.stateRoot ?? join(repositoryRoot, ".artifacts/development"),
+  args.stateRoot ?? path.join(repositoryRoot, ".artifacts/development"),
 );
 const node = process.env.APP_BUILDER_DEV_NODE_BIN;
 if (node === undefined || !node.startsWith("/"))
   throw new Error("mise must supply the absolute development Node executable.");
 
 const code = await runWithDevelopmentLock({
-  lockPath: join(artifactRoot, "development.lock"),
-  command: node,
   args: [
     "--import",
     "tsx",
-    join(repositoryRoot, "scripts/development.mts"),
+    path.join(repositoryRoot, "scripts/development.mts"),
     ...process.argv.slice(2),
   ],
+  command: node,
   environment: process.env,
+  lockPath: path.join(artifactRoot, "development.lock"),
 });
 process.exitCode = code;

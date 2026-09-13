@@ -4,9 +4,9 @@ import { expect, within } from "storybook/test";
 import { WorkspaceOnboarding } from "./workspace-onboarding";
 
 const meta = {
-  title: "Components/Workspace/Onboarding",
   component: WorkspaceOnboarding,
   parameters: { layout: "fullscreen" },
+  title: "Components/Workspace/Onboarding",
 } satisfies Meta<typeof WorkspaceOnboarding>;
 
 export default meta;

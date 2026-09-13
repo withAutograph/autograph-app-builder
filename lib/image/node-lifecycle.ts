@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { once } from "node:events";
 import {
   chmodSync,
   closeSync,
@@ -21,7 +22,7 @@ import {
 } from "node:fs";
 import { createConnection, createServer } from "node:net";
 import { arch, homedir, platform } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve as pathResolve, sep } from "node:path";
+import nodePath from "node:path";
 
 import {
   ARRUSTED_IMAGE_TARGET_SHA,
@@ -67,32 +68,33 @@ import type { SanitizedGitTree } from "./sanitized-git-tree.ts";
 
 export { materializeSanitizedGitTree } from "./sanitized-git-tree.ts";
 
+const { dirname, isAbsolute, join, relative, resolve: pathResolve, sep } = nodePath;
 const dockerfilePath = "containers/eve-sandbox/Dockerfile" as const;
 const maximumCommandOutputBytes = 4 * 1024 * 1024;
 const receiptKinds = {
-  "source-receipt.json": "image-source",
   "build-receipt.json": "image-build",
   "ghcr-login-receipt.json": "ghcr-login",
   "local-image-receipt.json": "local-image",
-  "push-receipt.json": "image-push",
-  "remote-image-receipt.json": "remote-image",
   "preload-receipt.json": "image-preload",
   "proof-runtime-receipt.json": "proof-runtime",
+  "push-receipt.json": "image-push",
+  "remote-image-receipt.json": "remote-image",
   "sandbox-proof-receipt.json": "sandbox-proof",
+  "source-receipt.json": "image-source",
 } as const;
 
 const targetArguments = {
-  MISE_CONFIG_SHA256: ".config/mise/config.toml",
-  MISE_LOCK_SHA256: ".config/mise/mise.lock",
+  APP_CONTRACT_SHA256: ".config/mise/scripts/repository/app-contract.ts",
+  APP_IDENTITY_SHA256: ".config/mise/scripts/repository/app-identity.ts",
+  APP_TEMPLATE_PACKAGE_SHA256: ".config/turbo/generators/templates/app/package.json.hbs",
+  APP_VALIDATION_SHA256: ".config/mise/scripts/repository/app-validation.ts",
   BUN_LOCK_SHA256: "bun.lock",
   CARGO_LOCK_SHA256: "Cargo.lock",
-  APP_IDENTITY_SHA256: ".config/mise/scripts/repository/app-identity.ts",
-  APP_CONTRACT_SHA256: ".config/mise/scripts/repository/app-contract.ts",
-  APP_VALIDATION_SHA256: ".config/mise/scripts/repository/app-validation.ts",
   CREATE_APP_SHA256: ".config/turbo/generators/create-app.ts",
-  APP_TEMPLATE_PACKAGE_SHA256: ".config/turbo/generators/templates/app/package.json.hbs",
-  REPOSITORY_PREFLIGHT_SHA256: ".config/mise/scripts/repository/repository-preflight.ts",
+  MISE_CONFIG_SHA256: ".config/mise/config.toml",
+  MISE_LOCK_SHA256: ".config/mise/mise.lock",
   REPOSITORY_EXEC_SHA256: ".config/mise/tasks/repository/exec",
+  REPOSITORY_PREFLIGHT_SHA256: ".config/mise/scripts/repository/repository-preflight.ts",
 } as const;
 
 export type LifecycleApproval = Readonly<{
@@ -113,14 +115,14 @@ type ReceiptEnvelope = Readonly<{
 
 const injectedImageProvenance = new AsyncLocalStorage<ImageProvenance>();
 
-export function withImageLifecycleTestProvenance<T>(
+export const withImageLifecycleTestProvenance = function withImageLifecycleTestProvenance<T>(
   provenance: ImageProvenance,
   operation: () => T,
 ): T {
   if (!hasTestCapability("simulated-target"))
     throw new Error("Image lifecycle provenance injection requires structural test authority.");
   return injectedImageProvenance.run(provenance, operation);
-}
+};
 
 const fixedGit = "/usr/bin/git";
 const githubCliVersion = "2.98.0";
@@ -133,13 +135,13 @@ const ghcrBoundHelperBytes = Buffer.from(
   "utf-8",
 );
 
-function ghcrDockerConfigPath(stateRoot: string): string {
+const ghcrDockerConfigPath = function ghcrDockerConfigPath(stateRoot: string): string {
   return join(stateRoot, ghcrDockerConfigName);
-}
+};
 
-function ghcrBoundHelperPath(stateRoot: string): string {
+const ghcrBoundHelperPath = function ghcrBoundHelperPath(stateRoot: string): string {
   return join(stateRoot, ghcrBoundHelperName);
-}
+};
 
 type GhcrCredentialBinding = Readonly<{
   version: 3;
@@ -185,11 +187,11 @@ const sanitizedEnvironment = (extra: Readonly<Record<string, string>> = {}): Nod
 const git = (root: string, args: readonly string[]) =>
   execFileSync(fixedGit, ["-C", root, ...args], {
     encoding: "utf-8",
-    maxBuffer: 32 * 1024 * 1024,
     env: sanitizedEnvironment(),
+    maxBuffer: 32 * 1024 * 1024,
   }).trim();
 
-function ensureNoLinkPath(path: string, label: string): void {
+const ensureNoLinkPath = function ensureNoLinkPath(path: string, label: string): void {
   const canonical = pathResolve(path);
   assertCanonicalRoot(canonical, realpathSync(canonical), label);
   const root = pathResolve(canonical, "/") === canonical ? canonical : undefined;
@@ -202,38 +204,42 @@ function ensureNoLinkPath(path: string, label: string): void {
     if (parent === cursor) break;
     cursor = parent;
   }
-}
+};
 
-function assertAbsoluteInput(path: string, label: string): void {
+const assertAbsoluteInput = function assertAbsoluteInput(path: string, label: string): void {
   if (!isAbsolute(path) || pathResolve(path) !== path)
     throw new Error(`${label} must be an absolute normalized path.`);
-}
+};
 
-function containsPath(root: string, candidate: string): boolean {
+const containsPath = function containsPath(root: string, candidate: string): boolean {
   const path = relative(root, candidate);
   return path === "" || (!path.startsWith(`..${sep}`) && path !== "..");
-}
+};
 
-function lifecycleLockPort(stateRoot: string, attempt = 0): number {
+const lifecycleLockPort = function lifecycleLockPort(stateRoot: string, attempt = 0): number {
   const value = createHash("sha256").update(stateRoot).digest().readUInt16BE(0);
   return 32_768 + ((value + attempt) % 24_000);
-}
+};
 
-// oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-async function portIsOurLock(port: number, identity: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = createConnection({ host: "127.0.0.1", port });
-    let data = "";
-    socket.setEncoding("utf-8");
-    socket.setTimeout(100);
-    socket.on("data", (chunk) => (data += chunk));
-    socket.once("close", () => resolve(data === identity));
-    socket.once("error", () => resolve(false));
-    socket.once("timeout", () => socket.destroy());
-  });
-}
+const portIsOurLock = async function portIsOurLock(
+  port: number,
+  identity: string,
+): Promise<boolean> {
+  const socket = createConnection({ host: "127.0.0.1", port });
+  let data = "";
+  socket.setEncoding("utf-8");
+  socket.setTimeout(100);
+  socket.on("data", (chunk) => (data += chunk));
+  socket.once("timeout", () => socket.destroy());
+  try {
+    await once(socket, "close");
+    return data === identity;
+  } catch {
+    return false;
+  }
+};
 
-export async function withLifecycleLock<T>(
+export const withLifecycleLock = async function withLifecycleLock<T>(
   stateRoot: string,
   operation: () => T | Promise<T>,
 ): Promise<T> {
@@ -242,23 +248,16 @@ export async function withLifecycleLock<T>(
   const server = createServer((socket) => socket.end(identity));
   for (let attempt = 0; ; attempt += 1) {
     const port = lifecycleLockPort(stateRoot, attempt);
+    const listening = once(server, "listening");
+    server.listen({ exclusive: true, host: "127.0.0.1", port });
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const acquired = await new Promise<boolean>((resolve, reject) => {
-      const handlers: { onListening?: () => void } = {};
-      const onError = (error: NodeJS.ErrnoException) => {
-        if (handlers.onListening !== undefined)
-          server.removeListener("listening", handlers.onListening);
-        if (error.code === "EADDRINUSE") resolve(false);
-        else reject(error);
-      };
-      handlers.onListening = () => {
-        server.removeListener("error", onError);
-        resolve(true);
-      };
-      server.once("error", onError);
-      server.once("listening", handlers.onListening);
-      server.listen({ host: "127.0.0.1", port, exclusive: true });
-    });
+    const acquired = await listening.then(
+      () => true,
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === "EADDRINUSE") return false;
+        throw error;
+      },
+    );
     if (acquired) break;
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     if (await portIsOurLock(port, identity))
@@ -270,16 +269,14 @@ export async function withLifecycleLock<T>(
   try {
     return await operation();
   } finally {
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => {
-        if (error === undefined) resolve();
-        else reject(error);
-      });
-    });
+    server.close();
+    await once(server, "close");
   }
-}
+};
 
-export function normalizedNodeModulesDigest(nodeModulesRoot: string): string {
+export const normalizedNodeModulesDigest = function normalizedNodeModulesDigest(
+  nodeModulesRoot: string,
+): string {
   const records: string[] = [];
   const walk = (directory: string): void => {
     for (const name of readdirSync(directory).toSorted()) {
@@ -313,14 +310,21 @@ export function normalizedNodeModulesDigest(nodeModulesRoot: string): string {
   };
   walk(nodeModulesRoot);
   return createHash("sha256").update(records.join("\n")).digest("hex");
-}
+};
 
-function assertDisjointRoots(stateRoot: string, repositoryRoot: string, label: string): void {
+const assertDisjointRoots = function assertDisjointRoots(
+  stateRoot: string,
+  repositoryRoot: string,
+  label: string,
+): void {
   if (containsPath(repositoryRoot, stateRoot) || containsPath(stateRoot, repositoryRoot))
     throw new Error(`${label} must be outside the image lifecycle state root.`);
-}
+};
 
-function assertOwnedPrivateDirectory(path: string, label: string): void {
+const assertOwnedPrivateDirectory = function assertOwnedPrivateDirectory(
+  path: string,
+  label: string,
+): void {
   const stat = lstatSync(path);
   // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission bitmask.
   if (!stat.isDirectory() || (stat.mode & 0o777) !== 0o700)
@@ -328,9 +332,11 @@ function assertOwnedPrivateDirectory(path: string, label: string): void {
   const uid = process.getuid?.();
   if (uid === undefined || stat.uid !== uid)
     throw new Error(`${label} must be owned by the current user.`);
-}
+};
 
-function assertLifecycleStateScope(approval: LifecycleApproval): void {
+const assertLifecycleStateScope = function assertLifecycleStateScope(
+  approval: LifecycleApproval,
+): void {
   const builderRoot = process.cwd();
   assertAbsoluteInput(builderRoot, "Builder root");
   assertAbsoluteInput(approval.arrustedRoot, "Arrusted root");
@@ -345,13 +351,13 @@ function assertLifecycleStateScope(approval: LifecycleApproval): void {
   }
   assertDisjointRoots(approval.stateRoot, builderRoot, "Builder root");
   assertDisjointRoots(approval.stateRoot, approval.arrustedRoot, "Arrusted root");
-}
+};
 
-function exactDockerArgument(dockerfile: string, name: string): string {
+const exactDockerArgument = function exactDockerArgument(dockerfile: string, name: string): string {
   const match = new RegExp(`^ARG ${name}=([^\\n]+)$`, "mu").exec(dockerfile);
   if (match?.[1] === undefined) throw new Error(`Dockerfile is missing exact ${name}.`);
   return match[1];
-}
+};
 
 const temporaryReceiptPattern = new RegExp(
   `^(?:${Object.keys(receiptKinds)
@@ -362,7 +368,7 @@ const temporaryReceiptPattern = new RegExp(
 const temporaryContextPattern = /^arrusted-context[.]tmp-[0-9]+-[0-9a-f-]{36}$/u;
 const temporaryBuildxPattern = /^buildx-runtime[.]tmp-[0-9]+-[0-9a-f-]{36}$/u;
 
-function assertOwnedNoLinkTree(path: string, uid: number): void {
+const assertOwnedNoLinkTree = function assertOwnedNoLinkTree(path: string, uid: number): void {
   const stat = lstatSync(path);
   if (
     stat.isSymbolicLink() ||
@@ -373,9 +379,9 @@ function assertOwnedNoLinkTree(path: string, uid: number): void {
     throw new Error("Unsafe interrupted Buildx state requires review.");
   if (!stat.isDirectory()) return;
   for (const entry of readdirSync(path)) assertOwnedNoLinkTree(join(path, entry), uid);
-}
+};
 
-function removeBuildxRuntime(path: string, uid: number): void {
+const removeBuildxRuntime = function removeBuildxRuntime(path: string, uid: number): void {
   const stat = lstatSync(path);
   if (
     !stat.isDirectory() ||
@@ -386,10 +392,10 @@ function removeBuildxRuntime(path: string, uid: number): void {
   )
     throw new Error("Unsafe interrupted Buildx state requires review.");
   assertOwnedNoLinkTree(path, uid);
-  rmSync(path, { recursive: true, force: false });
-}
+  rmSync(path, { force: false, recursive: true });
+};
 
-export function reconcileLifecycleTemps(stateRoot: string): void {
+export const reconcileLifecycleTemps = function reconcileLifecycleTemps(stateRoot: string): void {
   if (!existsSync(stateRoot)) return;
   ensureNoLinkPath(stateRoot, "Image lifecycle state root");
   assertOwnedPrivateDirectory(stateRoot, "Image lifecycle state root");
@@ -417,29 +423,29 @@ export function reconcileLifecycleTemps(stateRoot: string): void {
         (stat.mode & 0o777) !== 0o700
       )
         throw new Error("Unsafe interrupted build context requires review.");
-      rmSync(absolute, { recursive: true, force: false });
+      rmSync(absolute, { force: false, recursive: true });
     } else if (temporaryBuildxPattern.test(entry.name)) {
       removeBuildxRuntime(absolute, uid);
     }
   }
-}
+};
 
-export function withBuildxRuntime<T>(
+export const withBuildxRuntime = function withBuildxRuntime<T>(
   stateRoot: string,
   operation: (environment: Readonly<{ BUILDX_CONFIG: string }>) => T,
 ): T {
   const uid = process.getuid?.();
   if (uid === undefined) throw new Error("Buildx runtime isolation requires a current user ID.");
   const runtime = join(stateRoot, `buildx-runtime.tmp-${process.pid}-${randomUUID()}`);
-  mkdirSync(runtime, { recursive: false, mode: 0o700 });
+  mkdirSync(runtime, { mode: 0o700, recursive: false });
   try {
     return operation({ BUILDX_CONFIG: runtime });
   } finally {
     removeBuildxRuntime(runtime, uid);
   }
-}
+};
 
-function writeExactFile(path: string, bytes: Buffer, mode: number): void {
+const writeExactFile = function writeExactFile(path: string, bytes: Buffer, mode: number): void {
   const descriptor = openSync(
     path,
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -455,18 +461,18 @@ function writeExactFile(path: string, bytes: Buffer, mode: number): void {
     closeSync(descriptor);
   }
   chmodSync(path, mode);
-}
+};
 
-function removeSanitizedGitTree(context: SanitizedGitTree): void {
+const removeSanitizedGitTree = function removeSanitizedGitTree(context: SanitizedGitTree): void {
   if (!temporaryContextPattern.test(context.root.split(sep).at(-1) ?? ""))
     throw new Error("Refusing to remove a non-lifecycle build context.");
   const stat = lstatSync(context.root);
   if (!stat.isDirectory() || stat.isSymbolicLink())
     throw new Error("Refusing to remove an unsafe lifecycle build context.");
-  rmSync(context.root, { recursive: true, force: false });
-}
+  rmSync(context.root, { force: false, recursive: true });
+};
 
-function readReceipt(
+const readReceipt = function readReceipt(
   stateRoot: string,
   filename: string,
   kind: string,
@@ -497,16 +503,16 @@ function readReceipt(
     throw new Error(`${kind} receipt digest is invalid.`);
   assertNoSecretMaterial(parsed);
   return parsed;
-}
+};
 
-function writeReceipt(
+const writeReceipt = function writeReceipt(
   stateRoot: string,
   filename: string,
   kind: string,
   provenance: ImageProvenance,
   result: unknown,
 ): ReceiptEnvelope {
-  const unsigned = { version: 1 as const, kind, provenance, result };
+  const unsigned = { kind, provenance, result, version: 1 as const };
   assertNoSecretMaterial(unsigned);
   const receipt = {
     ...unsigned,
@@ -549,9 +555,9 @@ function writeReceipt(
     throw error;
   }
   return receipt;
-}
+};
 
-function optionalReceipt(
+const optionalReceipt = function optionalReceipt(
   stateRoot: string,
   filename: string,
   kind: string,
@@ -560,9 +566,9 @@ function optionalReceipt(
   return existsSync(join(stateRoot, filename))
     ? readReceipt(stateRoot, filename, kind, provenance)
     : undefined;
-}
+};
 
-function assertExactGhcrBoundHelper(stateRoot: string): void {
+const assertExactGhcrBoundHelper = function assertExactGhcrBoundHelper(stateRoot: string): void {
   const path = ghcrBoundHelperPath(stateRoot);
   ensureNoLinkPath(path, "GHCR bound helper");
   const stat = lstatSync(path);
@@ -578,9 +584,9 @@ function assertExactGhcrBoundHelper(stateRoot: string): void {
     throw new Error("GHCR bound helper must be an owned mode 0700 regular file.");
   if (!readFileSync(path).equals(ghcrBoundHelperBytes))
     throw new Error("GHCR bound helper does not match the closed implementation.");
-}
+};
 
-function assertExactGhcrDockerConfig(stateRoot: string): void {
+const assertExactGhcrDockerConfig = function assertExactGhcrDockerConfig(stateRoot: string): void {
   const path = ghcrDockerConfigPath(stateRoot);
   ensureNoLinkPath(path, "GHCR Docker configuration");
   const stat = lstatSync(path);
@@ -596,9 +602,11 @@ function assertExactGhcrDockerConfig(stateRoot: string): void {
     throw new Error("GHCR Docker configuration must be an owned mode 0600 regular file.");
   if (!readFileSync(path).equals(ghcrDockerConfigBytes))
     throw new Error("GHCR Docker configuration does not match the closed schema.");
-}
+};
 
-function verifyStateRootContents(provenance: ImageProvenance): void {
+const verifyStateRootContents = function verifyStateRootContents(
+  provenance: ImageProvenance,
+): void {
   for (const entry of readdirSync(provenance.builder.stateRoot, {
     withFileTypes: true,
   })) {
@@ -619,9 +627,9 @@ function verifyStateRootContents(provenance: ImageProvenance): void {
       throw new Error("Image lifecycle state contains an unknown or unsafe artifact.");
     readReceipt(provenance.builder.stateRoot, entry.name, kind, provenance);
   }
-}
+};
 
-export function observeImageProvenance(
+export const observeImageProvenance = function observeImageProvenance(
   approval: LifecycleApproval,
   builderRootInput: string = process.cwd(),
   options: Readonly<{ allowProofRuntime?: boolean }> = {},
@@ -649,7 +657,7 @@ export function observeImageProvenance(
   if (!existsSync(stateRoot)) {
     const parent = dirname(stateRoot);
     ensureNoLinkPath(parent, "Image lifecycle state parent");
-    mkdirSync(stateRoot, { recursive: false, mode: 0o700 });
+    mkdirSync(stateRoot, { mode: 0o700, recursive: false });
   }
   ensureNoLinkPath(stateRoot, "Image lifecycle state root");
   assertOwnedPrivateDirectory(stateRoot, "Image lifecycle state root");
@@ -702,26 +710,26 @@ export function observeImageProvenance(
       );
   }
   const provenance = createExactImageProvenance({
+    arrustedIgnored: git(arrustedRoot, ["ls-files", "--others", "--ignored", "--exclude-standard"]),
+    arrustedRoot,
+    arrustedStatus: git(arrustedRoot, ["status", "--porcelain=v1", "--untracked-files=all"]),
+    builderIgnored: options.allowProofRuntime === true ? "" : builderIgnored,
     builderRoot,
-    stateRoot,
-    observedBuilderCommit: git(builderRoot, ["rev-parse", "HEAD"]),
-    observedBuilderTree: git(builderRoot, ["rev-parse", "HEAD^{tree}"]),
+    builderStatus: git(builderRoot, ["status", "--porcelain=v1", "--untracked-files=all"]),
+    dockerfileSha256: hashArtifact(dockerfile),
     expectedBuilderCommit: approval.builderCommit,
     expectedBuilderTree: approval.builderTree,
-    builderStatus: git(builderRoot, ["status", "--porcelain=v1", "--untracked-files=all"]),
-    builderIgnored: options.allowProofRuntime === true ? "" : builderIgnored,
-    arrustedRoot,
+    expectedDockerfileSha256: approval.dockerfileSha256,
     observedArrustedCommit: git(arrustedRoot, ["rev-parse", "HEAD"]),
     observedArrustedTree: git(arrustedRoot, ["rev-parse", "HEAD^{tree}"]),
-    arrustedStatus: git(arrustedRoot, ["status", "--porcelain=v1", "--untracked-files=all"]),
-    arrustedIgnored: git(arrustedRoot, ["ls-files", "--others", "--ignored", "--exclude-standard"]),
-    dockerfileSha256: hashArtifact(dockerfile),
-    expectedDockerfileSha256: approval.dockerfileSha256,
+    observedBuilderCommit: git(builderRoot, ["rev-parse", "HEAD"]),
+    observedBuilderTree: git(builderRoot, ["rev-parse", "HEAD^{tree}"]),
+    stateRoot,
     targetFiles,
   });
   verifyStateRootContents(provenance);
   return provenance;
-}
+};
 
 const toolEnvironmentKeys = {
   docker: "APP_BUILDER_IMAGE_DOCKER_BIN",
@@ -731,7 +739,7 @@ const toolEnvironmentKeys = {
   pnpm: "APP_BUILDER_IMAGE_PNPM_BIN",
 } as const;
 
-function exactGithubCli(): string {
+const exactGithubCli = function exactGithubCli(): string {
   const configured = process.env.APP_BUILDER_IMAGE_GH_BIN;
   if (configured === undefined || !isAbsolute(configured))
     throw new Error("GitHub CLI must be resolved by the owning mise task.");
@@ -743,9 +751,9 @@ function exactGithubCli(): string {
     throw new Error("GitHub CLI does not resolve to a regular file.");
   const version = spawnSync(binary, ["version"], {
     encoding: "utf-8",
+    env: sanitizedEnvironment(),
     maxBuffer: maximumCommandOutputBytes,
     timeout: 10_000,
-    env: sanitizedEnvironment(),
   });
   if (
     version.error !== undefined ||
@@ -754,9 +762,9 @@ function exactGithubCli(): string {
   )
     throw new Error("GitHub CLI version is unsupported.");
   return binary;
-}
+};
 
-function exactGithubConfigRoot(): string {
+const exactGithubConfigRoot = function exactGithubConfigRoot(): string {
   // The trusted launcher never forwards this internal override. It exists so
   // hermetic tests can bind an owner-only fixture without reading the runner's
   // real GitHub configuration.
@@ -765,9 +773,9 @@ function exactGithubConfigRoot(): string {
   ensureNoLinkPath(root, "GitHub configuration root");
   githubConfigDigest(root);
   return root;
-}
+};
 
-function exactToolBinary(program: ImageTool): string {
+const exactToolBinary = function exactToolBinary(program: ImageTool): string {
   const key = toolEnvironmentKeys[program];
   const configured = process.env[key];
   if (configured === undefined || !isAbsolute(configured))
@@ -776,24 +784,24 @@ function exactToolBinary(program: ImageTool): string {
   const stat = lstatSync(binary);
   if (!stat.isFile()) throw new Error(`${program} does not resolve to a regular file.`);
   return binary;
-}
+};
 
-export function imageToolInvocation(
+export const imageToolInvocation = function imageToolInvocation(
   tool: ImageTool,
   args: readonly string[],
 ): Readonly<{ program: string; args: readonly string[] }> {
   const binary = exactToolBinary(tool);
-  if (tool !== "msb") return { program: binary, args };
+  if (tool !== "msb") return { args, program: binary };
   return {
-    program: exactToolBinary("node"),
     args: [binary, ...args],
+    program: exactToolBinary("node"),
   };
-}
+};
 
-function ensureGithubStateRoot(stateRoot: string): string {
+const ensureGithubStateRoot = function ensureGithubStateRoot(stateRoot: string): string {
   const path = join(stateRoot, githubStateRootName);
   if (!existsSync(path)) {
-    mkdirSync(path, { recursive: false, mode: 0o700 });
+    mkdirSync(path, { mode: 0o700, recursive: false });
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     const directory = openSync(stateRoot, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
@@ -804,29 +812,31 @@ function ensureGithubStateRoot(stateRoot: string): string {
   }
   assertGithubStateRoot(path);
   return path;
-}
+};
 
-function ensureGhcrDockerConfig(stateRoot: string): void {
+const ensureGhcrDockerConfig = function ensureGhcrDockerConfig(stateRoot: string): void {
   const path = ghcrDockerConfigPath(stateRoot);
   if (!existsSync(path)) writeExactFile(path, ghcrDockerConfigBytes, 0o600);
   assertExactGhcrDockerConfig(stateRoot);
-}
+};
 
-function ensureGhcrBoundHelper(stateRoot: string): void {
+const ensureGhcrBoundHelper = function ensureGhcrBoundHelper(stateRoot: string): void {
   const path = ghcrBoundHelperPath(stateRoot);
   if (!existsSync(path)) writeExactFile(path, ghcrBoundHelperBytes, 0o700);
   assertExactGhcrBoundHelper(stateRoot);
-}
+};
 
-function exactGhcrBoundHelperModule(): string {
+const exactGhcrBoundHelperModule = function exactGhcrBoundHelperModule(): string {
   const path = realpathSync(join(process.cwd(), "lib/image/ghcr-bound-helper.ts"));
   const stat = lstatSync(path);
   if (!stat.isFile() || stat.isSymbolicLink())
     throw new Error("GHCR bound helper module is invalid.");
   return path;
-}
+};
 
-export function currentGhcrCredentialBinding(stateRoot: string): GhcrCredentialBinding {
+export const currentGhcrCredentialBinding = function currentGhcrCredentialBinding(
+  stateRoot: string,
+): GhcrCredentialBinding {
   ensureGhcrDockerConfig(stateRoot);
   ensureGhcrBoundHelper(stateRoot);
   ensureGithubStateRoot(stateRoot);
@@ -835,16 +845,18 @@ export function currentGhcrCredentialBinding(stateRoot: string): GhcrCredentialB
   const verifierModule = exactGhcrBoundHelperModule();
   const node = exactToolBinary("node");
   return {
-    version: 3,
+    consumers: {
+      buildxSha256: hashArtifact(readFileSync(exactToolBinary("docker-buildx"))),
+      dockerSha256: hashArtifact(readFileSync(exactToolBinary("docker"))),
+    },
+    dockerConfig: {
+      providerName: "ghcr-bound",
+      sha256: hashArtifact(ghcrDockerConfigBytes),
+    },
     platform: `${platform()}/${arch()}`,
     provider: {
-      name: "gh",
-      version: githubCliVersion,
-      sha256: hashArtifact(readFileSync(gh)),
-      configDigest: githubConfigDigest(ghConfigRoot),
       authenticationSource: "keyring",
-      protocol: "operator-stdin-keyring-readback-v2",
-      statusCommand: ["auth", "status", "--active", "--hostname", "github.com", "--json", "hosts"],
+      configDigest: githubConfigDigest(ghConfigRoot),
       keyringReadCommand: [
         "auth",
         "token",
@@ -853,37 +865,35 @@ export function currentGhcrCredentialBinding(stateRoot: string): GhcrCredentialB
         "--user",
         "<receipt-username>",
       ],
-      userCommand: ["api", "/user", "--jq", ".login"],
       membershipCommand: [
         "api",
         "/user/memberships/orgs/withAutograph",
         "--jq",
         "[.state,.role,.organization.login] | @tsv",
       ],
-    },
-    consumers: {
-      dockerSha256: hashArtifact(readFileSync(exactToolBinary("docker"))),
-      buildxSha256: hashArtifact(readFileSync(exactToolBinary("docker-buildx"))),
-    },
-    dockerConfig: {
-      sha256: hashArtifact(ghcrDockerConfigBytes),
-      providerName: "ghcr-bound",
+      name: "gh",
+      protocol: "operator-stdin-keyring-readback-v2",
+      sha256: hashArtifact(readFileSync(gh)),
+      statusCommand: ["auth", "status", "--active", "--hostname", "github.com", "--json", "hosts"],
+      userCommand: ["api", "/user", "--jq", ".login"],
+      version: githubCliVersion,
     },
     state: {
-      environment: "XDG_STATE_HOME",
-      relativePath: githubStateRootName,
-      policy: "owned-0700-closed-gh-device-id-v1",
       digest: githubStateDigest(join(stateRoot, githubStateRootName)),
+      environment: "XDG_STATE_HOME",
+      policy: "owned-0700-closed-gh-device-id-v1",
+      relativePath: githubStateRootName,
     },
     verifier: {
-      wrapperSha256: hashArtifact(ghcrBoundHelperBytes),
       moduleSha256: hashArtifact(readFileSync(verifierModule)),
       nodeSha256: hashArtifact(readFileSync(node)),
+      wrapperSha256: hashArtifact(ghcrBoundHelperBytes),
     },
+    version: 3,
   };
-}
+};
 
-export function ghcrCredentialEnvironment(
+export const ghcrCredentialEnvironment = function ghcrCredentialEnvironment(
   stateRoot: string,
   identity?: Readonly<{
     username: string;
@@ -898,15 +908,15 @@ export function ghcrCredentialEnvironment(
   ensureGhcrBoundHelper(stateRoot);
   const githubStateRoot = ensureGithubStateRoot(stateRoot);
   const environment: Record<string, string> = {
-    PATH: `${stateRoot}:/usr/bin:/bin`,
-    DOCKER_CONFIG: stateRoot,
-    APP_BUILDER_IMAGE_NODE_BIN: exactToolBinary("node"),
-    APP_BUILDER_IMAGE_GH_BIN: gh,
-    APP_BUILDER_IMAGE_GHCR_BOUND_HELPER_MODULE: exactGhcrBoundHelperModule(),
-    APP_BUILDER_GH_SHA256: hashArtifact(readFileSync(gh)),
-    APP_BUILDER_GH_CONFIG_DIR: ghConfigRoot,
     APP_BUILDER_GH_CONFIG_DIGEST: githubConfigDigest(ghConfigRoot),
+    APP_BUILDER_GH_CONFIG_DIR: ghConfigRoot,
+    APP_BUILDER_GH_SHA256: hashArtifact(readFileSync(gh)),
     APP_BUILDER_GH_STATE_DIR: githubStateRoot,
+    APP_BUILDER_IMAGE_GHCR_BOUND_HELPER_MODULE: exactGhcrBoundHelperModule(),
+    APP_BUILDER_IMAGE_GH_BIN: gh,
+    APP_BUILDER_IMAGE_NODE_BIN: exactToolBinary("node"),
+    DOCKER_CONFIG: stateRoot,
+    PATH: `${stateRoot}:/usr/bin:/bin`,
   };
   if (identity !== undefined) {
     environment.APP_BUILDER_GHCR_USERNAME = identity.username;
@@ -916,15 +926,20 @@ export function ghcrCredentialEnvironment(
       environment.APP_BUILDER_GH_STATE_DIGEST = identity.stateDigest;
   }
   return environment;
-}
+};
 
-export function hasExactKeys(value: object, expected: readonly string[]): boolean {
+export const hasExactKeys = function hasExactKeys(
+  value: object,
+  expected: readonly string[],
+): boolean {
   const actual = Object.keys(value).toSorted();
   const wanted = [...expected].toSorted();
   return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
-}
+};
 
-function requireCurrentGhcrLogin(provenance: ImageProvenance): Readonly<{
+const requireCurrentGhcrLogin = function requireCurrentGhcrLogin(
+  provenance: ImageProvenance,
+): Readonly<{
   receipt: ReceiptEnvelope;
   binding: GhcrCredentialBinding;
   identity: Readonly<{
@@ -982,18 +997,18 @@ function requireCurrentGhcrLogin(provenance: ImageProvenance): Readonly<{
   const { username } = result as { username: string };
   assertGhcrUsername(username);
   return {
-    receipt,
     binding,
     identity: {
-      username,
       digest: String((result as { identityDigest: string }).identityDigest),
       provenanceDigest: provenance.digest,
       stateDigest: binding.state.digest,
+      username,
     },
+    receipt,
   };
-}
+};
 
-function readGhcrTokenFromStdin(): Buffer {
+const readGhcrTokenFromStdin = function readGhcrTokenFromStdin(): Buffer {
   const input = readBoundedInput(0, 4096);
   try {
     let end = input.length;
@@ -1014,9 +1029,9 @@ function readGhcrTokenFromStdin(): Buffer {
   } finally {
     input.fill(0);
   }
-}
+};
 
-async function verifyGhcrLoginWithOwnedProcessGroup(
+const verifyGhcrLoginWithOwnedProcessGroup = async function verifyGhcrLoginWithOwnedProcessGroup(
   provenance: ImageProvenance,
   identity: Readonly<{
     username: string;
@@ -1067,10 +1082,10 @@ async function verifyGhcrLoginWithOwnedProcessGroup(
     terminate();
   }, 50_000);
   try {
-    const status = await new Promise<number>((resolve) => {
-      child.once("error", () => resolve(-1));
-      child.once("close", (code) => resolve(code ?? -1));
-    });
+    const status = await once(child, "close").then(
+      ([code]) => code ?? -1,
+      () => -1,
+    );
     if (failed || timedOut || status !== 0)
       throw new Error("GitHub keyring verification failed without recording credential output.");
     return Buffer.concat(stdout).toString("utf-8");
@@ -1079,9 +1094,9 @@ async function verifyGhcrLoginWithOwnedProcessGroup(
     for (const chunk of stdout) chunk.fill(0);
     for (const chunk of stderr) chunk.fill(0);
   }
-}
+};
 
-function execute(
+const execute = function execute(
   command: CommandSpec,
   cwd: string,
   extraEnvironment: Readonly<Record<string, string>> = {},
@@ -1093,8 +1108,8 @@ function execute(
     const version = spawnSync(versionInvocation.program, [...versionInvocation.args], {
       cwd,
       encoding: "utf-8",
-      maxBuffer: maximumCommandOutputBytes,
       env: sanitizedEnvironment(),
+      maxBuffer: maximumCommandOutputBytes,
       timeout: 10_000,
     });
     if (version.error !== undefined || version.status !== 0)
@@ -1123,18 +1138,18 @@ function execute(
           )
             throw new Error("The image lifecycle trusted Node launcher is invalid.");
           return {
-            program: "/bin/sh",
             args: [launcher, toolInvocation.program, ...toolInvocation.args],
+            program: "/bin/sh",
           };
         })();
   const result = spawnSync(invocation.program, [...invocation.args], {
     cwd,
     encoding: "utf-8",
-    maxBuffer: maximumCommandOutputBytes,
     env: sanitizedEnvironment({
       ...command.environment,
       ...extraEnvironment,
     }),
+    maxBuffer: maximumCommandOutputBytes,
   });
   if (result.error !== undefined) throw result.error;
   if (
@@ -1147,9 +1162,11 @@ function execute(
       `${command.program} lifecycle command failed with exit code ${result.status ?? "unknown"}.`,
     );
   return result.stdout;
-}
+};
 
-function verifyImageSourcesUnlocked(approval: LifecycleApproval) {
+const verifyImageSourcesUnlocked = function verifyImageSourcesUnlocked(
+  approval: LifecycleApproval,
+) {
   const provenance = observeImageProvenance(approval);
   const existing = optionalReceipt(
     provenance.builder.stateRoot,
@@ -1165,9 +1182,9 @@ function verifyImageSourcesUnlocked(approval: LifecycleApproval) {
     provenance,
     { status: "verified" },
   );
-}
+};
 
-function buildImageUnlocked(approval: LifecycleApproval) {
+const buildImageUnlocked = function buildImageUnlocked(approval: LifecycleApproval) {
   const provenance = observeImageProvenance(approval);
   const existing = optionalReceipt(
     provenance.builder.stateRoot,
@@ -1196,16 +1213,16 @@ function buildImageUnlocked(approval: LifecycleApproval) {
     "image-build",
     provenance,
     {
-      status: "built",
-      tag: provenance.image.tag,
+      gitMetadataIncluded: false,
       sanitizedContextEntriesDigest: context.entriesDigest,
       sanitizedContextEntryCount: context.entryCount,
-      gitMetadataIncluded: false,
+      status: "built",
+      tag: provenance.image.tag,
     },
   );
-}
+};
 
-function inspectLocalImageUnlocked(approval: LifecycleApproval) {
+const inspectLocalImageUnlocked = function inspectLocalImageUnlocked(approval: LifecycleApproval) {
   const provenance = observeImageProvenance(approval);
   const existing = optionalReceipt(
     provenance.builder.stateRoot,
@@ -1226,9 +1243,9 @@ function inspectLocalImageUnlocked(approval: LifecycleApproval) {
     provenance,
     result,
   );
-}
+};
 
-function pushImageUnlocked(approval: LifecycleApproval) {
+const pushImageUnlocked = function pushImageUnlocked(approval: LifecycleApproval) {
   const provenance = observeImageProvenance(approval);
   const existing = optionalReceipt(
     provenance.builder.stateRoot,
@@ -1250,14 +1267,17 @@ function pushImageUnlocked(approval: LifecycleApproval) {
     ghcrCredentialEnvironment(provenance.builder.stateRoot, login.identity),
   );
   return writeReceipt(provenance.builder.stateRoot, "push-receipt.json", "image-push", provenance, {
+    ghcrLoginReceiptDigest: login.receipt.digest,
+    localImageReceiptDigest: local.digest,
     status: "pushed",
     tag: provenance.image.tag,
-    localImageReceiptDigest: local.digest,
-    ghcrLoginReceiptDigest: login.receipt.digest,
   });
-}
+};
 
-async function loginGhcrUnlocked(approval: LifecycleApproval, username: string) {
+const loginGhcrUnlocked = async function loginGhcrUnlocked(
+  approval: LifecycleApproval,
+  username: string,
+) {
   const provenance = observeImageProvenance(approval);
   readReceipt(provenance.builder.stateRoot, "source-receipt.json", "image-source", provenance);
   assertGhcrUsername(username);
@@ -1278,9 +1298,9 @@ async function loginGhcrUnlocked(approval: LifecycleApproval, username: string) 
   try {
     const identityDigest = ghcrIdentityDigest(username, provenance.digest, token);
     const identity = {
-      username,
       digest: identityDigest,
       provenanceDigest: provenance.digest,
+      username,
     };
     const result = await verifyGhcrLoginWithOwnedProcessGroup(provenance, identity, token);
     assertVerifiedGhcrLoginPayload(result, username, provenance.digest, identityDigest);
@@ -1291,26 +1311,28 @@ async function loginGhcrUnlocked(approval: LifecycleApproval, username: string) 
       "ghcr-login",
       provenance,
       {
-        schema: "ghcr-login-v3",
-        status: "credential-matched",
-        registry: "ghcr.io",
-        username,
-        authenticationProvider: `gh@${githubCliVersion}-keyring`,
-        operatorApprovalTransport: "one-time-stdin",
-        keyringReadbackTransport: "github-cli-keyring",
-        providerMutation: "none",
         authenticationBoundary: binding,
         authenticationBoundaryDigest: hashArtifact(JSON.stringify(binding)),
+        authenticationProvider: `gh@${githubCliVersion}-keyring`,
         identityDigest,
+        keyringReadbackTransport: "github-cli-keyring",
+        operatorApprovalTransport: "one-time-stdin",
         provenanceDigest: provenance.digest,
+        providerMutation: "none",
+        registry: "ghcr.io",
+        schema: "ghcr-login-v3",
+        status: "credential-matched",
+        username,
       },
     );
   } finally {
     token.fill(0);
   }
-}
+};
 
-function inspectRemoteImageUnlocked(approval: LifecycleApproval) {
+const inspectRemoteImageUnlocked = function inspectRemoteImageUnlocked(
+  approval: LifecycleApproval,
+) {
   const provenance = observeImageProvenance(approval);
   const existing = optionalReceipt(
     provenance.builder.stateRoot,
@@ -1386,9 +1408,12 @@ function inspectRemoteImageUnlocked(approval: LifecycleApproval) {
     provenance,
     result,
   );
-}
+};
 
-function preloadImageUnlocked(approval: LifecycleApproval, digestReferenceInput: string) {
+const preloadImageUnlocked = function preloadImageUnlocked(
+  approval: LifecycleApproval,
+  digestReferenceInput: string,
+) {
   const provenance = observeImageProvenance(approval);
   const reference = exactDigestReference(digestReferenceInput);
   const existing = optionalReceipt(
@@ -1442,9 +1467,9 @@ function preloadImageUnlocked(approval: LifecycleApproval, digestReferenceInput:
     "preload-receipt.json",
     "image-preload",
     provenance,
-    { status: "preloaded", reference },
+    { reference, status: "preloaded" },
   );
-}
+};
 
 type ProofRuntimeResult = Readonly<{
   status: "prepared";
@@ -1454,28 +1479,30 @@ type ProofRuntimeResult = Readonly<{
   ignoredInventory: "node_modules/";
 }>;
 
-function observeProofRuntime(
+const observeProofRuntime = function observeProofRuntime(
   approval: LifecycleApproval,
 ): Readonly<{ provenance: ImageProvenance; result: ProofRuntimeResult }> {
   const provenance = observeImageProvenance(approval, process.cwd(), {
     allowProofRuntime: true,
   });
   const result: ProofRuntimeResult = {
-    status: "prepared",
-    pnpmLockSha256: hashArtifact(readFileSync(join(provenance.builder.root, "pnpm-lock.yaml"))),
     dependencyTreeSha256: hashArtifact(
       execute(inspectProofRuntimeCommand(), provenance.builder.root),
     ),
+    ignoredInventory: "node_modules/",
     nodeModulesTreeSha256: normalizedNodeModulesDigest(
       join(provenance.builder.root, "node_modules"),
     ),
-    ignoredInventory: "node_modules/",
+    pnpmLockSha256: hashArtifact(readFileSync(join(provenance.builder.root, "pnpm-lock.yaml"))),
+    status: "prepared",
   };
   assertNoSecretMaterial(result);
   return { provenance, result };
-}
+};
 
-function prepareProofRuntimeUnlocked(approval: LifecycleApproval) {
+const prepareProofRuntimeUnlocked = function prepareProofRuntimeUnlocked(
+  approval: LifecycleApproval,
+) {
   const builderRoot = process.cwd();
   const nodeModules = join(builderRoot, "node_modules");
   if (existsSync(nodeModules)) {
@@ -1511,9 +1538,9 @@ function prepareProofRuntimeUnlocked(approval: LifecycleApproval) {
     provenance,
     result,
   );
-}
+};
 
-function requireCurrentProofRuntime(
+const requireCurrentProofRuntime = function requireCurrentProofRuntime(
   approval: LifecycleApproval,
 ): Readonly<{ provenance: ImageProvenance; receipt: ReceiptEnvelope }> {
   const { provenance, result } = observeProofRuntime(approval);
@@ -1526,9 +1553,12 @@ function requireCurrentProofRuntime(
   if (JSON.stringify(receipt.result) !== JSON.stringify(result))
     throw new Error("Proof runtime dependency state drifted after its frozen-install receipt.");
   return { provenance, receipt };
-}
+};
 
-function proveSandboxImageUnlocked(approval: LifecycleApproval, digestReferenceInput: string) {
+const proveSandboxImageUnlocked = function proveSandboxImageUnlocked(
+  approval: LifecycleApproval,
+  digestReferenceInput: string,
+) {
   const { provenance, receipt: proofRuntime } = requireCurrentProofRuntime(approval);
   const reference = exactDigestReference(digestReferenceInput);
   const existing = optionalReceipt(
@@ -1569,15 +1599,15 @@ function proveSandboxImageUnlocked(approval: LifecycleApproval, digestReferenceI
     "sandbox-proof",
     provenance,
     {
-      status: "passed",
-      reference,
-      readOnly: true,
-      scope: "typed-identity-and-planning",
-      terminalPhase: "planned",
       proofRuntimeReceiptDigest: proofRuntime.digest,
+      readOnly: true,
+      reference,
+      scope: "typed-identity-and-planning",
+      status: "passed",
+      terminalPhase: "planned",
     },
   );
-}
+};
 
 const locked = <T>(approval: LifecycleApproval, operation: () => T) =>
   withLifecycleLock(approval.stateRoot, () => {

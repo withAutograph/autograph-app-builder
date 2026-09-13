@@ -6,8 +6,8 @@ import { developmentMcpToolNames, waitForDevelopmentMcp } from "./mcp-readiness"
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function response(body: unknown, status = 200, sessionId?: string) {
   return new Response(body === undefined ? undefined : JSON.stringify(body), {
-    status,
     headers: sessionId ? { "mcp-session-id": sessionId } : undefined,
+    status,
   });
 }
 
@@ -22,11 +22,11 @@ describe("development MCP readiness", () => {
       };
       methods.push(request.method);
       if (request.method === "initialize")
-        return response({ jsonrpc: "2.0", id: request.id, result: {} }, 200, "dev-1");
+        return response({ id: request.id, jsonrpc: "2.0", result: {} }, 200, "dev-1");
       if (request.method === "notifications/initialized") return response(undefined, 202);
       return response({
-        jsonrpc: "2.0",
         id: request.id,
+        jsonrpc: "2.0",
         result: { tools: TOOL_NAMES.map((name) => ({ name })) },
       });
     }) as typeof fetch;
@@ -52,11 +52,11 @@ describe("development MCP readiness", () => {
       if (request.method === "initialize" && firstAttempt)
         return response({ error: "starting" }, 503);
       if (request.method === "initialize")
-        return response({ jsonrpc: "2.0", id: request.id, result: {} }, 200, "dev-2");
+        return response({ id: request.id, jsonrpc: "2.0", result: {} }, 200, "dev-2");
       if (request.method === "notifications/initialized") return response(undefined, 202);
       return response({
-        jsonrpc: "2.0",
         id: request.id,
+        jsonrpc: "2.0",
         result: { tools: TOOL_NAMES.map((name) => ({ name })) },
       });
     }) as typeof fetch;
@@ -78,11 +78,11 @@ describe("development MCP readiness", () => {
         method: string;
       };
       if (request.method === "initialize")
-        return response({ jsonrpc: "2.0", id: request.id, result: {} }, 200, "dev-3");
+        return response({ id: request.id, jsonrpc: "2.0", result: {} }, 200, "dev-3");
       if (request.method === "notifications/initialized") return response(undefined, 202);
       return response({
-        jsonrpc: "2.0",
         id: request.id,
+        jsonrpc: "2.0",
         result: { tools: [{ name: "eve_start" }] },
       });
     }) as typeof fetch;
