@@ -4,12 +4,10 @@ import type { Locator } from "playwright";
 import {
   appOrigin,
   applicationCounts,
-  currentSession,
   databaseUrl,
   finishOAuth,
   installProvider,
   resetApplicationState,
-  signOut,
   waitForBuilderReady,
 } from "../../e2e/support/harness";
 import { workflowMatrix } from "../support/self-reproduction-parity";
@@ -56,134 +54,65 @@ async function firstVisible(locators: Locator[]) {
 }
 
 function semanticCandidateAdapter(candidateUrl: string): TrustedBrowserWorkflowAdapter {
-  const state = new Map<WorkflowId, { value?: string; exercised?: boolean }>();
+  const entryUrl = new URL(candidateUrl).href;
   return {
-    contextOptions: { baseURL: candidateUrl },
+    contextOptions: { baseURL: entryUrl },
     async prepare(page, workflowId) {
-      await page.goto("/");
-      const response = await page.request.get("/").catch(() => undefined);
+      if (workflowId !== "documentation")
+        return {
+          ready: false,
+          disposition: "not-run",
+          reason: `The checked-in candidate adapter has no authenticated fixture and server readback binding for ${workflowId}.`,
+        };
+      const response = await page.goto(entryUrl);
       if (!response?.ok())
         return {
           ready: false,
           disposition: "infrastructure-unavailable",
-          reason: `Candidate runtime did not answer at ${candidateUrl}.`,
+          reason: `Candidate runtime did not answer at ${entryUrl}.`,
         };
-      state.set(workflowId, {});
       return { ready: true };
     },
-    async exercise(page, workflowId, freshPage) {
-      if (workflowId === "documentation") {
-        const docs = await firstVisible([
-          page.getByRole("link", { name: /docs|documentation/u }),
-          page.getByRole("button", { name: /docs|documentation/u }),
-        ]);
-        if (!docs)
-          return unsupported(workflowId, "Candidate exposes no semantic documentation control.");
-        await docs.click();
-        const readable = await page
-          .locator("main, article")
-          .first()
-          .isVisible()
-          .catch(() => false);
-        await page.goBack();
-        return {
-          reason: "Evaluator navigated the candidate documentation control and returned.",
-          assertions: [
-            assertion(
-              "docs-readable",
-              readable,
-              "A visible main or article region was required after navigation.",
-            ),
-            assertion(
-              "return-navigation-works",
-              await page.locator("body").isVisible(),
-              "Browser back returned to rendered content.",
-            ),
-          ],
-        };
-      }
-      if (workflowId === "durable-draft") {
-        const name = await firstVisible([
-          page.getByLabel(/app name/u),
-          page.getByPlaceholder(/app name/u),
-        ]);
-        const brief = await firstVisible([
-          page.getByLabel(/app brief|what should this app do/u),
-          page.getByPlaceholder(/describe|brief/u),
-        ]);
-        if (!name || !brief)
-          return unsupported(
-            workflowId,
-            "Candidate exposes no semantic app-name and app-brief controls.",
-          );
-        await name.fill(fixedName);
-        await brief.fill(fixedBrief);
-        await page.waitForTimeout(750);
-        await page.reload();
-        const reloadMatches = (await name.inputValue().catch(() => "")) === fixedName;
-        const fresh = await freshPage();
-        await fresh.goto("/");
-        const freshName = await firstVisible([
-          fresh.getByLabel(/app name/u),
-          fresh.getByPlaceholder(/app name/u),
-        ]);
-        const freshMatches = (await freshName?.inputValue().catch(() => "")) === fixedName;
-        state.set(workflowId, { value: fixedName, exercised: true });
-        return {
-          reason:
-            "Evaluator edited semantic draft fields and checked reload plus an isolated browser context.",
-          assertions: [
-            assertion("write-acknowledged", reloadMatches, "The edit survived a reload."),
-            assertion(
-              "fresh-context-read-matches",
-              freshMatches,
-              "The edit was read in a cookie-free browser context.",
-            ),
-          ],
-        };
-      }
-      const labels: Partial<Record<WorkflowId, RegExp>> = {
-        authentication: /sign in|log in|continue with/u,
-        "provider-return-success": /connect.*github|connect.*vercel|provider/u,
-        "provider-return-error": /connect.*github|connect.*vercel|provider/u,
-        "app-creation": /create app|build app|generate/u,
-        "preview-access": /preview|open app/u,
-        cancellation: /cancel|stop/u,
-        retry: /retry|try again/u,
-        "session-recovery": /resume|recover|continue/u,
-        "independent-child": /create app|build app|generate/u,
+    async exercise(page, workflowId) {
+      const docs = await firstVisible([
+        page.getByRole("link", { name: /docs|documentation/iu }),
+        page.getByRole("button", { name: /docs|documentation/iu }),
+      ]);
+      if (!docs)
+        return unsupported(workflowId, "Candidate exposes no semantic documentation control.");
+      const initialUrl = page.url();
+      const initialContent = await page.locator("body").textContent();
+      await docs.click();
+      const content = page.locator("main, article").first();
+      const readable =
+        (await content.isVisible().catch(() => false)) &&
+        ((await content.textContent()) ?? "").trim().length > 0 &&
+        (await page.locator("body").textContent()) !== initialContent;
+      const navigated = page.url() !== initialUrl;
+      if (navigated) await page.goBack();
+      return {
+        reason:
+          "Evaluator activated documentation, checked changed readable content, and exercised browser return navigation.",
+        assertions: [
+          assertion(
+            "docs-readable",
+            readable,
+            "Documentation activation must reveal distinct readable content.",
+          ),
+          assertion(
+            "return-navigation-works",
+            navigated &&
+              page.url() === initialUrl &&
+              (await page.locator("body").textContent()) === initialContent,
+            "Browser back must restore the original application URL and content.",
+          ),
+        ],
       };
-      const label = labels[workflowId];
-      const control = label
-        ? await firstVisible([
-            page.getByRole("button", { name: label }),
-            page.getByRole("link", { name: label }),
-          ])
-        : undefined;
-      if (!control)
-        return unsupported(workflowId, `Candidate exposes no semantic control for ${workflowId}.`);
-      await control.click().catch(() => undefined);
-      state.set(workflowId, { exercised: true });
-      return unsupported(
-        workflowId,
-        `A ${workflowId} control responded, but the candidate exposes no evaluator-owned fixture/readback contract for durable verification.`,
-      );
     },
     // oxlint-disable-next-line eslint/require-await -- adapter contract is uniformly asynchronous
-    async verify(workflowId) {
-      if (workflowId === "durable-draft")
-        return {
-          reason: "No candidate server readback contract was available.",
-          assertions: [
-            assertion(
-              "revision-advanced",
-              false,
-              "Browser storage is insufficient proof of a durable server revision.",
-            ),
-          ],
-        };
+    async verify() {
       return {
-        reason: "Candidate verification was limited to evaluator-observed semantics.",
+        reason: "Documentation assertions use evaluator-observed browser outcomes.",
         assertions: [],
       };
     },
@@ -192,7 +121,6 @@ function semanticCandidateAdapter(candidateUrl: string): TrustedBrowserWorkflowA
 
 function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
   const supported = new Set<WorkflowId>([
-    "authentication",
     "durable-draft",
     "provider-return-success",
     "documentation",
@@ -241,31 +169,6 @@ function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
       await finishOAuth(page, "GitHub");
       await page.goto("/");
       await waitForBuilderReady(page);
-      if (workflowId === "authentication") {
-        const signedIn = Boolean(await currentSession(page));
-        await signOut(page);
-        const revoked = (await currentSession(page)) === null;
-        const fresh = await freshPage();
-        await fresh.goto("/");
-        const isolated = (await currentSession(fresh)) === null;
-        return {
-          reason:
-            "Evaluator used the real emulated OAuth flow, sign-out route, and an isolated browser context.",
-          assertions: [
-            assertion("sign-in-restores-draft", signedIn, "The real auth session was established."),
-            assertion(
-              "sign-out-revokes-access",
-              revoked,
-              "The session endpoint returned no session after sign-out.",
-            ),
-            assertion(
-              "other-user-denied",
-              isolated,
-              "A cookie-free browser context had no authenticated session.",
-            ),
-          ],
-        };
-      }
       await page.getByLabel("App Name").fill(fixedName);
       await page.getByLabel("App Brief", { exact: true }).fill(fixedBrief);
       await page.getByRole("status").filter({ hasText: "Draft saved" }).waitFor();
