@@ -48,7 +48,7 @@ export const inspectSemanticColors = async (page: Page, browser: Browser, canoni
     const values: {
       element: string;
       property: string;
-      token?: string;
+      cssVariable?: string;
       actual: string;
       reason?: string;
     }[] = [];
@@ -74,7 +74,7 @@ export const inspectSemanticColors = async (page: Page, browser: Browser, canoni
           values.push({
             element: label,
             property,
-            token: [...tokens][0],
+            cssVariable: [...tokens][0],
             actual: getComputedStyle(element).getPropertyValue(property),
           });
         else
@@ -103,9 +103,9 @@ export const inspectSemanticColors = async (page: Page, browser: Browser, canoni
     const resolved = await expected.evaluate(
       (values) =>
         values.map((sample) => {
-          if (!sample.token) return { ...sample, status: "unassessed" };
+          if (!sample.cssVariable) return { ...sample, status: "unassessed" };
           const tokenValue = getComputedStyle(document.documentElement)
-            .getPropertyValue(sample.token)
+            .getPropertyValue(sample.cssVariable)
             .trim();
           if (!tokenValue)
             return {
@@ -114,7 +114,7 @@ export const inspectSemanticColors = async (page: Page, browser: Browser, canoni
               reason: "Canonical token is unavailable in this theme mode",
             };
           const probe = document.createElement("span");
-          probe.style.setProperty(sample.property, `var(${sample.token})`);
+          probe.style.setProperty(sample.property, `var(${sample.cssVariable})`);
           document.body.append(probe);
           const normalized = getComputedStyle(probe).getPropertyValue(sample.property);
           probe.remove();

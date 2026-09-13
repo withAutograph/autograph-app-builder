@@ -1,6 +1,9 @@
 import { chromium } from "playwright";
 import { parse } from "postcss";
 import { expect, it } from "vitest";
+import { redactCandidateEvidence } from "./self-reproduction-candidate-capabilities";
+import { sanitizeEvidence } from "./self-reproduction-evidence";
+import { runSandboxRuntimeComparison } from "./self-reproduction-runtime-comparison";
 import {
   semanticTokenProbeBinding,
   canonicalTokenStylesheet,
@@ -32,7 +35,7 @@ it.runIf(process.env.SELF_REPRODUCTION_BROWSER_TESTS === "1")(
       const normal = await inspectSemanticColors(page, browser, css);
       expect(normal.samples).toContainEqual(
         expect.objectContaining({
-          token: "--color-action-primary",
+          cssVariable: "--color-action-primary",
           actual: "rgb(129, 146, 255)",
           expected: "rgb(129, 146, 255)",
           status: "passed",
@@ -80,4 +83,32 @@ it("binds only actual archived canonical and candidate stylesheet paths", () => 
   });
   expect(semanticTokenProbeBinding({ ...input, workspacePaths: [] })).toBeUndefined();
   expect(semanticTokenProbeBinding({ ...input, candidateFiles: [] })).toBeUndefined();
+});
+
+it("retains CSS identifiers in sanitized receipts while redacting credentials", async () => {
+  const output = {
+    result: { samples: [{ cssVariable: "--color-action-primary" }] },
+    token: "synthetic-credential",
+    diagnostic: "synthetic-credential",
+  };
+  const comparison = await runSandboxRuntimeComparison({
+    session: {
+      writeTextFile: () => Promise.resolve(),
+      run: () => Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }),
+      readTextFile: () => Promise.resolve(JSON.stringify(output)),
+      readBinaryFile: () => Promise.resolve(null),
+    },
+    script: "// trusted evaluator fixture",
+    payload: {},
+    abortSignal: new AbortController().signal,
+  });
+  const receipt = redactCandidateEvidence(comparison, ["synthetic-credential"]);
+  const serialized = sanitizeEvidence(JSON.stringify(receipt));
+  if (typeof serialized !== "string") throw new Error("Expected serialized receipt");
+  const retained = JSON.parse(serialized);
+  expect(retained.status).toBe("completed");
+  expect(retained.output.result.samples[0].cssVariable).toBe("--color-action-primary");
+  expect(retained.output.token).toBe("[REDACTED]");
+  expect(retained.output.diagnostic).toBe("[REDACTED]");
+  expect(serialized).not.toContain("synthetic-credential");
 });
