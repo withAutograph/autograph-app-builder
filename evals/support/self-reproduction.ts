@@ -1,6 +1,6 @@
 /* oxlint-disable eslint/no-await-in-loop -- source traversal preserves deterministic filesystem order. */
 import { readdir, readFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { dirname, join, normalize, relative } from "node:path";
 
 export type RequirementStatus = "passed" | "failed" | "blocked" | "unassessed";
 
@@ -47,6 +47,69 @@ function count(files: SourceFile[], expression: RegExp) {
   return files.reduce((total, file) => total + (file.content.match(expression)?.length ?? 0), 0);
 }
 
+const codeExtensions = [
+  "",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  "/index.ts",
+  "/index.tsx",
+  "/index.js",
+  "/index.jsx",
+] as const;
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function clientImportGraph(files: SourceFile[]) {
+  const byPath = new Map(files.map((file) => [file.path.replaceAll("\\", "/"), file]));
+  const resolveImport = (from: string, specifier: string) => {
+    if (!specifier.startsWith(".") && !specifier.startsWith("@/")) return undefined;
+    const base = specifier.startsWith("@/")
+      ? specifier.slice(2)
+      : normalize(join(dirname(from), specifier)).replaceAll("\\", "/");
+    for (const prefix of specifier.startsWith("@/") ? [base, `src/${base}`] : [base])
+      for (const extension of codeExtensions) {
+        const candidate = `${prefix}${extension}`;
+        if (byPath.has(candidate)) return candidate;
+      }
+    return undefined;
+  };
+  const dependencies = new Map<string, string[]>();
+  for (const file of files) {
+    const imports = [
+      ...file.content.matchAll(
+        /(?:import(?:[\s\S]*?from\s*)?|export[\s\S]*?from\s*)["'](?<path>[^"']+)["']/gu,
+      ),
+    ]
+      .map((match) => resolveImport(file.path, match.groups?.path ?? ""))
+      .filter((path): path is string => path !== undefined);
+    dependencies.set(file.path, imports);
+  }
+  const routeRoots = files
+    .filter((file) =>
+      /(?:^|\/)app\/(?:.*\/)?(?:page|layout|template)\.[cm]?[jt]sx?$/u.test(file.path),
+    )
+    .map((file) => file.path);
+  const clientRouteRoots = routeRoots.filter((path) =>
+    /^\s*["']use client["']/mu.test(byPath.get(path)?.content ?? ""),
+  );
+  const boundaries = new Set<string>();
+  for (const root of routeRoots) {
+    const visited = new Set<string>();
+    const visit = (path: string) => {
+      if (visited.has(path)) return;
+      visited.add(path);
+      if (/^\s*["']use client["']/mu.test(byPath.get(path)?.content ?? "")) {
+        boundaries.add(path);
+        return;
+      }
+      for (const dependency of dependencies.get(path) ?? []) visit(dependency);
+    };
+    visit(root);
+  }
+  return { clientBoundaryPaths: [...boundaries].toSorted(), clientRouteRoots };
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function auditFramework(files: SourceFile[]) {
   // Generated skill payloads can quote deprecated APIs as guidance. They are
@@ -63,6 +126,7 @@ export function auditFramework(files: SourceFile[]) {
   const serverActions = codeFiles.filter((file) =>
     /^\s*["']use server["']/mu.test(file.content),
   ).length;
+  const clientGraph = clientImportGraph(codeFiles);
   return {
     appRouter,
     cacheComponents: /cacheComponents\s*:\s*true/u.test(nextConfig),
@@ -75,11 +139,8 @@ export function auditFramework(files: SourceFile[]) {
       codeFiles,
       /from\s*["']next\/router["']|getServerSideProps|getStaticProps/gu,
     ),
-    broadClientRoot: codeFiles.some(
-      (file) =>
-        /^\s*["']use client["']/mu.test(file.content) &&
-        /<main\b|<html\b|<body\b/u.test(file.content),
-    ),
+    ...clientGraph,
+    broadClientRoot: clientGraph.clientRouteRoots.length > 0,
   };
 }
 

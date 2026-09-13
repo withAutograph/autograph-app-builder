@@ -50,4 +50,51 @@ describe("self-reproduction evaluation", () => {
       }).find((item) => item.id === "durable-draft")?.status,
     ).toBe("failed");
   });
+  it("treats an imported interactive leaf as a narrow client boundary", () => {
+    const audit = auditFramework([
+      {
+        path: "app/page.tsx",
+        content:
+          'import Workspace from "../components/workspace"; export default function Page() { return <Workspace />; }',
+      },
+      {
+        path: "components/workspace.tsx",
+        content: '"use client"; export default function Workspace() { return <main />; }',
+      },
+    ]);
+    expect(audit.broadClientRoot).toBe(false);
+    expect(audit.clientBoundaryPaths).toEqual(["components/workspace.tsx"]);
+  });
+
+  it("flags a client route root and ignores unreachable client modules", () => {
+    const audit = auditFramework([
+      {
+        path: "app/page.tsx",
+        content: '"use client"; export default function Page() { return <main />; }',
+      },
+      {
+        path: "components/unreachable.tsx",
+        content: '"use client"; export default function Unreachable() { return <main />; }',
+      },
+    ]);
+    expect(audit.broadClientRoot).toBe(true);
+    expect(audit.clientRouteRoots).toEqual(["app/page.tsx"]);
+    expect(audit.clientBoundaryPaths).toEqual(["app/page.tsx"]);
+  });
+
+  it("resolves client boundaries through the src alias", () => {
+    const audit = auditFramework([
+      {
+        path: "src/app/page.tsx",
+        content:
+          'import Workspace from "@/components/workspace"; export default function Page() { return <Workspace />; }',
+      },
+      {
+        path: "src/components/workspace.tsx",
+        content: '"use client"; export default function Workspace() { return <button />; }',
+      },
+    ]);
+    expect(audit.clientBoundaryPaths).toEqual(["src/components/workspace.tsx"]);
+    expect(audit.broadClientRoot).toBe(false);
+  });
 });

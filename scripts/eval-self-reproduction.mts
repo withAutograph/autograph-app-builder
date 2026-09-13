@@ -1,7 +1,7 @@
 /* oxlint-disable eslint/no-await-in-loop -- evidence files are written sequentially to preserve a recoverable audit trail. */
 import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, realpath, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { existsSync } from "node:fs";
 import { basename, join, relative, resolve, sep } from "node:path";
@@ -15,7 +15,7 @@ import {
   prioritizedGaps,
   readSource,
 } from "../evals/support/self-reproduction";
-import type { Requirement, WorkflowEvidence } from "../evals/support/self-reproduction";
+import type { WorkflowEvidence } from "../evals/support/self-reproduction";
 import {
   candidateExportFromEvidence,
   candidateExportProvenanceFromEvidence,
@@ -24,6 +24,8 @@ import {
   evidenceSink,
   sanitizeEvidence,
 } from "../evals/support/self-reproduction-evidence";
+import { assessParity, parityVersion } from "../evals/support/self-reproduction-parity";
+import type { Assessment, ParityEvidence } from "../evals/support/self-reproduction-parity";
 
 const root = resolve(import.meta.dirname, "..");
 const { values } = parseArgs({
@@ -61,6 +63,7 @@ let settings: Record<string, unknown> = {};
 let candidateFiles: Awaited<ReturnType<typeof readSource>> | undefined;
 let referenceFiles: Awaited<ReturnType<typeof readSource>> | undefined;
 let workflowEvidence: WorkflowEvidence | undefined;
+let parityAssessment: Assessment | undefined;
 let candidate: Record<string, unknown> = {
   status: "unavailable",
   reason: "No candidate export has been supplied.",
@@ -105,14 +108,14 @@ function revision(directory: string | undefined) {
   }
 }
 
-function requirementRow(requirement: Requirement) {
-  return `<tr><td>${escape(requirement.status)}</td><th>${escape(requirement.title)}</th><td>${escape(requirement.expected)}</td><td>${escape(requirement.evidence.join(" "))}</td><td>${escape(requirement.likelyLayer)}</td><td>${escape(requirement.recommendation)}</td></tr>`;
+function requirementRow(requirement: Assessment["rows"][number]) {
+  return `<tr><td>${escape(requirement.status)}</td><th>${escape(requirement.side)}</th><td>${escape(requirement.requirementId)}</td><td>${escape(requirement.reason)}</td><td>${escape(requirement.artifacts.join(" "))}</td></tr>`;
 }
 
 function reportHtml(report: {
   createdAt: string;
   generation: Record<string, unknown>;
-  requirements: Requirement[];
+  requirements: Assessment["rows"];
   gaps: Record<string, unknown>[];
   captures: { label: string; files: string[]; status: string }[];
 }) {
@@ -126,7 +129,7 @@ function reportHtml(report: {
         `<li><strong>${escape(item.label)}</strong>: ${escape(item.status)}${item.files.length ? ` — ${item.files.map((file) => `<a href="${escape(file)}">${escape(basename(file))}</a>${/\.(?:png|jpe?g|webp)$/iu.test(file) ? `<img src="${escape(file)}" alt="${escape(item.label)} ${escape(basename(file))}" style="display:block;max-width:100%;margin:12px 0">` : ""}`).join(", ")}` : ""}</li>`,
     )
     .join("");
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>One unassisted baseline. Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escape(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escape(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Requirement</th><th>Expected</th><th>Evidence</th><th>Layer</th><th>Recommended repair</th></tr></thead><tbody>${rows}</tbody></table><h2>Paired captures</h2><ul>${captureItems || "<li>Not captured.</li>"}</ul></main></html>`;
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>One unassisted baseline. Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escape(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escape(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Side</th><th>Requirement</th><th>Reason</th><th>Artifacts</th></tr></thead><tbody>${rows}</tbody></table><h2>Paired captures</h2><ul>${captureItems || "<li>Not captured.</li>"}</ul></main></html>`;
 }
 
 async function runGenerator(arrustedRoot: string | undefined) {
@@ -318,7 +321,7 @@ const blockedFramework = (side: "reference" | "candidate") =>
   }));
 
 async function saveReport() {
-  const requirements = [
+  const diagnosticRequirements = [
     ...buildRequirements(candidateFiles, workflowEvidence),
     ...(referenceFiles
       ? frameworkRequirements(auditFramework(referenceFiles), "reference")
@@ -327,6 +330,44 @@ async function saveReport() {
       ? frameworkRequirements(auditFramework(candidateFiles), "candidate")
       : blockedFramework("candidate")),
   ];
+  const candidateOutput = candidate.status === "available" ? "available" : "missing";
+  const parityEvidence: ParityEvidence = {
+    schemaVersion: parityVersion,
+    runId: basename(output),
+    producer: "evaluator",
+    fixtureVersion: 1,
+    reference: {
+      output: referenceFiles ? "available" : "missing",
+      reason: referenceFiles
+        ? "Reference source is available; behavioral parity observations have not run."
+        : "Reference source is unavailable.",
+      sourceRevision: String(
+        (revisions.builder as { commit?: unknown } | undefined)?.commit ?? "unavailable",
+      ),
+      observations: [],
+    },
+    candidate: {
+      output: candidateOutput,
+      reason:
+        candidateOutput === "available"
+          ? "Candidate source is available; behavioral parity observations have not run."
+          : String(candidate.reason ?? "Candidate output is unavailable."),
+      sourceRevision: String(
+        (candidate.revision as { commit?: unknown } | undefined)?.commit ?? "generated-export",
+      ),
+      observations: [],
+    },
+  };
+  await jsonFile("parity-evidence.json", parityEvidence);
+  parityAssessment = await assessParity(parityEvidence, async (path) => {
+    try {
+      const info = await stat(join(output, path));
+      return info.isFile() && info.size > 0;
+    } catch {
+      return false;
+    }
+  });
+  await jsonFile("parity-assessment.json", parityAssessment);
   const receipt = {
     version: 1,
     createdAt: now,
@@ -351,8 +392,21 @@ async function saveReport() {
     reference: referenceFiles
       ? { framework: auditFramework(referenceFiles), sourceFiles: referenceFiles.length }
       : { status: "unavailable" },
-    requirements,
-    gaps: prioritizedGaps(requirements),
+    requirements: parityAssessment.rows,
+    diagnostics: {
+      sourceScans: diagnosticRequirements,
+      sourceScanGaps: prioritizedGaps(diagnosticRequirements),
+      note: "Source scans are diagnostic only and never award parity credit.",
+    },
+    gaps: parityAssessment.rows
+      .filter((row) => row.status !== "passed")
+      .map((row) => ({
+        priority: row.status === "failed" ? "high" : "medium",
+        title: `${row.side}: ${row.requirementId}`,
+        expected: "Evaluator-owned behavioral evidence for every required assertion.",
+        recommendation: row.reason,
+        confirmed: row.status === "failed",
+      })),
     captures: captures.length
       ? captures
       : [
