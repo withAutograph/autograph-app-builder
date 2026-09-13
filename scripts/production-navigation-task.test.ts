@@ -35,7 +35,7 @@ printf '%s\\n' "$*" >> "$MISE_TEST_LOG"
       {
         cwd: directory,
         encoding: "utf-8",
-        env: { MISE_BIN_PATH: mise, MISE_TEST_LOG: log, PATH: "/usr/bin:/bin" },
+        env: { MISE_BIN_PATH: mise, MISE_TEST_LOG: log, NODE_ENV: "test", PATH: "/usr/bin:/bin" },
       },
     );
     expect(result.status, result.stderr).toBe(0);
