@@ -122,7 +122,6 @@ try {
 console.log(JSON.stringify(probes));
 `;
 
-
 function candidatePackageName(files: readonly SandboxSeedFile[], appId: string) {
   const manifest = files.find((file) => file.path === "package.json");
   if (manifest)

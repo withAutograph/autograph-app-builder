@@ -624,7 +624,8 @@ async function saveReport() {
   ];
   const candidateOutput = candidate.status === "available" ? "available" : "missing";
   const effectiveTrustedWorkflowReceipts = trustedWorkflowReceipts.filter((receipt) => {
-    if (candidateRuntime.status === "available" || candidateRuntime.status === "not-run") return true;
+    if (candidateRuntime.status === "available" || candidateRuntime.status === "not-run")
+      return true;
     if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) return true;
     const candidateReceipt = receipt as {
       side?: unknown;
@@ -648,11 +649,11 @@ async function saveReport() {
     }),
   );
   const legacyRuntimeReceipts = runtimeObservations(trustedIds).map((observation) => ({
-      schemaVersion: "self-reproduction-runtime-receipt/v1" as const,
-      producer: "evaluator" as const,
-      side: "candidate" as const,
-      observation,
-    }));
+    schemaVersion: "self-reproduction-runtime-receipt/v1" as const,
+    producer: "evaluator" as const,
+    side: "candidate" as const,
+    observation,
+  }));
   const completedCaptures = pairedCaptures;
   const observedCaptureReceipts =
     completedCaptures?.manifest.rows.flatMap((row) =>
@@ -678,7 +679,9 @@ async function saveReport() {
     const viewport = desktopViewports.find((item) => item.name === viewportName);
     const state = captureStates.find((item) => item === stateName);
     if (!viewport || !state)
-      throw new Error(`Invalid candidate runtime capture requirement ${observation.requirementId}.`);
+      throw new Error(
+        `Invalid candidate runtime capture requirement ${observation.requirementId}.`,
+      );
     return { side: "candidate" as const, viewport, state, ...observation };
   });
   const captureReceipts = [...observedCaptureReceipts, ...failedRuntimeCaptureReceipts];
