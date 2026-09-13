@@ -27,7 +27,10 @@ export function referenceNavigationObservation(input: {
   const results = new Map<string, TestResult[]>();
   const visit = (suite: Suite, file = "") => {
     const source = suite.file ?? file;
-    if (source.endsWith("production-navigation/navigation.spec.ts"))
+    if (
+      source === "navigation.spec.ts" ||
+      source.endsWith("production-navigation/navigation.spec.ts")
+    )
       for (const spec of suite.specs ?? [])
         results.set(spec.title, spec.tests?.flatMap((test) => test.results ?? []) ?? []);
     for (const child of suite.suites ?? []) visit(child, source);
@@ -80,6 +83,7 @@ export function referenceNavigationObservation(input: {
 export async function runReferenceNavigationEvidence(input: {
   repositoryRoot: string;
   outputRoot: string;
+  miseExecutable: string;
 }) {
   const directory = resolve(input.outputRoot, "reference-navigation");
   await mkdir(directory, { recursive: true });
@@ -92,11 +96,14 @@ export async function runReferenceNavigationEvidence(input: {
   const startedAt = new Date().toISOString();
   let run: { stdout: string; stderr: string; error?: string };
   try {
-    run = await execute("mise", ["run", "test:production-navigation", "--", "--reporter=json"], {
-      cwd: input.repositoryRoot,
-      env: { ...process.env, PLAYWRIGHT_JSON_OUTPUT_FILE: reportPath },
-      maxBuffer: 16 * 1024 * 1024,
-    });
+    run = await execute(
+      input.miseExecutable,
+      ["run", "test:production-navigation", "--", "--json-report", reportPath],
+      {
+        cwd: input.repositoryRoot,
+        maxBuffer: 16 * 1024 * 1024,
+      },
+    );
   } catch (error) {
     const failure = error as { stdout?: string; stderr?: string; message?: string };
     run = {

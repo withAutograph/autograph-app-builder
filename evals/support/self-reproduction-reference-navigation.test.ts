@@ -9,7 +9,7 @@ function report(statuses: string[]) {
   return {
     suites: [
       {
-        file: "e2e/production-navigation/navigation.spec.ts",
+        file: "navigation.spec.ts",
         specs: titles.map((title, index) => ({
           title,
           tests: [{ results: [{ status: statuses[index] }] }],

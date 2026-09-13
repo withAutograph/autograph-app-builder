@@ -160,7 +160,9 @@ mise run test:unit -- evals/support/self-reproduction.test.ts \
 ### Reference instant-navigation evidence
 
 The bounded `runReferenceNavigationEvidence` collector uses the existing
-`mise run test:production-navigation -- --reporter=json` lifecycle. Its JSON
+`mise run test:production-navigation -- --json-report /absolute/path/report.json`
+lifecycle. The coordinator supplies its absolute mise executable so stripped
+application environments do not depend on finding mise on PATH. Its JSON
 report and source snapshot identify the exact sign-in direct-load and prefetched
 Sign In Link cases, including resolved controls after `instant()` releases
 dynamic work. It emits only the reference `instant-navigation` receipt; it does
