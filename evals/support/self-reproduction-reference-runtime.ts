@@ -1,6 +1,6 @@
 /* oxlint-disable eslint/no-await-in-loop -- Sequential copying and readiness polling bound resource use. */
 import { startSelfReproductionPostgres } from "./self-reproduction-postgres";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { copyFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
@@ -8,7 +8,22 @@ import { get } from "node:https";
 import { get as getHttp } from "node:http";
 import { createServer } from "node:net";
 import path from "node:path";
+import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
+
+/** Isolated emulation never inherits the hosted controller's credentials or deployment identity. */
+export const referenceRuntimeEnvironment = (
+  miseExecutable: string,
+  parent: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv => ({
+  CI: parent.CI,
+  HOME: parent.HOME,
+  LANG: parent.LANG,
+  MISE_BIN_PATH: miseExecutable,
+  NEXT_TELEMETRY_DISABLED: "1",
+  PATH: `${path.dirname(miseExecutable)}:${parent.PATH ?? "/usr/bin:/bin"}`,
+  TMPDIR: parent.TMPDIR,
+});
 
 export interface ReferenceRuntimeReceipt {
   producer: "evaluator";
@@ -180,6 +195,7 @@ export const startSelfReproductionReferenceRuntime = async (input: {
     stateRoot: path.join(fixtureRoot, ".emulate"),
     status: "infrastructure-unavailable",
   };
+  const childEnvironment = { ...referenceRuntimeEnvironment(input.miseExecutable), ...environment };
   let database: Awaited<ReturnType<typeof startSelfReproductionPostgres>> | undefined;
   let server: ReturnType<typeof spawn> | undefined;
   const run = async (args: string[], name: string): Promise<void> => {
@@ -188,12 +204,7 @@ export const startSelfReproductionReferenceRuntime = async (input: {
     const output = createWriteStream(log);
     const child = spawn(input.miseExecutable, args, {
       cwd: fixtureRoot,
-      env: {
-        ...process.env,
-        ...environment,
-        MISE_BIN_PATH: input.miseExecutable,
-        PATH: `${path.dirname(input.miseExecutable)}:${process.env.PATH ?? "/usr/bin:/bin"}`,
-      },
+      env: childEnvironment,
       stdio: ["ignore", "pipe", "pipe"],
     });
     child.stdout.pipe(output, { end: false });
@@ -236,8 +247,12 @@ export const startSelfReproductionReferenceRuntime = async (input: {
     const output = createWriteStream(log);
     await releaseReservations();
     if (input.databaseBackend === "process") {
+      const execute = promisify(execFile);
       database = await startSelfReproductionPostgres({
         port: databasePort,
+        run: async (command, args) => {
+          await execute(command, args, { env: childEnvironment, timeout: 60_000 });
+        },
         stateRoot: path.join(input.runtimeRoot, `postgres-${randomUUID()}`),
       });
       receipt.logs.push(database.log);
@@ -245,12 +260,7 @@ export const startSelfReproductionReferenceRuntime = async (input: {
     server = spawn(input.miseExecutable, ["run", "app:dev-emulated"], {
       cwd: fixtureRoot,
       detached: true,
-      env: {
-        ...process.env,
-        ...environment,
-        MISE_BIN_PATH: input.miseExecutable,
-        PATH: `${path.dirname(input.miseExecutable)}:${process.env.PATH ?? "/usr/bin:/bin"}`,
-      },
+      env: childEnvironment,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let startupError: Error | undefined;

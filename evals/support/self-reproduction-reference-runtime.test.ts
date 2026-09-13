@@ -5,6 +5,7 @@ import path from "node:path";
 import { expect, it } from "vitest";
 import {
   assertExternalReferenceRoot,
+  referenceRuntimeEnvironment,
   snapshotReferenceSource,
 } from "./self-reproduction-reference-runtime";
 
@@ -31,4 +32,35 @@ it("copies live tracked changes without credentials or ignored runtime files", a
     await rm(root, { force: true, recursive: true });
     await rm(fixture, { force: true, recursive: true });
   }
+});
+
+it("retains tool and PostgreSQL lookup while excluding hosted identity and preload inheritance", () => {
+  const parent = {
+    CI: "1",
+    DATABASE_URL: "live-database",
+    GITHUB_TOKEN: "live-github",
+    HOME: "/home/sandbox",
+    LANG: "C.UTF-8",
+    LD_PRELOAD: "/tmp/loader.so",
+    NODE_OPTIONS: "--import=/tmp/live-preload.mjs",
+    PATH: "/usr/lib/postgresql/16/bin:/workspace/toolchain/bin:/usr/bin",
+    SELF_REPRODUCTION_WORKLOAD_IDENTITY_FILE: "/tmp/live-identity.json",
+    TMPDIR: "/tmp",
+    VERCEL: "1",
+    VERCEL_ENV: "production",
+    VERCEL_OIDC_TOKEN: "live-token",
+    VERCEL_PROJECT_ID: "live-project",
+    VERCEL_TARGET_ENV: "production",
+  };
+  const result = referenceRuntimeEnvironment("/workspace/toolchain/bin/mise", parent);
+  expect(result).toEqual({
+    CI: "1",
+    HOME: "/home/sandbox",
+    LANG: "C.UTF-8",
+    MISE_BIN_PATH: "/workspace/toolchain/bin/mise",
+    NEXT_TELEMETRY_DISABLED: "1",
+    PATH: "/workspace/toolchain/bin:/usr/lib/postgresql/16/bin:/workspace/toolchain/bin:/usr/bin",
+    TMPDIR: "/tmp",
+  });
+  expect(parent.VERCEL_OIDC_TOKEN).toBe("live-token");
 });
