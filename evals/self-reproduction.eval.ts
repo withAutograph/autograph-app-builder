@@ -82,41 +82,43 @@ export default defineEval({
     await send("Run target identity and planning.");
     t.succeeded();
 
-    await send("Apply the current creation proposal.");
-    if (t.pendingInputRequests[0]?.action.toolName === "ask_question") {
-      emit({ kind: "response", request: "Build this app?", response: "build" });
-      await t.respondAll("build");
+    const approveCurrentBuild = async (prompt: string) => {
+      await send(prompt);
+      if (t.pendingInputRequests[0]?.action.toolName === "ask_question") {
+        emit({ kind: "response", request: "Build this app?", response: "build" });
+        await t.respondAll("build");
+        await send("Proceed with the selected build now.");
+      }
+      if (
+        t.pendingInputRequests.length !== 1 ||
+        t.pendingInputRequests[0]?.action.toolName !== "apply_app_creation"
+      )
+        throw new Error("Expected one apply_app_creation approval request.");
+      emit({ kind: "response", request: "apply_app_creation", response: "approve" });
+      await t.respondAll("approve");
+    };
+    const readWorkflowPhase = async () => {
+      const turn = await send("Report the current artifact workflow status without changing it.");
       t.succeeded();
-      await send("Proceed with the selected build now.");
-    }
-    if (
-      t.pendingInputRequests.length !== 1 ||
-      t.pendingInputRequests[0]?.action.toolName !== "apply_app_creation"
-    )
-      throw new Error("Expected one apply_app_creation approval request.");
-    emit({ kind: "response", request: "apply_app_creation", response: "approve" });
-    await t.respondAll("approve");
-    t.succeeded();
-
-    const workflow = await send("Report the current artifact workflow status without changing it.");
-    t.succeeded();
-    let phase = (
-      workflow.toolCalls.find(
-        (call) => call.name === "artifact_workflow_status" && call.status === "completed",
-      )?.output as { phase?: unknown } | undefined
-    )?.phase;
-    if (phase === "applied" || phase === "validation_pending") {
-      await send("Validate the applied creation, then report artifact workflow status.");
-      t.succeeded();
-      const refreshed = await send(
-        "Report the current artifact workflow status without changing it.",
-      );
-      t.succeeded();
-      phase = (
-        refreshed.toolCalls.find(
+      return (
+        turn.toolCalls.find(
           (call) => call.name === "artifact_workflow_status" && call.status === "completed",
         )?.output as { phase?: unknown } | undefined
       )?.phase;
+    };
+
+    await approveCurrentBuild("Apply the current creation proposal.");
+    let phase = await readWorkflowPhase();
+    if (phase === "planned" || phase === "apply_failed") {
+      await approveCurrentBuild(
+        "Repair the implementation using the apply failure already returned by the tool, then apply the current proposal again.",
+      );
+      phase = await readWorkflowPhase();
+    }
+    if (phase === "applied" || phase === "validation_pending") {
+      await send("Validate the applied creation, then report artifact workflow status.");
+      t.succeeded();
+      phase = await readWorkflowPhase();
     }
     if (phase === "validation_failed") {
       const failedExport = await send(
