@@ -35,6 +35,7 @@ export default defineEval({
           toolCalls: turn.toolCalls,
           elapsedMs: Date.now() - started,
         });
+        turn.expectOk();
         return turn;
       } finally {
         clearInterval(timer);
