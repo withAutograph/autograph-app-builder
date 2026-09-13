@@ -401,11 +401,7 @@ export function useBuilderController({
     initialDraft ? JSON.stringify(initialDraft) : undefined,
   );
   const visibleProviderNotices = providerNotices.filter(
-    (notice) =>
-      !(
-        notice.status === "failed" &&
-        notice.reason === "configuration-unavailable"
-      ),
+    (notice) => !(notice.status === "failed" && notice.reason === "configuration-unavailable"),
   );
   const draftSnapshot = useCallback(
     (origin = focusOrigin.current): BuilderDraft => {
