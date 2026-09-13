@@ -20,3 +20,10 @@ it("emits syntactically executable portable code with conservative transient evi
   expect(script).not.toContain("Finish preview");
   expect(script).not.toContain("page.setViewportSize");
 });
+
+it("waits for hydrated product controls before classifying an unknown candidate", () => {
+  const { script } = sandboxCandidateInteractionCaptures();
+  expect(script.indexOf("docs.waitFor")).toBeLessThan(script.indexOf("const known ="));
+  expect(script).toContain("state: 'visible', timeout: 5000");
+  expect(script).not.toContain("waitForTimeout");
+});

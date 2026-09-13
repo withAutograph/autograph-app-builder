@@ -28,6 +28,13 @@ try {
         const response = await page.goto(input.baseURL, { waitUntil: 'domcontentloaded' });
         if (!response || response.status() >= 400) throw new Error('Candidate route did not return a successful document.');
         const docs = page.getByRole('button', { name: 'Docs', exact: true });
+        // Hydration may mount the product controls after DOMContentLoaded.
+        // Wait on the real controls, never a fixed sleep or fabricated fixture.
+        await Promise.all([
+          docs.waitFor({ state: 'visible', timeout: 5000 }),
+          page.getByRole('textbox', { name: 'What would you like to build?', exact: true }).waitFor({ state: 'visible', timeout: 5000 }),
+          page.getByRole('button', { name: 'Continue to review', exact: true }).waitFor({ state: 'visible', timeout: 5000 }),
+        ]).catch(() => undefined);
         const known = await docs.count() === 1 && await page.getByRole('textbox', { name: 'What would you like to build?', exact: true }).count() === 1 && await page.getByRole('button', { name: 'Continue to review', exact: true }).count() === 1;
         if (!known) {
           row.reason = 'Unknown candidate shape has no evaluator-owned interaction fixture binding.';
