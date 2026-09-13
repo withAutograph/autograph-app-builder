@@ -15,13 +15,14 @@ jobs:
     env:
       SELF_REPRODUCTION_CONTROLLER_URL: ${{ vars.SELF_REPRODUCTION_CONTROLLER_URL }}
       SELF_REPRODUCTION_GITHUB_AUDIENCE: ${{ vars.SELF_REPRODUCTION_GITHUB_AUDIENCE }}
-      SELF_REPRODUCTION_OUTPUT_DIR: ${{ runner.temp }}/app-builder-self-reproduction-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24.18.0
       - name: Run live eval through project OIDC controller
+        env:
+          SELF_REPRODUCTION_OUTPUT_DIR: ${{ runner.temp }}/app-builder-self-reproduction-${{ github.run_id }}-${{ github.run_attempt }}
         run: node scripts/hosted-self-reproduction-client.mts
       - uses: actions/upload-artifact@v4
         if: always()
