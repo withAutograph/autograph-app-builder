@@ -28,6 +28,7 @@ export const hostedStorageMigrationTags = [
   "0019_opaque_builder_handoff",
   "0020_durable_builder_draft",
   "0021_builder_draft_active_revision",
+  "0022_hosted_self_reproduction",
 ] as const;
 
 const contractSourcePaths = [
