@@ -5,6 +5,7 @@ const { values } = parseArgs({
   options: {
     "output-dir": { type: "string" },
     "reference-captures-dir": { type: "string" },
+    "reference-run-dir": { type: "string" },
     "run-dir": { type: "string" },
     "source-review-dir": { type: "string" },
   },
@@ -16,6 +17,7 @@ if (!values["run-dir"] || !values["source-review-dir"] || !values["output-dir"])
 const report = await writeSupplementaryAssessment({
   outputDirectory: values["output-dir"],
   referenceCapturesDirectory: values["reference-captures-dir"],
+  referenceRunDirectory: values["reference-run-dir"],
   runDirectory: values["run-dir"],
   sourceReviewDirectory: values["source-review-dir"],
 });

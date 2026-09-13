@@ -65,6 +65,7 @@ export async function writeSupplementaryAssessment(input: {
   sourceReviewDirectory: string;
   outputDirectory: string;
   referenceCapturesDirectory?: string;
+  referenceRunDirectory?: string;
 }) {
   const output = join(
     await realpath(dirname(resolve(input.outputDirectory))),
@@ -76,6 +77,11 @@ export async function writeSupplementaryAssessment(input: {
   const roots = await Promise.all(
     [input.runDirectory, input.sourceReviewDirectory].map((path) => realpath(path)),
   );
+  const replayRoot = input.referenceRunDirectory
+    ? await realpath(input.referenceRunDirectory)
+    : undefined;
+  if (replayRoot && (output === replayRoot || output.startsWith(`${replayRoot}${sep}`)))
+    throw new Error("Supplementary output must be separate from reference replay evidence.");
   for (const root of roots)
     if (output === root || output.startsWith(`${root}${sep}`))
       throw new Error("Supplementary output must be separate from the original evidence.");
@@ -134,6 +140,32 @@ export async function writeSupplementaryAssessment(input: {
   for (const capture of originalReport.captures ?? [])
     for (const path of capture.files ?? [])
       if (typeof path === "string") await copy(roots[0]!, path, "original");
+  let referenceReport = originalReport;
+  const referencePrefix = replayRoot ? "reference-replay" : "original";
+  let referenceReplay:
+    | { runId: string; sourceRevision?: string; provenance: string; reason: string }
+    | undefined;
+  const replay = replayRoot
+    ? parityEvidenceSchema.parse(
+        JSON.parse(await readFile(join(replayRoot, "parity-evidence.json"), "utf-8")),
+      )
+    : undefined;
+  if (replayRoot && replay) {
+    for (const path of ["report.json", "parity-evidence.json", "revisions.json"])
+      await copy(replayRoot, path, referencePrefix);
+    referenceReport = JSON.parse(await readFile(join(replayRoot, "report.json"), "utf-8"));
+    for (const capture of referenceReport.captures ?? [])
+      if (capture.label === "reference")
+        for (const path of capture.files ?? [])
+          if (typeof path === "string") await copy(replayRoot, path, referencePrefix);
+    referenceReplay = {
+      runId: replay.runId,
+      sourceRevision: replay.reference.sourceRevision,
+      provenance: "reference-replay/revisions.json",
+      reason:
+        "Only reference observations and captures come from this retained replay. Candidate evidence remains from the original run; source review keeps its original provenance.",
+    };
+  }
   const rebase = async (
     value: Observation,
     root: string,
@@ -152,6 +184,14 @@ export async function writeSupplementaryAssessment(input: {
     evidence[side].observations = await Promise.all(
       evidence[side].observations.map((item) => rebase(item, roots[0]!, "original")),
     );
+    if (side === "reference" && replay && replayRoot) {
+      const observations = new Map(
+        evidence.reference.observations.map((item) => [item.requirementId, item]),
+      );
+      for (const item of replay.reference.observations)
+        observations.set(item.requirementId, await rebase(item, replayRoot, referencePrefix));
+      evidence.reference = { ...replay.reference, observations: [...observations.values()] };
+    }
     for (const raw of review.observations?.[side] ?? []) {
       const item = raw as Observation;
       const normalized = observationSchema.parse({
@@ -204,14 +244,14 @@ export async function writeSupplementaryAssessment(input: {
   }
   if (!input.referenceCapturesDirectory) {
     const fixturePath = "captures/reference/fixture.json";
-    const fixtureArtifact = `original/${fixturePath}`;
+    const fixtureArtifact = `${referencePrefix}/${fixturePath}`;
     const reportedFiles = new Set<string>(
       (originalReport.captures ?? []).flatMap(
         (capture: { files?: string[] }) => capture.files ?? [],
       ),
     );
     const referenceFiles = new Set<string>(
-      (originalReport.captures ?? [])
+      (referenceReport.captures ?? [])
         .filter((capture: { label?: string }) => capture.label === "reference")
         .flatMap((capture: { files?: string[] }) => capture.files ?? []),
     );
@@ -246,7 +286,7 @@ export async function writeSupplementaryAssessment(input: {
               item.viewport?.height === viewport.height,
           );
           const referencePath = `captures/reference/${viewport.name}-0.png`;
-          const reference = `original/${referencePath}`;
+          const reference = `${referencePrefix}/${referencePath}`;
           const candidate = `original/candidate-browser/${viewport.name}/root.png`;
           if (
             !fixture ||
@@ -304,6 +344,7 @@ export async function writeSupplementaryAssessment(input: {
     anonymousEntryPriority: "excluded",
     missingEvidence: missing,
     screenshotPairs,
+    referenceReplay,
     assessment,
   };
   await writeFile(join(output, "parity-evidence.json"), JSON.stringify(evidence, null, 2));
@@ -312,7 +353,7 @@ export async function writeSupplementaryAssessment(input: {
     (row) =>
       `| ${row.side} | ${row.requirementId} | ${row.status} | ${row.reason.replaceAll("|", "\\|").replaceAll("\n", " ")} |`,
   );
-  const md = `# Supplementary self-reproduction assessment\n\nOriginal run: ${evidence.runId}. No generation or runtime rerun. Source review supplements retained behavioral evidence. Anonymous entry remains excluded from cleanup priority.\n\n| Side | Requirement | Status | Evidence finding |\n| --- | --- | --- | --- |\n${rows.join("\n")}\n\n## Diagnostic initial screenshots\n\n${screenshotPairs.map((pair) => `- ${pair.viewport}: [reference](${pair.reference}), [candidate](${pair.candidate}). ${pair.qualification}`).join("\n")}\n`;
+  const md = `# Supplementary self-reproduction assessment\n\nOriginal run: ${evidence.runId}.${referenceReplay ? ` Reference replay: ${referenceReplay.runId}, source revision ${referenceReplay.sourceRevision ?? "unavailable"}; candidate evidence remains original. See reference-replay/revisions.json.` : ""} No generation or runtime rerun. Source review supplements retained behavioral evidence. Anonymous entry remains excluded from cleanup priority.\n\n| Side | Requirement | Status | Evidence finding |\n| --- | --- | --- | --- |\n${rows.join("\n")}\n\n## Diagnostic initial screenshots\n\n${screenshotPairs.map((pair) => `- ${pair.viewport}: [reference](${pair.reference}), [candidate](${pair.candidate}). ${pair.qualification}`).join("\n")}\n`;
   await writeFile(join(output, "report.md"), md);
   // oxlint-disable-next-line unicorn/consistent-function-scoping -- report-only HTML helper.
   const escape = (text: string) =>
@@ -346,7 +387,7 @@ export async function writeSupplementaryAssessment(input: {
     join(output, "index.html"),
     `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Supplementary self-reproduction assessment</title><style>
 body{font:15px/1.5 system-ui,sans-serif;margin:32px auto;padding:0 24px;max-width:1500px;color:#202124;background:#fafafa}h1{font-size:28px;margin-bottom:8px}h2{margin-top:32px}a{color:#1555a3}table{border-collapse:collapse;width:100%;background:white}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #ddd;vertical-align:top}thead{background:#eee}.summary{max-width:650px}.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}figure{margin:0;background:white;border:1px solid #ddd}figcaption{padding:10px;font-weight:600}img{display:block;width:100%;height:auto}.qualification{color:#555}.failed{color:#a12622;font-weight:600}.passed{color:#256029}.findings{overflow-x:auto}.provenance{display:flex;flex-wrap:wrap;gap:16px}.note{max-width:1000px}li{margin:6px 0}
-</style></head><body><h1>How close did the generated app get?</h1><p class="note">Supplementary assessment of <strong>${escape(evidence.runId)}</strong>. Existing runtime evidence plus evaluator source review; no generation or runtime rerun. Counts describe requirement evidence, not a numerical similarity score. Anonymous entry is excluded from cleanup priority.</p><table class="summary"><thead><tr><th>Application</th><th>Passed</th><th>Failed</th><th>Blocked</th><th>Unassessed</th></tr></thead><tbody>${counts}</tbody></table><p class="provenance"><a href="original/report.json">Original runtime report</a><a href="original/revisions.json">Original revisions</a><a href="source-review/source-evidence.json">Source review provenance</a>${input.referenceCapturesDirectory ? '<a href="reference-captures/capture-provenance.json">Capture provenance</a>' : copied.has("original/captures/reference/fixture.json") ? '<a href="original/captures/reference/fixture.json">Capture fixture provenance</a>' : ""}<a href="report.json">Assessment JSON</a><a href="report.md">Markdown report</a></p><h2>Initial screen comparison</h2>${pairMarkup || "<p>No paired captures retained.</p>"}<h2>Confirmed candidate gaps</h2><p>Workflow failures appear before framework and capture findings. These are separate requirements, not necessarily independent root causes.</p><ul>${priorities.map((row) => `<li><strong>${escape(row.requirementId)}</strong> — ${escape(row.reason)}</li>`).join("")}</ul><h2>All requirement outcomes</h2><div class="findings"><table><thead><tr><th>Side</th><th>Requirement</th><th>Status</th><th>Finding</th><th>Artifacts</th></tr></thead><tbody>${findings}</tbody></table></div><details><summary>Other retained screenshots (${images.length})</summary><ul>${images.map((path) => `<li><a href="${escape(path)}">${escape(path)}</a></li>`).join("")}</ul></details></body></html>`,
+</style></head><body><h1>How close did the generated app get?</h1><p class="note">Supplementary assessment of <strong>${escape(evidence.runId)}</strong>. Existing runtime evidence plus evaluator source review; no generation or runtime rerun.${referenceReplay ? ` Reference replay: ${escape(referenceReplay.runId)}, source revision ${escape(referenceReplay.sourceRevision ?? "unavailable")}; candidate evidence remains original.` : ""} Counts describe requirement evidence, not a numerical similarity score. Anonymous entry is excluded from cleanup priority.</p><table class="summary"><thead><tr><th>Application</th><th>Passed</th><th>Failed</th><th>Blocked</th><th>Unassessed</th></tr></thead><tbody>${counts}</tbody></table><p class="provenance"><a href="original/report.json">Original runtime report</a><a href="original/revisions.json">Original revisions</a><a href="source-review/source-evidence.json">Source review provenance</a>${input.referenceCapturesDirectory ? '<a href="reference-captures/capture-provenance.json">Capture provenance</a>' : copied.has(`${referencePrefix}/captures/reference/fixture.json`) ? `<a href="${referencePrefix}/captures/reference/fixture.json">Capture fixture provenance</a>` : ""}<a href="report.json">Assessment JSON</a><a href="report.md">Markdown report</a></p><h2>Initial screen comparison</h2>${pairMarkup || "<p>No paired captures retained.</p>"}<h2>Confirmed candidate gaps</h2><p>Workflow failures appear before framework and capture findings. These are separate requirements, not necessarily independent root causes.</p><ul>${priorities.map((row) => `<li><strong>${escape(row.requirementId)}</strong> — ${escape(row.reason)}</li>`).join("")}</ul><h2>All requirement outcomes</h2><div class="findings"><table><thead><tr><th>Side</th><th>Requirement</th><th>Status</th><th>Finding</th><th>Artifacts</th></tr></thead><tbody>${findings}</tbody></table></div><details><summary>Other retained screenshots (${images.length})</summary><ul>${images.map((path) => `<li><a href="${escape(path)}">${escape(path)}</a></li>`).join("")}</ul></details></body></html>`,
   );
   return report;
 }
