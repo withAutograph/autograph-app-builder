@@ -4,6 +4,7 @@ set -eu
 
 report_only=0
 candidate_runtime=0
+public_endpoint=0
 for argument in "$@"; do
   case "$argument" in
     -h|--help)
@@ -11,6 +12,11 @@ for argument in "$@"; do
 Submit evals/self-reproduction/brief.md through the supported App Builder web UI
 or autograph_start, then answer only its ordinary product questions and approvals.
 App Builder owns cloning, installation, planning, implementation, recovery and validation.
+
+Drive that same public MCP conversation reproducibly (no internal stages):
+  mise run eval:self-reproduction -- --endpoint http://127.0.0.1:64613/mcp --output-dir /tmp/self-reproduction
+Resume the same session and answer its outstanding product questions:
+  mise run eval:self-reproduction -- --endpoint http://127.0.0.1:64613/mcp --output-dir /tmp/self-reproduction --resume --responses-file /tmp/responses.json
 
 Compare the unchanged output afterward:
   mise run eval:self-reproduction -- --report-only --candidate-root PATH [comparison options]
@@ -21,12 +27,21 @@ See docs/evals/self-reproduction.md for the acceptance and evidence contract.
 EOF
       exit 0
       ;;
+    --endpoint|--endpoint=*) public_endpoint=1 ;;
     --report-only) report_only=1 ;;
     --candidate-runtime) candidate_runtime=1 ;;
   esac
 done
+if [ "$public_endpoint" = 1 ] && [ "$report_only" = 1 ]; then
+  echo "Choose public conversation driving or report-only comparison, not both." >&2
+  exit 64
+fi
+if [ "$public_endpoint" = 1 ]; then
+  exec .config/mise/scripts/trusted-node-launcher \
+    "$(mise which node)" --import tsx scripts/self-reproduction-public.mts "$@"
+fi
 if [ "$report_only" != 1 ]; then
-  echo "Start self-reproduction through the supported App Builder web UI or autograph_start with the product brief. This task only observes and compares output (--report-only); guided internal generation is retired." >&2
+  echo "Start self-reproduction through the supported App Builder web UI or autograph_start with the product brief. Use --endpoint for public MCP driving or --report-only for comparison; guided internal generation is retired." >&2
   exit 64
 fi
 

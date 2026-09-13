@@ -77,3 +77,22 @@ it("refreshes project OIDC only for explicitly requested candidate runtime compa
   expect(result.calls.split("\n")[0]).toBe("mise run local:ensure-oidc");
   expect(result.calls).toContain("--report-only --candidate-runtime");
 });
+
+it("launches only the public driver without provisioning infrastructure", () => {
+  const result = invoke([
+    "--endpoint",
+    "http://127.0.0.1:64613/mcp",
+    "--output-dir",
+    "/tmp/evidence",
+  ]);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.calls).toContain("scripts/self-reproduction-public.mts");
+  expect(result.calls).not.toContain("scripts/eval-self-reproduction.mts");
+  expect(result.calls).not.toContain("local:ensure-oidc");
+});
+
+it("rejects ambiguous public-driving and comparison modes", () => {
+  const result = invoke(["--endpoint", "http://127.0.0.1:64613/mcp", "--report-only"]);
+  expect(result.status).toBe(64);
+  expect(result.calls).toBe("");
+});
