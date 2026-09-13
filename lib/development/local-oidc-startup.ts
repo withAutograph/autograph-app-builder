@@ -205,7 +205,8 @@ export function ensureLocalDevelopmentOidc(input: {
 
   validateInstalledOidc({
     expectedProject,
-    nowEpochSeconds,
+    // A refreshed token can be issued after the pre-pull clock sample.
+    nowEpochSeconds: input.nowEpochSeconds ?? Math.floor(Date.now() / 1000),
     repositoryRoot,
   });
   return { refreshed: true };

@@ -52,6 +52,7 @@ import type { CandidateRuntimeReceipt } from "../evals/support/self-reproduction
 import { runSandboxRuntimeComparison } from "../evals/support/self-reproduction-runtime-comparison";
 import { mergeRuntimeEvidence } from "../evals/support/self-reproduction-runtime-evidence";
 import { sandboxBrowserComparison } from "../evals/support/self-reproduction-runtime-browser";
+import { redactCandidateEvidence } from "../evals/support/self-reproduction-candidate-capabilities";
 import {
   candidateWorkflowReceipts,
   sandboxCandidateWorkflowComparison,
@@ -369,8 +370,13 @@ function escape(value: string) {
   );
 }
 
+const candidateEvidenceSecrets: string[] = [];
+
 async function jsonFile(name: string, data: unknown) {
-  await artifactFile(name, `${JSON.stringify(sanitizeEvidence(data), null, 2)}\n`);
+  await artifactFile(
+    name,
+    `${JSON.stringify(redactCandidateEvidence(data, candidateEvidenceSecrets), null, 2)}\n`,
+  );
 }
 
 function revision(directory: string | undefined) {
@@ -1051,6 +1057,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     }
     if (values["candidate-runtime"] || (!values["report-only"] && !values.generator)) {
       const credentials = loadProjectOidc();
+      if (credentials) candidateEvidenceSecrets.push(credentials.token);
       const { evaluateCandidateRuntime } =
         await import("../evals/support/self-reproduction-runtime");
       const workspaceArchive = arrustedRoot
