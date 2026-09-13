@@ -126,9 +126,13 @@ The self-hosted GitHub workflow uses the same checked-in adapter. Optional
 repository or environment variables `REFERENCE_URL` and `CANDIDATE_URL` become
 `SELF_REPRODUCTION_REFERENCE_URL` and
 `SELF_REPRODUCTION_CANDIDATE_URL`. `WORKFLOW_ADAPTER_MODULE` can select a custom
-module under `evals/`. Leave the URL variables unset for generation-only runs;
-the report records honest not-run receipts instead of treating absent runtimes
-as success.
+module under `evals/`. The default native eval starts an isolated reference
+runtime when no reference URL is supplied and attempts the exported candidate
+in Vercel Sandbox. Local and GitHub runs use this same lifecycle. Report-only
+runs start those runtimes only when `--reference-runtime` or
+`--candidate-runtime` is requested; custom generators also require those flags.
+The reference runtime requires the mise-owned entrypoint and its local database
+prerequisites. Runtime startup errors remain visible in the retained report.
 
 The report labels an operator-supplied candidate separately from the live
 generation that produced it. Credentials and dependencies are never copied.
@@ -136,15 +140,36 @@ Runtime workflow claims require evaluator-owned receipts; candidate-authored
 workflow summaries, static source matches, configuration flags, and generic
 screenshots do not prove them.
 
-Paired captures require both URLs and installed Playwright Chromium. The command
-captures the existing comparison viewports and retains partial capture files if
-one fails. It does not start either app or infer their authentication/session
-state. Missing URLs or unavailable runtimes remain unassessed or blocked in all
-report formats. Native live acceptance and paired captures are separate from the
-focused deterministic checks below:
+The authoritative paired capture matrix requires both reachable URLs and
+installed Playwright Chromium. The candidate Sandbox stays alive while its
+in-Sandbox callback captures diagnostic root/documentation screens at the
+existing desktop viewports; this loopback URL is not exposed to the host browser.
+Those diagnostic captures do not establish authenticated or seeded-state parity.
+Use a reachable candidate URL and equivalent evaluator-owned fixtures for the
+host-side paired matrix. Partial screenshots survive later failures. Missing
+fixtures and unavailable runtimes remain unassessed or blocked in all report
+formats. Native live acceptance and captures are separate from the focused
+deterministic checks below:
 
 ```sh
 mise run test:unit -- evals/support/self-reproduction.test.ts \
   evals/support/self-reproduction-evidence.test.ts \
   scripts/eval-self-reproduction.test.ts
 ```
+
+### Reference instant-navigation evidence
+
+The bounded `runReferenceNavigationEvidence` collector uses the existing
+`mise run test:production-navigation -- --reporter=json` lifecycle. Its JSON
+report and source snapshot identify the exact sign-in direct-load and prefetched
+Sign In Link cases, including resolved controls after `instant()` releases
+dynamic work. It emits only the reference `instant-navigation` receipt; it does
+not award cache isolation, draft continuity, or other framework credit.
+
+The collector retains Git revision, dirty status, source digest, timestamps, and
+command errors under `reference-navigation/`. Missing or skipped exact tests
+remain unassessed; actual assertion failures remain failures. An older text log
+with an aggregate passing count is diagnostic evidence and cannot substitute
+for the exact JSON test results. Collection is opt-in through the eval's
+coordinator; do not repeat a production build solely to refresh an unchanged
+report.
