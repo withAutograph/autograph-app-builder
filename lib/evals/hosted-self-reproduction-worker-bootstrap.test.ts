@@ -29,6 +29,7 @@ const state = vi.hoisted(() => ({
   commands: [] as { cmd: string; args: string[]; env: Record<string, string> }[],
   fail: "",
   files: new Map<string, string>(),
+  os: "ubuntu",
 }));
 vi.mock("node:fs/promises", () => ({
   lstat: async (path: string) => ({
@@ -39,7 +40,7 @@ vi.mock("node:fs/promises", () => ({
   mkdir: async () => {},
   readFile: async (path: string) =>
     path === "/etc/os-release"
-      ? "ID=ubuntu\n"
+      ? `ID=${state.os}\n`
       : JSON.stringify({
           environment: { MISE_DATA_DIR: "/workspace/.app-builder/toolchain/mise-data" },
           toolchain: "trusted-toolchain",
@@ -91,6 +92,7 @@ afterEach(() => {
   state.files.clear();
   state.commands = [];
   state.fail = "";
+  state.os = "ubuntu";
 });
 it("executes fixed hosted task with process PostgreSQL and keeps clone credentials out of later commands and logs", async () => {
   vi.stubEnv("APP_BUILDER_TEMPLATE_READ_TOKEN", "secret-template");
@@ -147,4 +149,33 @@ it("retains allowlisted partial reports and a failed receipt when evaluation exi
   expect(state.files.get("/tmp/self-reproduction-worker/worker.log")).toContain(
     "evaluation: exit=1",
   );
+});
+
+it("installs Amazon Chromium libraries with dnf and downloads browsers without apt", async () => {
+  state.os = "amzn";
+  vi.stubEnv("VERCEL_OIDC_TOKEN", "secret-oidc");
+  vi.stubEnv("APP_BUILDER_TEMPLATE_READ_TOKEN", "secret-template");
+  await runHostedEvalWorker();
+  const packages = state.commands.find(({ args }) => args[0] === "dnf");
+  expect(packages?.args).toEqual(
+    expect.arrayContaining(["nss", "mesa-libgbm", "gtk3", "lsof", "procps-ng"]),
+  );
+  expect(state.commands.some(({ args }) => args.includes("storybook:install-browser"))).toBe(false);
+  const download = state.commands.find(({ args }) =>
+    args.includes("node_modules/playwright/cli.js"),
+  );
+  expect(download?.args).toEqual([
+    "exec",
+    "--",
+    "node",
+    "node_modules/playwright/cli.js",
+    "install",
+    "chromium",
+  ]);
+  expect(
+    state.commands.some(({ args }) => args.includes("apt-get") || args.includes("--with-deps")),
+  ).toBe(false);
+  expect(
+    JSON.parse(state.files.get("/tmp/self-reproduction-worker/result.json") ?? "{}").status,
+  ).toBe("completed");
 });
