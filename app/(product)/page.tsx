@@ -97,9 +97,6 @@ async function HomeContent({ searchParams }: PageProps) {
     if (status !== "connected" && status !== "failed") {
       continue;
     }
-    if (provider === "github" && status === "failed") {
-      continue;
-    }
     notices.push({
       provider,
       status,

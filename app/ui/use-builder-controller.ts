@@ -404,7 +404,7 @@ export function useBuilderController({
     (notice) =>
       !(
         notice.status === "failed" &&
-        (notice.reason === "configuration-unavailable" || notice.provider === "github")
+        notice.reason === "configuration-unavailable"
       ),
   );
   const draftSnapshot = useCallback(
