@@ -148,6 +148,13 @@
       "when": 1788357600000,
       "tag": "0021_builder_draft_active_revision",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1789308000000,
+      "tag": "0022_hosted_self_reproduction",
+      "breakpoints": true
     }
   ]
 }

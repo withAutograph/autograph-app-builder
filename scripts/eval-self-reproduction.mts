@@ -91,6 +91,7 @@ const { values } = parseArgs({
     "debug-prerender": { type: "boolean" },
     "reference-url": { type: "string" },
     "reference-runtime": { type: "boolean" },
+    "postgres-backend": { type: "string", default: "docker" },
     "reference-navigation": { type: "boolean" },
     "reference-navigation-evidence": { type: "string" },
     "mise-executable": { type: "string" },
@@ -306,12 +307,8 @@ async function runConfiguredWorkflowAdapters(candidateRoot: string | undefined) 
 
 async function loadProjectOidc(): Promise<{ token: string; teamId: string; projectId: string }> {
   if (values["hosted-oidc"]) {
-    const { acquireHostedEvalOidc } = await import("../lib/eve/hosted-eval-oidc");
-    return acquireHostedEvalOidc({
-      projectId: process.env.VERCEL_PROJECT_ID ?? "",
-      teamId: process.env.VERCEL_TEAM_ID ?? "",
-      environment: process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV || "",
-    });
+    const { syncHostedEvalIdentity } = await import("../lib/evals/hosted-eval-identity-refresh");
+    return syncHostedEvalIdentity();
   }
   const token = parseLocalVercelOidcToken(
     readOwnerBoundLocalFile(join(root, ".env.local"), { confidential: true }),
@@ -477,6 +474,7 @@ async function runGenerator(arrustedRoot: string | undefined) {
         "--gate-a-source-root",
         resolve(arrustedRoot!),
         "--live-model",
+        ...(values["hosted-oidc"] ? ["--hosted-oidc"] : []),
         "self-reproduction",
         "--strict",
         "--verbose",
@@ -940,6 +938,12 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
   await writeFile(join(output, "eval-output.log"), "", { mode: 0o600 });
   await saveReport();
   try {
+    if (values["hosted-oidc"]) {
+      const identity = await loadProjectOidc();
+      candidateEvidenceSecrets.push(identity.token);
+    }
+    if (!["docker", "process"].includes(values["postgres-backend"]))
+      throw new Error("Postgres backend must be docker or process.");
     const providedCheckout = values["arrusted-root"] ?? process.env.SELF_REPRODUCTION_ARRUSTED_ROOT;
     const templateSource =
       providedCheckout ||
@@ -1067,6 +1071,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         sourceRoot: root,
         runtimeRoot: join(output, "reference-runtime"),
         miseExecutable: values["mise-executable"],
+        databaseBackend: values["postgres-backend"] as "docker" | "process",
       });
       stopReference = reference.stop;
       await jsonFile("reference-runtime.json", reference.receipt);

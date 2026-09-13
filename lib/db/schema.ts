@@ -1,6 +1,7 @@
 import {
   boolean,
   check,
+  customType,
   index,
   integer,
   jsonb,
@@ -11,6 +12,39 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+
+const binaryContent = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => "bytea",
+});
+
+export const hostedSelfReproductionRuns = pgTable(
+  "hosted_self_reproduction_run",
+  {
+    id: text("id").primaryKey(),
+    record: jsonb("record").notNull(),
+    revision: integer("revision").notNull(),
+  },
+  (table) => [
+    check("hosted_self_reproduction_revision_check", sql`${table.revision} >= 0`),
+    check("hosted_self_reproduction_record_check", sql`jsonb_typeof(${table.record}) = 'object'`),
+  ],
+);
+
+export const hostedSelfReproductionArtifacts = pgTable(
+  "hosted_self_reproduction_artifact",
+  {
+    artifactId: text("artifact_id").notNull(),
+    content: binaryContent("content").notNull(),
+    contentType: text("content_type").notNull(),
+    runId: text("run_id")
+      .notNull()
+      .references(() => hostedSelfReproductionRuns.id, { onDelete: "cascade" }),
+    storageKey: text("storage_key").primaryKey(),
+  },
+  (table) => [
+    uniqueIndex("hosted_self_reproduction_artifact_identity").on(table.runId, table.artifactId),
+  ],
+);
 
 // Better Auth 1.7.1 core + jwt + MCP OAuth Provider schema. These exports use
 // the plugin model names intentionally: the Drizzle adapter resolves models by

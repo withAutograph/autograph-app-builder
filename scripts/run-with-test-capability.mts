@@ -31,9 +31,12 @@ const preload = pathToFileURL(
 const evalFetchPreload = pathToFileURL(
   path.resolve(repositoryRoot, "scripts/eve-eval-fetch-preload.mjs"),
 ).href;
+const hostedIdentityPreload = pathToFileURL(
+  path.resolve(repositoryRoot, "scripts/hosted-eval-identity-preload.mjs"),
+).href;
 const maximumFrameBytes = 4096;
 const launcher = path.resolve(repositoryRoot, ".config/mise/scripts/trusted-node-launcher");
-const launcherDigest = "4b0dc2998432cb006eabfaf3f9660e19ca97cd44e34f133330c12087155d1379";
+const launcherDigest = "f37315d8fa0ed5fb36ea1e60c11eba063d8f31a1915dd0132862fa23015ee933";
 const allowedEnvironment = [
   "HOME",
   "TMPDIR",
@@ -49,6 +52,9 @@ const allowedEnvironment = [
   "VERCEL_OIDC_TOKEN",
   "VERCEL_TEAM_ID",
   "VERCEL_PROJECT_ID",
+  "VERCEL_ENV",
+  "VERCEL_TARGET_ENV",
+  "SELF_REPRODUCTION_WORKLOAD_IDENTITY_FILE",
 ] as const;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -217,7 +223,7 @@ export async function runWithTestCapability(options: {
       HOME: evalRuntime?.home ?? process.env.HOME,
       NODE_OPTIONS:
         options.profile === "eve"
-          ? `--import=${preload} --import=${evalFetchPreload}`
+          ? `--import=${preload} --import=${evalFetchPreload}${process.env.SELF_REPRODUCTION_WORKLOAD_IDENTITY_FILE ? ` --import=${hostedIdentityPreload}` : ""}`
           : `--import=${preload}`,
       // Never recover another eval's unfinished queues. Failed runs retain
       // this task-owned directory for diagnostics; successful runs remove it.

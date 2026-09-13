@@ -13,6 +13,15 @@ for owner_file in .eve/sandbox-cache/template-locks/vercel-authorized/*/owner.js
   fi
 done
 
+# Hosted workers use verified invocation identity, without Development files.
+# The evaluator verifies project/owner/environment before running generation.
+for argument in "$@"; do
+  if [ "$argument" = "--hosted-oidc" ]; then
+    exec "$(mise which node)" --import tsx scripts/eval-self-reproduction.mts \
+      --mise-executable "${MISE_BIN_PATH:-$(command -v mise)}" "$@"
+  fi
+done
+
 # Refresh the linked project's short-lived Development OIDC before the trusted
 # Node launcher strips ambient tool paths. The evaluator loads only that token.
 mise run local:ensure-oidc

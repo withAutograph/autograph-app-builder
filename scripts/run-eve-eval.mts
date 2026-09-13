@@ -13,6 +13,9 @@ import {
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const eveEntry = path.resolve(repositoryRoot, "node_modules/eve/bin/eve.js");
 const args = process.argv.slice(2);
+const hostedOidcIndex = args.indexOf("--hosted-oidc");
+const hostedOidc = hostedOidcIndex !== -1;
+if (hostedOidc) args.splice(hostedOidcIndex, 1);
 const liveModelIndex = args.indexOf("--live-model");
 const liveModel = liveModelIndex !== -1;
 if (liveModel) args.splice(liveModelIndex, 1);
@@ -142,7 +145,12 @@ if (realSandbox) {
 }
 if (liveModel && (gateAEvalProfile.profile !== "sandbox" || args[0] !== "self-reproduction"))
   throw new Error("The live model is restricted to the self-reproduction sandbox evaluation.");
-if (liveModel) {
+if (hostedOidc && !liveModel)
+  throw new Error("Hosted identity is only supported for the live self-reproduction eval.");
+if (liveModel && hostedOidc) {
+  const { syncHostedEvalIdentity } = await import("../lib/evals/hosted-eval-identity-refresh");
+  await syncHostedEvalIdentity();
+} else if (liveModel) {
   const project = parseLinkedVercelProject(
     readOwnerBoundLocalFile(path.resolve(repositoryRoot, ".vercel/project.json"), {
       confidential: false,

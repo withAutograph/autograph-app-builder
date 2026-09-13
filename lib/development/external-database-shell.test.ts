@@ -26,6 +26,7 @@ it.each(["dev-emulated", "reset-emulated"])(
         const execution = spawnSync("/bin/sh", [script], {
           cwd: root,
           env: {
+            NODE_ENV: "test",
             APP_BUILDER_EXTERNAL_DATABASE: external,
             PATH: `${path.join(root, "bin")}:/usr/bin:/bin`,
             TRACE_FILE: trace,
