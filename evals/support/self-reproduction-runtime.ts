@@ -6,6 +6,8 @@ import {
   DEVELOPMENT_SANDBOX_ENVIRONMENT,
   developmentPinnedToolchainCommand,
 } from "../../lib/sandbox/development-toolchain";
+import { requirements } from "./self-reproduction-parity";
+import type { Observation } from "./self-reproduction-parity";
 
 export interface RuntimeCommandReceipt {
   command: string;
@@ -29,6 +31,59 @@ export interface CandidateRuntimeReceipt {
     method: "http" | "browser";
     disposition: "observed" | "infrastructure-unavailable";
   }[];
+}
+
+/**
+ * Converts a runtime prerequisite failure into explicit candidate evidence.
+ * Existing, more specific evaluator observations win, and anonymous entry is
+ * intentionally outside the current baseline.
+ */
+function runtimeFailureObservations(input: {
+  receipt: CandidateRuntimeReceipt | { status: "not-run" | "failed"; reason: string };
+  existingRequirementIds?: ReadonlySet<string>;
+  artifact?: string;
+  kind: "capture" | "runtime";
+}): Observation[] {
+  if (input.receipt.status === "available" || input.receipt.status === "not-run") return [];
+  const disposition =
+    input.receipt.status === "infrastructure-unavailable"
+      ? "infrastructure-unavailable"
+      : "missing-functionality";
+  const artifact = input.artifact ?? "candidate-runtime.json";
+  return requirements
+    .filter(
+      (requirement) =>
+        (input.kind === "capture"
+          ? requirement.kind === "capture"
+          : requirement.kind !== "capture") &&
+        requirement.id !== "anonymous-entry" &&
+        !input.existingRequirementIds?.has(requirement.id),
+    )
+    .map((requirement) => ({
+      requirementId: requirement.id,
+      disposition,
+      reason:
+        disposition === "missing-functionality"
+          ? `Candidate runtime prerequisite failed: ${input.receipt.reason}`
+          : `Candidate runtime infrastructure was unavailable: ${input.receipt.reason}`,
+      assertions: [],
+      artifacts: [artifact],
+      method: "none",
+    }));
+}
+
+/** Returns evaluator-owned fallback evidence accepted by the runtime receipt schema. */
+export function candidateRuntimeFailureObservations(
+  input: Omit<Parameters<typeof runtimeFailureObservations>[0], "kind">,
+) {
+  return runtimeFailureObservations({ ...input, kind: "runtime" });
+}
+
+/** Returns fallback observations that capture receipt assembly can attach to viewport metadata. */
+export function candidateRuntimeCaptureFailureObservations(
+  input: Omit<Parameters<typeof runtimeFailureObservations>[0], "kind">,
+) {
+  return runtimeFailureObservations({ ...input, kind: "capture" });
 }
 
 type Backend = SandboxBackend<Record<string, never>, Record<string, never>>;

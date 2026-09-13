@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { evaluateCandidateRuntime } from "./self-reproduction-runtime";
+import {
+  candidateRuntimeCaptureFailureObservations,
+  candidateRuntimeFailureObservations,
+  evaluateCandidateRuntime,
+} from "./self-reproduction-runtime";
 
 function backend(results: { exitCode: number; stdout?: string; stderr?: string }[]) {
   const shutdown = vi.fn(() => Promise.resolve());
@@ -49,6 +53,56 @@ function backend(results: { exitCode: number; stdout?: string; stderr?: string }
 }
 
 describe("self-reproduction candidate runtime", () => {
+  it("turns a candidate build failure into failed evidence for every in-scope requirement", () => {
+    const observations = candidateRuntimeFailureObservations({
+      receipt: { status: "failed", reason: "Candidate build failed." },
+      existingRequirementIds: new Set(["documentation"]),
+    });
+
+    expect(observations).not.toHaveLength(0);
+    expect(observations).not.toContainEqual(
+      expect.objectContaining({ requirementId: "anonymous-entry" }),
+    );
+    expect(observations).not.toContainEqual(
+      expect.objectContaining({ requirementId: "documentation" }),
+    );
+    expect(observations).toContainEqual(
+      expect.objectContaining({
+        requirementId: "durable-draft",
+        disposition: "missing-functionality",
+        artifacts: ["candidate-runtime.json"],
+      }),
+    );
+    expect(observations.some((item) => item.requirementId.startsWith("capture/"))).toBe(false);
+    const captures = candidateRuntimeCaptureFailureObservations({
+      receipt: { status: "failed", reason: "Candidate build failed." },
+    });
+    expect(captures).toContainEqual(
+      expect.objectContaining({
+        requirementId: "capture/desktop/error",
+        disposition: "missing-functionality",
+      }),
+    );
+    expect(captures.every((item) => item.requirementId.startsWith("capture/"))).toBe(true);
+  });
+
+  it("classifies runtime infrastructure loss as blocked evidence", () => {
+    const observations = candidateRuntimeFailureObservations({
+      receipt: {
+        producer: "evaluator",
+        status: "infrastructure-unavailable",
+        reason: "Vercel Sandbox unavailable.",
+        commands: [],
+        probes: [],
+      },
+    });
+
+    expect(observations).not.toHaveLength(0);
+    expect(observations.every((item) => item.disposition === "infrastructure-unavailable")).toBe(
+      true,
+    );
+  });
+
   it("starts a validated candidate and retains evaluator HTTP probes", async () => {
     const fixture = backend([
       { exitCode: 0 },
