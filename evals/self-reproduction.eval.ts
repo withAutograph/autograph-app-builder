@@ -82,11 +82,26 @@ export default defineEval({
     await send("Run target identity and planning.");
     t.succeeded();
 
+    const respondAll = async (response: string) => {
+      const started = Date.now();
+      const before = t.events.length;
+      const turn = await t.respondAll(response);
+      for (const event of t.events.slice(before)) emit({ kind: "event", event });
+      emit({
+        kind: "turn-completed",
+        status: turn.status,
+        message: turn.message,
+        toolCalls: turn.toolCalls,
+        elapsedMs: Date.now() - started,
+      });
+      turn.expectOk();
+      return turn;
+    };
     const approveCurrentBuild = async (prompt: string) => {
       await send(prompt);
       if (t.pendingInputRequests[0]?.action.toolName === "ask_question") {
         emit({ kind: "response", request: "Build this app?", response: "build" });
-        await t.respondAll("build");
+        await respondAll("build");
         await send("Proceed with the selected build now.");
       }
       if (
@@ -95,7 +110,7 @@ export default defineEval({
       )
         throw new Error("Expected one apply_app_creation approval request.");
       emit({ kind: "response", request: "apply_app_creation", response: "approve" });
-      await t.respondAll("approve");
+      await respondAll("approve");
     };
     const readWorkflowPhase = async () => {
       const turn = await send("Report the current artifact workflow status without changing it.");
