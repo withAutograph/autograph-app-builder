@@ -5,7 +5,7 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 
 import { readPrivateDatabaseUrl } from "./private-database-url";
-import { hostedTaskPostgresOptions } from "./postgres-connection-policy";
+import { hostedTaskPostgresOptions, parseMigrationDatabaseUrl } from "./postgres-connection-policy";
 
 if (
   process.argv.length !== 4 ||
@@ -14,7 +14,7 @@ if (
 ) {
   throw new Error("database:migrate requires its private database URL fd.");
 }
-const databaseUrl = readPrivateDatabaseUrl(0);
+const databaseUrl = readPrivateDatabaseUrl(0, parseMigrationDatabaseUrl);
 
 const sql = postgres(databaseUrl, hostedTaskPostgresOptions);
 try {

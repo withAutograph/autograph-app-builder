@@ -4,6 +4,7 @@ import {
   hostedRuntimePostgresOptions,
   hostedTaskPostgresOptions,
   parseHostedDatabaseUrl,
+  parseMigrationDatabaseUrl,
 } from "./postgres-connection-policy";
 
 describe("hosted PostgreSQL connection policy", () => {
@@ -58,4 +59,19 @@ describe("hosted PostgreSQL connection policy", () => {
       expect(() => parseHostedDatabaseUrl(value)).toThrow();
     }
   });
+});
+
+it("allows direct Neon only for migrations while retaining TLS and input validation", () => {
+  const direct =
+    "postgresql://fixture:synthetic@ep-preview.us-east-2.aws.neon.tech/app?sslmode=require";
+  expect(parseMigrationDatabaseUrl(direct)).toBe(direct);
+  expect(() => parseHostedDatabaseUrl(direct)).toThrow("pooled endpoint");
+  for (const invalid of [
+    direct.replace("require", "disable"),
+    "mysql://localhost/app",
+    "postgresql://localhost/app\n",
+    "postgresql://localhost/app\0",
+    "x".repeat(8193),
+  ])
+    expect(() => parseMigrationDatabaseUrl(invalid)).toThrow();
 });

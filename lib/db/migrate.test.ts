@@ -102,3 +102,10 @@ describe("database migration secret boundary", () => {
     expect(migration).not.toMatch(/token|client_secret|private_key/iu);
   });
 });
+
+it("selects the direct-capable parser only for the migration entrypoint", async () => {
+  const migration = await readFile("lib/db/migrate.mts", "utf-8");
+  expect(migration).toContain("readPrivateDatabaseUrl(0, parseMigrationDatabaseUrl)");
+  const reader = await readFile("lib/db/private-database-url.ts", "utf-8");
+  expect(reader).toContain("parseUrl = parseHostedDatabaseUrl");
+});
