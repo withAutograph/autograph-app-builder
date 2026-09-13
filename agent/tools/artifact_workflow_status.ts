@@ -4,8 +4,9 @@ import { z } from "zod";
 import { prototypeArtifactReceipt } from "@/lib/agent/prototype-artifacts";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function isReviewedPhase(state: ReturnType<typeof appBuilderWorkflowState.get>): state is Extract<
+const isReviewedPhase = (
+  state: ReturnType<typeof appBuilderWorkflowState.get>,
+): state is Extract<
   ReturnType<typeof appBuilderWorkflowState.get>,
   {
     phase:
@@ -20,26 +21,22 @@ function isReviewedPhase(state: ReturnType<typeof appBuilderWorkflowState.get>):
       | "fresh_bootstrap_failed"
       | "published_fresh_bootstrap";
   }
-> {
-  return (
-    state.phase === "reviewed" ||
-    state.phase === "publication_pending" ||
-    state.phase === "publication_failed" ||
-    state.phase === "published_local" ||
-    state.phase === "branch_publication_pending" ||
-    state.phase === "branch_publication_failed" ||
-    state.phase === "published_branch_worktree" ||
-    state.phase === "fresh_bootstrap_pending" ||
-    state.phase === "fresh_bootstrap_failed" ||
-    state.phase === "published_fresh_bootstrap"
-  );
-}
+> =>
+  state.phase === "reviewed" ||
+  state.phase === "publication_pending" ||
+  state.phase === "publication_failed" ||
+  state.phase === "published_local" ||
+  state.phase === "branch_publication_pending" ||
+  state.phase === "branch_publication_failed" ||
+  state.phase === "published_branch_worktree" ||
+  state.phase === "fresh_bootstrap_pending" ||
+  state.phase === "fresh_bootstrap_failed" ||
+  state.phase === "published_fresh_bootstrap";
 
 export default defineTool({
   description:
     "Return session-bound artifact workflow receipt metadata without artifact content or mutation.",
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-  async execute(_input, ctx) {
+  execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase === "empty")
       return {

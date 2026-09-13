@@ -45,8 +45,8 @@ describe("self-reproduction default workflow adapter", () => {
 describe("candidate workflow evidence boundaries", () => {
   it("preserves the microfrontend base path when opening the candidate", async () => {
     const { candidate } = createWorkflowAdapters({
-      outputRoot: "/tmp/evidence",
       candidateUrl: "https://candidate.example/replica/",
+      outputRoot: "/tmp/evidence",
     });
     const goto = vi.fn().mockResolvedValue({ ok: () => true });
     expect(await candidate?.prepare({ goto } as unknown as Page, "documentation")).toEqual({
@@ -59,13 +59,13 @@ describe("candidate workflow evidence boundaries", () => {
     "leaves %s unassessed when its candidate fixture is unavailable",
     async (workflow) => {
       const { candidate } = createWorkflowAdapters({
-        outputRoot: "/tmp/evidence",
         candidateUrl: "https://candidate.example/replica/",
+        outputRoot: "/tmp/evidence",
       });
       const goto = vi.fn();
       expect(await candidate?.prepare({ goto } as unknown as Page, workflow)).toMatchObject({
-        ready: false,
         disposition: "not-run",
+        ready: false,
       });
       expect(goto).not.toHaveBeenCalled();
     },
@@ -89,16 +89,16 @@ it("blocks authentication when the evaluator passkey fixture cannot be configure
     referenceUrl: "https://localhost:3001",
   });
   expect(await reference?.prepare({} as Page, "authentication")).toMatchObject({
-    ready: false,
     disposition: "infrastructure-unavailable",
+    ready: false,
   });
 });
 
 it("reads the isolated reference fixture flag secret", async () => {
   const { reference } = createWorkflowAdapters({
     outputRoot: "/tmp/evidence",
-    referenceUrl: "https://localhost:3001",
     referenceFixtureRoot: "/tmp/isolated-reference",
+    referenceUrl: "https://localhost:3001",
   });
   await reference?.prepare({} as Page, "authentication");
   expect(readFile).toHaveBeenCalledWith("/tmp/isolated-reference/.emulate/flags-secret", "utf-8");

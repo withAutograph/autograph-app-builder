@@ -13,8 +13,7 @@ import {
 } from "@/lib/repository/node-branch-worktree-publication";
 import { branchPublicationDigest } from "@/lib/agent/branch-worktree-publication-schema";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function branchWorkflow() {
+const branchWorkflow = () => {
   const workflow = appBuilderWorkflowState.get();
   if (
     workflow.phase !== "reviewed" &&
@@ -26,12 +25,9 @@ function branchWorkflow() {
       "An exact separately reviewed change set is required before branch-worktree publication.",
     );
   return workflow;
-}
+};
 
-// eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
-export async function exactBranchWorktreePublicationProposal(input: {
-  expectedReviewDigest: string;
-}) {
+export const exactBranchWorktreePublicationProposal = (input: { expectedReviewDigest: string }) => {
   const workflow = branchWorkflow();
   if (workflow.reviewReceipt.digest !== input.expectedReviewDigest)
     throw new Error("The reviewed change-set receipt changed before publication.");
@@ -39,7 +35,7 @@ export async function exactBranchWorktreePublicationProposal(input: {
     review: workflow.reviewReceipt,
     sourceReceipt: workflow.sourceReceipt,
   });
-}
+};
 
 export default defineTool({
   description:

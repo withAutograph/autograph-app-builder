@@ -15,9 +15,6 @@ import { hasTestCapability } from "@/lib/testing/test-capability";
 export default defineTool({
   description:
     "Run the repository's normal validation commands against the current applied app. Command exit status is the validation result. This does not publish or otherwise change an external repository.",
-  inputSchema: z.object({
-    implementationFiles: implementationFilesSchema.default([]),
-  }),
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
     if (
@@ -29,35 +26,39 @@ export default defineTool({
       throw new Error("Apply the requested changes before running the repository checks.");
     if (current.phase === "validated") {
       return {
+        commandCount: current.validationReceipt.commands.length,
+        productAcceptance: productAcceptanceObligations(current.appSpec),
+        reused: true,
         status: "validated" as const,
         technicalStatus: "passed" as const,
-        productAcceptance: productAcceptanceObligations(current.appSpec),
-        commandCount: current.validationReceipt.commands.length,
-        reused: true,
       };
     }
     const sandbox = await ctx.getSandbox();
     const relativeApplyRoot = current.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
-    for (const file of input.implementationFiles)
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+    const writeImplementationFiles = async (index: number): Promise<void> => {
+      const file = input.implementationFiles[index];
+      if (file === undefined) return;
       await sandbox.writeTextFile({
-        path: `${relativeApplyRoot}/${file.path}`,
         content: file.content,
+        path: `${relativeApplyRoot}/${file.path}`,
       });
+      await writeImplementationFiles(index + 1);
+    };
+    await writeImplementationFiles(0);
     const fixture = hasTestCapability("simulated-target");
     const attempt = createTargetValidationAttempt(current.applyReceipt, ctx.callId);
     const base = {
-      version: APP_BUILDER_WORKFLOW_VERSION,
-      preparedByCallId: current.preparedByCallId,
-      workspace: current.workspace,
-      sourceReceipt: current.sourceReceipt,
-      ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-      artifacts: current.artifacts,
       appSpec: current.appSpec,
-      dependencyReceipt: current.dependencyReceipt,
-      identityReceipt: current.identityReceipt,
-      proposal: current.proposal,
       applyReceipt: current.applyReceipt,
+      artifacts: current.artifacts,
+      dependencyReceipt: current.dependencyReceipt,
+      ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+      identityReceipt: current.identityReceipt,
+      preparedByCallId: current.preparedByCallId,
+      proposal: current.proposal,
+      sourceReceipt: current.sourceReceipt,
+      version: APP_BUILDER_WORKFLOW_VERSION,
+      workspace: current.workspace,
     } as const;
     appBuilderWorkflowState.update(() => ({
       ...base,
@@ -65,12 +66,12 @@ export default defineTool({
       validationAttempt: attempt,
     }));
     const result = await executeProposalBoundValidation({
-      sandbox,
-      executor: fixture ? fixtureValidationCommandExecutor() : sandboxValidationCommandExecutor(),
+      appId: current.appSpec.appId,
       apply: current.applyReceipt,
       attempt,
       dependencyLayout: current.dependencyReceipt.dependencyLayout,
-      appId: current.appSpec.appId,
+      executor: fixture ? fixtureValidationCommandExecutor() : sandboxValidationCommandExecutor(),
+      sandbox,
     });
     if (!result.ok) {
       appBuilderWorkflowState.update(() => ({
@@ -79,12 +80,12 @@ export default defineTool({
         validationFailure: result.receipt,
       }));
       return {
-        status: "needs_repair" as const,
-        reason: result.receipt.reason,
         commandFailure: result.receipt.commandFailure,
         diagnostics: result.receipt.diagnostics ?? [],
         output: result.receipt.output,
+        reason: result.receipt.reason,
         reused: false,
+        status: "needs_repair" as const,
       };
     }
     appBuilderWorkflowState.update(() => ({
@@ -93,11 +94,14 @@ export default defineTool({
       validationReceipt: result.receipt,
     }));
     return {
+      commandCount: result.receipt.commands.length,
+      productAcceptance: productAcceptanceObligations(current.appSpec),
+      reused: false,
       status: "validated" as const,
       technicalStatus: "passed" as const,
-      productAcceptance: productAcceptanceObligations(current.appSpec),
-      commandCount: result.receipt.commands.length,
-      reused: false,
     };
   },
+  inputSchema: z.object({
+    implementationFiles: implementationFilesSchema.default([]),
+  }),
 });

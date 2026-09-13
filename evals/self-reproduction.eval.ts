@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import path from "node:path";
 
 import { defineEval } from "eve/evals";
 import { satisfies } from "eve/evals/expect";
@@ -44,11 +44,11 @@ export default defineEval({
     };
     emit({ kind: "eval-started" });
     const brief = await readFile(
-      resolve(process.cwd(), "evals/self-reproduction/brief.md"),
+      path.resolve(process.cwd(), "evals/self-reproduction/brief.md"),
       "utf-8",
     );
     const answers = await readFile(
-      resolve(process.cwd(), "evals/self-reproduction/answers.json"),
+      path.resolve(process.cwd(), "evals/self-reproduction/answers.json"),
       "utf-8",
     );
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
@@ -86,7 +86,7 @@ export default defineEval({
     try {
       assertAcceptedAppSpec(status);
     } catch (error) {
-      emit({ kind: "eval-completed", candidate: { status: "unavailable", reason: String(error) } });
+      emit({ candidate: { reason: String(error), status: "unavailable" }, kind: "eval-completed" });
       throw error;
     }
 
@@ -196,11 +196,11 @@ export default defineEval({
 
     if (phase !== "validated" && phase !== "reviewed") {
       emit({
-        kind: "eval-completed",
         candidate: {
-          status: "unavailable",
           reason: `Generation stopped in workflow phase ${String(phase)}.`,
+          status: "unavailable",
         },
+        kind: "eval-completed",
       });
       throw new Error(`Cannot review or export a candidate in workflow phase ${String(phase)}.`);
     }

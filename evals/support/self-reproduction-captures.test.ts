@@ -120,9 +120,9 @@ describe("paired capture orchestration", () => {
     const adapter: CaptureAdapter = {
       exercise: async (_page, state, capture) => {
         await capture();
-        return requirements
-          .find((row) => row.id === `capture/desktop/${state}`)!
-          .assertions.map((id) => ({ detail: "Observed.", id, passed: true }));
+        const requirement = requirements.find((row) => row.id === `capture/desktop/${state}`);
+        if (!requirement) throw new Error(`Unknown capture state: ${state}`);
+        return requirement.assertions.map((id) => ({ detail: "Observed.", id, passed: true }));
       },
       prepare: () => Promise.resolve({ ready: true }),
     };
@@ -165,8 +165,10 @@ describe("paired capture orchestration", () => {
         candidate: { disposition: "infrastructure-unavailable" },
         reference: { disposition: "infrastructure-unavailable" },
       });
-      expect(manifest.rows[0]!.reference).not.toHaveProperty("png");
-      expect(manifest.rows[0]!.reference).not.toHaveProperty("receipt");
+      const [firstRow] = manifest.rows;
+      if (!firstRow) throw new Error("Expected a capture manifest row.");
+      expect(firstRow.reference).not.toHaveProperty("png");
+      expect(firstRow.reference).not.toHaveProperty("receipt");
     } finally {
       await rm(root, { force: true, recursive: true });
     }

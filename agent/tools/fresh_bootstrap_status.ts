@@ -22,8 +22,7 @@ import {
 } from "@/lib/repository/node-fresh-bootstrap";
 import { freshBootstrapSourceWorkspace } from "@/lib/agent/fresh-bootstrap-source";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function freshWorkflow() {
+const freshWorkflow = () => {
   const workflow = appBuilderWorkflowState.get();
   if (
     workflow.phase !== "reviewed" &&
@@ -35,7 +34,7 @@ function freshWorkflow() {
   if (workflow.sourceReceipt.sourceKind !== "fresh-template")
     throw new Error("Fresh bootstrap is unavailable for existing-repository sources.");
   return workflow;
-}
+};
 
 const inputSchema = z.strictObject({
   destinationPath: z.string().startsWith("/"),

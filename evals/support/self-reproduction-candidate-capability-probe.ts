@@ -3,8 +3,8 @@ import { runSandboxRuntimeComparison } from "./self-reproduction-runtime-compari
 
 /** Evaluator-only tooling; install in scratch space, never the generated app. */
 export const candidateCapabilityTooling = {
-  directory: ".scratch/self-reproduction-capabilities",
   dependencies: { "@vercel/sandbox": "2.8.0" },
+  directory: ".scratch/self-reproduction-capabilities",
 } as const;
 
 interface ProbeOutcome {
@@ -20,22 +20,22 @@ interface ProbePorts {
 }
 
 /** These assertions prove infrastructure access only, never generated product behavior. */
-export async function exerciseCandidateCapabilities(ports: ProbePorts) {
+export const exerciseCandidateCapabilities = async (ports: ProbePorts) => {
   const receipt = {
-    producer: "evaluator",
     applicationFunctionalCredit: false,
-    model: { status: "blocked", detail: "Model probe not completed." } as ProbeOutcome,
+    childCleanup: { detail: "No child Sandbox acquired.", status: "blocked" } as ProbeOutcome,
     childSandbox: {
-      status: "blocked",
       detail: "Child Sandbox probe not completed.",
+      status: "blocked",
     } as ProbeOutcome,
-    childCleanup: { status: "blocked", detail: "No child Sandbox acquired." } as ProbeOutcome,
+    model: { detail: "Model probe not completed.", status: "blocked" } as ProbeOutcome,
+    producer: "evaluator",
   };
   try {
     const text = await ports.model();
     receipt.model = {
-      status: text.trim() ? "passed" : "failed",
       detail: text.trim() ? "Live model returned nonempty text." : "Model returned empty text.",
+      status: text.trim() ? "passed" : "failed",
     };
   } catch {
     receipt.model.detail =
@@ -47,10 +47,10 @@ export async function exerciseCandidateCapabilities(ports: ProbePorts) {
     const command = await child.run();
     const passed = command.exitCode === 0 && command.stdout.trim() === "candidate-capability-ok";
     receipt.childSandbox = {
-      status: passed ? "passed" : "failed",
       detail: passed
         ? "Child Sandbox executed the evaluator sentinel."
         : "Child command did not return the expected sentinel.",
+      status: passed ? "passed" : "failed",
     };
   } catch {
     receipt.childSandbox.detail =
@@ -59,22 +59,21 @@ export async function exerciseCandidateCapabilities(ports: ProbePorts) {
     if (child) {
       try {
         await child.stop();
-        receipt.childCleanup = { status: "passed", detail: "Child Sandbox stopped." };
+        receipt.childCleanup = { detail: "Child Sandbox stopped.", status: "passed" };
       } catch {
         receipt.childCleanup = {
-          status: "failed",
           detail: "Child stop failed; bounded provider timeout remains active.",
+          status: "failed",
         };
       }
     }
   }
   return receipt;
-}
+};
 
 /** Compatible with runSandboxRuntimeComparison; payload accepts only the selected model ID. */
-export function sandboxCandidateCapabilityProbe() {
-  return {
-    script: `
+export const sandboxCandidateCapabilityProbe = () => ({
+  script: `
 import { readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
@@ -117,58 +116,57 @@ const receipt = await exercise({
 });
 await writeFile(process.argv[3], JSON.stringify(receipt));
 `,
-  };
-}
+});
 
 /** Opt-in infrastructure diagnostic; setup never writes generated application files. */
-export async function runCandidateCapabilityProbe(input: {
+export const runCandidateCapabilityProbe = async (input: {
   session: Parameters<typeof runSandboxRuntimeComparison>[0]["session"];
   abortSignal: AbortSignal;
   model: string;
-}) {
-  const setup = { exitCode: null as number | null, stdout: "", stderr: "" };
+}) => {
+  const setup = { exitCode: null as number | null, stderr: "", stdout: "" };
   try {
     await input.session.writeTextFile({
-      path: `${candidateCapabilityTooling.directory}/package.json`,
       content: JSON.stringify({
-        private: true,
         dependencies: candidateCapabilityTooling.dependencies,
+        private: true,
       }),
+      path: `${candidateCapabilityTooling.directory}/package.json`,
     });
     const environment = Object.entries(DEVELOPMENT_SANDBOX_ENVIRONMENT)
       .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
       .join(" ");
     const result = await input.session.run({
-      command: `${environment} bun install --cwd ${candidateCapabilityTooling.directory}`,
       abortSignal: input.abortSignal,
+      command: `${environment} bun install --cwd ${candidateCapabilityTooling.directory}`,
     });
     Object.assign(setup, {
       exitCode: result.exitCode,
-      stdout: result.stdout,
       stderr: result.stderr,
+      stdout: result.stdout,
     });
     if (result.exitCode !== 0)
       return {
-        status: "blocked" as const,
         applicationFunctionalCredit: false,
-        setup,
         comparison: null,
         reason: "Evaluator-only capability tooling installation failed.",
+        setup,
+        status: "blocked" as const,
       };
     const comparison = await runSandboxRuntimeComparison({
-      session: input.session,
       abortSignal: input.abortSignal,
       ...sandboxCandidateCapabilityProbe(),
       payload: { model: input.model },
+      session: input.session,
     });
-    return { status: comparison.status, applicationFunctionalCredit: false, setup, comparison };
+    return { applicationFunctionalCredit: false, comparison, setup, status: comparison.status };
   } catch {
     return {
-      status: "blocked" as const,
       applicationFunctionalCredit: false,
-      setup,
       comparison: null,
       reason: "Evaluator-only capability tooling or runtime unavailable.",
+      setup,
+      status: "blocked" as const,
     };
   }
-}
+};

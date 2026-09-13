@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 
 import type { Browser } from "playwright";
 import { describe, expect, it, vi } from "vitest";
@@ -13,66 +13,69 @@ import type {
   WorkflowId,
 } from "./self-reproduction-workflow-adapters";
 
-function assertionIds(id: WorkflowId) {
-  return requirements.find((item) => item.id === id)!.assertions;
-}
+const assertionIds = (id: WorkflowId) => {
+  const requirement = requirements.find((item) => item.id === id);
+  if (!requirement) throw new Error(`Unknown workflow: ${id}`);
+  return requirement.assertions;
+};
 
-function adapter(input?: {
+const adapter = (input?: {
   missing?: WorkflowId;
   unavailable?: WorkflowId;
   fail?: WorkflowId;
-}): TrustedBrowserWorkflowAdapter {
-  return {
-    exercise: async (_page, id, freshPage) => {
-      if (id === "authentication" || id === "durable-draft" || id === "session-recovery")
-        await freshPage();
-      return {
-        assertions: assertionIds(id)
-          .filter((_, index) => index % 2 === 0)
-          .map((assertion) => ({
-            detail: id === input?.fail ? "Transition did not occur." : "Transition observed.",
-            id: assertion,
-            passed: id !== input?.fail,
-          })),
-        reason: "Browser transition observed.",
-      };
-    },
-    prepare: (_page, id) =>
-      Promise.resolve(
-        id === input?.missing
-          ? { disposition: "missing-functionality", ready: false, reason: "Control absent." }
-          : id === input?.unavailable
-            ? {
-                disposition: "infrastructure-unavailable",
-                ready: false,
-                reason: "Fixture database unavailable.",
-              }
-            : { ready: true },
-      ),
-    verify: (id) =>
-      Promise.resolve({
-        assertions: assertionIds(id)
-          .filter((_, index) => index % 2 === 1)
-          .map((assertion) => ({
-            detail: "Durable readback matched.",
-            id: assertion,
-            passed: true,
-          })),
-        reason: "Server readback completed.",
-      }),
-  };
-}
+}): TrustedBrowserWorkflowAdapter => ({
+  exercise: async (_page, id, freshPage) => {
+    if (id === "authentication" || id === "durable-draft" || id === "session-recovery")
+      await freshPage();
+    return {
+      assertions: assertionIds(id)
+        .filter((_, index) => index % 2 === 0)
+        .map((assertion) => ({
+          detail: id === input?.fail ? "Transition did not occur." : "Transition observed.",
+          id: assertion,
+          passed: id !== input?.fail,
+        })),
+      reason: "Browser transition observed.",
+    };
+  },
+  prepare: (_page, id) => {
+    if (id === input?.missing)
+      return Promise.resolve({
+        disposition: "missing-functionality" as const,
+        ready: false as const,
+        reason: "Control absent.",
+      });
+    if (id === input?.unavailable)
+      return Promise.resolve({
+        disposition: "infrastructure-unavailable" as const,
+        ready: false as const,
+        reason: "Fixture database unavailable.",
+      });
+    return Promise.resolve({ ready: true as const });
+  },
+  verify: (id) =>
+    Promise.resolve({
+      assertions: assertionIds(id)
+        .filter((_, index) => index % 2 === 1)
+        .map((assertion) => ({
+          detail: "Durable readback matched.",
+          id: assertion,
+          passed: true,
+        })),
+      reason: "Server readback completed.",
+    }),
+});
 
-function browser() {
+const browser = () => {
   const close = vi.fn(() => Promise.resolve());
   const newPage = vi.fn(() => Promise.resolve({}));
   const newContext = vi.fn(() => Promise.resolve({ close, newPage }));
   return { close, newContext, newPage, value: { newContext } as unknown as Browser };
-}
+};
 
 describe("trusted browser workflow adapters", () => {
   it("runs every non-anonymous workflow per side and requires browser plus server assertions", async () => {
-    const outputRoot = await mkdtemp(join(tmpdir(), "trusted-workflows-"));
+    const outputRoot = await mkdtemp(path.join(tmpdir(), "trusted-workflows-"));
     const fixtureBrowser = browser();
     try {
       const run = await runTrustedBrowserWorkflows({
@@ -105,7 +108,10 @@ describe("trusted browser workflow adapters", () => {
       ).toBe(true);
       expect(fixtureBrowser.newContext.mock.calls.length).toBeGreaterThan(22);
       const receipt = JSON.parse(
-        await readFile(join(outputRoot, "parity/workflows/durable-draft/candidate.json"), "utf-8"),
+        await readFile(
+          path.join(outputRoot, "parity/workflows/durable-draft/candidate.json"),
+          "utf-8",
+        ),
       );
       expect(receipt.producer).toBe("evaluator");
     } finally {
@@ -114,7 +120,7 @@ describe("trusted browser workflow adapters", () => {
   });
 
   it("maps missing functionality, unavailable fixtures and failed behavior distinctly", async () => {
-    const outputRoot = await mkdtemp(join(tmpdir(), "trusted-workflows-status-"));
+    const outputRoot = await mkdtemp(path.join(tmpdir(), "trusted-workflows-status-"));
     try {
       const run = await runTrustedBrowserWorkflows({
         adapters: {
@@ -157,7 +163,7 @@ describe("trusted browser workflow adapters", () => {
   });
 
   it("records fixture exceptions as functional failures and closes all contexts", async () => {
-    const outputRoot = await mkdtemp(join(tmpdir(), "trusted-workflows-error-"));
+    const outputRoot = await mkdtemp(path.join(tmpdir(), "trusted-workflows-error-"));
     const fixtureBrowser = browser();
     const broken = adapter();
     broken.verify = () => Promise.reject(new Error("secret database error"));

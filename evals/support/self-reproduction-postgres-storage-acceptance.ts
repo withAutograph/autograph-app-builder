@@ -12,26 +12,26 @@ interface Storage {
 }
 
 /** Opt-in acceptance against a disposable real database; caller owns migration and cleanup. */
-export async function exerciseHostedPostgresStorage(input: {
+export const exerciseHostedPostgresStorage = async (input: {
   connect: () => Promise<{ storage: Storage; disconnect: () => Promise<void> }>;
-}) {
+}) => {
   const prefix = randomUUID();
   const record: HostedEvalRecord = {
+    artifacts: [],
+    cleanup: "pending",
+    cleanupAt: Date.now() + 60_000,
+    diagnostics: [],
     id: `${prefix}:1:1`,
     identity: {
-      repositoryId: prefix,
-      runId: "1",
-      runAttempt: "1",
       ref: "refs/heads/main",
+      repositoryId: prefix,
+      runAttempt: "1",
+      runId: "1",
       workflowRef: "synthetic/repo/.github/workflows/eval.yml@refs/heads/main",
     },
+    operationId: randomUUID(),
     revision: 0,
     status: "starting",
-    operationId: randomUUID(),
-    cleanupAt: Date.now() + 60_000,
-    artifacts: [],
-    diagnostics: [],
-    cleanup: "pending",
   };
   const first = await input.connect();
   const second = await input.connect().catch(async (error) => {
@@ -72,7 +72,7 @@ export async function exerciseHostedPostgresStorage(input: {
     );
     const other = { ...record, id: `${prefix}:2:1`, identity: { ...record.identity, runId: "2" } };
     await first.storage.store.reserve(other);
-    const artifact = { id: "report.json", contentType: "application/json" };
+    const artifact = { contentType: "application/json", id: "report.json" };
     retainedKey = await first.storage.artifacts.put(record.id, artifact, expected);
     assert.equal(
       await second.storage.artifacts.put(
@@ -98,11 +98,8 @@ export async function exerciseHostedPostgresStorage(input: {
   }
   const fresh = await input.connect();
   try {
-    assert.equal(
-      (await fresh.storage.store.read(record.id))?.revision,
-      1,
-      "A fresh adapter must recover persisted state",
-    );
+    const recovered = await fresh.storage.store.read(record.id);
+    assert.equal(recovered?.revision, 1, "A fresh adapter must recover persisted state");
     assert.deepEqual(
       await fresh.storage.artifacts.read(retainedKey),
       expected,
@@ -112,12 +109,12 @@ export async function exerciseHostedPostgresStorage(input: {
     await fresh.disconnect();
   }
   return {
-    concurrentReservation: "passed",
+    applicationFunctionalCredit: false,
     concurrentCompareAndSet: "passed",
-    staleCompareAndSet: "passed",
+    concurrentReservation: "passed",
+    freshAdapterRecovery: "passed",
     immutableArtifact: "passed",
     perRunIsolation: "passed",
-    freshAdapterRecovery: "passed",
-    applicationFunctionalCredit: false,
+    staleCompareAndSet: "passed",
   };
-}
+};

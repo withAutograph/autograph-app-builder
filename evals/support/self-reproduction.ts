@@ -1,6 +1,6 @@
 /* oxlint-disable eslint/no-await-in-loop -- source traversal preserves deterministic filesystem order. */
 import { readdir, readFile } from "node:fs/promises";
-import { dirname, join, normalize, relative } from "node:path";
+import path from "node:path";
 
 export type RequirementStatus = "passed" | "failed" | "blocked" | "unassessed";
 
@@ -28,10 +28,10 @@ export async function readSource(root: string, current = root): Promise<SourceFi
   const sourceFiles = await Promise.all(
     entries.map(async (entry): Promise<SourceFile[]> => {
       if (ignored.has(entry.name) || entry.name.startsWith(".")) return [];
-      const path = join(current, entry.name);
-      if (entry.isDirectory()) return readSource(root, path);
+      const filePath = path.join(current, entry.name);
+      if (entry.isDirectory()) return readSource(root, filePath);
       if (!entry.isFile() || !/\.(?:[cm]?tsx?|css|mdx?)$/u.test(entry.name)) return [];
-      return [{ content: await readFile(path, "utf-8"), path: relative(root, path) }];
+      return [{ content: await readFile(filePath, "utf-8"), path: path.relative(root, filePath) }];
     }),
   );
   return sourceFiles.flat();
@@ -66,13 +66,12 @@ function clientImportGraph(files: SourceFile[]) {
     if (!specifier.startsWith(".") && !specifier.startsWith("@/")) return;
     const base = specifier.startsWith("@/")
       ? specifier.slice(2)
-      : normalize(join(dirname(from), specifier)).replaceAll("\\", "/");
+      : path.normalize(path.join(path.dirname(from), specifier)).replaceAll("\\", "/");
     for (const prefix of specifier.startsWith("@/") ? [base, `src/${base}`] : [base])
       for (const extension of codeExtensions) {
         const candidate = `${prefix}${extension}`;
         if (byPath.has(candidate)) return candidate;
       }
-    return;
   };
   const dependencies = new Map<string, string[]>();
   for (const file of files) {
@@ -82,7 +81,7 @@ function clientImportGraph(files: SourceFile[]) {
       ),
     ]
       .map((match) => resolveImport(file.path, match.groups?.path ?? ""))
-      .filter((path): path is string => path !== undefined);
+      .filter((dependencyPath): dependencyPath is string => dependencyPath !== undefined);
     dependencies.set(file.path, imports);
   }
   const routeRoots = files
@@ -90,20 +89,20 @@ function clientImportGraph(files: SourceFile[]) {
       /(?:^|\/)app\/(?:.*\/)?(?:page|layout|template)\.[cm]?[jt]sx?$/u.test(file.path),
     )
     .map((file) => file.path);
-  const clientRouteRoots = routeRoots.filter((path) =>
-    /^\s*["']use client["']/mu.test(byPath.get(path)?.content ?? ""),
+  const clientRouteRoots = routeRoots.filter((routePath) =>
+    /^\s*["']use client["']/mu.test(byPath.get(routePath)?.content ?? ""),
   );
   const boundaries = new Set<string>();
   for (const root of routeRoots) {
     const visited = new Set<string>();
-    const visit = (path: string) => {
-      if (visited.has(path)) return;
-      visited.add(path);
-      if (/^\s*["']use client["']/mu.test(byPath.get(path)?.content ?? "")) {
-        boundaries.add(path);
+    const visit = (filePath: string) => {
+      if (visited.has(filePath)) return;
+      visited.add(filePath);
+      if (/^\s*["']use client["']/mu.test(byPath.get(filePath)?.content ?? "")) {
+        boundaries.add(filePath);
         return;
       }
-      for (const dependency of dependencies.get(path) ?? []) visit(dependency);
+      for (const dependency of dependencies.get(filePath) ?? []) visit(dependency);
     };
     visit(root);
   }
@@ -129,18 +128,19 @@ export function auditFramework(files: SourceFile[]) {
   const clientGraph = clientImportGraph(codeFiles);
   return {
     appRouter,
+    broadClientRoot: clientGraph.clientRouteRoots.length > 0,
     cacheComponents: /cacheComponents\s*:\s*true/u.test(nextConfig),
-    partialPrefetching: /partialPrefetching\s*:\s*true/u.test(nextConfig),
-    suspenseBoundaries: count(codeFiles, /<Suspense\b/gu),
-    loadingRoutes: codeFiles.filter((file) => /(?:^|\/)loading\.tsx$/u.test(file.path)).length,
+    clientBoundaryPaths: clientGraph.clientBoundaryPaths,
     clientRoots,
-    serverActions,
+    clientRouteRoots: clientGraph.clientRouteRoots,
     deprecatedPagesRouter: any(
       codeFiles,
       /from\s*["']next\/router["']|getServerSideProps|getStaticProps/gu,
     ),
-    ...clientGraph,
-    broadClientRoot: clientGraph.clientRouteRoots.length > 0,
+    loadingRoutes: codeFiles.filter((file) => /(?:^|\/)loading\.tsx$/u.test(file.path)).length,
+    partialPrefetching: /partialPrefetching\s*:\s*true/u.test(nextConfig),
+    serverActions,
+    suspenseBoundaries: count(codeFiles, /<Suspense\b/gu),
   };
 }
 

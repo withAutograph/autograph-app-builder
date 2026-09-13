@@ -1,30 +1,30 @@
 import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import path from "node:path";
 import { promisify } from "node:util";
 
 const execute = promisify(execFile);
 export const sandboxPostgresInstall = {
-  cmd: "sudo",
   args: ["dnf", "install", "-y", "postgresql16-server"],
+  cmd: "sudo",
 };
 
 type Command = (command: string, args: string[]) => Promise<void>;
 
 /** Ephemeral cluster owned by the current non-root Sandbox user, outside source. */
-export async function startSelfReproductionPostgres(input: {
+export const startSelfReproductionPostgres = async (input: {
   stateRoot: string;
   port: number;
   run?: Command;
-}) {
+}) => {
   const run: Command =
     input.run ??
     (async (command, args) => {
       await execute(command, args, { timeout: 60_000 });
     });
   await mkdir(input.stateRoot, { recursive: true });
-  const data = join(input.stateRoot, "data");
-  const log = join(input.stateRoot, "postgres.log");
+  const data = path.join(input.stateRoot, "data");
+  const log = path.join(input.stateRoot, "postgres.log");
   let stopped = false;
   const stop = async () => {
     if (stopped) return;
@@ -82,8 +82,8 @@ export async function startSelfReproductionPostgres(input: {
     throw error;
   }
   return {
-    stop,
-    log,
     databaseUrl: `postgresql://postgres@127.0.0.1:${input.port}/autograph_app_builder`,
+    log,
+    stop,
   };
-}
+};

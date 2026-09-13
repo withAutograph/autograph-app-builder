@@ -132,10 +132,10 @@ const repairLinePattern =
 
 // Keep enough compiler/build output for an agent to repair its own candidate,
 // while excluding control bytes and common credential forms from durable state.
-export function validationOutputExcerpt(
+export const validationOutputExcerpt = (
   stdout: string,
   stderr: string,
-): TargetValidationOutputExcerpt {
+): TargetValidationOutputExcerpt => {
   let truncated = false;
   const sanitize = (value: string) => {
     const cleaned = value
@@ -152,8 +152,8 @@ export function validationOutputExcerpt(
     truncated = true;
     return `${cleaned.slice(0, VALIDATION_OUTPUT_LIMIT)}\n[output truncated]`;
   };
-  return { stdout: sanitize(stdout), stderr: sanitize(stderr), truncated };
-}
+  return { stderr: sanitize(stderr), stdout: sanitize(stdout), truncated };
+};
 
 const compilerDiagnosticPatterns = [
   /^(?<file>.*?)\((?<line>\d+),(?<column>\d+)\):\s*error\s+(?<code>TS\d+):\s*(?<message>.+)$/u,
@@ -164,8 +164,7 @@ const sourceLocationPattern = /^\s*,-\[(?<path>.+?):(?<line>\d+):(?<column>\d+)\
 const vitestFailurePattern = /^\s*FAIL\s+(?<file>.+?)\s*>\s*(?<message>.+)$/u;
 const vitestLocationPattern = /^\s*❯\s+(?<path>.+?):(?<line>\d+):(?<column>\d+)$/u;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function safeDiagnosticPath(value: string): string | undefined {
+const safeDiagnosticPath = (value: string): string | undefined => {
   const normalized = value.replaceAll("\\", "/");
   const appsOffset = normalized.indexOf("apps/");
   const path = appsOffset === -1 ? normalized : normalized.slice(appsOffset);
@@ -178,10 +177,9 @@ function safeDiagnosticPath(value: string): string | undefined {
   )
     return undefined;
   return path;
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function diagnosticMessage(code: TargetValidationDiagnostic["code"]): string {
+const diagnosticMessage = (code: TargetValidationDiagnostic["code"]): string => {
   // Command text may contain source literals or credentials. Keep the actual
   // compiler code and location, but generate the explanation ourselves.
   if (code === "VITEST") return "Test assertion failed at this location.";
@@ -190,10 +188,9 @@ function diagnosticMessage(code: TargetValidationDiagnostic["code"]): string {
   if (code === "TS2532" || code === "TS18048")
     return "A value may be undefined; handle the empty case.";
   return "Compiler error at this location; inspect the reported code and file.";
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function compilerDiagnostics(output: string): TargetValidationDiagnostic[] {
+export const compilerDiagnostics = (output: string): TargetValidationDiagnostic[] => {
   const diagnostics: TargetValidationDiagnostic[] = [];
   const seen = new Set<string>();
   let pendingCompiler: { code: `TS${number}` } | undefined;
@@ -257,39 +254,35 @@ export function compilerDiagnostics(output: string): TargetValidationDiagnostic[
     }
   }
   return diagnostics;
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function validationBinding(apply: TargetApplyReceipt): TargetValidationBinding {
-  return {
-    appId: apply.targetReceipt.appId,
-    appSpecDigest: apply.appSpecDigest,
-    appSpecPath: apply.appSpecPath,
-    appValidationSha256: ARRUSTED_APP_VALIDATION_SHA256,
-    appliedTreeDigest: apply.postTreeDigest,
-    applyDigest: apply.digest,
-    artifactRevision: apply.artifactRevision,
-    changedContentDigest: apply.changedContentDigest,
-    dependencyCacheContentDigest: apply.dependencyCacheContentDigest,
-    dependencyCacheDigest: apply.dependencyCacheDigest,
-    dependencyReceiptDigest: apply.dependencyReceiptDigest,
-    eligibilityDigest: apply.eligibilityDigest,
-    identityDigest: apply.identityDigest,
-    imageDigest: apply.imageDigest,
-    proposalDigest: apply.proposalDigest,
-    sourceReceiptDigest: apply.sourceReceiptDigest,
-    sourceSha: apply.sourceSha,
-    sourceTree: apply.sourceTree,
-    testShards: SUPPORTED_VALIDATION_TEST_SHARDS,
-    workspaceDigest: apply.workspaceDigest,
-  };
-}
+export const validationBinding = (apply: TargetApplyReceipt): TargetValidationBinding => ({
+  appId: apply.targetReceipt.appId,
+  appSpecDigest: apply.appSpecDigest,
+  appSpecPath: apply.appSpecPath,
+  appValidationSha256: ARRUSTED_APP_VALIDATION_SHA256,
+  appliedTreeDigest: apply.postTreeDigest,
+  applyDigest: apply.digest,
+  artifactRevision: apply.artifactRevision,
+  changedContentDigest: apply.changedContentDigest,
+  dependencyCacheContentDigest: apply.dependencyCacheContentDigest,
+  dependencyCacheDigest: apply.dependencyCacheDigest,
+  dependencyReceiptDigest: apply.dependencyReceiptDigest,
+  eligibilityDigest: apply.eligibilityDigest,
+  identityDigest: apply.identityDigest,
+  imageDigest: apply.imageDigest,
+  proposalDigest: apply.proposalDigest,
+  sourceReceiptDigest: apply.sourceReceiptDigest,
+  sourceSha: apply.sourceSha,
+  sourceTree: apply.sourceTree,
+  testShards: SUPPORTED_VALIDATION_TEST_SHARDS,
+  workspaceDigest: apply.workspaceDigest,
+});
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function createTargetValidationAttempt(
+export const createTargetValidationAttempt = (
   apply: TargetApplyReceipt,
   startedByCallId: string,
-): TargetValidationAttemptReceipt {
+): TargetValidationAttemptReceipt => {
   const unsigned = {
     status: "pending" as const,
     version: 3 as const,
@@ -305,37 +298,34 @@ export function createTargetValidationAttempt(
     startedByCallId,
   };
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function attemptBinding(attempt: TargetValidationAttemptReceipt): TargetValidationBinding {
-  return {
-    appId: attempt.appId,
-    appSpecDigest: attempt.appSpecDigest,
-    appSpecPath: attempt.appSpecPath,
-    appValidationSha256: attempt.appValidationSha256,
-    appliedTreeDigest: attempt.appliedTreeDigest,
-    applyDigest: attempt.applyDigest,
-    artifactRevision: attempt.artifactRevision,
-    changedContentDigest: attempt.changedContentDigest,
-    dependencyCacheContentDigest: attempt.dependencyCacheContentDigest,
-    dependencyCacheDigest: attempt.dependencyCacheDigest,
-    dependencyReceiptDigest: attempt.dependencyReceiptDigest,
-    eligibilityDigest: attempt.eligibilityDigest,
-    identityDigest: attempt.identityDigest,
-    imageDigest: attempt.imageDigest,
-    proposalDigest: attempt.proposalDigest,
-    sourceReceiptDigest: attempt.sourceReceiptDigest,
-    sourceSha: attempt.sourceSha,
-    sourceTree: attempt.sourceTree,
-    testShards: attempt.testShards,
-    workspaceDigest: attempt.workspaceDigest,
-  };
-}
+const attemptBinding = (attempt: TargetValidationAttemptReceipt): TargetValidationBinding => ({
+  appId: attempt.appId,
+  appSpecDigest: attempt.appSpecDigest,
+  appSpecPath: attempt.appSpecPath,
+  appValidationSha256: attempt.appValidationSha256,
+  appliedTreeDigest: attempt.appliedTreeDigest,
+  applyDigest: attempt.applyDigest,
+  artifactRevision: attempt.artifactRevision,
+  changedContentDigest: attempt.changedContentDigest,
+  dependencyCacheContentDigest: attempt.dependencyCacheContentDigest,
+  dependencyCacheDigest: attempt.dependencyCacheDigest,
+  dependencyReceiptDigest: attempt.dependencyReceiptDigest,
+  eligibilityDigest: attempt.eligibilityDigest,
+  identityDigest: attempt.identityDigest,
+  imageDigest: attempt.imageDigest,
+  proposalDigest: attempt.proposalDigest,
+  sourceReceiptDigest: attempt.sourceReceiptDigest,
+  sourceSha: attempt.sourceSha,
+  sourceTree: attempt.sourceTree,
+  testShards: attempt.testShards,
+  workspaceDigest: attempt.workspaceDigest,
+});
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function sandboxValidationCommandExecutor(): ValidationCommandExecutor {
-  return async ({ sandbox, appId, command, validationRoot }) => {
+export const sandboxValidationCommandExecutor =
+  (): ValidationCommandExecutor =>
+  async ({ sandbox, appId, command, validationRoot }) => {
     const run = (script: "check" | "build" | "test", args = "") =>
       sandbox.run({
         command:
@@ -364,26 +354,24 @@ export function sandboxValidationCommandExecutor(): ValidationCommandExecutor {
     }
     return await run("test");
   };
-}
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function fixtureValidationCommandExecutor(): ValidationCommandExecutor {
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-  return async ({ appId, command }) =>
-    appId === "validation-failure" && command.startsWith("mise run app:check-build ")
-      ? { exitCode: 1, stderr: "fixture validation failure", stdout: "" }
-      : { exitCode: 0, stderr: "", stdout: `${command} passed` };
-}
+export const fixtureValidationCommandExecutor =
+  (): ValidationCommandExecutor =>
+  ({ appId, command }) =>
+    Promise.resolve(
+      appId === "validation-failure" && command.startsWith("mise run app:check-build ")
+        ? { exitCode: 1, stderr: "fixture validation failure", stdout: "" }
+        : { exitCode: 0, stderr: "", stdout: `${command} passed` },
+    );
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function failureReceipt(
+const failureReceipt = (
   attempt: TargetValidationAttemptReceipt,
   commands: readonly TargetValidationCommandReceipt[],
   reason: TargetValidationFailureReason,
   commandFailure?: TargetValidationFailureReceipt["commandFailure"],
   diagnostics?: readonly TargetValidationDiagnostic[],
   output?: TargetValidationOutputExcerpt,
-): TargetValidationFailureReceipt {
+): TargetValidationFailureReceipt => {
   const unsigned = {
     version: 3 as const,
     ...attemptBinding(attempt),
@@ -398,10 +386,9 @@ function failureReceipt(
     ...(output === undefined ? {} : { output }),
   };
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function executeProposalBoundValidation(input: {
+export const executeProposalBoundValidation = (input: {
   sandbox: SandboxSession;
   executor: ValidationCommandExecutor;
   apply: TargetApplyReceipt;
@@ -409,12 +396,26 @@ export async function executeProposalBoundValidation(input: {
   dependencyLayout?: ExecutionDependencyLayout;
   appId: string;
   environment?: Readonly<Record<string, string | undefined>>;
-}): Promise<TargetValidationResult> {
+}): Promise<TargetValidationResult> => {
   const commands: TargetValidationCommandReceipt[] = [];
-  for (const planned of input.attempt.commands) {
+  const execute = async (index: number): Promise<TargetValidationResult> => {
+    const planned = input.attempt.commands[index];
+    if (planned === undefined) {
+      const unsigned = {
+        version: 3 as const,
+        ...attemptBinding(input.attempt),
+        attemptDigest: input.attempt.digest,
+        commands,
+        status: "passed" as const,
+        validatedByCallId: input.attempt.startedByCallId,
+      };
+      return {
+        ok: true,
+        receipt: { ...unsigned, digest: sha256(JSON.stringify(unsigned)) },
+      };
+    }
     let result: ApplyCommandResult;
     try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       result = await input.executor({
         appId: input.appId,
         command: planned.command,
@@ -461,17 +462,7 @@ export async function executeProposalBoundValidation(input: {
           validationOutputExcerpt(result.stdout, result.stderr),
         ),
       };
-  }
-  const unsigned = {
-    version: 3 as const,
-    ...attemptBinding(input.attempt),
-    attemptDigest: input.attempt.digest,
-    commands,
-    status: "passed" as const,
-    validatedByCallId: input.attempt.startedByCallId,
+    return execute(index + 1);
   };
-  return {
-    ok: true,
-    receipt: { ...unsigned, digest: sha256(JSON.stringify(unsigned)) },
-  };
-}
+  return execute(0);
+};

@@ -1,3 +1,4 @@
+import { redactCandidateEvidence } from "../evals/support/self-reproduction-candidate-capabilities";
 import {
   sandboxSemanticTokenProbe,
   semanticTokenProbeBinding,
@@ -6,13 +7,12 @@ import {
   candidateNavigationReceipt,
   sandboxCandidateNavigation,
 } from "../evals/support/self-reproduction-candidate-navigation";
-import type { Page } from "playwright";
 /* oxlint-disable eslint/no-await-in-loop -- evidence files are written sequentially to preserve a recoverable audit trail. */
 import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { cp, mkdir, readFile, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import nodePath from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { create as createTar } from "tar";
@@ -60,7 +60,6 @@ import type { CandidateRuntimeReceipt } from "../evals/support/self-reproduction
 import { runSandboxRuntimeComparison } from "../evals/support/self-reproduction-runtime-comparison";
 import { mergeRuntimeEvidence } from "../evals/support/self-reproduction-runtime-evidence";
 import { sandboxBrowserComparison } from "../evals/support/self-reproduction-runtime-browser";
-import { redactCandidateEvidence } from "../evals/support/self-reproduction-candidate-capabilities";
 import {
   candidateWorkflowReceipts,
   sandboxCandidateWorkflowComparison,
@@ -80,31 +79,33 @@ import {
 } from "../evals/support/self-reproduction-captures";
 import type { CaptureAdapter, PairedCaptureRun } from "../evals/support/self-reproduction-captures";
 
+const { basename, isAbsolute, join, relative, resolve } = nodePath;
+
 const root = resolve(import.meta.dirname, "..");
 const { values } = parseArgs({
   options: {
-    "candidate-root": { type: "string" },
     "arrusted-root": { type: "string" },
-    "candidate-url": { type: "string" },
-    "candidate-runtime": { type: "boolean" },
     "candidate-capability-probe": { type: "boolean" },
+    "candidate-root": { type: "string" },
+    "candidate-runtime": { type: "boolean" },
+    "candidate-url": { type: "string" },
+    "capture-adapter": { type: "string" },
     "debug-prerender": { type: "boolean" },
-    "reference-url": { type: "string" },
-    "reference-runtime": { type: "boolean" },
-    "postgres-backend": { type: "string", default: "docker" },
+    "generation-timeout-ms": { type: "string" },
+    generator: { type: "string" },
+    "generator-arg": { multiple: true, type: "string" },
+    help: { type: "boolean" },
+    "hosted-oidc": { default: false, type: "boolean" },
+    json: { type: "boolean" },
+    "mise-executable": { type: "string" },
+    "output-dir": { type: "string" },
+    "postgres-backend": { default: "docker", type: "string" },
     "reference-navigation": { type: "boolean" },
     "reference-navigation-evidence": { type: "string" },
-    "mise-executable": { type: "string" },
-    "capture-adapter": { type: "string" },
-    "workflow-adapter-module": { type: "string" },
-    "output-dir": { type: "string" },
-    "generation-timeout-ms": { type: "string" },
-    "hosted-oidc": { type: "boolean", default: false },
+    "reference-runtime": { type: "boolean" },
+    "reference-url": { type: "string" },
     "report-only": { type: "boolean" },
-    generator: { type: "string" },
-    "generator-arg": { type: "string", multiple: true },
-    json: { type: "boolean" },
-    help: { type: "boolean" },
+    "workflow-adapter-module": { type: "string" },
   },
 });
 const now = new Date().toISOString();
@@ -139,16 +140,16 @@ let referenceFixtureRoot: string | undefined;
 let referenceDatabaseUrl: string | undefined;
 let stopReference: (() => Promise<void>) | undefined;
 let candidateRuntime: CandidateRuntimeReceipt | { status: "not-run" | "failed"; reason: string } = {
-  status: "not-run",
   reason: "Candidate runtime evaluation was not requested.",
+  status: "not-run",
 };
 let candidate: Record<string, unknown> = {
-  status: "unavailable",
   reason: "No candidate export has been supplied.",
+  status: "unavailable",
 };
 const errors: string[] = [];
 
-async function runConfiguredPairedCaptures() {
+const runConfiguredPairedCaptures = async () => {
   const adapterFile =
     values["capture-adapter"] ??
     (values["reference-url"] && values["candidate-url"]
@@ -163,8 +164,8 @@ async function runConfiguredPairedCaptures() {
   if (
     !adapterRelative ||
     adapterRelative === ".." ||
-    adapterRelative.startsWith(`..${sep}`) ||
-    adapterRelative.startsWith(sep)
+    adapterRelative.startsWith(`..${nodePath.sep}`) ||
+    adapterRelative.startsWith(nodePath.sep)
   )
     throw new Error("Capture adapter must be an evaluator-owned module under evals/.");
   const loaded = (await import(pathToFileURL(resolvedAdapter).href)) as {
@@ -176,26 +177,26 @@ async function runConfiguredPairedCaptures() {
   if (typeof loaded.createCaptureAdapters !== "function")
     throw new Error("Capture adapter must export createCaptureAdapters().");
   const adapters = await loaded.createCaptureAdapters({
-    referenceURL: values["reference-url"],
     candidateURL: values["candidate-url"],
+    referenceURL: values["reference-url"],
   });
   try {
-    pairedCaptures = await runPairedCaptureEvidence({ outputRoot: output, adapters });
+    pairedCaptures = await runPairedCaptureEvidence({ adapters, outputRoot: output });
   } catch {
     const observations = unavailableCaptureObservations(
       "The evaluator could not launch or retain its paired browser capture runtime.",
     );
     pairedCaptures = {
-      observations,
       manifest: await writePairedCaptureManifest(output, observations),
+      observations,
     };
   }
   captures.push({
-    label: "paired-state-manifest",
     files: ["parity/captures/manifest.json"],
+    label: "paired-state-manifest",
     status: "captured",
   });
-}
+};
 
 type WorkflowAdapterFactory = (input: {
   referenceUrl?: string;
@@ -206,12 +207,12 @@ type WorkflowAdapterFactory = (input: {
   | Partial<Record<"reference" | "candidate", TrustedBrowserWorkflowAdapter>>
   | Promise<Partial<Record<"reference" | "candidate", TrustedBrowserWorkflowAdapter>>>;
 
-function within(parent: string, child: string) {
+const within = (parent: string, child: string) => {
   const path = relative(parent, child);
-  return !isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`);
-}
+  return !isAbsolute(path) && path !== ".." && !path.startsWith(`..${nodePath.sep}`);
+};
 
-async function runConfiguredWorkflowAdapters(candidateRoot: string | undefined) {
+const runConfiguredWorkflowAdapters = async (candidateRoot: string | undefined) => {
   const adapterFile =
     values["workflow-adapter-module"] ??
     process.env.SELF_REPRODUCTION_WORKFLOW_ADAPTER_MODULE ??
@@ -243,17 +244,17 @@ async function runConfiguredWorkflowAdapters(candidateRoot: string | undefined) 
       workflowMatrix
         .filter((workflow) => workflow.id !== "anonymous-entry")
         .map((workflow) => ({
-          schemaVersion: "self-reproduction-runtime-receipt/v1" as const,
-          producer: "evaluator" as const,
-          side,
           observation: {
-            requirementId: workflow.id,
-            disposition: "not-run" as const,
-            reason: "The checked-in evaluator adapter has no runtime binding for this side.",
-            method: "none" as const,
             artifacts: [],
             assertions: [],
+            disposition: "not-run" as const,
+            method: "none" as const,
+            reason: "The checked-in evaluator adapter has no runtime binding for this side.",
+            requirementId: workflow.id,
           },
+          producer: "evaluator" as const,
+          schemaVersion: "self-reproduction-runtime-receipt/v1" as const,
+          side,
         })),
     );
     // oxlint-disable-next-line eslint/no-use-before-define -- artifact writer is initialized before runtime execution
@@ -265,35 +266,35 @@ async function runConfiguredWorkflowAdapters(candidateRoot: string | undefined) 
   try {
     const { runTrustedBrowserWorkflows } =
       await import("../evals/support/self-reproduction-workflow-adapters");
-    const run = await runTrustedBrowserWorkflows({ browser, outputRoot: output, adapters });
+    const run = await runTrustedBrowserWorkflows({ adapters, browser, outputRoot: output });
     trustedWorkflowReceipts = run.receipts;
     const { runTrustedFrameworkEvidence } =
       await import("../evals/support/self-reproduction-framework");
     const { createDefaultFrameworkAdapter } =
       await import("../evals/support/self-reproduction-framework-adapters");
     const framework = await runTrustedFrameworkEvidence({
-      browser,
-      outputRoot: output,
       adapters: {
         ...(referenceUrl && referenceFiles
           ? {
               reference: createDefaultFrameworkAdapter({
-                side: "reference",
-                files: referenceFiles,
                 baseURL: referenceUrl,
+                files: referenceFiles,
+                side: "reference",
               }),
             }
           : {}),
         ...(candidateUrl && candidateFiles
           ? {
               candidate: createDefaultFrameworkAdapter({
-                side: "candidate",
-                files: candidateFiles,
                 baseURL: candidateUrl,
+                files: candidateFiles,
+                side: "candidate",
               }),
             }
           : {}),
       },
+      browser,
+      outputRoot: output,
     });
     trustedFrameworkReceipts = framework.receipts;
     // oxlint-disable-next-line eslint/no-use-before-define -- writer is initialized before runtime execution
@@ -303,9 +304,9 @@ async function runConfiguredWorkflowAdapters(candidateRoot: string | undefined) 
     // oxlint-disable-next-line eslint/no-use-before-define -- artifact writer is initialized before runtime execution
     await jsonFile("trusted-workflow-receipts.json", trustedWorkflowReceipts);
   }
-}
+};
 
-async function loadProjectOidc(): Promise<{ token: string; teamId: string; projectId: string }> {
+const loadProjectOidc = async (): Promise<{ token: string; teamId: string; projectId: string }> => {
   if (values["hosted-oidc"]) {
     const { syncHostedEvalIdentity } = await import("../lib/evals/hosted-eval-identity-refresh");
     return syncHostedEvalIdentity();
@@ -317,17 +318,17 @@ async function loadProjectOidc(): Promise<{ token: string; teamId: string; proje
     readOwnerBoundLocalFile(join(root, ".vercel/project.json"), { confidential: false }),
   );
   validateLocalVercelOidcClaims({
-    token,
-    project,
     nowEpochSeconds: Math.floor(Date.now() / 1000),
+    project,
+    token,
   });
-  return { token, teamId: project.orgId, projectId: project.projectId };
-}
+  return { projectId: project.projectId, teamId: project.orgId, token };
+};
 
-async function readCandidateSource(
+const readCandidateSource = async (
   directory: string,
   current = directory,
-): Promise<Awaited<ReturnType<typeof readSource>>> {
+): Promise<Awaited<ReturnType<typeof readSource>>> => {
   const entries = await readdir(current, { withFileTypes: true });
   const nested = await Promise.all(
     entries.map(async (entry) => {
@@ -339,13 +340,13 @@ async function readCandidateSource(
         !/^(?:[^.]+|.*\.(?:[cm]?[jt]sx?|css|mdx?|json|pkl|toml|ya?ml))$/u.test(entry.name)
       )
         return [];
-      return [{ path: relative(directory, path), content: await readFile(path, "utf-8") }];
+      return [{ content: await readFile(path, "utf-8"), path: relative(directory, path) }];
     }),
   );
   return nested.flat();
-}
+};
 
-async function trackedWorkspaceArchive(directory: string): Promise<Buffer> {
+const trackedWorkspaceArchive = async (directory: string): Promise<Buffer> => {
   const tracked = execFileSync("git", ["ls-files", "-z"], {
     cwd: directory,
     encoding: "utf-8",
@@ -354,12 +355,12 @@ async function trackedWorkspaceArchive(directory: string): Promise<Buffer> {
     .split("\0")
     .filter(Boolean);
   const chunks: Buffer[] = [];
-  const archive = createTar({ cwd: directory, portable: true, noMtime: true }, tracked);
+  const archive = createTar({ cwd: directory, noMtime: true, portable: true }, tracked);
   for await (const chunk of archive) chunks.push(Buffer.from(chunk));
   return Buffer.concat(chunks);
-}
+};
 
-function candidateAppId(files: Awaited<ReturnType<typeof readSource>>): string {
+const candidateAppId = (files: Awaited<ReturnType<typeof readSource>>): string => {
   const contract = files.find((file) => file.path === "app.contract.json");
   if (contract)
     try {
@@ -370,62 +371,64 @@ function candidateAppId(files: Awaited<ReturnType<typeof readSource>>): string {
       /* Runtime readiness reports malformed candidate metadata as a failure. */
     }
   return "/";
-}
+};
 
-async function artifactFile(name: string, content: string) {
+const artifactFile = async (name: string, content: string) => {
   const path = join(output, name);
   await writeFile(`${path}.partial`, content, { mode: 0o600 });
   await rename(`${path}.partial`, path);
-}
+};
 
-function escape(value: string) {
-  return value.replaceAll(
-    /[&<>"']/gu,
-    (character) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!,
-  );
-}
+const escape = (value: string) => {
+  const replacements: Record<string, string> = {
+    '"': "&quot;",
+    "&": "&amp;",
+    "'": "&#39;",
+    "<": "&lt;",
+    ">": "&gt;",
+  };
+  return value.replaceAll(/[&<>"']/gu, (character) => replacements[character] ?? character);
+};
 
 const candidateEvidenceSecrets: string[] = [];
 
-async function jsonFile(name: string, data: unknown) {
+const jsonFile = async (name: string, data: unknown) => {
   await artifactFile(
     name,
-    `${JSON.stringify(redactCandidateEvidence(data, candidateEvidenceSecrets), null, 2)}\n`,
+    `${JSON.stringify(sanitizeEvidence(redactCandidateEvidence(data, candidateEvidenceSecrets)), null, 2)}\n`,
   );
-}
+};
 
-function revision(directory: string | undefined) {
-  if (!directory) return { status: "unavailable", reason: "Source checkout not supplied." };
+const revision = (directory: string | undefined) => {
+  if (!directory) return { reason: "Source checkout not supplied.", status: "unavailable" };
   try {
     return {
-      commit: execFileSync("git", ["rev-parse", "HEAD"], {
+      changes: execFileSync("git", ["status", "--porcelain"], {
         cwd: directory,
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "pipe"],
       }).trim(),
-      changes: execFileSync("git", ["status", "--porcelain"], {
+      commit: execFileSync("git", ["rev-parse", "HEAD"], {
         cwd: directory,
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "pipe"],
       }).trim(),
     };
   } catch {
-    return { status: "unavailable", reason: "Git revision could not be read." };
+    return { reason: "Git revision could not be read.", status: "unavailable" };
   }
-}
+};
 
-function requirementRow(requirement: Assessment["rows"][number]) {
-  return `<tr><td>${escape(requirement.status)}</td><th>${escape(requirement.side)}</th><td>${escape(requirement.requirementId)}</td><td>${escape(requirement.reason)}</td><td>${escape(requirement.artifacts.join(" "))}</td></tr>`;
-}
+const requirementRow = (requirement: Assessment["rows"][number]) =>
+  `<tr><td>${escape(requirement.status)}</td><th>${escape(requirement.side)}</th><td>${escape(requirement.requirementId)}</td><td>${escape(requirement.reason)}</td><td>${escape(requirement.artifacts.join(" "))}</td></tr>`;
 
-function reportHtml(report: {
+const reportHtml = (report: {
   createdAt: string;
   generation: Record<string, unknown>;
   requirements: Assessment["rows"];
   gaps: Record<string, unknown>[];
   captures: { label: string; files: string[]; status: string }[];
-}) {
+}) => {
   const rows = report.requirements.map(requirementRow).join("");
   const gaps = report.gaps.length
     ? `<ol>${report.gaps.map((gap) => `<li><strong>${escape(String(gap.priority).toUpperCase())}: ${escape(String(gap.title))}</strong><p>${escape(String(gap.expected))}</p><p>${escape(String(gap.recommendation))}</p><small>${escape(String(gap.confirmed ? "Observed failure; see retained evidence" : "Incomplete assessment; see status and reason"))}</small></li>`).join("")}</ol>`
@@ -448,16 +451,16 @@ function reportHtml(report: {
         `<li><strong>${escape(item.label)}</strong>: ${escape(item.status)}${item.files.length ? ` — ${item.files.map((file) => `<a href="${escape(file)}">${escape(basename(file))}</a>${/\.(?:png|jpe?g|webp)$/iu.test(file) ? `<img src="${escape(file)}" alt="${escape(item.label)} ${escape(basename(file))}" style="display:block;max-width:100%;margin:12px 0">` : ""}`).join(", ")}` : ""}</li>`,
     )
     .join("");
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>${report.generation.status === "not-run" ? "Comparison-only replay; no generation was run." : "One unassisted baseline."} Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escape(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escape(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Side</th><th>Requirement</th><th>Reason</th><th>Artifacts</th></tr></thead><tbody>${rows}</tbody></table><h2>Runtime and browser evidence</h2>${diagnosticPairs}<ul>${captureItems || "<li>Not captured.</li>"}</ul></main></html>`;
-}
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>One unassisted baseline. Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escape(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escape(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Side</th><th>Requirement</th><th>Reason</th><th>Artifacts</th></tr></thead><tbody>${rows}</tbody></table><h2>Browser evidence</h2>${diagnosticPairs}<ul>${captureItems || "<li>Not captured.</li>"}</ul></main></html>`;
+};
 
-async function runGenerator(arrustedRoot: string | undefined) {
-  if (values["report-only"]) return { status: "not-run", reason: "Report-only mode selected." };
+const runGenerator = async (arrustedRoot: string | undefined) => {
+  if (values["report-only"]) return { reason: "Report-only mode selected.", status: "not-run" };
   if (!values.generator && !arrustedRoot)
     return {
-      status: "blocked",
       reason:
         "Set SELF_REPRODUCTION_ARRUSTED_ROOT or --arrusted-root to the canonical Arrusted checkout.",
+      status: "blocked",
     };
   const deadline = Number(values["generation-timeout-ms"] ?? "900000");
   if (!Number.isSafeInteger(deadline) || deadline <= 0)
@@ -472,7 +475,7 @@ async function runGenerator(arrustedRoot: string | undefined) {
         "--gate-a-profile",
         "sandbox",
         "--gate-a-source-root",
-        resolve(arrustedRoot!),
+        resolve(arrustedRoot ?? root),
         "--live-model",
         ...(values["hosted-oidc"] ? ["--hosted-oidc"] : []),
         "self-reproduction",
@@ -486,11 +489,11 @@ async function runGenerator(arrustedRoot: string | undefined) {
   const command = values.generator ?? resolve(root, ".config/mise/scripts/trusted-node-launcher");
   settings = {
     ...settings,
-    command,
     args,
-    timeoutMs: deadline,
-    strict: true,
+    command,
     liveModel: !values.generator,
+    strict: true,
+    timeoutMs: deadline,
   };
   await jsonFile("settings.json", settings);
   const stdout = evidenceSink(
@@ -506,16 +509,17 @@ async function runGenerator(arrustedRoot: string | undefined) {
   let rawOutput = "";
   let interrupted: string | undefined;
   const childStarted = Date.now();
-  const result = await new Promise<{
+  const resultPromise = Promise.withResolvers<{
     exitCode: number | null;
     signal?: string | null;
     error?: string;
-  }>((_resolve) => {
+  }>();
+  {
     const child = spawn(command, args, {
       cwd: root,
-      stdio: ["ignore", "pipe", "pipe"],
       detached: true,
       env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
     });
     let force: ReturnType<typeof setTimeout> | undefined;
     const stop = (reason: string) => {
@@ -557,9 +561,10 @@ async function runGenerator(arrustedRoot: string | undefined) {
       process.removeListener("SIGTERM", onTerm);
       stdout.end();
       stderr.end();
-      _resolve({ exitCode, signal, ...(spawnError ? { error: spawnError } : {}) });
+      resultPromise.resolve({ exitCode, signal, ...(spawnError ? { error: spawnError } : {}) });
     });
-  });
+  }
+  const result = await resultPromise.promise;
   // --verbose adds checkpoint lines before the final native JSON document.
   let native: Record<string, unknown> | undefined;
   for (const match of rawOutput.matchAll(/(?:^|\n)(?=\{)/gu)) {
@@ -576,9 +581,9 @@ async function runGenerator(arrustedRoot: string | undefined) {
   await jsonFile(
     "native-result.json",
     native ?? {
-      status: "unavailable",
       reason:
         "Native runner did not emit complete result JSON; retained incremental transcript and diagnostics.",
+      status: "unavailable",
     },
   );
   const completion = evidenceCompletion(result.exitCode, records);
@@ -587,65 +592,46 @@ async function runGenerator(arrustedRoot: string | undefined) {
     nativeResults?.length === 1 &&
     nativeResults[0]?.id === "self-reproduction" &&
     nativeResults[0]?.verdict === "passed";
+  let nativeFailure: Record<string, string> = {};
+  if (native === undefined)
+    nativeFailure = {
+      reason: "Native result JSON unavailable; evidence is incomplete.",
+      status: "failed",
+    };
+  else if (!nativePassed)
+    nativeFailure = { reason: "Native strict eval did not pass.", status: "failed" };
   return {
     ...completion,
     ...result,
-    ...(interrupted ? { status: "failed", interrupted } : {}),
+    ...(interrupted ? { interrupted, status: "failed" } : {}),
     elapsedMs: Date.now() - childStarted,
     nativeResult: "native-result.json",
-    ...(native
-      ? nativePassed
-        ? {}
-        : { status: "failed", reason: "Native strict eval did not pass." }
-      : { status: "failed", reason: "Native result JSON unavailable; evidence is incomplete." }),
+    ...nativeFailure,
   };
-}
+};
 
-async function capture(label: string, url: string | undefined, sourceRoot: string | undefined) {
-  if (!url) return { label, files: [], status: "unassessed: URL not supplied" };
+const capture = async (label: string, url: string | undefined, sourceRoot: string | undefined) => {
+  if (!url) return { files: [], label, status: "unassessed: URL not supplied" };
   const destination = join(output, "captures", label);
   try {
-    await mkdir(destination, { recursive: true, mode: 0o700 });
+    await mkdir(destination, { mode: 0o700, recursive: true });
     const { capturePreview } = await import("./design-quality/browser");
-    const fixtureReceipts: unknown[] = [];
-    const fixtureRoot = label === "reference" ? referenceFixtureRoot : undefined;
-    const preparePage = fixtureRoot
-      ? async (page: Page) => {
-          const { prepareReferenceCaptureFixture } =
-            await import("../evals/support/self-reproduction-reference-capture-fixture");
-          await prepareReferenceCaptureFixture(page, {
-            fixtureRoot,
-            referenceUrl: url,
-            recordReceipt: async (receipt) => {
-              fixtureReceipts.push(receipt);
-              await jsonFile(`captures/${label}/fixture.json`, fixtureReceipts);
-            },
-          });
-        }
-      : undefined;
+    const sourceFiles = sourceRoot ? await readSource(sourceRoot) : [];
     const previewFiles = await capturePreview({
-      url,
-      output: destination,
-      tokens: {},
-      scenarios: [],
-      preparePage,
+      generatedSourcePaths: sourceFiles.map((file) => file.path),
       ignoreHTTPSErrors: label === "reference" && referenceFixtureRoot !== undefined,
-      generatedSourcePaths: sourceRoot
-        ? (await readSource(sourceRoot)).map((file) => file.path)
-        : [],
+      output: destination,
+      scenarios: [],
+      tokens: {},
+      url,
     });
     return {
+      files: previewFiles.map((item) => `captures/${label}/${basename(item.path)}`),
       label,
-      files: [
-        ...previewFiles.map((item) => `captures/${label}/${basename(item.path)}`),
-        ...(fixtureRoot ? [`captures/${label}/fixture.json`] : []),
-      ],
-      status: fixtureRoot
-        ? "captured: authenticated durable draft; candidate authentication parity is separately assessed"
-        : "captured: unseeded; authenticated state parity is unassessed",
+      status: "captured",
     };
   } catch (error) {
-    await mkdir(destination, { recursive: true, mode: 0o700 });
+    await mkdir(destination, { mode: 0o700, recursive: true });
     await writeFile(
       join(destination, "capture-error.json"),
       JSON.stringify(
@@ -659,46 +645,46 @@ async function capture(label: string, url: string | undefined, sourceRoot: strin
       { mode: 0o600 },
     );
     return {
-      label,
       files: await readdir(destination)
         .then((files) => files.map((file) => `captures/${label}/${file}`))
         .catch(() => []),
+      label,
       status:
         "blocked: preview was unavailable or could not be captured; any partial files are retained",
     };
   }
-}
+};
 
 const blockedFramework = (side: "reference" | "candidate") =>
   frameworkRequirements(auditFramework([]), side).map((item) => ({
     ...item,
-    status: "blocked" as const,
     evidence: [`${side} source was unavailable.`],
+    status: "blocked" as const,
   }));
 
-function runtimeObservations(existingRequirementIds: ReadonlySet<string>): Observation[] {
+const runtimeObservations = (existingRequirementIds: ReadonlySet<string>): Observation[] => {
   if (candidateRuntime.status === "not-run") return [];
   if (candidateRuntime.status !== "available")
     return candidateRuntimeFailureObservations({
-      receipt: candidateRuntime,
       existingRequirementIds,
-    });
+      receipt: candidateRuntime,
+    }) as Observation[];
   // Readiness and a guessed /docs route are diagnostics, not workflow evidence.
   // Only the evaluator adapter that activates the actual controls can assess docs.
   return workflowMatrix
     .filter((row) => row.id !== "anonymous-entry" && !existingRequirementIds.has(row.id))
     .map((row): Observation => ({
-      requirementId: row.id,
+      artifacts: ["candidate-runtime.json"],
+      assertions: [],
       disposition: "not-run",
+      method: "none",
       reason:
         "Candidate runtime started, but no trusted workflow adapter exists for this behavior.",
-      assertions: [],
-      artifacts: ["candidate-runtime.json"],
-      method: "none",
+      requirementId: row.id,
     }));
-}
+};
 
-async function saveReport() {
+const saveReport = async () => {
   const diagnosticRequirements = [
     ...buildRequirements(candidateFiles, workflowEvidence),
     ...(referenceFiles
@@ -710,6 +696,7 @@ async function saveReport() {
   ];
   const candidateOutput = candidate.status === "available" ? "available" : "missing";
   const runtimeReceipts = mergeRuntimeEvidence({
+    candidateFallback: runtimeObservations(new Set()),
     trustedReceipts: [
       ...sandboxWorkflowReceipts,
       ...sandboxNavigationReceipts,
@@ -717,7 +704,6 @@ async function saveReport() {
       ...trustedWorkflowReceipts,
       ...trustedFrameworkReceipts,
     ],
-    candidateFallback: runtimeObservations(new Set()),
   });
   const completedCaptures = pairedCaptures;
   const observedCaptureReceipts =
@@ -727,7 +713,7 @@ async function saveReport() {
           (item) => item.requirementId === row.requirementId,
         );
         return observation
-          ? [{ side, viewport: row.viewport, state: row.state, ...observation }]
+          ? [{ side, state: row.state, viewport: row.viewport, ...observation }]
           : [];
       }),
     ) ?? [];
@@ -742,7 +728,7 @@ async function saveReport() {
     const viewport = desktopViewports.find((item) => item.name === viewportName);
     const state = captureStates.find((item) => item === stateName);
     if (viewport && state)
-      observedCaptureReceipts.push({ side: "candidate", viewport, state, ...observation });
+      observedCaptureReceipts.push({ side: "candidate", state, viewport, ...observation });
   }
   const observedCandidateCaptureIds = new Set(
     observedCaptureReceipts
@@ -750,8 +736,8 @@ async function saveReport() {
       .map((receipt) => receipt.requirementId),
   );
   const failedRuntimeCaptureReceipts = candidateRuntimeCaptureFailureObservations({
-    receipt: candidateRuntime,
     existingRequirementIds: observedCandidateCaptureIds,
+    receipt: candidateRuntime,
   }).map((observation) => {
     const [, viewportName, stateName] = observation.requirementId.split("/");
     const viewport = desktopViewports.find((item) => item.name === viewportName);
@@ -760,20 +746,10 @@ async function saveReport() {
       throw new Error(
         `Invalid candidate runtime capture requirement ${observation.requirementId}.`,
       );
-    return { side: "candidate" as const, viewport, state, ...observation };
+    return { side: "candidate" as const, state, viewport, ...observation };
   });
   const captureReceipts = [...observedCaptureReceipts, ...failedRuntimeCaptureReceipts];
   const parityEvidence: ParityEvidence = parityEvidenceFromReceipts({
-    runId: basename(output),
-    reference: {
-      output: referenceFiles ? "available" : "missing",
-      reason: referenceFiles
-        ? "Reference source is available; behavioral parity observations have not run."
-        : "Reference source is unavailable.",
-      sourceRevision: String(
-        (revisions.builder as { commit?: unknown } | undefined)?.commit ?? "unavailable",
-      ),
-    },
     candidate: {
       output: candidateOutput,
       reason:
@@ -784,8 +760,18 @@ async function saveReport() {
         (candidate.revision as { commit?: unknown } | undefined)?.commit ?? "generated-export",
       ),
     },
-    runtimeReceipts,
     captureReceipts,
+    reference: {
+      output: referenceFiles ? "available" : "missing",
+      reason: referenceFiles
+        ? "Reference source is available; behavioral parity observations have not run."
+        : "Reference source is unavailable.",
+      sourceRevision: String(
+        (revisions.builder as { commit?: unknown } | undefined)?.commit ?? "unavailable",
+      ),
+    },
+    runId: basename(output),
+    runtimeReceipts,
   });
   await jsonFile("parity-evidence.json", parityEvidence);
   parityAssessment = await assessParity(parityEvidence, async (path) => {
@@ -798,66 +784,66 @@ async function saveReport() {
   });
   await jsonFile("parity-assessment.json", parityAssessment);
   const receipt = {
-    version: 1,
+    candidate,
+    candidateRuntime,
     createdAt: now,
     elapsedMs: Date.now() - started,
-    input,
-    settings,
-    revisions,
+    errors,
     generation,
+    input,
+    revisions,
+    settings,
+    toolOutcomes: records
+      .filter((record) => record.kind === "turn-completed")
+      .flatMap((record) => (Array.isArray(record.toolCalls) ? record.toolCalls : [])),
     transcript: {
       path: "generation-transcript.jsonl",
       records: records.length,
       status: records.length ? "available" : "unavailable",
     },
-    toolOutcomes: records
-      .filter((record) => record.kind === "turn-completed")
-      .flatMap((record) => (Array.isArray(record.toolCalls) ? record.toolCalls : [])),
-    candidate,
-    candidateRuntime,
-    errors,
+    version: 1,
   };
   const report = {
     ...receipt,
-    reference: referenceFiles
-      ? { framework: auditFramework(referenceFiles), sourceFiles: referenceFiles.length }
-      : { status: "unavailable" },
-    requirements: parityAssessment.rows,
+    captures: captures.length
+      ? captures
+      : [
+          { files: [], label: "reference", status: "unassessed: capture has not run" },
+          { files: [], label: "candidate", status: "unassessed: capture has not run" },
+        ],
     diagnostics: {
-      sourceScans: diagnosticRequirements,
-      sourceScanGaps: prioritizedGaps(diagnosticRequirements),
       note: "Source scans are diagnostic only and never award parity credit.",
+      sourceScanGaps: prioritizedGaps(diagnosticRequirements),
+      sourceScans: diagnosticRequirements,
     },
     gaps: parityAssessment.rows
       .filter((row) => row.status !== "passed" && row.requirementId !== "anonymous-entry")
       .map((row) => ({
-        priority: row.status === "failed" ? "high" : "medium",
-        title: `${row.side}: ${row.requirementId}`,
+        confirmed: row.status === "failed",
+        evidence: row.artifacts,
         expected:
           workflowMatrix.find((workflow) => workflow.id === row.requirementId)?.action ??
           "Evaluator-owned evidence for every required framework or interaction assertion.",
         observed: row.reason,
-        evidence: row.artifacts,
-        status: row.status,
+        priority: row.status === "failed" ? "high" : "medium",
+        recommendation: row.reason,
         responsibleLayer:
           row.status === "failed"
             ? `${row.side} behavior or implementation; cause is documented separately`
             : "evaluator fixture or execution infrastructure",
-        recommendation: row.reason,
-        confirmed: row.status === "failed",
+        status: row.status,
+        title: `${row.side}: ${row.requirementId}`,
       })),
-    captures: captures.length
-      ? captures
-      : [
-          { label: "reference", files: [], status: "unassessed: capture has not run" },
-          { label: "candidate", files: [], status: "unassessed: capture has not run" },
-        ],
-    pairedCaptureManifest: pairedCaptures ? "parity/captures/manifest.json" : undefined,
     limitations: [
       "No deployment, provider publication, or provisioning is performed by this report pipeline.",
       "The native eval retains reviewed sandbox status but does not export a candidate tree; supply --candidate-root with --report-only for an independently exported tree.",
       "Paired captures require running reference and candidate URLs and Playwright Chromium. They do not establish runtime workflow or instant-navigation acceptance.",
     ],
+    pairedCaptureManifest: pairedCaptures ? "parity/captures/manifest.json" : undefined,
+    reference: referenceFiles
+      ? { framework: auditFramework(referenceFiles), sourceFiles: referenceFiles.length }
+      : { status: "unavailable" },
+    requirements: parityAssessment.rows,
   };
   await jsonFile("receipt.json", receipt);
   await jsonFile("candidate-inventory.json", candidate);
@@ -887,13 +873,13 @@ async function saveReport() {
   ].join("\n");
   await artifactFile("report.md", `${sanitizeEvidence(markdown)}\n`);
   await artifactFile("index.html", reportHtml(sanitizeEvidence(report) as typeof report));
-}
+};
 
-async function main() {
+const main = async () => {
   if (values.help) {
     console.log(`Usage: mise run eval:self-reproduction -- [--arrusted-root PATH] [--output-dir EXTERNAL_PATH]
   [--reference-url URL] [--candidate-url URL] [--capture-adapter evals/PATH] [--generation-timeout-ms N]
-  [--candidate-runtime] [--candidate-capability-probe] [--debug-prerender] [--reference-runtime]
+  [--candidate-runtime] [--debug-prerender] [--reference-runtime]
   [--workflow-adapter-module EVALUATOR_MODULE]
   [--report-only --candidate-root PATH]
 
@@ -901,8 +887,6 @@ Explicitly runs the native live Eve benchmark with strict assertions and writes
 sanitized evidence outside the source tree. No publication or deployment.
 --report-only audits an existing candidate without running generation.
 --reference-runtime starts an isolated emulated reference; live native runs do this by default.
---candidate-capability-probe checks live model and child Sandbox access during a replay.
-Native live runs include this infrastructure proof; it gives no product functionality credit.
 --candidate-runtime starts the exported candidate in an evaluator-owned Vercel Sandbox
 and retains build, readiness, and public documentation probe receipts.
 --debug-prerender retains an additional diagnostic build after production build failure;
@@ -913,26 +897,26 @@ complete paired desktop state matrix against both supplied URLs.
 The checked-in brief and fixed answers are always preserved unchanged.`);
     return;
   }
-  await mkdir(output, { recursive: true, mode: 0o700 });
+  await mkdir(output, { mode: 0o700, recursive: true });
   const actualOutput = await realpath(output);
   const inside = relative(await realpath(root), actualOutput);
-  if (!inside || (!inside.startsWith(`..${sep}`) && inside !== ".."))
+  if (!inside || (!inside.startsWith(`..${nodePath.sep}`) && inside !== ".."))
     throw new Error("Evidence directory must be outside the App Builder source tree.");
   console.log(`Self-reproduction evidence: ${output}`);
   await writeFile(join(output, "generation-transcript.jsonl"), "", { mode: 0o600 });
   await jsonFile("native-result.json", {
-    status: "unavailable",
     reason: "Native eval has not completed.",
+    status: "unavailable",
   });
   await jsonFile("candidate-runtime.json", candidateRuntime);
   await jsonFile("trusted-workflow-receipts.json", trustedWorkflowReceipts);
   await jsonFile("settings.json", {
-    status: "unavailable",
     reason: "Settings have not been read.",
+    status: "unavailable",
   });
   await jsonFile("revisions.json", {
-    status: "unavailable",
     reason: "Revisions have not been read.",
+    status: "unavailable",
   });
   await writeFile(join(output, "eval.log"), "", { mode: 0o600 });
   await writeFile(join(output, "eval-output.log"), "", { mode: 0o600 });
@@ -956,42 +940,44 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         : undefined;
     const arrustedRoot = templateSource?.sourcePath;
     revisions = {
-      builder: revision(root),
       arrusted: {
         ...revision(arrustedRoot),
         ...(templateSource ? { acquisition: templateSource } : {}),
       },
+      builder: revision(root),
     };
     await jsonFile("revisions.json", revisions);
     await mkdir(join(output, "generator-input"), { mode: 0o700, recursive: true });
     const inputs: Record<string, unknown> = {};
-    for (const file of ["brief.md", "answers.json"]) {
-      const content = await readFile(join(root, "evals/self-reproduction", file), "utf-8");
-      await writeFile(join(output, "generator-input", file), content, { mode: 0o600 });
-      inputs[file] = { path: `generator-input/${file}`, sha256: digest(content) };
-    }
-    input = { status: "preserved", files: inputs, referenceSourceExposedToGenerator: false };
+    await Promise.all(
+      ["brief.md", "answers.json"].map(async (file) => {
+        const content = await readFile(join(root, "evals/self-reproduction", file), "utf-8");
+        await writeFile(join(output, "generator-input", file), content, { mode: 0o600 });
+        inputs[file] = { path: `generator-input/${file}`, sha256: digest(content) };
+      }),
+    );
+    input = { files: inputs, referenceSourceExposedToGenerator: false, status: "preserved" };
     await mkdir(join(output, "settings-source"), { mode: 0o700, recursive: true });
-    for (const file of [
-      "agent/agent.ts",
-      "lib/integrations/active-model.ts",
-      "evals/evals.config.ts",
-    ]) {
-      const content = await readFile(join(root, file), "utf-8");
-      await writeFile(
-        join(output, "settings-source", basename(file)),
-        String(sanitizeEvidence(content)),
-        { mode: 0o600 },
-      );
-    }
+    await Promise.all(
+      ["agent/agent.ts", "lib/integrations/active-model.ts", "evals/evals.config.ts"].map(
+        async (file) => {
+          const content = await readFile(join(root, file), "utf-8");
+          await writeFile(
+            join(output, "settings-source", basename(file)),
+            String(sanitizeEvidence(content)),
+            { mode: 0o600 },
+          );
+        },
+      ),
+    );
     settings = {
-      status: "preserved",
-      source: "settings-source/",
       model: activeBuilderModelId,
+      publication: "disabled by sandbox eval profile",
       reasoningConfiguration:
         "Preserved verbatim in settings-source/agent.ts; effective runtime identity is retained in transcript events.",
       runtimeIdentity: "See session.started events in generation-transcript.jsonl",
-      publication: "disabled by sandbox eval profile",
+      source: "settings-source/",
+      status: "preserved",
     };
     await jsonFile("settings.json", settings);
     generation = { status: "running" };
@@ -1006,19 +992,21 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         if (!candidateFiles.length)
           throw new Error("Candidate contains no application source files.");
         // Persist the audited source bytes, never the candidate's credentials or dependency tree.
-        for (const file of candidateFiles) {
-          const destination = join(output, "candidate", file.path);
-          await mkdir(resolve(destination, ".."), { recursive: true, mode: 0o700 });
-          await writeFile(destination, String(sanitizeEvidence(file.content)), { mode: 0o600 });
-        }
+        await Promise.all(
+          candidateFiles.map(async (file) => {
+            const destination = join(output, "candidate", file.path);
+            await mkdir(resolve(destination, ".."), { mode: 0o700, recursive: true });
+            await writeFile(destination, String(sanitizeEvidence(file.content)), { mode: 0o600 });
+          }),
+        );
         candidate = {
-          status: "available",
-          provenance: "operator-supplied export; not automatically attributed to this generation",
-          revision: revision(candidateRoot),
           files: candidateFiles.map((file) => ({
             path: `candidate/${file.path}`,
             sha256: digest(String(sanitizeEvidence(file.content))),
           })),
+          provenance: "operator-supplied export; not automatically attributed to this generation",
+          revision: revision(candidateRoot),
+          status: "available",
         };
         workflowEvidence = await readFile(
           join(candidateRoot, "self-reproduction.workflow-results.json"),
@@ -1032,32 +1020,34 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       } catch (error) {
         candidateFiles = undefined;
         candidate = {
-          status: "unavailable",
           reason: error instanceof Error ? error.message : String(error),
+          status: "unavailable",
         };
       }
     } else {
       const exported = candidateExportFromEvidence(records);
       if (exported) {
         candidateFiles = exported;
-        for (const file of exported) {
-          const destination = join(output, "candidate", file.path);
-          await mkdir(resolve(destination, ".."), { recursive: true, mode: 0o700 });
-          await writeFile(destination, file.content, { mode: 0o600 });
-        }
+        await Promise.all(
+          exported.map(async (file) => {
+            const destination = join(output, "candidate", file.path);
+            await mkdir(resolve(destination, ".."), { mode: 0o700, recursive: true });
+            await writeFile(destination, file.content, { mode: 0o600 });
+          }),
+        );
         candidate = {
-          status: "available",
-          provenance: candidateExportProvenanceFromEvidence(records),
           files: exported.map((file) => ({
             path: `candidate/${file.path}`,
             sha256: digest(file.content),
           })),
+          provenance: candidateExportProvenanceFromEvidence(records),
+          status: "available",
         };
       } else
         candidate = {
-          status: "unavailable",
           reason:
             "The native run did not retain a valid reviewed candidate export. Framework and workflow comparison remain blocked.",
+          status: "unavailable",
         };
     }
     await saveReport();
@@ -1068,10 +1058,10 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       if (!values["mise-executable"])
         throw new Error("Reference startup requires the mise-owned eval entrypoint.");
       const reference = await startSelfReproductionReferenceRuntime({
-        sourceRoot: root,
-        runtimeRoot: join(output, "reference-runtime"),
-        miseExecutable: values["mise-executable"],
         databaseBackend: values["postgres-backend"] as "docker" | "process",
+        miseExecutable: values["mise-executable"],
+        runtimeRoot: join(output, "reference-runtime"),
+        sourceRoot: root,
       });
       stopReference = reference.stop;
       await jsonFile("reference-runtime.json", reference.receipt);
@@ -1094,13 +1084,11 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       candidateRuntime =
         candidateFiles && workspaceArchive
           ? await evaluateCandidateRuntime({
-              files: candidateFiles.map((file) => ({ path: file.path, content: file.content })),
-              workspaceArchive,
-              candidateAppId: candidateAppId(candidateFiles),
-              publicBasePath: `/${candidateAppId(candidateFiles)}`,
-              credentials,
               appRoot: candidateRuntimeRoot,
+              candidateAppId: candidateAppId(candidateFiles),
+              credentials,
               debugPrerender: values["debug-prerender"],
+              files: candidateFiles.map((file) => ({ content: file.content, path: file.path })),
               onReady: async ({ session, baseURL, abortSignal }) => {
                 if (
                   values["candidate-capability-probe"] ||
@@ -1109,23 +1097,23 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
                   const { runCandidateCapabilityProbe } =
                     await import("../evals/support/self-reproduction-candidate-capability-probe");
                   const capabilityProof = await runCandidateCapabilityProbe({
-                    session,
                     abortSignal,
                     model: activeBuilderModelId,
+                    session,
                   });
                   await jsonFile("candidate-capability-proof.json", capabilityProof);
                   captures.push({
-                    label: "candidate infrastructure proof",
                     files: ["candidate-capability-proof.json"],
+                    label: "candidate infrastructure proof",
                     status:
                       "Live access diagnostic only; no generated application functionality credit.",
                   });
                 }
                 const tokenBinding = candidateFiles
                   ? semanticTokenProbeBinding({
-                      runtimeRoot: candidateRuntimeRoot,
                       candidateAppId: candidateAppId(candidateFiles),
                       candidateFiles,
+                      runtimeRoot: candidateRuntimeRoot,
                       workspacePaths: arrustedRoot
                         ? execFileSync(
                             "git",
@@ -1144,28 +1132,28 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
                   : undefined;
                 const semanticProbe = tokenBinding
                   ? await runSandboxRuntimeComparison({
-                      session,
-                      ...sandboxSemanticTokenProbe(),
-                      payload: { baseURL, ...tokenBinding },
                       abortSignal,
+                      payload: { baseURL, ...tokenBinding },
+                      ...sandboxSemanticTokenProbe(),
+                      session,
                     })
                   : {
-                      status: "unassessed",
                       reason:
                         "Exact canonical workspace theme or candidate stylesheet inventory was unavailable.",
+                      status: "unassessed",
                     };
                 await jsonFile("candidate-semantic-tokens.json", semanticProbe);
                 captures.push({
-                  label: "candidate semantic color samples",
                   files: ["candidate-semantic-tokens.json"],
+                  label: "candidate semantic color samples",
                   status:
                     "Partial computed-color diagnostic only; no complete palette or reference-palette parity credit.",
                 });
                 const navigation = await runSandboxRuntimeComparison({
-                  session,
-                  ...sandboxCandidateNavigation(),
-                  payload: { baseURL },
                   abortSignal,
+                  payload: { baseURL },
+                  ...sandboxCandidateNavigation(),
+                  session,
                 });
                 const { artifacts: navigationArtifacts, ...navigationReceipt } = navigation;
                 await jsonFile("candidate-navigation.json", navigationReceipt);
@@ -1177,41 +1165,43 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
                 const navigationOutput = navigation.output as { observation?: Observation } | null;
                 sandboxNavigationReceipts = [candidateNavigationReceipt(navigationOutput)];
                 captures.push({
-                  label: "candidate navigation diagnostic",
                   files: [
                     "candidate-navigation.json",
                     ...navigationArtifacts.map(({ path }) => `candidate-navigation/${path}`),
                   ],
+                  label: "candidate navigation diagnostic",
                   status:
                     navigationOutput?.observation?.disposition ??
                     "blocked: navigation probe failed",
                 });
                 const comparison = await runSandboxRuntimeComparison({
-                  session,
-                  ...sandboxBrowserComparison(),
-                  payload: { baseURL },
                   abortSignal,
+                  payload: { baseURL },
+                  ...sandboxBrowserComparison(),
+                  session,
                 });
                 const { artifacts, ...receipt } = comparison;
                 await jsonFile("candidate-browser-comparison.json", {
                   ...receipt,
                   artifacts: artifacts.map(({ path }) => `candidate-browser/${path}`),
                 });
-                for (const artifact of artifacts) {
-                  const target = join(output, "candidate-browser", artifact.path);
-                  await mkdir(resolve(target, ".."), { recursive: true });
-                  await writeFile(target, artifact.content, { mode: 0o600 });
-                }
+                await Promise.all(
+                  artifacts.map(async (artifact) => {
+                    const target = join(output, "candidate-browser", artifact.path);
+                    await mkdir(resolve(target, ".."), { recursive: true });
+                    await writeFile(target, artifact.content, { mode: 0o600 });
+                  }),
+                );
                 captures.push({
-                  label: "candidate diagnostic routes",
                   files: artifacts.map(({ path }) => `candidate-browser/${path}`),
+                  label: "candidate diagnostic routes",
                   status: `${comparison.status}; unseeded captures do not establish workflow-state parity`,
                 });
                 const workflows = await runSandboxRuntimeComparison({
-                  session,
-                  ...sandboxCandidateWorkflowComparison(),
-                  payload: { baseURL },
                   abortSignal,
+                  payload: { baseURL },
+                  ...sandboxCandidateWorkflowComparison(),
+                  session,
                 });
                 const { artifacts: workflowArtifacts, ...workflowReceipt } = workflows;
                 await jsonFile("candidate-browser-workflows.json", {
@@ -1229,10 +1219,10 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
                   await jsonFile("candidate-workflow-receipts.json", sandboxWorkflowReceipts);
                 }
                 const interactions = await runSandboxRuntimeComparison({
-                  session,
-                  ...sandboxCandidateInteractionCaptures(),
-                  payload: { baseURL },
                   abortSignal,
+                  payload: { baseURL },
+                  ...sandboxCandidateInteractionCaptures(),
+                  session,
                 });
                 const { artifacts: interactionArtifacts, ...interactionReceipt } = interactions;
                 await jsonFile("candidate-interactions.json", {
@@ -1241,11 +1231,13 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
                     ({ path }) => `candidate-interactions/${path}`,
                   ),
                 });
-                for (const artifact of interactionArtifacts) {
-                  const target = join(output, "candidate-interactions", artifact.path);
-                  await mkdir(resolve(target, ".."), { recursive: true });
-                  await writeFile(target, artifact.content, { mode: 0o600 });
-                }
+                await Promise.all(
+                  interactionArtifacts.map(async (artifact) => {
+                    const target = join(output, "candidate-interactions", artifact.path);
+                    await mkdir(resolve(target, ".."), { recursive: true });
+                    await writeFile(target, artifact.content, { mode: 0o600 });
+                  }),
+                );
                 const captured = interactions.output as { observations?: Observation[] } | null;
                 if (Array.isArray(captured?.observations)) {
                   sandboxCaptureObservations = captured.observations.map((observation) => ({
@@ -1264,18 +1256,20 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
                   }));
                 }
                 captures.push({
-                  label: "candidate desktop interactions",
                   files: interactionArtifacts.map(({ path }) => `candidate-interactions/${path}`),
+                  label: "candidate desktop interactions",
                   status: `${interactions.status}; state coverage is recorded per assertion`,
                 });
               },
+              publicBasePath: `/${candidateAppId(candidateFiles)}`,
+              workspaceArchive,
             })
           : {
-              status: "failed",
               reason:
                 candidateFiles === undefined
                   ? "Candidate output was unavailable, so its runtime could not start."
                   : "The Arrusted workspace source was unavailable, so workspace dependencies could not be resolved.",
+              status: "failed",
             };
       await jsonFile("candidate-runtime.json", candidateRuntime);
     }
@@ -1298,10 +1292,12 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     if (values["reference-navigation-evidence"]) {
       const directory = resolve(values["reference-navigation-evidence"]);
       // Reuse evaluator evidence without rerunning production builds. Preserve its own provenance.
-      for (const file of ["run.json", "navigation.spec.ts", "playwright.json", "receipt.json"]) {
-        await mkdir(join(output, "reference-navigation"), { recursive: true });
-        await cp(join(directory, file), join(output, "reference-navigation", file));
-      }
+      await Promise.all(
+        ["run.json", "navigation.spec.ts", "playwright.json", "receipt.json"].map(async (file) => {
+          await mkdir(join(output, "reference-navigation"), { recursive: true });
+          await cp(join(directory, file), join(output, "reference-navigation", file));
+        }),
+      );
       const receipt = runtimeReceiptSchema.parse(
         JSON.parse(await readFile(join(output, "reference-navigation/receipt.json"), "utf-8")),
       );
@@ -1318,9 +1314,9 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         await import("../evals/support/self-reproduction-reference-navigation");
       const receipt = await runReferenceNavigationEvidence({
         databaseBackend: values["postgres-backend"] as "docker" | "process",
-        repositoryRoot: root,
-        outputRoot: output,
         miseExecutable: values["mise-executable"],
+        outputRoot: output,
+        repositoryRoot: root,
       });
       referenceNavigationReceipts = [receipt];
       await jsonFile("reference-navigation/receipt.json", receipt);
@@ -1350,7 +1346,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     process.exitCode = 1;
   if (values.json) console.log(await readFile(join(output, "report.json"), "utf-8"));
   else console.log(`Self-reproduction report: ${join(output, "index.html")}`);
-}
+};
 
 try {
   await main();

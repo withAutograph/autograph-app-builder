@@ -6,14 +6,14 @@ import {
 
 it("passes only the supported project credential keys and makes no proof claim", () => {
   const result = candidateCapabilities({
-    token: "sensitive",
-    teamId: "team",
     projectId: "project",
+    teamId: "team",
+    token: "sensitive",
   });
   expect(result.environment).toEqual({
     VERCEL_OIDC_TOKEN: "sensitive",
-    VERCEL_TEAM_ID: "team",
     VERCEL_PROJECT_ID: "project",
+    VERCEL_TEAM_ID: "team",
   });
   expect(result.receipt.modelGateway).toBe("configured-unverified");
   expect(JSON.stringify(result.receipt)).not.toContain("sensitive");
@@ -25,7 +25,7 @@ it("redacts raw credentials in nested commands, startup and probe errors", () =>
   const secret = "plain-credential-without-a-key";
   const result = redactCandidateEvidence(
     {
-      commands: [{ stdout: secret, stderr: `error ${secret}` }],
+      commands: [{ stderr: `error ${secret}`, stdout: secret }],
       probes: [{ detail: secret }],
       reason: secret,
     },

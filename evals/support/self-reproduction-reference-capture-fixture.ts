@@ -46,7 +46,8 @@ export const prepareReferenceCaptureFixture = async (
     await finishOAuth(page, "GitHub");
     receipt.stage = "builder-readiness";
     await waitForBuilderReady(page);
-    const ownerId = (await currentSession(page))?.user?.id;
+    const session = await currentSession(page);
+    const ownerId = session?.user?.id;
     if (typeof ownerId !== "string") throw new Error("Emulated OAuth did not establish an owner.");
     receipt.stage = "draft-inputs";
     const appName = page.getByLabel("App Name");

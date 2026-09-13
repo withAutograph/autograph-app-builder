@@ -6,8 +6,8 @@ import { selfReproductionDraft } from "./self-reproduction-draft-fixture";
 
 const fixture = vi.hoisted(() => ({
   authenticate: vi.fn(() => Promise.resolve()),
-  query: vi.fn(),
   end: vi.fn(() => Promise.resolve()),
+  query: vi.fn(),
 }));
 vi.mock("../../e2e/support/harness", () => ({
   appOrigin: "https://localhost:3001",
@@ -88,7 +88,7 @@ it("captures three restored contexts without waiting for a new write acknowledge
             ),
         }),
         getByRole: status,
-        viewportSize: () => ({ width, height: 900 }),
+        viewportSize: () => ({ height: 900, width }),
       } as unknown as Page,
       {
         fixtureRoot: "/tmp/isolated-reference",

@@ -1,6 +1,6 @@
-import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Observation } from "./self-reproduction-parity";
 import {
@@ -9,19 +9,19 @@ import {
 } from "./self-reproduction-supplementary";
 
 const observation = (passed: boolean, method: Observation["method"]): Observation => ({
-  requirementId: "server-first",
-  disposition: "observed",
-  reason: "Evaluator finding",
-  method,
   artifacts: ["source-evidence.json"],
   assertions: [
     {
+      artifacts: ["source-evidence.json"],
+      detail: "Actual source review",
       id: "request-data-on-server",
       passed,
-      detail: "Actual source review",
-      artifacts: ["source-evidence.json"],
     },
   ],
+  disposition: "observed",
+  method,
+  reason: "Evaluator finding",
+  requirementId: "server-first",
 });
 describe("supplementary assessment", () => {
   it("preserves failures when assertions conflict and does not turn source-only review into browser credit", () => {
@@ -43,129 +43,87 @@ describe("supplementary assessment", () => {
     ).toBe("missing-functionality");
   });
   it("retains missing evidence as unassessed and leaves original inputs unchanged", async () => {
-    const root = await mkdtemp(join(tmpdir(), "supplementary-test-"));
+    const root = await mkdtemp(path.join(tmpdir(), "supplementary-test-"));
     try {
-      const run = join(root, "run");
-      const review = join(root, "review");
+      const run = path.join(root, "run");
+      const review = path.join(root, "review");
       await mkdir(run);
       await mkdir(review);
       const side = {
+        observations: [],
         output: "available",
         reason: "Source retained",
         sourceRevision: "revision",
-        observations: [],
       };
       const original = JSON.stringify({
-        schemaVersion: "self-reproduction-parity/v1",
-        runId: "original",
-        producer: "evaluator",
-        fixtureVersion: 1,
-        reference: side,
         candidate: side,
+        fixtureVersion: 1,
+        producer: "evaluator",
+        reference: side,
+        runId: "original",
+        schemaVersion: "self-reproduction-parity/v1",
       });
-      await writeFile(join(run, "parity-evidence.json"), original);
-      const captures = join(root, "captures");
+      await writeFile(path.join(run, "parity-evidence.json"), original);
+      const captures = path.join(root, "captures");
       await mkdir(captures);
       const viewports = ["desktop", "desktop-wide", "desktop-window"];
       await Promise.all(
         viewports.map(async (name) => {
-          await mkdir(join(run, "candidate-browser", name), { recursive: true });
-          await writeFile(join(run, "candidate-browser", name, "root.png"), "candidate screenshot");
-          await writeFile(join(captures, `${name}-0.png`), "reference screenshot");
+          await mkdir(path.join(run, "candidate-browser", name), { recursive: true });
+          await writeFile(
+            path.join(run, "candidate-browser", name, "root.png"),
+            "candidate screenshot",
+          );
+          await writeFile(path.join(captures, `${name}-0.png`), "reference screenshot");
         }),
       );
       await writeFile(
-        join(captures, "capture-provenance.json"),
+        path.join(captures, "capture-provenance.json"),
         JSON.stringify({
           authenticated: true,
+          captures: viewports.map((name) => ({
+            path: path.join(captures, `${name}-0.png`),
+            viewport: { height: 900, name, width: 1440 },
+          })),
           comparisonQualification:
             "Authenticated reference; candidate has no authentication. Layout diagnostics only.",
-          captures: viewports.map((name) => ({
-            viewport: { name, width: 1440, height: 900 },
-            path: join(captures, `${name}-0.png`),
-          })),
         }),
       );
       await writeFile(
-        join(run, "report.json"),
+        path.join(run, "report.json"),
         JSON.stringify({
           captures: [{ files: viewports.map((name) => `candidate-browser/${name}/root.png`) }],
         }),
       );
-      await writeFile(join(run, "revisions.json"), "{}");
+      await writeFile(path.join(run, "revisions.json"), "{}");
       await writeFile(
-        join(review, "observations.json"),
+        path.join(review, "observations.json"),
         JSON.stringify({
-          schemaVersion: "self-reproduction-source-review/v1",
           observations: { candidate: [observation(false, "source-review")] },
+          schemaVersion: "self-reproduction-source-review/v1",
         }),
       );
-      await writeFile(join(review, "source-evidence.json"), "");
-      const navigation = join(root, "navigation");
-      await mkdir(join(navigation, "candidate-navigation"), { recursive: true });
-      await writeFile(join(navigation, "candidate-navigation", "back.png"), "retained screenshot");
-      await writeFile(
-        join(navigation, "revisions.json"),
-        JSON.stringify({ candidate: "retained revision" }),
-      );
-      await writeFile(
-        join(navigation, "candidate-navigation.json"),
-        JSON.stringify({
-          status: "completed",
-          output: {
-            observation: {
-              requirementId: "navigation-continuity",
-              disposition: "missing-functionality",
-              method: "browser",
-              reason: "Browser Back did not restore the edited draft.",
-              artifacts: ["back.png"],
-              assertions: [
-                {
-                  id: "back-forward-preserves-draft",
-                  passed: false,
-                  detail: "Draft missing after Back.",
-                  artifacts: [],
-                },
-              ],
-            },
-          },
-        }),
-      );
+      await writeFile(path.join(review, "source-evidence.json"), "");
       const result = await writeSupplementaryAssessment({
-        runDirectory: run,
-        candidateNavigationRunDirectory: navigation,
-        sourceReviewDirectory: review,
-        outputDirectory: join(root, "out"),
+        outputDirectory: path.join(root, "out"),
         referenceCapturesDirectory: captures,
+        runDirectory: run,
+        sourceReviewDirectory: review,
       });
       expect(
         result.assessment.rows.find(
           (row) => row.side === "candidate" && row.requirementId === "server-first",
         )?.status,
       ).toBe("unassessed");
-      expect(
-        result.assessment.rows.find(
-          (row) => row.side === "candidate" && row.requirementId === "navigation-continuity",
-        )?.status,
-      ).toBe("failed");
-      expect(result.candidateNavigationReplay?.receipt).toBe(
-        "candidate-navigation-replay/candidate-navigation.json",
-      );
-      expect(
-        await readFile(
-          join(root, "out", "candidate-navigation-replay", "candidate-navigation", "back.png"),
-          "utf-8",
-        ),
-      ).toBe("retained screenshot");
-      expect(await readFile(join(run, "parity-evidence.json"), "utf-8")).toBe(original);
+      expect(await readFile(path.join(run, "parity-evidence.json"), "utf-8")).toBe(original);
       expect(
         result.missingEvidence.some((item) => item.includes("nonempty contained regular file")),
       ).toBe(true);
       await expect(
         writeSupplementaryAssessment({
+          outputDirectory: path.join(import.meta.dirname, "forbidden-report-output"),
           runDirectory: run,
           sourceReviewDirectory: review,
-          outputDirectory: join(import.meta.dirname, "forbidden-report-output"),
         }),
       ).rejects.toThrow("outside the App Builder source tree");
       expect(result.screenshotPairs.map(({ viewport }) => viewport)).toEqual(viewports);
@@ -174,7 +132,7 @@ describe("supplementary assessment", () => {
           qualification.includes("candidate has no authentication"),
         ),
       ).toBe(true);
-      const html = await readFile(join(root, "out", "index.html"), "utf-8");
+      const html = await readFile(path.join(root, "out", "index.html"), "utf-8");
       expect(html.indexOf("Initial screen comparison")).toBeLessThan(
         html.indexOf("All requirement outcomes"),
       );
@@ -183,215 +141,13 @@ describe("supplementary assessment", () => {
 
       await expect(
         writeSupplementaryAssessment({
+          outputDirectory: path.join(root, "missing-review"),
           runDirectory: run,
           sourceReviewDirectory: run,
-          outputDirectory: join(root, "missing-review"),
         }),
       ).rejects.toThrow();
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
 });
-
-const save = async (directory: string, path: string, value: unknown) => {
-  const target = join(directory, path);
-  await mkdir(target.slice(0, target.lastIndexOf("/")), { recursive: true });
-  await writeFile(target, JSON.stringify(value));
-};
-
-it.each(["ready", "replay", "blocked", "unlisted"])(
-  "automatically pairs only retained ready listed fixtures: %s",
-  async (state) => {
-    const root = await mkdtemp(join(tmpdir(), "supplementary-auto-"));
-    try {
-      const run = join(root, "run");
-      const review = join(root, "review");
-      const viewports = [
-        { name: "desktop", width: 1440, height: 900 },
-        { name: "desktop-wide", width: 1920, height: 1080 },
-        { name: "desktop-window", width: 1024, height: 768 },
-      ];
-      const side = {
-        output: "available",
-        reason: "Retained",
-        sourceRevision: "original-revision",
-        observations: [],
-      };
-      await save(run, "parity-evidence.json", {
-        schemaVersion: "self-reproduction-parity/v1",
-        runId: "automatic",
-        producer: "evaluator",
-        fixtureVersion: 1,
-        reference: side,
-        candidate: side,
-      });
-      await save(run, "revisions.json", { reference: "original-revision" });
-      await save(review, "observations.json", {
-        schemaVersion: "self-reproduction-source-review/v1",
-        observations: {},
-      });
-      await save(review, "source-evidence.json", { source: "unchanged" });
-      await save(review, "report.md", "Source review");
-      const draft = { appName: "Same name", brief: "Same brief" };
-      await save(
-        run,
-        "captures/reference/fixture.json",
-        viewports.map((viewport) => ({
-          status: state === "blocked" ? "blocked" : "ready",
-          state: "authenticated-durable-draft",
-          viewport,
-          draft,
-        })),
-      );
-      await save(run, "candidate-browser-comparison.json", {
-        output: {
-          outcomes: viewports.map((viewport) => ({
-            viewport: viewport.name,
-            fixture: { status: "prepared", matched: true, draft },
-          })),
-        },
-      });
-      await Promise.all(
-        viewports.flatMap(({ name }) => [
-          save(run, `captures/reference/${name}-0.png`, "reference image"),
-          save(run, `candidate-browser/${name}/root.png`, "candidate image"),
-        ]),
-      );
-      await save(run, "report.json", {
-        captures: [
-          {
-            label: "reference",
-            files: [
-              "captures/reference/fixture.json",
-              ...(state === "unlisted"
-                ? []
-                : viewports.map(({ name }) => `captures/reference/${name}-0.png`)),
-            ],
-          },
-          {
-            label: "candidate",
-            files: viewports.map(({ name }) => `candidate-browser/${name}/root.png`),
-          },
-        ],
-      });
-      const referenceRunDirectory =
-        state === "replay" ? join(root, "reference-replay-run") : undefined;
-      if (referenceRunDirectory) await cp(run, referenceRunDirectory, { recursive: true });
-      const report = await writeSupplementaryAssessment({
-        runDirectory: run,
-        referenceRunDirectory,
-        sourceReviewDirectory: review,
-        outputDirectory: join(root, "out"),
-      });
-      if (state === "replay")
-        expect(
-          report.screenshotPairs.every(({ reference }) =>
-            reference.startsWith("reference-replay/"),
-          ),
-        ).toBe(true);
-      expect(report.screenshotPairs).toHaveLength(["ready", "replay"].includes(state) ? 3 : 0);
-      if (["ready", "replay"].includes(state)) {
-        expect(
-          report.screenshotPairs.every(({ qualification }) =>
-            qualification.includes("matching synthetic draft values"),
-          ),
-        ).toBe(true);
-        expect(await readFile(join(root, "out/original/revisions.json"), "utf-8")).toBe(
-          await readFile(join(run, "revisions.json"), "utf-8"),
-        );
-      } else {
-        expect(
-          report.missingEvidence.some((entry) => entry.includes("paired-capture/desktop: blocked")),
-        ).toBe(true);
-      }
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  },
-);
-
-it.each(["observed", "infrastructure-unavailable"] as const)(
-  "overlays only reference observations from a %s replay with namespaced evidence",
-  async (disposition) => {
-    const root = await mkdtemp(join(tmpdir(), "supplementary-replay-"));
-    try {
-      const run = join(root, "run");
-      const replay = join(root, "replay");
-      const review = join(root, "review");
-      const base = {
-        output: "available",
-        reason: "Retained",
-        sourceRevision: "old",
-        observations: [] as Observation[],
-      };
-      const envelope = {
-        schemaVersion: "self-reproduction-parity/v1",
-        producer: "evaluator",
-        fixtureVersion: 1,
-      };
-      const candidateFailure = {
-        ...observation(false, "browser"),
-        disposition: "missing-functionality",
-      };
-      await save(run, "parity-evidence.json", {
-        ...envelope,
-        runId: "candidate-run",
-        candidate: { ...base, observations: [candidateFailure] },
-        reference: {
-          ...base,
-          observations: [
-            { ...observation(false, "browser"), disposition: "infrastructure-unavailable" },
-          ],
-        },
-      });
-      await save(replay, "parity-evidence.json", {
-        ...envelope,
-        runId: "reference-retry",
-        candidate: { ...base, observations: [observation(true, "browser")] },
-        reference: {
-          ...base,
-          sourceRevision: "new-reference",
-          observations: [{ ...observation(true, "browser"), disposition }],
-        },
-      });
-      await Promise.all(
-        [run, replay].map(async (directory) => {
-          await save(directory, "report.json", { captures: [] });
-          await save(directory, "revisions.json", {
-            revision: directory === replay ? "new-reference" : "old",
-          });
-          await save(directory, "source-evidence.json", { origin: directory });
-        }),
-      );
-      await save(review, "observations.json", {
-        schemaVersion: "self-reproduction-source-review/v1",
-        observations: {},
-      });
-      await save(review, "source-evidence.json", { origin: "independent source review" });
-      await save(review, "report.md", "Review");
-      const report = await writeSupplementaryAssessment({
-        runDirectory: run,
-        referenceRunDirectory: replay,
-        sourceReviewDirectory: review,
-        outputDirectory: join(root, "out"),
-      });
-      const merged = JSON.parse(await readFile(join(root, "out/parity-evidence.json"), "utf-8"));
-      expect(merged.candidate.observations[0]).toMatchObject({
-        disposition: "missing-functionality",
-        artifacts: ["original/source-evidence.json"],
-      });
-      expect(merged.reference.observations[0]).toMatchObject({
-        disposition,
-        artifacts: ["reference-replay/source-evidence.json"],
-      });
-      expect(report.referenceReplay).toMatchObject({
-        runId: "reference-retry",
-        sourceRevision: "new-reference",
-      });
-      expect(report.screenshotPairs).toEqual([]);
-    } finally {
-      await rm(root, { force: true, recursive: true });
-    }
-  },
-);

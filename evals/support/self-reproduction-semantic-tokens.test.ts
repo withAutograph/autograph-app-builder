@@ -35,8 +35,8 @@ it.runIf(process.env.SELF_REPRODUCTION_BROWSER_TESTS === "1")(
       const normal = await inspectSemanticColors(page, browser, css);
       expect(normal.samples).toContainEqual(
         expect.objectContaining({
-          cssVariable: "--color-action-primary",
           actual: "rgb(129, 146, 255)",
+          cssVariable: "--color-action-primary",
           expected: "rgb(129, 146, 255)",
           status: "passed",
         }),
@@ -72,14 +72,14 @@ it.runIf(process.env.SELF_REPRODUCTION_BROWSER_TESTS === "1")(
 
 it("binds only actual archived canonical and candidate stylesheet paths", () => {
   const input = {
-    runtimeRoot: "/actual/runtime",
     candidateAppId: "replica",
     candidateFiles: [{ path: "app/globals.css" }],
+    runtimeRoot: "/actual/runtime",
     workspacePaths: ["packages/design-systems/core/tokens/theme.css"],
   };
   expect(semanticTokenProbeBinding(input)).toEqual({
-    canonicalThemePath: "/actual/runtime/packages/design-systems/core/tokens/theme.css",
     candidateStylesheetPaths: ["/actual/runtime/apps/replica/app/globals.css"],
+    canonicalThemePath: "/actual/runtime/packages/design-systems/core/tokens/theme.css",
   });
   expect(semanticTokenProbeBinding({ ...input, workspacePaths: [] })).toBeUndefined();
   expect(semanticTokenProbeBinding({ ...input, candidateFiles: [] })).toBeUndefined();
@@ -87,20 +87,20 @@ it("binds only actual archived canonical and candidate stylesheet paths", () => 
 
 it("retains CSS identifiers in sanitized receipts while redacting credentials", async () => {
   const output = {
+    diagnostic: "synthetic-credential",
     result: { samples: [{ cssVariable: "--color-action-primary" }] },
     token: "synthetic-credential",
-    diagnostic: "synthetic-credential",
   };
   const comparison = await runSandboxRuntimeComparison({
-    session: {
-      writeTextFile: () => Promise.resolve(),
-      run: () => Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }),
-      readTextFile: () => Promise.resolve(JSON.stringify(output)),
-      readBinaryFile: () => Promise.resolve(null),
-    },
-    script: "// trusted evaluator fixture",
-    payload: {},
     abortSignal: new AbortController().signal,
+    payload: {},
+    script: "// trusted evaluator fixture",
+    session: {
+      readBinaryFile: () => Promise.resolve(null),
+      readTextFile: () => Promise.resolve(JSON.stringify(output)),
+      run: () => Promise.resolve({ exitCode: 0, stderr: "", stdout: "" }),
+      writeTextFile: () => Promise.resolve(),
+    },
   });
   const receipt = redactCandidateEvidence(comparison, ["synthetic-credential"]);
   const serialized = sanitizeEvidence(JSON.stringify(receipt));

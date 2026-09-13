@@ -11,15 +11,15 @@ export const canonicalTokenStylesheet = (source: string, parseCSS: typeof parse)
   });
   css.walkAtRules("theme", (rule) => {
     if (rule.params.trim()) throw new Error("Unsupported canonical theme mode.");
-    rule.replaceWith({ selector: ":root", nodes: rule.nodes });
+    rule.replaceWith({ nodes: rule.nodes, selector: ":root" });
   });
   return css.toString();
 };
 
 export const inspectSemanticColors = async (page: Page, browser: Browser, canonicalCSS: string) => {
   const mode = await page.evaluate(() => ({
-    dark: matchMedia("(prefers-color-scheme: dark)").matches,
     classes: document.documentElement.className,
+    dark: matchMedia("(prefers-color-scheme: dark)").matches,
     theme: document.documentElement.dataset.theme,
   }));
   const samples = await page.evaluate(() => {
@@ -72,23 +72,23 @@ export const inspectSemanticColors = async (page: Page, browser: Browser, canoni
         const label = `${element.tagName.toLowerCase()}[${index}]`;
         if (tokens.size === 1)
           values.push({
+            actual: getComputedStyle(element).getPropertyValue(property),
+            cssVariable: [...tokens][0],
             element: label,
             property,
-            cssVariable: [...tokens][0],
-            actual: getComputedStyle(element).getPropertyValue(property),
           });
         else
           values.push({
+            actual: getComputedStyle(element).getPropertyValue(property),
             element: label,
             property,
-            actual: getComputedStyle(element).getPropertyValue(property),
             reason: tokens.size
               ? "Ambiguous token mapping"
               : "No directly matched semantic token declaration",
           });
       }
     }
-    return { values, unreadableSheets };
+    return { unreadableSheets, values };
   });
   const context = await browser.newContext({ colorScheme: mode.dark ? "dark" : "light" });
   try {
@@ -110,8 +110,8 @@ export const inspectSemanticColors = async (page: Page, browser: Browser, canoni
           if (!tokenValue)
             return {
               ...sample,
-              status: "unassessed",
               reason: "Canonical token is unavailable in this theme mode",
+              status: "unassessed",
             };
           const probe = document.createElement("span");
           probe.style.setProperty(sample.property, `var(${sample.cssVariable})`);
@@ -127,17 +127,17 @@ export const inspectSemanticColors = async (page: Page, browser: Browser, canoni
       samples.values,
     );
     const mapped = resolved.filter((sample) => sample.status !== "unassessed");
+    let status = "unassessed";
+    if (mapped.some((sample) => sample.status === "failed")) status = "failed";
+    else if (mapped.length && mapped.length === resolved.length && samples.unreadableSheets === 0)
+      status = "passed";
     return {
       mode,
       samples: resolved,
-      unreadableSheets: samples.unreadableSheets,
-      status: mapped.some((sample) => sample.status === "failed")
-        ? "failed"
-        : mapped.length && mapped.length === resolved.length && samples.unreadableSheets === 0
-          ? "passed"
-          : "unassessed",
       scope:
         "Only directly mapped visible color properties were compared. Unmapped or ambiguous properties, other states, and inaccessible stylesheets are not palette proof.",
+      status,
+      unreadableSheets: samples.unreadableSheets,
     };
   } finally {
     await context.close();
@@ -189,9 +189,9 @@ export const semanticTokenProbeBinding = (input: {
   const stylesheets = input.candidateFiles.filter((file) => file.path.endsWith(".css"));
   if (!theme || !stylesheets.length) return;
   return {
-    canonicalThemePath: `${input.runtimeRoot}/${theme}`,
     candidateStylesheetPaths: stylesheets.map(
       (file) => `${input.runtimeRoot}/apps/${input.candidateAppId}/${file.path}`,
     ),
+    canonicalThemePath: `${input.runtimeRoot}/${theme}`,
   };
 };
