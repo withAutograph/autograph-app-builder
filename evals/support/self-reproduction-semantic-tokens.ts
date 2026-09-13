@@ -175,3 +175,23 @@ try {
 } finally { await browser?.close(); }
 `,
 });
+
+/** Bind only the canonical theme actually present in the archived workspace inventory. */
+export const semanticTokenProbeBinding = (input: {
+  runtimeRoot: string;
+  candidateAppId: string;
+  candidateFiles: readonly { path: string }[];
+  workspacePaths: readonly string[];
+}) => {
+  const theme = input.workspacePaths.find(
+    (path) => path === "packages/design-systems/core/tokens/theme.css",
+  );
+  const stylesheets = input.candidateFiles.filter((file) => file.path.endsWith(".css"));
+  if (!theme || !stylesheets.length) return;
+  return {
+    canonicalThemePath: `${input.runtimeRoot}/${theme}`,
+    candidateStylesheetPaths: stylesheets.map(
+      (file) => `${input.runtimeRoot}/apps/${input.candidateAppId}/${file.path}`,
+    ),
+  };
+};

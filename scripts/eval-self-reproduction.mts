@@ -1,4 +1,8 @@
 import {
+  sandboxSemanticTokenProbe,
+  semanticTokenProbeBinding,
+} from "../evals/support/self-reproduction-semantic-tokens";
+import {
   candidateNavigationReceipt,
   sandboxCandidateNavigation,
 } from "../evals/support/self-reproduction-candidate-navigation";
@@ -1081,6 +1085,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       const workspaceArchive = arrustedRoot
         ? await trackedWorkspaceArchive(arrustedRoot)
         : undefined;
+      const candidateRuntimeRoot = "/workspace";
       candidateRuntime =
         candidateFiles && workspaceArchive
           ? await evaluateCandidateRuntime({
@@ -1089,7 +1094,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
               candidateAppId: candidateAppId(candidateFiles),
               publicBasePath: `/${candidateAppId(candidateFiles)}`,
               credentials,
-              appRoot: "/workspace",
+              appRoot: candidateRuntimeRoot,
               debugPrerender: values["debug-prerender"],
               onReady: async ({ session, baseURL, abortSignal }) => {
                 if (
@@ -1111,6 +1116,46 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
                       "Live access diagnostic only; no generated application functionality credit.",
                   });
                 }
+                const tokenBinding = candidateFiles
+                  ? semanticTokenProbeBinding({
+                      runtimeRoot: candidateRuntimeRoot,
+                      candidateAppId: candidateAppId(candidateFiles),
+                      candidateFiles,
+                      workspacePaths: arrustedRoot
+                        ? execFileSync(
+                            "git",
+                            [
+                              "ls-files",
+                              "-z",
+                              "--",
+                              "packages/design-systems/core/tokens/theme.css",
+                            ],
+                            { cwd: arrustedRoot, encoding: "utf-8" },
+                          )
+                            .split("\0")
+                            .filter(Boolean)
+                        : [],
+                    })
+                  : undefined;
+                const semanticProbe = tokenBinding
+                  ? await runSandboxRuntimeComparison({
+                      session,
+                      ...sandboxSemanticTokenProbe(),
+                      payload: { baseURL, ...tokenBinding },
+                      abortSignal,
+                    })
+                  : {
+                      status: "unassessed",
+                      reason:
+                        "Exact canonical workspace theme or candidate stylesheet inventory was unavailable.",
+                    };
+                await jsonFile("candidate-semantic-tokens.json", semanticProbe);
+                captures.push({
+                  label: "candidate semantic color samples",
+                  files: ["candidate-semantic-tokens.json"],
+                  status:
+                    "Partial computed-color diagnostic only; no complete palette or reference-palette parity credit.",
+                });
                 const navigation = await runSandboxRuntimeComparison({
                   session,
                   ...sandboxCandidateNavigation(),

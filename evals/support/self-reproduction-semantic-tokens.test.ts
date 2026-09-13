@@ -2,6 +2,7 @@ import { chromium } from "playwright";
 import { parse } from "postcss";
 import { expect, it } from "vitest";
 import {
+  semanticTokenProbeBinding,
   canonicalTokenStylesheet,
   inspectSemanticColors,
 } from "./self-reproduction-semantic-tokens";
@@ -65,3 +66,18 @@ it.runIf(process.env.SELF_REPRODUCTION_BROWSER_TESTS === "1")(
     }
   },
 );
+
+it("binds only actual archived canonical and candidate stylesheet paths", () => {
+  const input = {
+    runtimeRoot: "/actual/runtime",
+    candidateAppId: "replica",
+    candidateFiles: [{ path: "app/globals.css" }],
+    workspacePaths: ["packages/design-systems/core/tokens/theme.css"],
+  };
+  expect(semanticTokenProbeBinding(input)).toEqual({
+    canonicalThemePath: "/actual/runtime/packages/design-systems/core/tokens/theme.css",
+    candidateStylesheetPaths: ["/actual/runtime/apps/replica/app/globals.css"],
+  });
+  expect(semanticTokenProbeBinding({ ...input, workspacePaths: [] })).toBeUndefined();
+  expect(semanticTokenProbeBinding({ ...input, candidateFiles: [] })).toBeUndefined();
+});
