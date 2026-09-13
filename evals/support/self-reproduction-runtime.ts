@@ -22,6 +22,8 @@ export interface CandidateRuntimeReceipt {
     status: number | null;
     passed: boolean;
     detail: string;
+    method: "http" | "browser";
+    disposition: "observed" | "infrastructure-unavailable";
   }[];
 }
 
@@ -43,24 +45,47 @@ async function command(
   };
 }
 
-const probeScript = (publicBasePath: string) => String.raw`
+const readinessScript = (publicBasePath: string) => String.raw`
 const basePath = ${JSON.stringify(publicBasePath)};
-const targets = [["root", "http://127.0.0.1:3000" + basePath], ["documentation", "http://127.0.0.1:3000" + basePath + "/docs"]];
+const target = ["root", "http://127.0.0.1:3000" + basePath];
 const deadline = Date.now() + 120000;
 while (Date.now() < deadline) {
-  try { if ((await fetch(targets[0][1])).status < 500) break; } catch {}
+  try { if ((await fetch(target[1])).status < 500) break; } catch {}
   await new Promise((resolve) => setTimeout(resolve, 500));
 }
 const probes = [];
-for (const [id, url] of targets) {
-  try {
-    const response = await fetch(url, { redirect: "manual" });
-    probes.push({ id, url, status: response.status, passed: response.status >= 200 && response.status < 400, detail: "Evaluator HTTP response." });
-  } catch (error) {
-    probes.push({ id, url, status: null, passed: false, detail: error instanceof Error ? error.message : "Request failed." });
-  }
+try {
+  const response = await fetch(target[1], { redirect: "manual" });
+  probes.push({ id: target[0], url: target[1], status: response.status, passed: response.status >= 200 && response.status < 400, detail: "Evaluator HTTP readiness response.", method: "http", disposition: "observed" });
+} catch (error) {
+  probes.push({ id: target[0], url: target[1], status: null, passed: false, detail: error instanceof Error ? error.message : "Request failed.", method: "http", disposition: "observed" });
 }
 console.log(JSON.stringify(probes));
+`;
+
+const browserProbeScript = (publicBasePath: string) => String.raw`
+import { chromium } from "playwright";
+const baseURL = "http://127.0.0.1:3000" + ${JSON.stringify(publicBasePath)};
+const browser = await chromium.launch({ headless: true });
+const context = await browser.newContext();
+const page = await context.newPage();
+let result;
+try {
+  await page.goto(baseURL, { waitUntil: "domcontentloaded" });
+  const rootURL = page.url();
+  const response = await page.goto(baseURL + "/docs", { waitUntil: "domcontentloaded" });
+  const body = (await page.locator("body").innerText()).trim();
+  await page.goBack({ waitUntil: "domcontentloaded" });
+  const returned = page.url() === rootURL;
+  const readable = (response?.status() ?? 0) < 400 && body.length > 40;
+  result = { id: "documentation", url: baseURL + "/docs", status: response?.status() ?? null, passed: readable && returned, detail: readable && returned ? "Public documentation rendered and browser back-navigation returned to the original page." : "Documentation readable=" + readable + "; return-navigation=" + returned + ".", method: "browser", disposition: "observed" };
+} catch (error) {
+  result = { id: "documentation", url: baseURL + "/docs", status: null, passed: false, detail: error instanceof Error ? error.message : "Browser probe failed.", method: "browser", disposition: "observed" };
+} finally {
+  await context.close();
+  await browser.close();
+}
+console.log(JSON.stringify([result]));
 `;
 
 /** Starts an exported candidate in a fresh evaluator-owned Vercel Sandbox.
@@ -165,7 +190,7 @@ export async function evaluateCandidateRuntime(input: {
     });
     const probe = await command(
       handle,
-      `node --input-type=module --eval ${JSON.stringify(probeScript(input.publicBasePath))}`,
+      `node --input-type=module --eval ${JSON.stringify(readinessScript(input.publicBasePath))}`,
       controller.signal,
     );
     commands.push(probe);
@@ -173,6 +198,27 @@ export async function evaluateCandidateRuntime(input: {
     const root = Array.isArray(probes)
       ? probes.find((item: { id?: unknown }) => item.id === "root")
       : undefined;
+    if (root?.passed === true) {
+      const browser = await command(
+        handle,
+        `node --input-type=module --eval ${JSON.stringify(browserProbeScript(input.publicBasePath))}`,
+        controller.signal,
+      );
+      commands.push(browser);
+      if (browser.exitCode === 0) {
+        const browserProbes = JSON.parse(browser.stdout.trim());
+        if (Array.isArray(browserProbes)) probes.push(...browserProbes);
+      } else
+        probes.push({
+          id: "documentation",
+          url: `http://127.0.0.1:3000${input.publicBasePath}/docs`,
+          status: null,
+          passed: false,
+          detail: `Evaluator browser was unavailable: ${browser.stderr || browser.stdout}`,
+          method: "browser",
+          disposition: "infrastructure-unavailable",
+        });
+    }
     return {
       producer: "evaluator",
       sandboxId: handle.session.id,

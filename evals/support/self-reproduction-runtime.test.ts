@@ -64,13 +64,22 @@ describe("self-reproduction candidate runtime", () => {
             status: 200,
             passed: true,
             detail: "ok",
+            method: "http",
+            disposition: "observed",
           },
+        ]),
+      },
+      {
+        exitCode: 0,
+        stdout: JSON.stringify([
           {
             id: "documentation",
             url: "http://127.0.0.1:3000/candidate/docs",
             status: 200,
             passed: true,
             detail: "ok",
+            method: "browser",
+            disposition: "observed",
           },
         ]),
       },

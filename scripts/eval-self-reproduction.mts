@@ -438,13 +438,24 @@ function runtimeObservations(): Observation[] {
     ...notRun,
     {
       requirementId: "documentation",
-      disposition: docs.passed ? "observed" : "missing-functionality",
+      disposition:
+        docs.disposition === "infrastructure-unavailable"
+          ? "infrastructure-unavailable"
+          : docs.passed
+            ? "observed"
+            : "missing-functionality",
       reason: docs.detail,
       assertions: [
         {
           id: "docs-readable",
           passed: docs.passed,
           detail: `Evaluator HTTP probe returned ${docs.status ?? "no response"}.`,
+          artifacts: [artifact],
+        },
+        {
+          id: "return-navigation-works",
+          passed: docs.passed,
+          detail: docs.detail,
           artifacts: [artifact],
         },
       ],
