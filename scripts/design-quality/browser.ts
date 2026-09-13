@@ -1,6 +1,6 @@
 import { chromium } from "playwright";
 import type { Page } from "playwright";
-import * as axe from "axe-core";
+import axe from "axe-core";
 import nodePath from "node:path";
 import { z } from "zod";
 import type { Observation } from "./evidence";
@@ -993,6 +993,8 @@ export async function capturePreview(input: {
   generatedCssSourceFiles?: { path: string; content: string }[];
   sharedCssSourceFiles?: CssSourceFile[];
   additionalDesktopSize?: DesktopSize;
+  /** For evaluator-owned local HTTPS fixtures with self-signed certificates. */
+  ignoreHTTPSErrors?: boolean;
 }) {
   const browser = await chromium.launch();
   const captures = [];
@@ -1001,6 +1003,7 @@ export async function capturePreview(input: {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const context = await browser.newContext({
         deviceScaleFactor: 1,
+        ignoreHTTPSErrors: input.ignoreHTTPSErrors ?? false,
         viewport: { height: viewport.height, width: viewport.width },
       });
       // tsx preserves local function names using this helper when serializing

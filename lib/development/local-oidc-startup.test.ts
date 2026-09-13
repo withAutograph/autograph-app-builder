@@ -117,6 +117,7 @@ describe("local Development OIDC startup", () => {
       },
       {
         args: ["run", "local:install-oidc"],
+        environment: { MISE_BIN_PATH: "/mise/mise" },
         executable: "/mise/mise",
         operation: "owner-bind",
       },

@@ -235,7 +235,7 @@ export default function Page() {
     ).toThrow(/not a public @autograph\/icons export.*ChevronLeft/u);
   });
 
-  it("rejects unrepairable single-line preview source", () => {
+  it("accepts valid single-line JSX regardless of formatting", () => {
     expect(() =>
       validateUiPreview({
         ...preview,
@@ -247,7 +247,22 @@ export default function Page() {
         ],
         manifest: { ...preview.manifest, productionComponents: [] },
       }),
-    ).toThrow(/format JSX/u);
+    ).not.toThrow();
+  });
+
+  it("still rejects forbidden controls in long-line JSX", () => {
+    expect(() =>
+      validateUiPreview({
+        ...preview,
+        files: [
+          {
+            content: `export default function Page() { return <main>${"x".repeat(2100)}<button>Submit</button></main>; }`,
+            path: "src/routes/index.tsx",
+          },
+        ],
+        manifest: { ...preview.manifest, productionComponents: [] },
+      }),
+    ).toThrow(/public Arrusted primitives/u);
   });
 
   it("binds manifest decisions and assumptions into the immutable revision", () => {

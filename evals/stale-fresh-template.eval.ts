@@ -10,9 +10,9 @@ export default defineEval({
     await t.send(`Prepare fresh template at ${repository}`);
     t.succeeded();
     t.notEvent("input.requested");
-    t.calledTool("approve-source-acquisition", { count: 1 });
-    t.calledTool("prepare-workspace", { count: 1 });
+    t.calledTool("approve_source_acquisition", { count: 1 });
+    t.calledTool("prepare_workspace", { count: 1 });
     t.notCalledTool("bash");
-    t.notCalledTool("write-file");
+    t.notCalledTool("write_file");
   },
 });

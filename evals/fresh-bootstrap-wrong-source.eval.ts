@@ -26,10 +26,10 @@ export default defineEval({
       );
       t.succeeded();
       t.check(t.reply, includes("rejected without target mutation"));
-      t.notCalledTool("publish-fresh-repository");
-      t.notCalledTool("recover-fresh-repository");
+      t.notCalledTool("publish_fresh_repository");
+      t.notCalledTool("recover_fresh_repository");
       t.notCalledTool("bash");
-      t.notCalledTool("write-file");
+      t.notCalledTool("write_file");
     } finally {
       await fixture.cleanup();
     }

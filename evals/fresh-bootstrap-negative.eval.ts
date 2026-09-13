@@ -23,7 +23,7 @@ export default defineEval({
       await withFreshBootstrapTestCapability(fixture.capability, () =>
         t.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
-      t.requireInputRequest({ toolName: "publish-fresh-repository" });
+      t.requireInputRequest({ toolName: "publish_fresh_repository" });
       await withFreshBootstrapTestCapability(fixture.capability, () => t.respondAll("cancel"));
       t.succeeded();
       t.check(t.reply, includes("canceled, stale, or recovery-required"));
@@ -36,8 +36,8 @@ export default defineEval({
       t.succeeded();
       t.check(t.reply, includes("rejected without target mutation"));
       t.notCalledTool("bash");
-      t.notCalledTool("write-file");
-      t.notCalledTool("publish-reviewed-change-set");
+      t.notCalledTool("write_file");
+      t.notCalledTool("publish_reviewed_change_set");
       t.notCalledTool("publish-reviewed-change-set_to_branch_worktree");
     } finally {
       await fixture.cleanup();

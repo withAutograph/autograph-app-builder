@@ -23,7 +23,7 @@ export default defineEval({
     t.check(t.reply, includes("did not pass its quality checks"));
     t.check(t.reply, includes("needs another revision"));
     t.notCalledTool("bash");
-    t.notCalledTool("write-file");
+    t.notCalledTool("write_file");
 
     await t.send("Report artifact workflow status.");
     t.succeeded();
@@ -35,6 +35,6 @@ export default defineEval({
     t.notEvent("input.requested");
     t.check(t.reply, includes("did not pass its quality checks"));
     t.notCalledTool("bash");
-    t.notCalledTool("write-file");
+    t.notCalledTool("write_file");
   },
 });

@@ -13,6 +13,15 @@ describe("approval-bound implementation files", () => {
         content: "export default null",
         path: "apps/stock-exceptions/app/page.tsx",
       },
+      {
+        path: "apps/stock-exceptions/app/api/drafts/route.ts",
+        content: "export async function POST() { return Response.json({ saved: true }); }",
+      },
+      { path: "apps/stock-exceptions/server/worker.mts", content: "export const worker = true;" },
+      {
+        path: "apps/stock-exceptions/db/migrations/001.sql",
+        content: "CREATE TABLE drafts (id text PRIMARY KEY);",
+      },
     ]);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const writeTextFile = vi.fn(async () => {});
@@ -38,6 +47,12 @@ describe("approval-bound implementation files", () => {
       content: "export default null",
       path: "repository/apps/stock-exceptions/app/page.tsx",
     });
+    for (const [index, file] of files.entries()) {
+      expect(writeTextFile).toHaveBeenNthCalledWith(index + 1, {
+        path: `repository/${file.path}`,
+        content: file.content,
+      });
+    }
     expect(
       implementationFilesSchema.safeParse([{ content: "nope", path: "../outside.ts" }]).success,
     ).toBe(false);

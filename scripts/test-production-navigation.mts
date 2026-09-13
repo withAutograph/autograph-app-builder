@@ -1,3 +1,4 @@
+import { navigationReporterOptions } from "../evals/support/self-reproduction-navigation-command";
 import { randomBytes } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
@@ -24,8 +25,10 @@ if (
 ) {
   throw new Error("Use mise run test:production-navigation.");
 }
+const reporter = navigationReporterOptions(process.argv.slice(6));
 // Deliberately do not inherit credentials, deployment metadata or Node preloads.
 const environment: NodeJS.ProcessEnv = {
+  ...reporter.environment,
   CI: process.env.CI,
   HOME: process.env.HOME,
   LANG: process.env.LANG,
@@ -324,7 +327,7 @@ try {
     "node_modules/playwright/cli.js",
     "test",
     "--config=playwright.production-navigation.config.ts",
-    ...process.argv.slice(6),
+    ...reporter.args,
   ]);
 } finally {
   await Promise.all([...children].map(stopChild));

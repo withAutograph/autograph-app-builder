@@ -48,7 +48,7 @@ export default defineEval({
 
     await t.send("Inspect the validated change set.");
     t.succeeded();
-    t.calledTool("change-set-status", { count: 1 });
+    t.calledTool("change_set_status", { count: 1 });
 
     await t.send("Accept the displayed change set.");
     t.succeeded();
@@ -59,16 +59,16 @@ export default defineEval({
 
     await t.send("Report artifact workflow status.");
     t.succeeded();
-    t.calledTool("artifact-workflow-status", { count: 1 });
+    t.calledTool("artifact_workflow_status", { count: 1 });
     t.check(t.reply, includes('"phase":"reviewed"'));
 
     for (const tool of [
-      "publish-reviewed-change-set",
+      "publish_reviewed_change_set",
       "publish-reviewed-change-set_to_branch_worktree",
-      "publish-fresh-repository",
+      "publish_fresh_repository",
       "publish_github_change_set",
       "bash",
-      "write-file",
+      "write_file",
     ])
       t.notCalledTool(tool);
 
@@ -77,17 +77,17 @@ export default defineEval({
         browserPreview: true,
         publicationAttempted: false,
         requiredTools: [
-          "inspect-source",
-          "prepare-workspace",
-          "record-prototype-artifact",
-          "accept-app-spec",
-          "prepare-target-dependencies",
-          "plan-app-creation",
-          "apply-app-creation",
-          "validate-app-creation",
-          "change-set-status",
-          "accept-change-set",
-          "artifact-workflow-status",
+          "inspect_source",
+          "prepare_workspace",
+          "record_prototype_artifact",
+          "accept_app_spec",
+          "prepare_target_dependencies",
+          "plan_app_creation",
+          "apply_app_creation",
+          "validate_app_creation",
+          "change_set_status",
+          "accept_change_set",
+          "artifact_workflow_status",
         ],
         sourceKind: "supported-existing-repository",
         terminalPhase: "reviewed",

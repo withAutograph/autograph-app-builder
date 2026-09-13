@@ -37,8 +37,8 @@ export default defineEval({
       }) !== ""
     )
       throw new Error("A stale approval created a branch.");
-    t.notCalledTool("recover-branch-worktree-publication");
+    t.notCalledTool("recover_branch_worktree_publication");
     t.notCalledTool("bash");
-    t.notCalledTool("write-file");
+    t.notCalledTool("write_file");
   },
 });

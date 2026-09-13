@@ -23,16 +23,16 @@ export default defineEval({
       await withFreshBootstrapTestCapability(fixture.capability, () =>
         t.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
-      t.requireInputRequest({ toolName: "publish-fresh-repository" });
+      t.requireInputRequest({ toolName: "publish_fresh_repository" });
       t.event("input.requested", { count: 1 });
       await withFreshBootstrapTestCapability(fixture.capability, () => t.respondAll("approve"));
       t.succeeded();
       t.check(t.reply, includes("one parentless SHA-1 local repository"));
-      t.calledTool("fresh-bootstrap-status", { count: 1 });
-      t.calledTool("publish-fresh-repository", { count: 1 });
+      t.calledTool("fresh_bootstrap_status", { count: 1 });
+      t.calledTool("publish_fresh_repository", { count: 1 });
       t.notCalledTool("bash");
-      t.notCalledTool("write-file");
-      t.notCalledTool("publish-reviewed-change-set");
+      t.notCalledTool("write_file");
+      t.notCalledTool("publish_reviewed_change_set");
       t.notCalledTool("publish-reviewed-change-set_to_branch_worktree");
     } finally {
       await fixture.cleanup();

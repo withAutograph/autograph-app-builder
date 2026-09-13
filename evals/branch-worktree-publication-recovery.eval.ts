@@ -23,12 +23,12 @@ export default defineEval({
     t.succeeded();
     t.check(t.reply, includes("not redispatched automatically"));
     await t.send("Recover branch worktree publication.");
-    t.requireInputRequest({ toolName: "recover-branch-worktree-publication" });
+    t.requireInputRequest({ toolName: "recover_branch_worktree_publication" });
     await t.respondAll("approve");
     t.succeeded();
     t.check(t.reply, includes("separately approved recovery completed"));
     t.check(t.reply, includes("without a commit, push, remote publication"));
     t.notCalledTool("bash");
-    t.notCalledTool("write-file");
+    t.notCalledTool("write_file");
   },
 });

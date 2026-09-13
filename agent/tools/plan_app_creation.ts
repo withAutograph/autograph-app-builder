@@ -1,3 +1,4 @@
+import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
@@ -49,7 +50,11 @@ export default defineTool({
       current.phase === "validated" ||
       current.phase === "reviewed"
     )
-      return { ...current.proposal, reused: true };
+      return {
+        ...current.proposal,
+        productAcceptance: productAcceptanceObligations(current.appSpec),
+        reused: true,
+      };
 
     const binding = {
       appSpecDigest: current.appSpec.digest,
@@ -138,7 +143,11 @@ export default defineTool({
         proposal,
       }),
     });
-    return { ...proposal, reused: false };
+    return {
+      ...proposal,
+      productAcceptance: productAcceptanceObligations(current.appSpec),
+      reused: false,
+    };
   },
   inputSchema: z.object({
     existingAppChanges: existingAppChangesSchema.optional(),

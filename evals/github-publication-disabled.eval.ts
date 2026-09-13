@@ -8,13 +8,13 @@ export default defineEval({
   async test(t) {
     await t.send("Report GitHub publication status.");
     t.succeeded();
-    t.calledTool("github-publication-status");
+    t.calledTool("github_publication_status");
     t.check(t.reply, includes("GitHub publication is fail-closed"));
     t.check(t.reply, includes("least-privilege GitHub App adapter"));
-    t.notCalledTool("resolve-github-source");
-    t.notCalledTool("create-github-repository");
-    t.notCalledTool("publish-github-draft-pr");
+    t.notCalledTool("resolve_github_source");
+    t.notCalledTool("create_github_repository");
+    t.notCalledTool("publish_github_draft_pr");
     t.notCalledTool("bash");
-    t.notCalledTool("write-file");
+    t.notCalledTool("write_file");
   },
 });

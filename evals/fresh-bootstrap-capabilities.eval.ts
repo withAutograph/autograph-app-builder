@@ -24,6 +24,6 @@ export default defineEval({
       ),
     );
     t.notCalledTool("bash");
-    t.notCalledTool("write-file");
+    t.notCalledTool("write_file");
   },
 });

@@ -714,7 +714,7 @@ export function createHostedEveSessionService(input: {
     const timestamp = now();
     const completeResult = projectSnapshot(sessionId, snapshot, 0, 100);
     const checkpoint = checkpointForSnapshot(sessionId, snapshot, timestamp);
-    await input.store.observeSession?.({
+    const observed = await input.store.observeSession?.({
       checkpoint,
       ...(completeResult.implementationPlan?.appId === undefined
         ? {}
@@ -725,6 +725,11 @@ export function createHostedEveSessionService(input: {
       sessionId,
       stage: stageForResult(completeResult),
     });
+    if (observed?.status === "cancelled") {
+      const durable = toDurableHostedSessionRecord(observed);
+      if (durable.checkpoint)
+        return resultFromHostedCheckpoint(sessionId, durable.checkpoint, 0, 100);
+    }
     return completeResult;
   }
 
@@ -752,7 +757,7 @@ export function createHostedEveSessionService(input: {
         observedAt >= session.lastProgressAtEpochMs + sessionTimeoutPolicy.idleTimeoutMs
       ) {
         const checkpoint = session.checkpoint ?? observedCheckpoint;
-        await input.store.observeSession?.({
+        const observed = await input.store.observeSession?.({
           ...(session.appId === undefined ? {} : { appId: session.appId }),
           checkpoint,
           nowEpochMs: observedAt,
@@ -761,14 +766,20 @@ export function createHostedEveSessionService(input: {
           sessionId,
           stage: session.stage,
         });
-        return resultFromHostedCheckpoint(sessionId, checkpoint, cursor, limit);
+        const retained = observed && toDurableHostedSessionRecord(observed).checkpoint;
+        return resultFromHostedCheckpoint(sessionId, retained ?? checkpoint, cursor, limit);
       }
-      await observeSnapshot(sessionId, snapshot);
+      const observed = await observeSnapshot(sessionId, snapshot);
+      if (observed.status === "cancelled") {
+        const durable = toDurableHostedSessionRecord(await requireSession(sessionId));
+        if (durable.checkpoint)
+          return resultFromHostedCheckpoint(sessionId, durable.checkpoint, cursor, limit);
+      }
       return projectSnapshot(sessionId, snapshot, cursor, limit);
     } catch (error) {
       if (!(error instanceof HostedAdapterSessionUnavailableError)) throw error;
       if (session.checkpoint === undefined) throw new HostedSessionRecoveryUnavailableError();
-      await input.store.observeSession?.({
+      const observed = await input.store.observeSession?.({
         ...(session.appId === undefined ? {} : { appId: session.appId }),
         checkpoint: session.checkpoint,
         nowEpochMs: now(),
@@ -777,7 +788,8 @@ export function createHostedEveSessionService(input: {
         sessionId,
         stage: session.stage,
       });
-      return resultFromHostedCheckpoint(sessionId, session.checkpoint, cursor, limit);
+      const retained = observed && toDurableHostedSessionRecord(observed).checkpoint;
+      return resultFromHostedCheckpoint(sessionId, retained ?? session.checkpoint, cursor, limit);
     }
   }
 
@@ -797,9 +809,7 @@ export function createHostedEveSessionService(input: {
           throw new HostedRejectedOperationError(error.code);
         throw error;
       }
-      const result = projectSnapshot(sessionId, snapshot);
-      await observeSnapshot(sessionId, snapshot);
-      return result;
+      return observeSnapshot(sessionId, snapshot);
     },
     get({ sessionId, cursor, limit }) {
       requireHostedOperationScope(principal, "get");
@@ -849,8 +859,7 @@ export function createHostedEveSessionService(input: {
               ? { sourceHandoffId: session.sourceHandoffId }
               : {}),
           });
-          const result = projectSnapshot(request.sessionId, snapshot);
-          await observeSnapshot(request.sessionId, snapshot);
+          const result = await observeSnapshot(request.sessionId, snapshot);
           return { result };
         },
         kind: "respond",
@@ -872,8 +881,7 @@ export function createHostedEveSessionService(input: {
               ? { sourceHandoffId: session.sourceHandoffId }
               : {}),
           });
-          const result = projectSnapshot(request.sessionId, snapshot);
-          await observeSnapshot(request.sessionId, snapshot);
+          const result = await observeSnapshot(request.sessionId, snapshot);
           return { result };
         },
         kind: "send",

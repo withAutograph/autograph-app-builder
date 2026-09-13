@@ -19,11 +19,11 @@ export default defineEval({
     t.check(t.reply, includes("recovery-required"));
 
     await t.send("Recover branch worktree publication.");
-    t.requireInputRequest({ toolName: "recover-branch-worktree-publication" });
+    t.requireInputRequest({ toolName: "recover_branch_worktree_publication" });
     await t.respondAll("approve");
     t.succeeded();
     t.check(t.reply, includes("separately approved recovery completed"));
     t.notCalledTool("bash");
-    t.notCalledTool("write-file");
+    t.notCalledTool("write_file");
   },
 });

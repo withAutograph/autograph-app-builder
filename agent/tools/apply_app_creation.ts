@@ -1,3 +1,4 @@
+import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
@@ -42,6 +43,7 @@ export default defineTool({
       return {
         appId: current.proposal.target.contract.appId,
         changedFileCount: current.applyReceipt.changes.length,
+        productAcceptance: productAcceptanceObligations(current.appSpec),
         reused: true,
         status: "applied" as const,
       };
@@ -125,6 +127,7 @@ export default defineTool({
     return {
       appId: current.proposal.target.contract.appId,
       changedFileCount: result.receipt.changes.length,
+      productAcceptance: productAcceptanceObligations(current.appSpec),
       reused: false,
       status: "applied" as const,
     };

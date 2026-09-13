@@ -571,7 +571,7 @@ describe("Vercel-faithful App Builder flow", () => {
     expect(accessibility.violations).toEqual([]);
   });
 
-  it("keeps GitHub failures out of the shared provider notice area", async () => {
+  it("shows actionable GitHub callback failures in an accessible provider notice", async () => {
     const view = await render(
       <AppBuilderComponent
         connectionsEnabled
@@ -580,8 +580,9 @@ describe("Vercel-faithful App Builder flow", () => {
       />,
     );
 
-    expect(view.textContent).not.toContain("GitHub could not be connected");
-    expect(view.querySelector('[role="alert"]')).toBeNull();
+    expect(view.querySelector('[role="alert"]')?.textContent).toContain(
+      "GitHub returned an invalid or expired authorization response. Start a new connection attempt.",
+    );
   });
 
   it("waits to show repository controls until a GitHub scope is available", async () => {

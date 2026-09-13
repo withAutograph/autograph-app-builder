@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
 
@@ -62,6 +62,10 @@ function run(script: string) {
     expect(readFileSync(nodePath.join(output, "generator-input", path), "utf-8")).toBe(
       readFileSync(nodePath.resolve("evals/self-reproduction", path), "utf-8"),
     );
+  expect(existsSync(nodePath.join(output, "runtime-source"))).toBe(false);
+  expect(
+    JSON.parse(readFileSync(nodePath.join(output, "revisions.json"), "utf-8")).arrusted.status,
+  ).toBe("unavailable");
   return { output, report, result };
 }
 
@@ -135,7 +139,7 @@ describe("native self-reproduction report orchestration", () => {
               },
             ],
           },
-          toolName: "change-set-status",
+          toolName: "change_set_status",
         },
         type: "action.result",
       },

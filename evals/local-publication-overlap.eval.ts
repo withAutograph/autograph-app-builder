@@ -17,8 +17,8 @@ export default defineEval({
     await t.send("Publish reviewed change set locally with dirty overlap.");
     t.succeeded();
     t.check(t.reply, includes("rejected before approval or destination mutation"));
-    t.notCalledTool("publish-reviewed-change-set");
+    t.notCalledTool("publish_reviewed_change_set");
     t.notCalledTool("bash");
-    t.notCalledTool("write-file");
+    t.notCalledTool("write_file");
   },
 });

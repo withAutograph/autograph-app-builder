@@ -23,14 +23,14 @@ export default defineEval({
       await withFreshBootstrapTestCapability(fixture.capability, () =>
         t.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
-      t.requireInputRequest({ toolName: "publish-fresh-repository" });
+      t.requireInputRequest({ toolName: "publish_fresh_repository" });
       await withFreshBootstrapTestCapability(fixture.capability, () => t.respondAll("approve"));
       t.succeeded();
 
       await withFreshBootstrapTestCapability(fixture.capability, () =>
         t.send("Recover fresh repository bootstrap after partial failure."),
       );
-      t.requireInputRequest({ toolName: "recover-fresh-repository" });
+      t.requireInputRequest({ toolName: "recover_fresh_repository" });
       await withFreshBootstrapTestCapability(fixture.capability, () => t.respondAll("approve"));
       t.succeeded();
       t.check(t.reply, includes("separately approved exact"));
@@ -40,10 +40,10 @@ export default defineEval({
       );
       t.succeeded();
       t.check(t.reply, includes("without redispatching recovery"));
-      t.calledTool("recover-fresh-repository", { count: 1 });
+      t.calledTool("recover_fresh_repository", { count: 1 });
       t.notCalledTool("bash");
-      t.notCalledTool("write-file");
-      t.notCalledTool("publish-reviewed-change-set");
+      t.notCalledTool("write_file");
+      t.notCalledTool("publish_reviewed_change_set");
       t.notCalledTool("publish-reviewed-change-set_to_branch_worktree");
     } finally {
       await fixture.cleanup();

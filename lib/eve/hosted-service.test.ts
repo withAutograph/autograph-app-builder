@@ -1616,3 +1616,44 @@ describe("hosted Eve service core", () => {
     ).toBe(false);
   });
 });
+
+it("keeps acknowledged cancellation terminal when an already-pending read completes late", async () => {
+  const store = new InMemoryHostedEveStore();
+  const pending = Promise.withResolvers<HostedEngineSnapshot>();
+  const readStarted = Promise.withResolvers<null>();
+  const adapter = transport({
+    cancel: () => Promise.resolve({ events: [], status: "cancelled" }),
+    get: () => {
+      readStarted.resolve(null);
+      return pending.promise;
+    },
+    start: () =>
+      Promise.resolve({
+        adapterSessionId: "cancel-race",
+        snapshot: { events: [], status: "working" },
+      }),
+  });
+  const service = createHostedEveSessionService({ principal, store, transport: adapter });
+  const initialSession = await service.start({
+    clientRequestId: "cancel-race-start",
+    prompt: "Pending operation",
+  });
+  const staleRead = service.get({ cursor: 0, limit: 100, sessionId: initialSession.sessionId });
+  await readStarted.promise;
+  const cancelled = await service.cancel({ sessionId: initialSession.sessionId });
+  expect(cancelled.status).toBe("cancelled");
+  pending.resolve({ events: [], status: "completed" });
+  const settledRead = await staleRead;
+  expect(settledRead.status).toBe("cancelled");
+  const retained = await store.getSession(principal, initialSession.sessionId);
+  expect(retained?.status).toBe("cancelled");
+  const resumed = await service.start({
+    clientRequestId: "cancel-race-resume",
+    prompt: "Explicit retry",
+    resumeSessionId: initialSession.sessionId,
+  });
+  expect(resumed.sessionId).not.toBe(initialSession.sessionId);
+  expect(resumed.status).toBe("working");
+  const retainedAfterResume = await store.getSession(principal, initialSession.sessionId);
+  expect(retainedAfterResume?.status).toBe("cancelled");
+});

@@ -18,4 +18,5 @@ done
 mise run local:ensure-oidc
 
 exec .config/mise/scripts/trusted-node-launcher \
-  "$(mise which node)" --import tsx scripts/eval-self-reproduction.mts "$@"
+  "$(mise which node)" --import tsx scripts/eval-self-reproduction.mts \
+  --mise-executable "${MISE_BIN_PATH:-$(command -v mise)}" "$@"

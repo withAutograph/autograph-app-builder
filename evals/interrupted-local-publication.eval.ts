@@ -12,7 +12,7 @@ export default defineEval({
     await prepareReviewedWorkflow(t, repository, "publication-interruption");
 
     await t.send("Publish reviewed change set locally.");
-    t.requireInputRequest({ toolName: "publish-reviewed-change-set" });
+    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
     await t.respondAll("approve");
     t.succeeded();
 
@@ -32,6 +32,6 @@ export default defineEval({
     t.succeeded();
     t.check(t.reply, includes("durable state was not changed"));
     t.notCalledTool("bash");
-    t.notCalledTool("write-file");
+    t.notCalledTool("write_file");
   },
 });

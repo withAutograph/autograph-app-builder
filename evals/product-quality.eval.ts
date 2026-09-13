@@ -26,10 +26,10 @@ export default defineEval({
     const vendor = productQualityScenario("vendor-onboarding");
     const repository = createSupportedRepositoryFixture();
     await t.send(`Supported repository at ${repository}\nProduct brief: ${vendor.brief}`);
-    t.requireInputRequest({ toolName: "apply-app-creation" });
+    t.requireInputRequest({ toolName: "apply_app_creation" });
     await t.respondAll("approve");
     t.succeeded();
-    t.calledTool("record-prototype-artifact", {
+    t.calledTool("record_prototype_artifact", {
       count: 1,
       input: {
         content: (value) => {
@@ -106,7 +106,7 @@ Confirmed.
         path: "prototype/vendor-onboarding/index.html",
       },
     });
-    t.calledTool("record-prototype-artifact", {
+    t.calledTool("record_prototype_artifact", {
       count: 1,
       input: {
         content: (value) =>
@@ -116,7 +116,7 @@ Confirmed.
         path: "prototype/vendor-onboarding/decisions.md",
       },
     });
-    t.calledTool("record-prototype-artifact", {
+    t.calledTool("record_prototype_artifact", {
       count: 1,
       input: {
         content: (value) =>
@@ -126,8 +126,8 @@ Confirmed.
         path: "prototype/vendor-onboarding/app-spec.md",
       },
     });
-    t.calledTool("apply-app-creation", { count: 1 });
-    t.calledTool("validate-app-creation", { count: 1 });
+    t.calledTool("apply_app_creation", { count: 1 });
+    t.calledTool("validate_app_creation", { count: 1 });
     t.check(
       t.reply,
       assertQuality(

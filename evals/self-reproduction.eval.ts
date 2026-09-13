@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { defineEval } from "eve/evals";
 import { satisfies } from "eve/evals/expect";
 import { evidencePrefix, sanitizeEvidence } from "./support/self-reproduction-evidence";
+import { assertAcceptedAppSpec } from "./support/self-reproduction-prerequisites";
 
 export default defineEval({
   description:
@@ -76,7 +77,20 @@ export default defineEval({
       ),
     );
 
-    await send("Prepare offline target dependencies.");
+    const designStatus = await send(
+      "Report the current artifact workflow status without changing it.",
+    );
+    const status = designStatus.toolCalls.find(
+      (call) => call.name === "artifact_workflow_status" && call.status === "completed",
+    )?.output;
+    try {
+      assertAcceptedAppSpec(status);
+    } catch (error) {
+      emit({ kind: "eval-completed", candidate: { status: "unavailable", reason: String(error) } });
+      throw error;
+    }
+
+    await send("Prepare target dependencies using the repository's normal installation workflow.");
     t.succeeded();
 
     await send("Run target identity and planning.");
@@ -180,13 +194,16 @@ export default defineEval({
       return;
     }
 
-    t.check(
-      phase,
-      satisfies(
-        (value) => value === "validated" || value === "reviewed",
-        "the generated candidate reached validated or reviewed state",
-      ),
-    );
+    if (phase !== "validated" && phase !== "reviewed") {
+      emit({
+        kind: "eval-completed",
+        candidate: {
+          status: "unavailable",
+          reason: `Generation stopped in workflow phase ${String(phase)}.`,
+        },
+      });
+      throw new Error(`Cannot review or export a candidate in workflow phase ${String(phase)}.`);
+    }
 
     if (phase === "validated") {
       await send("Inspect the validated change set.");

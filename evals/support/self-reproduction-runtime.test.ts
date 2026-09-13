@@ -33,6 +33,7 @@ function backend(results: { exitCode: number; stdout?: string; stderr?: string }
             run,
             spawn,
             writeBinaryFile,
+            readTextFile: () => Promise.resolve(JSON.stringify({ basePath: "" })),
             writeTextFile,
           },
           shutdown,
@@ -125,6 +126,7 @@ describe("self-reproduction candidate runtime", () => {
           },
         ]),
       },
+      { exitCode: 0 },
       {
         exitCode: 0,
         stdout: JSON.stringify([
@@ -140,19 +142,31 @@ describe("self-reproduction candidate runtime", () => {
         ]),
       },
     ]);
+    const onReady = vi.fn(({ baseURL }: { baseURL: string }) => {
+      expect(baseURL).toBe("http://127.0.0.1:3000");
+      expect(fixture.shutdown).not.toHaveBeenCalled();
+      return Promise.resolve();
+    });
     const receipt = await evaluateCandidateRuntime({
       backend: fixture.backend,
       candidateAppId: "candidate",
       files: [{ content: "{}", path: "package.json" }],
       publicBasePath: "/candidate",
+      onReady,
       workspaceArchive: Buffer.from("archive"),
     });
     expect(receipt).toMatchObject({ producer: "evaluator", status: "available" });
     expect(receipt.probes).toHaveLength(2);
     expect(fixture.writeBinaryFile).toHaveBeenCalledOnce();
-    expect(fixture.writeTextFile).toHaveBeenCalledTimes(4);
+    expect(fixture.writeTextFile).toHaveBeenCalledTimes(6);
     expect(fixture.spawn).toHaveBeenCalledOnce();
+    expect(fixture.spawn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: expect.stringContaining("PORT=3000"),
+      }),
+    );
     expect(fixture.shutdown).toHaveBeenCalledOnce();
+    expect(onReady).toHaveBeenCalledOnce();
   });
 
   it("retains build diagnostics and never starts a failed candidate", async () => {
@@ -190,5 +204,26 @@ describe("self-reproduction candidate runtime", () => {
       workspaceArchive: Buffer.from("archive"),
     });
     expect(receipt).toMatchObject({ probes: [], status: "infrastructure-unavailable" });
+  });
+
+  it("never treats a successful diagnostic rebuild as production acceptance", async () => {
+    const fixture = backend([
+      ...Array.from({ length: 5 }, () => ({ exitCode: 0 })),
+      { exitCode: 1, stderr: "Expected workStore to be initialized" },
+      { exitCode: 0, stdout: "Diagnostic build complete" },
+    ]);
+    const receipt = await evaluateCandidateRuntime({
+      backend: fixture.backend,
+      workspaceArchive: Buffer.from("archive"),
+      candidateAppId: "candidate",
+      publicBasePath: "/candidate",
+      files: [],
+      debugPrerender: true,
+    });
+    expect(receipt.status).toBe("failed");
+    expect(receipt.commands.at(-1)?.command).toContain("--debug-prerender");
+    expect(receipt.commands.at(-1)?.stdout).toContain("Diagnostic build complete");
+    expect(fixture.spawn).not.toHaveBeenCalled();
+    expect(fixture.shutdown).toHaveBeenCalledOnce();
   });
 });

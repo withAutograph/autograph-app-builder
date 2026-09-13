@@ -26,7 +26,7 @@ export default defineEval({
     t.succeeded();
     await t.send("Inspect existing Vendor application.");
     t.succeeded();
-    t.calledTool("inspect-existing-app", { count: 2 });
+    t.calledTool("inspect_existing_app", { count: 2 });
     await t.send("Prepare offline target dependencies.");
     t.succeeded();
     await t.send(
@@ -53,12 +53,12 @@ export default defineEval({
     t.check(t.reply, includes('"phase":"reviewed"'));
 
     for (const tool of [
-      "publish-reviewed-change-set",
+      "publish_reviewed_change_set",
       "publish-reviewed-change-set_to_branch_worktree",
-      "publish-fresh-repository",
+      "publish_fresh_repository",
       "publish_github_change_set",
       "bash",
-      "write-file",
+      "write_file",
     ])
       t.notCalledTool(tool);
 

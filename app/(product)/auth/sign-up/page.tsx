@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { Suspense } from "react";
 
 import { SignUp } from "@/components/auth/sign-up";
@@ -17,6 +18,9 @@ import type { AuthPageSearchParams } from "@/lib/auth/preview-auth-ui";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function hasAuthenticatedVisitor() {
+  // Better Auth initializes provider discovery asynchronously. Do not let a
+  // speculative prerender start and then abort that process-wide context.
+  await connection();
   const requestHeaders = await headers();
   const session = await getPreviewOAuthDeploymentSession({
     environment: process.env,

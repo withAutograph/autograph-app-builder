@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 
 import type { Browser, BrowserContext, Page } from "playwright";
 
+import { sanitizeEvidence } from "./self-reproduction-evidence";
 import { runtimeReceiptSchema } from "./self-reproduction-parity-evidence";
 import { assertParityNavigation } from "./self-reproduction-navigation";
 import { frameworkMatrix, sides } from "./self-reproduction-parity";
@@ -25,7 +26,7 @@ type ReviewResult =
     }
   | {
       ready: false;
-      disposition: "missing-functionality" | "infrastructure-unavailable";
+      disposition: "missing-functionality" | "infrastructure-unavailable" | "not-run";
       reason: string;
       artifacts: string[];
     };
@@ -37,7 +38,12 @@ export interface TrustedFrameworkAdapter {
   exerciseBrowser: (
     page: Page,
     requirementId: Exclude<FrameworkId, "instant-navigation">,
-  ) => Promise<{ reason: string; assertions: AssertionResult[]; artifacts: string[] }>;
+  ) => Promise<{
+    disposition?: "not-run" | "infrastructure-unavailable";
+    reason: string;
+    assertions: AssertionResult[];
+    artifacts: string[];
+  }>;
   instantNavigationRecipe: () => Promise<
     | {
         ready: true;
@@ -67,7 +73,7 @@ export async function runTrustedFrameworkEvidence(input: {
   adapters: Partial<Record<(typeof sides)[number], TrustedFrameworkAdapter>>;
   runInstant?: typeof assertParityNavigation;
 }): Promise<TrustedFrameworkRun> {
-  const observations: TrustedFrameworkRun["observations"] = { candidate: [], reference: [] };
+  const observations: TrustedFrameworkRun["observations"] = { reference: [], candidate: [] };
   const receipts: unknown[] = [];
   const runInstant = input.runInstant ?? assertParityNavigation;
   for (const side of sides)
@@ -76,32 +82,34 @@ export async function runTrustedFrameworkEvidence(input: {
       const adapter = input.adapters[side];
       let observation!: Observation;
       let context: BrowserContext | undefined;
+      let instantAssertionRunning = false;
       if (!adapter) {
         observation = {
+          requirementId: requirement.id,
+          disposition: "not-run",
+          reason: "No trusted framework adapter was supplied for this side.",
+          method: "none",
           artifacts: [],
           assertions: [],
-          disposition: "not-run",
-          method: "none",
-          reason: "No trusted framework adapter was supplied for this side.",
-          requirementId: requirement.id,
         };
       } else {
         try {
           const source = await adapter.reviewSource(requirement.id);
           if (!source.ready) {
             observation = {
+              requirementId: requirement.id,
+              disposition: source.disposition,
+              reason: source.reason,
+              method: "source-review",
               artifacts: source.artifacts,
               assertions: [],
-              disposition: source.disposition,
-              method: "source-review",
-              reason: source.reason,
-              requirementId: requirement.id,
             };
           } else {
             context = await input.browser.newContext();
             const page = await context.newPage();
             let browserResult:
               | {
+                  disposition?: "not-run" | "infrastructure-unavailable";
                   reason: string;
                   assertions: AssertionResult[];
                   artifacts: string[];
@@ -112,32 +120,38 @@ export async function runTrustedFrameworkEvidence(input: {
               const navigation = await adapter.instantNavigationRecipe();
               if (!navigation.ready) {
                 observation = {
+                  requirementId: requirement.id,
+                  disposition: navigation.disposition,
+                  reason: navigation.reason,
+                  method: "none",
                   artifacts: source.artifacts,
                   assertions: source.assertions,
-                  disposition: navigation.disposition,
-                  method: "none",
-                  reason: navigation.reason,
-                  requirementId: requirement.id,
                 };
               } else {
+                instantAssertionRunning = true;
                 await runInstant(page, navigation.recipe);
+                instantAssertionRunning = false;
                 method = "@next/playwright/instant";
                 browserResult = {
-                  artifacts: navigation.artifacts,
-                  assertions: requirement.assertions.map((id) => ({
-                    artifacts: navigation.artifacts,
-                    detail: "Observed with the installed @next/playwright instant helper.",
-                    id,
-                    passed: true,
-                  })),
                   reason:
                     "Direct and client navigations exposed useful instant UI and resolved content.",
+                  artifacts: navigation.artifacts,
+                  assertions: requirement.assertions.map((id) => ({
+                    id,
+                    passed: true,
+                    detail: "Observed with the installed @next/playwright instant helper.",
+                    artifacts: navigation.artifacts,
+                  })),
                 };
               }
             } else browserResult = await adapter.exerciseBrowser(page, requirement.id);
             if (browserResult) {
               const artifacts = [receiptPath, ...source.artifacts, ...browserResult.artifacts];
               observation = {
+                requirementId: requirement.id,
+                disposition: browserResult.disposition ?? "observed",
+                reason: `${source.reason} ${browserResult.reason}`,
+                method,
                 artifacts: [...new Set(artifacts)],
                 assertions: [...source.assertions, ...browserResult.assertions].map(
                   (assertion) => ({
@@ -145,29 +159,41 @@ export async function runTrustedFrameworkEvidence(input: {
                     artifacts: [...new Set([receiptPath, ...assertion.artifacts])],
                   }),
                 ),
-                disposition: "observed",
-                method,
-                reason: `${source.reason} ${browserResult.reason}`,
-                requirementId: requirement.id,
               };
             }
           }
-        } catch {
+        } catch (error) {
+          const diagnosticPath = `parity/framework/${requirement.id}/${side}-error.json`;
+          await mkdir(dirname(join(input.outputRoot, diagnosticPath)), { recursive: true });
+          await writeFile(
+            join(input.outputRoot, diagnosticPath),
+            JSON.stringify(
+              sanitizeEvidence({
+                name: error instanceof Error ? error.name : "Error",
+                message: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+              }),
+              null,
+              2,
+            ),
+            { mode: 0o600 },
+          );
           observation = {
-            artifacts: [receiptPath],
+            requirementId: requirement.id,
+            disposition: instantAssertionRunning ? "observed" : "infrastructure-unavailable",
+            reason: instantAssertionRunning
+              ? "Instant-navigation assertion failed; inspect sanitized evaluator diagnostics."
+              : "Trusted source review or browser execution threw; inspect sanitized evaluator diagnostics.",
+            method: "source-and-browser",
+            artifacts: [receiptPath, diagnosticPath],
             assertions: [
               {
-                artifacts: [receiptPath],
-                detail: "The framework evaluation did not complete.",
                 id: "fixture-execution",
                 passed: false,
+                detail: "The framework evaluation did not complete.",
+                artifacts: [receiptPath],
               },
             ],
-            disposition: "observed",
-            method: "source-and-browser",
-            reason:
-              "Trusted source review or browser execution failed; inspect evaluator diagnostics.",
-            requirementId: requirement.id,
           };
         } finally {
           await context?.close().catch(() => {
@@ -176,10 +202,10 @@ export async function runTrustedFrameworkEvidence(input: {
         }
       }
       const receipt = runtimeReceiptSchema.parse({
-        observation,
-        producer: "evaluator",
         schemaVersion: "self-reproduction-runtime-receipt/v1",
+        producer: "evaluator",
         side,
+        observation,
       });
       await mkdir(dirname(join(input.outputRoot, receiptPath)), { recursive: true });
       await writeFile(

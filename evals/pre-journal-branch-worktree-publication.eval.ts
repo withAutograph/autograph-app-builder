@@ -29,6 +29,6 @@ export default defineEval({
     await t.send("Report artifact workflow status.");
     t.check(t.reply, includes('"phase":"reviewed"'));
     t.notCalledTool("bash");
-    t.notCalledTool("write-file");
+    t.notCalledTool("write_file");
   },
 });

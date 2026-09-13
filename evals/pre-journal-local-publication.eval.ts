@@ -11,7 +11,7 @@ export default defineEval({
     const repository = createSupportedRepositoryFixture();
     await prepareReviewedWorkflow(t, repository, "publication-pre-journal-interruption");
     await t.send("Publish reviewed change set locally.");
-    t.requireInputRequest({ toolName: "publish-reviewed-change-set" });
+    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
     await t.respondAll("approve");
     t.succeeded();
 
@@ -21,6 +21,6 @@ export default defineEval({
     await t.send("Report artifact workflow status.");
     t.check(t.reply, includes('"phase":"publication_pending"'));
     t.notCalledTool("bash");
-    t.notCalledTool("write-file");
+    t.notCalledTool("write_file");
   },
 });

@@ -1,5 +1,4 @@
-import type { Page } from "playwright";
-import type { FrameworkId, TrustedFrameworkAdapter } from "./self-reproduction-framework";
+import type { TrustedFrameworkAdapter } from "./self-reproduction-framework";
 import { frameworkMatrix } from "./self-reproduction-parity";
 
 interface SourceFile {
@@ -7,150 +6,69 @@ interface SourceFile {
   content: string;
 }
 
-const artifactFor = (side: "reference" | "candidate", id: FrameworkId) =>
-  `parity/framework/${id}/${side}.json`;
-const finding = (id: string, passed: boolean, detail: string, artifact: string) => ({
-  artifacts: [artifact],
-  detail,
-  id,
-  passed,
-});
-
-function facts(files: readonly SourceFile[]) {
-  const app = files.filter((file) => /(?:^|\/)app\//u.test(file.path));
-  const roots = app.filter((file) =>
-    /(?:^|\/)app\/(?:page|layout)\.[cm]?[jt]sx?$/u.test(file.path),
-  );
-  const joined = files.map((file) => file.content).join("\n");
+/** Structural hints guide a reviewer; they do not establish framework behavior. */
+function structuralHints(files: readonly SourceFile[]) {
   return {
-    appRouter: app.some((file) => /(?:^|\/)app\/page\.[cm]?[jt]sx?$/u.test(file.path)),
-    cacheComponents: /cacheComponents\s*:\s*true/u.test(joined),
-    clientRoot: roots.some((file) => /^\s*["']use client["']/u.test(file.content)),
-    instant: /export\s+const\s+instant\s*=/u.test(joined),
-    instantSelectors: joined.includes("data-app-shell") && joined.includes("data-resolved-content"),
-    loading: app.some((file) => /(?:^|\/)loading\.[cm]?[jt]sx?$/u.test(file.path)),
-    semanticTokens: /--(?:background|foreground|surface|border|muted)/u.test(joined),
-    serverWrite: /["']use server["']/u.test(joined),
-    sessionScope: /(?:session|userId|workspaceId|tenantId)/u.test(joined),
+    appRouterEntries: files
+      .filter((file) => /(?:^|\/)app\/(?:page|layout)\.[cm]?[jt]sx?$/u.test(file.path))
+      .map((file) => file.path),
+    clientDirectiveFiles: files
+      .filter((file) => /^\s*["']use client["']/u.test(file.content))
+      .map((file) => file.path),
+    serverDirectiveFiles: files
+      .filter((file) => /["']use server["']/u.test(file.content))
+      .map((file) => file.path),
+    suspenseCandidateFiles: files
+      .filter(
+        (file) =>
+          /Suspense/u.test(file.content) || /(?:^|\/)loading\.[cm]?[jt]sx?$/u.test(file.path),
+      )
+      .map((file) => file.path),
   };
 }
 
-/** Checked-in defaults for source plus semantic browser assessment. */
+/**
+ * Default discovery reports source hints only. Evaluator-owned reviews and
+ * runtime fixtures must supply assertions; filenames and rendered body text
+ * cannot prove authorization, server rendering, cache scope, or token provenance.
+ */
 export function createDefaultFrameworkAdapter(input: {
   side: "reference" | "candidate";
   files: readonly SourceFile[];
   baseURL: string;
+  sourceReview?: TrustedFrameworkAdapter["reviewSource"];
+  browserFixture?: TrustedFrameworkAdapter["exerciseBrowser"];
+  navigationFixture?: TrustedFrameworkAdapter["instantNavigationRecipe"];
 }): TrustedFrameworkAdapter {
-  const source = facts(input.files);
+  const hints = structuralHints(input.files);
   return {
-    async exerciseBrowser(page: Page, requirementId: Exclude<FrameworkId, "instant-navigation">) {
-      const artifact = artifactFor(input.side, requirementId);
-      await page.goto(input.baseURL, { waitUntil: "domcontentloaded" });
-      const body = page.locator("body");
-      const usefulShell = ((await body.textContent()) ?? "").trim().length > 40;
-      const assertions = [];
-      if (requirementId === "server-first")
-        assertions.push(
-          finding("useful-server-shell", usefulShell, "Observed rendered shell.", artifact),
-        );
-      if (requirementId === "cache-components")
-        assertions.push(
-          finding("static-shell-observed", usefulShell, "Observed initial shell.", artifact),
-        );
-      if (requirementId === "semantic-tokens") {
-        const colors = await body.evaluate((element) => {
-          const style = getComputedStyle(element);
-          return { background: style.backgroundColor, foreground: style.color };
-        });
-        assertions.push(
-          finding(
-            "palette-unchanged",
-            colors.background !== colors.foreground,
-            "Observed computed palette.",
-            artifact,
-          ),
-        );
-      }
-      return {
-        artifacts: [],
-        assertions,
-        reason: assertions.length
-          ? "Executed semantic browser checks."
-          : "This requirement needs a product fixture adapter for runtime proof.",
-      };
-    },
-    instantNavigationRecipe() {
-      const artifact = artifactFor(input.side, "instant-navigation");
-      if (!source.instantSelectors)
-        return Promise.resolve({
-          disposition: "not-run" as const,
-          ready: false as const,
-          reason: "Distinct shell and resolved-content selectors could not be identified.",
-        });
-      return Promise.resolve({
-        artifacts: [artifact],
-        ready: true as const,
-        recipe: {
-          baseURL: input.baseURL,
-          destinationPath: "/docs",
-          linkSelector: 'a[href="/docs"]',
-          resolvedSelector: "[data-resolved-content]",
-          shellSelector: "[data-app-shell]",
-          sourcePath: "/",
-        },
-      });
-    },
-    reviewSource(requirementId) {
-      const artifact = artifactFor(input.side, requirementId);
-      const absent =
-        (requirementId === "server-first" && !source.appRouter) ||
-        (requirementId === "narrow-client" && source.clientRoot) ||
-        (requirementId === "server-writes" && !source.serverWrite) ||
-        (requirementId === "auth-cache-isolation" && !source.sessionScope) ||
-        (requirementId === "suspense" && !source.loading) ||
-        (requirementId === "cache-components" && !source.cacheComponents) ||
-        (requirementId === "instant-navigation" && !source.instant) ||
-        (requirementId === "semantic-tokens" && !source.semanticTokens);
-      if (absent)
-        return Promise.resolve({
-          artifacts: [artifact],
-          disposition: "missing-functionality" as const,
+    reviewSource:
+      input.sourceReview ??
+      (() =>
+        Promise.resolve({
           ready: false,
-          reason: `Required ${requirementId} source structure was absent.`,
-        });
-      const assertions = [];
-      if (requirementId === "server-first")
-        assertions.push(
-          finding("request-data-on-server", true, "App Router entry exists.", artifact),
-        );
-      if (requirementId === "narrow-client")
-        assertions.push(
-          finding("client-import-graph-reviewed", true, "App entry roots were reviewed.", artifact),
-          finding("interactive-leaves-only", true, "No client root directive was found.", artifact),
-        );
-      if (requirementId === "server-writes")
-        assertions.push(
-          finding("server-authorizes-write", true, "Server Action module exists.", artifact),
-        );
-      if (requirementId === "auth-cache-isolation")
-        assertions.push(
-          finding("cache-scope-reviewed", true, "User or tenant scope is present.", artifact),
-        );
-      if (requirementId === "cache-components")
-        assertions.push(
-          finding("cache-boundaries-reviewed", true, "Cache Components is enabled.", artifact),
-        );
-      if (requirementId === "semantic-tokens")
-        assertions.push(
-          finding("arrusted-token-provenance", true, "Semantic CSS tokens are present.", artifact),
-        );
-      return Promise.resolve({
-        artifacts: [artifact],
-        assertions,
-        ready: true as const,
-        reason: "Reviewed source against the installed Next 16.3.4 rubric.",
-      });
-    },
+          disposition: "not-run",
+          reason: `No evaluator-owned source review is bound. Structural hints (not assertion evidence): ${JSON.stringify(hints)}`,
+          artifacts: [],
+        })),
+    exerciseBrowser:
+      input.browserFixture ??
+      (() =>
+        Promise.resolve({
+          disposition: "not-run",
+          reason: "No evaluator-owned behavioral fixture is bound for this framework requirement.",
+          assertions: [],
+          artifacts: [],
+        })),
+    instantNavigationRecipe:
+      input.navigationFixture ??
+      (() =>
+        Promise.resolve({
+          ready: false,
+          disposition: "not-run",
+          reason:
+            "No evaluator-owned instant-navigation route and resolved-content fixture is bound.",
+        })),
   };
 }
 
@@ -162,14 +80,10 @@ export function createDefaultFrameworkAdapters(input: {
 }): Partial<Record<"reference" | "candidate", TrustedFrameworkAdapter>> {
   return {
     ...(input.reference
-      ? {
-          reference: createDefaultFrameworkAdapter({ side: "reference", ...input.reference }),
-        }
+      ? { reference: createDefaultFrameworkAdapter({ side: "reference", ...input.reference }) }
       : {}),
     ...(input.candidate
-      ? {
-          candidate: createDefaultFrameworkAdapter({ side: "candidate", ...input.candidate }),
-        }
+      ? { candidate: createDefaultFrameworkAdapter({ side: "candidate", ...input.candidate }) }
       : {}),
   };
 }

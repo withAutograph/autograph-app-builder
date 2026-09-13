@@ -86,7 +86,13 @@ app-owned files and reuse the same component-backed preview flow.
    load `$arrusted-next-app-like-experience` before applying it. It selects the
    relevant published Vercel workflow while preserving this Builder's typed-tool
    boundary.
-6. For a new app, compose the actual product implementation from the prototype,
+6. Carry `productAcceptance.implementationPrompt` from the planning tool into
+   implementation: it contains the accepted walkthrough, not a new product brief.
+   Keep its user actions and independent readbacks visible in behavioral tests.
+   When later tools return `productStatus: unassessed`, describe technical checks
+   as passed without claiming the product outcomes have been verified.
+
+   For a new app, compose the actual product implementation from the prototype,
    brief, and inspected Arrusted conventions, using only existing public
    components and compositions without local replacement components. Include the app-owned TSX,
    styles, and focused tests needed for the described experience. Preserve the

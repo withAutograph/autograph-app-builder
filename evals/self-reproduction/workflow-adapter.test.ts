@@ -1,7 +1,17 @@
+import { readFile } from "node:fs/promises";
 import type { Page } from "playwright";
-import { describe, expect, it } from "vitest";
-
+import type * as Harness from "../../e2e/support/harness";
 import { createWorkflowAdapters } from "./workflow-adapter";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("node:fs/promises", () => ({ readFile: vi.fn().mockResolvedValue("a".repeat(32)) }));
+vi.mock("flags", () => ({ encryptOverrides: vi.fn().mockResolvedValue("synthetic-override") }));
+
+vi.mock("../../e2e/support/harness", async (importOriginal) => ({
+  ...(await importOriginal<typeof Harness>()),
+  // oxlint-disable-next-line unicorn/no-useless-undefined -- Vitest requires the resolved-value argument.
+  resetApplicationState: vi.fn().mockResolvedValue(undefined),
+}));
 
 describe("self-reproduction default workflow adapter", () => {
   it("is self-contained and omits sides whose runtime URL is unavailable", () => {
@@ -30,4 +40,74 @@ describe("self-reproduction default workflow adapter", () => {
       reason: "The checked-in reference adapter has no bounded real fixture for app-creation.",
     });
   });
+});
+
+describe("candidate workflow evidence boundaries", () => {
+  it("preserves the microfrontend base path when opening the candidate", async () => {
+    const { candidate } = createWorkflowAdapters({
+      outputRoot: "/tmp/evidence",
+      candidateUrl: "https://candidate.example/replica/",
+    });
+    const goto = vi.fn().mockResolvedValue({ ok: () => true });
+    expect(await candidate?.prepare({ goto } as unknown as Page, "documentation")).toEqual({
+      ready: true,
+    });
+    expect(goto).toHaveBeenCalledWith("https://candidate.example/replica/");
+  });
+
+  it.each(["authentication", "durable-draft", "app-creation", "independent-child"] as const)(
+    "leaves %s unassessed when its candidate fixture is unavailable",
+    async (workflow) => {
+      const { candidate } = createWorkflowAdapters({
+        outputRoot: "/tmp/evidence",
+        candidateUrl: "https://candidate.example/replica/",
+      });
+      const goto = vi.fn();
+      expect(await candidate?.prepare({ goto } as unknown as Page, workflow)).toMatchObject({
+        ready: false,
+        disposition: "not-run",
+      });
+      expect(goto).not.toHaveBeenCalled();
+    },
+  );
+
+  it("prepares the real reference authentication fixture without pre-crediting assertions", async () => {
+    const { reference } = createWorkflowAdapters({
+      outputRoot: "/tmp/evidence",
+      referenceUrl: "https://localhost:3001",
+    });
+    expect(await reference?.prepare({} as Page, "authentication")).toMatchObject({
+      ready: true,
+    });
+  });
+});
+
+it("blocks authentication when the evaluator passkey fixture cannot be configured", async () => {
+  vi.mocked(readFile).mockRejectedValueOnce(new Error("fixture unavailable"));
+  const { reference } = createWorkflowAdapters({
+    outputRoot: "/tmp/evidence",
+    referenceUrl: "https://localhost:3001",
+  });
+  expect(await reference?.prepare({} as Page, "authentication")).toMatchObject({
+    ready: false,
+    disposition: "infrastructure-unavailable",
+  });
+});
+
+it("reads the isolated reference fixture flag secret", async () => {
+  const { reference } = createWorkflowAdapters({
+    outputRoot: "/tmp/evidence",
+    referenceUrl: "https://localhost:3001",
+    referenceFixtureRoot: "/tmp/isolated-reference",
+  });
+  await reference?.prepare({} as Page, "authentication");
+  expect(readFile).toHaveBeenCalledWith("/tmp/isolated-reference/.emulate/flags-secret", "utf-8");
+});
+
+it("binds the real reference provider denial and replay fixture", async () => {
+  const { reference } = createWorkflowAdapters({
+    outputRoot: "/tmp/evidence",
+    referenceUrl: "https://localhost:3001",
+  });
+  expect(await reference?.prepare({} as Page, "provider-return-error")).toEqual({ ready: true });
 });

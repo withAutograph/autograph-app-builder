@@ -35,6 +35,6 @@ export default defineEval({
       includes("app-builder/review-"),
     );
     t.notCalledTool("bash");
-    t.notCalledTool("write-file");
+    t.notCalledTool("write_file");
   },
 });

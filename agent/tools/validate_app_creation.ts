@@ -1,3 +1,4 @@
+import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
@@ -29,6 +30,8 @@ export default defineTool({
     if (current.phase === "validated") {
       return {
         status: "validated" as const,
+        technicalStatus: "passed" as const,
+        productAcceptance: productAcceptanceObligations(current.appSpec),
         commandCount: current.validationReceipt.commands.length,
         reused: true,
       };
@@ -91,6 +94,8 @@ export default defineTool({
     }));
     return {
       status: "validated" as const,
+      technicalStatus: "passed" as const,
+      productAcceptance: productAcceptanceObligations(current.appSpec),
       commandCount: result.receipt.commands.length,
       reused: false,
     };

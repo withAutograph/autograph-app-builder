@@ -29,47 +29,47 @@ export default defineEval({
 
     await t.send("Report artifact workflow status.");
     t.succeeded();
-    t.calledTool("artifact-workflow-status", { count: 1 });
+    t.calledTool("artifact_workflow_status", { count: 1 });
     t.check(t.reply, includes('"phase":"planned"'));
 
-    t.calledTool("inspect-source", { count: 1 });
-    t.calledTool("prepare-workspace", { count: 1 });
-    t.calledTool("record-prototype-artifact", { count: 1 });
-    t.calledTool("accept-app-spec", { count: 1 });
-    t.calledTool("prepare-target-dependencies", { count: 1 });
-    t.calledTool("plan-app-creation", { count: 1 });
+    t.calledTool("inspect_source", { count: 1 });
+    t.calledTool("prepare_workspace", { count: 1 });
+    t.calledTool("record_prototype_artifact", { count: 1 });
+    t.calledTool("accept_app_spec", { count: 1 });
+    t.calledTool("prepare_target_dependencies", { count: 1 });
+    t.calledTool("plan_app_creation", { count: 1 });
     for (const tool of [
-      "apply-app-creation",
-      "validate-app-creation",
-      "accept-change-set",
-      "publish-reviewed-change-set",
+      "apply_app_creation",
+      "validate_app_creation",
+      "accept_change_set",
+      "publish_reviewed_change_set",
       "publish-reviewed-change-set_to_branch_worktree",
       "prepare_fresh_template",
       "bash",
-      "write-file",
+      "write_file",
     ])
       t.notCalledTool(tool);
 
     process.stdout.write(
       `${JSON.stringify({
         calledTools: [
-          "inspect-source",
-          "prepare-workspace",
-          "record-prototype-artifact",
-          "accept-app-spec",
-          "prepare-target-dependencies",
-          "plan-app-creation",
-          "artifact-workflow-status",
+          "inspect_source",
+          "prepare_workspace",
+          "record_prototype_artifact",
+          "accept_app_spec",
+          "prepare_target_dependencies",
+          "plan_app_creation",
+          "artifact_workflow_status",
         ],
         forbiddenTools: [
-          "apply-app-creation",
-          "validate-app-creation",
-          "accept-change-set",
-          "publish-reviewed-change-set",
+          "apply_app_creation",
+          "validate_app_creation",
+          "accept_change_set",
+          "publish_reviewed_change_set",
           "publish-reviewed-change-set_to_branch_worktree",
           "prepare_fresh_template",
           "bash",
-          "write-file",
+          "write_file",
         ],
         terminalPhase: "planned",
         version: 1,
