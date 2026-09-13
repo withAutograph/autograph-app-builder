@@ -57,9 +57,11 @@ import {
 } from "../evals/support/self-reproduction-candidate-workflows";
 import type { CandidateWorkflowOutcome } from "../evals/support/self-reproduction-candidate-workflows";
 import { sandboxCandidateInteractionCaptures } from "../evals/support/self-reproduction-candidate-captures";
-import { runtimeReceiptSchema } from "../evals/support/self-reproduction-parity-evidence";
 import { startSelfReproductionReferenceRuntime } from "../evals/support/self-reproduction-reference-runtime";
-import { parityEvidenceFromReceipts } from "../evals/support/self-reproduction-parity-evidence";
+import {
+  parityEvidenceFromReceipts,
+  runtimeReceiptSchema,
+} from "../evals/support/self-reproduction-parity-evidence";
 import type { TrustedBrowserWorkflowAdapter } from "../evals/support/self-reproduction-workflow-adapters";
 import {
   runPairedCaptureEvidence,
@@ -410,11 +412,11 @@ function reportHtml(report: {
       const reference = report.captures
         .find((item) => item.label === "reference")
         ?.files.find((file) => file.endsWith(`/${name}.png`));
-      const candidate = report.captures
+      const candidateCapture = report.captures
         .find((item) => item.label === "candidate diagnostic routes")
         ?.files.find((file) => file.endsWith(`/${name}/root.png`));
-      if (!reference || !candidate) return "";
-      return `<section><h3>${escape(name)} initial routes</h3><p>Diagnostic comparison; equivalent workflow states have not been established.</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><figure><figcaption>Reference</figcaption><img style="width:100%" src="${escape(reference)}" alt="Reference initial route"></figure><figure><figcaption>Candidate</figcaption><img style="width:100%" src="${escape(candidate)}" alt="Candidate initial route"></figure></div></section>`;
+      if (!reference || !candidateCapture) return "";
+      return `<section><h3>${escape(name)} initial routes</h3><p>Diagnostic comparison; equivalent workflow states have not been established.</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><figure><figcaption>Reference</figcaption><img style="width:100%" src="${escape(reference)}" alt="Reference initial route"></figure><figure><figcaption>Candidate</figcaption><img style="width:100%" src="${escape(candidateCapture)}" alt="Candidate initial route"></figure></div></section>`;
     })
     .join("");
   const captureItems = report.captures
