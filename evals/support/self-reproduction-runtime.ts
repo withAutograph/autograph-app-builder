@@ -70,6 +70,7 @@ export async function evaluateCandidateRuntime(input: {
   workspaceArchive: Buffer;
   candidateAppId: string;
   publicBasePath: string;
+  credentials?: { token: string; teamId: string; projectId: string };
   appRoot?: string;
   backend?: Backend;
   timeoutMs?: number;
@@ -82,7 +83,7 @@ export async function evaluateCandidateRuntime(input: {
     input.timeoutMs ?? 600_000,
   );
   try {
-    const backend = input.backend ?? vercel({ networkPolicy: "allow-all" });
+    const backend = input.backend ?? vercel({ networkPolicy: "allow-all", ...input.credentials });
     handle = await backend.create({
       templateKey: null,
       sessionKey: `self-reproduction-runtime-${randomUUID()}`,
@@ -116,7 +117,23 @@ export async function evaluateCandidateRuntime(input: {
         }),
       ),
     );
-    const install = await command(handle, "mise run dependencies:install", controller.signal);
+    const runtime = await command(
+      handle,
+      "npm install --prefix .self-reproduction-runtime bun@1.3.14",
+      controller.signal,
+    );
+    commands.push(runtime);
+    if (runtime.exitCode !== 0)
+      return {
+        producer: "evaluator",
+        sandboxId: handle.session.id,
+        status: "infrastructure-unavailable",
+        reason: "Candidate runtime toolchain installation failed.",
+        commands,
+        probes: [],
+      };
+    const bun = "PATH=/workspace/.self-reproduction-runtime/node_modules/.bin:$PATH bun";
+    const install = await command(handle, `${bun} install --no-save`, controller.signal);
     commands.push(install);
     if (install.exitCode !== 0)
       return {
@@ -129,7 +146,7 @@ export async function evaluateCandidateRuntime(input: {
       };
     const build = await command(
       handle,
-      `mise run app:check-build ${input.candidateAppId}`,
+      `${bun} .config/mise/scripts/repository/app-validation.ts check-build ${input.candidateAppId}`,
       controller.signal,
     );
     commands.push(build);
@@ -143,7 +160,7 @@ export async function evaluateCandidateRuntime(input: {
         probes: [],
       };
     await handle.session.spawn({
-      command: `bun run --cwd apps/${input.candidateAppId} start -- --hostname 127.0.0.1 --port 3000`,
+      command: `${bun} run --cwd apps/${input.candidateAppId} start -- --hostname 127.0.0.1 --port 3000`,
       abortSignal: controller.signal,
     });
     const probe = await command(

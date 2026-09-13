@@ -8,6 +8,12 @@ import { basename, join, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 import { create as createTar } from "tar";
 import { activeBuilderModelId } from "../lib/integrations/active-model";
+import {
+  parseLinkedVercelProject,
+  parseLocalVercelOidcToken,
+  readOwnerBoundLocalFile,
+  validateLocalVercelOidcClaims,
+} from "../lib/eve/local-vercel-oidc";
 
 import {
   auditFramework,
@@ -35,7 +41,6 @@ import type {
   Observation,
   ParityEvidence,
 } from "../evals/support/self-reproduction-parity";
-import { evaluateCandidateRuntime } from "../evals/support/self-reproduction-runtime";
 import type { CandidateRuntimeReceipt } from "../evals/support/self-reproduction-runtime";
 
 const root = resolve(import.meta.dirname, "..");
@@ -86,6 +91,42 @@ let candidate: Record<string, unknown> = {
 };
 const errors: string[] = [];
 
+function loadProjectOidc(): { token: string; teamId: string; projectId: string } {
+  const token = parseLocalVercelOidcToken(
+    readOwnerBoundLocalFile(join(root, ".env.local"), { confidential: true }),
+  );
+  const project = parseLinkedVercelProject(
+    readOwnerBoundLocalFile(join(root, ".vercel/project.json"), { confidential: false }),
+  );
+  validateLocalVercelOidcClaims({
+    token,
+    project,
+    nowEpochSeconds: Math.floor(Date.now() / 1000),
+  });
+  return { token, teamId: project.orgId, projectId: project.projectId };
+}
+
+async function readCandidateSource(
+  directory: string,
+  current = directory,
+): Promise<Awaited<ReturnType<typeof readSource>>> {
+  const entries = await readdir(current, { withFileTypes: true });
+  const nested = await Promise.all(
+    entries.map(async (entry) => {
+      if ([".git", ".next", "node_modules", "coverage"].includes(entry.name)) return [];
+      const path = join(current, entry.name);
+      if (entry.isDirectory()) return readCandidateSource(directory, path);
+      if (
+        !entry.isFile() ||
+        !/^(?:[^.]+|.*\.(?:[cm]?[jt]sx?|css|mdx?|json|toml|ya?ml))$/u.test(entry.name)
+      )
+        return [];
+      return [{ path: relative(directory, path), content: await readFile(path, "utf-8") }];
+    }),
+  );
+  return nested.flat();
+}
+
 async function trackedWorkspaceArchive(directory: string): Promise<Buffer> {
   const tracked = execFileSync("git", ["ls-files", "-z"], {
     cwd: directory,
@@ -100,13 +141,13 @@ async function trackedWorkspaceArchive(directory: string): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-function candidatePublicBasePath(files: Awaited<ReturnType<typeof readSource>>): string {
+function candidateAppId(files: Awaited<ReturnType<typeof readSource>>): string {
   const contract = files.find((file) => file.path === "app.contract.json");
   if (contract)
     try {
       const parsed = JSON.parse(contract.content) as { appId?: unknown };
       if (typeof parsed.appId === "string" && /^[a-z][a-z0-9-]*$/u.test(parsed.appId))
-        return `/${parsed.appId}`;
+        return parsed.appId;
     } catch {
       /* Runtime readiness reports malformed candidate metadata as a failure. */
     }
@@ -631,7 +672,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     const candidateRoot = values["candidate-root"] ? resolve(values["candidate-root"]) : undefined;
     if (candidateRoot) {
       try {
-        candidateFiles = await readSource(candidateRoot);
+        candidateFiles = await readCandidateSource(candidateRoot);
         if (!candidateFiles.length)
           throw new Error("Candidate contains no application source files.");
         // Persist the audited source bytes, never the candidate's credentials or dependency tree.
@@ -689,6 +730,9 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     }
     await saveReport();
     if (values["candidate-runtime"]) {
+      const credentials = loadProjectOidc();
+      const { evaluateCandidateRuntime } =
+        await import("../evals/support/self-reproduction-runtime");
       const workspaceArchive = arrustedRoot
         ? await trackedWorkspaceArchive(arrustedRoot)
         : undefined;
@@ -697,8 +741,9 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
           ? await evaluateCandidateRuntime({
               files: candidateFiles.map((file) => ({ path: file.path, content: file.content })),
               workspaceArchive,
-              candidateAppId: "self-reproduction-candidate",
-              publicBasePath: candidatePublicBasePath(candidateFiles),
+              candidateAppId: candidateAppId(candidateFiles),
+              publicBasePath: `/${candidateAppId(candidateFiles)}`,
+              credentials,
               appRoot: "/workspace",
             })
           : {

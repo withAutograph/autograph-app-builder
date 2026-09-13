@@ -17,7 +17,7 @@ export function isCandidateExportTextPath(path: string): boolean {
   if (/(?:^|\/)(?:\.next|node_modules|dist|coverage|storybook-static)(?:\/|$)/u.test(path)) {
     return false;
   }
-  return /(?:^|\/)(?:Dockerfile|\.gitignore)$|\.(?:[cm]?[jt]sx?|css|mdx?|json|toml|ya?ml|cue|sql)$/u.test(
+  return /(?:^|\/)(?:Dockerfile|\.gitignore)$|\.(?:[cm]?[jt]sx?|css|mdx?|json|toml|ya?ml|cue|sql|pkl)$/u.test(
     path,
   );
 }
@@ -80,21 +80,22 @@ async function exportAppliedTextFiles(input: {
     },
     observed,
   );
-  const changedFiles = changes.filter((change) => change.kind !== "deleted");
-  const textFiles = changedFiles.filter((change) => isCandidateExportTextPath(change.path));
+  const appPrefix = `apps/${input.state.appSpec.appId}/`;
+  const appFiles = observed.files.filter((file) => file.path.startsWith(appPrefix));
+  const textFiles = appFiles.filter((file) => isCandidateExportTextPath(file.path));
   return {
     changes,
     exportFiles: await Promise.all(
-      textFiles.map(async (change) => ({
-        path: change.path,
+      textFiles.map(async (file) => ({
+        path: file.path,
         content: await input.sandbox.readTextFile({
-          path: `${input.state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "")}/${change.path}`,
+          path: `${input.state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "")}/${file.path}`,
         }),
       })),
     ),
-    exportOmissions: changedFiles
-      .filter((change) => !textFiles.includes(change))
-      .map((change) => ({ path: change.path, reason: "non-text artifact" })),
+    exportOmissions: appFiles
+      .filter((file) => !textFiles.includes(file))
+      .map((file) => ({ path: file.path, reason: "non-text artifact" })),
   };
 }
 

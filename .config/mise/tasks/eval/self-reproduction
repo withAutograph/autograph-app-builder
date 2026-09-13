@@ -13,5 +13,9 @@ for owner_file in .eve/sandbox-cache/template-locks/vercel-authorized/*/owner.js
   fi
 done
 
+# Refresh the linked project's short-lived Development OIDC before the trusted
+# Node launcher strips ambient tool paths. The evaluator loads only that token.
+mise run local:ensure-oidc
+
 exec .config/mise/scripts/trusted-node-launcher \
   "$(mise which node)" --import tsx scripts/eval-self-reproduction.mts "$@"
