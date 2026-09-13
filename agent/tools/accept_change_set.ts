@@ -1,3 +1,4 @@
+import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
@@ -23,7 +24,11 @@ export default defineTool({
         state.reviewReceipt.reviewedByCallId,
       );
       if (expectedReceipt.digest === state.reviewReceipt.digest)
-        return { ...state.reviewReceipt, reused: true };
+        return {
+          ...state.reviewReceipt,
+          productAcceptance: productAcceptanceObligations(state.appSpec),
+          reused: true,
+        };
     }
     const receipt = createReviewedChangeSetReceipt(changeSet, ctx.callId);
     appBuilderWorkflowState.update(() => ({
@@ -42,6 +47,10 @@ export default defineTool({
       validationReceipt: state.validationReceipt,
       reviewReceipt: receipt,
     }));
-    return { ...receipt, reused: false };
+    return {
+      ...receipt,
+      productAcceptance: productAcceptanceObligations(state.appSpec),
+      reused: false,
+    };
   },
 });

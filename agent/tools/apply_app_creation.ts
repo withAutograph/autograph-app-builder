@@ -1,3 +1,4 @@
+import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
@@ -45,6 +46,7 @@ export default defineTool({
     if (current.phase === "applied") {
       return {
         status: "applied" as const,
+        productAcceptance: productAcceptanceObligations(current.appSpec),
         appId: current.proposal.target.contract.appId,
         changedFileCount: current.applyReceipt.changes.length,
         reused: true,
@@ -128,6 +130,7 @@ export default defineTool({
     });
     return {
       status: "applied" as const,
+      productAcceptance: productAcceptanceObligations(current.appSpec),
       appId: current.proposal.target.contract.appId,
       changedFileCount: result.receipt.changes.length,
       reused: false,
