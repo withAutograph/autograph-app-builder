@@ -14,6 +14,5 @@ export default defineConfig({
   ],
   rules: {
     "eslint/complexity": "off",
-    "eslint/curly": "off",
   },
 });
