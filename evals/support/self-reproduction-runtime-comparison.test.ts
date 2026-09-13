@@ -30,7 +30,7 @@ describe("live sandbox comparison", () => {
     expect(result.output).toEqual({ observations: [] });
     expect(result.artifacts[0]?.content).toEqual(new Uint8Array([1, 2]));
     expect(session.writeTextFile).toHaveBeenCalledWith({
-      path: ".self-reproduction-comparison/input.json",
+      path: expect.stringMatching(/^\.self-reproduction-comparison\/[^/]+\/input\.json$/u),
       content: JSON.stringify(payload),
     });
     expect(session.run.mock.calls[0]).not.toContain(payload.text);
@@ -53,6 +53,47 @@ describe("live sandbox comparison", () => {
     expect(result.errors).toEqual([
       "Evaluator exited with code 1.",
       "Artifact missing.png: screenshot missing",
+    ]);
+  });
+
+  it("never recovers earlier probe files when the next probe fails before writing", async () => {
+    const files = new Map<string, string>();
+    const artifacts = new Map<string, Uint8Array>();
+    let invocation = 0;
+    const session = {
+      writeTextFile: vi.fn(async ({ path, content }: { path: string; content: string }) => {
+        files.set(path, content);
+      }),
+      run: vi.fn(async ({ command }: { command: string }) => {
+        invocation += 1;
+        if (invocation === 2) throw new Error("second probe failed before writing");
+        const outputPath = command.split(" ").at(-1)!;
+        files.set(outputPath, JSON.stringify({ probe: invocation }));
+        artifacts.set(outputPath.replace("output.json", "capture.png"), new Uint8Array([1]));
+        return { exitCode: 0, stdout: "", stderr: "" };
+      }),
+      readTextFile: vi.fn(async ({ path }: { path: string }) => files.get(path) ?? null),
+      readBinaryFile: vi.fn(async ({ path }: { path: string }) => artifacts.get(path) ?? null),
+    };
+    const input = {
+      session: session as never,
+      script: "// evaluator",
+      payload: {},
+      artifactPaths: ["capture.png"],
+      abortSignal: new AbortController().signal,
+    };
+    const first = await runSandboxRuntimeComparison(input);
+    const second = await runSandboxRuntimeComparison(input);
+    expect(first.status).toBe("completed");
+    expect(first.output).toEqual({ probe: 1 });
+    expect(first.artifacts).toHaveLength(1);
+    expect(second.status).toBe("failed");
+    expect(second.output).toBeNull();
+    expect(second.artifacts).toEqual([]);
+    expect(second.errors).toEqual([
+      "second probe failed before writing",
+      "Comparison output: Evaluator output file is missing.",
+      "Artifact capture.png: Evaluator artifact file is missing.",
     ]);
   });
 

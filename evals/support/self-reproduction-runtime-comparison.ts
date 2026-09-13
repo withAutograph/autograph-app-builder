@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { SandboxSession } from "eve/sandbox";
 import { DEVELOPMENT_SANDBOX_ENVIRONMENT } from "../../lib/sandbox/development-toolchain";
 
@@ -23,7 +24,7 @@ export async function runSandboxRuntimeComparison(input: {
   const runtimeEnvironment = Object.entries(DEVELOPMENT_SANDBOX_ENVIRONMENT)
     .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
     .join(" ");
-  const directory = ".self-reproduction-comparison";
+  const directory = `.self-reproduction-comparison/${randomUUID()}`;
   const artifactPaths = input.artifactPaths ?? [];
   for (const path of artifactPaths)
     if (path.startsWith("/") || path.split(/[\\/]/u).some((part) => part === ".." || part === ""))
