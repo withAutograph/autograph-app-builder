@@ -138,3 +138,25 @@ it("long-running real preload refreshes SDK identity and rejects correctly signe
     await rm(directory, { force: true, recursive: true });
   }
 }, 15_000);
+
+it("trusted launcher preserves absent deployment metadata for local provider emulation", () => {
+  const environment: NodeJS.ProcessEnv = {
+    ...process.env,
+    NODE_ENV: "test",
+    NODE_OPTIONS: undefined,
+    VERCEL_ENV: undefined,
+    VERCEL_TARGET_ENV: undefined,
+  };
+  const result = spawnSync(
+    "/bin/sh",
+    [
+      launcher,
+      process.execPath,
+      "-e",
+      `console.log(JSON.stringify({environment:process.env.VERCEL_ENV??null,target:process.env.VERCEL_TARGET_ENV??null}))`,
+    ],
+    { cwd: root, encoding: "utf-8", env: environment },
+  );
+  expect(result.status, result.stderr).toBe(0);
+  expect(JSON.parse(result.stdout)).toEqual({ environment: null, target: null });
+});

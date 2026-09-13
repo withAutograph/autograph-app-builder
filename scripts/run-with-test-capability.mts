@@ -36,7 +36,7 @@ const hostedIdentityPreload = pathToFileURL(
 ).href;
 const maximumFrameBytes = 4096;
 const launcher = path.resolve(repositoryRoot, ".config/mise/scripts/trusted-node-launcher");
-const launcherDigest = "f37315d8fa0ed5fb36ea1e60c11eba063d8f31a1915dd0132862fa23015ee933";
+const launcherDigest = "4c668cc9e04ce6e17662ca93dcf799afdeaebde42def984dd54ab5b130fdb70f";
 const allowedEnvironment = [
   "HOME",
   "TMPDIR",
