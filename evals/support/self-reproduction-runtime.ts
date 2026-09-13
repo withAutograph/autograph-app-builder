@@ -161,7 +161,7 @@ export async function evaluateCandidateRuntime(input: {
       .map(([name, value]) => `${name}=${value}`)
       .join(" ");
     const bun = `${runtimeEnvironment} bun`;
-    const install = await command(handle, `${bun} install --no-save`, controller.signal);
+    const install = await command(handle, `${bun} install`, controller.signal);
     commands.push(install);
     if (install.exitCode !== 0)
       return {
