@@ -84,6 +84,7 @@ export async function runReferenceNavigationEvidence(input: {
   repositoryRoot: string;
   outputRoot: string;
   miseExecutable: string;
+  databaseBackend?: "docker" | "process";
 }) {
   const directory = resolve(input.outputRoot, "reference-navigation");
   await mkdir(directory, { recursive: true });
@@ -98,7 +99,15 @@ export async function runReferenceNavigationEvidence(input: {
   try {
     run = await execute(
       input.miseExecutable,
-      ["run", "test:production-navigation", "--", "--json-report", reportPath],
+      [
+        "run",
+        "test:production-navigation",
+        "--",
+        "--postgres-backend",
+        input.databaseBackend ?? "docker",
+        "--json-report",
+        reportPath,
+      ],
       {
         cwd: input.repositoryRoot,
         env: { ...process.env, MISE_BIN_PATH: input.miseExecutable },
@@ -117,6 +126,7 @@ export async function runReferenceNavigationEvidence(input: {
     join(directory, "run.json"),
     JSON.stringify(
       {
+        databaseBackend: input.databaseBackend ?? "docker",
         startedAt,
         completedAt: new Date().toISOString(),
         revision: revision.stdout.trim(),

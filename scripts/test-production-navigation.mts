@@ -1,4 +1,8 @@
-import { navigationReporterOptions } from "../evals/support/self-reproduction-navigation-command";
+import { startSelfReproductionPostgres } from "../evals/support/self-reproduction-postgres";
+import {
+  navigationDatabaseOptions,
+  navigationReporterOptions,
+} from "../evals/support/self-reproduction-navigation-command";
 import { randomBytes } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
@@ -15,17 +19,10 @@ import { promisify } from "node:util";
 
 const execute = promisify(execFile);
 const source = path.resolve(import.meta.dirname, "..");
-const docker = process.argv.at(3) ?? "";
-const dockerHost = process.argv.at(5) ?? "";
-if (
-  process.argv[2] !== "--docker" ||
-  !docker?.startsWith("/") ||
-  process.argv[4] !== "--docker-host" ||
-  !dockerHost?.startsWith("unix:///")
-) {
-  throw new Error("Use mise run test:production-navigation.");
-}
-const reporter = navigationReporterOptions(process.argv.slice(6));
+const databaseOptions = navigationDatabaseOptions(process.argv.slice(2));
+const docker = databaseOptions.docker ?? "";
+const dockerHost = databaseOptions.dockerHost ?? "";
+const reporter = navigationReporterOptions(databaseOptions.args);
 // Deliberately do not inherit credentials, deployment metadata or Node preloads.
 const environment: NodeJS.ProcessEnv = {
   ...reporter.environment,
@@ -43,10 +40,11 @@ const snapshot = path.join(scratch, "source");
 const id = randomBytes(8).toString("hex");
 const databaseName = `autograph_navigation_${id}`;
 const container = `autograph-navigation-${id}`;
-console.log(`Production navigation database: ${container}`);
+console.log(`Production navigation database backend: ${databaseOptions.backend}`);
 const artifactDirectory = path.join(source, ".artifacts/production-navigation");
 const children = new Set<ChildProcess>();
 let databaseStarted = false;
+let processDatabase: Awaited<ReturnType<typeof startSelfReproductionPostgres>> | undefined;
 let cancelled = false;
 const upgradedSockets = new Set<Duplex>();
 
@@ -220,49 +218,63 @@ try {
   const address = tls.address();
   if (!address || typeof address === "string") throw new Error("Missing TLS port.");
   const origin = `https://localhost:${address.port}`;
-  databaseStarted = true;
-  await runDocker([
-    "run",
-    "--rm",
-    "--detach",
-    "--name",
-    container,
-    "--env",
-    "POSTGRES_HOST_AUTH_METHOD=trust",
-    "--env",
-    `POSTGRES_DB=${databaseName}`,
-    "--publish",
-    "127.0.0.1::5432",
-    "postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40",
-  ]);
-  const deadline = Date.now() + 60_000;
-  while (true) {
-    assertRunning();
-    try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- database initialization must precede migrations
-      await runDocker([
-        "exec",
-        container,
-        "pg_isready",
-        "-h",
-        "127.0.0.1",
-        "-U",
-        "postgres",
-        "-d",
-        databaseName,
-      ]);
-      break;
-    } catch (error) {
-      if (Date.now() >= deadline) throw error;
-      // oxlint-disable-next-line eslint/no-await-in-loop -- bounded readiness polling
-      await delay(500);
+  let databaseUrl: string;
+  if (databaseOptions.backend === "process") {
+    const postgresConfig = await execute("pg_config", ["--bindir"]);
+    const bindir = postgresConfig.stdout.trim();
+    processDatabase = await startSelfReproductionPostgres({
+      port: await freePort(),
+      run: async (command, args) => {
+        await execute(path.join(bindir, command), args, { timeout: 60_000 });
+      },
+      stateRoot: path.join(scratch, "postgres"),
+    });
+    ({ databaseUrl } = processDatabase);
+  } else {
+    databaseStarted = true;
+    await runDocker([
+      "run",
+      "--rm",
+      "--detach",
+      "--name",
+      container,
+      "--env",
+      "POSTGRES_HOST_AUTH_METHOD=trust",
+      "--env",
+      `POSTGRES_DB=${databaseName}`,
+      "--publish",
+      "127.0.0.1::5432",
+      "postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40",
+    ]);
+    const deadline = Date.now() + 60_000;
+    while (true) {
+      assertRunning();
+      try {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- database initialization must precede migrations
+        await runDocker([
+          "exec",
+          container,
+          "pg_isready",
+          "-h",
+          "127.0.0.1",
+          "-U",
+          "postgres",
+          "-d",
+          databaseName,
+        ]);
+        break;
+      } catch (error) {
+        if (Date.now() >= deadline) throw error;
+        // oxlint-disable-next-line eslint/no-await-in-loop -- bounded readiness polling
+        await delay(500);
+      }
     }
+    const dockerPort = await runDocker(["port", container, "5432/tcp"]);
+    const mapping = dockerPort.stdout.trim();
+    const databasePort = Number(mapping.split(":").at(-1));
+    if (!Number.isInteger(databasePort)) throw new Error("Missing database port.");
+    databaseUrl = `postgresql://postgres@127.0.0.1:${databasePort}/${databaseName}`;
   }
-  const dockerPort = await runDocker(["port", container, "5432/tcp"]);
-  const mapping = dockerPort.stdout.trim();
-  const databasePort = Number(mapping.split(":").at(-1));
-  if (!Number.isInteger(databasePort)) throw new Error("Missing database port.");
-  const databaseUrl = `postgresql://postgres@127.0.0.1:${databasePort}/${databaseName}`;
   const secret = randomBytes(32).toString("hex");
   const flagsSecret = randomBytes(32).toString("base64url");
   Object.assign(environment, {
@@ -335,6 +347,7 @@ try {
   tls.closeAllConnections();
   tls.close();
   try {
+    await processDatabase?.stop();
     if (databaseStarted) await execute(docker, ["--host", dockerHost, "rm", "-f", container]);
     await mkdir(artifactDirectory, { recursive: true });
     try {

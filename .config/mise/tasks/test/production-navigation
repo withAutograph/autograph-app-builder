@@ -3,6 +3,16 @@
 set -eu
 
 mise_executable=${MISE_BIN_PATH:-mise}
+postgres_backend=docker
+previous=
+for argument in "$@"; do
+  if [ "$previous" = --postgres-backend ]; then postgres_backend=$argument; fi
+  previous=$argument
+done
+if [ "$postgres_backend" = process ]; then
+  exec .config/mise/scripts/trusted-node-launcher \
+    "$("$mise_executable" which node)" --import tsx scripts/test-production-navigation.mts "$@"
+fi
 docker=$("$mise_executable" which docker)
 docker_host=$("$docker" context inspect --format '{{.Endpoints.docker.Host}}')
 # OrbStack exposes an owner-local socket even when Docker's default context

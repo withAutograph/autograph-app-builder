@@ -11,3 +11,27 @@ export function navigationReporterOptions(args: readonly string[]) {
     environment: { PLAYWRIGHT_JSON_OUTPUT_FILE: output },
   };
 }
+
+/** Parse execution options before forwarding only Playwright reporter/test arguments. */
+export function navigationDatabaseOptions(input: readonly string[]) {
+  const args = [...input];
+  const take = (name: string) => {
+    const index = args.indexOf(name);
+    if (index === -1) return;
+    const value = args[index + 1];
+    if (!value || value.startsWith("--")) throw new Error(`Missing ${name} value.`);
+    args.splice(index, 2);
+    if (args.includes(name)) throw new Error(`Duplicate ${name}.`);
+    return value;
+  };
+  const backend = take("--postgres-backend") ?? "docker";
+  const docker = take("--docker");
+  const dockerHost = take("--docker-host");
+  if (backend !== "docker" && backend !== "process") throw new Error("Invalid PostgreSQL backend.");
+  if (
+    backend === "docker" &&
+    (!docker || !isAbsolute(docker) || !dockerHost?.startsWith("unix:///"))
+  )
+    throw new Error("Use mise run test:production-navigation.");
+  return { args, backend, docker, dockerHost };
+}

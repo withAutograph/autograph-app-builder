@@ -1317,6 +1317,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       const { runReferenceNavigationEvidence } =
         await import("../evals/support/self-reproduction-reference-navigation");
       const receipt = await runReferenceNavigationEvidence({
+        databaseBackend: values["postgres-backend"] as "docker" | "process",
         repositoryRoot: root,
         outputRoot: output,
         miseExecutable: values["mise-executable"],
