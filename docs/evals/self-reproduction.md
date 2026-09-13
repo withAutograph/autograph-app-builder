@@ -55,7 +55,8 @@ The public driver, `scripts/self-reproduction-public.mts`, submits
 [the product brief](../../evals/self-reproduction/brief.md) through the supported
 Streamable HTTP MCP endpoint. It behaves as an ordinary user client: start one
 request with `autograph_start`, observe with `autograph_get`, and use
-`autograph_respond` only for actual product questions and approvals. It does not
+`autograph_respond` for structured product questions and approvals, or
+`autograph_send` for an ordinary chat reply to a public product question. It does not
 call internal Eve stages, prepare the candidate, or repair generated code.
 
 Use the existing supported App Builder service and its ordinary authentication.
@@ -88,6 +89,12 @@ mise run eval:self-reproduction -- \
   --resume \
   --responses-file /absolute/external/evidence/product-responses.json
 ```
+
+If the Builder asks an ordinary question in chat without an `inputRequests` card,
+resume with `--message-file /absolute/path/to/reply.txt` instead. The file contains
+only the ordinary user reply, such as approval of a local build. This is not a
+channel for evaluator findings, repair instructions, or workflow-stage prompts.
+The driver records the reply and preserves its idempotency key before sending.
 
 Resume the saved public session and cursor rather than creating a better reroll.
 Keep the prompt, public transcript, requests and replies, outcome, and errors as

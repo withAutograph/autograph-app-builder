@@ -5,7 +5,7 @@ import { makePublicTransport, runPublicSession } from "../evals/support/self-rep
 import type { PublicState } from "../evals/support/self-reproduction-public";
 
 const session = (
-  status: "working" | "completed" | "input_required",
+  status: "working" | "completed" | "input_required" | "waiting",
   inputRequests: unknown[] = [],
 ) => ({ cursor: 1, events: [], inputRequests, sessionId: "one-session", status });
 const state = (): PublicState => ({
@@ -211,5 +211,74 @@ describe("public self-reproduction driver", () => {
       await (responses.length === 2 ? expect(run).rejects.toThrow() : run);
       expect(calls).toEqual(["autograph_start"]);
     }
+  });
+  it("sends only the explicit ordinary reply and preserves its key through uncertain transport", async () => {
+    const current = state();
+    current.session = { ...session("waiting"), inputRequests: [] };
+    const message = "Yes, build this app. Do not publish.";
+    let saved = "";
+    const calls: { name: string; args: Record<string, unknown> }[] = [];
+    const options = {
+      message,
+      pollMs: 1,
+      save: () => {
+        saved = JSON.stringify(current);
+      },
+      state: current,
+      timeoutMs: 1000,
+    };
+    await expect(
+      runPublicSession({
+        ...options,
+        transport: {
+          call: async (name, args) => {
+            calls.push({ args, name });
+            if (name === "autograph_send") throw new Error("lost response");
+            return session("waiting");
+          },
+        },
+      }),
+    ).rejects.toThrow("lost response");
+    const pending = JSON.parse(saved).pendingMessage;
+    expect(pending.message).toBe(message);
+    await runPublicSession({
+      ...options,
+      message: undefined,
+      transport: {
+        call: async (name, args) => {
+          calls.push({ args, name });
+          return session("completed");
+        },
+      },
+    });
+    expect(calls.filter((call) => call.name === "autograph_send").map((call) => call.args)).toEqual(
+      [
+        { ...pending, sessionId: "one-session" },
+        { ...pending, sessionId: "one-session" },
+      ],
+    );
+    expect(current.pendingMessage).toBeUndefined();
+  });
+  it("observes waiting without inventing a message", async () => {
+    const current = state();
+    current.session = { ...session("waiting"), inputRequests: [] };
+    current.error = "previous transport failure";
+    current.outcome = "paused_timeout";
+    const calls: string[] = [];
+    await runPublicSession({
+      pollMs: 1,
+      save: () => {},
+      state: current,
+      timeoutMs: 1000,
+      transport: {
+        call: async (name) => {
+          calls.push(name);
+          return session("completed");
+        },
+      },
+    });
+    expect(calls).toEqual(["autograph_get"]);
+    expect(current.error).toBeUndefined();
+    expect(current.outcome).toBe("completed");
   });
 });

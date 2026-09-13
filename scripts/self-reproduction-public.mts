@@ -25,6 +25,7 @@ const { values } = parseArgs({
   options: {
     endpoint: { type: "string" },
     help: { type: "boolean" },
+    "message-file": { type: "string" },
     "output-dir": { type: "string" },
     "poll-ms": { default: "2000", type: "string" },
     "responses-file": { type: "string" },
@@ -35,12 +36,13 @@ const { values } = parseArgs({
 });
 if (values.help) {
   console.log(
-    "Submit the fixed product brief through public MCP. --endpoint URL --output-dir PATH [--resume] [--responses-file PATH] [--timeout-ms 120000] [--poll-ms 2000]. Responses file is an array of exact {requestId,response} entries. No approvals are inferred. Resume uses the same session and idempotency keys. Comparison remains separate.",
+    "Submit the fixed product brief through public MCP. --endpoint URL --output-dir PATH [--resume] [--responses-file PATH | --message-file PATH] [--timeout-ms 120000] [--poll-ms 2000]. Responses file is an array of exact {requestId,response} entries. No approvals are inferred. Resume uses the same session and idempotency keys. Comparison remains separate.",
   );
   process.exit(0);
 }
 if (!values.endpoint || !values["output-dir"])
   throw new Error("--endpoint and --output-dir are required");
+if (values["message-file"] && !values.resume) throw new Error("--message-file requires --resume");
 validatePublicEndpoint(values.endpoint);
 const repo = realpathSync(resolve(import.meta.dirname, ".."));
 const output = resolve(values["output-dir"]);
@@ -131,7 +133,10 @@ try {
   const responses = values["responses-file"]
     ? (JSON.parse(readFileSync(values["responses-file"], "utf-8")) as Responses)
     : undefined;
-  await runPublicSession({ pollMs, responses, save, state, timeoutMs, transport });
+  const message = values["message-file"]
+    ? readFileSync(values["message-file"], "utf-8")
+    : undefined;
+  await runPublicSession({ message, pollMs, responses, save, state, timeoutMs, transport });
 } catch (error) {
   state.outcome = "blocked_transport_or_contract";
   state.error = String(sanitizeEvidence(String(error)));

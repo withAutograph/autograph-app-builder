@@ -15,6 +15,7 @@ export interface PublicState {
   clientRequestId: string;
   startedAt: string;
   session?: EveSessionResult;
+  pendingMessage?: { clientRequestId: string; message: string };
   pendingResponse?: { clientRequestId: string; responses: Responses };
   answered: string[];
   outcome: string;
@@ -116,7 +117,9 @@ export const makePublicTransport = async (
   await rpc("notifications/initialized", {}, true);
   return {
     call: async (name, args) => {
-      if (!["autograph_start", "autograph_get", "autograph_respond"].includes(name))
+      if (
+        !["autograph_start", "autograph_get", "autograph_respond", "autograph_send"].includes(name)
+      )
         throw new Error("Only public user lifecycle calls are permitted");
       record({ arguments: args, at: new Date().toISOString(), direction: "request", name });
       const result = (await rpc("tools/call", { arguments: args, name })) as {
@@ -140,14 +143,21 @@ export const runPublicSession = async (options: {
   transport: PublicTransport;
   save: () => void;
   responses?: Responses;
+  message?: string;
   timeoutMs: number;
   pollMs: number;
   sleep?: (ms: number) => Promise<void>;
 }) => {
   const { state, transport, save } = options;
+  if (options.message !== undefined && !state.session)
+    throw new Error("An ordinary message requires an existing public session");
+  if (options.message !== undefined && (state.pendingResponse || options.responses))
+    throw new Error("Send one complete response batch or one ordinary message at a time");
   const deadline = Date.now() + options.timeoutMs;
   const accept = (raw: unknown) => {
     state.session = eveSessionResultSchema.parse(raw);
+    state.outcome = state.session.status;
+    delete state.error;
     save();
   };
   const respond = async () => {
@@ -170,7 +180,7 @@ export const runPublicSession = async (options: {
         prompt: state.prompt,
       }),
     );
-  else if (!state.pendingResponse)
+  else if (!state.pendingResponse && !state.pendingMessage)
     accept(
       await transport.call("autograph_get", {
         cursor: state.session.cursor,
@@ -178,6 +188,25 @@ export const runPublicSession = async (options: {
       }),
     );
   if (state.pendingResponse) await respond();
+  if (options.message !== undefined && !state.pendingMessage) {
+    if (!options.message.trim() || options.message.length > 32_000)
+      throw new Error("Message must contain 1 to 32000 characters");
+    if (state.session?.status !== "waiting" || state.session.inputRequests?.length)
+      throw new Error(
+        "Ordinary messages require a waiting public conversation without structured input requests",
+      );
+    state.pendingMessage = { clientRequestId: randomUUID(), message: options.message };
+    save();
+  }
+  if (state.pendingMessage) {
+    const pending = state.pendingMessage;
+    if (!state.session) throw new Error("Missing public session for pending message");
+    accept(
+      await transport.call("autograph_send", { ...pending, sessionId: state.session.sessionId }),
+    );
+    delete state.pendingMessage;
+    save();
+  }
   while (Date.now() < deadline) {
     const { session } = state;
     if (!session) throw new Error("Missing public session");

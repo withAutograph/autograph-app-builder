@@ -66,7 +66,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Builder or its [five public MCP tools](docs/public-mcp-contract.md), then answer
   ordinary product questions and approval requests. A reproducible test client
   may call those same public tools programmatically: one `autograph_start`,
-  `autograph_get` polling, and `autograph_respond` for actual product requests.
+  `autograph_get` polling, `autograph_respond` for structured product requests,
+  and `autograph_send` for ordinary replies to public chat questions.
   Preserve session IDs, cursors, and every reply; resume the saved public session
   instead of silently starting a replacement run. Do not drive internal Eve
   stages or supply implementation instructions between stages.
