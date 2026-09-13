@@ -48,6 +48,9 @@ import {
   candidateRuntimeFailureObservations,
 } from "../evals/support/self-reproduction-runtime";
 import type { CandidateRuntimeReceipt } from "../evals/support/self-reproduction-runtime";
+import { runSandboxRuntimeComparison } from "../evals/support/self-reproduction-runtime-comparison";
+import { sandboxBrowserComparison } from "../evals/support/self-reproduction-runtime-browser";
+import { startSelfReproductionReferenceRuntime } from "../evals/support/self-reproduction-reference-runtime";
 import { parityEvidenceFromReceipts } from "../evals/support/self-reproduction-parity-evidence";
 import type { TrustedBrowserWorkflowAdapter } from "../evals/support/self-reproduction-workflow-adapters";
 import {
@@ -64,7 +67,10 @@ const { values } = parseArgs({
     "arrusted-root": { type: "string" },
     "candidate-url": { type: "string" },
     "candidate-runtime": { type: "boolean" },
+    "debug-prerender": { type: "boolean" },
     "reference-url": { type: "string" },
+    "reference-runtime": { type: "boolean" },
+    "mise-executable": { type: "string" },
     "capture-adapter": { type: "string" },
     "workflow-adapter-module": { type: "string" },
     "output-dir": { type: "string" },
@@ -99,6 +105,9 @@ let workflowEvidence: WorkflowEvidence | undefined;
 let parityAssessment: Assessment | undefined;
 let pairedCaptures: PairedCaptureRun | undefined;
 let trustedWorkflowReceipts: unknown[] = [];
+let trustedFrameworkReceipts: unknown[] = [];
+let referenceFixtureRoot: string | undefined;
+let stopReference: (() => Promise<void>) | undefined;
 let candidateRuntime: CandidateRuntimeReceipt | { status: "not-run" | "failed"; reason: string } = {
   status: "not-run",
   reason: "Candidate runtime evaluation was not requested.",
@@ -160,6 +169,7 @@ async function runConfiguredPairedCaptures() {
 
 type WorkflowAdapterFactory = (input: {
   referenceUrl?: string;
+  referenceFixtureRoot?: string;
   candidateUrl?: string;
   outputRoot: string;
 }) =>
@@ -193,6 +203,7 @@ async function runConfiguredWorkflowAdapters(candidateRoot: string | undefined) 
   const candidateUrl = values["candidate-url"] ?? process.env.SELF_REPRODUCTION_CANDIDATE_URL;
   const adapters = await loaded.createWorkflowAdapters({
     ...(referenceUrl ? { referenceUrl } : {}),
+    ...(referenceFixtureRoot ? { referenceFixtureRoot } : {}),
     ...(candidateUrl ? { candidateUrl } : {}),
     outputRoot: output,
   });
@@ -226,6 +237,37 @@ async function runConfiguredWorkflowAdapters(candidateRoot: string | undefined) 
       await import("../evals/support/self-reproduction-workflow-adapters");
     const run = await runTrustedBrowserWorkflows({ browser, outputRoot: output, adapters });
     trustedWorkflowReceipts = run.receipts;
+    const { runTrustedFrameworkEvidence } =
+      await import("../evals/support/self-reproduction-framework");
+    const { createDefaultFrameworkAdapter } =
+      await import("../evals/support/self-reproduction-framework-adapters");
+    const framework = await runTrustedFrameworkEvidence({
+      browser,
+      outputRoot: output,
+      adapters: {
+        ...(referenceUrl && referenceFiles
+          ? {
+              reference: createDefaultFrameworkAdapter({
+                side: "reference",
+                files: referenceFiles,
+                baseURL: referenceUrl,
+              }),
+            }
+          : {}),
+        ...(candidateUrl && candidateFiles
+          ? {
+              candidate: createDefaultFrameworkAdapter({
+                side: "candidate",
+                files: candidateFiles,
+                baseURL: candidateUrl,
+              }),
+            }
+          : {}),
+      },
+    });
+    trustedFrameworkReceipts = framework.receipts;
+    // oxlint-disable-next-line eslint/no-use-before-define -- writer is initialized before runtime execution
+    await jsonFile("trusted-framework-receipts.json", trustedFrameworkReceipts);
   } finally {
     await browser.close();
     // oxlint-disable-next-line eslint/no-use-before-define -- artifact writer is initialized before runtime execution
@@ -555,7 +597,12 @@ function runtimeObservations(existingRequirementIds: ReadonlySet<string>): Obser
     });
   const artifact = "candidate-runtime.json";
   const notRun = workflowMatrix
-    .filter((row) => row.id !== "anonymous-entry" && row.id !== "documentation")
+    .filter(
+      (row) =>
+        row.id !== "anonymous-entry" &&
+        row.id !== "documentation" &&
+        !existingRequirementIds.has(row.id),
+    )
     .map((row): Observation => ({
       requirementId: row.id,
       disposition: "not-run",
@@ -567,7 +614,7 @@ function runtimeObservations(existingRequirementIds: ReadonlySet<string>): Obser
       artifacts: [artifact],
       method: "none",
     }));
-  if (!("probes" in candidateRuntime)) return notRun;
+  if (!("probes" in candidateRuntime) || existingRequirementIds.has("documentation")) return notRun;
   const docs = candidateRuntime.probes.find((probe) => probe.id === "documentation");
   if (!docs)
     return [
@@ -623,14 +670,23 @@ async function saveReport() {
       : blockedFramework("candidate")),
   ];
   const candidateOutput = candidate.status === "available" ? "available" : "missing";
-  const effectiveTrustedWorkflowReceipts = trustedWorkflowReceipts.filter((receipt) => {
-    if (candidateRuntime.status === "available" || candidateRuntime.status === "not-run")
-      return true;
+  const effectiveTrustedWorkflowReceipts = [
+    ...trustedWorkflowReceipts,
+    ...trustedFrameworkReceipts,
+  ].filter((receipt) => {
     if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) return true;
     const candidateReceipt = receipt as {
       side?: unknown;
-      observation?: { disposition?: unknown };
+      observation?: { disposition?: unknown; requirementId?: unknown };
     };
+    if (candidateRuntime.status === "not-run") return true;
+    if (candidateRuntime.status === "available")
+      return !(
+        candidateReceipt.side === "candidate" &&
+        candidateReceipt.observation?.disposition === "not-run" &&
+        candidateReceipt.observation.requirementId === "documentation" &&
+        candidateRuntime.probes.some((probe) => probe.id === "documentation")
+      );
     return !(
       candidateReceipt.side === "candidate" &&
       candidateReceipt.observation?.disposition === "not-run"
@@ -806,15 +862,18 @@ async function main() {
   if (values.help) {
     console.log(`Usage: mise run eval:self-reproduction -- [--arrusted-root PATH] [--output-dir EXTERNAL_PATH]
   [--reference-url URL] [--candidate-url URL] [--capture-adapter evals/PATH] [--generation-timeout-ms N]
-  [--candidate-runtime]
+  [--candidate-runtime] [--debug-prerender] [--reference-runtime]
   [--workflow-adapter-module EVALUATOR_MODULE]
   [--report-only --candidate-root PATH]
 
 Explicitly runs the native live Eve benchmark with strict assertions and writes
 sanitized evidence outside the source tree. No publication or deployment.
 --report-only audits an existing candidate without running generation.
+--reference-runtime starts an isolated emulated reference; live native runs do this by default.
 --candidate-runtime starts the exported candidate in an evaluator-owned Vercel Sandbox
 and retains build, readiness, and public documentation probe receipts.
+--debug-prerender retains an additional diagnostic build after production build failure;
+it never substitutes for production acceptance.
 --capture-adapter loads an evaluator-owned module under evals/ and executes the
 complete paired desktop state matrix against both supplied URLs.
 --generator FILE and repeatable --generator-arg VALUE select a test launcher.
@@ -951,7 +1010,26 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         };
     }
     await saveReport();
-    if (values["candidate-runtime"]) {
+    if (
+      values["reference-runtime"] ||
+      (!values["report-only"] && !values.generator && !values["reference-url"])
+    ) {
+      if (!values["mise-executable"])
+        throw new Error("Reference startup requires the mise-owned eval entrypoint.");
+      const reference = await startSelfReproductionReferenceRuntime({
+        sourceRoot: root,
+        runtimeRoot: join(output, "reference-runtime"),
+        miseExecutable: values["mise-executable"],
+      });
+      stopReference = reference.stop;
+      await jsonFile("reference-runtime.json", reference.receipt);
+      if (reference.receipt.status === "available") {
+        values["reference-url"] = reference.receipt.referenceUrl;
+        referenceFixtureRoot = reference.receipt.fixtureRoot;
+        Object.assign(process.env, reference.receipt.environment);
+      }
+    }
+    if (values["candidate-runtime"] || (!values["report-only"] && !values.generator)) {
       const credentials = loadProjectOidc();
       const { evaluateCandidateRuntime } =
         await import("../evals/support/self-reproduction-runtime");
@@ -967,6 +1045,25 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
               publicBasePath: `/${candidateAppId(candidateFiles)}`,
               credentials,
               appRoot: "/workspace",
+              debugPrerender: values["debug-prerender"],
+              onReady: async ({ session, baseURL, abortSignal }) => {
+                const comparison = await runSandboxRuntimeComparison({
+                  session,
+                  ...sandboxBrowserComparison(),
+                  payload: { baseURL },
+                  abortSignal,
+                });
+                const { artifacts, ...receipt } = comparison;
+                await jsonFile("candidate-browser-comparison.json", {
+                  ...receipt,
+                  artifacts: artifacts.map(({ path }) => `candidate-browser/${path}`),
+                });
+                for (const artifact of artifacts) {
+                  const target = join(output, "candidate-browser", artifact.path);
+                  await mkdir(resolve(target, ".."), { recursive: true });
+                  await writeFile(target, artifact.content, { mode: 0o600 });
+                }
+              },
             })
           : {
               status: "failed",
@@ -999,7 +1096,11 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     errors.push(String(sanitizeEvidence(error instanceof Error ? error.message : String(error))));
     generation = { ...generation, status: "failed" };
   } finally {
-    await saveReport();
+    try {
+      await saveReport();
+    } finally {
+      await stopReference?.();
+    }
   }
   if (!["completed", "not-run"].includes(String(generation.status)) || errors.length)
     process.exitCode = 1;

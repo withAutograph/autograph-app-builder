@@ -11,7 +11,7 @@ import type { Observation } from "./self-reproduction-parity";
 
 export interface RuntimeCommandReceipt {
   command: string;
-  exitCode: number;
+  exitCode: number | null;
   stdout: string;
   stderr: string;
 }
@@ -182,6 +182,14 @@ export async function evaluateCandidateRuntime(input: {
   appRoot?: string;
   backend?: Backend;
   timeoutMs?: number;
+  /** Opt-in diagnostic rebuild after failure; never used as acceptance evidence. */
+  debugPrerender?: boolean;
+  /** Evaluator work runs against loopback before the sandbox is released. */
+  onReady?: (input: {
+    session: SandboxBackendHandle<Record<string, never>>["session"];
+    baseURL: string;
+    abortSignal: AbortSignal;
+  }) => Promise<void>;
 }): Promise<CandidateRuntimeReceipt> {
   const commands: RuntimeCommandReceipt[] = [];
   let handle: SandboxBackendHandle<Record<string, never>> | undefined;
@@ -302,7 +310,16 @@ export async function evaluateCandidateRuntime(input: {
       controller.signal,
     );
     commands.push(build);
-    if (build.exitCode !== 0)
+    if (build.exitCode !== 0) {
+      if (input.debugPrerender) {
+        commands.push(
+          await command(
+            handle,
+            `${runtimeEnvironment} node node_modules/next/dist/bin/next build apps/${input.candidateAppId} --debug-prerender`,
+            controller.signal,
+          ),
+        );
+      }
       return {
         producer: "evaluator",
         sandboxId: handle.session.id,
@@ -311,10 +328,55 @@ export async function evaluateCandidateRuntime(input: {
         commands,
         probes: [],
       };
-    await handle.session.spawn({
-      command: `${bun} run --cwd apps/${input.candidateAppId} start -- --hostname 127.0.0.1 --port 3000`,
+    }
+    // A microfrontend's gateway prefix is not necessarily its direct Next basePath.
+    let runtimeBasePath = input.publicBasePath;
+    try {
+      const manifest = await handle.session.readTextFile({
+        path: `apps/${input.candidateAppId}/.next/routes-manifest.json`,
+      });
+      const routes = JSON.parse(manifest ?? "{}");
+      if (typeof routes.basePath === "string") runtimeBasePath = routes.basePath;
+    } catch {
+      // Custom output layouts retain the caller's explicit runtime path.
+    }
+    await handle.session.writeTextFile({
+      path: ".self-reproduction-readiness.mjs",
+      content: readinessScript(runtimeBasePath),
+    });
+    await handle.session.writeTextFile({
+      path: ".self-reproduction-browser.mjs",
+      content: browserProbeScript(runtimeBasePath),
+    });
+    const startCommand = `PORT=3000 ${bun} run --cwd apps/${input.candidateAppId} start`;
+    const server = await handle.session.spawn({
+      command: startCommand,
       abortSignal: controller.signal,
     });
+    const startup: RuntimeCommandReceipt = {
+      command: startCommand,
+      exitCode: null,
+      stdout: "",
+      stderr: "",
+    };
+    commands.push(startup);
+    // Drain both streams while readiness runs, retaining bounded startup diagnostics.
+    for (const stream of ["stdout", "stderr"] as const) {
+      const decoder = new TextDecoder();
+      void server[stream]
+        .pipeTo(
+          new WritableStream({
+            write(chunk) {
+              startup[stream] = excerpt(
+                startup[stream] +
+                  (typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true })),
+              );
+            },
+          }),
+        )
+        // oxlint-disable-next-line promise/prefer-await-to-then -- Drain concurrently with readiness; shutdown may close the stream.
+        .catch(() => undefined);
+    }
     const probe = await command(
       handle,
       `${runtimeEnvironment} node .self-reproduction-readiness.mjs`,
@@ -326,6 +388,17 @@ export async function evaluateCandidateRuntime(input: {
       ? probes.find((item: { id?: unknown }) => item.id === "root")
       : undefined;
     if (root?.passed === true) {
+      const browserSetup = await command(
+        handle,
+        `${bun} x playwright install --with-deps chromium`,
+        controller.signal,
+      );
+      commands.push(browserSetup);
+      await input.onReady?.({
+        session: handle.session,
+        baseURL: `http://127.0.0.1:3000${runtimeBasePath}`,
+        abortSignal: controller.signal,
+      });
       const browser = await command(
         handle,
         `${runtimeEnvironment} node .self-reproduction-browser.mjs`,
@@ -338,7 +411,7 @@ export async function evaluateCandidateRuntime(input: {
       } else
         probes.push({
           id: "documentation",
-          url: `http://127.0.0.1:3000${input.publicBasePath}/docs`,
+          url: `http://127.0.0.1:3000${runtimeBasePath}/docs`,
           status: null,
           passed: false,
           detail: `Evaluator browser was unavailable: ${browser.stderr || browser.stdout}`,

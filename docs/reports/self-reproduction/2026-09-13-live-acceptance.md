@@ -27,11 +27,11 @@ project-scoped Vercel Sandbox and reached the candidate's declared production
 build. Dependency installation, pinned toolchain installation, microfrontend
 configuration generation, and candidate route registration all completed.
 Next.js 16.3.0 compiled the candidate and completed TypeScript checking, then
-failed while prerendering `/_global-error`:
+failed while prerendering `/_not-found`:
 
 ```text
 InvariantError: Invariant: Expected workStore to be initialized.
-Export encountered an error on /_global-error/page: /_global-error
+Export encountered an error on /_not-found/page: /_not-found
 ```
 
 The build also emitted a non-fatal PostCSS warning for the Arrusted shared
@@ -84,23 +84,60 @@ required by the baseline scope.
 
 ## Prioritized remaining gaps
 
-1. **Generated candidate validation failure.** Expected: generated source passes
-   the repository test contract before review. Observed: unresolved
-   `@autograph/components` import. Evidence: `native-result.json`. Likely layer:
-   generated test/module-resolution composition. Recommended repair: improve
-   Builder generation and validation feedback so imports used by generated
-   components resolve under the repository's Vitest configuration.
-2. **Generated candidate production build failure.** Expected: the candidate
-   builds and starts independently in Vercel Sandbox. Observed: Next.js fails
-   prerendering `/_global-error` after compile and typecheck. Evidence:
-   `candidate-runtime.json` from `runtime-v12`. Responsible layer is not yet
-   confirmed. Recommended repair: reproduce this exact candidate/reference
-   combination in a focused build investigation and assign the fix only after
-   locating the invalid boundary.
-3. **Executable comparison.** Expected: matching reference and candidate states
-   produce workflow receipts and paired captures at all configured desktop
-   viewports. Observed: no candidate server was available. Evidence:
-   `candidate-runtime.json` and the empty capture set. Likely layer: downstream
-   consequence of gap 2. Recommended repair: rerun report-only assessment after
-   the responsible product/runtime fix; do not patch this baseline candidate or
-   claim scores from source inspection.
+1. **Arrusted template import resolution (confirmed cause).** The generated
+   Vitest configuration exactly reproduced the template, which omitted
+   `resolveWithTsconfigPaths()`. `@autograph/components` is a supported root
+   TypeScript alias, not a missing installable package. A fresh GitHub clone and
+   a Vite transformation regression reproduced the failure without the resolver
+   and passed with it. Repair the canonical template; do not attribute this
+   failure to the model or manually repair the baseline candidate.
+2. **Arrusted framework and CSS setup (confirmed defects).** The repository
+   declared Next 16.3.4 but overrode it to 16.3.0. Generated apps also omitted
+   PostCSS configuration and could not inherit it from the sibling Vendor app.
+   Align the intended Next version and emit the canonical Tailwind PostCSS
+   configuration from the template. These defects are established; neither is
+   yet a confirmed cause of the prerender invariant.
+3. **Production prerender failure (cause unresolved).** Preserve the candidate
+   and capture an explicit diagnostic build with `--debug-prerender`. Diagnostic
+   success cannot replace a passing normal production build. Compare against
+   an independently generated clean starter to distinguish template/runtime
+   failures from generated application failures.
+4. **Executable comparison (independent harness defects).** Runtime cleanup
+   currently precedes the comparison; the entrypoint does not automatically
+   start the reference, and the framework runner is not wired into it. Several
+   candidate workflows always fail when evaluator fixtures are missing; some
+   reference/framework assertions claim more than their evidence proves.
+   Keep runtimes alive through comparison, bind equivalent authenticated
+   fixtures and readbacks, and distinguish missing evaluator support from
+   observed missing product behavior. A successful candidate build alone does
+   not close this gap.
+
+The earlier machine report's blanket prerequisite failures are retained as
+historical output, not 37 independently observed product defects. Template
+repairs and diagnostic replays must retain their own source revisions and
+artifacts; the original generated source remains unchanged.
+
+## Clean starter setup follow-up
+
+A new clone of `withAutograph/arrusted-development` was used for the template
+repair and a second disposable clone for acceptance. The canonical generator
+created `setup-proof`; the generated workspace was then installed before
+validation. Production typecheck/build, the generated unit test, production
+startup, and HTTP 200 passed. Root and app resolve the same physical Next
+16.3.4 installation. Local evidence is retained under
+`/private/tmp/arrusted-template-acceptance-aligned-20260913`.
+
+The stale template also pinned older Node type dependencies, producing a
+different Sharp/Next peer closure, and the Vite-plus catalog lagged the root
+version. Aligning those dependencies removed the observed post-install Vite
+configuration type errors in the new starter. Arrusted repairs are submitted
+in PR 1360. This establishes starter setup, not acceptance of the original
+replica or proof that its historical prerender failure is fixed.
+
+The first clean-starter Sandbox replay passed installation and production
+build. Its startup probe failed because the evaluator supplied CLI port flags
+that the repository runner ignores; that runner uses `PORT`. The evaluator
+now supplies `PORT=3000` and retains startup output. Browser comparison now
+has a callback inside the Sandbox lifetime, preserving diagnostic screenshots
+before cleanup. These diagnostic captures do not earn seeded workflow or
+visual-state parity credit.
