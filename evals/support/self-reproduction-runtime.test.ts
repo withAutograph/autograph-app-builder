@@ -33,10 +33,10 @@ function backend(results: { exitCode: number; stdout?: string; stderr?: string }
             Promise.resolve({ backendName: "fixture", metadata: {}, sessionKey: "fixture" }),
           session: {
             id: "sandbox-fixture",
+            readTextFile: () => Promise.resolve(JSON.stringify({ basePath: "" })),
             run,
             spawn,
             writeBinaryFile,
-            readTextFile: () => Promise.resolve(JSON.stringify({ basePath: "" })),
             writeTextFile,
           },
           shutdown,
@@ -154,8 +154,8 @@ describe("self-reproduction candidate runtime", () => {
       backend: fixture.backend,
       candidateAppId: "candidate",
       files: [{ content: "{}", path: "package.json" }],
-      publicBasePath: "/candidate",
       onReady,
+      publicBasePath: "/candidate",
       workspaceArchive: Buffer.from("archive"),
     });
     expect(receipt).toMatchObject({ producer: "evaluator", status: "available" });
@@ -255,11 +255,11 @@ describe("self-reproduction candidate runtime", () => {
     ]);
     const receipt = await evaluateCandidateRuntime({
       backend: fixture.backend,
-      workspaceArchive: Buffer.from("archive"),
       candidateAppId: "candidate",
-      publicBasePath: "/candidate",
-      files: [],
       debugPrerender: true,
+      files: [],
+      publicBasePath: "/candidate",
+      workspaceArchive: Buffer.from("archive"),
     });
     expect(receipt.status).toBe("failed");
     expect(receipt.commands.at(-1)?.command).toContain("--debug-prerender");

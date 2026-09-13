@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import path from "node:path";
 import { promisify } from "node:util";
 import { ARRUSTED_TEMPLATE_REPOSITORY } from "../../lib/repository/source-receipt";
 
@@ -19,19 +19,19 @@ export interface TemplateSourceEvidence {
 }
 
 /** Acquires source once; explicit checkouts are inspected without fetching or changing them. */
-export async function prepareSelfReproductionTemplateSource(input: {
+export const prepareSelfReproductionTemplateSource = async (input: {
   outputDirectory: string;
   providedCheckout?: string;
   /** Injectable structured process boundary for focused transport tests. */
   runGit?: Git;
-}): Promise<TemplateSourceEvidence> {
+}): Promise<TemplateSourceEvidence> => {
   const run = input.runGit ?? git;
   const sourcePath = input.providedCheckout
-    ? resolve(input.providedCheckout)
-    : resolve(input.outputDirectory, "runtime-source", "arrusted-development");
+    ? path.resolve(input.providedCheckout)
+    : path.resolve(input.outputDirectory, "runtime-source", "arrusted-development");
   const acquisition = input.providedCheckout ? "provided-checkout" : "canonical-clone";
   if (!input.providedCheckout) {
-    await mkdir(resolve(input.outputDirectory, "runtime-source"), { recursive: true });
+    await mkdir(path.resolve(input.outputDirectory, "runtime-source"), { recursive: true });
     // Git's configured credential helper supplies access; no credentials enter arguments.
     await run([
       "clone",
@@ -51,5 +51,5 @@ export async function prepareSelfReproductionTemplateSource(input: {
   } catch {
     // Local source checkouts need not have an origin remote.
   }
-  return { sourcePath, acquisition, revision, remote };
+  return { acquisition, remote, revision, sourcePath };
 }
