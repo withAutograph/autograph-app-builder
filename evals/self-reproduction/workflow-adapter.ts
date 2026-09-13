@@ -1,8 +1,14 @@
+import { readFile } from "node:fs/promises";
+import { encryptOverrides } from "flags";
+import { expect } from "playwright/test";
 import postgres from "postgres";
 import type { Locator } from "playwright";
 
 import {
   appOrigin,
+  currentSession,
+  signOut,
+  registerPasskey,
   applicationCounts,
   databaseUrl,
   finishOAuth,
@@ -121,11 +127,13 @@ function semanticCandidateAdapter(candidateUrl: string): TrustedBrowserWorkflowA
 
 function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
   const supported = new Set<WorkflowId>([
+    "authentication",
     "durable-draft",
     "provider-return-success",
     "documentation",
   ]);
   let initialDraftRevision = 0;
+  let passkeyOverride = "";
   return {
     contextOptions: { baseURL: referenceUrl, ignoreHTTPSErrors: true },
     async prepare(_page, workflowId) {
@@ -141,6 +149,18 @@ function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
           disposition: "infrastructure-unavailable",
           reason: `Reference E2E helpers are bound to ${appOrigin}; received ${referenceUrl}.`,
         };
+      if (workflowId === "authentication") {
+        try {
+          const secret = (await readFile(".emulate/flags-secret", "utf-8")).trim();
+          passkeyOverride = await encryptOverrides({ passkeys: true }, secret, "1h");
+        } catch {
+          return {
+            ready: false,
+            disposition: "infrastructure-unavailable",
+            reason: "Reference authentication requires the emulated passkey flag fixture secret.",
+          };
+        }
+      }
       await resetApplicationState();
       initialDraftRevision = 0;
       return { ready: true };
@@ -172,6 +192,91 @@ function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
       await page.getByLabel("App Name").fill(fixedName);
       await page.getByLabel("App Brief", { exact: true }).fill(fixedBrief);
       await page.getByRole("status").filter({ hasText: "Draft saved" }).waitFor();
+      if (workflowId === "authentication") {
+        const ownerId = (await currentSession(page))?.user?.id;
+        if (typeof ownerId !== "string")
+          throw new Error("Reference OAuth did not establish an owner identity.");
+        const sql = postgres(databaseUrl, { max: 1 });
+        let persisted = false;
+        try {
+          const [row] = await sql<{ appName: string; brief: string }[]>`
+            SELECT record->'draft'->'form'->>'appName' AS "appName",
+                   record->'draft'->'form'->>'brief' AS brief
+            FROM builder_draft WHERE owner_user_id = ${ownerId} AND status = 'active'
+            ORDER BY updated_at DESC LIMIT 1
+          `;
+          persisted = row?.appName === fixedName && row?.brief === fixedBrief;
+        } finally {
+          await sql.end();
+        }
+        await signOut(page);
+        const revoked = (await currentSession(page)) === null;
+        const restored = await freshPage();
+        await finishOAuth(restored, "GitHub");
+        await waitForBuilderReady(restored);
+        const restoredDraft =
+          persisted &&
+          (await currentSession(restored))?.user?.id === ownerId &&
+          (await restored.getByLabel("App Name").inputValue()) === fixedName &&
+          (await restored.getByLabel("App Brief", { exact: true }).inputValue()) === fixedBrief;
+        await restored.getByRole("radio", { name: "Codex", exact: true }).check();
+        await restored.getByRole("button", { name: "Create App", exact: true }).click();
+        await expect(restored).toHaveURL(/\/handoff\/[0-9a-f-]{36}$/u);
+        const handoffId = new URL(restored.url()).pathname.split("/").at(-1);
+        const statusPath = `/api/builder/handoffs/${handoffId}`;
+        const ownerResponse = await restored.request.get(statusPath);
+        const ownerCanRead =
+          ownerResponse.ok() && (await ownerResponse.json()).status === "prepared";
+        const signedOutResponse = await page.request.get(statusPath);
+        const stranger = await freshPage();
+        await stranger.context().addCookies([
+          {
+            name: "vercel-flag-overrides",
+            value: passkeyOverride,
+            url: referenceUrl,
+            httpOnly: true,
+            secure: new URL(referenceUrl).protocol === "https:",
+            sameSite: "Lax",
+          },
+        ]);
+        const authenticator = await registerPasskey(stranger.context(), stranger);
+        let otherUserDenied = false;
+        try {
+          const strangerId = (await currentSession(stranger))?.user?.id;
+          const response = await stranger.request.get(statusPath);
+          const body = await response.json();
+          otherUserDenied =
+            ownerCanRead &&
+            typeof strangerId === "string" &&
+            strangerId !== ownerId &&
+            response.status() === 404 &&
+            body.error === "handoff_unavailable" &&
+            Object.keys(body).length === 1;
+        } finally {
+          await authenticator.dispose();
+        }
+        return {
+          reason:
+            "Saved an owner-scoped PostgreSQL draft, restored it through fresh OAuth, and checked the owner's prepared handoff with signed-out and distinct authenticated identities.",
+          assertions: [
+            assertion(
+              "sign-in-restores-draft",
+              restoredDraft,
+              "Both saved draft fields were restored for the same owner in a fresh authenticated context.",
+            ),
+            assertion(
+              "sign-out-revokes-access",
+              revoked && signedOutResponse.status() === 401,
+              "Signed-out session was absent and protected handoff access returned 401.",
+            ),
+            assertion(
+              "other-user-denied",
+              otherUserDenied,
+              "A distinct authenticated passkey user received only handoff_unavailable while the owner could read the prepared handoff.",
+            ),
+          ],
+        };
+      }
       if (workflowId === "provider-return-success") {
         await installProvider(page, "GitHub");
         return {

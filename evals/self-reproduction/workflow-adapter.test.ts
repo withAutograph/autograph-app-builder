@@ -1,7 +1,16 @@
+import { readFile } from "node:fs/promises";
 import type { Page } from "playwright";
+import type * as Harness from "../../e2e/support/harness";
+import { createWorkflowAdapters } from "./workflow-adapter";
 import { describe, expect, it, vi } from "vitest";
 
-import { createWorkflowAdapters } from "./workflow-adapter";
+vi.mock("node:fs/promises", () => ({ readFile: vi.fn().mockResolvedValue("a".repeat(32)) }));
+vi.mock("flags", () => ({ encryptOverrides: vi.fn().mockResolvedValue("synthetic-override") }));
+
+vi.mock("../../e2e/support/harness", async (importOriginal) => ({
+  ...(await importOriginal<typeof Harness>()),
+  resetApplicationState: vi.fn().mockResolvedValue(undefined),
+}));
 
 describe("self-reproduction default workflow adapter", () => {
   it("is self-contained and omits sides whose runtime URL is unavailable", () => {
@@ -61,14 +70,25 @@ describe("candidate workflow evidence boundaries", () => {
     },
   );
 
-  it("does not credit reference auth restoration or cross-user isolation without fixtures", async () => {
+  it("prepares the real reference authentication fixture without pre-crediting assertions", async () => {
     const { reference } = createWorkflowAdapters({
       outputRoot: "/tmp/evidence",
       referenceUrl: "https://localhost:3001",
     });
     expect(await reference?.prepare({} as Page, "authentication")).toMatchObject({
-      ready: false,
-      disposition: "not-run",
+      ready: true,
     });
+  });
+});
+
+it("blocks authentication when the evaluator passkey fixture cannot be configured", async () => {
+  vi.mocked(readFile).mockRejectedValueOnce(new Error("fixture unavailable"));
+  const { reference } = createWorkflowAdapters({
+    outputRoot: "/tmp/evidence",
+    referenceUrl: "https://localhost:3001",
+  });
+  expect(await reference?.prepare({} as Page, "authentication")).toMatchObject({
+    ready: false,
+    disposition: "infrastructure-unavailable",
   });
 });
