@@ -10,7 +10,7 @@ afterEach(async () => {
     roots.splice(0).map((directory) => rm(directory, { force: true, recursive: true })),
   );
 });
-const fixture = async (responses: Response[]) => {
+const fixture = async (responses: (Response | Error)[]) => {
   const outputDirectory = await mkdtemp(path.join(tmpdir(), "hosted-client-test-"));
   roots.push(outputDirectory);
   let token = 0;
@@ -21,7 +21,7 @@ const fixture = async (responses: Response[]) => {
     }
     const response = responses.shift();
     if (!response) return Promise.reject(new Error("network error bearer-secret"));
-    return Promise.resolve(response);
+    return response instanceof Error ? Promise.reject(response) : Promise.resolve(response);
   });
   return {
     input: {
@@ -123,4 +123,82 @@ it("redacts transport failures from retained diagnostics", async () => {
   expect(
     await readFile(path.join(f.outputDirectory, "client-receipt.json"), "utf-8"),
   ).not.toContain("bearer-secret");
+});
+
+it("recovers transient status transport and 503 failures without restarting the eval", async () => {
+  const f = await fixture([
+    Response.json({ artifacts: [], status: "running" }),
+    new Error("network bearer-private"),
+    new Response("provider private", { status: 503 }),
+    Response.json({
+      artifacts: [{ contentType: "application/json", id: "report.json" }],
+      status: "completed",
+    }),
+    new Response("retained"),
+  ]);
+  expect(await runHostedSelfReproductionClient(f.input)).toBe(0);
+  const receipt = JSON.parse(
+    await readFile(path.join(f.outputDirectory, "client-receipt.json"), "utf-8"),
+  );
+  expect(receipt.diagnostics).toHaveLength(2);
+  expect(receipt.failures).toEqual([]);
+  expect(JSON.stringify(receipt)).not.toContain("bearer-private");
+  expect(JSON.stringify(receipt)).not.toContain("provider private");
+  const actions = f.request.mock.calls
+    .filter((call) => String(call[0]).startsWith("https://controller.test"))
+    .map((call) => JSON.parse(String(call[1]?.body)).action);
+  expect(actions).toEqual(["start", "status", "status", "status", "artifact"]);
+});
+
+it.each([400, 401, 403])(
+  "does not retry permanent status HTTP %i and retains partial artifacts",
+  async (status) => {
+    const f = await fixture([
+      Response.json({
+        artifacts: [{ contentType: "application/json", id: "report.json" }],
+        status: "running",
+      }),
+      new Response("private auth detail", { status }),
+      new Response("partial"),
+    ]);
+    expect(await runHostedSelfReproductionClient(f.input)).toBe(1);
+    expect(await readFile(path.join(f.outputDirectory, "artifacts/report.json"), "utf-8")).toBe(
+      "partial",
+    );
+    const receipt = JSON.parse(
+      await readFile(path.join(f.outputDirectory, "client-receipt.json"), "utf-8"),
+    );
+    expect(receipt.diagnostics).toEqual([]);
+    expect(receipt.failures).toEqual([`Controller status failed (HTTP ${status}).`]);
+    expect(
+      f.request.mock.calls.filter((call) => String(call[1]?.body).includes('"action":"status"')),
+    ).toHaveLength(1);
+  },
+);
+
+it("bounds repeated transient status failures by the existing deadline", async () => {
+  const f = await fixture([
+    Response.json({ artifacts: [], status: "running" }),
+    new Response("transient", { status: 503 }),
+  ]);
+  let now = 0;
+  expect(
+    await runHostedSelfReproductionClient({
+      ...f.input,
+      now: () => now,
+      pause: () => {
+        now += 1;
+        return Promise.resolve();
+      },
+      timeoutMs: 2,
+    }),
+  ).toBe(1);
+  const receipt = JSON.parse(
+    await readFile(path.join(f.outputDirectory, "client-receipt.json"), "utf-8"),
+  );
+  expect(receipt.diagnostics).toHaveLength(1);
+  expect(receipt.failures[0]).toContain("polling timed out");
+  expect(
+    f.request.mock.calls.filter((call) => String(call[1]?.body).includes('"action":"start"')),
+  ).toHaveLength(1);
 });

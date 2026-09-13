@@ -20,6 +20,17 @@ interface ClientInput {
   timeoutMs?: number;
 }
 
+class ClientRequestError extends Error {
+  readonly retryable: boolean;
+  constructor(message: string, retryable: boolean) {
+    super(message);
+    this.name = "ClientRequestError";
+    this.retryable = retryable;
+  }
+}
+
+const transientStatus = (status: number) => status === 408 || status === 429 || status >= 500;
+
 /** GitHub-hosted client; all execution and Vercel credentials stay in the controller. */
 export const runHostedSelfReproductionClient = async (input: ClientInput) => {
   const request = input.fetch ?? fetch;
@@ -28,28 +39,44 @@ export const runHostedSelfReproductionClient = async (input: ClientInput) => {
   await mkdir(input.outputDirectory, { recursive: true });
   const downloaded = new Set<string>();
   const failures: string[] = [];
-  const deadline = now() + (input.timeoutMs ?? 50 * 60_000);
+  const diagnostics: string[] = [];
+  const deadline = now() + (input.timeoutMs ?? 55 * 60_000);
   const save = (name: string, value: unknown) =>
     writeFile(path.join(input.outputDirectory, name), JSON.stringify(value, null, 2));
   let status: Status | undefined;
+  const requestSafely: typeof fetch = async (url, options) => {
+    try {
+      return await request(url, options);
+    } catch {
+      throw new ClientRequestError("Hosted eval transport failed.", true);
+    }
+  };
   const call = async (action: "start" | "status" | "artifact", artifactId?: string) => {
     const tokenUrl = new URL(input.tokenRequestUrl);
     tokenUrl.searchParams.set("audience", input.audience);
-    const tokenResponse = await request(tokenUrl, {
+    const tokenResponse = await requestSafely(tokenUrl, {
       headers: { authorization: `Bearer ${input.tokenRequestToken}` },
       signal: AbortSignal.timeout(60_000),
     });
-    if (!tokenResponse.ok) throw new Error("GitHub OIDC request failed.");
+    if (!tokenResponse.ok)
+      throw new ClientRequestError(
+        `GitHub OIDC request failed (HTTP ${tokenResponse.status}).`,
+        transientStatus(tokenResponse.status),
+      );
     const token = (await tokenResponse.json()) as { value?: unknown };
     if (typeof token.value !== "string" || !token.value)
       throw new Error("GitHub OIDC response invalid.");
-    const response = await request(input.endpoint, {
+    const response = await requestSafely(input.endpoint, {
       body: JSON.stringify({ action, ...(artifactId ? { artifactId } : {}) }),
       headers: { authorization: `Bearer ${token.value}`, "content-type": "application/json" },
       method: "POST",
       signal: AbortSignal.timeout(60_000),
     });
-    if (!response.ok) throw new Error(`Controller ${action} failed (HTTP ${response.status}).`);
+    if (!response.ok)
+      throw new ClientRequestError(
+        `Controller ${action} failed (HTTP ${response.status}).`,
+        transientStatus(response.status),
+      );
     return response;
   };
   const capture = async () => {
@@ -102,7 +129,19 @@ export const runHostedSelfReproductionClient = async (input: ClientInput) => {
           "Hosted eval polling timed out; controller cleanup deadline remains active.",
         );
       await pause();
-      status = await readStatus(await call("status"));
+      if (now() >= deadline) continue;
+      try {
+        status = await readStatus(await call("status"));
+      } catch (error) {
+        if (!(error instanceof ClientRequestError) || !error.retryable) throw error;
+        diagnostics.push(`Retrying status after transient failure: ${error.message}`);
+        await save("client-receipt.json", {
+          diagnostics,
+          downloaded: [...downloaded],
+          failures,
+          status: status.status,
+        });
+      }
     }
   } catch (error) {
     // Never retain arbitrary provider/network errors, which may include credentials.
@@ -114,6 +153,7 @@ export const runHostedSelfReproductionClient = async (input: ClientInput) => {
   } finally {
     await capture();
     await save("client-receipt.json", {
+      diagnostics,
       downloaded: [...downloaded],
       failures,
       status: status?.status ?? "unavailable",
