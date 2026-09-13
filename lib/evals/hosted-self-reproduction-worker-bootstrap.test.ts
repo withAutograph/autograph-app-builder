@@ -1,8 +1,26 @@
-/* oxlint-disable unicorn/prefer-event-target -- child_process streams implement Node EventEmitter */
-import { runHostedEvalWorker } from "./hosted-self-reproduction-worker-bootstrap";
 /* oxlint-disable eslint/require-await -- mocked filesystem ports are asynchronous */
+/* oxlint-disable unicorn/import-style -- the standalone worker consumes the complete path module namespace */
 import { EventEmitter } from "node:events";
 import { afterEach, expect, it, vi } from "vitest";
+/* oxlint-disable unicorn/prefer-event-target -- child_process streams implement Node EventEmitter */
+import { hostedEvalWorkerSource } from "./hosted-self-reproduction-worker-source";
+import { Script } from "node:vm";
+
+const runHostedEvalWorker = () => {
+  const execute = new Script(
+    `(async (load, process, Buffer) => { ${hostedEvalWorkerSource.replaceAll("import(", "load(")} })`,
+  ).runInNewContext();
+  return execute(
+    async (specifier: string) => {
+      if (specifier === "node:child_process") return import("node:child_process");
+      if (specifier === "node:fs/promises") return import("node:fs/promises");
+      if (specifier === "node:path") return import("node:path");
+      throw new Error("Unexpected worker dependency");
+    },
+    process,
+    Buffer,
+  );
+};
 
 const state = vi.hoisted(() => ({
   commands: [] as { cmd: string; args: string[]; env: Record<string, string> }[],
