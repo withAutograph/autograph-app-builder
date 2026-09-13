@@ -187,3 +187,25 @@ with an aggregate passing count is diagnostic evidence and cannot substitute
 for the exact JSON test results. Collection is opt-in through the eval's
 coordinator; do not repeat a production build solely to refresh an unchanged
 report.
+
+### Supplementary offline assessment
+
+Combine a retained run with an evaluator-owned source review without running
+generation or either application again:
+
+```sh
+mise run eval:self-reproduction-report -- \
+  --run-dir /absolute/path/to/retained-run \
+  --source-review-dir /absolute/path/to/evaluator-source-review \
+  --reference-captures-dir /absolute/path/to/evaluator-reference-captures \
+  --output-dir /absolute/external/new-supplementary-report
+```
+
+The optional reference captures must include `capture-provenance.json` naming
+the retained screenshots. Original run metadata and evaluator review provenance
+are copied alongside referenced artifacts. No runtime trees or environment files
+are copied. Conflicting failed assertions remain failed; source-only findings
+cannot provide browser credit. Missing referenced evidence remains unassessed.
+The JSON, Markdown, and HTML outputs explicitly identify themselves as a
+supplementary assessment. Initial screenshot pairs are diagnostic; their state
+and authentication differences remain visible in the capture qualification.
