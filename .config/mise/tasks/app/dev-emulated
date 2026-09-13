@@ -19,11 +19,11 @@ if ! lsof -nP -iTCP:"$emulate_base_port" -sTCP:LISTEN >/dev/null 2>&1; then
     --seed .emulate/config.yaml &
   emulate_pid=$!
 fi
-docker=$(mise which docker)
 worktree_id=$(basename "$(dirname "$(pwd -P)")")
 database_container=${APP_BUILDER_DATABASE_CONTAINER:-autograph-app-builder-web-product-e2e-postgres-$worktree_id}
 external_database=${APP_BUILDER_EXTERNAL_DATABASE:-0}
 if [ "$external_database" != 1 ]; then
+  docker=$(mise which docker)
   if ! "$docker" inspect "$database_container" >/dev/null 2>&1; then
     "$docker" run --detach --name "$database_container" \
       --env POSTGRES_HOST_AUTH_METHOD=trust \

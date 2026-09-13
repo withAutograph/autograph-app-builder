@@ -5,7 +5,6 @@ set -eu
 
 state_dir=.emulate
 pid_file="$state_dir/dev-emulated.pids"
-docker=$(mise which docker)
 if [ -f "$pid_file" ]; then
   for key in app_pid emulate_pid; do
     pid=$(sed -n "s/^${key}=\([0-9][0-9]*\)$/\1/p" "$pid_file")
@@ -18,6 +17,7 @@ fi
 worktree_id=$(basename "$(dirname "$(pwd -P)")")
 database_container=${APP_BUILDER_DATABASE_CONTAINER:-autograph-app-builder-web-product-e2e-postgres-$worktree_id}
 if [ "${APP_BUILDER_EXTERNAL_DATABASE:-0}" != 1 ]; then
+  docker=$(mise which docker)
   "$docker" rm -f "$database_container" >/dev/null 2>&1 || true
 fi
 if [ -d "$state_dir" ]; then
