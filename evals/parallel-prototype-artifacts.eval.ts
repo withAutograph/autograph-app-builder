@@ -14,10 +14,10 @@ export default defineEval({
     await t.send("Record three prototype artifacts in parallel.");
     t.succeeded();
     t.notEvent("input.requested");
-    t.calledTool("record-prototype-artifact", { count: 3 });
+    t.calledTool("record_prototype_artifact", { count: 3 });
     t.check(t.reply, includes("All three prototype artifacts were recorded"));
     t.notCalledTool("bash");
-    t.notCalledTool("write-file");
+    t.notCalledTool("write_file");
 
     await t.send("Report artifact workflow status.");
     t.succeeded();
