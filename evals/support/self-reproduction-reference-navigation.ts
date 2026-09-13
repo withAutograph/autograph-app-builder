@@ -101,6 +101,7 @@ export async function runReferenceNavigationEvidence(input: {
       ["run", "test:production-navigation", "--", "--json-report", reportPath],
       {
         cwd: input.repositoryRoot,
+        env: { ...process.env, MISE_BIN_PATH: input.miseExecutable },
         maxBuffer: 16 * 1024 * 1024,
       },
     );
