@@ -167,3 +167,28 @@ describe("native self-reproduction report orchestration", () => {
     ]);
   });
 });
+
+it("rejects default generation before creating output or launching setup", () => {
+  const parent = mkdtempSync(nodePath.join(tmpdir(), "self-reproduction-entry-guard-"));
+  outputs.push(parent);
+  const output = nodePath.join(parent, "must-not-exist");
+  const result = spawnSync(
+    process.execPath,
+    ["--import", "tsx", "scripts/eval-self-reproduction.mts", "--output-dir", output],
+    {
+      cwd: nodePath.resolve(import.meta.dirname, ".."),
+      encoding: "utf-8",
+      env: {
+        HOME: process.env.HOME,
+        NODE_ENV: "production",
+        PATH: process.env.PATH,
+        TMPDIR: process.env.TMPDIR,
+      },
+      timeout: 30_000,
+    },
+  );
+  expect(result.error).toBeUndefined();
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain("requires the public App Builder entrypoint");
+  expect(existsSync(output)).toBe(false);
+});

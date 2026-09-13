@@ -1,21 +1,39 @@
 #!/bin/sh
-#MISE description="Run native live self-reproduction and preserve external comparison evidence"
+#MISE description="Observe and compare output from the public App Builder workflow"
 set -eu
 
-# Eve deliberately retains interrupted prewarm locks for crash recovery. For
-# this opt-in single-run eval, clear only locks whose recorded owner is dead so
-# a canceled baseline can be restarted immediately.
-for owner_file in .eve/sandbox-cache/template-locks/vercel-authorized/*/owner.json; do
-  [ -f "$owner_file" ] || continue
-  owner_pid=$(sed -n 's/.*"pid":\([0-9][0-9]*\).*/\1/p' "$owner_file")
-  if [ -n "$owner_pid" ] && ! kill -0 "$owner_pid" 2>/dev/null; then
-    rm -rf "$(dirname "$owner_file")"
-  fi
-done
+report_only=0
+candidate_runtime=0
+for argument in "$@"; do
+  case "$argument" in
+    -h|--help)
+      cat <<'EOF'
+Submit evals/self-reproduction/brief.md through the supported App Builder web UI
+or autograph_start, then answer only its ordinary product questions and approvals.
+App Builder owns cloning, installation, planning, implementation, recovery and validation.
 
-# Refresh the linked project's short-lived Development OIDC before the trusted
-# Node launcher strips ambient tool paths. The evaluator loads only that token.
-mise run local:ensure-oidc
+Compare the unchanged output afterward:
+  mise run eval:self-reproduction -- --report-only --candidate-root PATH [comparison options]
+
+Guided native generation is retired. Infrastructure probes and staged internal
+workflows are not out-of-box self-reproduction proof.
+See docs/evals/self-reproduction.md for the acceptance and evidence contract.
+EOF
+      exit 0
+      ;;
+    --report-only) report_only=1 ;;
+    --candidate-runtime) candidate_runtime=1 ;;
+  esac
+done
+if [ "$report_only" != 1 ]; then
+  echo "Start self-reproduction through the supported App Builder web UI or autograph_start with the product brief. This task only observes and compares output (--report-only); guided internal generation is retired." >&2
+  exit 64
+fi
+
+# Only an explicitly requested comparison Sandbox needs project OIDC.
+if [ "$candidate_runtime" = 1 ]; then
+  mise run local:ensure-oidc
+fi
 
 exec .config/mise/scripts/trusted-node-launcher \
   "$(mise which node)" --import tsx scripts/eval-self-reproduction.mts \

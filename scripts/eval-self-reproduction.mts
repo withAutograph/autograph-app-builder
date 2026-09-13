@@ -858,19 +858,24 @@ const main = async () => {
   [--workflow-adapter-module EVALUATOR_MODULE]
   [--report-only --candidate-root PATH]
 
-Explicitly runs the native live Eve benchmark with strict assertions and writes
-sanitized evidence outside the source tree. No publication or deployment.
+Observes existing candidate output and writes sanitized comparison evidence.
+Generation requires the public App Builder entrypoint; guided generation is retired.
 --report-only audits an existing candidate without running generation.
---reference-runtime starts an isolated emulated reference; live native runs do this by default.
+--reference-runtime starts an isolated emulated reference for observation.
 --candidate-runtime starts the exported candidate in an evaluator-owned Vercel Sandbox
 and retains build, readiness, and public documentation probe receipts.
 --debug-prerender retains an additional diagnostic build after production build failure;
 it never substitutes for production acceptance.
 --capture-adapter loads an evaluator-owned module under evals/ and executes the
 complete paired desktop state matrix against both supplied URLs.
---generator FILE and repeatable --generator-arg VALUE select a test launcher.
+--generator FILE is restricted to NODE_ENV=test report-harness fixtures.
 The checked-in brief and fixed answers are always preserved unchanged.`);
     return;
+  }
+  if (!values["report-only"] && !(values.generator && process.env.NODE_ENV === "test")) {
+    throw new Error(
+      "Self-reproduction generation requires the public App Builder entrypoint. Guided internal-stage generation is retired. Run an ordinary Builder session with the product brief, then use --report-only --candidate-root PATH to assess its output.",
+    );
   }
   await mkdir(output, { mode: 0o700, recursive: true });
   const actualOutput = await realpath(output);
