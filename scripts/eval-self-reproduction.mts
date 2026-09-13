@@ -24,8 +24,18 @@ import {
   evidenceSink,
   sanitizeEvidence,
 } from "../evals/support/self-reproduction-evidence";
-import { assessParity, parityVersion } from "../evals/support/self-reproduction-parity";
-import type { Assessment, ParityEvidence } from "../evals/support/self-reproduction-parity";
+import {
+  assessParity,
+  parityVersion,
+  workflowMatrix,
+} from "../evals/support/self-reproduction-parity";
+import type {
+  Assessment,
+  Observation,
+  ParityEvidence,
+} from "../evals/support/self-reproduction-parity";
+import { evaluateCandidateRuntime } from "../evals/support/self-reproduction-runtime";
+import type { CandidateRuntimeReceipt } from "../evals/support/self-reproduction-runtime";
 
 const root = resolve(import.meta.dirname, "..");
 const { values } = parseArgs({
@@ -33,6 +43,7 @@ const { values } = parseArgs({
     "candidate-root": { type: "string" },
     "arrusted-root": { type: "string" },
     "candidate-url": { type: "string" },
+    "candidate-runtime": { type: "boolean" },
     "reference-url": { type: "string" },
     "output-dir": { type: "string" },
     "generation-timeout-ms": { type: "string" },
@@ -64,6 +75,10 @@ let candidateFiles: Awaited<ReturnType<typeof readSource>> | undefined;
 let referenceFiles: Awaited<ReturnType<typeof readSource>> | undefined;
 let workflowEvidence: WorkflowEvidence | undefined;
 let parityAssessment: Assessment | undefined;
+let candidateRuntime: CandidateRuntimeReceipt | { status: "not-run" | "failed"; reason: string } = {
+  status: "not-run",
+  reason: "Candidate runtime evaluation was not requested.",
+};
 let candidate: Record<string, unknown> = {
   status: "unavailable",
   reason: "No candidate export has been supplied.",
@@ -320,6 +335,56 @@ const blockedFramework = (side: "reference" | "candidate") =>
     evidence: [`${side} source was unavailable.`],
   }));
 
+function runtimeObservations(): Observation[] {
+  if (candidateRuntime.status === "not-run") return [];
+  const artifact = "candidate-runtime.json";
+  const notRun = workflowMatrix
+    .filter((row) => row.id !== "anonymous-entry" && row.id !== "documentation")
+    .map((row): Observation => ({
+      requirementId: row.id,
+      disposition: "not-run",
+      reason:
+        candidateRuntime.status === "available"
+          ? "Candidate runtime started, but no trusted workflow adapter exists for this behavior."
+          : `Candidate runtime prerequisite failed: ${candidateRuntime.reason}`,
+      assertions: [],
+      artifacts: [artifact],
+      method: "none",
+    }));
+  if (!("probes" in candidateRuntime)) return notRun;
+  const docs = candidateRuntime.probes.find((probe) => probe.id === "documentation");
+  if (!docs)
+    return [
+      ...notRun,
+      {
+        requirementId: "documentation",
+        disposition: "not-run",
+        reason: `Candidate runtime prerequisite failed: ${candidateRuntime.reason}`,
+        assertions: [],
+        artifacts: [artifact],
+        method: "none",
+      },
+    ];
+  return [
+    ...notRun,
+    {
+      requirementId: "documentation",
+      disposition: docs.passed ? "observed" : "missing-functionality",
+      reason: docs.detail,
+      assertions: [
+        {
+          id: "docs-readable",
+          passed: docs.passed,
+          detail: `Evaluator HTTP probe returned ${docs.status ?? "no response"}.`,
+          artifacts: [artifact],
+        },
+      ],
+      artifacts: [artifact],
+      method: "browser",
+    },
+  ];
+}
+
 async function saveReport() {
   const diagnosticRequirements = [
     ...buildRequirements(candidateFiles, workflowEvidence),
@@ -355,7 +420,7 @@ async function saveReport() {
       sourceRevision: String(
         (candidate.revision as { commit?: unknown } | undefined)?.commit ?? "generated-export",
       ),
-      observations: [],
+      observations: runtimeObservations(),
     },
   };
   await jsonFile("parity-evidence.json", parityEvidence);
@@ -385,6 +450,7 @@ async function saveReport() {
       .filter((record) => record.kind === "turn-completed")
       .flatMap((record) => (Array.isArray(record.toolCalls) ? record.toolCalls : [])),
     candidate,
+    candidateRuntime,
     errors,
   };
   const report = {
@@ -453,11 +519,14 @@ async function main() {
   if (values.help) {
     console.log(`Usage: mise run eval:self-reproduction -- [--arrusted-root PATH] [--output-dir EXTERNAL_PATH]
   [--reference-url URL] [--candidate-url URL] [--generation-timeout-ms N]
+  [--candidate-runtime]
   [--report-only --candidate-root PATH]
 
 Explicitly runs the native live Eve benchmark with strict assertions and writes
 sanitized evidence outside the source tree. No publication or deployment.
 --report-only audits an existing candidate without running generation.
+--candidate-runtime starts the exported candidate in an evaluator-owned Vercel Sandbox
+and retains build, readiness, and public documentation probe receipts.
 --generator FILE and repeatable --generator-arg VALUE select a test launcher.
 The checked-in brief and fixed answers are always preserved unchanged.`);
     return;
@@ -473,6 +542,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     status: "unavailable",
     reason: "Native eval has not completed.",
   });
+  await jsonFile("candidate-runtime.json", candidateRuntime);
   await jsonFile("settings.json", {
     status: "unavailable",
     reason: "Settings have not been read.",
@@ -590,6 +660,25 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         };
     }
     await saveReport();
+    if (values["candidate-runtime"]) {
+      const arrustedFiles = arrustedRoot ? await readSource(arrustedRoot) : undefined;
+      candidateRuntime =
+        candidateFiles && arrustedFiles
+          ? await evaluateCandidateRuntime({
+              files: candidateFiles.map((file) => ({ path: file.path, content: file.content })),
+              baseFiles: arrustedFiles.map((file) => ({ path: file.path, content: file.content })),
+              candidateAppId: "self-reproduction-candidate",
+              appRoot: "/workspace",
+            })
+          : {
+              status: "failed",
+              reason:
+                candidateFiles === undefined
+                  ? "Candidate output was unavailable, so its runtime could not start."
+                  : "The Arrusted workspace source was unavailable, so workspace dependencies could not be resolved.",
+            };
+      await jsonFile("candidate-runtime.json", candidateRuntime);
+    }
     captures.push(
       ...(await Promise.all([
         capture("reference", values["reference-url"], root),

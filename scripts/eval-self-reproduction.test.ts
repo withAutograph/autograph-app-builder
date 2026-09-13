@@ -52,6 +52,7 @@ function run(script: string) {
     "revisions.json",
     "native-result.json",
     "candidate-inventory.json",
+    "candidate-runtime.json",
     "generation-transcript.jsonl",
     "parity-evidence.json",
     "parity-assessment.json",
