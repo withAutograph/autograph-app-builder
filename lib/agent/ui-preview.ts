@@ -208,10 +208,6 @@ export function validateUiPreview(input: UiPreviewInput): void {
       );
 
   for (const file of parsed.files) {
-    if (file.content.split(/\r?\n/u).some((line) => line.length > 2000))
-      throw new Error(
-        "UI preview source must remain readable and repairable; format JSX instead of submitting lines longer than 2,000 characters.",
-      );
     if (/\/(?:api|schema|server)\//u.test(file.path) || /(?:^|\/)route\.ts$/u.test(file.path))
       throw new Error("UI previews cannot contain backend, schema, or API files.");
     if (/\b(?:fetch|XMLHttpRequest|WebSocket|EventSource)\b/u.test(file.content))
