@@ -178,7 +178,12 @@ it("rejects default generation before creating output or launching setup", () =>
     {
       cwd: nodePath.resolve(import.meta.dirname, ".."),
       encoding: "utf-8",
-      env: { HOME: process.env.HOME, PATH: process.env.PATH, TMPDIR: process.env.TMPDIR },
+      env: {
+        HOME: process.env.HOME,
+        NODE_ENV: "production",
+        PATH: process.env.PATH,
+        TMPDIR: process.env.TMPDIR,
+      },
       timeout: 30_000,
     },
   );
