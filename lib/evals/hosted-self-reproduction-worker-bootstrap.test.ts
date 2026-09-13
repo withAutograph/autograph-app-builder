@@ -37,6 +37,14 @@ vi.mock("node:fs/promises", () => ({
 vi.mock("node:child_process", () => ({
   execFileSync: vi.fn(),
   spawn: (cmd: string, args: string[], options: { env: Record<string, string> }) => {
+    if (args.includes("eval:self-reproduction")) {
+      expect(state.files.get("/tmp/self-reproduction-worker/worker.log")).toContain(
+        "evaluation: starting",
+      );
+      expect(state.files.get("/tmp/self-reproduction-worker/worker.log")).not.toMatch(
+        /secret-template|secret-oidc/u,
+      );
+    }
     state.commands.push({ args, cmd, env: { ...options.env } });
     const child = Object.assign(new EventEmitter(), {
       stderr: new EventEmitter(),
@@ -100,6 +108,7 @@ it("executes fixed hosted task with process PostgreSQL and keeps clone credentia
 });
 it("retains allowlisted partial reports and a failed receipt when evaluation exits nonzero", async () => {
   vi.stubEnv("APP_BUILDER_TEMPLATE_READ_TOKEN", "secret-template");
+  vi.stubEnv("VERCEL_OIDC_TOKEN", "secret-oidc");
   state.fail = "eval:self-reproduction";
   await runHostedEvalWorker();
   const result = JSON.parse(state.files.get("/tmp/self-reproduction-worker/result.json") ?? "{}");

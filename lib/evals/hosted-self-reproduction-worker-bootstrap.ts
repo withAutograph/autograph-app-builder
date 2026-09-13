@@ -1,3 +1,4 @@
+/* oxlint-disable promise/prefer-await-to-then -- serialize file writes from synchronous child process event callbacks */
 /* oxlint-disable eslint/no-await-in-loop -- preserve deterministic archive collection and partial error handling */
 import {
   DEVELOPMENT_SANDBOX_ENVIRONMENT,
@@ -33,26 +34,50 @@ export const runHostedEvalWorker = async () => {
       "[REDACTED JWT]",
     );
   };
-  const run = (cmd: string, args: string[], env = process.env) =>
+  let pendingLogWrite = Promise.resolve();
+  const persistLog = () => {
+    const snapshot = sanitize(log);
+    pendingLogWrite = pendingLogWrite.then(async () => {
+      await writeFile(path.join(control, "worker.log.tmp"), snapshot, { mode: 0o600 });
+      await rename(path.join(control, "worker.log.tmp"), path.join(control, "worker.log"));
+    });
+    return pendingLogWrite;
+  };
+  const run = async (cmd: string, args: string[], env = process.env) => {
+    log += `${phase}: starting\n`;
+    await persistLog();
     // oxlint-disable-next-line promise/avoid-new -- bridge child process events into a single completion
-    new Promise<string>((resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
       const child = spawn(cmd, args, { cwd: repository, env, stdio: ["ignore", "pipe", "pipe"] });
       let diagnostic = "";
       let stdout = "";
+      let progressRecorded = false;
+      const progress = () => {
+        if (progressRecorded) return;
+        progressRecorded = true;
+        // Only a fixed progress marker is persisted mid-stream: secrets may span chunks.
+        log += `${phase}: output received\n`;
+        void persistLog().catch(reject);
+      };
       child.stdout.on("data", (chunk) => {
         diagnostic += chunk.toString();
+        progress();
         stdout += chunk.toString();
       });
       child.stderr.on("data", (chunk) => {
         diagnostic += chunk.toString();
+        progress();
       });
       child.on("error", () => reject(new Error(`${phase}: command could not start`)));
       child.on("close", (code) => {
         log += `${phase}: exit=${code}\n${sanitize(diagnostic).slice(-16_000)}\n`;
-        if (code === 0) resolve(stdout);
-        else reject(new Error(`${phase}: command exit ${code}`));
+        void persistLog().then(() => {
+          if (code === 0) resolve(stdout);
+          else reject(new Error(`${phase}: command exit ${code}`));
+        }, reject);
       });
     });
+  };
   try {
     const os = await readFile("/etc/os-release", "utf-8");
     if (/^ID=(?:"?)(?:ubuntu|debian)(?:"?)$/mu.test(os)) {
@@ -174,6 +199,7 @@ export const runHostedEvalWorker = async () => {
   } catch (error) {
     log += `${sanitize(error instanceof Error ? error.message : String(error))}\n`;
   }
+  await pendingLogWrite;
   const artifacts = [{ contentType: "text/plain", id: "worker.log" }];
   await writeFile(path.join(control, "worker.log"), sanitize(log), { mode: 0o600 });
   const permittedDirectories = new Set([

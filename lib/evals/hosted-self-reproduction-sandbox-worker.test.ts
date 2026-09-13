@@ -47,6 +47,7 @@ it("creates the fixed public source and detached trusted bootstrap without passi
         type: "git",
         url: "https://github.com/withAutograph/autograph-app-builder.git",
       },
+      timeout: 309_000,
     }),
   );
   expect(f.sandbox.runCommand).toHaveBeenCalledWith(
@@ -126,3 +127,19 @@ it("stops an acquired sandbox if detached bootstrap launch fails", async () => {
   ).rejects.toThrow("launch failed");
   expect(f.sandbox.stop).toHaveBeenCalledOnce();
 });
+
+it.each([null, 1])(
+  "retains incremental diagnostics without a result receipt (exit %s)",
+  async (exitCode) => {
+    const f = fixture();
+    const id = JSON.stringify({ commandId: "command-1", sandboxName: "sandbox-1" });
+    f.sandbox.getCommand.mockResolvedValueOnce({ exitCode });
+    f.sandbox.readFileToBuffer
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(Buffer.from("evaluation: starting\n"));
+    expect(await f.worker.inspect(id)).toEqual({
+      artifacts: [{ contentType: "text/plain", id: "worker.log" }],
+      status: exitCode === null ? "running" : "failed",
+    });
+  },
+);

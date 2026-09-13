@@ -4,6 +4,8 @@ import { acquireHostedEvalOidc } from "../eve/hosted-eval-oidc";
 import type { HostedEvalWorker, EvalArtifact } from "./hosted-self-reproduction-controller";
 import { hostedEvalBootstrapFiles } from "./hosted-self-reproduction-worker-bootstrap";
 
+// Keep the VM available after the evaluation deadline for artifact collection and cleanup.
+export const hostedEvalCollectionGraceMs = 5 * 60 * 1000;
 export const hostedEvalIdentityPath = "/tmp/self-reproduction-identity.json";
 const artifacts: Record<string, string> = {
   "evidence.tar.gz": "application/gzip",
@@ -77,7 +79,13 @@ export const createHostedEvalSandboxWorker = (input: {
       });
       if (buffer === null) {
         const command = await sandbox.getCommand(identity.commandId);
-        return { artifacts: [], status: command.exitCode === null ? "running" : "failed" };
+        const log = await sandbox.readFileToBuffer({
+          path: "/tmp/self-reproduction-worker/worker.log",
+        });
+        return {
+          artifacts: log?.length ? [{ contentType: "text/plain", id: "worker.log" }] : [],
+          status: command.exitCode === null ? "running" : "failed",
+        };
       }
       const result = JSON.parse(buffer.toString("utf-8"));
       if (!["completed", "failed"].includes(result.status) || !Array.isArray(result.artifacts))
@@ -114,7 +122,7 @@ export const createHostedEvalSandboxWorker = (input: {
           url: "https://github.com/withAutograph/autograph-app-builder.git",
         },
         teamId: auth.teamId,
-        timeout: Math.max(1, cleanupAt - (input.now ?? Date.now)()),
+        timeout: Math.max(1, cleanupAt + hostedEvalCollectionGraceMs - (input.now ?? Date.now)()),
         token: auth.token,
       });
       try {
