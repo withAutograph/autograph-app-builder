@@ -96,7 +96,7 @@ describe("self-reproduction candidate runtime", () => {
     expect(receipt).toMatchObject({ producer: "evaluator", status: "available" });
     expect(receipt.probes).toHaveLength(2);
     expect(fixture.writeBinaryFile).toHaveBeenCalledOnce();
-    expect(fixture.writeTextFile).toHaveBeenCalledOnce();
+    expect(fixture.writeTextFile).toHaveBeenCalledTimes(4);
     expect(fixture.spawn).toHaveBeenCalledOnce();
     expect(fixture.shutdown).toHaveBeenCalledOnce();
   });

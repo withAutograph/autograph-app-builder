@@ -163,14 +163,29 @@ export async function evaluateCandidateRuntime(input: {
         commands,
         probes: [],
       };
-    await Promise.all(
-      input.files.map((file) =>
+    await Promise.all([
+      ...input.files.map((file) =>
         handle!.session.writeTextFile({
           path: `apps/${input.candidateAppId}/${file.path}`,
           content: String(file.content),
         }),
       ),
-    );
+      handle.session.writeTextFile({
+        path: ".self-reproduction-register.mjs",
+        content: registerMicrofrontendScript(
+          input.candidateAppId,
+          candidatePackageName(input.files, input.candidateAppId),
+        ),
+      }),
+      handle.session.writeTextFile({
+        path: ".self-reproduction-readiness.mjs",
+        content: readinessScript(input.publicBasePath),
+      }),
+      handle.session.writeTextFile({
+        path: ".self-reproduction-browser.mjs",
+        content: browserProbeScript(input.publicBasePath),
+      }),
+    ]);
     const runtime = await command(handle, developmentPinnedToolchainCommand(), controller.signal);
     commands.push(runtime);
     if (runtime.exitCode !== 0)
@@ -214,7 +229,7 @@ export async function evaluateCandidateRuntime(input: {
       };
     const registration = await command(
       handle,
-      `${runtimeEnvironment} node --input-type=module --eval ${JSON.stringify(registerMicrofrontendScript(input.candidateAppId, candidatePackageName(input.files, input.candidateAppId)))}`,
+      `${runtimeEnvironment} node .self-reproduction-register.mjs`,
       controller.signal,
     );
     commands.push(registration);
@@ -248,7 +263,7 @@ export async function evaluateCandidateRuntime(input: {
     });
     const probe = await command(
       handle,
-      `${runtimeEnvironment} node --input-type=module --eval ${JSON.stringify(readinessScript(input.publicBasePath))}`,
+      `${runtimeEnvironment} node .self-reproduction-readiness.mjs`,
       controller.signal,
     );
     commands.push(probe);
@@ -259,7 +274,7 @@ export async function evaluateCandidateRuntime(input: {
     if (root?.passed === true) {
       const browser = await command(
         handle,
-        `${runtimeEnvironment} node --input-type=module --eval ${JSON.stringify(browserProbeScript(input.publicBasePath))}`,
+        `${runtimeEnvironment} node .self-reproduction-browser.mjs`,
         controller.signal,
       );
       commands.push(browser);
