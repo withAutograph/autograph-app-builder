@@ -100,6 +100,37 @@ describe("self-reproduction evidence persistence", () => {
     });
   });
 
+  it("preserves ordinary token and cookie source identifiers in exported code", () => {
+    const { sink, records } = capture();
+    sink.write(
+      receipt({
+        kind: "event",
+        event: {
+          type: "action.result",
+          data: {
+            result: {
+              toolName: "change_set_status",
+              output: {
+                exportFiles: [
+                  {
+                    path: "apps/replica/app/actions.ts",
+                    content:
+                      'const token = randomUUID(); const sessionCookie = "session"; API_KEY=private-value',
+                  },
+                ],
+              },
+            },
+          },
+        },
+      }),
+    );
+    sink.end();
+    const [file] = candidateExportFromEvidence(records) ?? [];
+    expect(file?.content).toContain("const token = randomUUID()");
+    expect(file?.content).toContain('sessionCookie = "session"');
+    expect(file?.content).not.toContain("private-value");
+  });
+
   it("extracts only a valid reviewed candidate source export", () => {
     expect(
       candidateExportFromEvidence([
