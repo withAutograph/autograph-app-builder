@@ -83,6 +83,12 @@ export default defineEval({
     t.succeeded();
 
     await send("Apply the current creation proposal.");
+    if (t.pendingInputRequests[0]?.action.toolName === "ask_question") {
+      emit({ kind: "response", request: "Build this app?", response: "build" });
+      await t.respondAll("build");
+      t.succeeded();
+      await send("Proceed with the selected build now.");
+    }
     if (
       t.pendingInputRequests.length !== 1 ||
       t.pendingInputRequests[0]?.action.toolName !== "apply_app_creation"
