@@ -16,7 +16,7 @@ describe("default self-reproduction capture adapter", () => {
     expect(adapters.reference).not.toBe(adapters.candidate);
   });
 
-  it("classifies absent semantic candidate behavior as missing functionality", async () => {
+  it("classifies an absent required candidate control as missing functionality", async () => {
     const { candidate } = await createCaptureAdapters({
       referenceURL: "http://127.0.0.1:3000",
       candidateURL: "http://127.0.0.1:3001",
@@ -27,9 +27,30 @@ describe("default self-reproduction capture adapter", () => {
       getByText: vi.fn(() => absentLocator),
       locator: vi.fn(() => absentLocator),
     } as unknown as Page;
-    await expect(candidate.prepare(page, "error")).resolves.toMatchObject({
+    await expect(candidate.prepare(page, "panel-resize")).resolves.toMatchObject({
       ready: false,
       disposition: "missing-functionality",
+    });
+  });
+
+  it("does not mistake an unseeded transient state for missing product functionality", async () => {
+    const { reference, candidate } = await createCaptureAdapters({
+      referenceURL: "http://127.0.0.1:3000",
+      candidateURL: "http://127.0.0.1:3001",
+    });
+    const page = {
+      goto: vi.fn(() => Promise.resolve()),
+      getByRole: vi.fn(() => absentLocator),
+      getByText: vi.fn(() => absentLocator),
+      locator: vi.fn(() => absentLocator),
+    } as unknown as Page;
+    await expect(reference.prepare(page, "loading")).resolves.toMatchObject({
+      ready: false,
+      disposition: "not-run",
+    });
+    await expect(candidate.prepare(page, "error")).resolves.toMatchObject({
+      ready: false,
+      disposition: "not-run",
     });
   });
 

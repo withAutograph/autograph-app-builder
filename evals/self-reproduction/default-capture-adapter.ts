@@ -39,20 +39,29 @@ function stateTarget(page: Page, state: CaptureState) {
   ]);
 }
 
-function missing(state: CaptureState) {
+function unavailableState(state: CaptureState, side: "reference" | "candidate") {
+  if (["loading", "empty", "error"].includes(state))
+    return {
+      ready: false as const,
+      disposition: "not-run" as const,
+      reason: `The default semantic adapter has no evaluator-owned ${state} fixture binding for the ${side} application.`,
+    };
   return {
     ready: false as const,
     disposition: "missing-functionality" as const,
-    reason: `No visible semantic control or state was available for ${state}.`,
+    reason: `The ${side} application exposes no visible semantic control for ${state}.`,
   };
 }
 
-export function createSemanticCaptureAdapter(baseURL: string): CaptureAdapter {
+export function createSemanticCaptureAdapter(
+  baseURL: string,
+  side: "reference" | "candidate",
+): CaptureAdapter {
   return {
     async prepare(page, state) {
       try {
         await page.goto(baseURL, { waitUntil: "domcontentloaded" });
-        return (await stateTarget(page, state)) ? { ready: true } : missing(state);
+        return (await stateTarget(page, state)) ? { ready: true } : unavailableState(state, side);
       } catch {
         return {
           ready: false,
@@ -164,7 +173,7 @@ export function createSemanticCaptureAdapter(baseURL: string): CaptureAdapter {
 
 export function createCaptureAdapters(input: { referenceURL: string; candidateURL: string }) {
   return Promise.resolve({
-    reference: createSemanticCaptureAdapter(new URL(input.referenceURL).href),
-    candidate: createSemanticCaptureAdapter(new URL(input.candidateURL).href),
+    reference: createSemanticCaptureAdapter(new URL(input.referenceURL).href, "reference"),
+    candidate: createSemanticCaptureAdapter(new URL(input.candidateURL).href, "candidate"),
   });
 }

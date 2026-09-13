@@ -17,7 +17,7 @@ export interface CaptureAdapter {
     | { ready: true }
     | {
         ready: false;
-        disposition: "missing-functionality" | "infrastructure-unavailable";
+        disposition: "missing-functionality" | "infrastructure-unavailable" | "not-run";
         reason: string;
       }
   >;
