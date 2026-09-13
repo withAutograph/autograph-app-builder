@@ -213,7 +213,8 @@ describe("test capability preload", () => {
       authorization.on("error", (error: NodeJS.ErrnoException) => {
         authorizationErrors.push(error.code ?? error.message);
       });
-      const authorizationClosed = once(authorization, "close");
+      const authorizationClosed = Promise.withResolvers<undefined>();
+      authorization.once("close", authorizationClosed.resolve);
       authorization.end(
         `${JSON.stringify({
           publicKey: attackerPublicKey,
