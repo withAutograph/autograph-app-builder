@@ -2,26 +2,26 @@ import { describe, expect, it } from "vitest";
 import { axes, judgeDesign, validateJudgment } from "./judge";
 
 const image = {
+  height: 100,
   name: "desktop-0",
   path: "unused.png",
   width: 100,
-  height: 100,
 };
 const valid = {
-  ratings: Object.fromEntries(
-    axes.map((a) => [a, { score: 3, reason: "Clear visible hierarchy" }]),
-  ),
-  strengths: ["Readable labels"],
   findings: [
     {
-      image: "desktop-0",
-      region: { x: 0, y: 0, width: 20, height: 20 },
-      severity: "low",
       explanation: "Tight spacing",
+      image: "desktop-0",
       improvement: "Increase row spacing",
+      region: { height: 20, width: 20, x: 0, y: 0 },
+      severity: "low",
     },
   ],
   limitations: ["Fixture content"],
+  ratings: Object.fromEntries(
+    axes.map((a) => [a, { reason: "Clear visible hierarchy", score: 3 }]),
+  ),
+  strengths: ["Readable labels"],
 };
 describe("design judgment", () => {
   it("computes advisory scores from anchored axes", () => {
@@ -35,7 +35,7 @@ describe("design judgment", () => {
           findings: [
             {
               ...valid.findings[0],
-              region: { x: 90, y: 0, width: 20, height: 20 },
+              region: { height: 20, width: 20, x: 90, y: 0 },
             },
           ],
         },
@@ -45,14 +45,14 @@ describe("design judgment", () => {
   });
   it("retains an incomplete state without credentials", async () => {
     const r = await judgeDesign(
-      { brief: "test", images: [image], evidence: {} },
+      { brief: "test", evidence: {}, images: [image] },
       {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        generate: async () => valid,
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         getToken: async () => {
           throw new Error("secret-token");
         },
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        generate: async () => valid,
       },
     );
     expect(r.status).toBe("incomplete");
@@ -61,12 +61,12 @@ describe("design judgment", () => {
   });
   it("does not fabricate a score from invalid judge output", async () => {
     const r = await judgeDesign(
-      { brief: "test", images: [image], evidence: {} },
+      { brief: "test", evidence: {}, images: [image] },
       {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        getToken: async () => "mock-oidc",
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         generate: async () => ({ ratings: {} }),
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        getToken: async () => "mock-oidc",
       },
     );
     expect(r.status).toBe("incomplete");
@@ -74,9 +74,9 @@ describe("design judgment", () => {
   });
   it("returns mocked validated scores without a provider", async () => {
     const r = await judgeDesign(
-      { brief: "test", images: [image], evidence: {} },
+      { brief: "test", evidence: {}, images: [image] },
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      { getToken: async () => "mock-oidc", generate: async () => valid },
+      { generate: async () => valid, getToken: async () => "mock-oidc" },
     );
     expect(r.status).toBe("complete");
     expect(r).toHaveProperty("subjectiveScore", 75);

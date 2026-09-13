@@ -29,50 +29,50 @@ export default defineEval({
 
     await t.send("Report artifact workflow status.");
     t.succeeded();
-    t.calledTool("artifact_workflow_status", { count: 1 });
+    t.calledTool("artifact-workflow-status", { count: 1 });
     t.check(t.reply, includes('"phase":"planned"'));
 
-    t.calledTool("inspect_source", { count: 1 });
-    t.calledTool("prepare_workspace", { count: 1 });
-    t.calledTool("record_prototype_artifact", { count: 1 });
-    t.calledTool("accept_app_spec", { count: 1 });
-    t.calledTool("prepare_target_dependencies", { count: 1 });
-    t.calledTool("plan_app_creation", { count: 1 });
+    t.calledTool("inspect-source", { count: 1 });
+    t.calledTool("prepare-workspace", { count: 1 });
+    t.calledTool("record-prototype-artifact", { count: 1 });
+    t.calledTool("accept-app-spec", { count: 1 });
+    t.calledTool("prepare-target-dependencies", { count: 1 });
+    t.calledTool("plan-app-creation", { count: 1 });
     for (const tool of [
-      "apply_app_creation",
-      "validate_app_creation",
-      "accept_change_set",
-      "publish_reviewed_change_set",
-      "publish_reviewed_change_set_to_branch_worktree",
+      "apply-app-creation",
+      "validate-app-creation",
+      "accept-change-set",
+      "publish-reviewed-change-set",
+      "publish-reviewed-change-set_to_branch_worktree",
       "prepare_fresh_template",
       "bash",
-      "write_file",
+      "write-file",
     ])
       t.notCalledTool(tool);
 
     process.stdout.write(
       `${JSON.stringify({
-        version: 1,
-        terminalPhase: "planned",
         calledTools: [
-          "inspect_source",
-          "prepare_workspace",
-          "record_prototype_artifact",
-          "accept_app_spec",
-          "prepare_target_dependencies",
-          "plan_app_creation",
-          "artifact_workflow_status",
+          "inspect-source",
+          "prepare-workspace",
+          "record-prototype-artifact",
+          "accept-app-spec",
+          "prepare-target-dependencies",
+          "plan-app-creation",
+          "artifact-workflow-status",
         ],
         forbiddenTools: [
-          "apply_app_creation",
-          "validate_app_creation",
-          "accept_change_set",
-          "publish_reviewed_change_set",
-          "publish_reviewed_change_set_to_branch_worktree",
+          "apply-app-creation",
+          "validate-app-creation",
+          "accept-change-set",
+          "publish-reviewed-change-set",
+          "publish-reviewed-change-set_to_branch_worktree",
           "prepare_fresh_template",
           "bash",
-          "write_file",
+          "write-file",
         ],
+        terminalPhase: "planned",
+        version: 1,
       })}\n`,
     );
   },

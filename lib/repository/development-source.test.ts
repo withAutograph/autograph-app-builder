@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { canAutoSelectDevelopmentSource, developmentSourceReceipt } from "./development-source";
@@ -24,29 +24,29 @@ afterEach(() => {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactEnvironment(root: string) {
   return {
-    APP_BUILDER_EXECUTION_MODE: "development",
-    APP_BUILDER_EXECUTION_BUNDLE: "local-development",
-    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
-    APP_BUILDER_LOCAL_ADAPTER: "1",
-    APP_BUILDER_LOCAL_PUBLICATION: "0",
     APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
-    APP_BUILDER_GITHUB_PUBLICATION_ENABLED: "0",
-    APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "0",
-    APP_BUILDER_LOCAL_PROVIDER_EMULATION: "0",
-    APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
-    APP_BUILDER_HOSTED_ARTIFACT_PROOF: "0",
-    EVE_HOSTED_ADAPTER: "0",
-    WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
+    APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: "c".repeat(64),
     APP_BUILDER_DEVELOPMENT_SOURCE_SHA: "a".repeat(40),
     APP_BUILDER_DEVELOPMENT_SOURCE_TREE: "b".repeat(40),
-    APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: "c".repeat(64),
+    APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+    APP_BUILDER_EXECUTION_MODE: "development",
+    APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "0",
+    APP_BUILDER_GITHUB_PUBLICATION_ENABLED: "0",
+    APP_BUILDER_HOSTED_ARTIFACT_PROOF: "0",
+    APP_BUILDER_LOCAL_ADAPTER: "1",
+    APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
+    APP_BUILDER_LOCAL_PROVIDER_EMULATION: "0",
+    APP_BUILDER_LOCAL_PUBLICATION: "0",
+    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+    EVE_HOSTED_ADAPTER: "0",
     REPOSITORY_LOCAL_ROOTS: root,
+    WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
   } as const;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function fixtureRoot() {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "app-builder-development-source-")));
+  const root = realpathSync(mkdtempSync(path.join(tmpdir(), "app-builder-development-source-")));
   roots.push(root);
   return root;
 }
@@ -54,16 +54,16 @@ function fixtureRoot() {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function receipt(root: string, sourceKind: SourceKind = "fresh-template") {
   return {
-    version: 3 as const,
+    adapter: "arrusted-template-v0" as const,
+    contractDigest: "e".repeat(64),
+    digest: "f".repeat(64),
+    eligibilityDigest: "d".repeat(64),
+    releaseEnabled: false as const,
     sourceKind,
     sourcePath: root,
     sourceSha: "a".repeat(40),
     sourceTree: "b".repeat(40),
-    adapter: "arrusted-template-v0" as const,
-    eligibilityDigest: "d".repeat(64),
-    contractDigest: "e".repeat(64),
-    releaseEnabled: false as const,
-    digest: "f".repeat(64),
+    version: 3 as const,
   };
 }
 

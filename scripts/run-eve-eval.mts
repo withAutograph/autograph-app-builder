@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import path from "node:path";
 
 import { reconcileDeadEveEvalPrewarmLocks } from "../lib/testing/eve-eval-lifecycle";
 import { createGateAEvalProfile } from "./gate-a-eval-profile.mjs";
@@ -10,8 +10,8 @@ import {
   validateLocalVercelOidcToken,
 } from "../lib/eve/local-vercel-oidc";
 
-const repositoryRoot = resolve(import.meta.dirname, "..");
-const eveEntry = resolve(repositoryRoot, "node_modules/eve/bin/eve.js");
+const repositoryRoot = path.resolve(import.meta.dirname, "..");
+const eveEntry = path.resolve(repositoryRoot, "node_modules/eve/bin/eve.js");
 const args = process.argv.slice(2);
 const liveModelIndex = args.indexOf("--live-model");
 const liveModel = liveModelIndex !== -1;
@@ -34,37 +34,37 @@ const allowedRoot = option("--gate-a-allowed-root");
 const fault = option("--gate-a-fault");
 const image = option("--gate-a-image");
 const sourceRoot = option("--gate-a-source-root");
-const gateAEvalProfile =
-  profileName === "general-enabled" || profileName === "general-disabled"
-    ? createGateAEvalProfile(
-        {
-          profile: "general",
-          localPublication: profileName === "general-enabled" ? "1" : "0",
-        },
-        repositoryRoot,
-      )
-    : profileName === "fresh"
-      ? createGateAEvalProfile(
-          {
-            profile: "fresh",
-            stateRoot,
-            allowedRoot,
-            fault: fault ?? null,
-          },
-          repositoryRoot,
-        )
-      : profileName === "sandbox" || profileName === "hosted-artifact"
-        ? createGateAEvalProfile(
-            {
-              profile: profileName,
-              image: image ?? null,
-              sourceRoot: sourceRoot ?? null,
-            },
-            repositoryRoot,
-          )
-        : (() => {
-            throw new Error("The Gate A eval profile was invalid.");
-          })();
+let gateAEvalProfile;
+if (profileName === "general-enabled" || profileName === "general-disabled") {
+  gateAEvalProfile = createGateAEvalProfile(
+    {
+      localPublication: profileName === "general-enabled" ? "1" : "0",
+      profile: "general",
+    },
+    repositoryRoot,
+  );
+} else if (profileName === "fresh") {
+  gateAEvalProfile = createGateAEvalProfile(
+    {
+      allowedRoot,
+      fault: fault ?? null,
+      profile: "fresh",
+      stateRoot,
+    },
+    repositoryRoot,
+  );
+} else if (profileName === "sandbox" || profileName === "hosted-artifact") {
+  gateAEvalProfile = createGateAEvalProfile(
+    {
+      image: image ?? null,
+      profile: profileName,
+      sourceRoot: sourceRoot ?? null,
+    },
+    repositoryRoot,
+  );
+} else {
+  throw new Error("The Gate A eval profile was invalid.");
+}
 if (gateAEvalProfile === undefined) throw new Error("The Gate A eval profile was invalid.");
 if (
   gateAEvalProfile.profile !== "fresh" &&
@@ -144,32 +144,35 @@ if (liveModel && (gateAEvalProfile.profile !== "sandbox" || args[0] !== "self-re
   throw new Error("The live model is restricted to the self-reproduction sandbox evaluation.");
 if (liveModel) {
   const project = parseLinkedVercelProject(
-    readOwnerBoundLocalFile(resolve(repositoryRoot, ".vercel/project.json"), {
+    readOwnerBoundLocalFile(path.resolve(repositoryRoot, ".vercel/project.json"), {
       confidential: false,
     }),
   );
   const token = parseLocalVercelOidcToken(
-    readOwnerBoundLocalFile(resolve(repositoryRoot, ".env.local"), { confidential: true }),
+    readOwnerBoundLocalFile(path.resolve(repositoryRoot, ".env.local"), { confidential: true }),
   );
   process.env.VERCEL_OIDC_TOKEN = validateLocalVercelOidcToken({
-    token,
-    project,
     nowEpochSeconds: Math.floor(Date.now() / 1000),
+    project,
+    token,
   });
   process.env.VERCEL_TEAM_ID = project.orgId;
   process.env.VERCEL_PROJECT_ID = project.projectId;
 }
-const capabilities = liveModel
-  ? []
-  : realSandbox
-    ? ["mock-model"]
-    : ["mock-model", "simulated-target", "simulated-publication"];
+let capabilities: string[];
+if (liveModel) {
+  capabilities = [];
+} else if (realSandbox) {
+  capabilities = ["mock-model"];
+} else {
+  capabilities = ["mock-model", "simulated-target", "simulated-publication"];
+}
 
 const exitCode = await runWithTestCapability({
-  profile: "eve",
-  command: process.execPath,
   args: [eveEntry, "eval", ...args],
   capabilities,
+  command: process.execPath,
   gateAEvalProfile,
+  profile: "eve",
 });
 process.exitCode = exitCode;

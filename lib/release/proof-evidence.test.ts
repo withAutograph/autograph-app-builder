@@ -17,9 +17,9 @@ describe("release proof evidence", () => {
     // oxlint-disable-next-line unicorn/consistent-function-scoping
     const receipt = (overrides: Record<string, unknown> = {}) =>
       JSON.stringify({
-        terminalPhase: "reviewed",
         browserPreview: true,
         publicationAttempted: false,
+        terminalPhase: "reviewed",
         ...overrides,
       });
     expect(parseReviewedProof(receipt(), "sandbox-existing-iteration")).toMatchObject({

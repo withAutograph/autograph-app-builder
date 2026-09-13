@@ -13,64 +13,64 @@ const gitObjectSchema = z.string().regex(/^[a-f0-9]{40}$/u);
 
 const proofReferenceSchema = z
   .object({
-    receiptDigest: sha256Schema,
     accepted: z.literal(true),
+    receiptDigest: sha256Schema,
   })
   .strict();
 
 export const extBld05EvidenceInputSchema = z
   .object({
-    version: z.literal(1),
-    source: z.object({ sha: gitObjectSchema, tree: gitObjectSchema }).strict(),
+    disclosureScan: proofReferenceSchema
+      .extend({
+        findings: z.literal(0),
+        providerLogBytesScanned: z.number().int().nonnegative(),
+        publicResponsesScanned: z.number().int().min(1),
+      })
+      .strict(),
     environment: hostedDeploymentEnvironmentSchema,
     lifecycle: proofReferenceSchema
       .extend({
-        exactFiveTools: z.literal(true),
-        twoDistinctSubjects: z.literal(true),
-        twoDistinctWorkspaces: z.literal(true),
-        mutualTenantDenial: z.literal(true),
         completeInputBatchesRespondedAtomically: z.literal(true),
         discardedStartResponseRecovered: z.literal(true),
+        exactFiveTools: z.literal(true),
+        mutualTenantDenial: z.literal(true),
+        twoDistinctSubjects: z.literal(true),
+        twoDistinctWorkspaces: z.literal(true),
         unknownSubmissionRedispatched: z.literal(false),
       })
       .strict(),
     membershipRevocation: proofReferenceSchema
       .extend({
-        nextRequestDenied: z.literal(true),
-        maximumResidualTokenWindowSeconds: z.literal(300),
         immediateTokenRevocationClaimed: z.literal(false),
+        maximumResidualTokenWindowSeconds: z.literal(300),
+        nextRequestDenied: z.literal(true),
       })
       .strict(),
     retention: proofReferenceSchema
       .extend({
+        reservedOperationsPreserved: z.literal(true),
         terminalOperationRowsDeleted: z.number().int().min(1),
         unreferencedSessionRowsDeleted: z.number().int().min(1),
-        reservedOperationsPreserved: z.literal(true),
+      })
+      .strict(),
+    source: z.object({ sha: gitObjectSchema, tree: gitObjectSchema }).strict(),
+    sourceValidation: proofReferenceSchema
+      .extend({
+        continuationCredential: z.literal("not-applicable-canonical-session-id-only"),
+        evePackageVersion: z.literal("0.43.0"),
+        expiredSessionDeniedBeforeTransport: z.literal(true),
+        expiredSessionsExcludedFromActiveCompute: z.literal(true),
+        idleTimeoutSeconds: z.literal(HOSTED_SESSION_IDLE_TIMEOUT_MS / 1000),
+        maximumLifetimeSeconds: z.literal(HOSTED_SESSION_MAX_LIFETIME_MS / 1000),
       })
       .strict(),
     tenantDeletion: proofReferenceSchema
       .extend({
-        revocationDrainSeconds: z.number().int().min(300),
         membershipRowsDeleted: z.literal(1),
+        revocationDrainSeconds: z.number().int().min(300),
       })
       .strict(),
-    disclosureScan: proofReferenceSchema
-      .extend({
-        publicResponsesScanned: z.number().int().min(1),
-        providerLogBytesScanned: z.number().int().nonnegative(),
-        findings: z.literal(0),
-      })
-      .strict(),
-    sourceValidation: proofReferenceSchema
-      .extend({
-        idleTimeoutSeconds: z.literal(HOSTED_SESSION_IDLE_TIMEOUT_MS / 1000),
-        maximumLifetimeSeconds: z.literal(HOSTED_SESSION_MAX_LIFETIME_MS / 1000),
-        expiredSessionDeniedBeforeTransport: z.literal(true),
-        expiredSessionsExcludedFromActiveCompute: z.literal(true),
-        evePackageVersion: z.literal("0.43.0"),
-        continuationCredential: z.literal("not-applicable-canonical-session-id-only"),
-      })
-      .strict(),
+    version: z.literal(1),
   })
   .strict();
 
@@ -78,30 +78,30 @@ export type ExtBld05EvidenceInput = z.infer<typeof extBld05EvidenceInputSchema>;
 
 export const extBld05EvidenceReceiptSchema = z
   .object({
-    format: z.literal("autograph-ext-bld-05-evidence-v1"),
-    source: z.object({ sha: gitObjectSchema, tree: gitObjectSchema }).strict(),
-    environment: hostedDeploymentEnvironmentSchema,
-    evidenceDigest: sha256Schema,
+    claims: z
+      .object({
+        completeInputBatchesRespondedAtomically: z.literal(true),
+        continuationCredential: z.literal("not-applicable-canonical-session-id-only"),
+        credentialsDisclosed: z.literal(false),
+        discardedStartResponseRecovered: z.literal(true),
+        immediateTokenRevocationClaimed: z.literal(false),
+        maximumResidualTokenWindowSeconds: z.literal(300),
+        membershipRevocationDeniedNextRequest: z.literal(true),
+        mutualTenantDenial: z.literal(true),
+        productionReadinessClaimed: z.literal(false),
+        retentionApplied: z.literal(true),
+        sessionIdleTimeoutSeconds: z.literal(HOSTED_SESSION_IDLE_TIMEOUT_MS / 1000),
+        sessionMaximumLifetimeSeconds: z.literal(HOSTED_SESSION_MAX_LIFETIME_MS / 1000),
+        tenantDeletionAfterDrain: z.literal(true),
+      })
+      .strict(),
     componentReceiptDigests: z
       .tuple([sha256Schema, sha256Schema, sha256Schema, sha256Schema, sha256Schema, sha256Schema])
       .readonly(),
-    claims: z
-      .object({
-        mutualTenantDenial: z.literal(true),
-        completeInputBatchesRespondedAtomically: z.literal(true),
-        discardedStartResponseRecovered: z.literal(true),
-        membershipRevocationDeniedNextRequest: z.literal(true),
-        maximumResidualTokenWindowSeconds: z.literal(300),
-        immediateTokenRevocationClaimed: z.literal(false),
-        retentionApplied: z.literal(true),
-        tenantDeletionAfterDrain: z.literal(true),
-        sessionIdleTimeoutSeconds: z.literal(HOSTED_SESSION_IDLE_TIMEOUT_MS / 1000),
-        sessionMaximumLifetimeSeconds: z.literal(HOSTED_SESSION_MAX_LIFETIME_MS / 1000),
-        credentialsDisclosed: z.literal(false),
-        continuationCredential: z.literal("not-applicable-canonical-session-id-only"),
-        productionReadinessClaimed: z.literal(false),
-      })
-      .strict(),
+    environment: hostedDeploymentEnvironmentSchema,
+    evidenceDigest: sha256Schema,
+    format: z.literal("autograph-ext-bld-05-evidence-v1"),
+    source: z.object({ sha: gitObjectSchema, tree: gitObjectSchema }).strict(),
   })
   .strict();
 
@@ -128,10 +128,21 @@ function digest(value: unknown): `sha256:${string}` {
 export function buildExtBld05EvidenceReceipt(input: unknown): ExtBld05EvidenceReceipt {
   const evidence = extBld05EvidenceInputSchema.parse(input);
   return extBld05EvidenceReceiptSchema.parse({
-    format: "autograph-ext-bld-05-evidence-v1",
-    source: evidence.source,
-    environment: evidence.environment,
-    evidenceDigest: digest(evidence),
+    claims: {
+      completeInputBatchesRespondedAtomically: true,
+      continuationCredential: "not-applicable-canonical-session-id-only",
+      credentialsDisclosed: false,
+      discardedStartResponseRecovered: true,
+      immediateTokenRevocationClaimed: false,
+      maximumResidualTokenWindowSeconds: 300,
+      membershipRevocationDeniedNextRequest: true,
+      mutualTenantDenial: true,
+      productionReadinessClaimed: false,
+      retentionApplied: true,
+      sessionIdleTimeoutSeconds: HOSTED_SESSION_IDLE_TIMEOUT_MS / 1000,
+      sessionMaximumLifetimeSeconds: HOSTED_SESSION_MAX_LIFETIME_MS / 1000,
+      tenantDeletionAfterDrain: true,
+    },
     componentReceiptDigests: [
       evidence.lifecycle.receiptDigest,
       evidence.membershipRevocation.receiptDigest,
@@ -140,20 +151,9 @@ export function buildExtBld05EvidenceReceipt(input: unknown): ExtBld05EvidenceRe
       evidence.disclosureScan.receiptDigest,
       evidence.sourceValidation.receiptDigest,
     ],
-    claims: {
-      mutualTenantDenial: true,
-      completeInputBatchesRespondedAtomically: true,
-      discardedStartResponseRecovered: true,
-      membershipRevocationDeniedNextRequest: true,
-      maximumResidualTokenWindowSeconds: 300,
-      immediateTokenRevocationClaimed: false,
-      retentionApplied: true,
-      tenantDeletionAfterDrain: true,
-      sessionIdleTimeoutSeconds: HOSTED_SESSION_IDLE_TIMEOUT_MS / 1000,
-      sessionMaximumLifetimeSeconds: HOSTED_SESSION_MAX_LIFETIME_MS / 1000,
-      credentialsDisclosed: false,
-      continuationCredential: "not-applicable-canonical-session-id-only",
-      productionReadinessClaimed: false,
-    },
+    environment: evidence.environment,
+    evidenceDigest: digest(evidence),
+    format: "autograph-ext-bld-05-evidence-v1",
+    source: evidence.source,
   });
 }

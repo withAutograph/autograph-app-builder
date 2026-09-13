@@ -9,28 +9,28 @@ test.beforeEach(async ({ context }) => {
 
 for (const { path, title, region, button } of [
   {
+    button: /GitHub/iu,
     path: "/auth/sign-in?callbackURL=%2F",
+    region: "Authentication form loading",
     title: "Sign in to Autograph",
-    region: "Authentication form loading",
-    button: /GitHub/iu,
   },
   {
+    button: /GitHub/iu,
     path: "/auth/sign-up?callbackURL=%2F",
-    title: "Create your Autograph account",
     region: "Authentication form loading",
-    button: /GitHub/iu,
+    title: "Create your Autograph account",
   },
   {
-    path: "/github/installations",
-    title: "Connect a GitHub App installation",
-    region: "Provider connection loading",
     button: "Install or update GitHub access",
+    path: "/github/installations",
+    region: "Provider connection loading",
+    title: "Connect a GitHub App installation",
   },
   {
-    path: "/vercel/installations",
-    title: "Connect a Vercel team",
-    region: "Provider connection loading",
     button: "Connect to Vercel",
+    path: "/vercel/installations",
+    region: "Provider connection loading",
+    title: "Connect a Vercel team",
   },
 ]) {
   test(`${path} streams its meaningful production shell and resolves`, async ({
@@ -41,7 +41,7 @@ for (const { path, title, region, button } of [
       page,
       async () => {
         await page.goto(path);
-        await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
+        await expect(page.getByRole("heading", { exact: true, name: title })).toBeVisible();
         await expect(page.getByRole("region", { name: region })).toBeVisible();
         await expect(page.getByText("Autograph", { exact: true })).toBeVisible();
       },
@@ -83,7 +83,7 @@ for (const { label, pathname } of [
     await page.goto("/?mode=anonymous");
     await expect(page.getByLabel("What should this app do?")).toBeEnabled();
     await instant(page, async () => {
-      await page.getByRole("link", { name: label, exact: true }).click();
+      await page.getByRole("link", { exact: true, name: label }).click();
       await page.waitForURL((url) => url.pathname === pathname);
       await expect(
         page
@@ -101,7 +101,7 @@ test("provider Back Link commits the builder before deferred content", async ({ 
   await page.goto("/github/installations");
   await expect(page.getByRole("button", { name: "Install or update GitHub access" })).toBeEnabled();
   await instant(page, async () => {
-    await page.getByRole("link", { name: "Back", exact: true }).click();
+    await page.getByRole("link", { exact: true, name: "Back" }).click();
     await page.waitForURL((url) => url.pathname === "/");
     await expect(page.getByRole("heading", { name: "Create an app" })).toBeVisible();
     await expect(

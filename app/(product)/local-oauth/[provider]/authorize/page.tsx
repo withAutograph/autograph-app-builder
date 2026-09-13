@@ -39,11 +39,11 @@ async function LocalOAuthApprovalContent({ params, searchParams }: Props) {
     emulation = configured;
     const appOrigin = emulation.canonicalOrigin;
     parsed = parseLocalOAuthAuthorization({
-      provider,
-      values: scalarValues(query),
       appOrigin,
       emulation,
       githubClientId: emulation.githubClientId,
+      provider,
+      values: scalarValues(query),
       vercelClientId: emulation.vercelClientId,
     });
   } catch {
@@ -57,9 +57,9 @@ async function LocalOAuthApprovalContent({ params, searchParams }: Props) {
   await connection();
   const approval = signFreshLocalOAuthApproval(
     {
-      provider: parsed.provider,
-      origin: emulation.canonicalOrigin,
       authorization: parsed.authorization,
+      origin: emulation.canonicalOrigin,
+      provider: parsed.provider,
     },
     emulation.relaySecret,
   );

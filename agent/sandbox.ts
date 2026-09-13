@@ -33,8 +33,8 @@ function createVercelDefinition() {
       const sandbox = await use({ networkPolicy: "allow-all" });
       if (process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development") {
         const setup = await sandbox.run({
-          command: developmentPinnedToolchainCommand(),
           abortSignal: AbortSignal.timeout(300_000),
+          command: developmentPinnedToolchainCommand(),
         });
         if (setup.exitCode !== 0)
           throw new Error(

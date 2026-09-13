@@ -23,11 +23,11 @@ const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
 export const SANDBOX_GITHUB_SOURCE_INSPECTION = ".app-builder/canonical-clone-inspection.json";
 
 /** Clone a private GitHub source through the writable Vercel Sandbox. */
-function shellQuote(value: string) {
+const shellQuote = function shellQuote(value: string) {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
-}
+};
 
-export async function cloneGitHubSource(input: {
+export const cloneGitHubSource = async function cloneGitHubSource(input: {
   sandbox: SandboxSession;
   url: string;
   token: string;
@@ -35,19 +35,19 @@ export async function cloneGitHubSource(input: {
   const basic = Buffer.from(`x-access-token:${input.token}`).toString("base64");
   const result = await input.sandbox.run({
     command: `git clone --depth 1 ${shellQuote(input.url)} /workspace/repository`,
-    workingDirectory: "/workspace",
     env: {
       GIT_CONFIG_COUNT: "1",
       GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
       GIT_CONFIG_VALUE_0: `Authorization: Basic ${basic}`,
       GIT_TERMINAL_PROMPT: "0",
     },
+    workingDirectory: "/workspace",
   });
   if (result.exitCode !== 0)
     throw new Error(result.stderr.trim() || "The GitHub checkout is not available.");
-}
+};
 
-function parseRemote(input: string) {
+const parseRemote = function parseRemote(input: string) {
   let remote: URL;
   try {
     remote = new URL(input);
@@ -69,13 +69,13 @@ function parseRemote(input: string) {
   )
     throw new Error("The GitHub source remote is invalid.");
   return remote.toString();
-}
+};
 
-function parseBranch(input: string) {
+const parseBranch = function parseBranch(input: string) {
   if (!BRANCH.test(input) || input.split("/").some((part) => part.startsWith(".")))
     throw new Error("The GitHub source branch is invalid.");
   return input;
-}
+};
 
 // Kept temporarily for stored receipt parsing while the legacy inspection
 // writer is removed from the active source path.
@@ -306,15 +306,16 @@ console.log(JSON.stringify({
 }));
 `;
 
-function sandboxGitHubSourceReinspectionCommand(input: { remote: string; branch: string }) {
-  const expected = JSON.stringify({
-    remote: parseRemote(input.remote),
-    ref: `refs/remotes/origin/${parseBranch(input.branch)}`,
-  });
-  return `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 node -e ${shellQuote(sandboxGitHubSourceReinspectionProgram)} ${shellQuote(expected)}`;
-}
+const sandboxGitHubSourceReinspectionCommand =
+  function sandboxGitHubSourceReinspectionCommand(input: { remote: string; branch: string }) {
+    const expected = JSON.stringify({
+      ref: `refs/remotes/origin/${parseBranch(input.branch)}`,
+      remote: parseRemote(input.remote),
+    });
+    return `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 node -e ${shellQuote(sandboxGitHubSourceReinspectionProgram)} ${shellQuote(expected)}`;
+  };
 
-export async function readSandboxGitHubSourceSnapshot(
+export const readSandboxGitHubSourceSnapshot = async function readSandboxGitHubSourceSnapshot(
   sandbox: SandboxSession,
 ): Promise<CanonicalTemplateSnapshot> {
   const result = await sandbox.run({
@@ -333,19 +334,19 @@ export async function readSandboxGitHubSourceSnapshot(
   )
     throw new Error("GitHub did not return a repository revision.");
   return {
+    contents: {},
+    contract: [],
+    dirtyPaths: [],
     sourcePath: SANDBOX_WORKSPACE,
     sourceSha,
     sourceTree,
-    dirtyPaths: [],
-    contents: {},
-    contract: [],
   };
-}
+};
 
 // Kept temporarily for stored receipt parsing while the legacy inspection
 // writer is removed from the active source path.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function reinspectGitHubSourceWorkspace(input: {
+const reinspectGitHubSourceWorkspace = async function reinspectGitHubSourceWorkspace(input: {
   sandbox: SandboxSession;
   remote: string;
   branch: string;
@@ -365,9 +366,9 @@ async function reinspectGitHubSourceWorkspace(input: {
   )
     throw new Error("The stored GitHub source inspection drifted.");
   const result = await input.sandbox.run({
+    abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
     command: sandboxGitHubSourceReinspectionCommand(input),
     workingDirectory: "/workspace",
-    abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
   });
   if (
     Buffer.byteLength(result.stdout) > SANDBOX_INSPECTION_BYTES ||
@@ -404,31 +405,32 @@ async function reinspectGitHubSourceWorkspace(input: {
   )
     throw new Error("The GitHub source workspace drifted.");
   return { snapshot, workspace: prepared.workspace };
-}
+};
 
-export async function inspectGitHubSourceSandboxWorkspace(input: {
-  sandbox: SandboxSession;
-  receipt: SourceReceipt;
-  githubSource: ImmutableGitHubSourceReceipt;
-  expectedWorkspace?: PreparedSandboxWorkspace;
-}): Promise<PreparedSandboxWorkspace> {
-  // A sandbox checkout is deliberately writable. Inspecting it is best-effort
-  // discovery for the next repository command, not a second authorization
-  // boundary over source shape, file modes, receipts, or normal edits.
-  const snapshot = await readSandboxGitHubSourceSnapshot(input.sandbox);
-  const workspaceDigest = createHash("sha256")
-    .update(`${snapshot.sourceSha}:${snapshot.sourceTree}`)
-    .digest("hex");
-  return {
-    workspaceId: input.sandbox.id,
-    workspacePath: SANDBOX_WORKSPACE,
-    sourcePath: SANDBOX_WORKSPACE,
-    sourceSha: snapshot.sourceSha,
-    sourceTree: snapshot.sourceTree,
-    workspaceDigest,
-    adapter: "arrusted-development-v0",
-    // Compatibility remains repository-command-owned. This value is only
-    // diagnostic state retained for legacy callers, never a runtime gate.
-    eligibilityDigest: workspaceDigest,
+export const inspectGitHubSourceSandboxWorkspace =
+  async function inspectGitHubSourceSandboxWorkspace(input: {
+    sandbox: SandboxSession;
+    receipt: SourceReceipt;
+    githubSource: ImmutableGitHubSourceReceipt;
+    expectedWorkspace?: PreparedSandboxWorkspace;
+  }): Promise<PreparedSandboxWorkspace> {
+    // A sandbox checkout is deliberately writable. Inspecting it is best-effort
+    // discovery for the next repository command, not a second authorization
+    // boundary over source shape, file modes, receipts, or normal edits.
+    const snapshot = await readSandboxGitHubSourceSnapshot(input.sandbox);
+    const workspaceDigest = createHash("sha256")
+      .update(`${snapshot.sourceSha}:${snapshot.sourceTree}`)
+      .digest("hex");
+    return {
+      adapter: "arrusted-development-v0",
+      // Compatibility remains repository-command-owned. This value is only
+      // diagnostic state retained for legacy callers, never a runtime gate.
+      eligibilityDigest: workspaceDigest,
+      sourcePath: SANDBOX_WORKSPACE,
+      sourceSha: snapshot.sourceSha,
+      sourceTree: snapshot.sourceTree,
+      workspaceDigest,
+      workspaceId: input.sandbox.id,
+      workspacePath: SANDBOX_WORKSPACE,
+    };
   };
-}

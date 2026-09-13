@@ -8,8 +8,6 @@ import { AppDetailsSection } from "./builder-app-details";
 import { appNameFromBrief } from "./builder-defaults";
 
 const meta = {
-  title: "Components/Create App/Sections/App Details",
-  component: AppDetailsSection,
   args: {
     appName: "Vendor Portal",
     brief: "Build a vendor onboarding portal.",
@@ -17,6 +15,7 @@ const meta = {
     onBriefChange: fn(),
     onCycleBrief: fn(),
   },
+  component: AppDetailsSection,
   decorators: [
     (Story) => (
       <CreateAppFormStoryLayout>
@@ -24,6 +23,7 @@ const meta = {
       </CreateAppFormStoryLayout>
     ),
   ],
+  title: "Components/Create App/Sections/App Details",
 } satisfies Meta<typeof AppDetailsSection>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -68,9 +68,9 @@ function GeneratedNameHarness() {
   );
 }
 export const GeneratedNameSync: Story = {
-  render: () => <GeneratedNameHarness />,
   play: async ({ canvasElement }) => {
     await userEvent.type(within(canvasElement).getByLabelText("App Brief"), "Build a finance hub");
     await expect(within(canvasElement).getByLabelText("App Name")).toHaveValue("Finance Hub");
   },
+  render: () => <GeneratedNameHarness />,
 };

@@ -36,7 +36,10 @@ describe("build-ready AppSpec validation", () => {
     expect(bundled?.content).toBe(reference);
     const templates = [...reference.matchAll(/````markdown\n(?<template>[\s\S]*?)\n````/gu)];
     expect(templates).toHaveLength(1);
-    const authored = templates[0]!.groups!.template!;
+    const authored = templates[0]?.groups?.template;
+    if (authored === undefined) {
+      throw new Error("Expected the canonical authoring template.");
+    }
     // Test the bytes shown to the model, before acceptance normalization.
     expect(validateBuildReadyAppSpec(authored)).toEqual({ valid: true });
     expect(authored.match(/^## .+$/gmu)).toEqual(
@@ -48,10 +51,10 @@ describe("build-ready AppSpec validation", () => {
   it.each(REQUIRED_APP_SPEC_HEADINGS)("still rejects an omitted %s section", (heading) => {
     const content = completeAppSpec().replace(`## ${heading}\n`, "");
     expect(validateBuildReadyAppSpec(content)).toMatchObject({
-      valid: false,
       issues: expect.arrayContaining([
         expect.objectContaining({ code: "missing_heading", path: heading }),
       ]),
+      valid: false,
     });
   });
 
@@ -72,8 +75,8 @@ describe("build-ready AppSpec validation", () => {
           const content = completeAppSpec({
             ...BUILD_READY_HANDOFF_EXAMPLE,
             optionalCapabilities: {
-              integrations: [],
               hostedResources: [],
+              integrations: [],
               [field]: [value],
             },
           });
@@ -81,14 +84,14 @@ describe("build-ready AppSpec validation", () => {
           expect(normalized).toContain(`"${value}"`);
           for (const draft of [content, normalized]) {
             expect(validateBuildReadyAppSpec(draft)).toMatchObject({
-              valid: false,
               issues: expect.arrayContaining([
                 expect.objectContaining({
                   code: "build_handoff_shape",
-                  path: `Build handoff.optionalCapabilities.${field}.0`,
                   message: expect.stringContaining("provider-neutral"),
+                  path: `Build handoff.optionalCapabilities.${field}.0`,
                 }),
               ]),
+              valid: false,
             });
           }
         }
@@ -100,8 +103,8 @@ describe("build-ready AppSpec validation", () => {
     const authored = completeAppSpec({
       ...BUILD_READY_HANDOFF_EXAMPLE,
       optionalCapabilities: {
-        integrations: ["application-hosting", "source-control"],
         hostedResources: ["relational-database"],
+        integrations: ["application-hosting", "source-control"],
       },
     }).replace(
       "## Integrations and reconciliation\n\nProduct decision.",
@@ -132,15 +135,15 @@ describe("build-ready AppSpec validation", () => {
   it("normalizes mechanical handoff drift before validation", () => {
     const normalized = normalizeBuildReadyAppSpec(
       completeAppSpec({
-        status: "ready",
-        owner: " operations ",
-        schema: { kind: "operational", entities: ["exception"] },
         additionalPublicRoutes: ["/z", "/bad/[id]", "/a", "/a"],
-        optionalCapabilities: {
-          integrations: ["inventory-sync", "inventory-sync", "Bad"],
-          hostedResources: ["relational-database"],
-        },
         ignored: true,
+        optionalCapabilities: {
+          hostedResources: ["relational-database"],
+          integrations: ["inventory-sync", "inventory-sync", "Bad"],
+        },
+        owner: " operations ",
+        schema: { entities: ["exception"], kind: "operational" },
+        status: "ready",
       }),
     );
 
@@ -156,8 +159,8 @@ describe("build-ready AppSpec validation", () => {
     ["wrong fence language", completeAppSpec().replace("```json", "```yaml")],
   ])("rejects %s after the terminal handoff", (_label, content) => {
     expect(validateBuildReadyAppSpec(content)).toMatchObject({
-      valid: false,
       issues: expect.arrayContaining([expect.objectContaining({ code: "build_handoff_format" })]),
+      valid: false,
     });
   });
 
@@ -169,8 +172,8 @@ describe("build-ready AppSpec validation", () => {
       expect.arrayContaining([
         expect.objectContaining({
           code: "missing_heading",
-          path: "User and outcome",
           message: 'Add exactly one "## User and outcome" section.',
+          path: "User and outcome",
         }),
         expect.objectContaining({
           code: "build_handoff_format",
@@ -185,9 +188,9 @@ describe("build-ready AppSpec validation", () => {
       buildHandoffExample: unknown;
     };
     expect(diagnostic).toMatchObject({
+      buildHandoffExample: BUILD_READY_HANDOFF_EXAMPLE,
       code: "app_spec_invalid",
       instruction: expect.stringContaining("without asking the user"),
-      buildHandoffExample: BUILD_READY_HANDOFF_EXAMPLE,
     });
     expect(diagnostic.requiredHeadings).toHaveLength(14);
   });
@@ -198,8 +201,8 @@ describe("build-ready AppSpec validation", () => {
       "{ invalid",
     );
     expect(validateBuildReadyAppSpec(malformed)).toMatchObject({
-      valid: false,
       issues: [{ code: "build_handoff_json", path: "Build handoff" }],
+      valid: false,
     });
 
     const extra = completeAppSpec({

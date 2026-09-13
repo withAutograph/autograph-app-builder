@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { z } from "zod";
 
@@ -16,68 +17,68 @@ const gitRef = z.string().regex(/^refs\/(?:heads|tags)\/[A-Za-z0-9._/-]+$/u);
 
 const expectedApprovalSchema = z
   .object({
-    requestTitle: z.string().min(1),
     receipt: approvalReceiptSchema,
+    requestTitle: z.string().min(1),
     response: z.literal("approve"),
   })
   .strict();
 
 const targetProofSchema = z
   .object({
-    repositoryId: z.string().regex(/^\d+$/u),
-    repository: repositoryName,
+    appSpecDigest: hex64,
     baseRef: gitRef,
     baseSha: objectId,
-    headRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]+$/u),
-    appSpecDigest: hex64,
     changeSetDigest: hex64,
+    headRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]+$/u),
     proposalDigest: hex64,
+    repository: repositoryName,
+    repositoryId: z.string().regex(/^\d+$/u),
   })
   .strict();
 
 const oauthProofSchema = z
   .object({
-    issuer: z.string().url().startsWith("https://"),
     audience: z.string().min(1),
+    issuer: z.string().url().startsWith("https://"),
     resource: z.string().url().startsWith("https://"),
   })
   .strict();
 
 export const hostedProofScenarioSchema = z
   .object({
-    format: z.literal("autograph-hosted-client-proof-scenario-v2"),
-    createPrompt: z.string().trim().min(1).max(32_000),
-    iterateMessage: z.string().trim().min(1).max(32_000),
+    approvalReceipts: z.array(expectedApprovalSchema).length(3),
     cancelPrompt: z.string().trim().min(1).max(32_000),
-    target: targetProofSchema,
+    createPrompt: z.string().trim().min(1).max(32_000),
+    format: z.literal("autograph-hosted-client-proof-scenario-v2"),
+    iterateMessage: z.string().trim().min(1).max(32_000),
+    maxPolls: z.number().int().min(1).max(120).default(30),
     oauth: oauthProofSchema,
+    pollIntervalMs: z.number().int().min(100).max(10_000).default(1000),
     questionResponses: z.array(
       z
         .object({
+          optionId: z.string().min(1).optional(),
           requestTitle: z.string().min(1),
           value: z.string().max(16_000),
-          optionId: z.string().min(1).optional(),
         })
         .strict(),
     ),
-    approvalReceipts: z.array(expectedApprovalSchema).length(3),
-    maxPolls: z.number().int().min(1).max(120).default(30),
-    pollIntervalMs: z.number().int().min(100).max(10_000).default(1000),
+    target: targetProofSchema,
   })
   .strict()
   .superRefine((scenario, context) => {
     if (scenario.oauth.audience !== scenario.oauth.resource)
       context.addIssue({
         code: "custom",
-        path: ["oauth", "audience"],
         message: "OAuth audience must be the exact protected resource.",
+        path: ["oauth", "audience"],
       });
     const phases = scenario.approvalReceipts.map(({ receipt }) => receipt.phase);
     if (new Set(phases).size !== 3)
       context.addIssue({
         code: "custom",
-        path: ["approvalReceipts"],
         message: "Each approval phase is required exactly once.",
+        path: ["approvalReceipts"],
       });
     for (const expected of scenario.approvalReceipts) {
       const { receipt } = expected;
@@ -89,26 +90,26 @@ export const hostedProofScenarioSchema = z
       )
         context.addIssue({
           code: "custom",
-          path: ["approvalReceipts"],
           message: "Approval target binding drifted.",
+          path: ["approvalReceipts"],
         });
-      const expectedDigest =
-        receipt.phase === "appspec"
-          ? scenario.target.appSpecDigest
-          : receipt.phase === "change_set"
-            ? scenario.target.changeSetDigest
-            : scenario.target.proposalDigest;
-      const expectedOutcome =
-        receipt.phase === "appspec"
-          ? "accept-appspec"
-          : receipt.phase === "change_set"
-            ? "accept-change-set"
-            : "create-draft-pr";
+      let expectedDigest: string;
+      let expectedOutcome: string;
+      if (receipt.phase === "appspec") {
+        expectedDigest = scenario.target.appSpecDigest;
+        expectedOutcome = "accept-appspec";
+      } else if (receipt.phase === "change_set") {
+        expectedDigest = scenario.target.changeSetDigest;
+        expectedOutcome = "accept_change_set";
+      } else {
+        expectedDigest = scenario.target.proposalDigest;
+        expectedOutcome = "create-draft-pr";
+      }
       if (receipt.subjectDigest !== expectedDigest || receipt.outcome !== expectedOutcome)
         context.addIssue({
           code: "custom",
-          path: ["approvalReceipts"],
           message: "Approval digest or outcome drifted.",
+          path: ["approvalReceipts"],
         });
     }
   });
@@ -123,7 +124,11 @@ function canonicalPublicResult(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalPublicResult).join(",")}]`;
   if (value !== null && typeof value === "object")
     return `{${Object.entries(value)
-      .toSorted(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .toSorted(([left], [right]) => {
+        if (left < right) return -1;
+        if (left > right) return 1;
+        return 0;
+      })
       .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalPublicResult(entry)}`)
       .join(",")}}`;
   const primitive = JSON.stringify(value);
@@ -138,13 +143,13 @@ function publicResultFingerprint(result: EveSessionResult) {
 
 const tokenClaimsSchema = z
   .object({
-    iss: z.string().url().startsWith("https://"),
     aud: z.string(),
+    exp: z.number().int(),
+    iss: z.string().url().startsWith("https://"),
+    nbf: z.number().int(),
+    scope: z.string().min(1),
     sub: z.string().min(1),
     workspace_id: z.string().min(1),
-    scope: z.string().min(1),
-    nbf: z.number().int(),
-    exp: z.number().int(),
   })
   .passthrough();
 
@@ -196,9 +201,9 @@ export function verifyWorkspaceTokenPair(input: {
 
 const protectedResourceMetadataSchema = z
   .object({
-    resource: z.string().url().startsWith("https://"),
     authorization_servers: z.array(z.string().url().startsWith("https://")).length(1),
     bearer_methods_supported: z.tuple([z.literal("header")]),
+    resource: z.string().url().startsWith("https://"),
     scopes_supported: z.tuple([
       z.literal("autograph:session"),
       z.literal("autograph:start"),
@@ -212,16 +217,16 @@ const protectedResourceMetadataSchema = z
 
 const draftPrReceiptSchema = z
   .object({
-    format: z.literal("autograph-draft-pr-publication-receipt-v1"),
-    url: z.string().url().startsWith("https://github.com/"),
-    draft: z.literal(true),
-    repository: repositoryName,
     baseRef: gitRef,
     baseSha: objectId,
+    changeSetDigest: hex64,
+    draft: z.literal(true),
+    format: z.literal("autograph-draft-pr-publication-receipt-v1"),
     headRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]+$/u),
     headSha: objectId,
-    changeSetDigest: hex64,
     outcome: z.literal("draft-pr-created"),
+    repository: repositoryName,
+    url: z.string().url().startsWith("https://github.com/"),
   })
   .strict();
 
@@ -249,7 +254,7 @@ export function verifiedDraftPrEvidence(text: string, scenario: HostedProofScena
     receipt.changeSetDigest !== scenario.target.changeSetDigest
   )
     throw new Error("Draft-PR receipt did not match the exact approved target and change set.");
-  return { receipt, evidenceDigest: digest(JSON.stringify(receipt)) };
+  return { evidenceDigest: digest(JSON.stringify(receipt)), receipt };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -262,10 +267,10 @@ function jsonRpcPayload(text: string) {
   const payload = JSON.parse(contentTypePayload ?? text) as unknown;
   return z
     .object({
-      jsonrpc: z.literal("2.0"),
-      id: z.union([z.string(), z.number()]).optional(),
-      result: z.unknown().optional(),
       error: z.object({ code: z.number(), message: z.string() }).passthrough().optional(),
+      id: z.union([z.string(), z.number()]).optional(),
+      jsonrpc: z.literal("2.0"),
+      result: z.unknown().optional(),
     })
     .passthrough()
     .parse(payload);
@@ -316,9 +321,9 @@ export class HostedMcpProofClient {
       params,
     };
     const response = await this.fetcher(this.endpoint, {
-      method: "POST",
-      headers,
       body: JSON.stringify(body),
+      headers,
+      method: "POST",
       redirect: "error",
     });
     const returnedSession = response.headers.get("mcp-session-id");
@@ -326,17 +331,17 @@ export class HostedMcpProofClient {
     const text = await response.text();
     this.responseBodies.push(text);
     return {
-      status: response.status,
       headers: response.headers,
+      status: response.status,
       ...(text === "" ? {} : { payload: jsonRpcPayload(text) }),
     };
   }
 
   async initialize() {
     const response = await this.post("initialize", {
-      protocolVersion: "2025-03-26",
       capabilities: {},
       clientInfo: { name: "autograph-hosted-proof", version: "1" },
+      protocolVersion: "2025-03-26",
     });
     if (response.status !== 200 || response.payload?.error !== undefined)
       throw new Error(`MCP initialize failed with HTTP ${response.status}.`);
@@ -359,7 +364,7 @@ export class HostedMcpProofClient {
   }
 
   async callTool(name: (typeof TOOL_NAMES)[number], args: unknown) {
-    const response = await this.post("tools/call", { name, arguments: args });
+    const response = await this.post("tools/call", { arguments: args, name });
     if (response.status !== 200 || response.payload?.error !== undefined)
       throw new Error(`${name} failed with HTTP ${response.status}.`);
     const result = z
@@ -379,7 +384,7 @@ export class HostedMcpProofClient {
   }
 
   async callToolAndDiscardResult(name: (typeof TOOL_NAMES)[number], args: unknown) {
-    const response = await this.post("tools/call", { name, arguments: args });
+    const response = await this.post("tools/call", { arguments: args, name });
     if (response.status !== 200 || response.payload?.error !== undefined)
       throw new Error(`${name} failed with HTTP ${response.status}.`);
     const result = z
@@ -395,8 +400,8 @@ export class HostedMcpProofClient {
     // loses the successful operation result before it can retain the public
     // session identity while still binding a retry to the discarded result.
     this.discardedResult = {
-      name,
       fingerprint: publicResultFingerprint(publicResult),
+      name,
     };
   }
 
@@ -418,9 +423,9 @@ export class HostedMcpProofClient {
     return this.post(
       "initialize",
       {
-        protocolVersion: "2025-03-26",
         capabilities: {},
         clientInfo: { name: "autograph-hosted-proof-negative", version: "1" },
+        protocolVersion: "2025-03-26",
       },
       { authenticate },
     );
@@ -436,8 +441,8 @@ export class HostedMcpProofClient {
       throw new Error("Hosted public responses disclosed private runtime material.");
     }
     return {
-      publicResponsesScanned: this.responseBodies.length,
       publicResponseDisclosureScanDigest: digest(joined),
+      publicResponsesScanned: this.responseBodies.length,
     };
   }
 }
@@ -453,8 +458,8 @@ async function verifyProtectedResourceMetadata(input: {
   if (input.scenario.oauth.resource !== endpoint.href)
     throw new Error("OAuth resource must be the exact release MCP endpoint.");
   const response = await input.fetcher(metadataUrl, {
-    method: "GET",
     headers: { accept: "application/json" },
+    method: "GET",
     redirect: "error",
   });
   if (response.status !== 200)
@@ -466,8 +471,8 @@ async function verifyProtectedResourceMetadata(input: {
   )
     throw new Error("OAuth protected-resource metadata binding drifted.");
   return {
-    metadataUrl: metadataUrl.href,
     digest: digest(JSON.stringify(metadata)),
+    metadataUrl: metadataUrl.href,
   };
 }
 
@@ -520,8 +525,8 @@ function responseFor(
   if (!permitApprovals)
     throw new Error("Approval response requires the explicit --permit-approvals gate.");
   return {
-    response: { kind: "approve" as const },
     approvalPhase: parsedReceipt.phase,
+    response: { kind: "approve" as const },
   };
 }
 
@@ -544,9 +549,9 @@ async function pollUntilSettled(input: {
       "autograph_get",
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await input.client.callTool("autograph_get", {
-        sessionId: input.sessionId,
         cursor,
         limit: 250,
+        sessionId: input.sessionId,
       }),
     );
     ({ cursor } = page);
@@ -563,9 +568,9 @@ async function pollUntilSettled(input: {
         "autograph_respond",
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await input.client.callTool("autograph_respond", {
-          sessionId: input.sessionId,
-          responses,
           clientRequestId: `${input.requestPrefix}-respond-batch-${responseBatchCount}`,
+          responses,
+          sessionId: input.sessionId,
         }),
       );
       responseCount += responses.length;
@@ -578,17 +583,15 @@ async function pollUntilSettled(input: {
       page.status === "cancelled"
     )
       return {
-        page,
-        cursor,
         allText,
-        responseCount,
-        responseBatchCount,
         approvalPhases,
+        cursor,
+        page,
+        responseBatchCount,
+        responseCount,
       };
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    await new Promise<void>((resolve) => {
-      setTimeout(() => resolve(), input.scenario.pollIntervalMs);
-    });
+    await delay(input.scenario.pollIntervalMs);
   }
   throw new Error("Hosted session did not settle within the bounded poll window.");
 }
@@ -636,15 +639,15 @@ export async function runHostedProof(input: {
 }): Promise<HostedProofResult> {
   const fetcher = input.fetcher ?? fetch;
   const tokenPair = verifyWorkspaceTokenPair({
-    primary: input.token,
-    secondary: input.crossTenantToken,
-    scenario: input.scenario,
     nowEpochSeconds: input.nowEpochSeconds ?? Math.floor(Date.now() / 1000),
+    primary: input.token,
+    scenario: input.scenario,
+    secondary: input.crossTenantToken,
   });
   const metadata = await verifyProtectedResourceMetadata({
     endpoint: input.endpoint,
-    scenario: input.scenario,
     fetcher,
+    scenario: input.scenario,
   });
   const noAuth = new HostedMcpProofClient(input.endpoint, undefined, fetcher);
   const missing = await noAuth.rawInitialize(false);
@@ -677,8 +680,8 @@ export async function runHostedProof(input: {
     `${input.sourceSha}\0${JSON.stringify(input.scenario)}\0${randomUUID()}`,
   ).slice(0, 24);
   const startArgs = {
-    prompt: input.scenario.createPrompt,
     clientRequestId: `hosted-create-${proofId}`,
+    prompt: input.scenario.createPrompt,
   };
   await client.callToolAndDiscardResult("autograph_start", startArgs);
   const first = toolSession(
@@ -691,11 +694,11 @@ export async function runHostedProof(input: {
   );
   const created = await pollUntilSettled({
     client,
-    scenario: input.scenario,
-    sessionId: first.sessionId,
     cursor: first.cursor,
     permitApprovals: input.permitApprovals,
     requestPrefix: `hosted-create-${proofId}`,
+    scenario: input.scenario,
+    sessionId: first.sessionId,
   });
   if (created.responseCount < 1)
     throw new Error("Hosted proof did not exercise autograph_respond.");
@@ -705,18 +708,18 @@ export async function runHostedProof(input: {
   const sent = toolSession(
     "autograph_send",
     await client.callTool("autograph_send", {
-      sessionId: first.sessionId,
-      message: input.scenario.iterateMessage,
       clientRequestId: `hosted-iterate-${proofId}`,
+      message: input.scenario.iterateMessage,
+      sessionId: first.sessionId,
     }),
   );
   const iterated = await pollUntilSettled({
     client,
-    scenario: input.scenario,
-    sessionId: first.sessionId,
     cursor: created.cursor,
     permitApprovals: input.permitApprovals,
     requestPrefix: `hosted-iterate-${proofId}`,
+    scenario: input.scenario,
+    sessionId: first.sessionId,
   });
   if (iterated.page.status !== "completed")
     throw new Error("Iteration did not reach a successful completed state.");
@@ -729,9 +732,9 @@ export async function runHostedProof(input: {
   const draftPr = verifiedDraftPrEvidence(iterated.allText, input.scenario);
 
   const stale = await client.callTool("autograph_get", {
-    sessionId: `stale-${proofId}`,
     cursor: 0,
     limit: 1,
+    sessionId: `stale-${proofId}`,
   });
   if (!stale.isError) throw new Error("Stale or unknown session access did not fail closed.");
 
@@ -740,20 +743,20 @@ export async function runHostedProof(input: {
   const cancellationStart = toolSession(
     "autograph_start",
     await crossTenant.callTool("autograph_start", {
-      prompt: input.scenario.cancelPrompt,
       clientRequestId: `hosted-cancel-${proofId}`,
+      prompt: input.scenario.cancelPrompt,
     }),
   );
   // Keep proof response construction local to this run.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
-  const denied = async (clientInput: HostedMcpProofClient, sessionId: string) =>
-    (
-      await clientInput.callTool("autograph_get", {
-        sessionId,
-        cursor: 0,
-        limit: 1,
-      })
-    ).isError;
+  const denied = async (clientInput: HostedMcpProofClient, sessionId: string) => {
+    const result = await clientInput.callTool("autograph_get", {
+      cursor: 0,
+      limit: 1,
+      sessionId,
+    });
+    return result.isError;
+  };
   if (
     !(await denied(crossTenant, first.sessionId)) ||
     !(await denied(client, cancellationStart.sessionId))
@@ -767,11 +770,11 @@ export async function runHostedProof(input: {
   );
   const cancelled = await pollUntilSettled({
     client: crossTenant,
-    scenario: input.scenario,
-    sessionId: cancellationStart.sessionId,
     cursor: cancellationStart.cursor,
     permitApprovals: false,
     requestPrefix: `hosted-cancel-${proofId}`,
+    scenario: input.scenario,
+    sessionId: cancellationStart.sessionId,
   });
   if (cancelled.page.status !== "cancelled")
     throw new Error("Cooperative cancellation was not proven by public events.");
@@ -779,33 +782,34 @@ export async function runHostedProof(input: {
   const secondaryDisclosure = crossTenant.disclosureEvidence([input.token, input.crossTenantToken]);
 
   return {
-    sourceSha: input.sourceSha,
-    sourceTree: input.sourceTree,
-    releaseArchiveSha256: input.releaseArchiveSha256,
-    endpointOrigin: new URL(input.endpoint).origin,
+    cancellationProved: true,
+    discardedStartResponseRecovered: true,
     discoveredTools,
-    missingAuthRejected: true,
+    draftPrEvidenceDigest: draftPr.evidenceDigest,
+    endpointOrigin: new URL(input.endpoint).origin,
+    idempotentStart: true,
     invalidAuthRejected: true,
+    iterationProved: sent.sessionId === first.sessionId,
+    missingAuthRejected: true,
+    mutualWorkspaceDenial: true,
     oauthMetadataBound: true,
     oauthMetadataDigest: metadata.digest,
-    ...tokenPair,
-    idempotentStart: true,
-    discardedStartResponseRecovered: true,
-    responseCount: created.responseCount + iterated.responseCount,
-    responseBatchCount: created.responseBatchCount + iterated.responseBatchCount,
-    iterationProved: sent.sessionId === first.sessionId,
-    publicationEvidenceProved: true,
-    draftPrEvidenceDigest: draftPr.evidenceDigest,
-    staleSessionRejected: true,
-    mutualWorkspaceDenial: true,
-    cancellationProved: true,
-    publicResponsesScanned:
-      primaryDisclosure.publicResponsesScanned + secondaryDisclosure.publicResponsesScanned,
+    primaryIdentityDigest: tokenPair.primaryIdentityDigest,
     publicResponseDisclosureScanDigest: digest(
       `${primaryDisclosure.publicResponseDisclosureScanDigest}\0${secondaryDisclosure.publicResponseDisclosureScanDigest}`,
     ),
+    publicResponsesScanned:
+      primaryDisclosure.publicResponsesScanned + secondaryDisclosure.publicResponsesScanned,
+    publicationEvidenceProved: true,
+    releaseArchiveSha256: input.releaseArchiveSha256,
+    responseBatchCount: created.responseBatchCount + iterated.responseBatchCount,
+    responseCount: created.responseCount + iterated.responseCount,
+    secondaryIdentityDigest: tokenPair.secondaryIdentityDigest,
     sessionEvidenceDigest: digest(
       `${first.sessionId}\0${created.allText}\0${iterated.allText}\0${cancelled.page.status}`,
     ),
+    sourceSha: input.sourceSha,
+    sourceTree: input.sourceTree,
+    staleSessionRejected: true,
   };
 }

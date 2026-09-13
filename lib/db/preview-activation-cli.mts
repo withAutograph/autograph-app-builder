@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, realpath, stat } from "node:fs/promises";
-import { isAbsolute } from "node:path";
+import nodePath from "node:path";
 
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -24,7 +24,7 @@ const MAX_REQUEST_BYTES = 64 * 1024;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readPrivateRequest(path: string): Promise<unknown> {
-  if (!isAbsolute(path)) throw new Error("Activation request path must be absolute.");
+  if (!nodePath.isAbsolute(path)) throw new Error("Activation request path must be absolute.");
   const [link, canonicalPath] = await Promise.all([lstat(path), realpath(path)]);
   if (link.isSymbolicLink() || canonicalPath !== path) {
     throw new Error("Activation request path must be canonical and unsymlinked.");
@@ -73,82 +73,6 @@ async function configureLoginRole(
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function createStore(sql: Sql): PreviewActivationStore {
   return {
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    async provisionInvitedUser(input) {
-      return sql.begin(async (transaction) => {
-        const users = await transaction<
-          {
-            id: string;
-            name: string;
-            email: string;
-            email_verified: boolean;
-          }[]
-        >`select id, name, email, email_verified from "user" where id = ${input.userId} or email = ${input.email} for update`;
-        const accountId = stableId("account", `github:${input.githubAccountId}`);
-        const accounts = await transaction<
-          {
-            id: string;
-            issuer: string;
-            account_id: string;
-            provider_id: string;
-            user_id: string;
-            password: string | null;
-          }[]
-        >`select id, issuer, account_id, provider_id, user_id, password from account where id = ${accountId} or (issuer = 'local:oauth:github' and account_id = ${input.githubAccountId}) for update`;
-        const memberships = await transaction<
-          {
-            active: boolean;
-          }[]
-        >`select active from hosted_workspace_membership where issuer = ${input.issuer} and audience = ${input.resource} and workspace_id = ${input.workspaceId} and owner_user_id = ${input.userId} for update`;
-        let userRowsAffected = 0;
-        let accountRowsAffected = 0;
-        let membershipRowsAffected = 0;
-        if (users.length === 0) {
-          const now = new Date(input.requestedAt);
-          await transaction`insert into "user" (id, name, email, email_verified, created_at, updated_at) values (${input.userId}, ${input.githubLogin}, ${input.email}, true, ${now}, ${now})`;
-          userRowsAffected = 1;
-        } else if (
-          users.length !== 1 ||
-          users[0]?.id !== input.userId ||
-          users[0]?.email !== input.email ||
-          users[0]?.name !== input.githubLogin ||
-          users[0]?.email_verified !== true
-        ) {
-          throw new Error("Invited user identity conflicts with an existing row.");
-        }
-        if (accounts.length === 0) {
-          const now = new Date(input.requestedAt);
-          await transaction`insert into account (id, issuer, account_id, provider_id, user_id, password, created_at, updated_at) values (${accountId}, 'local:oauth:github', ${input.githubAccountId}, 'github', ${input.userId}, null, ${now}, ${now})`;
-          accountRowsAffected = 1;
-        } else {
-          const [account] = accounts;
-          if (
-            accounts.length !== 1 ||
-            account?.id !== accountId ||
-            account.issuer !== "local:oauth:github" ||
-            account.account_id !== input.githubAccountId ||
-            account.provider_id !== "github" ||
-            account.user_id !== input.userId ||
-            account.password !== null
-          ) {
-            throw new Error("Invited GitHub identity conflicts with an existing row.");
-          }
-        }
-        if (memberships.length === 0) {
-          const now = new Date(input.requestedAt);
-          await transaction`insert into hosted_workspace_membership (issuer, audience, workspace_id, owner_user_id, active, updated_at) values (${input.issuer}, ${input.resource}, ${input.workspaceId}, ${input.userId}, true, ${now})`;
-          membershipRowsAffected = 1;
-        } else if (memberships.length !== 1 || memberships[0]?.active !== true) {
-          throw new Error("Invited user membership conflicts with an existing row.");
-        }
-        return {
-          userRowsAffected,
-          accountRowsAffected,
-          membershipRowsAffected,
-        };
-      });
-    },
-
     async configureRuntimeRole(input) {
       const existing = await sql<
         { rolcanlogin: boolean; membership_count: number }[]
@@ -238,33 +162,33 @@ function createStore(sql: Sql): PreviewActivationStore {
       }
       try {
         assertRuntimeRoleReadback({
+          bypassRls: readback.rolbypassrls,
           canConnect: readback.can_connect,
-          canUseSchema: readback.can_use_schema,
           canCreateSchemaObjects: readback.can_create_schema_objects,
-          tablePrivilegesExact: readback.table_privileges_exact,
-          sequencePrivilegesExact: readback.sequence_privileges_exact,
           canLogin: readback.rolcanlogin,
-          inherits: readback.rolinherit,
-          superuser: readback.rolsuper,
+          canUseSchema: readback.can_use_schema,
           createDatabase: readback.rolcreatedb,
           createRole: readback.rolcreaterole,
-          replication: readback.rolreplication,
-          bypassRls: readback.rolbypassrls,
+          inherits: readback.rolinherit,
           membershipCount: readback.membership_count,
+          replication: readback.rolreplication,
+          sequencePrivilegesExact: readback.sequence_privileges_exact,
+          superuser: readback.rolsuper,
+          tablePrivilegesExact: readback.table_privileges_exact,
         });
       } catch {
         throw new Error("Runtime database role readback was not least privilege.");
       }
       return {
+        runtimeRoleAttributesExact: true,
+        runtimeRoleCanConnect: true,
+        runtimeRoleCanCreateSchemaObjects: false as const,
+        runtimeRoleCanUseSchema: true,
         runtimeRoleCreated,
         runtimeRoleLogin: true,
-        runtimeRoleCanConnect: true,
-        runtimeRoleCanUseSchema: true,
-        runtimeRoleCanCreateSchemaObjects: false as const,
-        runtimeRoleTablePrivilegesExact: true,
-        runtimeRoleSequencePrivilegesExact: true,
-        runtimeRoleAttributesExact: true,
         runtimeRoleMembershipCount: 0 as const,
+        runtimeRoleSequencePrivilegesExact: true,
+        runtimeRoleTablePrivilegesExact: true,
       };
     },
 
@@ -278,17 +202,17 @@ function createStore(sql: Sql): PreviewActivationStore {
       const database = drizzle(sql, { schema: databaseSchema });
       const auth = createPreviewOAuthServer({
         config: {
-          hostedAdapter: "1",
-          environment: "preview",
-          issuer: input.issuer,
-          resource: input.resource,
-          secret: input.authSecret,
           databaseUrl: "postgresql://task-scoped.invalid/database",
+          environment: "preview",
           githubClientId: "task-scoped-oauth-initialization",
           githubClientSecret: "task-scoped-oauth-initialization",
+          hostedAdapter: "1",
+          issuer: input.issuer,
+          passkeyOnboarding: null,
+          resource: input.resource,
+          secret: input.authSecret,
           vercelClientId: "task-scoped-oauth-initialization",
           vercelClientSecret: "task-scoped-oauth-initialization",
-          passkeyOnboarding: null,
         },
         database: drizzleAdapter(database, {
           provider: "pg",
@@ -297,8 +221,8 @@ function createStore(sql: Sql): PreviewActivationStore {
         }),
         membership: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-          async activeWorkspaceForUser() {
-            return undefined;
+          activeWorkspaceForUser() {
+            return Promise.resolve(undefined as undefined);
           },
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
           async isActiveMember() {
@@ -321,11 +245,87 @@ function createStore(sql: Sql): PreviewActivationStore {
         throw new Error("OAuth resource or JWKS initialization readback failed.");
       }
       return {
-        resourceRowsBefore: beforeResource[0]?.count ?? 0,
-        resourceRowsAfter: afterResource[0].count,
-        jwksRowsBefore: beforeJwks[0]?.count ?? 0,
         jwksRowsAfter: afterJwks[0].count,
+        jwksRowsBefore: beforeJwks[0]?.count ?? 0,
+        resourceRowsAfter: afterResource[0].count,
+        resourceRowsBefore: beforeResource[0]?.count ?? 0,
       };
+    },
+
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async provisionInvitedUser(input) {
+      return sql.begin(async (transaction) => {
+        const users = await transaction<
+          {
+            id: string;
+            name: string;
+            email: string;
+            email_verified: boolean;
+          }[]
+        >`select id, name, email, email_verified from "user" where id = ${input.userId} or email = ${input.email} for update`;
+        const accountId = stableId("account", `github:${input.githubAccountId}`);
+        const accounts = await transaction<
+          {
+            id: string;
+            issuer: string;
+            account_id: string;
+            provider_id: string;
+            user_id: string;
+            password: string | null;
+          }[]
+        >`select id, issuer, account_id, provider_id, user_id, password from account where id = ${accountId} or (issuer = 'local:oauth:github' and account_id = ${input.githubAccountId}) for update`;
+        const memberships = await transaction<
+          {
+            active: boolean;
+          }[]
+        >`select active from hosted_workspace_membership where issuer = ${input.issuer} and audience = ${input.resource} and workspace_id = ${input.workspaceId} and owner_user_id = ${input.userId} for update`;
+        let userRowsAffected = 0;
+        let accountRowsAffected = 0;
+        let membershipRowsAffected = 0;
+        if (users.length === 0) {
+          const now = new Date(input.requestedAt);
+          await transaction`insert into "user" (id, name, email, email_verified, created_at, updated_at) values (${input.userId}, ${input.githubLogin}, ${input.email}, true, ${now}, ${now})`;
+          userRowsAffected = 1;
+        } else if (
+          users.length !== 1 ||
+          users[0]?.id !== input.userId ||
+          users[0]?.email !== input.email ||
+          users[0]?.name !== input.githubLogin ||
+          users[0]?.email_verified !== true
+        ) {
+          throw new Error("Invited user identity conflicts with an existing row.");
+        }
+        if (accounts.length === 0) {
+          const now = new Date(input.requestedAt);
+          await transaction`insert into account (id, issuer, account_id, provider_id, user_id, password, created_at, updated_at) values (${accountId}, 'local:oauth:github', ${input.githubAccountId}, 'github', ${input.userId}, null, ${now}, ${now})`;
+          accountRowsAffected = 1;
+        } else {
+          const [account] = accounts;
+          if (
+            accounts.length !== 1 ||
+            account?.id !== accountId ||
+            account.issuer !== "local:oauth:github" ||
+            account.account_id !== input.githubAccountId ||
+            account.provider_id !== "github" ||
+            account.user_id !== input.userId ||
+            account.password !== null
+          ) {
+            throw new Error("Invited GitHub identity conflicts with an existing row.");
+          }
+        }
+        if (memberships.length === 0) {
+          const now = new Date(input.requestedAt);
+          await transaction`insert into hosted_workspace_membership (issuer, audience, workspace_id, owner_user_id, active, updated_at) values (${input.issuer}, ${input.resource}, ${input.workspaceId}, ${input.userId}, true, ${now})`;
+          membershipRowsAffected = 1;
+        } else if (memberships.length !== 1 || memberships[0]?.active !== true) {
+          throw new Error("Invited user membership conflicts with an existing row.");
+        }
+        return {
+          accountRowsAffected,
+          membershipRowsAffected,
+          userRowsAffected,
+        };
+      });
     },
   };
 }

@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import path from "node:path";
 import { formatWithOxfmt } from "./format-with-oxfmt.mts";
 import {
   assertAutographMcpEndpoint,
@@ -8,7 +8,7 @@ import {
   AUTOGRAPH_PACKAGE_VERSION,
 } from "../lib/plugin/agent-plugin-package.ts";
 
-const portable = JSON.parse(await readFile(resolve("plugin.json"), "utf-8"));
+const portable = JSON.parse(await readFile(path.resolve("plugin.json"), "utf-8"));
 const connectionIndex = process.argv.indexOf("--connection-id");
 const connectionId = connectionIndex === -1 ? undefined : process.argv[connectionIndex + 1];
 const endpointIndex = process.argv.indexOf("--endpoint");
@@ -32,7 +32,7 @@ if (portable.version !== AUTOGRAPH_PACKAGE_VERSION)
 
 if (suppliedEndpoint) assertAutographMcpEndpoint(suppliedEndpoint, { release: true });
 
-const portableMcpPath = resolve("mcp.json");
+const portableMcpPath = path.resolve("mcp.json");
 const portableMcp = JSON.parse(await readFile(portableMcpPath, "utf-8"));
 const portableServerNames = Object.keys(portableMcp.mcpServers ?? {});
 if (portableServerNames.length !== 1 || portableServerNames[0] !== AUTOGRAPH_MCP_SERVER_NAME)
@@ -47,41 +47,41 @@ if (
 assertAutographMcpEndpoint(portableServer.url, { release: false });
 
 const manifest = {
-  name: portable.name,
-  version: portable.version,
-  description: portable.description,
   author: portable.author,
+  description: portable.description,
   homepage: portable.homepage,
-  repository: portable.repository,
-  license: portable.license,
-  keywords: portable.keywords,
-  skills: "./skills/",
-  ...(connectionId ? { apps: "./.app.json" } : {}),
-  ...(endpoint ? { mcpServers: "./.mcp.json" } : {}),
   interface: {
-    displayName: "Autograph App Builder",
-    shortDescription: "Design and create apps with Autograph",
-    longDescription:
-      "Use Autograph App Builder to design, plan, create, validate, and separately publish apps in explicitly supported repositories.",
-    developerName: portable.author.name,
-    category: "Developer Tools",
+    brandColor: "#111827",
     capabilities: ["Interactive", "Read", "Write"],
+    category: "Developer Tools",
     composerIcon: "./assets/autograph-icon.png",
-    logo: "./assets/autograph-icon.png",
-    websiteURL: portable.homepage,
     defaultPrompt: [
       "Create an app for [who it is for, what they need to do, and the outcome you want]",
       "Build an event planning app for coordinating guests, schedules, and tasks",
       "Design a customer feedback app with a clear review workflow",
     ],
-    brandColor: "#111827",
+    developerName: portable.author.name,
+    displayName: "Autograph App Builder",
+    logo: "./assets/autograph-icon.png",
+    longDescription:
+      "Use Autograph App Builder to design, plan, create, validate, and separately publish apps in explicitly supported repositories.",
     screenshots: [],
+    shortDescription: "Design and create apps with Autograph",
+    websiteURL: portable.homepage,
   },
+  keywords: portable.keywords,
+  license: portable.license,
+  name: portable.name,
+  repository: portable.repository,
+  skills: "./skills/",
+  version: portable.version,
+  ...(connectionId ? { apps: "./.app.json" } : {}),
+  ...(endpoint ? { mcpServers: "./.mcp.json" } : {}),
 };
 const apps = connectionId ? { apps: { "app-builder": { id: connectionId } } } : { apps: {} };
-await mkdir(resolve(".codex-plugin"), { recursive: true });
+await mkdir(path.resolve(".codex-plugin"), { recursive: true });
 await writeFile(
-  resolve(".codex-plugin/plugin.json"),
+  path.resolve(".codex-plugin/plugin.json"),
   await formatWithOxfmt(".codex-plugin/plugin.json", JSON.stringify(manifest)),
 );
 if (endpoint) {
@@ -91,26 +91,28 @@ if (endpoint) {
     await formatWithOxfmt(portableMcpPath, JSON.stringify(portableMcp)),
   );
   await writeFile(
-    resolve(".mcp.json"),
+    path.resolve(".mcp.json"),
     await formatWithOxfmt(
       ".mcp.json",
       JSON.stringify({
         mcpServers: {
           [AUTOGRAPH_MCP_SERVER_NAME]: {
+            oauth_resource: endpoint,
             type: "http",
             url: endpoint,
-            oauth_resource: endpoint,
           },
         },
       }),
     ),
   );
 }
-await writeFile(resolve(".app.json"), await formatWithOxfmt(".app.json", JSON.stringify(apps)));
-console.log(
-  connectionId
-    ? "Generated the OpenAI adapter with its registered MCP connection."
-    : endpoint
-      ? `Generated the OpenAI adapter for ${endpoint}.`
-      : "Generated the skill-only OpenAI adapter; pass --connection-id after registering MCP.",
+await writeFile(
+  path.resolve(".app.json"),
+  await formatWithOxfmt(".app.json", JSON.stringify(apps)),
 );
+let completionMessage =
+  "Generated the skill-only OpenAI adapter; pass --connection-id after registering MCP.";
+if (connectionId)
+  completionMessage = "Generated the OpenAI adapter with its registered MCP connection.";
+else if (endpoint) completionMessage = `Generated the OpenAI adapter for ${endpoint}.`;
+console.log(completionMessage);

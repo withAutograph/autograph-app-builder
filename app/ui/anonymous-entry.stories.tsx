@@ -13,10 +13,10 @@ function AnonymousBuilder({ onContinue }: { onContinue?: (brief: string) => void
 }
 
 const meta = {
-  title: "Create App/Flow/Anonymous Entry",
-  component: AnonymousBuilder,
   args: { onContinue: fn() },
+  component: AnonymousBuilder,
   parameters: { layout: "fullscreen" },
+  title: "Create App/Flow/Anonymous Entry",
 } satisfies Meta<typeof AnonymousBuilder>;
 export default meta;
 type Story = StoryObj<typeof meta>;

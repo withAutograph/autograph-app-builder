@@ -18,11 +18,11 @@ type Authority = HostedAdminPlanRequest["authority"];
 
 const configSchema = z
   .object({
+    clientId: z.string().min(1).max(512),
+    clientSecret: z.string().min(1).max(512),
     issuer: z.string().url(),
     resource: z.string().url(),
     slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$/u),
-    clientId: z.string().min(1).max(512),
-    clientSecret: z.string().min(1).max(512),
     tokenKey: z.instanceof(Buffer).refine((value) => value.length === 32),
     tokenKeyVersion: z.string().regex(/^[A-Za-z0-9._-]{1,32}$/u),
   })
@@ -36,11 +36,11 @@ export function readVercelIntegrationEnvironment(
 ): VercelIntegrationConfig {
   const tokenKey = Buffer.from(environment.VERCEL_INTEGRATION_TOKEN_KEY ?? "", "base64");
   return configSchema.parse({
+    clientId: environment.VERCEL_INTEGRATION_CLIENT_ID,
+    clientSecret: environment.VERCEL_INTEGRATION_CLIENT_SECRET,
     issuer: environment.BETTER_AUTH_URL,
     resource: environment.MCP_RESOURCE_URL,
     slug: environment.VERCEL_INTEGRATION_SLUG,
-    clientId: environment.VERCEL_INTEGRATION_CLIENT_ID,
-    clientSecret: environment.VERCEL_INTEGRATION_CLIENT_SECRET,
     tokenKey,
     tokenKeyVersion: environment.VERCEL_INTEGRATION_TOKEN_KEY_VERSION,
   });
@@ -145,13 +145,13 @@ export function decryptVercelToken(input: {
 const tokenResponseSchema = z.object({ access_token: z.string().min(1).max(8192) }).passthrough();
 const teamSchema = z
   .object({
-    id: z.string().min(1),
-    name: z.string().min(1),
-    slug: z.string().min(1),
     billing: z
       .object({ plan: z.string().min(1) })
       .passthrough()
       .optional(),
+    id: z.string().min(1),
+    name: z.string().min(1),
+    slug: z.string().min(1),
   })
   .passthrough();
 const teamResponseSchema = z.union([
@@ -198,12 +198,12 @@ export function createVercelInstallationAuthorization(input: {
       const state = nonce();
       const issuedAt = now();
       await input.states.create({
-        stateDigest: digest(state),
         authority,
         authorityDigest: authorityDigest(authority),
         createdAt: new Date(issuedAt),
         expiresAt: new Date(issuedAt + 10 * 60_000),
         returnState,
+        stateDigest: digest(state),
       });
       const url = input.emulation
         ? new URL("/local-connections/vercel", config.issuer)
@@ -228,18 +228,18 @@ export function createVercelInstallationAuthorization(input: {
       if (!(await input.membership.isActiveMember(authority)))
         throw new Error("membership-inactive");
       const returnState = await input.states.consume({
-        stateDigest: digest(state),
         authority,
         authorityDigest: authorityDigest(authority),
         now: new Date(now()),
+        stateDigest: digest(state),
       });
       if (!returnState)
         throw new VercelInstallationAuthorizationError(
           "state-invalid",
           await input.states.recover({
-            stateDigest: digest(state),
             authority,
             authorityDigest: authorityDigest(authority),
+            stateDigest: digest(state),
           }),
         );
 
@@ -249,11 +249,6 @@ export function createVercelInstallationAuthorization(input: {
             ? `${input.emulation.vercelOrigin}/login/oauth/token`
             : "https://api.vercel.com/v2/oauth/access_token",
           {
-            method: "POST",
-            headers: {
-              Accept: "application/json",
-              "Content-Type": "application/x-www-form-urlencoded",
-            },
             body: new URLSearchParams({
               client_id: config.clientId,
               client_secret: config.clientSecret,
@@ -265,6 +260,11 @@ export function createVercelInstallationAuthorization(input: {
                 config.issuer,
               ).toString(),
             }),
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            method: "POST",
             signal: AbortSignal.timeout(8000),
           },
         );
@@ -295,12 +295,12 @@ export function createVercelInstallationAuthorization(input: {
         if (!response.ok) throw new Error("scope-read-failed");
         const team = teamResponseSchema.parse(await response.json());
         binding = {
+          displayName: team.name,
           installationId,
+          plan: team.billing?.plan ?? "unknown",
           scopeId: team.id,
           scopeType: "team",
-          displayName: team.name,
           slug: team.slug,
-          plan: team.billing?.plan ?? "unknown",
         };
       } else {
         const response = await request(
@@ -313,12 +313,12 @@ export function createVercelInstallationAuthorization(input: {
         if (!response.ok) throw new Error("scope-read-failed");
         const { user } = userSchema.parse(await response.json());
         binding = {
+          displayName: user.name ?? user.username,
           installationId,
+          plan: "hobby",
           scopeId: user.id,
           scopeType: "user",
-          displayName: user.name ?? user.username,
           slug: user.username,
-          plan: "hobby",
         };
       }
       if (!(await input.membership.isActiveMember(authority)))
@@ -326,8 +326,8 @@ export function createVercelInstallationAuthorization(input: {
       const persistedBinding = await input.installations.bind({
         authority,
         binding,
-        token,
         now: new Date(now()),
+        token,
       });
       return { binding: persistedBinding, returnState };
     },

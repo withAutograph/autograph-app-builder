@@ -11,11 +11,11 @@ export type HostedGitHubTenantAuthority = z.infer<typeof hostedTenantAuthoritySc
 
 export const hostedGitHubInstallationBindingSchema = z
   .object({
-    installationId: z.string().regex(/^[1-9][0-9]*$/u),
     accountId: z.string().regex(/^[1-9][0-9]*$/u),
     accountLogin: z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?$/u),
     accountType: z.enum(["Organization", "User"]),
     active: z.boolean(),
+    installationId: z.string().regex(/^[1-9][0-9]*$/u),
     updatedAt: z.date(),
   })
   .strict();
@@ -56,11 +56,11 @@ function bindingTenantPredicate(authority: HostedGitHubTenantAuthority) {
 }
 
 const bindingSelection = {
-  installationId: hostedGitHubInstallationBindings.installationId,
   accountId: hostedGitHubInstallationBindings.accountId,
   accountLogin: hostedGitHubInstallationBindings.accountLogin,
   accountType: hostedGitHubInstallationBindings.accountType,
   active: hostedGitHubInstallationBindings.active,
+  installationId: hostedGitHubInstallationBindings.installationId,
   updatedAt: hostedGitHubInstallationBindings.updatedAt,
 };
 
@@ -81,31 +81,6 @@ export function createPostgresHostedGitHubInstallationStore(
   database: Database,
 ): HostedGitHubInstallationStore {
   return {
-    async read(authority) {
-      const rows = await database
-        .select({
-          installationId: hostedGitHubInstallations.installationId,
-          accountId: hostedGitHubInstallations.accountId,
-          accountLogin: hostedGitHubInstallations.accountLogin,
-          accountType: hostedGitHubInstallations.accountType,
-          active: hostedGitHubInstallations.active,
-          updatedAt: hostedGitHubInstallations.updatedAt,
-        })
-        .from(hostedGitHubInstallations)
-        .where(tenantPredicate(authority))
-        .limit(1);
-      return rows[0] === undefined
-        ? undefined
-        : hostedGitHubInstallationBindingSchema.parse(rows[0]);
-    },
-    async list(authority) {
-      const rows = await database
-        .select(bindingSelection)
-        .from(hostedGitHubInstallationBindings)
-        .where(bindingTenantPredicate(authority))
-        .orderBy(asc(hostedGitHubInstallationBindings.accountLogin));
-      return rows.map((row) => hostedGitHubInstallationBindingSchema.parse(row));
-    },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async bind(input) {
       const authority = hostedTenantAuthoritySchema.parse(input.authority);
@@ -117,11 +92,11 @@ export function createPostgresHostedGitHubInstallationStore(
       return database.transaction(async (transaction) => {
         const legacyRows = await transaction
           .select({
-            installationId: hostedGitHubInstallations.installationId,
             accountId: hostedGitHubInstallations.accountId,
             accountLogin: hostedGitHubInstallations.accountLogin,
             accountType: hostedGitHubInstallations.accountType,
             active: hostedGitHubInstallations.active,
+            installationId: hostedGitHubInstallations.installationId,
             updatedAt: hostedGitHubInstallations.updatedAt,
           })
           .from(hostedGitHubInstallations)
@@ -139,6 +114,7 @@ export function createPostgresHostedGitHubInstallationStore(
           .insert(hostedGitHubInstallationBindings)
           .values({ ...authority, ...binding })
           .onConflictDoUpdate({
+            set: binding,
             target: [
               hostedGitHubInstallationBindings.issuer,
               hostedGitHubInstallationBindings.audience,
@@ -146,7 +122,6 @@ export function createPostgresHostedGitHubInstallationStore(
               hostedGitHubInstallationBindings.ownerUserId,
               hostedGitHubInstallationBindings.installationId,
             ],
-            set: binding,
           })
           .returning(bindingSelection);
         if (bindingRows.length !== 1)
@@ -159,19 +134,44 @@ export function createPostgresHostedGitHubInstallationStore(
           .insert(hostedGitHubInstallations)
           .values({ ...authority, ...binding })
           .onConflictDoUpdate({
+            set: binding,
             target: [
               hostedGitHubInstallations.issuer,
               hostedGitHubInstallations.audience,
               hostedGitHubInstallations.workspaceId,
               hostedGitHubInstallations.ownerUserId,
             ],
-            set: binding,
           })
           .returning({
             installationId: hostedGitHubInstallations.installationId,
           });
         return hostedGitHubInstallationBindingSchema.parse(bindingRows[0]);
       });
+    },
+    async list(authority) {
+      const rows = await database
+        .select(bindingSelection)
+        .from(hostedGitHubInstallationBindings)
+        .where(bindingTenantPredicate(authority))
+        .orderBy(asc(hostedGitHubInstallationBindings.accountLogin));
+      return rows.map((row) => hostedGitHubInstallationBindingSchema.parse(row));
+    },
+    async read(authority) {
+      const rows = await database
+        .select({
+          accountId: hostedGitHubInstallations.accountId,
+          accountLogin: hostedGitHubInstallations.accountLogin,
+          accountType: hostedGitHubInstallations.accountType,
+          active: hostedGitHubInstallations.active,
+          installationId: hostedGitHubInstallations.installationId,
+          updatedAt: hostedGitHubInstallations.updatedAt,
+        })
+        .from(hostedGitHubInstallations)
+        .where(tenantPredicate(authority))
+        .limit(1);
+      return rows[0] === undefined
+        ? undefined
+        : hostedGitHubInstallationBindingSchema.parse(rows[0]);
     },
   };
 }

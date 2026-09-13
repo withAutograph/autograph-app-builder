@@ -105,9 +105,9 @@ routes, catalog gaps, and one synchronized manifest. The manifest inventories:
 - the future production meaning of visible elements.
 
 Before authoring the first preview, read `references/ui-preview-authoring.md`
-with `read_skill_reference`. Resolve the public aliases through the prepared
+with `read-skill-reference`. Resolve the public aliases through the prepared
 repository's `tsconfig.json` or package exports, then follow re-exports to the
-selected component implementations and stories with `inspect_repository`.
+selected component implementations and stories with `inspect-repository`.
 Use exact exported names and observed props. The preview inventory supports
 capitalized component, composition, and icon names only; package helpers such
 as `buttonClassName` are not preview imports even if the package exports them.
@@ -162,7 +162,7 @@ preflight steps or approval gates:
 
 Show the UI early and continue internal design recording and planning from the
 brief and safe revisable defaults. Before recording the first AppSpec artifact,
-read `references/app-spec.md` with `read_skill_reference` and copy its complete
+read `references/app-spec.md` with `read-skill-reference` and copy its complete
 canonical Markdown skeleton. Fill every required section, including explicit
 deferrals where appropriate, and end with its exact Build handoff. Keep GitHub,
 Vercel, and other provider names in product prose; use only provider-neutral
@@ -193,7 +193,7 @@ generated styling system.
 
 References are bundled files, not skills. Never pass a reference path to
 `load_skill`; load only the top-level `design-app` skill, then use
-`read_skill_reference` with:
+`read-skill-reference` with:
 
 - `design-app` and `references/questions.md` before asking discovery questions;
 - `design-app` and `references/information-composition.md` when composing any

@@ -19,7 +19,6 @@ const commands = ["bash", "git", "mise", "bun", "node", "pnpm"] as const;
 export default defineTool({
   description:
     "Inspect the fixed sandbox build-tool allowlist without installing packages or mutating the workspace.",
-  inputSchema: z.object({}),
   async execute(_input, ctx) {
     const sandbox = await ctx.getSandbox();
     const tools = await Promise.all(
@@ -27,11 +26,11 @@ export default defineTool({
         const location = await sandbox.run({
           command: `command -v ${command}`,
         });
-        if (location.exitCode !== 0) return { command, available: false as const };
+        if (location.exitCode !== 0) return { available: false as const, command };
         const version = await sandbox.run({ command: `${command} --version` });
         return {
-          command,
           available: true as const,
+          command,
           path: location.stdout.trim(),
           version: (version.stdout.trim() || version.stderr.trim()).split("\n")[0] ?? "",
         };
@@ -44,7 +43,7 @@ export default defineTool({
     });
     const cache =
       backend.blockers.length === 0
-        ? await inspectDependencyCache(sandbox).catch(() => undefined)
+        ? await inspectDependencyCache(sandbox).catch(() => globalThis.undefined)
         : undefined;
     const execution =
       cache === undefined
@@ -53,7 +52,7 @@ export default defineTool({
             try {
               return targetExecutionBinding(cache);
             } catch {
-              return undefined;
+              return globalThis.undefined;
             }
           })();
     const required = (
@@ -61,24 +60,25 @@ export default defineTool({
     ).map((command) => {
       const observed = tools.find((tool) => tool.command === command);
       return {
+        available: observed?.available === true,
         command,
         expected: requiredToolVersions[command].source,
-        available: observed?.available === true,
-        version: observed?.available === true ? observed.version : "",
         matches: observed?.available === true && toolVersionMatches(command, observed.version),
+        version: observed?.available === true ? observed.version : "",
       };
     });
     return {
-      sandboxId: sandbox.id,
       backend: backend.kind,
       backendBlockers: backend.blockers,
-      imageConfiguration: execution === undefined ? "unconfigured" : "configured",
-      toolchainReady:
-        execution !== undefined && cache !== undefined && required.every((tool) => tool.matches),
       dependencyCacheDigest:
         cache === undefined ? "unverified" : dependencyCacheReceiptDigest(cache),
+      imageConfiguration: execution === undefined ? "unconfigured" : "configured",
       required,
+      sandboxId: sandbox.id,
+      toolchainReady:
+        execution !== undefined && cache !== undefined && required.every((tool) => tool.matches),
       tools,
     };
   },
+  inputSchema: z.object({}),
 });

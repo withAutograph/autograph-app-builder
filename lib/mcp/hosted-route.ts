@@ -114,9 +114,9 @@ export function createDeploymentMcpRequestHandler(input: {
           auth: config.auth,
           database,
           eve: config.eve,
-          workloadIdentity: input.workloadIdentity,
           fetchImplementation: input.fetchImplementation,
           now: input.now,
+          workloadIdentity: input.workloadIdentity,
         });
         const handoffService = createBuilderHandoffService({
           store: createPostgresBuilderHandoffStore(database),
@@ -125,23 +125,6 @@ export function createDeploymentMcpRequestHandler(input: {
           environment: input.environment,
           hostedRuntime: {
             ...runtime,
-            handoffs: {
-              ...handoffService,
-              async recheckRepositoryAccess({ principal, repository, sourceHandoffId }) {
-                if (input.recheckRepositoryAccess !== undefined)
-                  return input.recheckRepositoryAccess({
-                    sessionAuth: forwardedSessionAuth(principal, sourceHandoffId),
-                    repository,
-                  });
-                const repositoryAccessRuntime =
-                  await import("../agent/deployment-repository-access-runtime");
-                const repositoryRuntime =
-                  await repositoryAccessRuntime.repositoryAccessRuntimeForSession(
-                    forwardedSessionAuth(principal, sourceHandoffId),
-                  );
-                return repositoryRuntime.classify({ repository });
-              },
-            },
             async beforeRead({ principal, adapterSessionId, sourceHandoffId }) {
               try {
                 const repositoryRuntime =
@@ -161,6 +144,23 @@ export function createDeploymentMcpRequestHandler(input: {
                 // access remains parked and the ordinary session read still
                 // returns its exact outstanding authorization request.
               }
+            },
+            handoffs: {
+              ...handoffService,
+              async recheckRepositoryAccess({ principal, repository, sourceHandoffId }) {
+                if (input.recheckRepositoryAccess !== undefined)
+                  return input.recheckRepositoryAccess({
+                    repository,
+                    sessionAuth: forwardedSessionAuth(principal, sourceHandoffId),
+                  });
+                const repositoryAccessRuntime =
+                  await import("../agent/deployment-repository-access-runtime");
+                const repositoryRuntime =
+                  await repositoryAccessRuntime.repositoryAccessRuntimeForSession(
+                    forwardedSessionAuth(principal, sourceHandoffId),
+                  );
+                return repositoryRuntime.classify({ repository });
+              },
             },
           },
         });

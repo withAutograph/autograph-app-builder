@@ -6,26 +6,26 @@ import { organization } from "better-auth/plugins/organization";
 const identityCallbackPaths = new Set(["/callback/github", "/callback/vercel"]);
 
 const organizationAccess = createAccessControl({
-  organization: ["update", "delete"],
-  member: ["create", "update", "delete"],
   invitation: ["create", "cancel"],
+  member: ["create", "update", "delete"],
+  organization: ["update", "delete"],
 });
 
 const organizationRoles = {
-  owner: organizationAccess.newRole({
-    organization: ["update", "delete"],
-    member: ["create", "update", "delete"],
-    invitation: ["create", "cancel"],
-  }),
   admin: organizationAccess.newRole({
-    organization: ["update"],
-    member: ["create", "update", "delete"],
     invitation: ["create", "cancel"],
+    member: ["create", "update", "delete"],
+    organization: ["update"],
   }),
   member: organizationAccess.newRole({
-    organization: [],
-    member: [],
     invitation: [],
+    member: [],
+    organization: [],
+  }),
+  owner: organizationAccess.newRole({
+    invitation: ["create", "cancel"],
+    member: ["create", "update", "delete"],
+    organization: ["update", "delete"],
   }),
 };
 
@@ -122,21 +122,6 @@ function organizationError(cause: unknown) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPreviewUserManagementLifecycle(authority: PreviewOrganizationUserAuthority) {
   return {
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    async beforeUserCreate(
-      user: PreviewVerifiedUser & Record<string, unknown>,
-      context: { path?: string } | null,
-    ) {
-      if (!identityCallbackPaths.has(context?.path ?? "")) return;
-      if (!user.emailVerified) throw identityUnavailable();
-      return {
-        data: {
-          ...user,
-          email: user.email.trim().toLowerCase(),
-        },
-      };
-    },
-
     async beforeSessionCreate<T extends { userId: string }>(
       session: T,
       context?: { path?: string } | null,
@@ -165,6 +150,21 @@ export function createPreviewUserManagementLifecycle(authority: PreviewOrganizat
         throw organizationError(error);
       }
     },
+
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async beforeUserCreate(
+      user: PreviewVerifiedUser & Record<string, unknown>,
+      context: { path?: string } | null,
+    ) {
+      if (!identityCallbackPaths.has(context?.path ?? "")) return;
+      if (!user.emailVerified) throw identityUnavailable();
+      return {
+        data: {
+          ...user,
+          email: user.email.trim().toLowerCase(),
+        },
+      };
+    },
   };
 }
 
@@ -174,43 +174,43 @@ export function previewUserManagementPlugins(authority: PreviewOrganizationUserA
   return [
     organization({
       ac: organizationAccess,
-      roles: organizationRoles,
-      creatorRole: "owner",
       allowUserToCreateOrganization: false,
+      cancelPendingInvitationsOnReInvite: true,
+      creatorRole: "owner",
+      invitationExpiresIn: 60 * 60 * 48,
       // Better Auth defaults to a 100-member organization ceiling when this
       // option is omitted. App Builder does not impose a product membership
       // quota, so use the largest exactly representable integer instead.
       membershipLimit: Number.MAX_SAFE_INTEGER,
-      invitationExpiresIn: 60 * 60 * 48,
-      cancelPendingInvitationsOnReInvite: true,
       requireEmailVerificationOnInvitation: true,
+      roles: organizationRoles,
       schema: {
         organization: {
           additionalFields: {
-            issuer: {
-              type: "string",
-              required: true,
-              input: false,
-              fieldName: "issuer",
-            },
             audience: {
-              type: "string",
-              required: true,
-              input: false,
               fieldName: "audience",
+              input: false,
+              required: true,
+              type: "string",
+            },
+            issuer: {
+              fieldName: "issuer",
+              input: false,
+              required: true,
+              type: "string",
             },
             workspaceId: {
-              type: "string",
-              required: true,
               input: false,
+              required: true,
+              type: "string",
             },
           },
         },
       },
     }),
     admin({
-      defaultRole: "user",
       adminRoles: ["admin"],
+      defaultRole: "user",
     }),
     {
       id: "autograph-self-serve-workspace",
@@ -218,14 +218,14 @@ export function previewUserManagementPlugins(authority: PreviewOrganizationUserA
         return {
           options: {
             databaseHooks: {
-              user: {
-                create: {
-                  before: lifecycle.beforeUserCreate,
-                },
-              },
               session: {
                 create: {
                   before: lifecycle.beforeSessionCreate,
+                },
+              },
+              user: {
+                create: {
+                  before: lifecycle.beforeUserCreate,
                 },
               },
             },

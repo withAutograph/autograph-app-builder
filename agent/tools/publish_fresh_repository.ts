@@ -20,10 +20,9 @@ import {
 import { freshBootstrapSourceWorkspace } from "@/lib/agent/fresh-bootstrap-source";
 
 export default defineTool({
+  approval: always(),
   description:
     "After a separate approval, atomically publish the exact reviewed fresh-template result to the approved absent or exact-empty local destination as one parentless SHA-1 Git commit. GitHub publication, remotes, release activation, and arbitrary target mutation remain unavailable.",
-  inputSchema: z.strictObject({ publication: freshBootstrapProposalSchema }),
-  approval: always(),
   async execute({ publication: expected }, ctx) {
     const capability = await currentFreshBootstrapCapability();
     const workflow = appBuilderWorkflowState.get();
@@ -35,19 +34,19 @@ export default defineTool({
     const readOverlayFile = async (path: string) =>
       await sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` });
     const sourceWorkspace = await freshBootstrapSourceWorkspace({
-      sandbox,
       receipt: workflow.sourceReceipt,
+      sandbox,
       workspace: workflow.workspace,
     });
     const proposal = await deriveFreshBootstrapProposal({
       capability,
       destinationPath: expected.destinationPath,
       expectedPrestate: expected.destinationPrestate.kind,
-      repositoryIdentity: expected.repositoryIdentity,
-      sourceReceipt: workflow.sourceReceipt,
-      review: workflow.reviewReceipt,
       protectedPaths: [process.cwd()],
       readOverlayFile,
+      repositoryIdentity: expected.repositoryIdentity,
+      review: workflow.reviewReceipt,
+      sourceReceipt: workflow.sourceReceipt,
       sourceWorkspace,
     });
     if (!exactFreshBootstrapProposalMatch(proposal, expected))
@@ -55,12 +54,6 @@ export default defineTool({
     let pendingWorkflow: ReturnType<typeof appBuilderWorkflowState.get> | undefined;
     const result = await publishFreshBootstrap({
       capability,
-      proposal,
-      sourceReceipt: workflow.sourceReceipt,
-      review: workflow.reviewReceipt,
-      publishedByCallId: ctx.callId,
-      readOverlayFile,
-      sourceWorkspace,
       hooks: {
         ...configuredFreshBootstrapEvalHooks(),
         ...currentFreshBootstrapTestHooks(),
@@ -73,15 +66,21 @@ export default defineTool({
                 throw new Error("The reviewed workflow changed before fresh bootstrap.");
               return {
                 ...current,
-                phase: "fresh_bootstrap_pending",
-                freshBootstrapProposal: proposal,
                 freshBootstrapCallId: ctx.callId,
+                freshBootstrapProposal: proposal,
+                phase: "fresh_bootstrap_pending",
               };
             },
           });
           pendingWorkflow = appBuilderWorkflowState.get();
         },
       },
+      proposal,
+      publishedByCallId: ctx.callId,
+      readOverlayFile,
+      review: workflow.reviewReceipt,
+      sourceReceipt: workflow.sourceReceipt,
+      sourceWorkspace,
     });
     if (pendingWorkflow === undefined)
       throw new Error("Durable fresh-bootstrap intent was not bound to workflow state.");
@@ -101,16 +100,17 @@ export default defineTool({
         return result.ok
           ? {
               ...current,
-              phase: "published_fresh_bootstrap",
               freshBootstrapReceipt: result.receipt,
+              phase: "published_fresh_bootstrap",
             }
           : {
               ...current,
-              phase: "fresh_bootstrap_failed",
               freshBootstrapReceipt: result.receipt,
+              phase: "fresh_bootstrap_failed",
             };
       },
     });
     return result.receipt;
   },
+  inputSchema: z.strictObject({ publication: freshBootstrapProposalSchema }),
 });

@@ -6,11 +6,11 @@ import type { HostedPrincipal } from "../eve/hosted-auth";
 
 const forwardedAttributesSchema = z
   .object({
+    "autograph:source-handoff-id": z.string().uuid().optional(),
+    "eve:forwarded-by": hostedIdentifierSchema.optional(),
     "mcp:audience": z.string().url().startsWith("https://"),
     "mcp:scopes": z.array(z.string().min(1).max(100)).min(1).max(50),
     "mcp:workspace-id": z.string().min(1).max(200),
-    "eve:forwarded-by": hostedIdentifierSchema.optional(),
-    "autograph:source-handoff-id": z.string().uuid().optional(),
   })
   .strict();
 
@@ -65,10 +65,10 @@ export function exactForwardedSessionAuthority(sessionAuth: unknown): {
       throw new HostedSessionAuthorityError("subject");
     }
     return {
-      issuer: context.issuer,
       audience: context.attributes["mcp:audience"],
-      workspaceId: context.attributes["mcp:workspace-id"],
+      issuer: context.issuer,
       ownerUserId: context.subject,
+      workspaceId: context.attributes["mcp:workspace-id"],
     };
   }
 

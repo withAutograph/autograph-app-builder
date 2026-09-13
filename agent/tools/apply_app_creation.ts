@@ -21,13 +21,9 @@ import {
 } from "@/lib/agent/apply-implementation-files";
 
 export default defineTool({
+  approval: always(),
   description:
     "Build this app in the private preview checkout, then validate it for review. This does not publish, deploy, provision resources, or change the user's repository.",
-  approval: always(),
-  inputSchema: z.object({
-    productSummary: z.string().trim().min(1).max(600).optional(),
-    implementationFiles: implementationFilesSchema.default([]),
-  }),
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
     if (
@@ -44,64 +40,64 @@ export default defineTool({
     const fixture = hasTestCapability("simulated-target");
     if (current.phase === "applied") {
       return {
-        status: "applied" as const,
         appId: current.proposal.target.contract.appId,
         changedFileCount: current.applyReceipt.changes.length,
         reused: true,
+        status: "applied" as const,
       };
     }
 
     const binding = {
-      sourceSha: current.workspace.sourceSha,
-      sourceTree: current.workspace.sourceTree,
-      sourceReceiptDigest: current.sourceReceipt.digest,
-      eligibilityDigest: current.workspace.eligibilityDigest,
-      workspaceDigest: current.workspace.workspaceDigest,
       appSpecDigest: current.appSpec.digest,
       appSpecPath: current.appSpec.artifactPath,
       artifactRevision: current.appSpec.artifactRevision,
+      dependencyCacheContentDigest: current.dependencyReceipt.cacheContentDigest,
+      dependencyCacheDigest: current.dependencyReceipt.dependencyCacheDigest,
       dependencyReceiptDigest: current.dependencyReceipt.digest,
+      eligibilityDigest: current.workspace.eligibilityDigest,
       identityDigest: current.identityReceipt.digest,
       imageDigest: current.dependencyReceipt.imageDigest,
-      dependencyCacheDigest: current.dependencyReceipt.dependencyCacheDigest,
-      dependencyCacheContentDigest: current.dependencyReceipt.cacheContentDigest,
       proposalDigest: current.proposal.digest,
+      sourceReceiptDigest: current.sourceReceipt.digest,
+      sourceSha: current.workspace.sourceSha,
+      sourceTree: current.workspace.sourceTree,
+      workspaceDigest: current.workspace.workspaceDigest,
     };
     const result = await executeProposalBoundApply({
-      sandbox,
+      appliedByCallId: ctx.callId,
+      artifactRevision: current.appSpec.artifactRevision,
+      binding,
+      dependencyLayout: current.dependencyReceipt.dependencyLayout,
       executor: withImplementationFiles(
         fixture ? fixtureApplyCommandExecutor() : sandboxApplyCommandExecutor(),
         input.implementationFiles,
       ),
+      proposal: current.proposal.target,
+      sandbox,
       ...(fixture
         ? {
             snapshotter: (fixtureSandbox, applyRoot) =>
               inspectFixtureApplyOverlay(fixtureSandbox, applyRoot, current.appSpec.appId),
           }
         : {}),
-      binding,
-      artifactRevision: current.appSpec.artifactRevision,
-      dependencyLayout: current.dependencyReceipt.dependencyLayout,
-      proposal: current.proposal.target,
-      appliedByCallId: ctx.callId,
     });
     if (!result.ok) {
       updateExactWorkflow({
         expected: current,
         operation: "target apply failure recording",
         transition: () => ({
-          version: APP_BUILDER_WORKFLOW_VERSION,
+          appSpec: current.appSpec,
+          applyFailure: result.receipt,
+          artifacts: current.artifacts,
+          dependencyReceipt: current.dependencyReceipt,
+          ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+          identityReceipt: current.identityReceipt,
           phase: "apply_failed",
           preparedByCallId: current.preparedByCallId,
-          workspace: current.workspace,
-          sourceReceipt: current.sourceReceipt,
-          ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-          artifacts: current.artifacts,
-          appSpec: current.appSpec,
-          dependencyReceipt: current.dependencyReceipt,
-          identityReceipt: current.identityReceipt,
           proposal: current.proposal,
-          applyFailure: result.receipt,
+          sourceReceipt: current.sourceReceipt,
+          version: APP_BUILDER_WORKFLOW_VERSION,
+          workspace: current.workspace,
         }),
       });
       throw new Error(
@@ -112,25 +108,29 @@ export default defineTool({
       expected: current,
       operation: "target apply success recording",
       transition: () => ({
-        version: APP_BUILDER_WORKFLOW_VERSION,
+        appSpec: current.appSpec,
+        applyReceipt: result.receipt,
+        artifacts: current.artifacts,
+        dependencyReceipt: current.dependencyReceipt,
+        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+        identityReceipt: current.identityReceipt,
         phase: "applied",
         preparedByCallId: current.preparedByCallId,
-        workspace: current.workspace,
-        sourceReceipt: current.sourceReceipt,
-        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-        artifacts: current.artifacts,
-        appSpec: current.appSpec,
-        dependencyReceipt: current.dependencyReceipt,
-        identityReceipt: current.identityReceipt,
         proposal: current.proposal,
-        applyReceipt: result.receipt,
+        sourceReceipt: current.sourceReceipt,
+        version: APP_BUILDER_WORKFLOW_VERSION,
+        workspace: current.workspace,
       }),
     });
     return {
-      status: "applied" as const,
       appId: current.proposal.target.contract.appId,
       changedFileCount: result.receipt.changes.length,
       reused: false,
+      status: "applied" as const,
     };
   },
+  inputSchema: z.object({
+    implementationFiles: implementationFilesSchema.default([]),
+    productSummary: z.string().trim().min(1).max(600).optional(),
+  }),
 });

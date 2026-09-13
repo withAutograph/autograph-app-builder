@@ -28,7 +28,7 @@ export function toolResult<const Result extends EveSessionListResult | EveSessio
     (result.inputRequests?.length ?? 0) > 0;
 
   return {
-    content: [{ type: "text" as const, text }],
+    content: [{ text, type: "text" as const }],
     structuredContent: result,
     ...(needsInteractiveSessionUi ? { _meta: { ui: { resourceUri: SESSION_RESOURCE_URI } } } : {}),
   };
@@ -42,11 +42,11 @@ export function safeToolError(error: unknown, sessionId = "") {
     return {
       ...toolResult(
         {
+          cursor: 0,
+          error: { code: "provider_unavailable", message },
+          events: [],
           sessionId,
           status: "failed",
-          cursor: 0,
-          events: [],
-          error: { code: "provider_unavailable", message },
         },
         message,
       ),
@@ -64,59 +64,51 @@ export function safeToolError(error: unknown, sessionId = "") {
   const busy = error instanceof HostedSessionBusyError;
   const recoveryUnavailable = error instanceof HostedSessionRecoveryUnavailableError;
   const cancellationUnsettled = error instanceof HostedCancellationUnsettledError;
-  const code = authenticationRequired
-    ? "authentication_required"
-    : notConfigured
-      ? "adapter_not_configured"
-      : notFound
-        ? "not_found"
-        : forbidden
-          ? "forbidden"
-          : conflict
-            ? "request_conflict"
-            : unknown
-              ? "submission_unknown"
-              : cancellationUnsettled
-                ? "cancellation_unsettled"
-                : busy
-                  ? "already_continuing"
-                  : recoveryUnavailable
-                    ? "restart_required"
-                    : rejected
-                      ? "operation_rejected"
-                      : "internal_error";
-  const message = authenticationRequired
-    ? "Sign in to Autograph App Builder to continue."
-    : notConfigured
-      ? "Autograph App Builder is not connected to its production service yet."
-      : notFound
-        ? handoffUnavailable
-          ? "This handoff is unavailable. Connect Autograph with the same account used on the web, or reopen your prepared app to renew an expired handoff."
-          : "The requested resource was not found."
-        : forbidden
-          ? "The operation is not permitted."
-          : conflict
-            ? "The client request conflicts with an existing operation."
-            : unknown
-              ? "The submission outcome is unknown and was not replayed."
-              : cancellationUnsettled
-                ? "Cancellation was accepted but has not settled. Continue with autograph_get."
-                : busy
-                  ? "This app is already continuing elsewhere. Try again shortly."
-                  : recoveryUnavailable
-                    ? "This app cannot continue from its last saved point. Start again from the latest result."
-                    : rejected
-                      ? "The operation was rejected before a durable result."
-                      : "The operation failed safely.";
+  let code = "internal_error";
+  let message = "The operation failed safely.";
+  if (authenticationRequired) {
+    code = "authentication_required";
+    message = "Sign in to Autograph App Builder to continue.";
+  } else if (notConfigured) {
+    code = "adapter_not_configured";
+    message = "Autograph App Builder is not connected to its production service yet.";
+  } else if (notFound) {
+    code = "not_found";
+    message = handoffUnavailable
+      ? "This handoff is unavailable. Connect Autograph with the same account used on the web, or reopen your prepared app to renew an expired handoff."
+      : "The requested resource was not found.";
+  } else if (forbidden) {
+    code = "forbidden";
+    message = "The operation is not permitted.";
+  } else if (conflict) {
+    code = "request_conflict";
+    message = "The client request conflicts with an existing operation.";
+  } else if (unknown) {
+    code = "submission_unknown";
+    message = "The submission outcome is unknown and was not replayed.";
+  } else if (cancellationUnsettled) {
+    code = "cancellation_unsettled";
+    message = "Cancellation was accepted but has not settled. Continue with autograph_get.";
+  } else if (busy) {
+    code = "already_continuing";
+    message = "This app is already continuing elsewhere. Try again shortly.";
+  } else if (recoveryUnavailable) {
+    code = "restart_required";
+    message =
+      "This app cannot continue from its last saved point. Start again from the latest result.";
+  } else if (rejected) {
+    code = "operation_rejected";
+    message = "The operation was rejected before a durable result.";
+  }
   const result: EveSessionResult = {
-    sessionId,
-    status: "failed",
     cursor: 0,
-    events: [],
     error: {
       code,
       message,
     },
+    events: [],
+    sessionId,
+    status: "failed",
   };
   return {
     ...toolResult(result, message),

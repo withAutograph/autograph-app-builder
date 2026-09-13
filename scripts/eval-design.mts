@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import path from "node:path";
 import {
   capturePreview,
   parseAdditionalDesktopSize,
@@ -21,18 +21,18 @@ import { execFileSync } from "node:child_process";
 
 const { values } = parseArgs({
   options: {
-    "preview-url": { type: "string" },
+    "additional-desktop-size": { type: "string" },
     "arrusted-root": { type: "string" },
     "brief-file": { type: "string" },
     case: { type: "string" },
-    "list-cases": { type: "boolean" },
-    "source-dir": { type: "string" },
-    "output-dir": { type: "string" },
-    scenario: { type: "string" },
     "fixture-interactions": { type: "boolean" },
-    "measurements-only": { type: "boolean" },
-    "additional-desktop-size": { type: "string" },
     help: { type: "boolean" },
+    "list-cases": { type: "boolean" },
+    "measurements-only": { type: "boolean" },
+    "output-dir": { type: "string" },
+    "preview-url": { type: "string" },
+    scenario: { type: "string" },
+    "source-dir": { type: "string" },
   },
 });
 if (values.help) {
@@ -43,19 +43,25 @@ if (values.help) {
 }
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function sources(root: string, relative = ""): Promise<{ path: string; content: string }[]> {
-  const files = [];
-  for (const entry of await readdir(join(root, relative), {
+  const entries = await readdir(path.join(root, relative), {
     withFileTypes: true,
-  })) {
-    if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
-    const path = join(relative, entry.name);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    if (entry.isDirectory()) files.push(...(await sources(root, path)));
-    else if (entry.isFile() && /\.(?<extension>tsx?|css)$/u.test(path))
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      files.push({ path, content: await readFile(join(root, path), "utf-8") });
-  }
-  return files;
+  });
+  const fileGroups = await Promise.all(
+    entries.map(async (entry) => {
+      if (entry.name.startsWith(".") || entry.name === "node_modules") return [];
+      const relativePath = path.join(relative, entry.name);
+      if (entry.isDirectory()) return sources(root, relativePath);
+      if (entry.isFile() && /\.(?<extension>tsx?|css)$/u.test(relativePath))
+        return [
+          {
+            content: await readFile(path.join(root, relativePath), "utf-8"),
+            path: relativePath,
+          },
+        ];
+      return [];
+    }),
+  );
+  return fileGroups.flat();
 }
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function main() {
@@ -75,19 +81,22 @@ async function main() {
     throw new Error(
       "Interaction steps require --fixture-interactions: use only previews with simulated effects",
     );
-  const output = resolve(
+  const output = path.resolve(
     values["output-dir"] ??
-      join(".artifacts/design-quality", new Date().toISOString().replaceAll(/[:.]/gu, "-")),
+      path.join(".artifacts/design-quality", new Date().toISOString().replaceAll(/[:.]/gu, "-")),
   );
-  await mkdir(output, { recursive: true, mode: 0o700 });
+  await mkdir(output, { mode: 0o700, recursive: true });
   const selectedCase = values.case ? await readDesignCase(values.case) : undefined;
   const brief = selectedCase
     ? appendReviewQuestions(selectedCase.brief, selectedCase.reviewQuestions)
-    : await readFile(values["brief-file"]!, "utf-8");
+    : await readFile(values["brief-file"] ?? "", "utf-8");
   const limitations: string[] = [];
-  const referenceRoot = resolve(values["arrusted-root"]);
+  const referenceRoot = path.resolve(values["arrusted-root"]);
   const tokenCss = await readFile(
-    join(resolve(values["arrusted-root"]), "packages/design-systems/core/tokens/theme.css"),
+    path.join(
+      path.resolve(values["arrusted-root"]),
+      "packages/design-systems/core/tokens/theme.css",
+    ),
     "utf-8",
   ).catch(() => {
     limitations.push("Reference theme could not be read; token evidence is incomplete.");
@@ -96,14 +105,14 @@ async function main() {
   const reference = await readReference(referenceRoot);
   limitations.push(...reference.limitations);
   const sourceFiles = values["source-dir"]
-    ? await sources(resolve(values["source-dir"])).catch(() => {
+    ? await sources(path.resolve(values["source-dir"])).catch(() => {
         limitations.push("Generated source could not be read.");
         return [];
       })
     : [];
   // A read-only candidate inventory, not proof of rendered component identity.
-  const sharedFiles = await sources(join(referenceRoot, "packages", "design-systems")).catch(
-    () => undefined,
+  const sharedFiles = await sources(path.join(referenceRoot, "packages", "design-systems")).catch(
+    () => null,
   );
   const generatedCssRules = collectCssRuleEvidence(sourceFiles);
   const sharedCssRules = sharedFiles ? collectCssRuleEvidence(sharedFiles) : [];
@@ -112,14 +121,14 @@ async function main() {
         status: "available",
         ...analyzeSource({
           files: sourceFiles,
-          tokenCss,
           reference,
+          tokenCss,
         }),
       }
     : {
-        status: "unassessed",
         reason:
           "No generated preview source supplied. Computed style matches do not prove component or token provenance.",
+        status: "unassessed",
       };
   // An explicit scenario is always user-bound. Case scenarios are an optional
   // fixture convenience and never run unless interactions were explicitly enabled.
@@ -141,20 +150,20 @@ async function main() {
     : undefined;
   console.log("Capturing existing preview across desktop window sizes…");
   const captures = await capturePreview({
-    url: url.href,
-    output,
-    tokens: parseTokens(tokenCss),
-    scenarios,
-    generatedSourcePaths: sourceFiles.map((f) => f.path),
-    generatedClassSignatures: collectIntrinsicClassSignatures(sourceFiles),
-    sharedClassSignatures: sharedFiles ? collectIntrinsicClassSignatures(sharedFiles) : undefined,
-    generatedClassTokens: collectClassTokenEvidence(sourceFiles),
-    sharedClassTokens: sharedFiles ? collectClassTokenEvidence(sharedFiles) : undefined,
-    generatedCssRules,
-    sharedCssRules,
-    generatedCssSourceFiles: sourceFiles.filter((file) => /\.css$/iu.test(file.path)),
-    sharedCssSourceFiles: sharedFiles?.filter((file) => /\.css$/iu.test(file.path)),
     additionalDesktopSize,
+    generatedClassSignatures: collectIntrinsicClassSignatures(sourceFiles),
+    generatedClassTokens: collectClassTokenEvidence(sourceFiles),
+    generatedCssRules,
+    generatedCssSourceFiles: sourceFiles.filter((file) => /\.css$/iu.test(file.path)),
+    generatedSourcePaths: sourceFiles.map((f) => f.path),
+    output,
+    scenarios,
+    sharedClassSignatures: sharedFiles ? collectIntrinsicClassSignatures(sharedFiles) : undefined,
+    sharedClassTokens: sharedFiles ? collectClassTokenEvidence(sharedFiles) : undefined,
+    sharedCssRules,
+    sharedCssSourceFiles: sharedFiles?.filter((file) => /\.css$/iu.test(file.path)),
+    tokens: parseTokens(tokenCss),
+    url: url.href,
   });
   limitations.push(...("limitations" in source ? source.limitations : []));
   for (const capture of captures) limitations.push(...(capture.styles?.limitations ?? []));
@@ -176,74 +185,76 @@ async function main() {
     /* Diagnostic only. */
   }
   const catalog = await readFile(
-    join(referenceRoot, "docs/app-builder-ui-catalog.json"),
+    path.join(referenceRoot, "docs/app-builder-ui-catalog.json"),
     "utf-8",
   ).catch(() => "");
   const measured = {
-    createdAt: new Date().toISOString(),
-    referenceTheme: "packages/design-systems/core/tokens/theme.css",
-    source,
-    sourceFiles,
     adherence,
+    captures,
+    createdAt: new Date().toISOString(),
     reference: {
-      name: referenceRoot.split("/").pop(),
-      commit: referenceCommit,
-      publicModules: Object.keys(reference.modules),
       catalogAvailable: !!catalog,
+      commit: referenceCommit,
+      name: referenceRoot.split("/").pop(),
+      publicModules: Object.keys(reference.modules),
     },
     ...(selectedCase
       ? {
           case: {
-            id: selectedCase.id,
-            title: selectedCase.title,
-            status: selectedCase.status,
-            notes: selectedCase.notes,
             evidence: selectedCase.evidence,
-            reviewQuestions: selectedCase.reviewQuestions,
+            id: selectedCase.id,
+            notes: selectedCase.notes,
             outcomes: selectedCase.outcomes,
+            reviewQuestions: selectedCase.reviewQuestions,
+            status: selectedCase.status,
+            title: selectedCase.title,
           },
         }
       : {}),
-    captures,
+    referenceTheme: "packages/design-systems/core/tokens/theme.css",
+    source,
+    sourceFiles,
   };
   // Save useful results before any model call; a failed judge never discards them.
-  await writeFile(join(output, "measurements.json"), JSON.stringify(measured, null, 2), {
+  await writeFile(path.join(output, "measurements.json"), JSON.stringify(measured, null, 2), {
     mode: 0o600,
   });
   console.log("Browser measurements captured. Preparing advisory review…");
   const judge = values["measurements-only"]
-    ? { status: "not-run", reason: "Measurements-only requested" }
+    ? { reason: "Measurements-only requested", status: "not-run" }
     : await judgeDesign({
         brief,
         evidence: {
-          arrustedCapabilities: catalog,
           adherence: {
             dimensions: adherence.dimensions,
             limitations: adherence.limitations,
           },
+          arrustedCapabilities: catalog,
+          captures: captures.map((c) => ({
+            interaction: c.interaction,
+            measurements: c.measurements,
+            name: c.name,
+            state: c.state,
+          })),
           sourceFindings: adherence.observations.filter(
             (o) => o.evidence === "static" && o.verdict !== "conforming",
           ),
-          captures: captures.map((c) => ({
-            name: c.name,
-            state: c.state,
-            measurements: c.measurements,
-            interaction: c.interaction,
-          })),
         },
-        images: captures.map(({ name, path, width, height }) => ({
-          name,
-          path,
-          width,
+        images: captures.map(({ name, path: screenshotPath, width, height }) => ({
           height,
+          name,
+          path: screenshotPath,
+          width,
         })),
       });
   const report = { ...measured, judge };
-  await writeFile(join(output, "report.json"), JSON.stringify(report, null, 2), { mode: 0o600 });
-  await writeFile(join(output, "index.html"), renderReport(report), {
+  await writeFile(path.join(output, "report.json"), JSON.stringify(report, null, 2), {
     mode: 0o600,
   });
-  console.log(`Design report: ${join(output, "index.html")}`);
+  await writeFile(path.join(output, "index.html"), renderReport(report), {
+    mode: 0o600,
+  });
+  console.log(`Design report: ${path.join(output, "index.html")}`);
   console.log(
     `AI review: ${judge.status}. Scores are advisory; no generation or publication was performed.`,
   );

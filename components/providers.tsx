@@ -41,8 +41,8 @@ export function authPlugins(passkeysEnabled: boolean, themeHook: typeof useTheme
     })),
     {
       ...themePlugin({ useTheme: themeHook }),
-      userMenuItems: [ThemeToggleItem],
       accountCards: [Appearance],
+      userMenuItems: [ThemeToggleItem],
     },
   ];
 }
@@ -90,7 +90,7 @@ export function AuthRouteProvider({
       emailAndPassword={{ enabled: false }}
       redirectTo={DEFAULT_AUTH_REDIRECT_TO}
       socialProviders={[
-        ...(vercelAuthEnabled ? [{ id: "vercel", label: "Vercel", icon: <SiVercel /> }] : []),
+        ...(vercelAuthEnabled ? [{ icon: <SiVercel />, id: "vercel", label: "Vercel" }] : []),
         ...(githubAuthEnabled ? (["github"] as const) : []),
       ]}
     >

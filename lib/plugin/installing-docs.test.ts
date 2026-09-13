@@ -1,15 +1,15 @@
 import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import nodePath from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 
 const execute = promisify(execFile);
-const readDocumentation = (path: string) => readFile(resolve(path), "utf-8");
+const readDocumentation = (path: string) => readFile(nodePath.resolve(path), "utf-8");
 const verifiedReleaseInstall = {
-  path: "docs/installing.md",
   heading: "## Install before shared marketplace publication",
+  path: "docs/installing.md",
 } as const;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -22,7 +22,7 @@ function firstShellBlock(documentation: string, heading: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function writeStub(root: string, name: string, body: string) {
-  await writeFile(join(root, name), `#!/bin/sh\nset -eu\n${body}\n`, {
+  await writeFile(nodePath.join(root, name), `#!/bin/sh\nset -eu\n${body}\n`, {
     mode: 0o700,
   });
 }
@@ -39,9 +39,9 @@ async function readAuditLog(path: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function runInstall(script: string, failure: "none" | "checksum" | "release-verifier") {
-  const root = await mkdtemp(join(tmpdir(), "autograph-install-docs-"));
-  const bin = join(root, "bin");
-  const auditLog = join(root, "audit.log");
+  const root = await mkdtemp(nodePath.join(tmpdir(), "autograph-install-docs-"));
+  const bin = nodePath.join(root, "bin");
+  const auditLog = nodePath.join(root, "audit.log");
   await mkdir(bin);
   await writeStub(
     bin,
@@ -55,18 +55,18 @@ async function runInstall(script: string, failure: "none" | "checksum" | "releas
   const execution = execute("/bin/sh", ["-c", script], {
     cwd: root,
     env: {
+      AUDIT_LOG: auditLog,
+      GH_VERIFY_EXIT: failure === "release-verifier" ? "1" : "0",
       NODE_ENV: "test",
       PATH: `${bin}:/usr/bin:/bin`,
-      AUDIT_LOG: auditLog,
       SHASUM_EXIT: failure === "checksum" ? "1" : "0",
-      GH_VERIFY_EXIT: failure === "release-verifier" ? "1" : "0",
     },
   });
   try {
     await (failure === "none" ? execution : expect(execution).rejects.toThrow());
     return await readAuditLog(auditLog);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { force: true, recursive: true });
   }
 }
 

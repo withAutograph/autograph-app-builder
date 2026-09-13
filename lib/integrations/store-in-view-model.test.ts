@@ -25,9 +25,9 @@ describe("GitHub Store In view model", () => {
         desiredRepository: "withAutograph/app-builder-dogfood",
         scopes: [
           {
+            detail: "Organization",
             id: "123",
             label: "withAutograph",
-            detail: "Organization",
           },
         ],
       }),
@@ -40,18 +40,18 @@ describe("GitHub Store In view model", () => {
 
   it("keeps repository and scope metadata closed and internally consistent", () => {
     const access = {
-      provider: "github" as const,
       action: "update" as const,
+      provider: "github" as const,
       repository: {
-        owner: "withAutograph",
-        name: "app-builder-dogfood",
         fullName: "withAutograph/app-builder-dogfood",
+        name: "app-builder-dogfood",
+        owner: "withAutograph",
       },
       scopes: [
         {
-          installationId: "123",
           accountLogin: "withAutograph",
           accountType: "Organization" as const,
+          installationId: "123",
         },
       ],
     };
@@ -59,7 +59,7 @@ describe("GitHub Store In view model", () => {
     expect(githubRepositoryAccessViewModel(access)).toMatchObject({
       action: "update",
       desiredRepository: "withAutograph/app-builder-dogfood",
-      scopes: [{ id: "123", label: "withAutograph", detail: "Organization" }],
+      scopes: [{ detail: "Organization", id: "123", label: "withAutograph" }],
     });
     expect(
       githubRepositoryAccessSchema.safeParse({

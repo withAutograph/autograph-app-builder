@@ -33,18 +33,18 @@ export async function resolveBuilderFlagsForStorybook() {
     resolveFlagForStorybook(builderResourceProvisioningFlag),
   ]);
 
-  return { connectionsEnabled, comingSoonEnabled, provisioningEnabled };
+  return { comingSoonEnabled, connectionsEnabled, provisioningEnabled };
 }
 
 const config: StorybookConfig = {
+  addons: ["@storybook/addon-vitest", "@storybook/addon-a11y", "@storybook/addon-docs"],
+  framework: "@storybook/nextjs-vite",
+  staticDirs: ["../public"],
   stories: [
     "../app/**/*.stories.@(ts|tsx)",
     "../components/**/*.stories.@(ts|tsx)",
     "../lib/mcp/session-app/**/*.stories.@(ts|tsx)",
   ],
-  addons: ["@storybook/addon-vitest", "@storybook/addon-a11y", "@storybook/addon-docs"],
-  framework: "@storybook/nextjs-vite",
-  staticDirs: ["../public"],
   async viteFinal(viteConfig) {
     const existingAliases = viteConfig.resolve?.alias ?? [];
     const aliases = Array.isArray(existingAliases)
@@ -61,11 +61,11 @@ const config: StorybookConfig = {
       ...viteConfig.define,
       // This resolved Boolean is the only flag data included in the browser
       // bundle. The SDK key and discovery secret remain server-only.
-      "process.env.STORYBOOK_BUILDER_CONNECTIONS_ENABLED": JSON.stringify(
-        String(connectionsEnabled),
-      ),
       "process.env.STORYBOOK_BUILDER_COMING_SOON_ENABLED": JSON.stringify(
         String(comingSoonEnabled),
+      ),
+      "process.env.STORYBOOK_BUILDER_CONNECTIONS_ENABLED": JSON.stringify(
+        String(connectionsEnabled),
       ),
       "process.env.STORYBOOK_BUILDER_PROVISIONING_ENABLED": JSON.stringify(
         String(provisioningEnabled),

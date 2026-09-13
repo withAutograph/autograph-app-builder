@@ -14,14 +14,14 @@ describe("durable session discovery contracts", () => {
     expect(eveGetInputSchema.parse({})).toEqual({ cursor: 0, limit: 100 });
     expect(
       eveStartInputSchema.parse({
-        resumeSessionId: "session-one",
         clientRequestId: "resume-one",
+        resumeSessionId: "session-one",
       }),
     ).toMatchObject({ resumeSessionId: "session-one" });
     expect(
       eveStartInputSchema.parse({
-        handoffId: "123e4567-e89b-42d3-a456-426614174000",
         clientRequestId: "handoff-one",
+        handoffId: "123e4567-e89b-42d3-a456-426614174000",
       }),
     ).toMatchObject({
       handoffId: "123e4567-e89b-42d3-a456-426614174000",
@@ -29,19 +29,19 @@ describe("durable session discovery contracts", () => {
     for (const candidate of [
       { clientRequestId: "missing" },
       {
+        clientRequestId: "cannot-inject-internal-context",
         prompt: "Build",
         sourceHandoffId: "123e4567-e89b-42d3-a456-426614174000",
-        clientRequestId: "cannot-inject-internal-context",
       },
       {
+        clientRequestId: "both",
         prompt: "Build",
         resumeSessionId: "session-one",
-        clientRequestId: "both",
       },
       {
-        prompt: "Build",
-        handoffId: "123e4567-e89b-42d3-a456-426614174000",
         clientRequestId: "prompt-and-handoff",
+        handoffId: "123e4567-e89b-42d3-a456-426614174000",
+        prompt: "Build",
       },
     ])
       expect(eveStartInputSchema.safeParse(candidate).success).toBe(false);
@@ -50,10 +50,10 @@ describe("durable session discovery contracts", () => {
 
 describe("publicInputRequestSchema", () => {
   const authorization = {
-    requestId: "authorize-one",
-    kind: "authorization" as const,
-    title: "GitHub",
     allowFreeform: false,
+    kind: "authorization" as const,
+    requestId: "authorize-one",
+    title: "GitHub",
   };
 
   it("accepts only safe authorization challenges", () => {
@@ -64,7 +64,7 @@ describe("publicInputRequestSchema", () => {
       expect(
         publicInputRequestSchema.safeParse({
           ...authorization,
-          authorization: { url, displayName: "GitHub" },
+          authorization: { displayName: "GitHub", url },
         }).success,
       ).toBe(true);
 
@@ -83,30 +83,30 @@ describe("publicInputRequestSchema", () => {
 
   it("accepts closed GitHub repository-access presentation metadata", () => {
     const repositoryAccess = {
-      provider: "github" as const,
       action: "update" as const,
+      provider: "github" as const,
       repository: {
-        owner: "withAutograph",
-        name: "app-builder-dogfood",
         fullName: "withAutograph/app-builder-dogfood",
+        name: "app-builder-dogfood",
+        owner: "withAutograph",
       },
       scopes: [
         {
-          installationId: "123",
           accountLogin: "withAutograph",
           accountType: "Organization" as const,
+          installationId: "123",
         },
       ],
     };
     expect(
       publicInputRequestSchema.safeParse({
         ...authorization,
-        title: "Update GitHub access",
         authorization: {
-          url: "https://builder.example.test/github/installations?continuation=opaque",
           displayName: "GitHub",
           repositoryAccess,
+          url: "https://builder.example.test/github/installations?continuation=opaque",
         },
+        title: "Update GitHub access",
       }).success,
     ).toBe(true);
     expect(
@@ -122,20 +122,20 @@ describe("publicInputRequestSchema", () => {
   it("keeps presentation metadata closed and authorization-specific", () => {
     expect(
       publicInputRequestSchema.safeParse({
-        requestId: "choice-one",
-        kind: "question",
-        title: "Store in",
         allowFreeform: false,
-        presentation: { section: "store-in", control: "provider" },
+        kind: "question",
+        presentation: { control: "provider", section: "store-in" },
+        requestId: "choice-one",
+        title: "Store in",
       }).success,
     ).toBe(true);
     expect(
       publicInputRequestSchema.safeParse({
-        requestId: "choice-one",
-        kind: "question",
-        title: "Store in",
         allowFreeform: false,
         authorization: { url: "https://github.com" },
+        kind: "question",
+        requestId: "choice-one",
+        title: "Store in",
       }).success,
     ).toBe(false);
   });
@@ -151,38 +151,38 @@ describe("eveRespondInputSchema", () => {
     expect(
       eveRespondInputSchema
         .parse({
-          sessionId: "session_1",
           clientRequestId: "client_1",
           responses: [response("one"), response("two"), response("three")],
+          sessionId: "session_1",
         })
         .responses.map(({ requestId }) => requestId),
     ).toEqual(["one", "two", "three"]);
     expect(() =>
       eveRespondInputSchema.parse({
-        sessionId: "session_1",
         clientRequestId: "client_1",
         requestId: "legacy",
         response: { kind: "approve" },
+        sessionId: "session_1",
       }),
     ).toThrow();
     expect(() =>
       eveRespondInputSchema.parse({
-        sessionId: "session_1",
         clientRequestId: "client_1",
         responses: [],
+        sessionId: "session_1",
       }),
     ).toThrow();
     const duplicate = eveRespondInputSchema.safeParse({
-      sessionId: "session_1",
       clientRequestId: "client_1",
       responses: [response("same"), response("same")],
+      sessionId: "session_1",
     });
     expect(duplicate.success).toBe(false);
     if (!duplicate.success)
       expect(duplicate.error.issues).toContainEqual(
         expect.objectContaining({
-          path: ["responses", 1, "requestId"],
           message: "Each requestId must appear exactly once.",
+          path: ["responses", 1, "requestId"],
         }),
       );
   });
@@ -190,10 +190,10 @@ describe("eveRespondInputSchema", () => {
 
 describe("publicPrototypeSchema", () => {
   const prototype = {
-    path: "prototype/vendor-onboarding/index.html",
-    mediaType: "text/html" as const,
     content: "<!doctype html><html><body>Vendor queue</body></html>",
     digest: "a".repeat(64),
+    mediaType: "text/html" as const,
+    path: "prototype/vendor-onboarding/index.html",
     revision: "b".repeat(64),
   };
 
@@ -254,11 +254,11 @@ describe("publicPrototypeSchema", () => {
 describe("publicImplementationPlanSchema", () => {
   const plan = {
     appId: "vendor-onboarding",
-    runtime: "nextjs" as const,
     packageName: "@autograph/vendor-onboarding",
     projectName: "apps-vendor-onboarding",
-    routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
     readOnly: true as const,
+    routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
+    runtime: "nextjs" as const,
   };
 
   it("accepts only the closed sanitized target-plan shape", () => {

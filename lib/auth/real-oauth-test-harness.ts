@@ -28,55 +28,55 @@ export const codexRedirectUris = [
   "http://localhost/callback/4-bzS8rt42zJ",
 ] as const;
 export const codexClientMetadata = {
-  client_id: codexClientId,
-  client_uri: "https://chatgpt.com/codex",
   application_type: "native",
+  client_id: codexClientId,
+  client_name: "Codex",
+  client_uri: "https://chatgpt.com/codex",
+  grant_types: ["authorization_code", "refresh_token"],
+  logo_uri: "https://persistent.oaistatic.com/sonic/misc/openai-logo.png",
   redirect_uris: [...codexRedirectUris],
+  response_types: ["code"],
   token_endpoint_auth_method: "none",
   token_endpoint_auth_methods_supported: ["none"],
-  grant_types: ["authorization_code", "refresh_token"],
-  response_types: ["code"],
-  client_name: "Codex",
-  logo_uri: "https://persistent.oaistatic.com/sonic/misc/openai-logo.png",
 };
 
 const DEFAULT_OAUTH_CLIENT = { id: clientId, redirectUri };
 const DEFAULT_CLIENT_METADATA = {
   client_name: "Portable client",
-  redirect_uris: [redirectUri],
-  token_endpoint_auth_method: "none",
   grant_types: ["authorization_code", "refresh_token"],
+  redirect_uris: [redirectUri],
   response_types: ["code"],
+  token_endpoint_auth_method: "none",
 };
 const DEFAULT_RATE_LIMIT: BetterAuthOptions["rateLimit"] = { enabled: false };
 
-export function authorizationUrl(
+export const authorizationUrl = (
   challenge: string,
   state: string,
   client: { id: string; redirectUri: string } = DEFAULT_OAUTH_CLIENT,
-) {
+) => {
   const url = new URL(`${issuer}/oauth2/authorize`);
   for (const [key, value] of Object.entries({
-    response_type: "code",
     client_id: client.id,
-    redirect_uri: client.redirectUri,
-    scope: requestedScope,
-    state,
-    resource,
     code_challenge: challenge,
     code_challenge_method: "S256",
+    redirect_uri: client.redirectUri,
+    resource,
+    response_type: "code",
+    scope: requestedScope,
+    state,
   })) {
     url.searchParams.set(key, value);
   }
   return url;
-}
+};
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-export async function createRealOAuthHarness(
+export const createRealOAuthHarness = async (
   activeWorkspaces: string[] = ["workspace_1"],
   clientMetadata: Record<string, unknown> = DEFAULT_CLIENT_METADATA,
   rateLimit: BetterAuthOptions["rateLimit"] = DEFAULT_RATE_LIMIT,
-) {
+) => {
   const membershipState = { activeWorkspaces };
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   const fetchClientMetadata = vi.fn(async (input: RequestInfo | URL) =>
@@ -102,16 +102,14 @@ export async function createRealOAuthHarness(
   });
   return getTestInstance(
     {
-      baseURL: origin,
       basePath: "/api/auth",
-      secret: "test-secret-that-is-long-enough-for-better-auth",
+      baseURL: origin,
       logger: { disabled: true },
-      rateLimit,
       plugins: [
         jwt({
-          jwks: { keyPairConfig: { alg: "ES256" }, jwksPath: "/jwks" },
-          jwt: { issuer, audience: resource, expirationTime: "5m" },
           disableSettingJwtHeader: true,
+          jwks: { jwksPath: "/jwks", keyPairConfig: { alg: "ES256" } },
+          jwt: { audience: resource, expirationTime: "5m", issuer },
         }),
         mcp(options),
         cimd(
@@ -120,6 +118,8 @@ export async function createRealOAuthHarness(
           }),
         ),
       ],
+      rateLimit,
+      secret: "test-secret-that-is-long-enough-for-better-auth",
     },
     { port: 3000 },
   ).then((instance) => ({
@@ -128,15 +128,15 @@ export async function createRealOAuthHarness(
     membershipState,
     signIn: async (credentials: { email: string; password: string } = instance.testUser) => {
       const response = await instance.customFetchImpl(`${issuer}/sign-in/email`, {
-        method: "POST",
-        headers: {
-          origin,
-          "content-type": "application/json",
-        },
         body: JSON.stringify({
           email: credentials.email,
           password: credentials.password,
         }),
+        headers: {
+          "content-type": "application/json",
+          origin,
+        },
+        method: "POST",
       });
       if (!response.ok) throw new Error("Test sign-in failed.");
       const cookie = response.headers.get("set-cookie")?.split(";", 1)[0];
@@ -144,7 +144,7 @@ export async function createRealOAuthHarness(
       return new Headers({ cookie });
     },
   }));
-}
+};
 
 export type RealOAuthHarness = Awaited<ReturnType<typeof createRealOAuthHarness>>;
 export interface OAuthTokens {
@@ -156,7 +156,7 @@ export interface OAuthTokens {
 }
 
 /** Local test DB only; uses the same stable fields as deployment setup. */
-export async function registerTestCursorClient(harness: RealOAuthHarness) {
+export const registerTestCursorClient = async (harness: RealOAuthHarness) => {
   // getTestInstance migrates after plugin initialization. Seed the resource in
   // this local DB as deployment's oauth-initialize does before client setup.
   await harness.auth.$context;
@@ -166,46 +166,45 @@ export async function registerTestCursorClient(harness: RealOAuthHarness) {
   });
   if (!target)
     await harness.db.create({
-      model: "oauthResource",
       data: {
+        accessTokenTtl: 300,
+        allowedScopes: [...previewOAuthScopes],
+        disabled: false,
         identifier: resource,
         name: "Autograph",
-        allowedScopes: [...previewOAuthScopes],
-        accessTokenTtl: 300,
         refreshTokenTtl: 28_800,
         signingAlgorithm: "ES256",
-        disabled: false,
       },
+      model: "oauthResource",
     });
   await harness.db.create({
-    model: "oauthClient",
     data: cursorClientRegistration(),
+    model: "oauthClient",
   });
   await harness.db.create({
-    model: "oauthClientResource",
     data: { clientId: cursorClientId, resourceId: resource },
+    model: "oauthClientResource",
   });
-}
+};
 
 /** Complete an actual browser-cookie authorization/consent and PKCE exchange. */
-export async function verifyRealOAuthToken(harness: RealOAuthHarness, accessToken: string) {
+export const verifyRealOAuthToken = async (harness: RealOAuthHarness, accessToken: string) => {
   const response = await harness.customFetchImpl(`${issuer}/jwks`);
   const jwks = (await response.json()) as { keys: JsonWebKey[] };
-  return (
-    await jwtVerify(accessToken, createLocalJWKSet(jwks), {
-      issuer,
-      audience: resource,
-      algorithms: ["ES256"],
-    })
-  ).payload;
-}
+  const verification = await jwtVerify(accessToken, createLocalJWKSet(jwks), {
+    algorithms: ["ES256"],
+    audience: resource,
+    issuer,
+  });
+  return verification.payload;
+};
 
-export async function grantRealOAuth(
+export const grantRealOAuth = async (
   harness: RealOAuthHarness,
   browserHeaders: Headers,
   client: { id: string; redirectUri: string },
   scope = requestedScope,
-) {
+) => {
   const verifier = randomBytes(48).toString("base64url");
   const state = randomBytes(24).toString("base64url");
   const url = authorizationUrl(
@@ -228,64 +227,67 @@ export async function grantRealOAuth(
     headers.set("origin", origin);
     headers.set("content-type", "application/json");
     const consent = await harness.customFetchImpl(`${issuer}/oauth2/consent`, {
-      method: "POST",
-      headers,
       body: JSON.stringify({
         accept: true,
         oauth_query: callback.search.slice(1),
       }),
+      headers,
+      method: "POST",
     });
     if (!consent.ok) throw new Error("OAuth consent failed.");
     const body = (await consent.json()) as {
       redirect_uri?: string;
       url?: string;
     };
-    callback = new URL(body.redirect_uri ?? body.url!);
+    const consentRedirect = body.redirect_uri ?? body.url;
+    if (!consentRedirect) throw new Error("OAuth consent did not return a redirect.");
+    callback = new URL(consentRedirect);
   }
+  const code = callback.searchParams.get("code");
   if (
     callback.origin + callback.pathname !== client.redirectUri ||
     callback.searchParams.get("state") !== state ||
-    !callback.searchParams.get("code")
+    !code
   ) {
     throw new Error("OAuth did not return the bound authorization code.");
   }
   const response = await harness.customFetchImpl(`${issuer}/oauth2/token`, {
-    method: "POST",
-    headers: { origin, "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      grant_type: "authorization_code",
       client_id: client.id,
-      code: callback.searchParams.get("code")!,
+      code,
       code_verifier: verifier,
+      grant_type: "authorization_code",
       redirect_uri: client.redirectUri,
       resource,
     }),
+    headers: { "content-type": "application/x-www-form-urlencoded", origin },
+    method: "POST",
   });
   if (!response.ok) throw new Error("OAuth token exchange failed.");
   const tokens = (await response.json()) as OAuthTokens;
   const claims = await verifyRealOAuthToken(harness, tokens.access_token);
-  return { tokens, claims, consentRequired };
-}
+  return { claims, consentRequired, tokens };
+};
 
-export async function refreshRealOAuth(
+export const refreshRealOAuth = async (
   harness: RealOAuthHarness,
   client: string,
   refreshToken: string,
-) {
+) => {
   const response = await harness.customFetchImpl(`${issuer}/oauth2/token`, {
-    method: "POST",
-    headers: { origin, "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      grant_type: "refresh_token",
       client_id: client,
+      grant_type: "refresh_token",
       refresh_token: refreshToken,
       resource,
     }),
+    headers: { "content-type": "application/x-www-form-urlencoded", origin },
+    method: "POST",
   });
   if (!response.ok) throw new Error("OAuth refresh failed.");
   const tokens = (await response.json()) as OAuthTokens;
   return {
-    tokens,
     claims: await verifyRealOAuthToken(harness, tokens.access_token),
+    tokens,
   };
-}
+};

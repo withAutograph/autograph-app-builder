@@ -34,17 +34,17 @@ function parseRow(
 ): BuilderProvisionJournalRow {
   return {
     authority: hostedTenantAuthoritySchema.parse({
-      issuer: row.issuer,
       audience: row.audience,
-      workspaceId: row.workspaceId,
+      issuer: row.issuer,
       ownerUserId: row.ownerUserId,
+      workspaceId: row.workspaceId,
     }),
-    requestId: row.requestId,
-    requestDigest: row.requestDigest,
-    state: row.state as "pending" | "settled",
-    revision: row.revision,
-    record: builderProvisionJournalRecordSchema.parse(row.record),
     createdAt: row.createdAt,
+    record: builderProvisionJournalRecordSchema.parse(row.record),
+    requestDigest: row.requestDigest,
+    requestId: row.requestId,
+    revision: row.revision,
+    state: row.state as "pending" | "settled",
     updatedAt: row.updatedAt,
   };
 }
@@ -63,40 +63,15 @@ export function createPostgresBuilderProvisionJournalStore(
     return rows[0] ? parseRow(rows[0]) : undefined;
   };
   return {
-    async reserve(input) {
-      const authority = hostedTenantAuthoritySchema.parse(input.authority);
-      const requestDigest = builderProvisionRequestDigest(input.request);
-      const rows = await database
-        .insert(builderProvisioningJournals)
-        .values({
-          ...authority,
-          requestId: input.request.requestId,
-          requestDigest,
-          state: "pending",
-          revision: 1,
-          record: initialBuilderProvisionJournalRecord(input.request, input.now),
-          createdAt: input.now,
-          updatedAt: input.now,
-        })
-        .onConflictDoNothing()
-        .returning();
-      const row = rows[0]
-        ? parseRow(rows[0])
-        : await read({ authority, requestId: input.request.requestId });
-      if (!row) throw new Error("provision-journal-not-durable");
-      if (row.requestDigest !== requestDigest) throw new Error("provision-request-id-reused");
-      return row;
-    },
-    read,
     async compareAndSet(input) {
       const authority = hostedTenantAuthoritySchema.parse(input.authority);
       const record = builderProvisionJournalRecordSchema.parse(input.record);
       const rows = await database
         .update(builderProvisioningJournals)
         .set({
-          state: record.response.status,
-          revision: input.expectedRevision + 1,
           record,
+          revision: input.expectedRevision + 1,
+          state: record.response.status,
           updatedAt: input.now,
         })
         .where(
@@ -107,6 +82,31 @@ export function createPostgresBuilderProvisionJournalStore(
         )
         .returning();
       return rows[0] ? parseRow(rows[0]) : undefined;
+    },
+    read,
+    async reserve(input) {
+      const authority = hostedTenantAuthoritySchema.parse(input.authority);
+      const requestDigest = builderProvisionRequestDigest(input.request);
+      const rows = await database
+        .insert(builderProvisioningJournals)
+        .values({
+          ...authority,
+          createdAt: input.now,
+          record: initialBuilderProvisionJournalRecord(input.request, input.now),
+          requestDigest,
+          requestId: input.request.requestId,
+          revision: 1,
+          state: "pending",
+          updatedAt: input.now,
+        })
+        .onConflictDoNothing()
+        .returning();
+      const row = rows[0]
+        ? parseRow(rows[0])
+        : await read({ authority, requestId: input.request.requestId });
+      if (!row) throw new Error("provision-journal-not-durable");
+      if (row.requestDigest !== requestDigest) throw new Error("provision-request-id-reused");
+      return row;
     },
   };
 }

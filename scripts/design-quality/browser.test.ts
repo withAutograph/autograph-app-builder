@@ -37,8 +37,8 @@ describe("conservative design measurements", () => {
   });
   it("accepts an opt-in desktop size without adding a width requirement", () => {
     expect(parseAdditionalDesktopSize("960x700")).toEqual({
-      width: 960,
       height: 700,
+      width: 960,
     });
     for (const value of ["960", "960X700", "0x700", "960x0", "960x700px"])
       expect(() => parseAdditionalDesktopSize(value)).toThrow();
@@ -47,10 +47,10 @@ describe("conservative design measurements", () => {
       "desktop-wide",
       "desktop-window",
     ]);
-    expect(captureViewports({ width: 960, height: 700 }).at(-1)).toMatchObject({
+    expect(captureViewports({ height: 700, width: 960 }).at(-1)).toMatchObject({
+      height: 700,
       name: "desktop-custom-960x700",
       width: 960,
-      height: 700,
     });
   });
   it("attributes a stylesheet only when its source URL matches an explicit generated path", () => {
@@ -68,26 +68,26 @@ describe("conservative design measurements", () => {
   it("verifies mapped shared CSS by exact file bytes and declaration location", () => {
     const path = "packages/design-systems/core/card.css";
     const content = ".card {\n  color: var(--color-text-primary);\n}";
-    const rules = collectCssRuleEvidence([{ path, content }]);
-    const mapped = { path, line: 2, column: 3, sourceIndex: 0 };
+    const rules = collectCssRuleEvidence([{ content, path }]);
+    const mapped = { column: 3, line: 2, path, sourceIndex: 0 };
     const map = {
-      version: 3,
+      mappings: "",
       sources: [path],
       sourcesContent: [content],
-      mappings: "",
+      version: 3,
     };
     const input = {
       map,
       mapped,
       property: "color",
-      value: "var(--color-text-primary)",
       sharedCssRules: rules,
-      sharedCssSourceFiles: [{ path, content }],
+      sharedCssSourceFiles: [{ content, path }],
+      value: "var(--color-text-primary)",
     };
     expect(mappedSharedCssRule(input)?.source).toEqual({
-      path,
-      line: 2,
       column: 3,
+      line: 2,
+      path,
     });
     // Bundlers may add a sandbox prefix, but a basename by itself is not a
     // reference to the checked-in source path.
@@ -123,21 +123,24 @@ describe("conservative design measurements", () => {
     expect(
       mappedSharedCssRule({
         ...input,
-        mapped: { ...mapped, line: 1, column: 1 },
+        mapped: { ...mapped, column: 1, line: 1 },
       }),
     ).toBeUndefined();
     expect(
-      mappedSharedCssRule({ ...input, sharedCssRules: [...rules, rules[0]!] }),
+      mappedSharedCssRule({
+        ...input,
+        sharedCssRules: [...rules, ...rules.slice(0, 1)],
+      }),
     ).toBeUndefined();
   });
   it("escapes untrusted model/page copy in reports", () => {
     expect(escapeHtml('<script>"&')).toBe("&lt;script&gt;&quot;&amp;");
     expect(
       renderReport({
-        createdAt: "now",
-        source: { value: "<script>" },
-        judge: {},
         captures: [],
+        createdAt: "now",
+        judge: {},
+        source: { value: "<script>" },
       }),
     ).not.toContain("<script>");
   });

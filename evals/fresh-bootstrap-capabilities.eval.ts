@@ -2,9 +2,9 @@ import { defineEval } from "eve/evals";
 import { includes, satisfies } from "eve/evals/expect";
 
 export default defineEval({
-  tags: ["fresh-bootstrap-publication"],
   description:
     "The fresh-bootstrap profile explains product capabilities without exposing setup mechanics.",
+  tags: ["fresh-bootstrap-publication"],
   async test(t) {
     await t.send("What are your app builder capabilities?");
     t.succeeded();
@@ -24,6 +24,6 @@ export default defineEval({
       ),
     );
     t.notCalledTool("bash");
-    t.notCalledTool("write_file");
+    t.notCalledTool("write-file");
   },
 });

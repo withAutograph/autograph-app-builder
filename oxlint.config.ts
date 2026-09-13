@@ -8,22 +8,34 @@ export default defineConfig({
     {
       files: ["agent/tools/**/*.ts"],
       rules: {
-        // Eve derives public tool identities from these filenames, which must remain snake_case.
         "unicorn/filename-case": "off",
+      },
+    },
+    {
+      files: [
+        ".config/mise/scripts/repository/generate-hosted-runtime-assets.mts",
+        "agent/tools/**/*.ts",
+        "evals/self-reproduction.eval.ts",
+        "evals/self-reproduction/**/*.ts",
+        "evals/support/self-reproduction*.ts",
+        "lib/agent/apply-implementation-files.test.ts",
+        "lib/repository/target-validation.ts",
+        "scripts/eval-self-reproduction.mts",
+      ],
+      rules: {
+        "eslint/func-style": "off",
+        "eslint/no-nested-ternary": "off",
+        "eslint/no-useless-return": "off",
+        "eslint/sort-keys": "off",
+        "promise/avoid-new": "off",
+        "typescript/no-non-null-assertion": "off",
+        "unicorn/import-style": "off",
+        "unicorn/no-await-expression-member": "off",
       },
     },
   ],
   rules: {
-    "unicorn/import-style": "off",
-    "eslint/curly": "off",
-    "eslint/no-bitwise": "off",
-    "eslint/no-nested-ternary": "off",
-    "eslint/func-style": "off",
     "eslint/complexity": "off",
-    "eslint/sort-keys": "off",
-    "promise/avoid-new": "off",
-    "typescript/no-non-null-assertion": "off",
-    "unicorn/no-await-expression-member": "off",
-    "unicorn/no-useless-undefined": "off",
+    "eslint/curly": "off",
   },
 });

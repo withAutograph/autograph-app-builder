@@ -1,10 +1,10 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("release publication workflow", () => {
   it("verifies already-promoted bytes without rebuilding them", async () => {
-    const workflow = await readFile(resolve(".github/workflows/release.yml"), "utf-8");
+    const workflow = await readFile(path.resolve(".github/workflows/release.yml"), "utf-8");
 
     expect(workflow).toContain("types: [published]");
     expect(workflow).toContain("Download already-promoted bytes");
@@ -21,7 +21,7 @@ describe("release publication workflow", () => {
   });
 
   it("binds deployment and tool readbacks before recoverable package publication", async () => {
-    const publish = await readFile(resolve("scripts/release-publish.mts"), "utf-8");
+    const publish = await readFile(path.resolve("scripts/release-publish.mts"), "utf-8");
     expect(publish).toContain("deployment.id !== endpointDeployment.id");
     expect(publish).toContain("hostedClient.listTools()");
     expect(publish).toContain("exactGithubReleaseExists()");

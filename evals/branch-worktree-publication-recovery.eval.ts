@@ -13,7 +13,7 @@ export default defineEval({
 
     await t.send("Publish reviewed change set to a new branch worktree.");
     t.requireInputRequest({
-      toolName: "publish_reviewed_change_set_to_branch_worktree",
+      toolName: "publish-reviewed-change-set_to_branch_worktree",
     });
     await t.respondAll("approve");
     t.succeeded();
@@ -23,12 +23,12 @@ export default defineEval({
     t.succeeded();
     t.check(t.reply, includes("not redispatched automatically"));
     await t.send("Recover branch worktree publication.");
-    t.requireInputRequest({ toolName: "recover_branch_worktree_publication" });
+    t.requireInputRequest({ toolName: "recover-branch-worktree-publication" });
     await t.respondAll("approve");
     t.succeeded();
     t.check(t.reply, includes("separately approved recovery completed"));
     t.check(t.reply, includes("without a commit, push, remote publication"));
     t.notCalledTool("bash");
-    t.notCalledTool("write_file");
+    t.notCalledTool("write-file");
   },
 });

@@ -3,9 +3,9 @@ import { isHostedVercelRuntime } from "./backend";
 export const TOOLCHAIN_IMAGE_ENV = "APP_BUILDER_SANDBOX_IMAGE";
 
 export const requiredToolVersions = {
+  bun: /^1\.3\.14(?:\s|$)/u,
   git: /^git version \d+\.\d+\.\d+/u,
   mise: /^2026\.8\.12(?:\s|$)/u,
-  bun: /^1\.3\.14(?:\s|$)/u,
 } as const;
 
 export type RequiredTool = keyof typeof requiredToolVersions;
@@ -47,6 +47,9 @@ export function toolVersionMatches(tool: RequiredTool, version: string): boolean
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function sandboxRevalidationKey(image: string | undefined, backend = "local"): string {
+export function sandboxRevalidationKey(
+  image: string | undefined = undefined,
+  backend = "local",
+): string {
   return `autograph-app-builder-toolchain-v2:${backend}:${image ?? "unconfigured"}`;
 }

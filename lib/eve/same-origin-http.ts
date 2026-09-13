@@ -42,8 +42,8 @@ const sameOriginConfigSchema = z
     ) {
       context.addIssue({
         code: "custom",
-        path: ["baseUrl"],
         message: "The canonical Eve API must use a credential-free HTTPS origin.",
+        path: ["baseUrl"],
       });
       return z.NEVER;
     }
@@ -72,7 +72,7 @@ const cancelResponseSchema = z.discriminatedUnion("status", [
 const errorResponseSchema = z.object({ code: z.string().min(1).max(100) }).passthrough();
 
 const streamEnvelopeSchema = z
-  .object({ type: z.string().min(1), data: z.record(z.string(), z.unknown()) })
+  .object({ data: z.record(z.string(), z.unknown()), type: z.string().min(1) })
   .passthrough();
 
 export interface HostedWorkloadIdentity {
@@ -170,18 +170,18 @@ async function postMutation(input: {
   let response: Response;
   try {
     response = await input.fetchImplementation(endpoint(input.config, input.path), {
-      method: "POST",
-      redirect: "manual",
-      signal: AbortSignal.timeout(input.config.timeoutMs),
+      body: JSON.stringify({
+        ...input.body,
+        forwardedPrincipal: forwardedPrincipal(input.principal, input.sourceHandoffId),
+      }),
       headers: {
         ...headers,
         Accept: "application/json",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        ...input.body,
-        forwardedPrincipal: forwardedPrincipal(input.principal, input.sourceHandoffId),
-      }),
+      method: "POST",
+      redirect: "manual",
+      signal: AbortSignal.timeout(input.config.timeoutMs),
     });
   } catch {
     throw new SubmissionOutcomeUnknownError();
@@ -214,9 +214,9 @@ async function authenticatedFetch(input: {
   const headers = await workloadHeaders(input.workloadIdentity);
   return input.fetchImplementation(endpoint(input.config, input.path), {
     ...input.init,
+    headers: { ...headers, ...input.init?.headers },
     redirect: "manual",
     signal: input.init?.signal ?? AbortSignal.timeout(input.config.timeoutMs),
-    headers: { ...headers, ...input.init?.headers },
   });
 }
 
@@ -258,10 +258,10 @@ async function readInstalledSnapshot(input: {
     throw new Error("Canonical Eve returned an invalid durable stream tail.");
   }
   if (tail === -1) {
-    await response.body.cancel().catch(() => undefined);
+    await response.body.cancel().catch(() => null);
     return {
-      snapshot: { status: sessionStatusSchema.parse("working"), events: [] },
       installed: [],
+      snapshot: { events: [], status: sessionStatusSchema.parse("working") },
     };
   }
 
@@ -302,7 +302,7 @@ async function readInstalledSnapshot(input: {
       throw new Error("Canonical Eve stream ended before its durable tail.");
     }
   } finally {
-    await reader.cancel().catch(() => undefined);
+    await reader.cancel().catch(() => null);
     reader.releaseLock();
   }
 
@@ -313,14 +313,14 @@ async function readInstalledSnapshot(input: {
   const uiPreview = latestInstalledUiPreview(events);
   const implementationPlan = latestInstalledImplementationPlan(events);
   return {
+    installed: events,
     snapshot: {
-      status: deriveInstalledEveStatus(events),
       events: projected,
+      status: deriveInstalledEveStatus(events),
       ...(prototype === undefined ? {} : { prototype }),
       ...(uiPreview === undefined ? {} : { uiPreview }),
       ...(implementationPlan === undefined ? {} : { implementationPlan }),
     },
-    installed: events,
   };
 }
 
@@ -416,70 +416,10 @@ export function createSameOriginEveTransport(input: {
   const fetchImplementation = input.fetchImplementation ?? fetch;
   const common = {
     config,
-    workloadIdentity: input.workloadIdentity,
     fetchImplementation,
+    workloadIdentity: input.workloadIdentity,
   };
   return {
-    async start(request) {
-      const accepted = await postMutation({
-        ...common,
-        path: "/eve/v1/session",
-        principal: request.principal,
-        body: { message: request.prompt, operationId: request.operationId },
-        sourceHandoffId: request.sourceHandoffId,
-      });
-      return {
-        adapterSessionId: accepted.sessionId,
-        snapshot: await readSnapshot({
-          ...common,
-          sessionId: accepted.sessionId,
-        }),
-      };
-    },
-    get: (request) => readSnapshot({ ...common, sessionId: request.adapterSessionId }),
-    async send(request) {
-      const accepted = await postMutation({
-        ...common,
-        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
-        principal: request.principal,
-        body: { message: request.message, turnPolicy: "queue" },
-        sourceHandoffId: request.sourceHandoffId,
-      });
-      if (accepted.sessionId !== request.adapterSessionId) {
-        throw new SubmissionOutcomeUnknownError();
-      }
-      return readSnapshot({ ...common, sessionId: request.adapterSessionId });
-    },
-    async respond(request) {
-      const accepted = await postMutation({
-        ...common,
-        sourceHandoffId: request.sourceHandoffId,
-        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
-        principal: request.principal,
-        body: {
-          inputResponses: request.responses.map(({ requestId, response }) =>
-            response.kind === "approve"
-              ? { requestId, optionId: "approve" }
-              : response.kind === "deny"
-                ? { requestId, optionId: "cancel" }
-                : {
-                    requestId,
-                    ...(response.optionId === undefined
-                      ? { text: response.value }
-                      : { optionId: response.optionId }),
-                  },
-          ),
-        },
-      });
-      if (accepted.sessionId !== request.adapterSessionId) {
-        throw new SubmissionOutcomeUnknownError();
-      }
-      return readRespondSettlement({
-        ...common,
-        sessionId: request.adapterSessionId,
-        requestIds: request.responses.map(({ requestId }) => requestId),
-      });
-    },
     async cancel(request) {
       const before = await readInstalledSnapshot({
         ...common,
@@ -492,15 +432,15 @@ export function createSameOriginEveTransport(input: {
       const guardedTurnId = request.turnId ?? observedTurnId;
       const response = await authenticatedFetch({
         ...common,
-        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}/cancel`,
         init: {
-          method: "POST",
+          body: JSON.stringify(guardedTurnId === undefined ? {} : { turnId: guardedTurnId }),
           headers: {
             Accept: "application/json",
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(guardedTurnId === undefined ? {} : { turnId: guardedTurnId }),
+          method: "POST",
         },
+        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}/cancel`,
       });
       if (response.status !== 200 && response.status !== 202) {
         throw new Error("Canonical Eve cancellation failed.");
@@ -530,6 +470,60 @@ export function createSameOriginEveTransport(input: {
           throw new SubmissionRejectedBeforeDispatchError("turn_changed");
       }
       throw new HostedCancellationUnsettledError();
+    },
+    get: (request) => readSnapshot({ ...common, sessionId: request.adapterSessionId }),
+    async respond(request) {
+      const accepted = await postMutation({
+        ...common,
+        body: {
+          inputResponses: request.responses.map(({ requestId, response }) => {
+            if (response.kind === "approve") return { optionId: "approve", requestId };
+            if (response.kind === "deny") return { optionId: "cancel", requestId };
+            if (response.optionId === undefined) return { requestId, text: response.value };
+            return { optionId: response.optionId, requestId };
+          }),
+        },
+        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
+        principal: request.principal,
+        sourceHandoffId: request.sourceHandoffId,
+      });
+      if (accepted.sessionId !== request.adapterSessionId) {
+        throw new SubmissionOutcomeUnknownError();
+      }
+      return readRespondSettlement({
+        ...common,
+        requestIds: request.responses.map(({ requestId }) => requestId),
+        sessionId: request.adapterSessionId,
+      });
+    },
+    async send(request) {
+      const accepted = await postMutation({
+        ...common,
+        body: { message: request.message, turnPolicy: "queue" },
+        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
+        principal: request.principal,
+        sourceHandoffId: request.sourceHandoffId,
+      });
+      if (accepted.sessionId !== request.adapterSessionId) {
+        throw new SubmissionOutcomeUnknownError();
+      }
+      return readSnapshot({ ...common, sessionId: request.adapterSessionId });
+    },
+    async start(request) {
+      const accepted = await postMutation({
+        ...common,
+        body: { message: request.prompt, operationId: request.operationId },
+        path: "/eve/v1/session",
+        principal: request.principal,
+        sourceHandoffId: request.sourceHandoffId,
+      });
+      return {
+        adapterSessionId: accepted.sessionId,
+        snapshot: await readSnapshot({
+          ...common,
+          sessionId: accepted.sessionId,
+        }),
+      };
     },
   };
 }

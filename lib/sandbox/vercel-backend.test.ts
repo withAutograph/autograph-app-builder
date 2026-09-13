@@ -24,7 +24,7 @@ function recoveryInput(input?: {
 }) {
   return () => ({
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    bootstrap: input?.bootstrap ?? (async () => undefined),
+    bootstrap: input?.bootstrap ?? (async () => {}),
     seedFiles:
       input?.seedFiles ??
       ([
@@ -42,8 +42,8 @@ function backendFactory(input: {
   readonly prewarm: ReturnType<typeof vi.fn>;
 }): HostedVercelBackendFactory {
   return vi.fn(() => ({
-    name: "vercel",
     create: input.create,
+    name: "vercel",
     prewarm: input.prewarm,
   })) as HostedVercelBackendFactory;
 }
@@ -55,28 +55,27 @@ describe.skip("retired template-backed Vercel backend", () => {
       .mockRejectedValueOnce(new Error("fetch failed"))
       .mockResolvedValueOnce(new Response("ok"));
     const request = new Request("https://sandbox.example.test/v1/create?secret=hidden", {
-      method: "POST",
-      headers: { authorization: "Bearer hidden", "x-private": "hidden" },
       body: "hidden",
+      headers: { authorization: "Bearer hidden", "x-private": "hidden" },
+      method: "POST",
     });
     await expect(createProviderFetch(fetch)(request)).resolves.toMatchObject({
       status: 200,
     });
     expect(fetch).toHaveBeenCalledTimes(2);
-    expect(fetch.mock.calls[0]![0]).toBeInstanceOf(Request);
+    expect(fetch.mock.calls[0]?.[0]).toBeInstanceOf(Request);
   });
 
   it("retries one provider timeout without retrying caller cancellation", async () => {
+    const timeoutResponse = Promise.withResolvers<Response>();
     const timedOutFetch = vi
       .fn<typeof globalThis.fetch>()
-      .mockImplementationOnce(
-        (_input, init) =>
-          new Promise((_resolve, reject) => {
-            init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), {
-              once: true,
-            });
-          }),
-      )
+      .mockImplementationOnce((_input, init) => {
+        init?.signal?.addEventListener("abort", () => timeoutResponse.reject(init.signal?.reason), {
+          once: true,
+        });
+        return timeoutResponse.promise;
+      })
       .mockResolvedValueOnce(new Response("ok"));
     await expect(
       createProviderFetch(
@@ -122,8 +121,8 @@ describe.skip("retired template-backed Vercel backend", () => {
 
     expect(factory).toHaveBeenCalledOnce();
     expect(options).toBeDefined();
-    expect(options!.networkPolicy).toBe("allow-all");
-    expect(options!.sessionCreateOptions()).toEqual({
+    expect(options?.networkPolicy).toBe("allow-all");
+    expect(options?.sessionCreateOptions()).toEqual({
       networkPolicy: "allow-all",
     });
   });
@@ -136,16 +135,16 @@ describe.skip("retired template-backed Vercel backend", () => {
     }) satisfies HostedVercelBackendFactory);
     createHostedVercelBackend({
       factory,
-      sandboxEnvironment: {
-        MISE_AUTO_INSTALL: "false",
-        CARGO_NET_OFFLINE: "true",
-      },
       runtimeRecoveryPrewarmInput: recoveryInput(),
+      sandboxEnvironment: {
+        CARGO_NET_OFFLINE: "true",
+        MISE_AUTO_INSTALL: "false",
+      },
     });
     expect(options?.networkPolicy).toBe("allow-all");
     expect(options?.env).toEqual({
-      MISE_AUTO_INSTALL: "false",
       CARGO_NET_OFFLINE: "true",
+      MISE_AUTO_INSTALL: "false",
     });
   });
 
@@ -153,19 +152,19 @@ describe.skip("retired template-backed Vercel backend", () => {
     const providerKey = "development-dependencies";
     const session = { id: "session-1" } as SandboxSession;
     const handle = {
-      session,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      useSessionFn: async () => session,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       captureState: async () => ({
         backendName: "vercel",
         metadata: {},
         sessionKey: "session-1",
       }),
+      session,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      stop: async () => undefined,
+      shutdown: async () => {},
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      shutdown: async () => undefined,
+      stop: async () => {},
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      useSessionFn: async () => session,
     } satisfies SandboxBackendHandle;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const create = vi.fn(async () => handle);
@@ -179,7 +178,7 @@ describe.skip("retired template-backed Vercel backend", () => {
 
     await backend.prewarm({
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      bootstrap: async () => undefined,
+      bootstrap: async () => {},
       runtimeContext,
       seedFiles: [],
       templateKey: "authored-key-a",
@@ -197,20 +196,20 @@ describe.skip("retired template-backed Vercel backend", () => {
   it("reuses one live Development session until its handle is closed", async () => {
     const session = { id: "session-1" } as SandboxSession;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const stop = vi.fn(async () => undefined);
+    const stop = vi.fn(async () => {});
     const handle = {
-      session,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      useSessionFn: async () => session,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       captureState: async () => ({
         backendName: "vercel",
         metadata: { sandboxName: "provider-session" },
         sessionKey: "session-1",
       }),
+      session,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      shutdown: vi.fn(async () => {}),
       stop,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      shutdown: vi.fn(async () => undefined),
+      useSessionFn: async () => session,
     } satisfies SandboxBackendHandle;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const create = vi.fn(async () => handle);
@@ -251,21 +250,21 @@ describe.skip("retired template-backed Vercel backend", () => {
   it("replays the exact non-empty managed seeds and bootstrap, then retries once", async () => {
     const session = { id: "session-1" } as SandboxSession;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const stop = vi.fn(async () => undefined);
+    const stop = vi.fn(async () => {});
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const shutdown = vi.fn(async () => undefined);
+    const shutdown = vi.fn(async () => {});
     const handle = {
-      session,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      useSessionFn: async () => session,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       captureState: async () => ({
         backendName: "vercel",
         metadata: {},
         sessionKey: "session-1",
       }),
-      stop,
+      session,
       shutdown,
+      stop,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      useSessionFn: async () => session,
     } satisfies SandboxBackendHandle;
     const create = vi
       .fn()
@@ -282,7 +281,7 @@ describe.skip("retired template-backed Vercel backend", () => {
       return { reused: false };
     });
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const bootstrap = vi.fn(async () => undefined);
+    const bootstrap = vi.fn(async () => {});
     const seedFiles = [
       {
         content: Buffer.from("first skill"),
@@ -316,7 +315,7 @@ describe.skip("retired template-backed Vercel backend", () => {
     });
     expect(prewarmInput.seedFiles).toBe(seedFiles);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await prewarmInput.bootstrap!({ use: async () => session });
+    await prewarmInput.bootstrap?.({ use: async () => session });
     expect(bootstrap).toHaveBeenCalledOnce();
 
     await recovered.stop();
@@ -327,25 +326,25 @@ describe.skip("retired template-backed Vercel backend", () => {
 
   it.each([
     {
-      name: "a null template",
-      requestedTemplateKey: null,
       error: new SandboxTemplateNotProvisionedError({
         backendName: "vercel",
         templateKey,
       }),
+      name: "a null template",
+      requestedTemplateKey: null,
     },
     {
+      error: new Error("provider unavailable"),
       name: "an unrelated provider failure",
       requestedTemplateKey: templateKey,
-      error: new Error("provider unavailable"),
     },
     {
-      name: "a typed failure for a different template",
-      requestedTemplateKey: templateKey,
       error: new SandboxTemplateNotProvisionedError({
         backendName: "vercel",
         templateKey: "different-template",
       }),
+      name: "a typed failure for a different template",
+      requestedTemplateKey: templateKey,
     },
   ])("does not recover $name", async ({ error, requestedTemplateKey }) => {
     const create = vi.fn().mockRejectedValueOnce(error);
@@ -448,19 +447,19 @@ describe("provider-native Vercel source", () => {
   it("falls back to a fresh sandbox when an optional template is absent", async () => {
     const session = { id: "fresh-session" } as SandboxSession;
     const handle = {
-      session,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      useSessionFn: async () => session,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       captureState: async () => ({
         backendName: "vercel",
         metadata: {},
         sessionKey: "fresh-session",
       }),
+      session,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      stop: async () => undefined,
+      shutdown: async () => {},
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      shutdown: async () => undefined,
+      stop: async () => {},
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      useSessionFn: async () => session,
     } satisfies SandboxBackendHandle;
     const create = vi
       .fn()
@@ -496,7 +495,7 @@ describe("provider-native Vercel source", () => {
     const token = "short_lived_installation_token";
     configureVercelSessionGitSource({
       sessionId: "session-source",
-      source: { url: "https://github.com/acme/private.git", token },
+      source: { token, url: "https://github.com/acme/private.git" },
     });
     try {
       createHostedVercelBackend({ factory });
@@ -506,10 +505,10 @@ describe("provider-native Vercel source", () => {
       expect(options?.sessionCreateOptions({ session: { id: "session-source" } })).toEqual({
         networkPolicy: "allow-all",
         source: {
+          password: token,
           type: "git",
           url: "https://github.com/acme/private.git",
           username: "x-access-token",
-          password: token,
         },
       });
       expect(JSON.stringify(factory.mock.calls)).not.toContain(token);
@@ -526,7 +525,7 @@ describe("provider-native Vercel source", () => {
     }) satisfies HostedVercelBackendFactory);
     configureVercelSessionGitSource({
       sessionId: "wrun_source",
-      source: { url: "https://github.com/acme/private.git", token: "token" },
+      source: { token: "token", url: "https://github.com/acme/private.git" },
     });
     try {
       createHostedVercelBackend({ factory });

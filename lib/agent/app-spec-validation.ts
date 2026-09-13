@@ -18,11 +18,11 @@ export const REQUIRED_APP_SPEC_HEADINGS = [
 ] as const;
 
 export const BUILD_READY_HANDOFF_EXAMPLE = {
-  status: "build-ready",
+  additionalPublicRoutes: [],
+  optionalCapabilities: { hostedResources: [], integrations: [] },
   owner: "product-operations",
   schema: { kind: "none" },
-  additionalPublicRoutes: [],
-  optionalCapabilities: { integrations: [], hostedResources: [] },
+  status: "build-ready",
 } as const;
 
 const capabilityIdPattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
@@ -64,16 +64,16 @@ const sortedUnique = <T extends z.ZodType<string>>(item: T) =>
 
 export const buildReadyHandoffSchema = z
   .object({
-    status: z.literal("build-ready"),
-    owner: z.string().trim().min(1),
-    schema: z.object({ kind: z.enum(["none", "kernel"]) }).strict(),
     additionalPublicRoutes: sortedUnique(publicRoute),
     optionalCapabilities: z
       .object({
-        integrations: sortedUnique(capabilityId),
         hostedResources: sortedUnique(capabilityId),
+        integrations: sortedUnique(capabilityId),
       })
       .strict(),
+    owner: z.string().trim().min(1),
+    schema: z.object({ kind: z.enum(["none", "kernel"]) }).strict(),
+    status: z.literal("build-ready"),
   })
   .strict();
 
@@ -137,16 +137,16 @@ export function normalizeBuildReadyAppSpec(content: string): string {
       ? input.owner.trim()
       : BUILD_READY_HANDOFF_EXAMPLE.owner;
   const canonical = {
-    status: "build-ready" as const,
+    additionalPublicRoutes: normalizedStrings(input.additionalPublicRoutes, publicRoutePattern),
+    optionalCapabilities: {
+      hostedResources: normalizedStrings(capabilities.hostedResources, capabilityIdPattern),
+      integrations: normalizedStrings(capabilities.integrations, capabilityIdPattern),
+    },
     owner,
     schema: {
       kind: schema.kind === "none" ? ("none" as const) : ("kernel" as const),
     },
-    additionalPublicRoutes: normalizedStrings(input.additionalPublicRoutes, publicRoutePattern),
-    optionalCapabilities: {
-      integrations: normalizedStrings(capabilities.integrations, capabilityIdPattern),
-      hostedResources: normalizedStrings(capabilities.hostedResources, capabilityIdPattern),
-    },
+    status: "build-ready" as const,
   };
   const prefix = normalizedContent.slice(0, heading.index).trimEnd();
   return `${prefix}\n\n## Build handoff\n\n\`\`\`json\n${JSON.stringify(canonical, null, 2)}\n\`\`\``;
@@ -161,14 +161,14 @@ export function validateBuildReadyAppSpec(content: string): AppSpecValidationRes
     if (count === 0)
       issues.push({
         code: "missing_heading",
-        path: heading,
         message: `Add exactly one "## ${heading}" section.`,
+        path: heading,
       });
     else if (count > 1)
       issues.push({
         code: "duplicate_heading",
-        path: heading,
         message: `Keep exactly one "## ${heading}" section.`,
+        path: heading,
       });
   }
 
@@ -184,11 +184,11 @@ export function validateBuildReadyAppSpec(content: string): AppSpecValidationRes
   if (block?.[1] === undefined) {
     issues.push({
       code: "build_handoff_format",
-      path: "Build handoff",
       message:
         "End the document with the exact Build handoff heading, one blank line, and one json fenced block.",
+      path: "Build handoff",
     });
-    return { valid: false, issues };
+    return { issues, valid: false };
   }
 
   let parsed: unknown;
@@ -197,21 +197,21 @@ export function validateBuildReadyAppSpec(content: string): AppSpecValidationRes
   } catch {
     issues.push({
       code: "build_handoff_json",
-      path: "Build handoff",
       message: "Make the Build handoff fenced block valid JSON.",
+      path: "Build handoff",
     });
-    return { valid: false, issues };
+    return { issues, valid: false };
   }
   const handoff = buildReadyHandoffSchema.safeParse(parsed);
   if (!handoff.success)
     for (const issue of handoff.error.issues)
       issues.push({
         code: "build_handoff_shape",
-        path: ["Build handoff", ...issue.path].join("."),
         message: issue.message,
+        path: ["Build handoff", ...issue.path].join("."),
       });
 
-  return issues.length === 0 ? { valid: true } : { valid: false, issues };
+  return issues.length === 0 ? { valid: true } : { issues, valid: false };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -219,11 +219,11 @@ export function appSpecRepairDiagnostic(
   result: Extract<AppSpecValidationResult, { valid: false }>,
 ): string {
   return JSON.stringify({
+    buildHandoffExample: BUILD_READY_HANDOFF_EXAMPLE,
     code: "app_spec_invalid",
     instruction:
       "Repair and replace the complete Markdown artifact, then retry accept_app_spec without asking the user.",
     issues: result.issues,
     requiredHeadings: REQUIRED_APP_SPEC_HEADINGS.map((heading) => `## ${heading}`),
-    buildHandoffExample: BUILD_READY_HANDOFF_EXAMPLE,
   });
 }

@@ -7,7 +7,7 @@ export interface RouteErrorProps {
   retry: () => void;
 }
 
-const subscribe = () => () => undefined;
+const subscribe = () => () => null;
 const clientReady = () => true;
 const serverReady = () => false;
 

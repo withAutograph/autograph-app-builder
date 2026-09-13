@@ -15,7 +15,7 @@ import {
   writeFile,
   chmod,
 } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import nodePath from "node:path";
 
 import {
   assertExactProposal,
@@ -71,7 +71,7 @@ export interface LocalPublicationFaultHooks {
   preservePendingOnFailure?: boolean;
 }
 
-function fixedGitEnvironment(): NodeJS.ProcessEnv {
+const fixedGitEnvironment = function fixedGitEnvironment(): NodeJS.ProcessEnv {
   const environment = { ...process.env };
   for (const name of [
     "GIT_DIR",
@@ -84,9 +84,9 @@ function fixedGitEnvironment(): NodeJS.ProcessEnv {
   ])
     Reflect.deleteProperty(environment, name);
   return environment;
-}
+};
 
-function fixedGitApply(
+const fixedGitApply = function fixedGitApply(
   root: string,
   patch: Uint8Array,
   options: { reverse?: boolean; check?: boolean } = {},
@@ -110,8 +110,8 @@ function fixedGitApply(
       "-",
     ],
     {
-      input: patch,
       env: fixedGitEnvironment(),
+      input: patch,
       maxBuffer: 64 * 1024 * 1024,
     },
   );
@@ -119,43 +119,48 @@ function fixedGitApply(
     throw new Error(
       `Fixed git apply failed: ${result.stderr.toString("utf-8").trim() || "unknown error"}`,
     );
-}
+};
 
-async function materializePatchFile(
+const materializePatchFile = async function materializePatchFile(
   root: string,
   side: "old" | "new",
   path: string,
   state: { bytes: Uint8Array; mode: string } | undefined,
 ): Promise<void> {
   if (state === undefined) return;
-  const target = resolve(root, side, path);
-  await mkdir(dirname(target), { recursive: true, mode: 0o755 });
+  const target = nodePath.resolve(root, side, path);
+  await mkdir(nodePath.dirname(target), { mode: 0o755, recursive: true });
   await writeFile(target, state.bytes, {
     flag: "wx",
     mode: Number.parseInt(state.mode, 8),
   });
   await chmod(target, Number.parseInt(state.mode, 8));
-}
+};
 
-async function buildExactGitPatch(input: {
+const buildExactGitPatch = async function buildExactGitPatch(input: {
   gitDirectoryPath: string;
   executionPaths: readonly string[];
   changes: LocalPublicationProposal["changes"];
   preimages: ReadonlyMap<string, FileState>;
   overlay: ReadonlyMap<string, Uint8Array>;
 }): Promise<Uint8Array> {
-  const scratchParent = resolve(input.gitDirectoryPath, "app-builder");
-  await mkdir(scratchParent, { recursive: true, mode: 0o700 });
-  const scratch = await mkdtemp(resolve(scratchParent, "publication-patch-"));
+  const scratchParent = nodePath.resolve(input.gitDirectoryPath, "app-builder");
+  await mkdir(scratchParent, { mode: 0o700, recursive: true });
+  const scratch = await mkdtemp(nodePath.resolve(scratchParent, "publication-patch-"));
   const chunks: Buffer[] = [];
   try {
     for (const path of input.executionPaths) {
-      const change = input.changes.find((candidate) => candidate.path === path)!;
+      const change = input.changes.find((candidate) => candidate.path === path);
+      if (change === undefined) throw new Error(`Missing approved change for ${path}.`);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const item = await mkdtemp(resolve(scratch, "item-"));
+      const item = await mkdtemp(nodePath.resolve(scratch, "item-"));
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await Promise.all([mkdir(resolve(item, "old")), mkdir(resolve(item, "new"))]);
-      const before = input.preimages.get(path)!;
+      await Promise.all([
+        mkdir(nodePath.resolve(item, "old")),
+        mkdir(nodePath.resolve(item, "new")),
+      ]);
+      const before = input.preimages.get(path);
+      if (before === undefined) throw new Error(`Missing approved preimage for ${path}.`);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await materializePatchFile(
         item,
@@ -186,23 +191,26 @@ async function buildExactGitPatch(input: {
     }
     return Buffer.concat(chunks);
   } finally {
-    await rm(scratch, { recursive: true, force: true });
+    await rm(scratch, { force: true, recursive: true });
   }
-}
+};
 
-function git(path: string, args: readonly string[]): string {
+const git = function git(path: string, args: readonly string[]): string {
   return execFileSync("git", ["-C", path, ...args], {
     encoding: "utf-8",
     maxBuffer: 4 * 1024 * 1024,
   });
-}
+};
 
-function within(root: string, candidate: string): boolean {
-  const path = relative(root, candidate);
-  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
-}
+const within = function within(root: string, candidate: string): boolean {
+  const path = nodePath.relative(root, candidate);
+  return (
+    path === "" ||
+    (path !== ".." && !path.startsWith(`..${nodePath.sep}`) && !nodePath.isAbsolute(path))
+  );
+};
 
-function fieldAfter(record: string, spaceCount: number): string {
+const fieldAfter = function fieldAfter(record: string, spaceCount: number): string {
   let offset = 0;
   for (let count = 0; count < spaceCount; count += 1) {
     offset = record.indexOf(" ", offset);
@@ -210,7 +218,7 @@ function fieldAfter(record: string, spaceCount: number): string {
     offset += 1;
   }
   return record.slice(offset);
-}
+};
 
 export interface ParsedGitStatus {
   path: string;
@@ -221,17 +229,19 @@ export interface ParsedGitStatus {
   indexObjectId?: string;
 }
 
-function statusMetadata(record: string): {
+const statusMetadata = function statusMetadata(record: string): {
   indexMode?: string;
   indexObjectId?: string;
 } {
   const fields = record.split(" ");
   const { 4: indexMode, 7: indexObjectId } = fields;
   return indexMode !== undefined && indexObjectId !== undefined ? { indexMode, indexObjectId } : {};
-}
+};
 
 /** Parse `git status --porcelain=v2 -z`; rename records consume two NUL fields. */
-export function parseGitStatusV2(output: string): readonly ParsedGitStatus[] {
+export const parseGitStatusV2 = function parseGitStatusV2(
+  output: string,
+): readonly ParsedGitStatus[] {
   const records = output.split("\0");
   const result: ParsedGitStatus[] = [];
   for (let index = 0; index < records.length; index += 1) {
@@ -239,8 +249,8 @@ export function parseGitStatusV2(output: string): readonly ParsedGitStatus[] {
     if (record === "" || record.startsWith("# ") || record.startsWith("! ")) continue;
     if (record.startsWith("? ")) {
       result.push({
-        path: record.slice(2),
         indexStatus: "?",
+        path: record.slice(2),
         worktreeStatus: "?",
       });
       continue;
@@ -263,8 +273,8 @@ export function parseGitStatusV2(output: string): readonly ParsedGitStatus[] {
         throw new Error("Git returned a truncated rename record.");
       index += 1;
       result.push({
-        path,
         originalPath,
+        path,
         ...statusMetadata(record),
         indexStatus: xy[0] ?? ".",
         worktreeStatus: xy[1] ?? ".",
@@ -284,9 +294,9 @@ export function parseGitStatusV2(output: string): readonly ParsedGitStatus[] {
     throw new Error("Git returned an unsupported porcelain-v2 status record.");
   }
   return result.toSorted((left, right) => compareOverlayPaths(left.path, right.path));
-}
+};
 
-async function fileState(path: string, includeBytes = true): Promise<FileState> {
+const fileState = async function fileState(path: string, includeBytes = true): Promise<FileState> {
   try {
     const stat = await lstat(path);
     if (stat.isSymbolicLink()) return { kind: "symlink" };
@@ -307,15 +317,18 @@ async function fileState(path: string, includeBytes = true): Promise<FileState> 
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return { kind: "absent" };
     throw error;
   }
-}
+};
 
-async function dirtyEntry(root: string, parsed: ParsedGitStatus): Promise<DirtyPathSnapshot> {
+const dirtyEntry = async function dirtyEntry(
+  root: string,
+  parsed: ParsedGitStatus,
+): Promise<DirtyPathSnapshot> {
   if (
     !safeSourcePath(parsed.path) ||
     (parsed.originalPath !== undefined && !safeSourcePath(parsed.originalPath))
   )
     throw new Error("Git reported an unsafe dirty path.");
-  const state = await fileState(resolve(root, parsed.path));
+  const state = await fileState(nodePath.resolve(root, parsed.path));
   return {
     ...parsed,
     kind: state.kind,
@@ -323,131 +336,134 @@ async function dirtyEntry(root: string, parsed: ParsedGitStatus): Promise<DirtyP
     ...(state.bytes === undefined
       ? {}
       : {
-          size: state.bytes.byteLength,
-          contentDigest: state.digest,
           contentBase64: Buffer.from(state.bytes).toString("base64"),
+          contentDigest: state.digest,
+          size: state.bytes.byteLength,
         }),
   };
-}
+};
 
-function gitOwnedPath(root: string, name: string): string {
-  return resolve(git(root, ["rev-parse", "--path-format=absolute", "--git-path", name]).trim());
-}
+const gitOwnedPath = function gitOwnedPath(root: string, name: string): string {
+  return nodePath.resolve(
+    git(root, ["rev-parse", "--path-format=absolute", "--git-path", name]).trim(),
+  );
+};
 
-export async function inspectLocalPublicationDestination(input: {
-  destinationPath: string;
-  sourceReceipt: SourceReceipt;
-}): Promise<DestinationSnapshot> {
-  if (resolve(input.destinationPath) !== input.sourceReceipt.sourcePath)
-    throw new Error(
-      "The destination must be the canonical original source path, not a symlink or alias.",
+export const inspectLocalPublicationDestination =
+  async function inspectLocalPublicationDestination(input: {
+    destinationPath: string;
+    sourceReceipt: SourceReceipt;
+  }): Promise<DestinationSnapshot> {
+    if (nodePath.resolve(input.destinationPath) !== input.sourceReceipt.sourcePath)
+      throw new Error(
+        "The destination must be the canonical original source path, not a symlink or alias.",
+      );
+    const canonicalPath = await resolveAllowedRepository(input.destinationPath);
+    if (canonicalPath !== input.sourceReceipt.sourcePath)
+      throw new Error("The selected destination is not the exact original source checkout.");
+    const [headSha, headTree] = [
+      git(canonicalPath, ["rev-parse", "HEAD"]).trim(),
+      git(canonicalPath, ["rev-parse", "HEAD^{tree}"]).trim(),
+    ];
+    const headReference = git(canonicalPath, ["rev-parse", "--symbolic-full-name", "HEAD"]).trim();
+    const gitDirectoryPath = await realpath(
+      git(canonicalPath, ["rev-parse", "--absolute-git-dir"]).trim(),
     );
-  const canonicalPath = await resolveAllowedRepository(input.destinationPath);
-  if (canonicalPath !== input.sourceReceipt.sourcePath)
-    throw new Error("The selected destination is not the exact original source checkout.");
-  const [headSha, headTree] = [
-    git(canonicalPath, ["rev-parse", "HEAD"]).trim(),
-    git(canonicalPath, ["rev-parse", "HEAD^{tree}"]).trim(),
-  ];
-  const headReference = git(canonicalPath, ["rev-parse", "--symbolic-full-name", "HEAD"]).trim();
-  const gitDirectoryPath = await realpath(
-    git(canonicalPath, ["rev-parse", "--absolute-git-dir"]).trim(),
-  );
-  const [rootStat, gitDirectoryStat] = await Promise.all([
-    lstat(canonicalPath),
-    lstat(gitDirectoryPath),
-  ]);
-  const indexPath = await gitOwnedPath(canonicalPath, "index");
-  const indexFileDigest = contentDigest(await readFile(indexPath));
-  const remoteDigest = stableDigest(git(canonicalPath, ["remote", "-v"]));
-  if (!rootStat.isDirectory() || !gitDirectoryStat.isDirectory())
-    throw new Error("The repository root or Git directory is not a directory.");
-  const parsed = parseGitStatusV2(
-    git(canonicalPath, ["status", "--porcelain=v2", "-z", "--untracked-files=all"]),
-  );
-  const dirty = await Promise.all(parsed.map((entry) => dirtyEntry(canonicalPath, entry)));
-  const indexPaths = [
-    ...new Set(
-      parsed
-        .flatMap((entry) => [entry.path, entry.originalPath])
-        .filter((path): path is string => path !== undefined),
-    ),
-  ].toSorted(compareOverlayPaths);
-  const index = indexPaths.map((path) => {
-    const entries = execFileSync(
-      "git",
-      ["-C", canonicalPath, "ls-files", "--stage", "-z", "--", path],
-      { encoding: "buffer", maxBuffer: 4 * 1024 * 1024 },
+    const [rootStat, gitDirectoryStat] = await Promise.all([
+      lstat(canonicalPath),
+      lstat(gitDirectoryPath),
+    ]);
+    const indexPath = await gitOwnedPath(canonicalPath, "index");
+    const indexFileDigest = contentDigest(await readFile(indexPath));
+    const remoteDigest = stableDigest(git(canonicalPath, ["remote", "-v"]));
+    if (!rootStat.isDirectory() || !gitDirectoryStat.isDirectory())
+      throw new Error("The repository root or Git directory is not a directory.");
+    const parsed = parseGitStatusV2(
+      git(canonicalPath, ["status", "--porcelain=v2", "-z", "--untracked-files=all"]),
     );
-    return {
-      path,
-      entriesBase64: entries.toString("base64"),
-      digest: contentDigest(entries),
+    const dirty = await Promise.all(parsed.map((entry) => dirtyEntry(canonicalPath, entry)));
+    const indexPaths = [
+      ...new Set(
+        parsed
+          .flatMap((entry) => [entry.path, entry.originalPath])
+          .filter((path): path is string => path !== undefined),
+      ),
+    ].toSorted(compareOverlayPaths);
+    const index = indexPaths.map((path) => {
+      const entries = execFileSync(
+        "git",
+        ["-C", canonicalPath, "ls-files", "--stage", "-z", "--", path],
+        { encoding: "buffer", maxBuffer: 4 * 1024 * 1024 },
+      );
+      return {
+        digest: contentDigest(entries),
+        entriesBase64: entries.toString("base64"),
+        path,
+      };
+    });
+    const totalBytes = dirty.reduce((sum, entry) => sum + (entry.size ?? 0), 0);
+    if (totalBytes > LOCAL_PUBLICATION_MAX_DIRTY_BYTES)
+      throw new Error("The unrelated dirty snapshot exceeds the local-publication size limit.");
+    const dirtyDigest = stableDigest(dirty);
+    const stable = {
+      canonicalPath,
+      contractDigest: sourceIdentityDigest(headSha, headTree),
+      dirty,
+      dirtyDigest,
+      gitDirectoryIdentity: {
+        device: gitDirectoryStat.dev.toString(),
+        inode: gitDirectoryStat.ino.toString(),
+      },
+      gitDirectoryPath,
+      headReference,
+      headSha,
+      headTree,
+      index,
+      indexFileDigest,
+      remoteDigest,
+      rootIdentity: {
+        device: rootStat.dev.toString(),
+        inode: rootStat.ino.toString(),
+      },
     };
-  });
-  const totalBytes = dirty.reduce((sum, entry) => sum + (entry.size ?? 0), 0);
-  if (totalBytes > LOCAL_PUBLICATION_MAX_DIRTY_BYTES)
-    throw new Error("The unrelated dirty snapshot exceeds the local-publication size limit.");
-  const dirtyDigest = stableDigest(dirty);
-  const stable = {
-    canonicalPath,
-    rootIdentity: {
-      device: rootStat.dev.toString(),
-      inode: rootStat.ino.toString(),
-    },
-    gitDirectoryPath,
-    gitDirectoryIdentity: {
-      device: gitDirectoryStat.dev.toString(),
-      inode: gitDirectoryStat.ino.toString(),
-    },
-    headSha,
-    headTree,
-    headReference,
-    indexFileDigest,
-    remoteDigest,
-    contractDigest: sourceIdentityDigest(headSha, headTree),
-    dirty,
-    index,
-    dirtyDigest,
+    return { ...stable, statusDigest: stableDigest(stable) };
   };
-  return { ...stable, statusDigest: stableDigest(stable) };
-}
 
-export async function deriveLocalPublicationProposal(input: {
+export const deriveLocalPublicationProposal = async function deriveLocalPublicationProposal(input: {
   destinationPath: string;
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
 }): Promise<LocalPublicationProposal> {
   const destination = await inspectLocalPublicationDestination(input);
   return createLocalPublicationProposal({
-    sourceReceipt: input.sourceReceipt,
     destination,
     review: input.review,
+    sourceReceipt: input.sourceReceipt,
   });
-}
+};
 
-function assertFileMatches(
+const assertFileMatches = function assertFileMatches(
   state: FileState,
   expected: { mode: string; digest: string } | undefined,
 ): boolean {
   return expected === undefined
     ? state.kind === "absent"
     : state.kind === "regular" && state.mode === expected.mode && state.digest === expected.digest;
-}
+};
 
-async function safeTarget(
+const safeTarget = async function safeTarget(
   root: string,
   relativePath: string,
   createParents: boolean,
   createdDirs: string[],
 ): Promise<string> {
   if (!safeSourcePath(relativePath)) throw new Error("The approved path is unsafe.");
-  const target = resolve(root, relativePath);
+  const target = nodePath.resolve(root, relativePath);
   if (!within(root, target)) throw new Error("The approved path escapes the destination.");
   const segments = relativePath.split("/").slice(0, -1);
   let cursor = root;
   for (const segment of segments) {
-    cursor = resolve(cursor, segment);
+    cursor = nodePath.resolve(cursor, segment);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const state = await fileState(cursor, false);
     if (state.kind === "absent" && createParents) {
@@ -464,22 +480,22 @@ async function safeTarget(
   if (leaf.kind === "symlink" || leaf.kind === "directory" || leaf.kind === "special")
     throw new Error("The approved path names a symlink or non-regular entry.");
   return target;
-}
+};
 
-async function syncDirectory(path: string): Promise<void> {
+const syncDirectory = async function syncDirectory(path: string): Promise<void> {
   const handle = await open(path, "r");
   try {
     await handle.sync();
   } finally {
     await handle.close();
   }
-}
+};
 
-function sameFileState(left: FileState, right: FileState): boolean {
+const sameFileState = function sameFileState(left: FileState, right: FileState): boolean {
   return left.kind === right.kind && left.mode === right.mode && left.digest === right.digest;
-}
+};
 
-async function atomicWrite(
+const atomicWrite = async function atomicWrite(
   path: string,
   bytes: Uint8Array,
   mode: string,
@@ -493,40 +509,43 @@ async function atomicWrite(
     await handle.sync();
   } catch (error) {
     await handle.close();
-    await unlink(temporary).catch(() => undefined);
+    await unlink(temporary).catch(() => null);
     throw error;
   }
   await handle.close();
   if (expectedPreimage !== undefined && !sameFileState(await fileState(path), expectedPreimage)) {
-    await unlink(temporary).catch(() => undefined);
+    await unlink(temporary).catch(() => null);
     throw new Error("The file changed while its atomic replacement was prepared.");
   }
   await rename(temporary, path);
-  await syncDirectory(dirname(path));
-}
+  await syncDirectory(nodePath.dirname(path));
+};
 
-async function writeJournal(path: string, journal: LocalPublicationJournal): Promise<void> {
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+const writeJournal = async function writeJournal(
+  path: string,
+  journal: LocalPublicationJournal,
+): Promise<void> {
+  await mkdir(nodePath.dirname(path), { mode: 0o700, recursive: true });
   await atomicWrite(path, Buffer.from(`${JSON.stringify(journal)}\n`), "644");
-}
+};
 
-async function createInitialJournal(
+const createInitialJournal = async function createInitialJournal(
   path: string,
   journal: LocalPublicationPendingReceipt,
 ): Promise<void> {
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  await mkdir(nodePath.dirname(path), { mode: 0o700, recursive: true });
   const candidate = `${path}.pending-${randomUUID()}`;
   await atomicWrite(candidate, Buffer.from(`${JSON.stringify(journal)}\n`), "644");
   try {
     // A hard link is an atomic no-overwrite compare-and-swap on this filesystem.
     await link(candidate, path);
-    await syncDirectory(dirname(path));
+    await syncDirectory(nodePath.dirname(path));
   } finally {
-    await unlink(candidate).catch(() => undefined);
+    await unlink(candidate).catch(() => null);
   }
-}
+};
 
-function assertJournal(journal: LocalPublicationJournal): void {
+const assertJournal = function assertJournal(journal: LocalPublicationJournal): void {
   if (
     journal === null ||
     typeof journal !== "object" ||
@@ -534,9 +553,9 @@ function assertJournal(journal: LocalPublicationJournal): void {
   )
     throw new Error("The durable local-publication journal has an unsupported state.");
   assertCanonicalLocalPublicationJournal(journal);
-}
+};
 
-export async function readLocalPublicationJournal(
+export const readLocalPublicationJournal = async function readLocalPublicationJournal(
   destinationPath: string,
 ): Promise<LocalPublicationJournal | undefined> {
   const root = await resolveAllowedRepository(destinationPath);
@@ -551,31 +570,33 @@ export async function readLocalPublicationJournal(
       cause: error,
     });
   }
-}
+};
 
-async function acquireLock(root: string): Promise<() => Promise<void>> {
+const acquireLock = async function acquireLock(root: string): Promise<() => Promise<void>> {
   const lockPath = await gitOwnedPath(root, "app-builder/local-publication.lock");
-  await mkdir(dirname(lockPath), { recursive: true, mode: 0o700 });
+  await mkdir(nodePath.dirname(lockPath), { mode: 0o700, recursive: true });
   try {
     await mkdir(lockPath, { mode: 0o700 });
   } catch {
     throw new Error("A local-publication attempt is already in progress.");
   }
   return async () => {
-    await rmdir(lockPath).catch(() => undefined);
+    await rmdir(lockPath).catch(() => null);
   };
-}
+};
 
-function pathEvidence(proposal: LocalPublicationProposal): readonly PublicationPathEvidence[] {
+const pathEvidence = function pathEvidence(
+  proposal: LocalPublicationProposal,
+): readonly PublicationPathEvidence[] {
   return proposal.changes.map((change) => ({
-    path: change.path,
     operation: change.kind,
+    path: change.path,
     ...(change.before === undefined ? {} : { before: change.before }),
     ...(change.after === undefined ? {} : { after: change.after }),
   }));
-}
+};
 
-async function verifyPreconditions(input: {
+const verifyPreconditions = async function verifyPreconditions(input: {
   proposal: LocalPublicationProposal;
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
@@ -593,9 +614,9 @@ async function verifyPreconditions(input: {
     sourceReceipt: input.sourceReceipt,
   });
   const current = createLocalPublicationProposal({
-    sourceReceipt: input.sourceReceipt,
     destination: snapshot,
     review: input.review,
+    sourceReceipt: input.sourceReceipt,
   });
   if (!exactProposalMatch(current, input.proposal))
     throw new Error("The destination preconditions changed after approval.");
@@ -607,9 +628,9 @@ async function verifyPreconditions(input: {
       throw new Error(`The approved preimage changed for ${change.path}.`);
   }
   return snapshot;
-}
+};
 
-export async function verifyPublishedChangeSet(input: {
+export const verifyPublishedChangeSet = async function verifyPublishedChangeSet(input: {
   receipt: LocalPublicationSuccessReceipt;
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
@@ -662,9 +683,9 @@ export async function verifyPublishedChangeSet(input: {
   const durable = await readLocalPublicationJournal(root);
   if (durable?.status !== "succeeded" || durable.digest !== input.receipt.digest)
     throw new Error("The durable local-publication journal does not match the success receipt.");
-}
+};
 
-export async function publishReviewedChangeSet(input: {
+export const publishReviewedChangeSet = async function publishReviewedChangeSet(input: {
   proposal: LocalPublicationProposal;
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
@@ -721,21 +742,21 @@ export async function publishReviewedChangeSet(input: {
       preimages.set(change.path, before);
     }
     patch = await buildExactGitPatch({
-      gitDirectoryPath: snapshot.gitDirectoryPath,
-      executionPaths: input.proposal.executionPaths,
       changes: input.proposal.changes,
-      preimages,
+      executionPaths: input.proposal.executionPaths,
+      gitDirectoryPath: snapshot.gitDirectoryPath,
       overlay,
+      preimages,
     });
     const pendingUnsigned = {
       ...proposalFields,
-      proposalDigest,
-      status: "pending" as const,
-      publishedByCallId: input.publishedByCallId,
-      beforeStatusDigest,
       appliedPaths: [] as readonly string[],
+      beforeStatusDigest,
       intentPaths: input.proposal.executionPaths,
       pathEvidence: evidence,
+      proposalDigest,
+      publishedByCallId: input.publishedByCallId,
+      status: "pending" as const,
     };
     let pending: LocalPublicationPendingReceipt = {
       ...pendingUnsigned,
@@ -750,7 +771,8 @@ export async function publishReviewedChangeSet(input: {
     await input.hooks?.afterPendingJournal?.();
     for (let index = 0; index < input.proposal.executionPaths.length; index += 1) {
       const path = input.proposal.executionPaths[index];
-      const change = input.proposal.changes.find((candidate) => candidate.path === path)!;
+      const change = input.proposal.changes.find((candidate) => candidate.path === path);
+      if (change === undefined) throw new Error(`Missing approved change for ${path}.`);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await input.hooks?.beforeMutation?.(change.path, index);
     }
@@ -800,21 +822,21 @@ export async function publishReviewedChangeSet(input: {
       throw new Error("Unrelated state or Git metadata changed during publication.");
     const successUnsigned = {
       ...proposalFields,
-      proposalDigest,
-      status: "succeeded" as const,
-      publishedByCallId: input.publishedByCallId,
-      beforeStatusDigest,
       afterStatusDigest: after.statusDigest,
       appliedPaths,
-      intentPaths: input.proposal.executionPaths,
-      rolledBackPaths: [] as readonly string[],
+      beforeStatusDigest,
       conflictedPaths: [] as readonly string[],
-      uncertainPaths: [] as readonly string[],
+      intentPaths: input.proposal.executionPaths,
       pathEvidence: evidence,
-      recoveryRequired: false,
       postconditionDigest: stableDigest(
         evidence.map(({ path, after: postimage }) => ({ path, postimage })),
       ),
+      proposalDigest,
+      publishedByCallId: input.publishedByCallId,
+      recoveryRequired: false,
+      rolledBackPaths: [] as readonly string[],
+      status: "succeeded" as const,
+      uncertainPaths: [] as readonly string[],
     };
     const receipt: LocalPublicationSuccessReceipt = {
       ...successUnsigned,
@@ -833,7 +855,11 @@ export async function publishReviewedChangeSet(input: {
       const observedPost: string[] = [];
       for (let index = 0; index < input.proposal.executionPaths.length; index += 1) {
         const path = input.proposal.executionPaths[index];
-        const change = input.proposal.changes.find((candidate) => candidate.path === path)!;
+        const change = input.proposal.changes.find((candidate) => candidate.path === path);
+        if (change === undefined) {
+          uncertainPaths.push(path);
+          continue;
+        }
         try {
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await input.hooks?.beforeRollback?.(path, index);
@@ -855,15 +881,15 @@ export async function publishReviewedChangeSet(input: {
       if (observedPost.length > 0) {
         try {
           const rollbackPatch = await buildExactGitPatch({
-            gitDirectoryPath: input.proposal.gitDirectoryPath,
-            executionPaths: observedPost,
             changes: input.proposal.changes,
-            preimages,
+            executionPaths: observedPost,
+            gitDirectoryPath: input.proposal.gitDirectoryPath,
             overlay,
+            preimages,
           });
           fixedGitApply(input.proposal.destinationPath, rollbackPatch, {
-            reverse: true,
             check: true,
+            reverse: true,
           });
           fixedGitApply(input.proposal.destinationPath, rollbackPatch, {
             reverse: true,
@@ -873,7 +899,11 @@ export async function publishReviewedChangeSet(input: {
         }
       }
       for (const path of observedPost) {
-        const change = input.proposal.changes.find((candidate) => candidate.path === path)!;
+        const change = input.proposal.changes.find((candidate) => candidate.path === path);
+        if (change === undefined) {
+          conflictedPaths.push(path);
+          continue;
+        }
         try {
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const target = await safeTarget(input.proposal.destinationPath, path, false, []);
@@ -888,13 +918,13 @@ export async function publishReviewedChangeSet(input: {
         input.proposal.executionPaths.map((path, index) => [path, index]),
       );
       rolledBackPaths.sort(
-        (left, right) => executionPosition.get(left)! - executionPosition.get(right)!,
+        (left, right) => (executionPosition.get(left) ?? -1) - (executionPosition.get(right) ?? -1),
       );
       conflictedPaths.sort(
-        (left, right) => executionPosition.get(left)! - executionPosition.get(right)!,
+        (left, right) => (executionPosition.get(left) ?? -1) - (executionPosition.get(right) ?? -1),
       );
       uncertainPaths.sort(
-        (left, right) => executionPosition.get(left)! - executionPosition.get(right)!,
+        (left, right) => (executionPosition.get(left) ?? -1) - (executionPosition.get(right) ?? -1),
       );
     }
     let afterStatusDigest = "unavailable";
@@ -911,26 +941,26 @@ export async function publishReviewedChangeSet(input: {
       conflictedPaths.length > 0 ||
       uncertainPaths.length > 0 ||
       appliedPaths.length !== rolledBackPaths.length;
+    let reason: "rollback-conflict" | "mutation-failed" | "precondition-failed";
+    if (recoveryRequired) reason = "rollback-conflict";
+    else if (pendingWritten) reason = "mutation-failed";
+    else reason = "precondition-failed";
     const failureUnsigned = {
       ...proposalFields,
-      proposalDigest,
-      status: "failed" as const,
-      publishedByCallId: input.publishedByCallId,
-      beforeStatusDigest,
       afterStatusDigest,
       appliedPaths,
-      intentPaths: pendingWritten ? input.proposal.executionPaths : [],
-      rolledBackPaths,
+      beforeStatusDigest,
       conflictedPaths,
-      uncertainPaths,
-      pathEvidence: evidence,
-      recoveryRequired,
-      reason: recoveryRequired
-        ? ("rollback-conflict" as const)
-        : pendingWritten
-          ? ("mutation-failed" as const)
-          : ("precondition-failed" as const),
       failureMessage,
+      intentPaths: pendingWritten ? input.proposal.executionPaths : [],
+      pathEvidence: evidence,
+      proposalDigest,
+      publishedByCallId: input.publishedByCallId,
+      reason,
+      recoveryRequired,
+      rolledBackPaths,
+      status: "failed" as const,
+      uncertainPaths,
     };
     const receipt: LocalPublicationFailureReceipt = {
       ...failureUnsigned,
@@ -948,9 +978,9 @@ export async function publishReviewedChangeSet(input: {
   } finally {
     await release?.();
   }
-}
+};
 
-export function assertNoApprovedOverlap(
+export const assertNoApprovedOverlap = function assertNoApprovedOverlap(
   proposal: LocalPublicationProposal,
   dirty: readonly ParsedGitStatus[],
 ): void {
@@ -964,4 +994,4 @@ export function assertNoApprovedOverlap(
     )
   )
     throw new Error("A dirty path overlaps the approved publication path set.");
-}
+};

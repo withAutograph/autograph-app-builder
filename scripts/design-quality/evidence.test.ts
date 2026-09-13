@@ -7,12 +7,12 @@ const row = (
   dimension: Observation["dimension"],
   verdict: Observation["verdict"],
 ): Observation => ({
-  id,
   dimension,
-  verdict,
-  provenance: "generated",
   evidence: "static",
+  id,
+  provenance: "generated",
   summary: id,
+  verdict,
 });
 it("uses equally weighted available dimensions and retains denominators", () => {
   const result = scoreAdherence([
@@ -25,8 +25,8 @@ it("uses equally weighted available dimensions and retains denominators", () => 
   expect(result.status).toBe("complete");
   expect(result.dimensions.styling).toMatchObject({
     assessed: 2,
-    total: 2,
     percent: 50,
+    total: 2,
   });
 });
 it("does not award shared, unknown, duplicated, or missing evidence credit", () => {
@@ -45,14 +45,14 @@ it("does not award shared, unknown, duplicated, or missing evidence credit", () 
 });
 it("shows no fabricated score for absent evidence", () => {
   expect(scoreAdherence([], [], false)).toMatchObject({
+    coveragePercent: null,
     score: null,
     status: "unassessed",
-    coveragePercent: null,
   });
   expect(scoreAdherence([row("x", "styling", "unassessed")])).toMatchObject({
+    coveragePercent: 0,
     score: null,
     status: "unassessed",
-    coveragePercent: 0,
   });
 });
 it("does not round sparse evidence down to zero coverage", () => {

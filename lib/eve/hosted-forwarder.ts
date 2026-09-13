@@ -5,12 +5,12 @@ import { readHostedDeploymentEnvironment } from "../hosted/deployment-environmen
 
 const hostedForwarderConfigSchema = z
   .object({
-    teamSlug: z
+    projectName: z
       .string()
       .min(1)
       .max(100)
       .refine((value) => !/[*:]/u.test(value)),
-    projectName: z
+    teamSlug: z
       .string()
       .min(1)
       .max(100)
@@ -25,8 +25,8 @@ export function readHostedForwarderSubject(
   if (environment.EVE_HOSTED_ADAPTER !== "1") return;
   const deploymentEnvironment = readHostedDeploymentEnvironment(environment);
   const config = hostedForwarderConfigSchema.parse({
-    teamSlug: environment.EVE_HOSTED_VERCEL_TEAM_SLUG,
     projectName: environment.EVE_HOSTED_VERCEL_PROJECT_NAME,
+    teamSlug: environment.EVE_HOSTED_VERCEL_TEAM_SLUG,
   });
   return vercelSubject({ ...config, environment: deploymentEnvironment });
 }

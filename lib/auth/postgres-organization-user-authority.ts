@@ -107,6 +107,14 @@ export function createPostgresPreviewOrganizationAuthority(
 ): PostgresPreviewOrganizationAuthority {
   const generateId = options.generateId ?? randomUUID;
   return {
+    async activeWorkspaceForUser({ issuer, audience, ownerUserId }) {
+      if (issuer !== authority.issuer || audience !== authority.audience) {
+        return;
+      }
+      const activeOrganization = await exactActiveOrganization(database, authority, ownerUserId);
+      return activeOrganization?.workspaceId;
+    },
+
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async ensureOrganizationForVerifiedUser({ userId }) {
       return database.transaction(async (transaction) => {
@@ -276,14 +284,6 @@ export function createPostgresPreviewOrganizationAuthority(
         }
         return created;
       });
-    },
-
-    async activeWorkspaceForUser({ issuer, audience, ownerUserId }) {
-      if (issuer !== authority.issuer || audience !== authority.audience) {
-        return;
-      }
-      const activeOrganization = await exactActiveOrganization(database, authority, ownerUserId);
-      return activeOrganization?.workspaceId;
     },
 
     async isActiveMember({ issuer, audience, workspaceId, ownerUserId }) {

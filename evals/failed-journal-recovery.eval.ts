@@ -11,17 +11,17 @@ export default defineEval({
     const repository = createSupportedRepositoryFixture();
     await prepareReviewedWorkflow(t, repository, "publication-failure-recovery");
     await t.send("Publish reviewed change set locally.");
-    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
+    t.requireInputRequest({ toolName: "publish-reviewed-change-set" });
     await t.respondAll("approve");
     t.succeeded();
 
     await t.send("Retry local publication after a lost response.");
-    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
+    t.requireInputRequest({ toolName: "publish-reviewed-change-set" });
     await t.respondAll("approve");
     t.succeeded();
     await t.send("Report artifact workflow status.");
     t.check(t.reply, includes('"phase":"publication_failed"'));
     t.notCalledTool("bash");
-    t.notCalledTool("write_file");
+    t.notCalledTool("write-file");
   },
 });

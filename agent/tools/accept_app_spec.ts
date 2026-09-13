@@ -35,6 +35,12 @@ async function planAcceptedAppSpec(
   const latest = appBuilderWorkflowState.get();
   await continueAcceptedAppSpec({
     phase: latest.phase,
+    plan: async () => {
+      await planAppCreation.execute(
+        existingAppChanges === undefined ? {} : { existingAppChanges },
+        ctx,
+      );
+    },
     planComplete:
       latest.phase === "planned" ||
       latest.phase === "apply_failed" ||
@@ -43,30 +49,12 @@ async function planAcceptedAppSpec(
       latest.phase === "validation_failed" ||
       latest.phase === "validated" ||
       latest.phase === "reviewed",
-    plan: async () => {
-      await planAppCreation.execute(
-        existingAppChanges === undefined ? {} : { existingAppChanges },
-        ctx,
-      );
-    },
   });
 }
 
 export default defineTool({
   description:
     "Silently validate the complete AppSpec artifact and continue planning. Before authoring it, read design-app references/app-spec.md and use its complete canonical skeleton: every required heading and the exact final Build handoff with provider-neutral capability identifiers. Missing product sections must be authored, not inferred by this tool. No source, workspace, or approval receipt is required. This does not publish or change an external repository.",
-  inputSchema: z.strictObject({
-    appId: z.string().min(1),
-    expectedArtifactDigest: z
-      .string()
-      .regex(/^[0-9a-f]{64}$/u)
-      .optional(),
-    expectedArtifactRevision: z
-      .string()
-      .regex(/^[0-9a-f]{64}$/u)
-      .optional(),
-    existingAppChanges: existingAppChangesSchema.optional(),
-  }),
   async execute(
     { appId, expectedArtifactDigest, expectedArtifactRevision, existingAppChanges },
     ctx,
@@ -91,12 +79,12 @@ export default defineTool({
     const validation = validateBuildReadyAppSpec(content);
     if (!validation.valid) throw new Error(appSpecRepairDiagnostic(validation));
     const accepted = {
+      acceptedByCallId: ctx.callId,
       appId,
       artifactPath: artifact.path,
+      artifactRevision: artifact.revision,
       content,
       digest: sha256(content),
-      acceptedByCallId: ctx.callId,
-      artifactRevision: artifact.revision,
       ...(current.phase === "ui_accepted" ? { uiRevision: current.uiPreview.revision } : {}),
     };
     if (
@@ -119,17 +107,29 @@ export default defineTool({
       expected: current,
       operation: "AppSpec acceptance",
       transition: () => ({
-        version: APP_BUILDER_WORKFLOW_VERSION,
-        phase: "app_spec_accepted",
-        workspace: current.workspace,
-        sourceReceipt: current.sourceReceipt,
-        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
-        preparedByCallId: current.preparedByCallId,
-        artifacts: current.artifacts,
         appSpec: accepted,
+        artifacts: current.artifacts,
+        ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+        phase: "app_spec_accepted",
+        preparedByCallId: current.preparedByCallId,
+        sourceReceipt: current.sourceReceipt,
+        version: APP_BUILDER_WORKFLOW_VERSION,
+        workspace: current.workspace,
       }),
     });
     await planAcceptedAppSpec(ctx, existingAppChanges);
     return { ...accepted, reused: false };
   },
+  inputSchema: z.strictObject({
+    appId: z.string().min(1),
+    existingAppChanges: existingAppChangesSchema.optional(),
+    expectedArtifactDigest: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/u)
+      .optional(),
+    expectedArtifactRevision: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/u)
+      .optional(),
+  }),
 });

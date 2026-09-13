@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
 import { createHash, timingSafeEqual } from "node:crypto";
+import { once } from "node:events";
 import { existsSync, lstatSync, readFileSync, readdirSync, readSync, realpathSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import nodePath from "node:path";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 
 const identityDomain = "autograph-app-builder-ghcr-keyring-v2";
 const registry = "https://ghcr.io";
@@ -188,7 +190,7 @@ function requiredEnvironment(name: string): string {
 function exactGithubCli(): string {
   const path = requiredEnvironment("APP_BUILDER_IMAGE_GH_BIN");
   const expectedSha256 = requiredEnvironment("APP_BUILDER_GH_SHA256");
-  if (!isAbsolute(path) || realpathSync(path) !== path)
+  if (!nodePath.isAbsolute(path) || realpathSync(path) !== path)
     throw new Error("GitHub CLI executable is invalid.");
   const stat = lstatSync(path);
   if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("GitHub CLI executable is invalid.");
@@ -199,7 +201,7 @@ function exactGithubCli(): string {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function githubConfigDigest(configRoot: string): string {
-  if (!isAbsolute(configRoot) || realpathSync(configRoot) !== configRoot)
+  if (!nodePath.isAbsolute(configRoot) || realpathSync(configRoot) !== configRoot)
     throw new Error("GitHub configuration root is invalid.");
   const uid = process.getuid?.();
   const rootStat = lstatSync(configRoot);
@@ -214,7 +216,7 @@ export function githubConfigDigest(configRoot: string): string {
     throw new Error("GitHub configuration root is unsafe.");
   const records: string[] = [];
   for (const name of ["config.yml", "hosts.yml"] as const) {
-    const path = join(configRoot, name);
+    const path = nodePath.join(configRoot, name);
     if (realpathSync(path) !== path) throw new Error("GitHub configuration file is unsafe.");
     const stat = lstatSync(path);
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -234,7 +236,11 @@ export function githubConfigDigest(configRoot: string): string {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertGithubStateRoot(stateRoot: string): void {
-  if (!isAbsolute(stateRoot) || !existsSync(stateRoot) || realpathSync(stateRoot) !== stateRoot)
+  if (
+    !nodePath.isAbsolute(stateRoot) ||
+    !existsSync(stateRoot) ||
+    realpathSync(stateRoot) !== stateRoot
+  )
     throw new Error("GitHub state root is invalid.");
   const uid = process.getuid?.();
   const rootStat = lstatSync(stateRoot);
@@ -257,7 +263,7 @@ export function assertGithubStateRoot(stateRoot: string): void {
     rootEntries[0].isSymbolicLink()
   )
     throw new Error("GitHub state root has unexpected contents.");
-  const ghRoot = join(stateRoot, "gh");
+  const ghRoot = nodePath.join(stateRoot, "gh");
   if (realpathSync(ghRoot) !== ghRoot)
     throw new Error("GitHub state root contains a symbolic link.");
   const ghStat = lstatSync(ghRoot);
@@ -274,7 +280,7 @@ export function assertGithubStateRoot(stateRoot: string): void {
     ghEntries[0].isSymbolicLink()
   )
     throw new Error("GitHub state root has unexpected contents.");
-  const deviceId = join(ghRoot, "device-id");
+  const deviceId = nodePath.join(ghRoot, "device-id");
   if (realpathSync(deviceId) !== deviceId)
     throw new Error("GitHub state root contains a symbolic link.");
   const deviceStat = lstatSync(deviceId);
@@ -292,7 +298,7 @@ export function assertGithubStateRoot(stateRoot: string): void {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function githubStateDigest(stateRoot: string): string {
   assertGithubStateRoot(stateRoot);
-  const deviceId = join(stateRoot, "gh", "device-id");
+  const deviceId = nodePath.join(stateRoot, "gh", "device-id");
   if (!existsSync(deviceId)) return createHash("sha256").update("empty").digest("hex");
   const bytes = readFileSync(deviceId);
   try {
@@ -382,10 +388,8 @@ async function runBoundedGh(args: readonly string[]): Promise<Buffer> {
     terminate();
   }, ghTimeoutMs);
   try {
-    const status = await new Promise<number>((resolve, reject) => {
-      child.once("error", reject);
-      child.once("close", (code) => resolve(code ?? -1));
-    });
+    const [code] = await once(child, "close");
+    const status = code ?? -1;
     if (timedOut || overflow || status !== 0)
       throw new Error("GitHub credential read-back failed.");
     assertExpectedGithubState();
@@ -478,11 +482,7 @@ async function writeCredential(username: string, token: Buffer): Promise<void> {
   const suffix = Buffer.from('"}\n', "utf-8");
   const payload = Buffer.concat([prefix, token, suffix]);
   try {
-    await new Promise<void>((resolve, reject) => {
-      process.stdout.write(payload, (error) =>
-        error === undefined || error === null ? resolve() : reject(error),
-      );
-    });
+    await promisify(process.stdout.write).call(process.stdout, payload);
   } finally {
     prefix.fill(0);
     suffix.fill(0);
@@ -506,11 +506,7 @@ async function writeVerifiedLogin(
     "utf-8",
   );
   try {
-    await new Promise<void>((resolve, reject) => {
-      process.stdout.write(payload, (error) =>
-        error === undefined || error === null ? resolve() : reject(error),
-      );
-    });
+    await promisify(process.stdout.write).call(process.stdout, payload);
   } finally {
     payload.fill(0);
   }

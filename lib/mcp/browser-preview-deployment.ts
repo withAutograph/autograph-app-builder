@@ -59,19 +59,19 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
       const config = readPreviewOAuthRuntimeConfig(input.environment);
       const database = openHostedPostgresDatabase(config.databaseUrl);
       hosted = {
-        origin: new URL(config.issuer).origin,
-        issuer: config.issuer,
         audience: config.resource,
         auth: getPreviewOAuthDeploymentAuth(input.environment),
+        issuer: config.issuer,
         membership: createPostgresPreviewOrganizationAuthority(database, {
-          issuer: config.issuer,
           audience: config.resource,
+          issuer: config.issuer,
         }),
+        origin: new URL(config.issuer).origin,
         store: createPostgresHostedEveStore(database),
         transport: createSameOriginEveTransport({
           config: { baseUrl: new URL(config.resource).origin },
-          workloadIdentity: input.workloadIdentity,
           fetchImplementation: input.fetchImplementation,
+          workloadIdentity: input.workloadIdentity,
         }),
       };
     }
@@ -81,17 +81,17 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
     });
     if (session?.user.id === undefined) return undefined;
     const workspaceId = await hosted.membership.activeWorkspaceForUser({
-      issuer: hosted.issuer,
       audience: hosted.audience,
+      issuer: hosted.issuer,
       ownerUserId: session.user.id,
     });
     if (workspaceId === undefined) return undefined;
     const principal = hostedPrincipalSchema.parse({
-      issuer: hosted.issuer,
       audience: hosted.audience,
-      workspaceId,
+      issuer: hosted.issuer,
       ownerUserId: session.user.id,
       scopes: ["autograph:get", "autograph:session"],
+      workspaceId,
     });
     return createHostedEveSessionService({
       principal,

@@ -224,11 +224,10 @@ export function SessionAppView({
     const answer = answers[request.requestId];
     return answer === undefined || (answer.kind === "answer" && answer.value.trim().length === 0);
   }).length;
-  const continueGuidance = canCallTools
-    ? unansweredCount > 0
-      ? `Answer ${unansweredCount === 1 ? "the remaining request" : `all ${unansweredCount} remaining requests`} to continue.`
-      : undefined
-    : "Answer in chat to continue.";
+  let continueGuidance: string | undefined;
+  if (!canCallTools) continueGuidance = "Answer in chat to continue.";
+  else if (unansweredCount > 0)
+    continueGuidance = `Answer ${unansweredCount === 1 ? "the remaining request" : `all ${unansweredCount} remaining requests`} to continue.`;
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function submitApproval(
@@ -254,10 +253,10 @@ export function SessionAppView({
     setError("");
     try {
       await onRespond(
-        respondable.map((request) => ({
-          requestId: request.requestId,
-          response: answers[request.requestId]!,
-        })),
+        respondable.flatMap((request) => {
+          const response = answers[request.requestId];
+          return response === undefined ? [] : [{ requestId: request.requestId, response }];
+        }),
       );
       setState("submitted");
     } catch {

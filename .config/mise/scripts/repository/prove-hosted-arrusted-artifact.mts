@@ -11,11 +11,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, isAbsolute, join } from "node:path";
+import path from "node:path";
 
 import { extract } from "tar";
 
 import { BUILD_READY_APP_SPEC } from "../../../../evals/support/app-spec.ts";
+
+const { basename, dirname, isAbsolute, join } = path;
 
 const TARGET_SHA = "d378904a05e1bc2c0896886e6fbd3b816babaee2";
 const TARGET_TREE = "6735f4b45cc2b29a139531a41dac990c925e0d39";
@@ -59,10 +61,10 @@ function parseArguments(args: readonly string[]) {
       "Usage: hosted:artifact-prove -- --arrusted-root <path> --artifact <path> --artifact-sha256 <sha256>",
     );
   return {
-    miseBin: realpathSync(miseBin),
     arrustedRoot: realpathSync(arrustedRoot),
     artifact: realpathSync(artifact),
     artifactSha256,
+    miseBin: realpathSync(miseBin),
   };
 }
 
@@ -124,12 +126,12 @@ try {
   writeFileSync(
     contractPath,
     `${JSON.stringify({
-      version: 1,
       appId: "builder-proof",
       appSpec: {
         path: "prototype/builder-proof/app-spec.md",
         sha256: appSpecDigest,
       },
+      version: 1,
     })}\n`,
   );
   const run = (args: readonly string[]) =>
@@ -151,10 +153,10 @@ try {
           encoding: "utf-8",
           env: {
             ...process.env,
-            PATH: `${dirname(input.miseBin)}:${process.env.PATH ?? ""}`,
             MISE_AUTO_INSTALL: "false",
             MISE_EXEC_AUTO_INSTALL: "false",
             MISE_TASK_RUN_AUTO_INSTALL: "false",
+            PATH: `${dirname(input.miseBin)}:${process.env.PATH ?? ""}`,
           },
         },
       ),
@@ -174,14 +176,14 @@ try {
     throw new Error("The hosted dependency artifact returned an unexpected planning result.");
   process.stdout.write(
     `${JSON.stringify({
-      version: 2,
+      appId: identity.appId,
       artifactSha256: input.artifactSha256,
+      blockers: proposal.blockers,
+      futurePath: proposal.futurePath,
+      mutations: proposal.mutations,
       sourceSha: TARGET_SHA,
       sourceTree: TARGET_TREE,
-      appId: identity.appId,
-      futurePath: proposal.futurePath,
-      blockers: proposal.blockers,
-      mutations: proposal.mutations,
+      version: 2,
     })}\n`,
   );
 } finally {

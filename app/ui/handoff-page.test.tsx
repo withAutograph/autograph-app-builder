@@ -29,7 +29,7 @@ afterEach(() => vi.clearAllMocks());
 
 describe("authenticated handoff page", () => {
   it("redirects a missing web session back through the same handoff", async () => {
-    server.load.mockResolvedValue(undefined);
+    server.load.mockImplementation(() => Promise.resolve());
     await expect(HandoffContent({ params })).rejects.toThrow("redirect:");
     expect(server.redirect).toHaveBeenCalledWith(
       `/auth/sign-in?callbackURL=${encodeURIComponent(`/handoff/${id}`)}`,
@@ -47,23 +47,23 @@ describe("authenticated handoff page", () => {
     "renders saved context and only offers reconnect for credential failures: %s",
     async (code) => {
       server.load.mockResolvedValue({
-        version: 1,
-        handoffId: id,
-        expiresAt: "2030-01-01T00:00:00Z",
-        status: "prepared",
-        destination: "cursor",
         cursorInstallReady: false,
-        mcpUrl: "https://builder.example/mcp",
+        destination: "cursor",
+        expiresAt: "2030-01-01T00:00:00Z",
+        handoffId: id,
         intent: {
           appName: "Support App",
           brief: "Help customers",
           connections: ["QuickBooks"],
-          repository: { requestedName: "support-app", private: true },
           provisioning: {
-            github: { status: "failed", code },
-            vercel: { status: "failed", code },
+            github: { code, status: "failed" },
+            vercel: { code, status: "failed" },
           },
+          repository: { private: true, requestedName: "support-app" },
         },
+        mcpUrl: "https://builder.example/mcp",
+        status: "prepared",
+        version: 1,
       });
       const html = renderToStaticMarkup(await HandoffContent({ params }));
       expect(html).toContain("Support App");

@@ -4,9 +4,9 @@ import { z } from "zod";
 export const parityVersion = "self-reproduction-parity/v1" as const;
 export const sides = ["reference", "candidate"] as const;
 export const desktopViewports = [
-  { name: "desktop", width: 1440, height: 900 },
-  { name: "desktop-wide", width: 1920, height: 1080 },
-  { name: "desktop-window", width: 1024, height: 768 },
+  { height: 900, name: "desktop", width: 1440 },
+  { height: 1080, name: "desktop-wide", width: 1920 },
+  { height: 768, name: "desktop-window", width: 1024 },
 ] as const;
 export const captureStates = ["panel-resize", "keyboard", "loading", "empty", "error"] as const;
 
@@ -14,39 +14,37 @@ export const captureStates = ["panel-resize", "keyboard", "loading", "empty", "e
 // assertions; labels, routes and selectors may differ between applications.
 export const workflowMatrix = [
   {
-    id: "anonymous-entry",
-    seed: "anonymous-empty",
     action: "Enter the fixed brief and continue",
     assertions: ["brief-editable", "continuation-changes-state"],
+    id: "anonymous-entry",
+    seed: "anonymous-empty",
   },
   {
-    id: "authentication",
-    seed: "anonymous-draft",
     action: "Sign in, sign out, then try another user's draft",
     assertions: ["sign-in-restores-draft", "sign-out-revokes-access", "other-user-denied"],
+    id: "authentication",
+    seed: "anonymous-draft",
   },
   {
-    id: "durable-draft",
-    seed: "owner-empty",
     action:
       "Edit all draft fields, await server acknowledgement, reopen in a fresh browser context",
     assertions: ["write-acknowledged", "fresh-context-read-matches", "revision-advanced"],
+    id: "durable-draft",
+    seed: "owner-empty",
   },
   {
-    id: "provider-return-success",
-    seed: "owner-draft-provider-pending",
     action: "Complete seeded successful callback through application handler",
     assertions: ["callback-consumed", "draft-preserved", "connection-persisted"],
+    id: "provider-return-success",
+    seed: "owner-draft-provider-pending",
   },
   {
-    id: "provider-return-error",
-    seed: "owner-draft-provider-pending",
     action: "Return seeded denial, then replay callback state",
     assertions: ["error-visible", "draft-preserved", "replayed-state-rejected"],
+    id: "provider-return-error",
+    seed: "owner-draft-provider-pending",
   },
   {
-    id: "app-creation",
-    seed: "owner-build-ready",
     action: "Submit fixed child brief through this application's creation workflow",
     assertions: [
       "submission-changes-state",
@@ -54,34 +52,34 @@ export const workflowMatrix = [
       "artifact-readable",
       "result-linked",
     ],
+    id: "app-creation",
+    seed: "owner-build-ready",
   },
   {
-    id: "preview-access",
-    seed: "owner-created-app",
     action: "Open preview as owner and as unrelated user",
     assertions: ["owner-preview-loads", "other-user-denied", "expired-access-rejected"],
+    id: "preview-access",
+    seed: "owner-created-app",
   },
   {
-    id: "cancellation",
-    seed: "owner-running-job",
     action: "Cancel while operation is pending and reload",
     assertions: ["cancel-acknowledged", "terminal-state-persists", "no-late-success"],
+    id: "cancellation",
+    seed: "owner-running-job",
   },
   {
-    id: "retry",
-    seed: "owner-failed-job",
     action: "Retry once and reload",
     assertions: ["retry-changes-state", "single-continuation", "result-persists"],
+    id: "retry",
+    seed: "owner-failed-job",
   },
   {
-    id: "session-recovery",
-    seed: "owner-interrupted-job",
     action: "Close context while pending; open new context and resume",
     assertions: ["session-restored", "single-continuation", "result-persists"],
+    id: "session-recovery",
+    seed: "owner-interrupted-job",
   },
   {
-    id: "independent-child",
-    seed: "owner-build-ready",
     action: "Create exactly one child via this application; inspect child output and stop",
     assertions: [
       "child-artifact-readable",
@@ -90,64 +88,66 @@ export const workflowMatrix = [
       "no-reference-backend",
       "no-reference-source",
     ],
+    id: "independent-child",
+    seed: "owner-build-ready",
   },
   {
-    id: "documentation",
-    seed: "anonymous-empty",
     action: "Navigate to public docs and back",
     assertions: ["docs-readable", "return-navigation-works"],
+    id: "documentation",
+    seed: "anonymous-empty",
   },
 ] as const;
 
 export const frameworkMatrix = [
-  { id: "server-first", assertions: ["request-data-on-server", "useful-server-shell"] },
-  { id: "narrow-client", assertions: ["client-import-graph-reviewed", "interactive-leaves-only"] },
+  { assertions: ["request-data-on-server", "useful-server-shell"], id: "server-first" },
+  { assertions: ["client-import-graph-reviewed", "interactive-leaves-only"], id: "narrow-client" },
   {
-    id: "server-writes",
     assertions: ["server-authorizes-write", "durable-readback", "failure-not-success"],
+    id: "server-writes",
   },
   {
-    id: "auth-cache-isolation",
     assertions: ["two-user-isolation", "sign-out-invalidates", "cache-scope-reviewed"],
+    id: "auth-cache-isolation",
   },
   {
-    id: "suspense",
     assertions: ["direct-load-fallback-useful", "shared-layout-navigation-fallback-useful"],
+    id: "suspense",
   },
   {
-    id: "cache-components",
     assertions: ["cache-boundaries-reviewed", "static-shell-observed", "revalidation-observed"],
+    id: "cache-components",
   },
   {
-    id: "partial-prefetching",
     assertions: ["app-shell-prefetch-observed", "url-dependent-content-correct"],
+    id: "partial-prefetching",
   },
   {
-    id: "instant-navigation",
     assertions: ["instant-direct-load", "instant-client-navigation", "resolved-content-visible"],
+    id: "instant-navigation",
   },
   {
-    id: "navigation-continuity",
     assertions: ["back-forward-preserves-draft", "shared-layout-state-preserved", "focus-restored"],
+    id: "navigation-continuity",
   },
   {
-    id: "pending-optimistic",
     assertions: [
       "pending-visible",
       "duplicate-submit-prevented",
       "failure-rolls-back",
       "confirmed-write-reconciles",
     ],
+    id: "pending-optimistic",
   },
-  { id: "semantic-tokens", assertions: ["arrusted-token-provenance", "palette-unchanged"] },
+  { assertions: ["arrusted-token-provenance", "palette-unchanged"], id: "semantic-tokens" },
 ] as const;
 
 const captureAssertions: Record<(typeof captureStates)[number], string[]> = {
-  "panel-resize": ["panel-dimension-changed", "content-remains-reachable"],
-  keyboard: ["focus-visible", "keyboard-activation-changes-state"],
-  loading: ["pending-held", "useful-loading-visible"],
   empty: ["empty-state-visible", "next-action-works"],
   error: ["error-visible", "recovery-action-works"],
+  keyboard: ["focus-visible", "keyboard-activation-changes-state"],
+  loading: ["pending-held", "useful-loading-visible"],
+  "panel-resize": ["panel-dimension-changed", "content-remains-reachable"],
 };
 
 export const requirements = [
@@ -155,9 +155,9 @@ export const requirements = [
   ...frameworkMatrix.map((row) => ({ ...row, kind: "framework" as const })),
   ...desktopViewports.flatMap((viewport) =>
     captureStates.map((state) => ({
+      assertions: captureAssertions[state],
       id: `capture/${viewport.name}/${state}`,
       kind: "capture" as const,
-      assertions: captureAssertions[state],
     })),
   ),
 ];
@@ -170,24 +170,22 @@ const artifactPath = z
   );
 const assertionSchema = z
   .object({
+    artifacts: z.array(artifactPath).min(1),
+    detail: z.string().min(1),
     id: z.string().min(1),
     passed: z.boolean(),
-    detail: z.string().min(1),
-    artifacts: z.array(artifactPath).min(1),
   })
   .strict();
 export const observationSchema = z
   .object({
-    requirementId: z.enum(requirements.map((row) => row.id)),
+    artifacts: z.array(artifactPath),
+    assertions: z.array(assertionSchema),
     disposition: z.enum([
       "observed",
       "missing-functionality",
       "infrastructure-unavailable",
       "not-run",
     ]),
-    reason: z.string().min(1),
-    assertions: z.array(assertionSchema),
-    artifacts: z.array(artifactPath),
     method: z.enum([
       "browser",
       "source-review",
@@ -195,6 +193,8 @@ export const observationSchema = z
       "@next/playwright/instant",
       "none",
     ]),
+    reason: z.string().min(1),
+    requirementId: z.enum(requirements.map((row) => row.id)),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -203,10 +203,10 @@ export const observationSchema = z
   });
 export const sideEvidenceSchema = z
   .object({
+    observations: z.array(observationSchema),
     output: z.enum(["available", "missing", "infrastructure-unavailable"]),
     reason: z.string().min(1),
     sourceRevision: z.string().min(1),
-    observations: z.array(observationSchema),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -218,12 +218,12 @@ export const sideEvidenceSchema = z
   });
 export const parityEvidenceSchema = z
   .object({
-    schemaVersion: z.literal(parityVersion),
-    runId: z.string().min(1),
-    producer: z.literal("evaluator"),
-    fixtureVersion: z.literal(1),
-    reference: sideEvidenceSchema,
     candidate: sideEvidenceSchema,
+    fixtureVersion: z.literal(1),
+    producer: z.literal("evaluator"),
+    reference: sideEvidenceSchema,
+    runId: z.string().min(1),
+    schemaVersion: z.literal(parityVersion),
   })
   .strict();
 export type ParityEvidence = z.infer<typeof parityEvidenceSchema>;
@@ -244,22 +244,22 @@ export type ParityReasonCode = (typeof parityReasonCodes)[number];
 
 export const parityAssessmentSchema = z
   .object({
-    schemaVersion: z.literal(parityVersion),
-    runId: z.string(),
-    visualScoresAdvisory: z.literal(true),
     rows: z.array(
       z
         .object({
-          side: z.enum(sides),
-          requirementId: z.enum(requirements.map((row) => row.id)),
-          kind: z.enum(["workflow", "framework", "capture"]),
-          status: z.enum(["passed", "failed", "blocked", "unassessed"]),
-          reasonCode: z.enum(parityReasonCodes),
-          reason: z.string(),
           artifacts: z.array(artifactPath),
+          kind: z.enum(["workflow", "framework", "capture"]),
+          reason: z.string(),
+          reasonCode: z.enum(parityReasonCodes),
+          requirementId: z.enum(requirements.map((row) => row.id)),
+          side: z.enum(sides),
+          status: z.enum(["passed", "failed", "blocked", "unassessed"]),
         })
         .strict(),
     ),
+    runId: z.string(),
+    schemaVersion: z.literal(parityVersion),
+    visualScoresAdvisory: z.literal(true),
   })
   .strict();
 export type Assessment = z.infer<typeof parityAssessmentSchema>;
@@ -328,15 +328,15 @@ export async function assessParity(
         }
       }
       rows.push({
-        side,
-        requirementId: requirement.id,
-        kind: requirement.kind,
-        status,
-        reasonCode,
-        reason,
         artifacts,
+        kind: requirement.kind,
+        reason,
+        reasonCode,
+        requirementId: requirement.id,
+        side,
+        status,
       });
     }
   }
-  return { schemaVersion: parityVersion, runId: evidence.runId, visualScoresAdvisory: true, rows };
+  return { rows, runId: evidence.runId, schemaVersion: parityVersion, visualScoresAdvisory: true };
 }

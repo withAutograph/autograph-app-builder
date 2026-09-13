@@ -13,7 +13,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import nodePath from "node:path";
 import { promisify } from "node:util";
 
 import { describe, expect, it, vi } from "vitest";
@@ -48,89 +48,90 @@ import {
   shouldPreferLiveTemplateDependencies,
 } from "./dependency-cache";
 
+const { join } = nodePath;
 const executeFile = promisify(execFile);
 
 const archiveDigest = "a".repeat(64);
 const hostedArchiveDigest = "d1febde038cc4f84394293e80bf076c944809a3e6cb6485accf67f4af2c4b1ce";
 const hostedExecutionManifest = {
-  version: 1,
-  scope: "builder-execution",
-  platform: "linux/x86_64",
-  target: {
-    sha: ARRUSTED_TARGET_SHA,
-    tree: ARRUSTED_TARGET_TREE,
-    miseConfigSha256: "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
-    miseLockSha256: "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
-    bunLockSha256: "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
-    appIdentitySha256: "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
-    appContractSha256: "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
-    repositoryPreflightSha256: "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
-    repositoryExecSha256: "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
-  },
-  runtime: { bun: "1.3.14" },
   closure: {
-    package: "@vercel/microfrontends",
-    version: "2.4.0",
+    archiveBytes: 1_356_765,
     archivePath: DEPENDENCY_CACHE_ARCHIVE_PATH,
     archiveSha256: hostedArchiveDigest,
-    archiveBytes: 1_356_765,
-  },
-} as const;
-const manifest = {
-  version: 1,
-  scope: "builder-execution",
-  platform: "linux/arm64",
-  target: {
-    sha: ARRUSTED_TARGET_SHA,
-    tree: ARRUSTED_TARGET_TREE,
-    miseConfigSha256: "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
-    miseLockSha256: "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
-    bunLockSha256: "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
-    cargoLockSha256: "8ba85741c6021d44cb8f211939f3b0488db22a7b0e11a1d703eccb2d31e259cb",
-    appIdentitySha256: "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
-    appContractSha256: "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
-    appValidationSha256: ARRUSTED_APP_VALIDATION_SHA256,
-    createAppSha256: ARRUSTED_CREATE_APP_SHA256,
-    appTemplatePackageSha256: ARRUSTED_APP_TEMPLATE_PACKAGE_SHA256,
-    repositoryPreflightSha256: "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
-    repositoryExecSha256: "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
-  },
-  runtime: { bun: "1.3.14", rust: ARRUSTED_RUST_VERSION },
-  closure: {
     package: "@vercel/microfrontends",
     version: "2.4.0",
+  },
+  platform: "linux/x86_64",
+  runtime: { bun: "1.3.14" },
+  scope: "builder-execution",
+  target: {
+    appContractSha256: "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
+    appIdentitySha256: "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
+    bunLockSha256: "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
+    miseConfigSha256: "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
+    miseLockSha256: "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
+    repositoryExecSha256: "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
+    repositoryPreflightSha256: "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
+    sha: ARRUSTED_TARGET_SHA,
+    tree: ARRUSTED_TARGET_TREE,
+  },
+  version: 1,
+} as const;
+const manifest = {
+  closure: {
+    archiveBytes: 123,
     archivePath: DEPENDENCY_CACHE_ARCHIVE_PATH,
     archiveSha256: archiveDigest,
-    archiveBytes: 123,
+    cargoArchiveBytes: 456,
     cargoArchivePath: DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH,
     cargoArchiveSha256: "c".repeat(64),
-    cargoArchiveBytes: 456,
+    package: "@vercel/microfrontends",
+    version: "2.4.0",
   },
+  platform: "linux/arm64",
+  runtime: { bun: "1.3.14", rust: ARRUSTED_RUST_VERSION },
+  scope: "builder-execution",
+  target: {
+    appContractSha256: "03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e",
+    appIdentitySha256: "10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c",
+    appTemplatePackageSha256: ARRUSTED_APP_TEMPLATE_PACKAGE_SHA256,
+    appValidationSha256: ARRUSTED_APP_VALIDATION_SHA256,
+    bunLockSha256: "e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0",
+    cargoLockSha256: "8ba85741c6021d44cb8f211939f3b0488db22a7b0e11a1d703eccb2d31e259cb",
+    createAppSha256: ARRUSTED_CREATE_APP_SHA256,
+    miseConfigSha256: "da8fe48559f8250494bdbea0f1a6caa644b59d5be14658a7aaf26ccd6fab0199",
+    miseLockSha256: "415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644e3462",
+    repositoryExecSha256: "7816d61ce34ccf3b7680d6e03ddd8655650312901f23a03fae2b1aab50a051dc",
+    repositoryPreflightSha256: "c30fb6d26d49a229d8e4283c1350d86fa61a6f1708ada614f55f8f40358cbbba",
+    sha: ARRUSTED_TARGET_SHA,
+    tree: ARRUSTED_TARGET_TREE,
+  },
+  version: 1,
 } as const;
 const developmentManifest = {
-  version: 3,
-  scope: "development-execution",
-  platform: "linux/amd64",
+  closure: {
+    cargoConfigPath: `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml`,
+    contentDigest: "d".repeat(64),
+    nodeModulesPath: `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/dependencies/${"d".repeat(64)}/node_modules`,
+    package: "@vercel/microfrontends",
+    version: "2.4.0",
+  },
   dependencyKey: "d".repeat(64),
   lockfiles: {
     ".config/mise/config.toml": "1".repeat(64),
     ".config/mise/mise.lock": "2".repeat(64),
-    "bun.lock": "3".repeat(64),
     "Cargo.lock": "4".repeat(64),
+    "bun.lock": "3".repeat(64),
   },
+  platform: "linux/amd64",
   runtime: {
-    node: "24.18.0",
     bun: "1.3.14",
     mise: "2026.8.12",
+    node: "24.18.0",
     rust: "1.97.1",
   },
-  closure: {
-    package: "@vercel/microfrontends",
-    version: "2.4.0",
-    contentDigest: "d".repeat(64),
-    nodeModulesPath: `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/dependencies/${"d".repeat(64)}/node_modules`,
-    cargoConfigPath: `${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/cargo/config.toml`,
-  },
+  scope: "development-execution",
+  version: 3,
 } as const;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -179,35 +180,35 @@ function liveTemplateCacheFixture() {
   let closureState: "cargo-tampered" | "clean" | "missing" | "node-tampered" = "clean";
   const stored = new Map<string, string>();
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  const setNetworkPolicy = vi.fn(async () => undefined);
-  const observation = (tampered: "cargo" | "node" | undefined = undefined) =>
+  const setNetworkPolicy = vi.fn(async () => {});
+  const observation = (tampered?: "cargo" | "node") =>
     JSON.stringify({
-      platform: "linux/x86_64",
-      nodeModulesDigest: tampered === "node" ? "c".repeat(64) : liveNodeModulesDigest,
-      workspaceNodeModules: [],
-      workspaceLinks: [],
       cargoHomeDigest: tampered === "cargo" ? "d".repeat(64) : liveCargoHomeDigest,
       microfrontendsVersion: "2.4.0",
+      nodeModulesDigest: tampered === "node" ? "c".repeat(64) : liveNodeModulesDigest,
+      platform: "linux/x86_64",
+      workspaceLinks: [],
+      workspaceNodeModules: [],
     });
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const run = vi.fn(async ({ command }: { command: string }) => {
-    if (command.includes("uname -s")) return { exitCode: 0, stdout: "linux/x86_64\n", stderr: "" };
-    if (command.includes("bun install")) return { exitCode: 0, stdout: observation(), stderr: "" };
+    if (command.includes("uname -s")) return { exitCode: 0, stderr: "", stdout: "linux/x86_64\n" };
+    if (command.includes("bun install")) return { exitCode: 0, stderr: "", stdout: observation() };
     if (command.includes("function digestTree(root, allowTrackedWorkspaceLinks)")) {
-      if (closureState === "missing") return { exitCode: 1, stdout: "", stderr: "missing closure" };
+      if (closureState === "missing") return { exitCode: 1, stderr: "missing closure", stdout: "" };
+      let tamperedCache: "cargo" | "node" | undefined;
+      if (closureState === "node-tampered") {
+        tamperedCache = "node";
+      } else if (closureState === "cargo-tampered") {
+        tamperedCache = "cargo";
+      }
       return {
         exitCode: 0,
-        stdout: observation(
-          closureState === "node-tampered"
-            ? "node"
-            : closureState === "cargo-tampered"
-              ? "cargo"
-              : undefined,
-        ),
         stderr: "",
+        stdout: observation(tamperedCache),
       };
     }
-    return { exitCode: 0, stdout: "", stderr: "" };
+    return { exitCode: 0, stderr: "", stdout: "" };
   });
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const writeTextFile = vi.fn(async ({ path, content }: { path: string; content: string }) => {
@@ -215,33 +216,33 @@ function liveTemplateCacheFixture() {
   });
   const sandbox = {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
+      const content = source.contents.get(path.replace(/^repository\//u, ""));
+      return content === undefined ? null : Buffer.from(content);
+    }),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     readTextFile: vi.fn(async ({ path }: { path: string }) =>
       path === ".app-builder/source-files.json"
         ? JSON.stringify(source.sourceFiles)
         : (stored.get(path) ?? null),
     ),
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
-      const content = source.contents.get(path.replace(/^repository\//u, ""));
-      return content === undefined ? null : Buffer.from(content);
-    }),
-    setNetworkPolicy,
     run,
+    setNetworkPolicy,
     writeTextFile,
   } as unknown as SandboxSession;
   return {
-    sandbox,
     run,
-    setNetworkPolicy,
-    stored,
-    writeTextFile,
-    source: () => source,
-    setSource: (next: ReturnType<typeof liveDependencySourceFixture>) => {
-      source = next;
-    },
+    sandbox,
     setClosureState: (next: typeof closureState) => {
       closureState = next;
     },
+    setNetworkPolicy,
+    setSource: (next: ReturnType<typeof liveDependencySourceFixture>) => {
+      source = next;
+    },
+    source: () => source,
+    stored,
+    writeTextFile,
   };
 }
 
@@ -251,26 +252,26 @@ function sandboxFixture(inputManifest: unknown = manifest) {
     .fn()
     .mockResolvedValueOnce({
       exitCode: 0,
-      stdout: `${JSON.stringify(inputManifest)}\n`,
       stderr: "",
+      stdout: `${JSON.stringify(inputManifest)}\n`,
     })
     .mockResolvedValueOnce({
       exitCode: 0,
-      stdout: `${archiveDigest}  ${DEPENDENCY_CACHE_ARCHIVE_PATH}\n123\n${"c".repeat(64)}  ${DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH}\n456\n`,
       stderr: "",
+      stdout: `${archiveDigest}  ${DEPENDENCY_CACHE_ARCHIVE_PATH}\n123\n${"c".repeat(64)}  ${DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH}\n456\n`,
     })
-    .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
-  run.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
-  run.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
-  run.mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" });
-  run.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" });
+  run.mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" });
+  run.mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" });
+  run.mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" });
+  run.mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  const writeTextFile = vi.fn(async () => undefined);
+  const writeTextFile = vi.fn(async () => {});
   const sandbox = {
-    run,
-    writeTextFile,
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     readTextFile: vi.fn(async () => JSON.stringify({ version: "2.4.0" })),
+    run,
+    writeTextFile,
   } as unknown as SandboxSession;
   return { run, sandbox, writeTextFile };
 }
@@ -281,13 +282,13 @@ function hostedExecutionSandbox(inputManifest: unknown = hostedExecutionManifest
     .fn()
     .mockResolvedValueOnce({
       exitCode: 0,
-      stdout: `${JSON.stringify(inputManifest)}\n`,
       stderr: "",
+      stdout: `${JSON.stringify(inputManifest)}\n`,
     })
     .mockResolvedValueOnce({
       exitCode: 0,
-      stdout: `${hostedArchiveDigest}  ${DEPENDENCY_CACHE_ARCHIVE_PATH}\n1356765\n`,
       stderr: "",
+      stdout: `${hostedArchiveDigest}  ${DEPENDENCY_CACHE_ARCHIVE_PATH}\n1356765\n`,
     });
   return { run, sandbox: { run } as unknown as SandboxSession };
 }
@@ -333,11 +334,11 @@ async function writeDependencyTopologyFixture(root: string) {
   await writeFile(manifestPath, JSON.stringify(sourceManifest));
   await executeFile("/bin/chmod", ["-R", "a-w,a+rX", source, cargo]);
   return {
-    source: await realpath(source),
-    cargo: await realpath(cargo),
-    rootModules: await realpath(rootModules),
     appModules: await realpath(appModules),
+    cargo: await realpath(cargo),
     manifestPath: await realpath(manifestPath),
+    rootModules: await realpath(rootModules),
+    source: await realpath(source),
   };
 }
 
@@ -345,15 +346,15 @@ describe("offline dependency cache", () => {
   it("invalidates the live cache key only for declared dependency and runtime inputs", () => {
     const source = liveDependencySourceFixture();
     const basis = {
-      platform: "linux/x86_64",
+      bootstrapVersion: 3,
       dependencyInputs: source.dependencyInputs,
+      platform: "linux/x86_64",
       runtime: {
-        node: "24.18.0",
-        mise: "2026.8.12",
         bun: "1.3.14",
+        mise: "2026.8.12",
+        node: "24.18.0",
         rust: "1.97.1",
       },
-      bootstrapVersion: 3,
     } as const;
     const original = liveTemplateDependencyKey(basis);
     for (const path of [
@@ -416,20 +417,20 @@ describe("offline dependency cache", () => {
       };
       expect(observation.workspaceNodeModules).toEqual([
         expect.objectContaining({
-          path: "apps/vendor/node_modules",
           nodeModulesPath: fixture.appModules,
+          path: "apps/vendor/node_modules",
         }),
       ]);
       expect(observation.workspaceLinks).toEqual([
         {
           path: "apps/vendor/node_modules/@autograph/ui",
-          target: "../../../../packages/ui",
           sourcePath: "packages/ui",
+          target: "../../../../packages/ui",
         },
         {
           path: "node_modules/@autograph/ui",
-          target: "../../packages/ui",
           sourcePath: "packages/ui",
+          target: "../../packages/ui",
         },
       ]);
 
@@ -451,20 +452,20 @@ describe("offline dependency cache", () => {
         writeFile(join(overlay, "apps", "vendor", "package.json"), '{"name":"vendor"}\n'),
       ]);
       const layout = {
-        version: 1,
         kind: "cache",
         roots: [
           {
-            path: "node_modules",
             cachePath: fixture.rootModules,
             digest: observation.nodeModulesDigest,
+            path: "node_modules",
           },
           ...observation.workspaceNodeModules.map((entry) => ({
-            path: entry.path,
             cachePath: entry.nodeModulesPath,
             digest: entry.digest,
+            path: entry.path,
           })),
         ],
+        version: 1,
         workspaceLinks: observation.workspaceLinks,
       };
       const layoutPath = join(root, "layout.json");
@@ -489,15 +490,17 @@ describe("offline dependency cache", () => {
       );
 
       const cachedPackage = join(fixture.rootModules, "react", "package.json");
+      const cachedPackageStats = await lstat(cachedPackage);
       const cachedBefore = {
         content: await readFile(cachedPackage, "utf-8"),
-        mode: (await lstat(cachedPackage)).mode,
+        mode: cachedPackageStats.mode,
       };
       const overlayModules = await realpath(join(overlay, "node_modules"));
       await writeFile(join(overlayModules, "overlay-owned.txt"), "owned\n");
       await chmod(overlayModules, 0o700);
       expect(await readFile(cachedPackage, "utf-8")).toBe(cachedBefore.content);
-      expect((await lstat(cachedPackage)).mode).toBe(cachedBefore.mode);
+      const cachedPackageStatsAfter = await lstat(cachedPackage);
+      expect(cachedPackageStatsAfter.mode).toBe(cachedBefore.mode);
 
       await chmod(fixture.rootModules, 0o755);
       await symlink(join(root, "outside"), join(fixture.rootModules, "escape"));
@@ -513,8 +516,8 @@ describe("offline dependency cache", () => {
         ]),
       ).rejects.toThrow();
     } finally {
-      await executeFile("/bin/chmod", ["-R", "u+w", root]).catch(() => undefined);
-      await rm(root, { recursive: true, force: true });
+      await executeFile("/bin/chmod", ["-R", "u+w", root]).catch(() => {});
+      await rm(root, { force: true, recursive: true });
     }
   });
   it("keeps cache selection independent of source-receipt transport versions", () => {
@@ -583,9 +586,9 @@ describe("offline dependency cache", () => {
     expect(observed.manifest.scope).toBe("builder-execution");
     expect(observed.contentDigest).toBe(hostedArchiveDigest);
     expect(run).toHaveBeenNthCalledWith(2, {
+      abortSignal: expect.any(AbortSignal),
       command: `sha256sum -- /workspace/.app-builder/hosted-dependency-cache/node-modules.tar.gz && stat --format='%s' -- /workspace/.app-builder/hosted-dependency-cache/node-modules.tar.gz`,
       workingDirectory: "/workspace",
-      abortSignal: expect.any(AbortSignal),
     });
   });
 
@@ -617,8 +620,8 @@ describe("offline dependency cache", () => {
   it("rejects the former planning-only cache on Vercel", async () => {
     const { run, sandbox } = hostedExecutionSandbox({
       ...hostedExecutionManifest,
-      scope: "identity-planning",
       platform: "linux/portable",
+      scope: "identity-planning",
     });
 
     await expect(inspectDependencyCache(sandbox, { VERCEL: "1" })).rejects.toThrow(
@@ -629,9 +632,9 @@ describe("offline dependency cache", () => {
 
   it("binds fixture cache observations to the exact prepared source", async () => {
     const target = {
+      digest: "5".repeat(64),
       sourceSha: "3".repeat(40),
       sourceTree: "4".repeat(40),
-      digest: "5".repeat(64),
     };
     const cache = await inspectDependencyCache({} as SandboxSession, process.env, target);
 
@@ -643,90 +646,90 @@ describe("offline dependency cache", () => {
     );
     expect(() =>
       assertExactDependencyTargetBinding({
-        workspace: target,
-        sourceReceipt: target,
         cache,
+        sourceReceipt: target,
+        workspace: target,
       }),
     ).not.toThrow();
   });
 
   it("rejects source-tree and durable dependency-receipt drift", async () => {
     const target = {
+      digest: "6".repeat(64),
       sourceSha: "3".repeat(40),
       sourceTree: "4".repeat(40),
-      digest: "6".repeat(64),
     };
     const cache = await inspectDependencyCache({} as SandboxSession, process.env, target);
 
     expect(() =>
       assertExactDependencyTargetBinding({
-        workspace: target,
-        sourceReceipt: { ...target, sourceTree: "5".repeat(40) },
         cache,
+        sourceReceipt: { ...target, sourceTree: "5".repeat(40) },
+        workspace: target,
       }),
     ).toThrow("prepared source does not match");
     expect(() =>
       assertExactDependencyTargetBinding({
-        workspace: target,
-        sourceReceipt: target,
         cache,
         dependencyReceipt: {
           ...target,
+          sourceReceiptDigest: target.digest,
           targetSha: target.sourceSha,
           targetTree: "5".repeat(40),
-          sourceReceiptDigest: target.digest,
         },
+        sourceReceipt: target,
+        workspace: target,
       }),
     ).toThrow("prepared source does not match");
     expect(() =>
       assertExactDependencyTargetBinding({
-        workspace: target,
-        sourceReceipt: target,
         cache,
         dependencyReceipt: {
           ...target,
+          sourceReceiptDigest: "7".repeat(64),
           targetSha: target.sourceSha,
           targetTree: target.sourceTree,
-          sourceReceiptDigest: "7".repeat(64),
         },
+        sourceReceipt: target,
+        workspace: target,
       }),
     ).toThrow("prepared source does not match");
   });
 
   it("binds reusable development dependencies to the per-run source without making source bytes part of the cache key", () => {
     const workspace = {
+      digest: "6".repeat(64),
       sourceSha: "7".repeat(40),
       sourceTree: "8".repeat(40),
-      digest: "6".repeat(64),
     };
     const cache = {
+      contentDigest: archiveDigest,
       manifest: {
-        version: 3,
-        scope: "development-execution",
-        platform: "linux/arm64",
+        closure: {
+          cargoConfigPath: "/workspace/.app-builder/dependency-cache/cargo/config.toml",
+          contentDigest: archiveDigest,
+          nodeModulesPath: `/workspace/.app-builder/dependency-cache/dependencies/${"9".repeat(64)}/node_modules`,
+          package: "@vercel/microfrontends",
+          version: "2.4.0",
+        },
         dependencyKey: "9".repeat(64),
         lockfiles: {
           ".config/mise/config.toml": "1".repeat(64),
           ".config/mise/mise.lock": "2".repeat(64),
-          "bun.lock": "3".repeat(64),
           "Cargo.lock": "4".repeat(64),
+          "bun.lock": "3".repeat(64),
         },
+        platform: "linux/arm64",
         runtime: {
-          node: "24.18.0",
           bun: "1.3.14",
           mise: "2026.8.12",
+          node: "24.18.0",
           rust: "1.97.1",
         },
-        closure: {
-          package: "@vercel/microfrontends",
-          version: "2.4.0",
-          contentDigest: archiveDigest,
-          nodeModulesPath: `/workspace/.app-builder/dependency-cache/dependencies/${"9".repeat(64)}/node_modules`,
-          cargoConfigPath: "/workspace/.app-builder/dependency-cache/cargo/config.toml",
-        },
+        scope: "development-execution",
+        version: 3,
       },
       manifestDigest: "a".repeat(64),
-      contentDigest: archiveDigest,
     } as const;
     expect(dependencyTargetForWorkspace(cache, workspace)).toEqual({
       sha: workspace.sourceSha,
@@ -734,9 +737,9 @@ describe("offline dependency cache", () => {
     });
     expect(() =>
       assertExactDependencyTargetBinding({
-        workspace,
-        sourceReceipt: workspace,
         cache,
+        sourceReceipt: workspace,
+        workspace,
       }),
     ).not.toThrow();
   });
@@ -747,20 +750,20 @@ describe("offline dependency cache", () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const run = vi.fn(async () => ({
       exitCode: 0,
-      stdout: "linux/x86_64\n",
       stderr: "",
+      stdout: "linux/x86_64\n",
     }));
     const sandbox = {
-      run,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      readTextFile: vi.fn(async ({ path }: { path: string }) =>
-        path === ".app-builder/source-files.json" ? JSON.stringify(source.sourceFiles) : null,
-      ),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       readBinaryFile: vi.fn(async ({ path }: { path: string }) => {
         const content = source.contents.get(path.replace(/^repository\//u, ""));
         return content === undefined ? null : Buffer.from(content);
       }),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      readTextFile: vi.fn(async ({ path }: { path: string }) =>
+        path === ".app-builder/source-files.json" ? JSON.stringify(source.sourceFiles) : null,
+      ),
+      run,
     } as unknown as SandboxSession;
 
     await expect(inspectDependencyCache(sandbox, {}, target, true)).rejects.toBeInstanceOf(
@@ -787,23 +790,23 @@ describe("offline dependency cache", () => {
 
     expect(first).toEqual(second);
     expect(first.manifest).toMatchObject({
-      version: 4,
-      scope: "live-template-execution",
-      dependencyKey: expect.stringMatching(/^[0-9a-f]{64}$/u),
-      dependencyInputs: originalDependencyInputs,
       bootstrapVersion: 3,
       closure: {
-        nodeModulesPath: expect.stringMatching(
-          /^\/workspace\/\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/x86_64\/source\/node_modules$/u,
-        ),
-        nodeModulesDigest: liveNodeModulesDigest,
-        workspaceNodeModules: [],
-        workspaceLinks: [],
+        cargoHomeDigest: liveCargoHomeDigest,
         cargoHomePath: expect.stringMatching(
           /^\/workspace\/\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/x86_64\/cargo-home$/u,
         ),
-        cargoHomeDigest: liveCargoHomeDigest,
+        nodeModulesDigest: liveNodeModulesDigest,
+        nodeModulesPath: expect.stringMatching(
+          /^\/workspace\/\.app-builder\/template-dependency-cache\/[0-9a-f]{64}\/linux\/x86_64\/source\/node_modules$/u,
+        ),
+        workspaceLinks: [],
+        workspaceNodeModules: [],
       },
+      dependencyInputs: originalDependencyInputs,
+      dependencyKey: expect.stringMatching(/^[0-9a-f]{64}$/u),
+      scope: "live-template-execution",
+      version: 4,
     });
     const bootstrap = fixture.run.mock.calls.find(([call]) =>
       call.command.includes("bun install"),
@@ -823,8 +826,8 @@ describe("offline dependency cache", () => {
     expect(bootstrap).not.toContain("mise install");
     fixture.setSource(
       liveDependencySourceFixture({
-        packageJson: '{"workspaces":["apps/*","packages/*"]}\n',
         ordinarySource: "export default function Page() { return 'Changed'; }\n",
+        packageJson: '{"workspaces":["apps/*","packages/*"]}\n',
       }),
     );
     const changedManifest = await bootstrapLiveTemplateDependencies({
@@ -936,24 +939,24 @@ describe("offline dependency cache", () => {
   it("verifies target-bound manifest and archive bytes before extraction", async () => {
     const { run, sandbox, writeTextFile } = sandboxFixture();
     const result = await materializeOfflineDependencies({
-      sandbox,
       artifactRevision: "b".repeat(64),
+      environment: {},
+      sandbox,
       target: {
         sourceSha: ARRUSTED_TARGET_SHA,
         sourceTree: ARRUSTED_TARGET_TREE,
       },
-      environment: {},
     });
     expect(result.contentDigest).toBe(archiveDigest);
     expect(run).toHaveBeenNthCalledWith(1, {
+      abortSignal: expect.any(AbortSignal),
       command: "cat -- /opt/app-builder/dependency-cache/manifest.json",
       workingDirectory: "/workspace",
-      abortSignal: expect.any(AbortSignal),
     });
     expect(run).toHaveBeenNthCalledWith(2, {
+      abortSignal: expect.any(AbortSignal),
       command: `sha256sum -- ${DEPENDENCY_CACHE_ARCHIVE_PATH} && stat --format='%s' -- ${DEPENDENCY_CACHE_ARCHIVE_PATH} && sha256sum -- ${DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH} && stat --format='%s' -- ${DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH}`,
       workingDirectory: "/workspace",
-      abortSignal: expect.any(AbortSignal),
     });
     const linkCommand = run.mock.calls
       .map(([request]) => request.command as string)
@@ -1024,15 +1027,15 @@ describe("offline dependency cache", () => {
   it("does not require Rust for the pinned Vercel Development planning closure", async () => {
     const { run, sandbox, writeTextFile } = sandboxFixture(developmentManifest);
     await materializeOfflineDependencies({
-      sandbox,
       artifactRevision: "b".repeat(64),
+      environment: {
+        APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: developmentManifest.dependencyKey,
+        APP_BUILDER_EXECUTION_MODE: "development",
+      },
+      sandbox,
       target: {
         sourceSha: "7".repeat(40),
         sourceTree: "8".repeat(40),
-      },
-      environment: {
-        APP_BUILDER_EXECUTION_MODE: "development",
-        APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: developmentManifest.dependencyKey,
       },
     });
 

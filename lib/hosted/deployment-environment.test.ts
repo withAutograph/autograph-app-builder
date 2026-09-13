@@ -9,8 +9,8 @@ describe("hosted deployment environment binding", () => {
       expect(
         readHostedDeploymentEnvironment({
           EVE_HOSTED_ADAPTER: "1",
-          VERCEL_ENV: deploymentEnvironment,
           EVE_HOSTED_VERCEL_ENVIRONMENT: deploymentEnvironment,
+          VERCEL_ENV: deploymentEnvironment,
         }),
       ).toBe(deploymentEnvironment);
     },
@@ -26,18 +26,18 @@ describe("hosted deployment environment binding", () => {
       },
       {
         EVE_HOSTED_ADAPTER: "1",
-        VERCEL_ENV: "preview",
         EVE_HOSTED_VERCEL_ENVIRONMENT: "production",
+        VERCEL_ENV: "preview",
       },
       {
         EVE_HOSTED_ADAPTER: "1",
-        VERCEL_ENV: "production",
         EVE_HOSTED_VERCEL_ENVIRONMENT: "preview",
+        VERCEL_ENV: "production",
       },
       {
         EVE_HOSTED_ADAPTER: "1",
-        VERCEL_ENV: "development",
         EVE_HOSTED_VERCEL_ENVIRONMENT: "development",
+        VERCEL_ENV: "development",
       },
     ]) {
       expect(() => readHostedDeploymentEnvironment(environment)).toThrow(

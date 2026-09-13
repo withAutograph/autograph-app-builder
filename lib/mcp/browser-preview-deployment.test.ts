@@ -12,43 +12,43 @@ describe("deployment Browser preview route", () => {
   it("serves the exact artifact selected by the request-scoped service", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const get = vi.fn(async () => ({
-      sessionId: "session-one",
-      status: "completed" as const,
       cursor: 1,
       events: [],
       prototype: {
-        path: "prototype/vendor-onboarding/index.html",
-        mediaType: "text/html" as const,
         content,
         digest,
+        mediaType: "text/html" as const,
+        path: "prototype/vendor-onboarding/index.html",
         revision: "b".repeat(64),
       },
+      sessionId: "session-one",
+      status: "completed" as const,
     }));
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const serviceForRequest = vi.fn(async () => ({ get }) as unknown as EveSessionService);
     const handler = createDeploymentPrototypePreviewRequestHandler({
       environment: {},
+      serviceForRequest,
       workloadIdentity: {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         async token() {
           throw new Error("Hosted workload identity must not be requested.");
         },
       },
-      serviceForRequest,
     });
     const request = new Request(`https://builder.example.test/preview/session-one/${digest}`);
     const response = await handler(request, {
-      sessionId: "session-one",
       digest,
+      sessionId: "session-one",
     });
 
     expect(response.status).toBe(200);
     await expect(response.text()).resolves.toBe(content);
     expect(serviceForRequest).toHaveBeenCalledWith(request);
     expect(get).toHaveBeenCalledWith({
-      sessionId: "session-one",
       cursor: 0,
       limit: 1,
+      sessionId: "session-one",
     });
   });
 
@@ -64,7 +64,7 @@ describe("deployment Browser preview route", () => {
     });
     const response = await handler(
       new Request(`https://builder.example.test/preview/session-one/${digest}`),
-      { sessionId: "session-one", digest },
+      { digest, sessionId: "session-one" },
     );
 
     expect(response.status).toBe(404);

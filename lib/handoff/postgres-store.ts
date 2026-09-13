@@ -25,19 +25,19 @@ function authorityPredicate(authorityInput: Authority) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function rowRecord(row: typeof builderHandoffs.$inferSelect): BuilderHandoffRecord {
   return builderHandoffRecordSchema.parse({
-    version: 1,
-    handoffId: row.handoffId,
     authority: {
-      issuer: row.issuer,
       audience: row.audience,
-      workspaceId: row.workspaceId,
+      issuer: row.issuer,
       ownerUserId: row.ownerUserId,
+      workspaceId: row.workspaceId,
     },
-    creationRequestId: row.creationRequestId,
-    requestDigest: row.requestDigest,
-    intent: builderHandoffIntentSchema.parse(row.intent),
     createdAt: row.createdAt,
+    creationRequestId: row.creationRequestId,
     expiresAt: row.expiresAt,
+    handoffId: row.handoffId,
+    intent: builderHandoffIntentSchema.parse(row.intent),
+    requestDigest: row.requestDigest,
+    version: 1,
     ...(row.redeemedAt === null ? {} : { redeemedAt: row.redeemedAt }),
     ...(row.sessionId === null ? {} : { sessionId: row.sessionId }),
   });
@@ -84,37 +84,34 @@ export function createPostgresBuilderHandoffStore(database: Database): BuilderHa
   };
 
   return {
-    async reserve(recordInput) {
-      const record = builderHandoffRecordSchema.parse(recordInput);
-      const inserted = await database
-        .insert(builderHandoffs)
-        .values({
-          handoffId: record.handoffId,
-          ...record.authority,
-          creationRequestId: record.creationRequestId,
-          requestDigest: record.requestDigest,
-          intent: record.intent,
-          createdAt: record.createdAt,
-          expiresAt: record.expiresAt,
-        })
-        .onConflictDoNothing()
-        .returning();
-      if (inserted[0]) return { disposition: "created", record: rowRecord(inserted[0]) };
-      const existing = await database
-        .select()
-        .from(builderHandoffs)
+    async bindSession(input) {
+      const authority = hostedTenantAuthoritySchema.parse(input.authority);
+      const updated = await database
+        .update(builderHandoffs)
+        .set({ redeemedAt: input.now, sessionId: input.sessionId })
         .where(
           and(
-            authorityPredicate(record.authority),
-            eq(builderHandoffs.creationRequestId, record.creationRequestId),
+            authorityPredicate(authority),
+            eq(builderHandoffs.handoffId, input.handoffId),
+            eq(builderHandoffs.requestDigest, input.requestDigest),
+            isNull(builderHandoffs.redeemedAt),
+            isNull(builderHandoffs.sessionId),
+            gt(builderHandoffs.expiresAt, input.now),
           ),
         )
-        .limit(1);
-      if (!existing[0]) throw new Error("builder-handoff-not-durable");
-      return { disposition: "existing", record: rowRecord(existing[0]) };
+        .returning();
+      if (updated[0]) return rowRecord(updated[0]);
+      const existing = await read({
+        authority,
+        handoffId: input.handoffId,
+      });
+      return existing?.requestDigest === input.requestDigest &&
+        existing.sessionId === input.sessionId
+        ? existing
+        : undefined;
     },
-    read,
     findLatestPending,
+    read,
     async renewExpired(input) {
       const updated = await database
         .update(builderHandoffs)
@@ -141,31 +138,34 @@ export function createPostgresBuilderHandoffStore(database: Database): BuilderHa
         ? { disposition: "existing", record: existing }
         : undefined;
     },
-    async bindSession(input) {
-      const authority = hostedTenantAuthoritySchema.parse(input.authority);
-      const updated = await database
-        .update(builderHandoffs)
-        .set({ redeemedAt: input.now, sessionId: input.sessionId })
+    async reserve(recordInput) {
+      const record = builderHandoffRecordSchema.parse(recordInput);
+      const inserted = await database
+        .insert(builderHandoffs)
+        .values({
+          ...record.authority,
+          createdAt: record.createdAt,
+          creationRequestId: record.creationRequestId,
+          expiresAt: record.expiresAt,
+          handoffId: record.handoffId,
+          intent: record.intent,
+          requestDigest: record.requestDigest,
+        })
+        .onConflictDoNothing()
+        .returning();
+      if (inserted[0]) return { disposition: "created", record: rowRecord(inserted[0]) };
+      const existing = await database
+        .select()
+        .from(builderHandoffs)
         .where(
           and(
-            authorityPredicate(authority),
-            eq(builderHandoffs.handoffId, input.handoffId),
-            eq(builderHandoffs.requestDigest, input.requestDigest),
-            isNull(builderHandoffs.redeemedAt),
-            isNull(builderHandoffs.sessionId),
-            gt(builderHandoffs.expiresAt, input.now),
+            authorityPredicate(record.authority),
+            eq(builderHandoffs.creationRequestId, record.creationRequestId),
           ),
         )
-        .returning();
-      if (updated[0]) return rowRecord(updated[0]);
-      const existing = await read({
-        authority,
-        handoffId: input.handoffId,
-      });
-      return existing?.requestDigest === input.requestDigest &&
-        existing.sessionId === input.sessionId
-        ? existing
-        : undefined;
+        .limit(1);
+      if (!existing[0]) throw new Error("builder-handoff-not-durable");
+      return { disposition: "existing", record: rowRecord(existing[0]) };
     },
   };
 }

@@ -32,19 +32,19 @@ function rowPredicate(authority: BuilderDraftAuthority, draftId: string) {
 function parseRow(row: typeof schema.builderDrafts.$inferSelect): BuilderDraftRow {
   return {
     authority: hostedTenantAuthoritySchema.parse({
-      issuer: row.issuer,
       audience: row.audience,
-      workspaceId: row.workspaceId,
+      issuer: row.issuer,
       ownerUserId: row.ownerUserId,
+      workspaceId: row.workspaceId,
     }),
+    createdAt: row.createdAt,
     draftId: row.draftId,
-    status: builderDraftStatusSchema.parse(row.status),
-    revision: row.revision,
-    record: builderDraftRecordSchema.parse(row.record),
     ...(row.lastClientMutationId === null
       ? {}
       : { lastClientMutationId: row.lastClientMutationId }),
-    createdAt: row.createdAt,
+    record: builderDraftRecordSchema.parse(row.record),
+    revision: row.revision,
+    status: builderDraftStatusSchema.parse(row.status),
     updatedAt: row.updatedAt,
   };
 }
@@ -75,83 +75,6 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
   };
 
   return {
-    read,
-    readActive,
-    async saveActive(input) {
-      const authority = hostedTenantAuthoritySchema.parse(input.authority);
-      const record = builderDraftRecordSchema.parse(input.record);
-      // A compare-and-set loop makes the database completion order authoritative:
-      // stale clients still save, but their response identifies the contention.
-      for (let attempt = 0; attempt < 8; attempt += 1) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        const target = await read({ authority, draftId: input.draftId });
-        if (target?.status === "archived") throw new Error("builder-draft-archived");
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        const current = await readActive({ authority });
-        if (input.expectedRevision > 0 && current?.draftId !== input.draftId)
-          throw new Error("builder-draft-stale");
-        if (current) {
-          if (current.lastClientMutationId === input.clientMutationId)
-            return { row: current, idempotent: true, concurrent: false };
-          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-          const rows = await database
-            .update(schema.builderDrafts)
-            .set({
-              record,
-              revision: current.revision + 1,
-              lastClientMutationId: input.clientMutationId,
-              updatedAt: input.now,
-            })
-            .where(
-              and(
-                rowPredicate(authority, current.draftId),
-                eq(schema.builderDrafts.status, "active"),
-                eq(schema.builderDrafts.revision, current.revision),
-              ),
-            )
-            .returning();
-          if (rows[0]) {
-            return {
-              row: parseRow(rows[0]),
-              idempotent: false,
-              concurrent: current.revision !== input.expectedRevision,
-            };
-          }
-          continue;
-        }
-
-        try {
-          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-          const rows = await database
-            .insert(schema.builderDrafts)
-            .values({
-              ...authority,
-              draftId: input.draftId,
-              status: "active",
-              revision: 1,
-              record,
-              lastClientMutationId: input.clientMutationId,
-              createdAt: input.now,
-              updatedAt: input.now,
-            })
-            .onConflictDoNothing()
-            .returning();
-          if (rows[0]) {
-            return {
-              row: parseRow(rows[0]),
-              idempotent: false,
-              concurrent: input.expectedRevision !== 0,
-            };
-          }
-
-          // A completed handoff's draft is read-only. Never reactivate it from
-          // delayed page-hide transport or an old provider-return tab.
-        } catch (error) {
-          if (!isUniqueViolation(error)) throw error;
-        }
-      }
-      throw new Error("builder-draft-contention");
-    },
     async archive({ authority, draftId, now, expectedRevision }) {
       const rows = await database
         .update(schema.builderDrafts)
@@ -181,6 +104,83 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
         .returning({ draftId: schema.builderDrafts.draftId });
       return rows.length;
     },
+    read,
+    readActive,
+    async saveActive(input) {
+      const authority = hostedTenantAuthoritySchema.parse(input.authority);
+      const record = builderDraftRecordSchema.parse(input.record);
+      // A compare-and-set loop makes the database completion order authoritative:
+      // stale clients still save, but their response identifies the contention.
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        const target = await read({ authority, draftId: input.draftId });
+        if (target?.status === "archived") throw new Error("builder-draft-archived");
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        const current = await readActive({ authority });
+        if (input.expectedRevision > 0 && current?.draftId !== input.draftId)
+          throw new Error("builder-draft-stale");
+        if (current) {
+          if (current.lastClientMutationId === input.clientMutationId)
+            return { concurrent: false, idempotent: true, row: current };
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+          const rows = await database
+            .update(schema.builderDrafts)
+            .set({
+              lastClientMutationId: input.clientMutationId,
+              record,
+              revision: current.revision + 1,
+              updatedAt: input.now,
+            })
+            .where(
+              and(
+                rowPredicate(authority, current.draftId),
+                eq(schema.builderDrafts.status, "active"),
+                eq(schema.builderDrafts.revision, current.revision),
+              ),
+            )
+            .returning();
+          if (rows[0]) {
+            return {
+              concurrent: current.revision !== input.expectedRevision,
+              idempotent: false,
+              row: parseRow(rows[0]),
+            };
+          }
+          continue;
+        }
+
+        try {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+          const rows = await database
+            .insert(schema.builderDrafts)
+            .values({
+              ...authority,
+              createdAt: input.now,
+              draftId: input.draftId,
+              lastClientMutationId: input.clientMutationId,
+              record,
+              revision: 1,
+              status: "active",
+              updatedAt: input.now,
+            })
+            .onConflictDoNothing()
+            .returning();
+          if (rows[0]) {
+            return {
+              concurrent: input.expectedRevision !== 0,
+              idempotent: false,
+              row: parseRow(rows[0]),
+            };
+          }
+
+          // A completed handoff's draft is read-only. Never reactivate it from
+          // delayed page-hide transport or an old provider-return tab.
+        } catch (error) {
+          if (!isUniqueViolation(error)) throw error;
+        }
+      }
+      throw new Error("builder-draft-contention");
+    },
   };
 }
 
@@ -203,8 +203,8 @@ export function createBuilderDraftStore(database: Database): BuilderDraftStore {
   };
   return {
     ...unlocked,
-    saveActive: (input) => serialize(input.authority, (store) => store.saveActive(input)),
     archive: (input) => serialize(input.authority, (store) => store.archive(input)),
+    saveActive: (input) => serialize(input.authority, (store) => store.saveActive(input)),
   };
 }
 

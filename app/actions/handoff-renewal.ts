@@ -13,16 +13,16 @@ import {
 
 const renewalInputSchema = z
   .object({
-    handoffId: z.string().uuid(),
     creationRequestId: z.string().uuid(),
+    handoffId: z.string().uuid(),
   })
   .strict();
 
 const renewedHandoffSchema = z
   .object({
-    version: z.literal(1),
-    handoffId: z.string().uuid(),
     expiresAt: z.string().datetime(),
+    handoffId: z.string().uuid(),
+    version: z.literal(1),
   })
   .strict();
 
@@ -63,13 +63,13 @@ function toControlData(
 ): HandoffControlData | undefined {
   if (!value) return;
   return {
-    version: 1 as const,
-    handoffId: value.handoffId,
-    expiresAt: value.expiresAt,
-    status: value.status,
-    destination: value.destination,
     cursorInstallReady: value.cursorInstallReady,
+    destination: value.destination,
+    expiresAt: value.expiresAt,
+    handoffId: value.handoffId,
     mcpUrl: value.mcpUrl,
+    status: value.status,
+    version: 1 as const,
   };
 }
 
@@ -92,9 +92,9 @@ export async function renewBuilderHandoff(
       new Request(
         requestUrl(`/api/builder/handoffs/${encodeURIComponent(input.handoffId)}/renew`),
         {
-          method: "POST",
-          headers: await sameOriginHeaders(),
           body: JSON.stringify({ creationRequestId: input.creationRequestId }),
+          headers: await sameOriginHeaders(),
+          method: "POST",
         },
       ),
       input.handoffId,
@@ -108,13 +108,13 @@ export async function renewBuilderHandoff(
     const handoff = toControlData(
       await getBuilderHandoffPageData({
         environment: process.env,
-        headers: await headers(),
         handoffId: renewed.data.handoffId,
+        headers: await headers(),
       }),
     );
     if (!handoff) return { status: "unavailable" };
     refresh();
-    return { status: "renewed", handoff };
+    return { handoff, status: "renewed" };
   } catch {
     return { status: "error" };
   }

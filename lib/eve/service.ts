@@ -1,5 +1,6 @@
 import { Client } from "eve/client";
 import type { ClientSession, MessageStreamEvent } from "eve/client";
+import { setTimeout as delay } from "node:timers/promises";
 
 import type { EveSessionListResult, EveSessionResult } from "@/lib/mcp/contracts";
 import {
@@ -75,16 +76,10 @@ export function toEveInputResponse(
     | { kind: "deny" }
     | { kind: "answer"; value: string; optionId?: string },
 ): { requestId: string; optionId?: string; text?: string } {
-  return response.kind === "approve"
-    ? { requestId, optionId: "approve" }
-    : response.kind === "deny"
-      ? { requestId, optionId: "cancel" }
-      : {
-          requestId,
-          ...(response.optionId === undefined
-            ? { text: response.value }
-            : { optionId: response.optionId }),
-        };
+  if (response.kind === "approve") return { optionId: "approve", requestId };
+  if (response.kind === "deny") return { optionId: "cancel", requestId };
+  if (response.optionId === undefined) return { requestId, text: response.value };
+  return { optionId: response.optionId, requestId };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -139,19 +134,19 @@ const localModelTurnInterruptedMessage =
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function settleLocalCancellation(operation: Promise<unknown>) {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutController = new AbortController();
   try {
     await Promise.race([
       operation,
-      new Promise<never>((_resolve, reject) => {
-        timeout = setTimeout(
-          () => reject(new HostedCancellationUnsettledError()),
-          localCancellationTimeoutMs,
-        );
+      delay(localCancellationTimeoutMs, null, {
+        ref: false,
+        signal: timeoutController.signal,
+      }).then(() => {
+        throw new HostedCancellationUnsettledError();
       }),
     ]);
   } finally {
-    if (timeout !== undefined) clearTimeout(timeout);
+    timeoutController.abort();
   }
 }
 
@@ -165,17 +160,17 @@ function localRuntimeState(generation: string): LocalEveRuntimeState {
   const existing = localRuntimeGlobal[localEveRuntimeStateKey];
   if (existing !== undefined && existing.generation === generation) return existing;
   return (localRuntimeGlobal[localEveRuntimeStateKey] = {
+    activeResponses: new Map(),
     generation,
+    metadata: new Map(),
+    modelInterruptions: new Map(),
+    recoveries: new Map(),
+    recoveryRequired: new Set(),
     requests: new Map(),
+    restartInterrupted: new Set(),
     sessionEvents: new Map(),
     sessionHandles: new Map(),
-    activeResponses: new Map(),
-    modelInterruptions: new Map(),
-    restartInterrupted: new Set(),
-    recoveryRequired: new Set(),
-    recoveries: new Map(),
     tailPumps: new Map(),
-    metadata: new Map(),
   });
 }
 
@@ -233,10 +228,10 @@ function resultForEvents(
   const uiPreview = latestInstalledUiPreview(snapshotEvents);
   const implementationPlan = latestInstalledImplementationPlan(snapshotEvents);
   return {
-    sessionId,
-    status: options.status ?? deriveInstalledEveStatus(snapshotEvents),
     cursor: Math.min(cursor + events.length, projected.length),
     events,
+    sessionId,
+    status: options.status ?? deriveInstalledEveStatus(snapshotEvents),
     ...(inputRequests.length === 0 ? {} : { inputRequests }),
     ...(prototype === undefined ? {} : { prototype }),
     ...(uiPreview === undefined ? {} : { uiPreview }),
@@ -254,10 +249,10 @@ function acceptedResult(
   const uiPreview = latestInstalledUiPreview(snapshotEvents);
   const implementationPlan = latestInstalledImplementationPlan(snapshotEvents);
   return {
-    sessionId,
-    status: "working",
     cursor: 0,
     events: [],
+    sessionId,
+    status: "working",
     ...(prototype === undefined ? {} : { prototype }),
     ...(uiPreview === undefined ? {} : { uiPreview }),
     ...(implementationPlan === undefined ? {} : { implementationPlan }),
@@ -301,8 +296,8 @@ function consumeResponse(
       if (!modelTurnActive || timedOut || state.activeResponses.get(sessionId) !== response) return;
       timedOut = true;
       state.modelInterruptions.set(sessionId, {
-        response,
         message: localModelTurnInterruptedMessage,
+        response,
       });
       // A cancellation request is idempotent at Eve's durable session
       // boundary. We deliberately do not start another turn here: first wait
@@ -310,7 +305,7 @@ function consumeResponse(
       state.recoveryRequired.add(sessionId);
       // Cancellation cleanup is deliberately fire-and-forget from the timer.
       // oxlint-disable-next-line promise/prefer-await-to-then
-      void settleLocalCancellation(options.cancelTurn(modelTurnId)).catch(() => undefined);
+      void settleLocalCancellation(options.cancelTurn(modelTurnId)).catch(() => null);
     }, modelTurnTimeoutMs);
     modelTurnTimer.unref?.();
   };
@@ -469,9 +464,7 @@ export function createLocalEveSessionService(
         }
         if (deriveInstalledEveStatus(localSessionEvents.get(sessionId) ?? []) !== "working") return;
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        await new Promise<void>((resolve) => {
-          setTimeout(resolve, 250);
-        });
+        await delay(250);
       }
       // Remove the tail pump entry regardless of its terminal outcome.
       // oxlint-disable-next-line promise/prefer-await-to-then
@@ -524,169 +517,166 @@ export function createLocalEveSessionService(
       throw new Error("The previous Autograph response is still settling. Try again in a moment.");
   }
 
-  return {
-    async start({ prompt, resumeSessionId, clientRequestId }) {
-      if (resumeSessionId !== undefined) {
-        const snapshot = await sessionFor(resumeSessionId).snapshot();
-        if (snapshot.session.sessionId !== resumeSessionId)
-          throw new Error("Eve changed the local session during resume.");
-        localSessionEvents.set(resumeSessionId, [...snapshot.events]);
-        touchSession(resumeSessionId);
-        return resultForEvents(resumeSessionId, snapshot.events, 0, 100, {
-          status: state.restartInterrupted.has(resumeSessionId) ? "waiting" : undefined,
-        });
-      }
-      if (prompt === undefined) throw new Error("A new App Builder session requires a prompt.");
-      const key = `start:${clientRequestId}`;
-      const existing = localRequests.get(key);
-      if (existing !== undefined) return acceptedResult(existing, localSessionEvents.get(existing));
-      const { session, response } = await client.sessions.create({
-        message: prompt,
+  const service = Object.create(Object.prototype) as EveSessionService;
+  service.start = async ({ prompt, resumeSessionId, clientRequestId }) => {
+    if (resumeSessionId !== undefined) {
+      const snapshot = await sessionFor(resumeSessionId).snapshot();
+      if (snapshot.session.sessionId !== resumeSessionId)
+        throw new Error("Eve changed the local session during resume.");
+      localSessionEvents.set(resumeSessionId, [...snapshot.events]);
+      touchSession(resumeSessionId);
+      return resultForEvents(resumeSessionId, snapshot.events, 0, 100, {
+        status: state.restartInterrupted.has(resumeSessionId) ? "waiting" : undefined,
       });
-      const { sessionId } = session.state;
-      localRequests.set(key, sessionId);
-      localSessionHandles.set(sessionId, session);
-      const timestamp = Date.now();
-      state.metadata.set(sessionId, {
-        title: localSessionTitle(prompt),
-        createdAtEpochMs: timestamp,
-        updatedAtEpochMs: timestamp,
-      });
-      consumeSessionResponse(sessionId, response);
-      return acceptedResult(sessionId, localSessionEvents.get(sessionId));
-    },
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    async list({ cursor, limit }) {
-      const sessions = [...state.metadata.entries()]
-        .toSorted(
-          ([leftId, left], [rightId, right]) =>
-            right.updatedAtEpochMs - left.updatedAtEpochMs || rightId.localeCompare(leftId),
-        )
-        .slice(cursor, cursor + limit)
-        .map(([sessionId, metadata]) => {
-          const result = resultForEvents(sessionId, localSessionEvents.get(sessionId) ?? []);
-          return {
-            sessionId,
-            title: metadata.title,
-            ...(result.implementationPlan?.appId === undefined
-              ? {}
-              : { appId: result.implementationPlan.appId }),
-            stage:
-              result.status === "completed"
-                ? ("complete" as const)
-                : result.implementationPlan === undefined
-                  ? result.prototype === undefined
-                    ? ("designing" as const)
-                    : ("prototype" as const)
-                  : ("ready" as const),
-            status: result.status,
-            resumability: ["completed", "failed", "cancelled"].includes(result.status)
-              ? ("terminal" as const)
-              : ("live" as const),
-            updatedAt: new Date(metadata.updatedAtEpochMs).toISOString(),
-          };
-        });
-      return {
-        kind: "session_list",
-        sessions,
-        cursor: cursor + sessions.length,
-      };
-    },
-    async get({ sessionId, cursor, limit }) {
-      if (state.restartInterrupted.has(sessionId)) await recoverDurableTail(sessionId);
-      if (!localSessionEvents.has(sessionId)) {
-        try {
-          const snapshot = await sessionFor(sessionId).snapshot();
-          if (snapshot.session.sessionId !== sessionId)
-            throw new Error("Eve changed the local session during recovery.");
-          localSessionEvents.set(sessionId, [...snapshot.events]);
-          localSessionHandles.set(
-            sessionId,
-            client.sessions.attach(sessionId, {
-              streamIndex: snapshot.session.streamIndex,
-            }),
-          );
-        } catch {
-          // A fresh development invocation intentionally cannot recover an
-          // older application's local Eve session. Keep that lookup empty.
-        }
-      }
-      touchSession(sessionId);
-      return resultForEvents(
-        sessionId,
-        localSessionEvents.get(sessionId) ?? [],
-        cursor,
-        limit,
-        localResultOptions(sessionId),
-      );
-    },
-    async send({ sessionId, message, clientRequestId }) {
-      const key = `send:${sessionId}:${clientRequestId}`;
-      if (!localRequests.has(key)) {
-        await requireSettledModelTurn(sessionId);
-        const response = await sessionAtBufferedTail(sessionId).send(message);
-        state.restartInterrupted.delete(sessionId);
-        consumeSessionResponse(sessionId, response);
-        localRequests.set(key, sessionId);
-      }
-      touchSession(sessionId);
-      return acceptedResult(sessionId, localSessionEvents.get(sessionId));
-    },
-    async respond({ sessionId, responses, clientRequestId }) {
-      const key = `respond:${sessionId}:${clientRequestId}`;
-      if (!localRequests.has(key)) {
-        await requireSettledModelTurn(sessionId);
-        const expected = outstandingInstalledEveRequests(
-          localSessionEvents.get(sessionId) ?? [],
-        ).map(({ requestId }) => requestId);
-        if (
-          expected.length !== responses.length ||
-          expected.some((requestId, index) => responses[index]?.requestId !== requestId)
-        )
-          throw new Error("The complete outstanding Eve input batch is required.");
-        const result = await sessionAtBufferedTail(sessionId).respond(
-          toEveInputResponses(responses),
-        );
-        state.restartInterrupted.delete(sessionId);
-        consumeSessionResponse(sessionId, result);
-        localRequests.set(key, sessionId);
-      }
-      touchSession(sessionId);
-      return acceptedResult(sessionId, localSessionEvents.get(sessionId));
-    },
-    async cancel({ sessionId, turnId }) {
-      if (state.restartInterrupted.has(sessionId)) {
-        touchSession(sessionId);
-        return resultForEvents(sessionId, localSessionEvents.get(sessionId) ?? [], 0, 100, {
-          status: "waiting",
-        });
-      }
-      const active = localActiveResponses.get(sessionId);
-      if (turnId === undefined && active !== undefined) {
-        try {
-          await settleLocalCancellation(active.cancel());
-        } catch (error) {
-          if (error instanceof HostedCancellationUnsettledError) {
-            localActiveResponses.delete(sessionId);
-            state.recoveryRequired.add(sessionId);
-          }
-          throw error;
-        }
-      } else {
-        try {
-          await settleLocalCancellation(
-            sessionFor(sessionId).cancel(turnId === undefined ? undefined : { turnId }),
-          );
-        } catch (error) {
-          if (error instanceof HostedCancellationUnsettledError)
-            state.recoveryRequired.add(sessionId);
-          throw error;
-        }
-      }
-      touchSession(sessionId);
-      return resultForEvents(sessionId, localSessionEvents.get(sessionId) ?? []);
-    },
+    }
+    if (prompt === undefined) throw new Error("A new App Builder session requires a prompt.");
+    const key = `start:${clientRequestId}`;
+    const existing = localRequests.get(key);
+    if (existing !== undefined) return acceptedResult(existing, localSessionEvents.get(existing));
+    const { session, response } = await client.sessions.create({
+      message: prompt,
+    });
+    const { sessionId } = session.state;
+    localRequests.set(key, sessionId);
+    localSessionHandles.set(sessionId, session);
+    const timestamp = Date.now();
+    state.metadata.set(sessionId, {
+      createdAtEpochMs: timestamp,
+      title: localSessionTitle(prompt),
+      updatedAtEpochMs: timestamp,
+    });
+    consumeSessionResponse(sessionId, response);
+    return acceptedResult(sessionId, localSessionEvents.get(sessionId));
   };
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+  service.list = async ({ cursor, limit }) => {
+    const sessions = [...state.metadata.entries()]
+      .toSorted(
+        ([leftId, left], [rightId, right]) =>
+          right.updatedAtEpochMs - left.updatedAtEpochMs || rightId.localeCompare(leftId),
+      )
+      .slice(cursor, cursor + limit)
+      .map(([sessionId, metadata]) => {
+        const result = resultForEvents(sessionId, localSessionEvents.get(sessionId) ?? []);
+        let stage: "complete" | "designing" | "prototype" | "ready";
+        if (result.status === "completed") stage = "complete";
+        else if (result.implementationPlan === undefined) {
+          stage = result.prototype === undefined ? "designing" : "prototype";
+        } else stage = "ready";
+        const resumability = ["completed", "failed", "cancelled"].includes(result.status)
+          ? ("terminal" as const)
+          : ("live" as const);
+        return {
+          ...(result.implementationPlan?.appId === undefined
+            ? {}
+            : { appId: result.implementationPlan.appId }),
+          resumability,
+          sessionId,
+          stage,
+          status: result.status,
+          title: metadata.title,
+          updatedAt: new Date(metadata.updatedAtEpochMs).toISOString(),
+        };
+      });
+    return {
+      cursor: cursor + sessions.length,
+      kind: "session_list",
+      sessions,
+    };
+  };
+  service.get = async ({ sessionId, cursor, limit }) => {
+    if (state.restartInterrupted.has(sessionId)) await recoverDurableTail(sessionId);
+    if (!localSessionEvents.has(sessionId)) {
+      try {
+        const snapshot = await sessionFor(sessionId).snapshot();
+        if (snapshot.session.sessionId !== sessionId)
+          throw new Error("Eve changed the local session during recovery.");
+        localSessionEvents.set(sessionId, [...snapshot.events]);
+        localSessionHandles.set(
+          sessionId,
+          client.sessions.attach(sessionId, {
+            streamIndex: snapshot.session.streamIndex,
+          }),
+        );
+      } catch {
+        // A fresh development invocation intentionally cannot recover an
+        // older application's local Eve session. Keep that lookup empty.
+      }
+    }
+    touchSession(sessionId);
+    return resultForEvents(
+      sessionId,
+      localSessionEvents.get(sessionId) ?? [],
+      cursor,
+      limit,
+      localResultOptions(sessionId),
+    );
+  };
+  service.send = async ({ sessionId, message, clientRequestId }) => {
+    const key = `send:${sessionId}:${clientRequestId}`;
+    if (!localRequests.has(key)) {
+      await requireSettledModelTurn(sessionId);
+      const response = await sessionAtBufferedTail(sessionId).send(message);
+      state.restartInterrupted.delete(sessionId);
+      consumeSessionResponse(sessionId, response);
+      localRequests.set(key, sessionId);
+    }
+    touchSession(sessionId);
+    return acceptedResult(sessionId, localSessionEvents.get(sessionId));
+  };
+  service.respond = async ({ sessionId, responses, clientRequestId }) => {
+    const key = `respond:${sessionId}:${clientRequestId}`;
+    if (!localRequests.has(key)) {
+      await requireSettledModelTurn(sessionId);
+      const expected = outstandingInstalledEveRequests(localSessionEvents.get(sessionId) ?? []).map(
+        ({ requestId }) => requestId,
+      );
+      if (
+        expected.length !== responses.length ||
+        expected.some((requestId, index) => responses[index]?.requestId !== requestId)
+      )
+        throw new Error("The complete outstanding Eve input batch is required.");
+      const result = await sessionAtBufferedTail(sessionId).respond(toEveInputResponses(responses));
+      state.restartInterrupted.delete(sessionId);
+      consumeSessionResponse(sessionId, result);
+      localRequests.set(key, sessionId);
+    }
+    touchSession(sessionId);
+    return acceptedResult(sessionId, localSessionEvents.get(sessionId));
+  };
+  service.cancel = async ({ sessionId, turnId }) => {
+    if (state.restartInterrupted.has(sessionId)) {
+      touchSession(sessionId);
+      return resultForEvents(sessionId, localSessionEvents.get(sessionId) ?? [], 0, 100, {
+        status: "waiting",
+      });
+    }
+    const active = localActiveResponses.get(sessionId);
+    if (turnId === undefined && active !== undefined) {
+      try {
+        await settleLocalCancellation(active.cancel());
+      } catch (error) {
+        if (error instanceof HostedCancellationUnsettledError) {
+          localActiveResponses.delete(sessionId);
+          state.recoveryRequired.add(sessionId);
+        }
+        throw error;
+      }
+    } else {
+      try {
+        await settleLocalCancellation(
+          sessionFor(sessionId).cancel(turnId === undefined ? undefined : { turnId }),
+        );
+      } catch (error) {
+        if (error instanceof HostedCancellationUnsettledError)
+          state.recoveryRequired.add(sessionId);
+        throw error;
+      }
+    }
+    touchSession(sessionId);
+    return resultForEvents(sessionId, localSessionEvents.get(sessionId) ?? []);
+  };
+  return service;
 }
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
@@ -706,16 +696,16 @@ export function createEveSessionService(
       throw new Error("The local Eve adapter requires a loopback EVE_AGENT_HOST.");
     }
     return createLocalEveSessionService(new Client({ host: url.origin, redirect: "error" }), {
-      stateGeneration: localCycleGeneration(environment),
       restartGeneration: localEveRestartGeneration(environment),
+      stateGeneration: localCycleGeneration(environment),
     });
   }
   return {
-    start: notConfigured,
-    list: notConfigured,
-    get: notConfigured,
-    send: notConfigured,
-    respond: notConfigured,
     cancel: notConfigured,
+    get: notConfigured,
+    list: notConfigured,
+    respond: notConfigured,
+    send: notConfigured,
+    start: notConfigured,
   };
 }

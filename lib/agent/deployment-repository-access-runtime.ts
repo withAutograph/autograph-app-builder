@@ -61,9 +61,9 @@ import { providerEmulationFetch } from "../integrations/provider-emulation-fetch
 
 const failed = (reason: string, message: string, retryable = false) =>
   new ConnectionAuthorizationFailedError("github-repository-access", {
+    message,
     reason,
     retryable,
-    message,
   });
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -205,140 +205,57 @@ export function createRepositoryAccessRuntime(input: {
     });
     if (result.status === "provider-unavailable" && deniedInstallations.size > 0 && !unavailable)
       return {
-        status: "authorization-required",
         action: "update",
         repository: result.repository,
         scopes: [],
+        status: "authorization-required",
       };
     return result;
   };
 
   return {
-    classify,
-    async prepareExistingSource(value) {
-      const initialAccessReceipt = recordRepositoryAccessReceipt({
-        current: value.currentAccessReceipt,
-        sessionId: value.sessionId,
-        confirmedByCallId: value.callId,
-        access: value.access,
-      });
-      const listed = (await input.installations.list?.(input.authority)) ?? [];
-      const legacy = await input.installations.read(input.authority);
-      const binding = mergeHostedGitHubInstallationBindings(listed, legacy).find(
-        (candidate) =>
-          candidate.active &&
-          candidate.installationId === value.access.scope.installationId &&
-          candidate.accountLogin === value.access.scope.accountLogin &&
-          candidate.accountType === value.access.scope.accountType,
-      );
-      if (binding === undefined)
-        throw new Error("The selected GitHub installation is no longer active.");
-      const provider = await input.providerFactory({
-        authority: input.authority,
-        installation: binding,
-      });
-      if (!repositorySourceProvider(provider))
-        throw new Error("GitHub source preparation is unavailable.");
-
-      const ref = `refs/heads/${value.access.repository.defaultBranch}`;
-      const observedGitHubSource = await resolveImmutableExistingSource({
-        adapter: createGitHubAppSourceResolutionAdapter(provider),
-        expectedInstallationId: binding.installationId,
-        repositoryId: value.access.repository.repositoryId,
-        ref,
-        expectedSha: value.access.repository.headSha,
-        expectedTree: value.access.repository.headTree,
-        resolvedByCallId: value.callId,
-      });
-      // Repository metadata is diagnostic context, not a source-drift gate.
-      // The provider-created checkout below is the source the builder uses.
-      assertExactImmutableGitHubSourceReceipt(observedGitHubSource);
-      const githubSource = observedGitHubSource;
-      const credential = await provider.acquireRepositoryReadCredential({
-        repositoryId: value.access.repository.repositoryId,
-      });
-      configureVercelSessionGitSource({
-        sessionId: value.sessionId,
-        source: {
-          url: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
-          token: credential.token,
-        },
-      });
-      // The Vercel backend now supplies this source directly to
-      // `Sandbox.create({ source: { type: "git", ... } })`. No shell clone,
-      // manifest, or predicted checkout shape sits between provider access and
-      // the repository's own commands.
-      const sandbox = typeof value.sandbox === "function" ? await value.sandbox() : value.sandbox;
-      await cloneGitHubSource({
-        sandbox,
-        url: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
-        token: credential.token,
-      });
-      const cloned = {
-        snapshot: await readSandboxGitHubSourceSnapshot(sandbox),
-        workspaceDigest: value.access.repository.headTree,
-      };
-      const sourceReceipt = inspectExistingRepositorySnapshotReceipt(cloned.snapshot);
-      // GitHub already authorized the clone. Do not repeat a speculative
-      // permission/readback gate after the provider operation succeeded.
-      const confirmed = value.access;
-      const accessReceipt = recordRepositoryAccessReceipt({
-        current: initialAccessReceipt,
-        sessionId: value.sessionId,
-        confirmedByCallId: value.callId,
-        access: confirmed,
-      });
-      assertResolvedSourceMatchesRepositoryAccess({
-        access: accessReceipt,
-        source: githubSource,
-      });
-      const workspace = await recordPreparedSandboxWorkspace({
-        sandbox,
-        callId: value.callId,
-        sourcePath: sourceReceipt.sourcePath,
-        sourceSha: sourceReceipt.sourceSha,
-        sourceTree: sourceReceipt.sourceTree,
-        eligibilityDigest: sourceReceipt.eligibilityDigest,
-        workspaceDigest: cloned.workspaceDigest,
-      });
-      return { accessReceipt, githubSource, sourceReceipt, workspace };
-    },
-    async resumeAuthorizedForSession(value) {
-      const candidates = await input.continuations.authorizedForSession({
-        authority: input.authority,
-        sessionId: value.sessionId,
-      });
-      let resumed = 0;
-      for (const candidate of candidates) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        const access = await classify({
-          repository: candidate.record.repository.fullName,
-          ...(candidate.record.selectedInstallationId
-            ? {
-                selectedInstallationId: candidate.record.selectedInstallationId,
-              }
-            : {}),
-        });
-        if (access.status !== "ready") continue;
-        const callback = new URL(candidate.callbackUrl);
-        callback.searchParams.set("provider", "github");
-        callback.searchParams.set("status", "connected");
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        const response = await (value.fetchImplementation ?? fetch)(callback, {
-          method: "GET",
-          redirect: "manual",
-          headers: { Accept: "application/json" },
-        });
-        if (response.status >= 200 && response.status < 400) resumed += 1;
-      }
-      return resumed;
-    },
     authorization(request) {
       const value = {
         ...request,
         ...withPreparedGitHubSelection(request, input.preparedIntent),
       };
       return defineInteractiveAuthorization<{ continuationId: string }>({
+        async completeAuthorization({ callback, principal, resume }) {
+          exactPrincipal(principal, input.authority);
+          if (
+            callback.method !== "GET" ||
+            callback.params.provider !== "github" ||
+            callback.params.status !== "connected" ||
+            Object.keys(callback.params).some((key) => key !== "provider" && key !== "status")
+          ) {
+            throw failed("callback_invalid", "GitHub access confirmation was invalid or expired.");
+          }
+          const access = await classify(value);
+          if (access.status !== "ready") {
+            throw failed(
+              "repository_access_missing",
+              `GitHub is connected, but ${value.repository} is not included.`,
+              true,
+            );
+          }
+          const continuation = await input.continuations.consume({
+            authority: input.authority,
+            continuationId: resume?.continuationId ?? "",
+            repository: value.repository,
+            requestId: value.requestId,
+            sessionId: value.sessionId,
+            ...(value.selectedInstallationId
+              ? { selectedInstallationId: value.selectedInstallationId }
+              : {}),
+          });
+          if (!continuation) {
+            throw failed(
+              "continuation_invalid",
+              "GitHub access confirmation was invalid or expired.",
+            );
+          }
+          return { token: access.accessDigest };
+        },
         displayName: "GitHub repository access",
         async getToken({ principal }) {
           exactPrincipal(principal, input.authority);
@@ -377,9 +294,9 @@ export function createRepositoryAccessRuntime(input: {
           }
           const continuation = await input.continuations.create({
             authority: input.authority,
-            sessionId: value.sessionId,
-            requestId: value.requestId,
             repository: value.repository,
+            requestId: value.requestId,
+            sessionId: value.sessionId,
             ...(value.selectedInstallationId
               ? { selectedInstallationId: value.selectedInstallationId }
               : {}),
@@ -389,62 +306,145 @@ export function createRepositoryAccessRuntime(input: {
           authorizeUrl.searchParams.set("returnTo", input.returnTo ?? "/");
           authorizeUrl.searchParams.set("resume", continuation.continuationId);
           const challenge = {
-            url: authorizeUrl.toString(),
-            expiresAt: continuation.expiresAt.toISOString(),
             displayName: access.action === "connect" ? "Connect GitHub" : "Update GitHub access",
+            expiresAt: continuation.expiresAt.toISOString(),
             instructions:
               access.action === "connect"
                 ? `Connect GitHub so Autograph can use ${value.repository}. This app continues automatically after access is confirmed.`
                 : `Update GitHub access to include ${value.repository}. This app continues automatically after access is confirmed.`,
             repositoryAccess: {
-              provider: "github" as const,
               action: access.action,
+              provider: "github" as const,
               repository: access.repository,
               scopes: access.scopes,
             },
+            url: authorizeUrl.toString(),
           };
           return {
             challenge,
             resume: { continuationId: continuation.continuationId },
           };
         },
-        async completeAuthorization({ callback, principal, resume }) {
-          exactPrincipal(principal, input.authority);
-          if (
-            callback.method !== "GET" ||
-            callback.params.provider !== "github" ||
-            callback.params.status !== "connected" ||
-            Object.keys(callback.params).some((key) => key !== "provider" && key !== "status")
-          ) {
-            throw failed("callback_invalid", "GitHub access confirmation was invalid or expired.");
-          }
-          const access = await classify(value);
-          if (access.status !== "ready") {
-            throw failed(
-              "repository_access_missing",
-              `GitHub is connected, but ${value.repository} is not included.`,
-              true,
-            );
-          }
-          const continuation = await input.continuations.consume({
-            authority: input.authority,
-            continuationId: resume?.continuationId ?? "",
-            sessionId: value.sessionId,
-            requestId: value.requestId,
-            repository: value.repository,
-            ...(value.selectedInstallationId
-              ? { selectedInstallationId: value.selectedInstallationId }
-              : {}),
-          });
-          if (!continuation) {
-            throw failed(
-              "continuation_invalid",
-              "GitHub access confirmation was invalid or expired.",
-            );
-          }
-          return { token: access.accessDigest };
+      });
+    },
+    classify,
+    async prepareExistingSource(value) {
+      const initialAccessReceipt = recordRepositoryAccessReceipt({
+        access: value.access,
+        confirmedByCallId: value.callId,
+        current: value.currentAccessReceipt,
+        sessionId: value.sessionId,
+      });
+      const listed = (await input.installations.list?.(input.authority)) ?? [];
+      const legacy = await input.installations.read(input.authority);
+      const binding = mergeHostedGitHubInstallationBindings(listed, legacy).find(
+        (candidate) =>
+          candidate.active &&
+          candidate.installationId === value.access.scope.installationId &&
+          candidate.accountLogin === value.access.scope.accountLogin &&
+          candidate.accountType === value.access.scope.accountType,
+      );
+      if (binding === undefined)
+        throw new Error("The selected GitHub installation is no longer active.");
+      const provider = await input.providerFactory({
+        authority: input.authority,
+        installation: binding,
+      });
+      if (!repositorySourceProvider(provider))
+        throw new Error("GitHub source preparation is unavailable.");
+
+      const ref = `refs/heads/${value.access.repository.defaultBranch}`;
+      const observedGitHubSource = await resolveImmutableExistingSource({
+        adapter: createGitHubAppSourceResolutionAdapter(provider),
+        expectedInstallationId: binding.installationId,
+        expectedSha: value.access.repository.headSha,
+        expectedTree: value.access.repository.headTree,
+        ref,
+        repositoryId: value.access.repository.repositoryId,
+        resolvedByCallId: value.callId,
+      });
+      // Repository metadata is diagnostic context, not a source-drift gate.
+      // The provider-created checkout below is the source the builder uses.
+      assertExactImmutableGitHubSourceReceipt(observedGitHubSource);
+      const githubSource = observedGitHubSource;
+      const credential = await provider.acquireRepositoryReadCredential({
+        repositoryId: value.access.repository.repositoryId,
+      });
+      configureVercelSessionGitSource({
+        sessionId: value.sessionId,
+        source: {
+          token: credential.token,
+          url: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
         },
       });
+      // The Vercel backend now supplies this source directly to
+      // `Sandbox.create({ source: { type: "git", ... } })`. No shell clone,
+      // manifest, or predicted checkout shape sits between provider access and
+      // the repository's own commands.
+      const sandbox = typeof value.sandbox === "function" ? await value.sandbox() : value.sandbox;
+      await cloneGitHubSource({
+        sandbox,
+        token: credential.token,
+        url: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
+      });
+      const cloned = {
+        snapshot: await readSandboxGitHubSourceSnapshot(sandbox),
+        workspaceDigest: value.access.repository.headTree,
+      };
+      const sourceReceipt = inspectExistingRepositorySnapshotReceipt(cloned.snapshot);
+      // GitHub already authorized the clone. Do not repeat a speculative
+      // permission/readback gate after the provider operation succeeded.
+      const confirmed = value.access;
+      const accessReceipt = recordRepositoryAccessReceipt({
+        access: confirmed,
+        confirmedByCallId: value.callId,
+        current: initialAccessReceipt,
+        sessionId: value.sessionId,
+      });
+      assertResolvedSourceMatchesRepositoryAccess({
+        access: accessReceipt,
+        source: githubSource,
+      });
+      const workspace = await recordPreparedSandboxWorkspace({
+        callId: value.callId,
+        eligibilityDigest: sourceReceipt.eligibilityDigest,
+        sandbox,
+        sourcePath: sourceReceipt.sourcePath,
+        sourceSha: sourceReceipt.sourceSha,
+        sourceTree: sourceReceipt.sourceTree,
+        workspaceDigest: cloned.workspaceDigest,
+      });
+      return { accessReceipt, githubSource, sourceReceipt, workspace };
+    },
+    async resumeAuthorizedForSession(value) {
+      const candidates = await input.continuations.authorizedForSession({
+        authority: input.authority,
+        sessionId: value.sessionId,
+      });
+      let resumed = 0;
+      for (const candidate of candidates) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        const access = await classify({
+          repository: candidate.record.repository.fullName,
+          ...(candidate.record.selectedInstallationId
+            ? {
+                selectedInstallationId: candidate.record.selectedInstallationId,
+              }
+            : {}),
+        });
+        if (access.status !== "ready") continue;
+        const callback = new URL(candidate.callbackUrl);
+        callback.searchParams.set("provider", "github");
+        callback.searchParams.set("status", "connected");
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        const response = await (value.fetchImplementation ?? fetch)(callback, {
+          headers: { Accept: "application/json" },
+          method: "GET",
+          redirect: "manual",
+        });
+        if (response.status >= 200 && response.status < 400) resumed += 1;
+      }
+      return resumed;
     },
   };
 }
@@ -468,22 +468,24 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
     const installation = readGitHubAppInstallationEnvironment(environment);
     const emulation = readProviderEmulation(environment);
     runtimeInput = {
-      database: openHostedPostgresDatabase(environment.DATABASE_URL ?? ""),
-      origin: new URL(installation.issuer).origin,
       credentials: parseGitHubAppHttpProviderCredentials({
         appId: installation.appId,
         privateKey: environment.GITHUB_APP_PRIVATE_KEY,
       }),
+      database: openHostedPostgresDatabase(environment.DATABASE_URL ?? ""),
+      origin: new URL(installation.issuer).origin,
       ...(emulation
         ? {
             providerFetch: ((resource, init) => {
-              const url = new URL(
-                typeof resource === "string"
-                  ? resource
-                  : resource instanceof URL
-                    ? resource.href
-                    : resource.url,
-              );
+              let resourceUrl: string;
+              if (typeof resource === "string") {
+                resourceUrl = resource;
+              } else if (resource instanceof URL) {
+                resourceUrl = resource.href;
+              } else {
+                resourceUrl = resource.url;
+              }
+              const url = new URL(resourceUrl);
               return providerEmulationFetch(
                 `${emulation.githubOrigin}${url.pathname}${url.search}`,
                 init,
@@ -494,7 +496,8 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
         : {}),
     };
   }
-  const membership = createPostgresWorkspaceMembership(runtimeInput.database);
+  const input = runtimeInput;
+  const membership = createPostgresWorkspaceMembership(input.database);
   if (
     !(await membership.isMember({
       principal,
@@ -503,24 +506,24 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
   ) {
     throw new Error("Repository access requires an active workspace member.");
   }
-  const installations = createPostgresHostedGitHubInstallationStore(runtimeInput.database);
+  const installations = createPostgresHostedGitHubInstallationStore(input.database);
   return createRepositoryAccessRuntime({
     authority,
-    preparedIntent,
-    returnTo: preparedIntent ? preparedHandoffReturnPath(sessionAuth) : undefined,
-    origin: runtimeInput.origin,
-    installations,
-    providerFactory: ({ installation }) =>
-      createGitHubAppHttpProvider({
-        fetch: runtimeInput!.providerFetch,
-        config: {
-          ...runtimeInput!.credentials,
-          installationId: installation.installationId,
-        },
-      }),
     continuations: createRepositoryAccessContinuationService({
       store: createPostgresRepositoryAccessContinuationStore(runtimeInput.database),
     }),
+    installations,
+    origin: input.origin,
+    preparedIntent,
+    providerFactory: ({ installation }) =>
+      createGitHubAppHttpProvider({
+        config: {
+          ...input.credentials,
+          installationId: installation.installationId,
+        },
+        fetch: input.providerFetch,
+      }),
+    returnTo: preparedIntent ? preparedHandoffReturnPath(sessionAuth) : undefined,
   });
 }
 

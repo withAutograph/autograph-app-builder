@@ -1,23 +1,25 @@
 /* oxlint-disable eslint/no-await-in-loop -- readiness retries and model turns must remain sequential. */
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
-import { join, resolve as pathResolve } from "node:path";
+import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
-function required(name: string) {
+const required = (name: string) => {
   const value = process.env[name];
   if (!value) throw new Error(`${name} was required for the live self-reproduction run.`);
   return value;
-}
+};
 
-const root = pathResolve(import.meta.dirname, "..");
+const root = path.resolve(import.meta.dirname, "..");
 const candidateRoot = required("SELF_REPRODUCTION_CANDIDATE_ROOT");
 const arrustedRoot = required("SELF_REPRODUCTION_ARRUSTED_ROOT");
 const briefPath = required("SELF_REPRODUCTION_BRIEF_PATH");
 const answersPath = required("SELF_REPRODUCTION_ANSWERS_PATH");
 const transcriptPath = required("SELF_REPRODUCTION_TRANSCRIPT_PATH");
-const stateRoot = pathResolve(
-  process.env.SELF_REPRODUCTION_STATE_ROOT ?? join(candidateRoot, "..", "runtime"),
+const stateRoot = path.resolve(
+  process.env.SELF_REPRODUCTION_STATE_ROOT ?? path.join(candidateRoot, "..", "runtime"),
 );
 const configuredNextPort = process.env.SELF_REPRODUCTION_NEXT_PORT;
 const configuredEvePort = process.env.SELF_REPRODUCTION_EVE_PORT;
@@ -26,75 +28,65 @@ const providerRequestTimeoutMs = Number(
   process.env.SELF_REPRODUCTION_PROVIDER_REQUEST_TIMEOUT_MS ?? "30000",
 );
 
-async function availableLoopbackPort(configured: string | undefined): Promise<number> {
+const availableLoopbackPort = async (configured: string | undefined): Promise<number> => {
   if (configured !== undefined) {
     const port = Number(configured);
     if (Number.isInteger(port) && port > 0 && port < 65_536) return port;
     throw new Error("Configured self-reproduction ports must be valid TCP ports.");
   }
   const server = createServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => resolve());
-  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
   const address = server.address();
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => {
-      if (error) reject(error);
-      else resolve();
-    });
-  });
+  const closed = once(server, "close");
+  server.close();
+  await closed;
   if (address === null || typeof address === "string")
     throw new Error("A loopback port was unavailable.");
   return address.port;
-}
+};
 
-function run(
+const run = async (
   command: string,
   args: string[],
   options: { input?: string; timeoutMs?: number } = {},
-) {
-  return new Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }>(
-    (resolve) => {
-      const child = spawn(command, args, { cwd: root, stdio: "pipe", env: process.env });
-      let stdout = "";
-      let stderr = "";
-      let timedOut = false;
-      let forceStop: ReturnType<typeof setTimeout> | undefined;
-      const timer = setTimeout(() => {
-        timedOut = true;
-        child.kill("SIGTERM");
-        forceStop = setTimeout(() => child.kill("SIGKILL"), 5000);
-      }, options.timeoutMs ?? 0);
-      timer.unref();
-      child.stdout.on("data", (chunk: Buffer) => (stdout += String(chunk)));
-      child.stderr.on("data", (chunk: Buffer) => (stderr += String(chunk)));
-      if (options.input) child.stdin.end(options.input);
-      else child.stdin.end();
-      child.on("close", (code) => {
-        clearTimeout(timer);
-        if (forceStop !== undefined) clearTimeout(forceStop);
-        resolve({ code, stdout, stderr, timedOut });
-      });
-      child.on("error", (error) => {
-        clearTimeout(timer);
-        if (forceStop !== undefined) clearTimeout(forceStop);
-        resolve({ code: null, stdout, stderr: `${stderr}${error.message}`, timedOut });
-      });
-    },
-  );
-}
-
-const delay = (milliseconds: number) =>
-  new Promise<void>((resolve) => {
-    setTimeout(resolve, milliseconds);
+) => {
+  const child = spawn(command, args, { cwd: root, env: process.env, stdio: "pipe" });
+  let stdout = "";
+  let stderr = "";
+  let timedOut = false;
+  let spawnError: Error | undefined;
+  let forceStop: ReturnType<typeof setTimeout> | undefined;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    child.kill("SIGTERM");
+    forceStop = setTimeout(() => child.kill("SIGKILL"), 5000);
+  }, options.timeoutMs ?? 0);
+  timer.unref();
+  child.stdout.on("data", (chunk: Buffer) => (stdout += String(chunk)));
+  child.stderr.on("data", (chunk: Buffer) => (stderr += String(chunk)));
+  if (options.input) child.stdin.end(options.input);
+  else child.stdin.end();
+  const closed = once(child, "close");
+  const [code] = await closed.catch((error: Error) => {
+    spawnError = error;
+    return [null];
   });
+  clearTimeout(timer);
+  if (forceStop !== undefined) clearTimeout(forceStop);
+  return {
+    code: spawnError === undefined ? (code as number | null) : null,
+    stderr: spawnError === undefined ? stderr : `${stderr}${spawnError.message}`,
+    stdout,
+    timedOut,
+  };
+};
 
-async function waitForEveAttempt(
+const waitForEveAttempt = async (
   url: string,
   signal: AbortSignal,
   deadline: number,
-): Promise<void> {
+): Promise<void> => {
   if (Date.now() >= deadline || signal.aborted)
     throw new Error("The local Eve agent did not become ready within two minutes.");
   try {
@@ -105,34 +97,36 @@ async function waitForEveAttempt(
   }
   await delay(500);
   return waitForEveAttempt(url, signal, deadline);
-}
+};
 
 const waitForEve = (url: string, signal: AbortSignal) =>
   waitForEveAttempt(url, signal, Date.now() + 120_000);
 
-async function availableDistinctLoopbackPort(
+const availableDistinctLoopbackPort = async (
   excludedPort: number,
   configured: string | undefined,
-): Promise<number> {
+): Promise<number> => {
   const port = await availableLoopbackPort(configured);
-  return port === excludedPort ? availableDistinctLoopbackPort(excludedPort, undefined) : port;
-}
+  return port === excludedPort
+    ? availableDistinctLoopbackPort(excludedPort, undefined as undefined)
+    : port;
+};
 
-function answerFor(result: unknown, answers: Record<string, string>) {
+const answerFor = (result: unknown, answers: Record<string, string>) => {
   const serialized = JSON.stringify(result).toLowerCase();
   if (serialized.includes("approve")) return "approve";
   for (const [key, value] of Object.entries(answers)) if (serialized.includes(key)) return value;
   return "continue with the benchmark defaults";
-}
+};
 
 type Invocation = Awaited<ReturnType<typeof run>>;
 
-async function resumeInvocation(
+const resumeInvocation = async (
   invocation: Invocation,
   remainingTurns: number,
   url: string,
   answers: Record<string, string>,
-): Promise<Invocation> {
+): Promise<Invocation> => {
   if (remainingTurns === 0 || invocation.code !== 3) return invocation;
   let result: unknown;
   try {
@@ -147,11 +141,11 @@ async function resumeInvocation(
   );
   await appendFile(transcriptPath, `${resumed.stdout}\n${resumed.stderr}\n`);
   return resumeInvocation(resumed, remainingTurns - 1, url, answers);
-}
+};
 
-async function main() {
-  await mkdir(candidateRoot, { recursive: true, mode: 0o700 });
-  await mkdir(stateRoot, { recursive: true, mode: 0o700 });
+const main = async () => {
+  await mkdir(candidateRoot, { mode: 0o700, recursive: true });
+  await mkdir(stateRoot, { mode: 0o700, recursive: true });
   const brief = await readFile(briefPath, "utf-8");
   const answers = (
     JSON.parse(await readFile(answersPath, "utf-8")) as { responses: Record<string, string> }
@@ -180,16 +174,14 @@ async function main() {
     {
       cwd: root,
       detached: true,
-      stdio: "pipe",
       env: {
         ...process.env,
         APP_BUILDER_SANDBOX_REQUEST_TIMEOUT_MS: String(providerRequestTimeoutMs),
       },
+      stdio: "pipe",
     },
   );
-  const developmentExited = new Promise<void>((resolve) => {
-    development.once("close", () => resolve());
-  });
+  const developmentExited = once(development, "close");
   development.once("close", () => controller.abort());
   development.stdout.on("data", async (chunk: Buffer) => {
     await appendFile(transcriptPath, String(chunk));
@@ -220,16 +212,18 @@ async function main() {
     );
     await appendFile(transcriptPath, `${invocation.stdout}\n${invocation.stderr}\n`);
     invocation = await resumeInvocation(invocation, 8, url, answers);
+    let status = "failed";
+    if (invocation.code === 0) status = "unassessed";
+    else if (invocation.timedOut) status = "blocked";
     await writeFile(
-      join(candidateRoot, "self-reproduction.workflow-results.json"),
+      path.join(candidateRoot, "self-reproduction.workflow-results.json"),
       JSON.stringify(
         {
           "independent-creation": {
-            status:
-              invocation.code === 0 ? "unassessed" : invocation.timedOut ? "blocked" : "failed",
             evidence: invocation.timedOut
               ? `The Vercel Sandbox-backed invocation exceeded its ${generationTimeoutMs}ms deadline.`
               : "Live Eve invocation completed; inspect the recorded transcript and generated files for workflow-level acceptance.",
+            status,
           },
         },
         null,
@@ -248,7 +242,7 @@ async function main() {
     process.off("SIGINT", stop);
     process.off("SIGTERM", stop);
   }
-}
+};
 
 try {
   await main();

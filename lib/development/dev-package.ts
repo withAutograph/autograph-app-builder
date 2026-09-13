@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import path from "node:path";
 import { promisify } from "node:util";
 
 import { registeredAutographToolNames, sha256 } from "../../scripts/portable-release";
@@ -13,22 +13,20 @@ export const DEVELOPMENT_PLUGIN_SELECTOR = `${DEVELOPMENT_PLUGIN_NAME}@${DEVELOP
 export const DEVELOPMENT_MCP_SERVER_NAME = "app-builder-dev";
 export const DEVELOPMENT_VERSION = "0.0.0-development";
 
-function developmentVersion(port: number) {
-  return `${DEVELOPMENT_VERSION}.${port}`;
-}
+const developmentVersion = (port: number) => `${DEVELOPMENT_VERSION}.${port}`;
 
 export type DevelopmentCodexCommandRunner = (
   args: readonly string[],
   options: { allowFailure?: boolean },
 ) => Promise<{ stdout: string; stderr: string }>;
 
-async function packageInputDigest(path: string): Promise<string> {
-  const entries = await readdir(path, { withFileTypes: true });
+const packageInputDigest = async (directoryPath: string): Promise<string> => {
+  const entries = await readdir(directoryPath, { withFileTypes: true });
   const contents = await Promise.all(
     entries
       .toSorted((left, right) => left.name.localeCompare(right.name))
       .map(async (entry) => {
-        const entryPath = join(path, entry.name);
+        const entryPath = path.join(directoryPath, entry.name);
         if (entry.isDirectory()) return [entry.name, await packageInputDigest(entryPath)] as const;
         if (!entry.isFile())
           throw new Error(`Development package input was not a regular file: ${entryPath}`);
@@ -36,40 +34,40 @@ async function packageInputDigest(path: string): Promise<string> {
       }),
   );
   return sha256(JSON.stringify(contents));
-}
+};
 
 /**
  * Only bytes that are installed into Codex or define its MCP registration
  * require a package rebuild.  Keeping this separate from the App Builder
  * runtime lets UI-only changes retain the existing local installation.
  */
-export async function developmentPackageFingerprint(input: {
+export const developmentPackageFingerprint = async (input: {
   repositoryRoot: string;
   port: number;
-}) {
-  const repositoryRoot = resolve(input.repositoryRoot);
+}) => {
+  const repositoryRoot = path.resolve(input.repositoryRoot);
   return sha256(
     JSON.stringify({
-      skills: await packageInputDigest(join(repositoryRoot, "skills")),
-      icon: sha256(await readFile(join(repositoryRoot, "assets/autograph-icon.png"))),
-      plugin: sha256(await readFile(join(repositoryRoot, ".codex-plugin/plugin.json"))),
-      mcpHandler: sha256(await readFile(join(repositoryRoot, "lib/mcp/request-handler.ts"))),
+      icon: sha256(await readFile(path.join(repositoryRoot, "assets/autograph-icon.png"))),
+      mcpHandler: sha256(await readFile(path.join(repositoryRoot, "lib/mcp/request-handler.ts"))),
+      plugin: sha256(await readFile(path.join(repositoryRoot, ".codex-plugin/plugin.json"))),
       port: input.port,
+      skills: await packageInputDigest(path.join(repositoryRoot, "skills")),
     }),
   );
-}
+};
 
-export async function createDevelopmentPackage(input: {
+export const createDevelopmentPackage = async (input: {
   repositoryRoot: string;
   outputRoot: string;
   port: number;
-}) {
-  const repositoryRoot = resolve(input.repositoryRoot);
-  const outputRoot = resolve(input.outputRoot);
-  await mkdir(outputRoot, { recursive: true, mode: 0o700 });
-  const temporaryMarketplaceRoot = await mkdtemp(join(outputRoot, ".marketplace-"));
-  const marketplaceRoot = join(outputRoot, "marketplace");
-  const pluginRoot = join(temporaryMarketplaceRoot, "plugins", DEVELOPMENT_PLUGIN_NAME);
+}) => {
+  const repositoryRoot = path.resolve(input.repositoryRoot);
+  const outputRoot = path.resolve(input.outputRoot);
+  await mkdir(outputRoot, { mode: 0o700, recursive: true });
+  const temporaryMarketplaceRoot = await mkdtemp(path.join(outputRoot, ".marketplace-"));
+  const marketplaceRoot = path.join(outputRoot, "marketplace");
+  const pluginRoot = path.join(temporaryMarketplaceRoot, "plugins", DEVELOPMENT_PLUGIN_NAME);
   const endpoint = `http://127.0.0.1:${input.port}/mcp`;
   // Codex retains an MCP transport by server name across tasks.  Make the
   // local-only transport identity include its loopback port so a fresh
@@ -77,20 +75,20 @@ export async function createDevelopmentPackage(input: {
   const mcpServer = `${DEVELOPMENT_MCP_SERVER_NAME}-${input.port}`;
   const version = developmentVersion(input.port);
   try {
-    await mkdir(join(pluginRoot, ".codex-plugin"), {
-      recursive: true,
+    await mkdir(path.join(pluginRoot, ".codex-plugin"), {
       mode: 0o700,
-    });
-    await cp(join(repositoryRoot, "skills"), join(pluginRoot, "skills"), {
       recursive: true,
     });
-    await mkdir(join(pluginRoot, "assets"), { mode: 0o700 });
+    await cp(path.join(repositoryRoot, "skills"), path.join(pluginRoot, "skills"), {
+      recursive: true,
+    });
+    await mkdir(path.join(pluginRoot, "assets"), { mode: 0o700 });
     await cp(
-      join(repositoryRoot, "assets/autograph-icon.png"),
-      join(pluginRoot, "assets/autograph-icon.png"),
+      path.join(repositoryRoot, "assets/autograph-icon.png"),
+      path.join(pluginRoot, "assets/autograph-icon.png"),
     );
     const sourceManifest = JSON.parse(
-      await readFile(join(repositoryRoot, ".codex-plugin/plugin.json"), "utf-8"),
+      await readFile(path.join(repositoryRoot, ".codex-plugin/plugin.json"), "utf-8"),
     ) as Record<string, unknown>;
     const sourceInterface =
       typeof sourceManifest.interface === "object" && sourceManifest.interface !== null
@@ -98,8 +96,6 @@ export async function createDevelopmentPackage(input: {
         : {};
     const manifest = {
       ...sourceManifest,
-      name: DEVELOPMENT_PLUGIN_NAME,
-      version,
       description: "Local-only Autograph App Builder development package.",
       interface: {
         ...sourceInterface,
@@ -107,42 +103,47 @@ export async function createDevelopmentPackage(input: {
         shortDescription: "Build with local App Builder and Arrusted changes",
       },
       mcpServers: "./.mcp.json",
+      name: DEVELOPMENT_PLUGIN_NAME,
+      version,
     };
     delete (manifest as { apps?: unknown }).apps;
     const mcp = {
       mcpServers: {
         [mcpServer]: {
+          oauth_resource: endpoint,
           type: "http",
           url: endpoint,
-          oauth_resource: endpoint,
         },
       },
     };
-    const handler = await readFile(join(repositoryRoot, "lib/mcp/request-handler.ts"), "utf-8");
+    const handler = await readFile(
+      path.join(repositoryRoot, "lib/mcp/request-handler.ts"),
+      "utf-8",
+    );
     const tools = [...registeredAutographToolNames(handler)];
-    const marketplaceManifestPath = join(
+    const marketplaceManifestPath = path.join(
       temporaryMarketplaceRoot,
       ".agents/plugins/marketplace.json",
     );
-    await mkdir(dirname(marketplaceManifestPath), {
-      recursive: true,
+    await mkdir(path.dirname(marketplaceManifestPath), {
       mode: 0o700,
+      recursive: true,
     });
     const marketplace = {
-      name: DEVELOPMENT_MARKETPLACE_NAME,
       interface: { displayName: "Autograph Development" },
+      name: DEVELOPMENT_MARKETPLACE_NAME,
       plugins: [
         {
-          name: DEVELOPMENT_PLUGIN_NAME,
-          source: {
-            source: "local",
-            path: `./plugins/${DEVELOPMENT_PLUGIN_NAME}`,
-          },
-          policy: {
-            installation: "AVAILABLE",
-            authentication: "ON_INSTALL",
-          },
           category: "Developer Tools",
+          name: DEVELOPMENT_PLUGIN_NAME,
+          policy: {
+            authentication: "ON_INSTALL",
+            installation: "AVAILABLE",
+          },
+          source: {
+            path: `./plugins/${DEVELOPMENT_PLUGIN_NAME}`,
+            source: "local",
+          },
         },
       ],
     };
@@ -151,59 +152,59 @@ export async function createDevelopmentPackage(input: {
         mode: 0o600,
       }),
       writeFile(
-        join(pluginRoot, ".codex-plugin/plugin.json"),
+        path.join(pluginRoot, ".codex-plugin/plugin.json"),
         `${JSON.stringify(manifest, null, 2)}\n`,
         { mode: 0o600 },
       ),
-      writeFile(join(pluginRoot, ".mcp.json"), `${JSON.stringify(mcp, null, 2)}\n`, {
+      writeFile(path.join(pluginRoot, ".mcp.json"), `${JSON.stringify(mcp, null, 2)}\n`, {
         mode: 0o600,
       }),
-      writeFile(join(pluginRoot, "tools-list.json"), `${JSON.stringify(tools, null, 2)}\n`, {
+      writeFile(path.join(pluginRoot, "tools-list.json"), `${JSON.stringify(tools, null, 2)}\n`, {
         mode: 0o600,
       }),
     ]);
     const receipt = {
-      format: "autograph-development-package-v2",
-      marketplace: DEVELOPMENT_MARKETPLACE_NAME,
-      plugin: DEVELOPMENT_PLUGIN_NAME,
-      selector: DEVELOPMENT_PLUGIN_SELECTOR,
-      version,
-      mcpServer,
-      endpoint,
-      tools,
-      mcpAppPreview: false,
-      publication: false,
       digest: sha256(
         JSON.stringify({
+          endpoint,
           marketplace: DEVELOPMENT_MARKETPLACE_NAME,
+          mcpServer,
           plugin: DEVELOPMENT_PLUGIN_NAME,
           selector: DEVELOPMENT_PLUGIN_SELECTOR,
-          version,
-          mcpServer,
-          endpoint,
           tools,
+          version,
         }),
       ),
+      endpoint,
+      format: "autograph-development-package-v2",
+      marketplace: DEVELOPMENT_MARKETPLACE_NAME,
+      mcpAppPreview: false,
+      mcpServer,
+      plugin: DEVELOPMENT_PLUGIN_NAME,
+      publication: false,
+      selector: DEVELOPMENT_PLUGIN_SELECTOR,
+      tools,
+      version,
     } as const;
     await writeFile(
-      join(pluginRoot, "development-receipt.json"),
+      path.join(pluginRoot, "development-receipt.json"),
       `${JSON.stringify(receipt, null, 2)}\n`,
       { mode: 0o600 },
     );
-    await rm(marketplaceRoot, { recursive: true, force: true });
+    await rm(marketplaceRoot, { force: true, recursive: true });
     await rename(temporaryMarketplaceRoot, marketplaceRoot);
     return {
       marketplaceRoot,
-      pluginRoot: join(marketplaceRoot, "plugins", DEVELOPMENT_PLUGIN_NAME),
+      pluginRoot: path.join(marketplaceRoot, "plugins", DEVELOPMENT_PLUGIN_NAME),
       receipt,
     };
   } finally {
-    await rm(temporaryMarketplaceRoot, { recursive: true, force: true });
+    await rm(temporaryMarketplaceRoot, { force: true, recursive: true });
   }
-}
+};
 
-async function disableGlobalDevelopmentPackage(codexHome: string) {
-  const configPath = join(codexHome, "config.toml");
+const disableGlobalDevelopmentPackage = async (codexHome: string) => {
+  const configPath = path.join(codexHome, "config.toml");
   const config = await readFile(configPath, "utf-8");
   let inPlugin = false;
   let updated = false;
@@ -224,18 +225,18 @@ async function disableGlobalDevelopmentPackage(codexHome: string) {
     throw new Error("Codex did not write the development plugin enablement setting.");
   }
   await writeFile(configPath, scoped);
-}
+};
 
-export async function registerDevelopmentPackage(input: {
+export const registerDevelopmentPackage = async (input: {
   codexBin: string;
   codexHome: string;
   marketplaceRoot: string;
   version: string;
   runner?: DevelopmentCodexCommandRunner;
-}) {
-  const codexBin = resolve(input.codexBin);
-  const codexHome = resolve(input.codexHome);
-  const marketplaceRoot = resolve(input.marketplaceRoot);
+}) => {
+  const codexBin = path.resolve(input.codexBin);
+  const codexHome = path.resolve(input.codexHome);
+  const marketplaceRoot = path.resolve(input.marketplaceRoot);
   const runner: DevelopmentCodexCommandRunner =
     input.runner ??
     (async (args, options) => {
@@ -243,11 +244,11 @@ export async function registerDevelopmentPackage(input: {
         const result = await execFileAsync(codexBin, [...args], {
           env: { ...process.env, CODEX_HOME: codexHome },
         });
-        return { stdout: result.stdout, stderr: result.stderr };
+        return { stderr: result.stderr, stdout: result.stdout };
       } catch (error) {
         if (options.allowFailure) {
           const failed = error as { stdout?: string; stderr?: string };
-          return { stdout: failed.stdout ?? "", stderr: failed.stderr ?? "" };
+          return { stderr: failed.stderr ?? "", stdout: failed.stdout ?? "" };
         }
         throw error;
       }
@@ -287,19 +288,19 @@ export async function registerDevelopmentPackage(input: {
     installed.version !== input.version ||
     installed.installed !== true ||
     installed.source?.source !== "local" ||
-    installed.source.path !== join(marketplaceRoot, "plugins", DEVELOPMENT_PLUGIN_NAME) ||
+    installed.source.path !== path.join(marketplaceRoot, "plugins", DEVELOPMENT_PLUGIN_NAME) ||
     installed.marketplaceSource?.sourceType !== "local" ||
     installed.marketplaceSource.source !== marketplaceRoot
   )
     throw new Error(
       `Codex did not report the exact project-scoped ${DEVELOPMENT_PLUGIN_SELECTOR} installation.`,
     );
-  return { selector: DEVELOPMENT_PLUGIN_SELECTOR, marketplaceRoot };
-}
+  return { marketplaceRoot, selector: DEVELOPMENT_PLUGIN_SELECTOR };
+};
 
 // `codex plugin add` writes this canonical table to the user config. Keep the
 // installed package available, but let the repository config enable it.
-export function developmentLaunchEnvironment(input: {
+export const developmentLaunchEnvironment = (input: {
   sourceRoot: string;
   snapshotRoot: string;
   destinationRoot: string;
@@ -308,30 +309,28 @@ export function developmentLaunchEnvironment(input: {
   fingerprint: string;
   dependencyKey: string;
   evePort: number;
-}): Readonly<Record<string, string>> {
-  return {
-    APP_BUILDER_EXECUTION_MODE: "development",
-    APP_BUILDER_EXECUTION_BUNDLE: "local-development",
-    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
-    APP_BUILDER_DEVELOPMENT_SOURCE_SHA: input.sourceSha,
-    APP_BUILDER_DEVELOPMENT_SOURCE_TREE: input.sourceTree,
-    APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: input.fingerprint,
-    APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: input.dependencyKey,
-    APP_BUILDER_DEVELOPMENT_SOURCE_ROOT: input.sourceRoot,
-    APP_BUILDER_DEVELOPMENT_SNAPSHOT_ROOT: input.snapshotRoot,
-    APP_BUILDER_LOCAL_ADAPTER: "1",
-    APP_BUILDER_LOCAL_PUBLICATION: "0",
-    APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
-    APP_BUILDER_GITHUB_PUBLICATION_ENABLED: "0",
-    APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "0",
-    APP_BUILDER_LOCAL_PROVIDER_EMULATION: "0",
-    APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
-    EVE_HOSTED_ADAPTER: "0",
-    WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
-    WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
-    WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
-    EVE_AGENT_HOST: `http://127.0.0.1:${input.evePort}`,
-    REPOSITORY_LOCAL_ROOTS: input.snapshotRoot,
-    REPOSITORY_WORKSPACE_ROOT: input.destinationRoot,
-  };
-}
+}): Readonly<Record<string, string>> => ({
+  APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
+  APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: input.dependencyKey,
+  APP_BUILDER_DEVELOPMENT_SNAPSHOT_ROOT: input.snapshotRoot,
+  APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: input.fingerprint,
+  APP_BUILDER_DEVELOPMENT_SOURCE_ROOT: input.sourceRoot,
+  APP_BUILDER_DEVELOPMENT_SOURCE_SHA: input.sourceSha,
+  APP_BUILDER_DEVELOPMENT_SOURCE_TREE: input.sourceTree,
+  APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+  APP_BUILDER_EXECUTION_MODE: "development",
+  APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "0",
+  APP_BUILDER_GITHUB_PUBLICATION_ENABLED: "0",
+  APP_BUILDER_LOCAL_ADAPTER: "1",
+  APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
+  APP_BUILDER_LOCAL_PROVIDER_EMULATION: "0",
+  APP_BUILDER_LOCAL_PUBLICATION: "0",
+  APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+  EVE_AGENT_HOST: `http://127.0.0.1:${input.evePort}`,
+  EVE_HOSTED_ADAPTER: "0",
+  REPOSITORY_LOCAL_ROOTS: input.snapshotRoot,
+  REPOSITORY_WORKSPACE_ROOT: input.destinationRoot,
+  WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
+  WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
+  WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
+});

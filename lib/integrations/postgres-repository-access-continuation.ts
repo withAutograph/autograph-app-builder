@@ -13,21 +13,21 @@ import type {
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 
 const columns = {
-  continuationDigest: githubRepositoryAccessContinuations.continuationDigest,
-  issuer: githubRepositoryAccessContinuations.issuer,
   audience: githubRepositoryAccessContinuations.audience,
-  workspaceId: githubRepositoryAccessContinuations.workspaceId,
-  ownerUserId: githubRepositoryAccessContinuations.ownerUserId,
-  sessionId: githubRepositoryAccessContinuations.sessionId,
-  requestId: githubRepositoryAccessContinuations.requestId,
-  repositoryOwner: githubRepositoryAccessContinuations.repositoryOwner,
-  repositoryName: githubRepositoryAccessContinuations.repositoryName,
-  selectedInstallationId: githubRepositoryAccessContinuations.selectedInstallationId,
+  authorizedAt: githubRepositoryAccessContinuations.authorizedAt,
   callbackUrl: githubRepositoryAccessContinuations.callbackUrl,
+  consumedAt: githubRepositoryAccessContinuations.consumedAt,
+  continuationDigest: githubRepositoryAccessContinuations.continuationDigest,
   createdAt: githubRepositoryAccessContinuations.createdAt,
   expiresAt: githubRepositoryAccessContinuations.expiresAt,
-  authorizedAt: githubRepositoryAccessContinuations.authorizedAt,
-  consumedAt: githubRepositoryAccessContinuations.consumedAt,
+  issuer: githubRepositoryAccessContinuations.issuer,
+  ownerUserId: githubRepositoryAccessContinuations.ownerUserId,
+  repositoryName: githubRepositoryAccessContinuations.repositoryName,
+  repositoryOwner: githubRepositoryAccessContinuations.repositoryOwner,
+  requestId: githubRepositoryAccessContinuations.requestId,
+  selectedInstallationId: githubRepositoryAccessContinuations.selectedInstallationId,
+  sessionId: githubRepositoryAccessContinuations.sessionId,
+  workspaceId: githubRepositoryAccessContinuations.workspaceId,
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -45,26 +45,26 @@ function record(
   row: typeof githubRepositoryAccessContinuations.$inferSelect,
 ): RepositoryAccessContinuation {
   return repositoryAccessContinuationSchema.parse({
-    continuationDigest: row.continuationDigest,
     authority: {
-      issuer: row.issuer,
       audience: row.audience,
-      workspaceId: row.workspaceId,
+      issuer: row.issuer,
       ownerUserId: row.ownerUserId,
+      workspaceId: row.workspaceId,
     },
-    sessionId: row.sessionId,
-    requestId: row.requestId,
-    repository: {
-      owner: row.repositoryOwner,
-      name: row.repositoryName,
-      fullName: `${String(row.repositoryOwner)}/${String(row.repositoryName)}`,
-    },
-    ...(row.selectedInstallationId ? { selectedInstallationId: row.selectedInstallationId } : {}),
+    ...(row.authorizedAt ? { authorizedAt: row.authorizedAt } : {}),
     callbackUrl: row.callbackUrl,
+    continuationDigest: row.continuationDigest,
+    ...(row.consumedAt ? { consumedAt: row.consumedAt } : {}),
     createdAt: row.createdAt,
     expiresAt: row.expiresAt,
-    ...(row.authorizedAt ? { authorizedAt: row.authorizedAt } : {}),
-    ...(row.consumedAt ? { consumedAt: row.consumedAt } : {}),
+    repository: {
+      fullName: `${String(row.repositoryOwner)}/${String(row.repositoryName)}`,
+      name: row.repositoryName,
+      owner: row.repositoryOwner,
+    },
+    requestId: row.requestId,
+    ...(row.selectedInstallationId ? { selectedInstallationId: row.selectedInstallationId } : {}),
+    sessionId: row.sessionId,
   });
 }
 
@@ -73,23 +73,6 @@ export function createPostgresRepositoryAccessContinuationStore(
   database: Database,
 ): RepositoryAccessContinuationStore {
   return {
-    async create(value) {
-      await database.insert(githubRepositoryAccessContinuations).values({
-        continuationDigest: value.continuationDigest,
-        ...value.authority,
-        sessionId: value.sessionId,
-        requestId: value.requestId,
-        repositoryOwner: value.repository.owner,
-        repositoryName: value.repository.name,
-        selectedInstallationId: value.selectedInstallationId ?? null,
-        callbackUrl: value.callbackUrl,
-        createdAt: value.createdAt,
-        expiresAt: value.expiresAt,
-        authorizedAt: null,
-        consumedAt: null,
-      });
-    },
-
     async authorize(value) {
       const rows = await database
         .update(githubRepositoryAccessContinuations)
@@ -132,6 +115,23 @@ export function createPostgresRepositoryAccessContinuationStore(
         )
         .returning(columns);
       return rows[0] ? record(rows[0]) : undefined;
+    },
+
+    async create(value) {
+      await database.insert(githubRepositoryAccessContinuations).values({
+        ...value.authority,
+        authorizedAt: null,
+        callbackUrl: value.callbackUrl,
+        consumedAt: null,
+        continuationDigest: value.continuationDigest,
+        createdAt: value.createdAt,
+        expiresAt: value.expiresAt,
+        repositoryName: value.repository.name,
+        repositoryOwner: value.repository.owner,
+        requestId: value.requestId,
+        selectedInstallationId: value.selectedInstallationId ?? null,
+        sessionId: value.sessionId,
+      });
     },
 
     async listAuthorizedForSession(value) {

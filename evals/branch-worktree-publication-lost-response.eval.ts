@@ -12,18 +12,18 @@ export default defineEval({
     await prepareReviewedWorkflow(t, repository, "branch-publication-lost-response");
     await t.send("Publish reviewed change set to a new branch worktree.");
     t.requireInputRequest({
-      toolName: "publish_reviewed_change_set_to_branch_worktree",
+      toolName: "publish-reviewed-change-set_to_branch_worktree",
     });
     await t.respondAll("approve");
     t.succeeded();
     t.check(t.reply, includes("recovery-required"));
 
     await t.send("Recover branch worktree publication.");
-    t.requireInputRequest({ toolName: "recover_branch_worktree_publication" });
+    t.requireInputRequest({ toolName: "recover-branch-worktree-publication" });
     await t.respondAll("approve");
     t.succeeded();
     t.check(t.reply, includes("separately approved recovery completed"));
     t.notCalledTool("bash");
-    t.notCalledTool("write_file");
+    t.notCalledTool("write-file");
   },
 });

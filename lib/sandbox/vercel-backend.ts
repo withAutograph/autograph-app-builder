@@ -1,6 +1,7 @@
 import { SandboxTemplateNotProvisionedError } from "eve/sandbox";
 import type { SandboxBackend, SandboxBackendHandle, SandboxBackendPrewarmInput } from "eve/sandbox";
 import { vercel } from "eve/sandbox/vercel";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { assertHostedSandboxCommandAuthority } from "./deployment-execution-lease";
 import { createAuthorizedSandboxBackend } from "./sandbox-command-adapter";
@@ -95,9 +96,7 @@ export function createProviderFetch(
             `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: provider_status_${response.status}; retrying once`,
           );
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-          await new Promise((resolve) => {
-            setTimeout(resolve, PROVIDER_RETRY_DELAY_MS);
-          });
+          await delay(PROVIDER_RETRY_DELAY_MS);
           continue;
         }
         return response;
@@ -113,9 +112,7 @@ export function createProviderFetch(
             `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: ${providerDiagnostic(error)}; retrying once`,
           );
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-          await new Promise((resolve) => {
-            setTimeout(resolve, PROVIDER_RETRY_DELAY_MS);
-          });
+          await delay(PROVIDER_RETRY_DELAY_MS);
           continue;
         }
         console.warn(
@@ -139,13 +136,9 @@ function createRuntimeRecoveringBackend<BO, SO>(input: {
     authoredTemplateKey === null
       ? null
       : (input.providerTemplateKey?.(authoredTemplateKey) ?? authoredTemplateKey);
+  const providerPrewarmTemplateKey = (authoredTemplateKey: string) =>
+    input.providerTemplateKey?.(authoredTemplateKey) ?? authoredTemplateKey;
   return {
-    name: input.backend.name,
-    prewarm: (prewarmInput) =>
-      input.backend.prewarm({
-        ...prewarmInput,
-        templateKey: providerTemplateKey(prewarmInput.templateKey)!,
-      }),
     async create(createInput) {
       const providerCreateInput = {
         ...createInput,
@@ -170,6 +163,12 @@ function createRuntimeRecoveringBackend<BO, SO>(input: {
         });
       }
     },
+    name: input.backend.name,
+    prewarm: (prewarmInput) =>
+      input.backend.prewarm({
+        ...prewarmInput,
+        templateKey: providerPrewarmTemplateKey(prewarmInput.templateKey),
+      }),
   };
 }
 
@@ -185,8 +184,6 @@ function createProcessSessionReusingBackend<BO, SO>(
     Promise<SandboxBackendHandle<SO>>
   >;
   return {
-    name: backend.name,
-    prewarm: (input) => backend.prewarm(input),
     create(input) {
       const key = JSON.stringify([
         backend.name,
@@ -199,8 +196,8 @@ function createProcessSessionReusingBackend<BO, SO>(
         console.log(
           JSON.stringify({
             event: "autograph.local.sandbox-handle",
-            state: "hit",
             sessionKey: input.sessionKey,
+            state: "hit",
           }),
         );
         return existing;
@@ -208,8 +205,8 @@ function createProcessSessionReusingBackend<BO, SO>(
       console.log(
         JSON.stringify({
           event: "autograph.local.sandbox-handle",
-          state: "miss",
           sessionKey: input.sessionKey,
+          state: "miss",
         }),
       );
 
@@ -228,11 +225,11 @@ function createProcessSessionReusingBackend<BO, SO>(
             await handle[kind]();
           };
           return {
-            session: handle.session,
-            useSessionFn: handle.useSessionFn,
             captureState: () => handle.captureState(),
-            stop: () => close("stop"),
+            session: handle.session,
             shutdown: () => close("shutdown"),
+            stop: () => close("stop"),
+            useSessionFn: handle.useSessionFn,
           } satisfies SandboxBackendHandle<SO>;
         })
         // The backend promise cleanup must remain attached to the promise chain.
@@ -247,6 +244,8 @@ function createProcessSessionReusingBackend<BO, SO>(
       sessions.set(key, pending);
       return pending;
     },
+    name: backend.name,
+    prewarm: (input) => backend.prewarm(input),
   };
 }
 
@@ -283,18 +282,18 @@ export function createHostedVercelBackend(
               // official Vercel `Sandbox.create` call when no template is
               // present. The installation token remains provider-only.
               source: {
+                password: source.token,
                 type: "git" as const,
                 url: source.url,
                 username: "x-access-token" as const,
-                password: source.token,
               },
             }),
       };
     },
   });
   const authorized = createAuthorizedSandboxBackend({
-    backend,
     authorizeSessionCommand: (sessionId) => assertHostedSandboxCommandAuthority({ sessionId }),
+    backend,
   });
   const templateOptional = createRuntimeRecoveringBackend({
     backend: authorized,

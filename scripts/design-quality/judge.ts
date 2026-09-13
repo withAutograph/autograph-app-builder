@@ -9,33 +9,33 @@ import {
 
 export const axes = ["hierarchy", "layout", "typography", "responsive", "productClarity"] as const;
 const rating = z.object({
-  score: z.number().int().min(0).max(4),
   reason: z.string().min(1),
+  score: z.number().int().min(0).max(4),
 });
 export const judgmentSchema = z.object({
-  ratings: z.object({
-    hierarchy: rating,
-    layout: rating,
-    typography: rating,
-    responsive: rating,
-    productClarity: rating,
-  }),
-  strengths: z.array(z.string()),
   findings: z.array(
     z.object({
+      explanation: z.string().min(1),
       image: z.string(),
+      improvement: z.string().min(1),
       region: z.object({
+        height: z.number().positive(),
+        width: z.number().positive(),
         x: z.number().min(0),
         y: z.number().min(0),
-        width: z.number().positive(),
-        height: z.number().positive(),
       }),
       severity: z.enum(["low", "medium", "high"]),
-      explanation: z.string().min(1),
-      improvement: z.string().min(1),
     }),
   ),
   limitations: z.array(z.string()),
+  ratings: z.object({
+    hierarchy: rating,
+    layout: rating,
+    productClarity: rating,
+    responsive: rating,
+    typography: rating,
+  }),
+  strengths: z.array(z.string()),
 });
 export interface ImageEvidence {
   name: string;
@@ -74,9 +74,9 @@ export async function judgeDesign(
   hooks?: { getToken: () => Promise<string>; generate: () => Promise<unknown> },
 ) {
   const base = {
+    assessedImages: input.images.map((i) => i.name),
     model: activeBuilderModelId,
     rubricVersion: 2,
-    assessedImages: input.images.map((i) => i.name),
   };
   let token: string;
   try {
@@ -96,8 +96,8 @@ export async function judgeDesign(
   } catch {
     return {
       ...base,
-      status: "incomplete" as const,
       reason: "Project OIDC is unavailable. Browser measurements are retained.",
+      status: "incomplete" as const,
     };
   }
   try {
@@ -106,46 +106,45 @@ export async function judgeDesign(
     if (hooks) output = await hooks.generate();
     else {
       const gateway = createGateway({ apiKey: token });
+      const imageContent = await Promise.all(
+        input.images.map(async (image) => [
+          {
+            text: `Screenshot ${image.name}; original dimensions ${image.width}x${image.height}`,
+            type: "text" as const,
+          },
+          {
+            data: await readFile(image.path),
+            mediaType: "image/png",
+            type: "file" as const,
+          },
+        ]),
+      );
       const result = await generateText({
-        model: gateway(builderValidationModelId),
-        system: rubric,
         maxRetries: 0,
-        output: Output.object({ schema: judgmentSchema }),
         messages: [
           {
-            role: "user",
             content: [
               {
-                type: "text",
                 text: JSON.stringify({
                   brief: input.brief,
-                  measurements: input.evidence,
                   images: input.images.map(({ name, width, height }) => ({
+                    height,
                     name,
                     width,
-                    height,
                   })),
+                  measurements: input.evidence,
                 }),
+                type: "text",
               },
-              ...(
-                await Promise.all(
-                  input.images.map(async (image) => [
-                    {
-                      type: "text" as const,
-                      text: `Screenshot ${image.name}; original dimensions ${image.width}x${image.height}`,
-                    },
-                    {
-                      type: "file" as const,
-                      data: await readFile(image.path),
-                      mediaType: "image/png",
-                    },
-                  ]),
-                )
-              ).flat(),
+              ...imageContent.flat(),
             ],
+            role: "user",
           },
         ],
+        model: gateway(builderValidationModelId),
+        output: Output.object({ schema: judgmentSchema }),
         providerOptions: { gateway: { only: ["openai"] } },
+        system: rubric,
       });
       ({ output, usage } = result);
     }
@@ -159,8 +158,8 @@ export async function judgeDesign(
     // Provider exceptions can contain request headers, URLs and credentials.
     return {
       ...base,
-      status: "incomplete" as const,
       reason: "AI review was unavailable or returned invalid evidence. No score was assigned.",
+      status: "incomplete" as const,
     };
   }
 }

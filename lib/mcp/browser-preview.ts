@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { z } from "zod";
 
@@ -21,8 +22,8 @@ const unprivilegedPortSchema = z.coerce.number().int().min(1024).max(65_535);
 
 const previewRouteInputSchema = z
   .object({
-    sessionId: previewSessionIdSchema,
     digest: previewDigestSchema,
+    sessionId: previewSessionIdSchema,
   })
   .strict();
 
@@ -96,8 +97,8 @@ const previewResponseHeaders = {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function emptyPreviewNotFoundResponse(): Response {
   return new Response(null, {
-    status: 404,
     headers: previewResponseHeaders,
+    status: 404,
   });
 }
 
@@ -115,8 +116,8 @@ function previewUrl(input: {
   digest: string;
 }): string | undefined {
   const parsed = previewRouteInputSchema.safeParse({
-    sessionId: input.sessionId,
     digest: input.digest,
+    sessionId: input.sessionId,
   });
   if (!parsed.success) return undefined;
   let origin: string;
@@ -138,9 +139,9 @@ export function attachPrototypePreviewUrl(
   const result = eveSessionResultSchema.parse(resultInput);
   if (result.prototype === undefined) return result;
   const url = previewUrl({
+    digest: result.prototype.digest,
     requestUrl,
     sessionId: result.sessionId,
-    digest: result.prototype.digest,
   });
   if (url === undefined) return result;
   return eveSessionResultSchema.parse({
@@ -185,8 +186,8 @@ export function createPrototypePreviewRequestHandler(input: {
         return emptyPreviewNotFoundResponse();
       }
       return new Response(prototype.data.content, {
-        status: 200,
         headers: previewResponseHeaders,
+        status: 200,
       });
     } catch {
       return emptyPreviewNotFoundResponse();
@@ -200,21 +201,18 @@ export function createServicePrototypePreviewResolver(input: {
 }): PrototypePreviewResolver {
   return async ({ request, sessionId }) => {
     const service = await input.serviceForRequest(request);
-    if (service === undefined) return undefined;
+    if (service === undefined) return;
     // The public event tail can expose the preview URL just before the
     // corresponding prototype event has reached the request-scoped read. Give
     // that normal delivery race a short chance to settle so the first Browser
     // navigation does not turn a valid preview into a sticky 404.
     for (let attempt = 0; attempt < 5; attempt += 1) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const result = await service.get({ sessionId, cursor: 0, limit: 1 });
+      const result = await service.get({ cursor: 0, limit: 1, sessionId });
       if (result.prototype !== undefined) return result.prototype;
       if (attempt < 4)
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        await new Promise<void>((resolve) => {
-          setTimeout(resolve, 100);
-        });
+        await delay(100);
     }
-    return undefined;
   };
 }

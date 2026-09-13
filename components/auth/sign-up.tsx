@@ -98,7 +98,7 @@ export function SignUp({
     confirmPassword?: string;
   }>({});
   const currentLocation = useSyncExternalStore(
-    () => () => undefined,
+    () => () => null,
     () => window.location.href,
     () => "",
   );
@@ -182,11 +182,11 @@ export function SignUp({
     }
 
     signUpEmail({
-      name,
       email,
+      fetchOptions,
+      name,
       password,
       ...additionalFieldValues,
-      fetchOptions,
     });
   };
 
@@ -337,11 +337,12 @@ export function SignUp({
                           const el = e.target as HTMLInputElement;
                           const min = emailAndPassword?.minPasswordLength;
                           const max = emailAndPassword?.maxPasswordLength;
-                          const msg = el.validity.valueMissing
-                            ? localization.auth.fieldRequired
-                            : el.validity.tooShort
-                              ? localization.auth.tooShort.replace("{{min}}", String(min))
-                              : localization.auth.tooLong.replace("{{max}}", String(max));
+                          let msg = localization.auth.tooLong.replace("{{max}}", String(max));
+                          if (el.validity.valueMissing) {
+                            msg = localization.auth.fieldRequired;
+                          } else if (el.validity.tooShort) {
+                            msg = localization.auth.tooShort.replace("{{min}}", String(min));
+                          }
 
                           setFieldErrors((prev) => ({
                             ...prev,
@@ -409,11 +410,12 @@ export function SignUp({
                             const el = e.target as HTMLInputElement;
                             const min = emailAndPassword?.minPasswordLength;
                             const max = emailAndPassword?.maxPasswordLength;
-                            const msg = el.validity.valueMissing
-                              ? localization.auth.fieldRequired
-                              : el.validity.tooShort
-                                ? localization.auth.tooShort.replace("{{min}}", String(min))
-                                : localization.auth.tooLong.replace("{{max}}", String(max));
+                            let msg = localization.auth.tooLong.replace("{{max}}", String(max));
+                            if (el.validity.valueMissing) {
+                              msg = localization.auth.fieldRequired;
+                            } else if (el.validity.tooShort) {
+                              msg = localization.auth.tooShort.replace("{{min}}", String(min));
+                            }
 
                             setFieldErrors((prev) => ({
                               ...prev,

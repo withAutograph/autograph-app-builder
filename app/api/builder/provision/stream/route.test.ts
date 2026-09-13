@@ -19,17 +19,17 @@ function projection(
   status: "pending" | "settled" = "settled",
 ): BuilderProvisionProjection {
   return {
-    revision,
     provisioning: {
-      version: 1,
-      requestId,
-      requestDigest: "f".repeat(64),
       appId: "streamed-app",
+      github: { code: "not_selected", retryable: false, status: "skipped" },
+      requestDigest: "f".repeat(64),
+      requestId,
       status,
-      github: { status: "skipped", code: "not_selected", retryable: false },
-      vercel: { status: "skipped", code: "not_selected", retryable: false },
       updatedAt: "2026-09-11T00:00:00.000Z",
+      vercel: { code: "not_selected", retryable: false, status: "skipped" },
+      version: 1,
     },
+    revision,
   };
 }
 

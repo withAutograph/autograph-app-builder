@@ -4,25 +4,25 @@ import { getAuthenticatedBuilderDraftContext } from "@/lib/builder-drafts/deploy
 import { getBuilderHandoffDeploymentHandler } from "@/lib/handoff/deployment";
 
 const calls = vi.hoisted(() => [] as string[]);
-const drafts = vi.hoisted(() => ({ read: vi.fn(), archive: vi.fn() }));
+const drafts = vi.hoisted(() => ({ archive: vi.fn(), read: vi.fn() }));
 const draftId = "123e4567-e89b-42d3-a456-426614174003";
 const storedForm = {
   appName: "Server Action App",
-  repository: "server-action-app",
   brief: "Build this with a durable server action.",
-  privateRepository: true,
   buildDestination: "codex",
   connections: [],
   githubInstallationId: "101",
-  vercelInstallationId: "vercel-team",
   modelId: "openai/gpt-5.6-sol",
+  privateRepository: true,
+  repository: "server-action-app",
+  vercelInstallationId: "vercel-team",
 };
 const input = {
-  version: 1 as const,
-  requestId: "123e4567-e89b-42d3-a456-426614174000",
   creationRequestId: "123e4567-e89b-42d3-a456-426614174002",
-  provisioningEnabled: true,
   draftCheckpoint: { draftId, revision: 4 },
+  provisioningEnabled: true,
+  requestId: "123e4567-e89b-42d3-a456-426614174000",
+  version: 1 as const,
 };
 
 vi.mock("@/lib/builder-drafts/deployment", () => ({
@@ -31,18 +31,18 @@ vi.mock("@/lib/builder-drafts/deployment", () => ({
 beforeEach(() => {
   vi.mocked(getAuthenticatedBuilderDraftContext).mockResolvedValue({
     authority: {
-      issuer: "https://app.test",
       audience: "https://app.test/mcp",
-      workspaceId: "workspace",
+      issuer: "https://app.test",
       ownerUserId: "user",
+      workspaceId: "workspace",
     },
     drafts,
   } as never);
   drafts.read.mockResolvedValue({
     draftId,
+    record: { draft: { form: storedForm }, version: 1 },
     revision: 4,
     status: "active",
-    record: { version: 1, draft: { form: storedForm } },
   });
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   drafts.archive.mockImplementation(async () => {
@@ -63,49 +63,49 @@ vi.mock("@/lib/provisioning/deployment", () => ({
       `${new URL(request.url).searchParams.get("mode") ?? "run"}:${requestInput.operation}`,
     );
     const github = {
-      status: "succeeded",
-      installationId: "101",
-      repositoryId: "202",
-      owner: "autograph",
-      name: "server-action-app",
-      fullName: "autograph/server-action-app",
-      url: "https://github.com/autograph/server-action-app",
-      scope: { type: "user", id: "77", login: "autograph" },
-      visibility: "private",
       defaultBranch: "main",
+      fullName: "autograph/server-action-app",
       headSha: "a".repeat(40),
       headTree: "b".repeat(40),
+      installationId: "101",
+      name: "server-action-app",
+      owner: "autograph",
+      repositoryId: "202",
+      scope: { id: "77", login: "autograph", type: "user" },
       starter: {
+        archiveBytes: 1,
+        archiveSha256: "d".repeat(64),
+        manifestSha256: "e".repeat(64),
         sourceSha: "c".repeat(40),
         sourceTree: "b".repeat(40),
-        archiveSha256: "d".repeat(64),
-        archiveBytes: 1,
-        manifestSha256: "e".repeat(64),
       },
+      status: "succeeded",
+      url: "https://github.com/autograph/server-action-app",
+      visibility: "private",
     };
     const vercel = {
-      status: "succeeded",
-      installationId: "vercel-team",
-      projectId: "prj_303",
-      name: "server-action-app",
       dashboardUrl: "https://vercel.com/autograph/server-action-app",
-      scope: { type: "team", id: "team_1", slug: "autograph" },
       framework: "nextjs",
-      rootDirectory: "apps/server-action-app",
+      installationId: "vercel-team",
       linkedGitHubRepository: "autograph/server-action-app",
+      name: "server-action-app",
+      projectId: "prj_303",
+      rootDirectory: "apps/server-action-app",
+      scope: { id: "team_1", slug: "autograph", type: "team" },
+      status: "succeeded",
     };
     return Response.json({
-      version: 1,
-      requestId: "123e4567-e89b-42d3-a456-426614174000",
-      requestDigest: "f".repeat(64),
       appId: "server-action-app",
-      status: "settled",
       github,
+      requestDigest: "f".repeat(64),
+      requestId: "123e4567-e89b-42d3-a456-426614174000",
+      status: "settled",
+      updatedAt: "2026-09-10T00:00:00.000Z",
       vercel:
         requestInput.operation === "vercel"
           ? vercel
-          : { status: "skipped", code: "not_selected", retryable: false },
-      updatedAt: "2026-09-10T00:00:00.000Z",
+          : { code: "not_selected", retryable: false, status: "skipped" },
+      version: 1,
     });
   }),
 }));
@@ -114,9 +114,9 @@ vi.mock("@/lib/handoff/deployment", () => ({
   getBuilderHandoffDeploymentHandler: vi.fn(() => async () => {
     calls.push("handoff");
     return Response.json({
-      version: 1,
-      handoffId: "123e4567-e89b-42d3-a456-426614174001",
       expiresAt: "2026-09-11T00:00:00.000Z",
+      handoffId: "123e4567-e89b-42d3-a456-426614174001",
+      version: 1,
     });
   }),
   getBuilderHandoffPageData: vi.fn(),
@@ -140,17 +140,17 @@ describe("continueBuilderHandoff", () => {
 
     expect(calls).toEqual(["reserve:github", "handoff", "archive"]);
     expect(drafts.read).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: "workspace", ownerUserId: "user" }),
+      expect.objectContaining({ ownerUserId: "user", workspaceId: "workspace" }),
       draftId,
     );
     expect(drafts.archive).toHaveBeenCalledWith(expect.any(Object), draftId, 4);
     expect(result).toMatchObject({
-      status: "ready",
       handoff: { handoffId: "123e4567-e89b-42d3-a456-426614174001" },
       provisioning: {
         github: { status: "succeeded" },
         vercel: { status: "skipped" },
       },
+      status: "ready",
     });
   });
 
@@ -166,14 +166,14 @@ describe("continueBuilderHandoff", () => {
   });
 
   it("rejects missing tenant authority before reading a draft", async () => {
-    vi.mocked(getAuthenticatedBuilderDraftContext).mockResolvedValueOnce(undefined);
+    vi.mocked(getAuthenticatedBuilderDraftContext).mockResolvedValueOnce(undefined as undefined);
     expect(await continueBuilderHandoff(undefined, input)).toEqual({ status: "error" });
     expect(drafts.read).not.toHaveBeenCalled();
     expect(calls).toEqual([]);
   });
 
   it("rejects an inaccessible draft before provider work", async () => {
-    drafts.read.mockResolvedValueOnce(undefined);
+    drafts.read.mockResolvedValueOnce(undefined as undefined);
     expect(await continueBuilderHandoff(undefined, input)).toEqual({ status: "error" });
     expect(calls).toEqual([]);
   });
@@ -195,19 +195,19 @@ describe("continueBuilderHandoff", () => {
 
   it("rejects malformed input before it reaches a deployment handler", async () => {
     const result = await continueBuilderHandoff(undefined, {
-      version: 1,
-      requestId: "not-a-uuid",
       creationRequestId: "123e4567-e89b-42d3-a456-426614174002",
-      provisioningEnabled: false,
       form: {
         appName: "Server Action App",
-        repository: "server-action-app",
         brief: "Build this with a durable server action.",
-        privateRepository: true,
         buildDestination: "codex",
         connections: [],
         modelId: "openai/gpt-5.6-sol",
+        privateRepository: true,
+        repository: "server-action-app",
       },
+      provisioningEnabled: false,
+      requestId: "not-a-uuid",
+      version: 1,
     } as never);
 
     expect(result).toEqual({ status: "error" });

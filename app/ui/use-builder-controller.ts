@@ -91,21 +91,21 @@ export function useBuilderController({
 }) {
   const router = useRouter();
   const teamOptions = integrations.vercel.scopes.map((scope) => ({
-    value: scope.installationId,
-    label: scope.displayName,
     detail: scope.plan === "unknown" ? "Connected" : scope.plan,
+    label: scope.displayName,
+    value: scope.installationId,
   }));
   const gitScopeOptions = integrations.github.scopes.map((scope) => ({
-    value: scope.installationId,
-    label: scope.accountLogin,
     detail: scope.accountType,
+    label: scope.accountLogin,
+    value: scope.installationId,
   }));
   const allModelOptions = integrations.models.entries
     .filter((model) => model.id === preferredModelId)
     .map((model) => ({
-      value: model.id,
-      label: model.name,
       detail: model.id,
+      label: model.name,
+      value: model.id,
     }));
   const defaultModel = allModelOptions[0]?.value ?? "";
   const effectiveInitialBrief = initialBrief.trim() ? initialBrief : defaultBrief;
@@ -118,12 +118,12 @@ export function useBuilderController({
       }
     : {
         appName: initialAppName,
-        repository: repositoryNameFromAppName(initialAppName),
         brief: effectiveInitialBrief,
-        privateRepository: true,
         buildDestination: "codex",
         connections: [],
         modelId: defaultModel,
+        privateRepository: true,
+        repository: repositoryNameFromAppName(initialAppName),
       };
   const builderForm = useForm<BuilderForm>({
     defaultValues: initialForm,
@@ -249,8 +249,8 @@ export function useBuilderController({
     ): Promise<ServerSaveState> => {
       if (!saveActiveBuilderDraftAction)
         return {
-          mutationId: input.clientMutationId,
           error: "builder-draft-action-unavailable",
+          mutationId: input.clientMutationId,
         };
       try {
         return {
@@ -259,12 +259,12 @@ export function useBuilderController({
         };
       } catch (error) {
         return {
-          mutationId: input.clientMutationId,
           error: error instanceof Error ? error.message : "builder-draft-save-failed",
+          mutationId: input.clientMutationId,
         };
       }
     },
-    undefined,
+    undefined as undefined,
   );
   const serverSaveWaiters = useRef(
     new Map<
@@ -319,14 +319,14 @@ export function useBuilderController({
       keepalive: boolean;
     }) => {
       const input = {
-        version: 1 as const,
+        clientMutationId: mutationId,
         draftId: activeDraftId.current,
         expectedRevision: draftRevision.current,
-        clientMutationId: mutationId,
         record: {
-          version: 1 as const,
           draft: snapshot,
+          version: 1 as const,
         } satisfies BuilderDraftRecord,
+        version: 1 as const,
       };
       if (!keepalive) {
         pendingActionExpectedRevisions.current.add(input.expectedRevision);
@@ -336,23 +336,26 @@ export function useBuilderController({
         );
       }
       try {
-        const saved = keepalive
-          ? await fetch("/api/builder/draft", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(input),
-              keepalive: true,
-            }).then(async (response) => {
-              if (!response.ok) throw new Error("builder-draft-save-failed");
-              return (await response.json()) as {
-                draftId: string;
-                revision: number;
-                updatedAt: string;
-              };
-            })
-          : saveActiveBuilderDraftAction
-            ? await requestServerSave(input)
-            : await Promise.reject(new Error("builder-draft-action-unavailable"));
+        let saved: { draftId: string; revision: number; updatedAt: string };
+        if (keepalive) {
+          saved = await fetch("/api/builder/draft", {
+            body: JSON.stringify(input),
+            headers: { "Content-Type": "application/json" },
+            keepalive: true,
+            method: "POST",
+          }).then(async (response) => {
+            if (!response.ok) throw new Error("builder-draft-save-failed");
+            return (await response.json()) as {
+              draftId: string;
+              revision: number;
+              updatedAt: string;
+            };
+          });
+        } else if (saveActiveBuilderDraftAction) {
+          saved = await requestServerSave(input);
+        } else {
+          throw new Error("builder-draft-action-unavailable");
+        }
         activeDraftId.current = saved.draftId;
         draftRevision.current = saved.revision;
         draftUpdatedAt.current = saved.updatedAt;
@@ -378,10 +381,10 @@ export function useBuilderController({
     [initialBrief, requestServerSave, saveActiveBuilderDraftAction],
   );
   const autosave = useBuilderDraftAutosave({
-    outbox: draftOutbox,
-    save: saveDraft,
     debounceMs: 500,
     initialRevision: durableDraftRevision ?? 0,
+    outbox: draftOutbox,
+    save: saveDraft,
   });
   const {
     discardPending: discardPendingDraft,
@@ -417,20 +420,20 @@ export function useBuilderController({
       const currentForm = builderForm.getValues();
       formSnapshot.current = currentForm;
       return {
-        version: 1,
-        form: currentForm,
-        team,
-        gitScope,
-        model,
-        zdrOnly,
-        showMoreConnections,
-        search,
+        appNameEditedByUser: appNameEditedByUser.current,
         connectedConnections,
-        storageProvider,
         deploymentProvider,
         focusOrigin: origin,
-        appNameEditedByUser: appNameEditedByUser.current,
+        form: currentForm,
+        gitScope,
+        model,
         repositoryEditedByUser: repositoryEditedByUser.current,
+        search,
+        showMoreConnections,
+        storageProvider,
+        team,
+        version: 1,
+        zdrOnly,
       };
     },
     [
@@ -530,14 +533,17 @@ export function useBuilderController({
     (!form.appName.trim() || validAppId) &&
     (form.buildDestination !== "web" || (integrations.models.status === "ready" && model)),
   );
-  const submitGuidance =
-    form.appName.trim() && !validAppId
-      ? "Use an app name that can form a lowercase, URL-safe app ID."
-      : form.brief.trim()
-        ? form.buildDestination === "web" && (integrations.models.status !== "ready" || !model)
-          ? "Choose an available model to continue."
-          : undefined
-        : "Add an app brief to continue.";
+  let submitGuidance: string | undefined;
+  if (form.appName.trim() && !validAppId) {
+    submitGuidance = "Use an app name that can form a lowercase, URL-safe app ID.";
+  } else if (!form.brief.trim()) {
+    submitGuidance = "Add an app brief to continue.";
+  } else if (
+    form.buildDestination === "web" &&
+    (integrations.models.status !== "ready" || !model)
+  ) {
+    submitGuidance = "Choose an available model to continue.";
+  }
   const updateBrief = (brief: string) => {
     setForm((current) => {
       // `formSnapshot` is updated atomically by every builder field handler.
@@ -559,8 +565,8 @@ export function useBuilderController({
       generatedAppName.current = appName;
       return {
         ...current,
-        brief,
         appName,
+        brief,
         repository: repositoryEditedByUser.current
           ? current.repository
           : repositoryNameFromAppName(appName),
@@ -592,15 +598,16 @@ export function useBuilderController({
   };
   useEffect(() => {
     if (!interactive) return;
-    const id = resumedVercelConnection
-      ? "vercel-team"
-      : resumedGitHubConnection
-        ? "git-scope"
-        : initialDraft?.focusOrigin === "vercel"
-          ? "vercel-team"
-          : initialDraft
-            ? "git-scope"
-            : undefined;
+    let id: "git-scope" | "vercel-team" | undefined;
+    if (resumedVercelConnection) {
+      id = "vercel-team";
+    } else if (resumedGitHubConnection) {
+      id = "git-scope";
+    } else if (initialDraft?.focusOrigin === "vercel") {
+      id = "vercel-team";
+    } else if (initialDraft) {
+      id = "git-scope";
+    }
     if (!id) return;
     const frame = window.requestAnimationFrame(() => {
       document.querySelector<HTMLElement>(`#${id}`)?.focus();
@@ -729,11 +736,11 @@ export function useBuilderController({
     }
     if (actionMutationVersion !== undefined)
       localActionMutationVersions.current.delete(durableDraftRevision);
-    void applyAuthoritativeDraft({
+    applyAuthoritativeDraft({
       draftId: durableDraftId,
+      record: { draft: initialDraft, version: 1 },
       revision: durableDraftRevision,
       updatedAt: durableDraftUpdatedAt,
-      record: { version: 1, draft: initialDraft },
     });
   }, [
     applyAuthoritativeDraft,
@@ -799,10 +806,10 @@ export function useBuilderController({
       const submissionForm: BuilderForm = {
         ...currentForm,
         appName,
-        repository: currentForm.repository.trim() || repositoryNameFromAppName(appName),
         githubInstallationId: storageProvider === "github" && gitScope ? gitScope : undefined,
-        vercelInstallationId: deploymentProvider === "vercel" && team ? team : undefined,
         modelId: preferredModelId,
+        repository: currentForm.repository.trim() || repositoryNameFromAppName(appName),
+        vercelInstallationId: deploymentProvider === "vercel" && team ? team : undefined,
       };
       setForm(submissionForm);
       autosave.schedule({ ...draftSnapshot(), form: submissionForm });
@@ -823,54 +830,54 @@ export function useBuilderController({
   }
 
   return {
-    form,
-    builderForm,
-    appNameEditedByUser,
-    generatedAppName,
-    repositoryEditedByUser,
-    setForm,
-    updateBrief,
-    comingSoonEnabled,
-    integrations,
-    model,
-    modelOptions,
-    zdrOnly,
-    setModel,
-    setZdrOnly,
-    router,
-    storageProvider,
-    gitScope,
-    gitScopeOptions,
-    setStorageProvider,
-    setGitScope,
-    beginProviderConnection,
-    deploymentProvider,
-    team,
-    teamOptions,
-    setDeploymentProvider,
-    setTeam,
-    connectedConnections,
-    search,
-    showMoreConnections,
     addConnection,
-    removeConnection,
-    setSearch,
-    setShowMoreConnections,
-    setConnectionFlow,
+    appNameEditedByUser,
+    autosave,
+    beginProviderConnection,
+    briefExamples,
+    builderForm,
     canSubmit,
-    submitGuidance,
-    visibleProviderNotices,
+    comingSoonEnabled,
+    completeConnection,
+    connectedConnections,
+    connectionFlow,
+    deploymentProvider,
     draftSaveError,
     draftSyncNotice,
-    autosave,
-    setDraftSaveError,
-    submissionPending,
-    preparingSubmission,
-    submit,
+    form,
+    generatedAppName,
+    gitScope,
+    gitScopeOptions,
+    integrations,
     interactive,
-    connectionFlow,
-    completeConnection,
-    briefExamples,
+    model,
+    modelOptions,
+    preparingSubmission,
+    removeConnection,
+    repositoryEditedByUser,
     repositoryNameFromAppName,
+    router,
+    search,
+    setConnectionFlow,
+    setDeploymentProvider,
+    setDraftSaveError,
+    setForm,
+    setGitScope,
+    setModel,
+    setSearch,
+    setShowMoreConnections,
+    setStorageProvider,
+    setTeam,
+    setZdrOnly,
+    showMoreConnections,
+    storageProvider,
+    submissionPending,
+    submit,
+    submitGuidance,
+    team,
+    teamOptions,
+    updateBrief,
+    visibleProviderNotices,
+    zdrOnly,
   };
 }

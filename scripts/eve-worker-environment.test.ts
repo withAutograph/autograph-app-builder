@@ -10,13 +10,13 @@ const appRoot = "/owned/app";
 function trustedSource(overrides: Record<string, string | undefined> = {}) {
   return {
     EVE_DEV: "1",
-    EVE_DEV_WORKER_APP_ROOT: appRoot,
-    WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:43123",
-    PORT: "43123",
-    EVE_DEV_WORKFLOW_TRANSPORT_SECRET: randomBytes(32).toString("base64url"),
     EVE_DEVELOPMENT_SANDBOX_RUN_ID: randomUUID(),
+    EVE_DEV_WORKER_APP_ROOT: appRoot,
+    EVE_DEV_WORKFLOW_TRANSPORT_SECRET: randomBytes(32).toString("base64url"),
     EVE_EVALUATION: "1",
     EVE_EVALUATION_RUN_ID: randomUUID(),
+    PORT: "43123",
+    WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:43123",
     WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
     WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
     ...overrides,
@@ -33,9 +33,9 @@ describe("closed Eve worker environment", () => {
     expect(environment).toMatchObject({
       EVE_DEV: "1",
       EVE_DEV_WORKER_APP_ROOT: appRoot,
-      WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:43123",
-      PORT: "43123",
       EVE_EVALUATION: "1",
+      PORT: "43123",
+      WORKFLOW_LOCAL_BASE_URL: "http://127.0.0.1:43123",
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
       WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
     });

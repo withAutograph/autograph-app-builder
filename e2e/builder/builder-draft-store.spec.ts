@@ -9,50 +9,50 @@ import type { BuilderDraftRecord } from "../../lib/builder-drafts/contracts";
 import { databaseUrl, resetApplicationState } from "../support/harness";
 
 const authority = {
-  issuer: "https://draft-store.test/api/auth",
   audience: "https://draft-store.test/mcp",
-  workspaceId: "draft-race-workspace",
+  issuer: "https://draft-store.test/api/auth",
   ownerUserId: "draft-race-owner",
+  workspaceId: "draft-race-workspace",
 };
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function record(brief: string): BuilderDraftRecord {
   return {
-    version: 1,
     draft: {
-      version: 1,
+      appNameEditedByUser: true,
+      connectedConnections: [],
+      deploymentProvider: null,
+      focusOrigin: "github",
       form: {
         appName: "Saved app",
-        repository: "saved-app",
         brief,
-        privateRepository: true,
         buildDestination: "codex",
         connections: [],
         modelId: "openai/gpt-5.6-terra",
+        privateRepository: true,
+        repository: "saved-app",
       },
-      team: "",
       gitScope: "",
       model: "openai/gpt-5.6-terra",
-      zdrOnly: false,
-      showMoreConnections: false,
-      search: "",
-      connectedConnections: [],
-      storageProvider: null,
-      deploymentProvider: null,
-      focusOrigin: "github",
-      appNameEditedByUser: true,
       repositoryEditedByUser: true,
+      search: "",
+      showMoreConnections: false,
+      storageProvider: null,
+      team: "",
+      version: 1,
+      zdrOnly: false,
     },
+    version: 1,
   };
 }
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function saveInput(draftId: string, brief: string, expectedRevision = 0) {
   return {
     authority,
-    draftId,
-    record: record(brief),
-    expectedRevision,
     clientMutationId: randomUUID(),
+    draftId,
+    expectedRevision,
     now: new Date(),
+    record: record(brief),
   };
 }
 
@@ -73,8 +73,8 @@ test("PostgreSQL serializes draft save/archive races without resurrecting a hand
     if (save.status === "fulfilled") {
       expect(archive).toMatchObject({ value: false });
       expect(await store.readActive({ authority })).toMatchObject({
-        revision: 2,
         record: record("Concurrent device edit"),
+        revision: 2,
       });
       expect(
         await store.archive({ authority, draftId, expectedRevision: 2, now: new Date() }),
@@ -96,8 +96,8 @@ test("PostgreSQL serializes draft save/archive races without resurrecting a hand
     }
     expect(await store.readActive({ authority })).toMatchObject({
       draftId: newDraftId,
-      revision: 1,
       record: record("A fresh builder"),
+      revision: 1,
     });
     expect(await store.read({ authority, draftId })).toMatchObject({ status: "archived" });
   } finally {
@@ -121,10 +121,13 @@ test("PostgreSQL keeps one active draft across simultaneous device creation and 
       store.saveActive(saveInput(randomUUID(), "Expired device outbox", 3)),
     ).rejects.toThrow("builder-draft-stale");
     expect(await store.readActive({ authority })).toEqual(current);
+    if (!current) {
+      throw new Error("Expected an active draft");
+    }
     expect(
       await store.read({
         authority: { ...authority, workspaceId: "different-workspace" },
-        draftId: current!.draftId,
+        draftId: current.draftId,
       }),
     ).toBeUndefined();
   } finally {

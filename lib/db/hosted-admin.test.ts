@@ -9,10 +9,10 @@ import type { HostedAdminPlanRequest, HostedAdminStore } from "./hosted-admin";
 
 const now = Date.parse("2026-08-26T20:00:00.000Z");
 const authority = {
-  issuer: "https://builder.example.test/api/auth",
   audience: "https://builder.example.test/mcp",
-  workspaceId: "workspace_1",
+  issuer: "https://builder.example.test/api/auth",
   ownerUserId: "user_1",
+  workspaceId: "workspace_1",
 };
 
 type RequestInput = HostedAdminPlanRequest extends infer Request
@@ -24,9 +24,9 @@ type RequestInput = HostedAdminPlanRequest extends infer Request
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function request(value: RequestInput): HostedAdminPlanRequest {
   return {
-    version: 1,
     authority,
     requestedAt: new Date(now).toISOString(),
+    version: 1,
     ...value,
   } as HostedAdminPlanRequest;
 }
@@ -35,15 +35,11 @@ function request(value: RequestInput): HostedAdminPlanRequest {
 function store(): HostedAdminStore {
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    seedMembership: vi.fn(async () => ({ membershipRowsAffected: 1 })),
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    revokeMembership: vi.fn(async () => ({ membershipRowsAffected: 1 })),
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     applyRetention: vi.fn(async () => ({
+      authorizationStateRowsDeleted: 0,
+      integrationRowsDeleted: 0,
       operationRowsDeleted: 4,
       sessionRowsDeleted: 2,
-      integrationRowsDeleted: 0,
-      authorizationStateRowsDeleted: 0,
     })),
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     deleteTenant: vi.fn(async () => ({
@@ -51,6 +47,10 @@ function store(): HostedAdminStore {
       operationRowsDeleted: 5,
       sessionRowsDeleted: 2,
     })),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    revokeMembership: vi.fn(async () => ({ membershipRowsAffected: 1 })),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    seedMembership: vi.fn(async () => ({ membershipRowsAffected: 1 })),
   };
 }
 
@@ -77,24 +77,24 @@ describe("hosted database administration contract", () => {
   it("applies only an exact fresh confirmation and emits a closed sanitized receipt", async () => {
     const adapter = store();
     const receipt = await executeHostedAdminRequest({
+      now: () => now,
       request: confirmed(request({ action: "membership.seed" })),
       store: adapter,
-      now: () => now,
     });
     expect(adapter.seedMembership).toHaveBeenCalledWith({
       authority,
       now: new Date(now),
     });
     expect(receipt).toMatchObject({
-      version: 1,
       action: "membership.seed",
-      status: "applied",
-      effects: { membershipRowsAffected: 1 },
       database: {
         dialect: "postgresql",
-        secretTransport: "task-scoped-stdin",
         maxConnections: 1,
+        secretTransport: "task-scoped-stdin",
       },
+      effects: { membershipRowsAffected: 1 },
+      status: "applied",
+      version: 1,
     });
     const serialized = JSON.stringify(receipt);
     expect(serialized).not.toContain(authority.issuer);
@@ -106,16 +106,16 @@ describe("hosted database administration contract", () => {
     const input = confirmed(request({ action: "membership.revoke" }));
     await expect(
       executeHostedAdminRequest({
+        now: () => now,
         request: { ...input, confirmationDigest: `sha256:${"0".repeat(64)}` },
         store: store(),
-        now: () => now,
       }),
     ).rejects.toThrow("confirmation");
     await expect(
       executeHostedAdminRequest({
+        now: () => now + 16 * 60_000,
         request: input,
         store: store(),
-        now: () => now + 16 * 60_000,
       }),
     ).rejects.toThrow("stale");
     expect(() =>
@@ -137,21 +137,21 @@ describe("hosted database administration contract", () => {
       deleteBefore: "2026-07-01T00:00:00.000Z",
     });
     const receipt = await executeHostedAdminRequest({
+      now: () => now,
       request: confirmed(input),
       store: adapter,
-      now: () => now,
     });
     expect(adapter.applyRetention).toHaveBeenCalledWith({
       authority,
       deleteBefore: new Date("2026-07-01T00:00:00.000Z"),
     });
     expect(receipt.effects).toEqual({
+      authorizationStateRowsDeleted: 0,
+      integrationRowsDeleted: 0,
       membershipRowsAffected: 0,
       membershipRowsDeleted: 0,
       operationRowsDeleted: 4,
       sessionRowsDeleted: 2,
-      integrationRowsDeleted: 0,
-      authorizationStateRowsDeleted: 0,
     });
 
     const future = request({
@@ -160,9 +160,9 @@ describe("hosted database administration contract", () => {
     });
     await expect(
       executeHostedAdminRequest({
+        now: () => now,
         request: confirmed(future),
         store: adapter,
-        now: () => now,
       }),
     ).rejects.toThrow("cutoff");
   });
@@ -174,9 +174,9 @@ describe("hosted database administration contract", () => {
       membershipRevokedBefore: "2026-08-26T19:54:59.000Z",
     });
     const receipt = await executeHostedAdminRequest({
+      now: () => now,
       request: confirmed(drained),
       store: adapter,
-      now: () => now,
     });
     expect(adapter.deleteTenant).toHaveBeenCalledWith({
       authority,
@@ -190,9 +190,9 @@ describe("hosted database administration contract", () => {
     });
     await expect(
       executeHostedAdminRequest({
+        now: () => now,
         request: confirmed(undrained),
         store: adapter,
-        now: () => now,
       }),
     ).rejects.toThrow("five-minute");
   });

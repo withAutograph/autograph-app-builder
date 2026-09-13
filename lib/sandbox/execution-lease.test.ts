@@ -8,11 +8,11 @@ import {
 import { SANDBOX_EXECUTION_POLICY, sandboxExecutionPolicyDigest } from "./execution-policy";
 
 const principal = (ownerUserId: string): HostedPrincipal => ({
-  issuer: "https://builder.example.test",
   audience: "https://builder.example.test/mcp",
-  workspaceId: "workspace_1",
+  issuer: "https://builder.example.test",
   ownerUserId,
   scopes: ["eve:start"],
+  workspaceId: "workspace_1",
 });
 
 const acquire = (
@@ -22,11 +22,11 @@ const acquire = (
   nowEpochMs = 1000,
 ) =>
   store.acquire({
-    principal: principal(ownerUserId),
     adapterSessionId: sessionId,
-    providerSandboxId: `sandbox_${sessionId}`,
-    policy: SANDBOX_EXECUTION_POLICY,
     nowEpochMs,
+    policy: SANDBOX_EXECUTION_POLICY,
+    principal: principal(ownerUserId),
+    providerSandboxId: `sandbox_${sessionId}`,
   });
 
 describe("sandbox execution lease", () => {
@@ -49,20 +49,20 @@ describe("sandbox execution lease", () => {
     const acquired = await acquire(store, "user_1", "session_1");
     if (acquired.disposition === "rejected") throw new Error("unexpected");
     const released = await store.release({
-      principal: acquired.lease.principal,
       adapterSessionId: acquired.lease.adapterSessionId,
       epoch: acquired.lease.epoch,
-      reason: "waiting",
       nowEpochMs: 2000,
+      principal: acquired.lease.principal,
+      reason: "waiting",
     });
     expect(released.state).toBe("released");
     expect(
       await store.release({
-        principal: acquired.lease.principal,
         adapterSessionId: acquired.lease.adapterSessionId,
         epoch: acquired.lease.epoch,
-        reason: "waiting",
         nowEpochMs: 2001,
+        principal: acquired.lease.principal,
+        reason: "waiting",
       }),
     ).toEqual(released);
     const next = await acquire(store, "user_1", "session_1", 3000);
@@ -78,9 +78,9 @@ describe("sandbox execution lease", () => {
       throw new Error("provider unavailable");
     });
     const receipt = await reconcileExpiredSandboxLeases({
-      store,
-      stopSandbox,
       nowEpochMs: 1 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+      stopSandbox,
+      store,
     });
     expect(receipt).toMatchObject({ claimed: 1, stopped: [] });
     expect(receipt.providerFailed).toHaveLength(1);
@@ -96,26 +96,26 @@ describe("sandbox execution lease", () => {
       { disposition: "rejected", reason: "recovery-in-progress" },
     ]);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const retryStop = vi.fn(async () => undefined);
+    const retryStop = vi.fn(async () => {});
     const retried = await reconcileExpiredSandboxLeases({
-      store,
-      stopSandbox: retryStop,
       nowEpochMs: 2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+      stopSandbox: retryStop,
+      store,
     });
     expect(retried).toMatchObject({ claimed: 1, providerFailed: [] });
     expect(retried.stopped).toHaveLength(1);
     expect(
       await reconcileExpiredSandboxLeases({
-        store,
-        stopSandbox: retryStop,
         nowEpochMs: 3 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+        stopSandbox: retryStop,
+        store,
       }),
     ).toEqual({
       claimed: 0,
-      stopped: [],
       providerFailed: [],
       settlementFailed: [],
       settlementRaced: [],
+      stopped: [],
     });
   });
 
@@ -128,9 +128,9 @@ describe("sandbox execution lease", () => {
       if (providerSandboxId === "sandbox_session_1") throw new Error("provider unavailable");
     });
     const result = await reconcileExpiredSandboxLeases({
-      store,
-      stopSandbox,
       nowEpochMs: 1 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+      stopSandbox,
+      store,
     });
     expect(stopSandbox).toHaveBeenCalledTimes(2);
     expect(result.providerFailed).toHaveLength(1);
@@ -151,10 +151,11 @@ describe("sandbox execution lease", () => {
     const first = await acquire(store, "user_1", "session_1", 1);
     if (first.disposition === "rejected") throw new Error("unexpected");
     const [claim] = await store.claimExpired({
-      nowEpochMs: 1 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
       limit: 1,
+      nowEpochMs: 1 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
     });
     expect(claim).toBeDefined();
+    if (!claim) throw new Error("expected an expired lease claim");
     await expect(
       acquire(store, "user_1", "session_1", 2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs),
     ).resolves.toEqual({
@@ -162,9 +163,9 @@ describe("sandbox execution lease", () => {
       reason: "recovery-in-progress",
     });
     await store.settleRecovery({
-      lease: claim!,
-      providerOutcome: "stopped",
+      lease: claim,
       nowEpochMs: 3 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+      providerOutcome: "stopped",
     });
     const reacquired = await acquire(
       store,
@@ -176,9 +177,9 @@ describe("sandbox execution lease", () => {
     expect(reacquired.lease.epoch).toBe(2);
     await expect(
       store.settleRecovery({
-        lease: claim!,
-        providerOutcome: "stopped",
+        lease: claim,
         nowEpochMs: 5 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+        providerOutcome: "stopped",
       }),
     ).resolves.toBeNull();
   });
@@ -190,20 +191,20 @@ describe("sandbox execution lease", () => {
     const settle = vi.spyOn(store, "settleRecovery");
     settle.mockRejectedValueOnce(new Error("settlement unavailable"));
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const stopSandbox = vi.fn(async () => undefined);
+    const stopSandbox = vi.fn(async () => {});
     const result = await reconcileExpiredSandboxLeases({
-      store,
-      stopSandbox,
       nowEpochMs: 1 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+      stopSandbox,
+      store,
     });
     expect(stopSandbox).toHaveBeenCalledTimes(2);
     expect(result.settlementFailed).toHaveLength(1);
     expect(result.stopped).toHaveLength(1);
     expect(result.providerFailed).toEqual([]);
     const retried = await reconcileExpiredSandboxLeases({
-      store,
-      stopSandbox,
       nowEpochMs: 2 + SANDBOX_EXECUTION_POLICY.lease.ttlMs,
+      stopSandbox,
+      store,
     });
     expect(retried.claimed).toBe(1);
     expect(retried.stopped).toHaveLength(1);

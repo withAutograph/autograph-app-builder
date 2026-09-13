@@ -4,8 +4,8 @@ import { collectCssRuleEvidence, generatedCssRule } from "./css-evidence";
 describe("CSS rule evidence", () => {
   const generated = collectCssRuleEvidence([
     {
-      path: "src/screen.css",
       content: ".screen { color: var(--color-text-primary); }",
+      path: "src/screen.css",
     },
   ]);
 
@@ -13,7 +13,7 @@ describe("CSS rule evidence", () => {
     const rule = generatedCssRule(generated, [], ".screen", "color", "var(--color-text-primary)", [
       { name: "color", value: "var(--color-text-primary)" },
     ]);
-    expect(rule?.source).toMatchObject({ path: "src/screen.css", line: 1 });
+    expect(rule?.source).toMatchObject({ line: 1, path: "src/screen.css" });
   });
 
   it("rejects synthetic shorthand expansion unless the caller removes it", () => {
@@ -28,8 +28,8 @@ describe("CSS rule evidence", () => {
   it("keeps copied, ambiguous, and absent source evidence unassigned", () => {
     const shared = collectCssRuleEvidence([
       {
-        path: "packages/design-systems/shared.css",
         content: ".screen { color: var(--color-text-primary); }",
+        path: "packages/design-systems/shared.css",
       },
     ]);
     expect(
@@ -49,8 +49,8 @@ describe("CSS rule evidence", () => {
       generatedCssRule(
         collectCssRuleEvidence([
           {
-            path: "src/conditional.css",
             content: "@media (min-width: 800px) { .screen { color: var(--color-text-primary); } }",
+            path: "src/conditional.css",
           },
         ]),
         [],
@@ -62,8 +62,8 @@ describe("CSS rule evidence", () => {
     ).toBeUndefined();
     const strings = collectCssRuleEvidence([
       {
-        path: "src/strings.css",
         content: '.copy::before { content: "a b"; }',
+        path: "src/strings.css",
       },
     ]);
     expect(

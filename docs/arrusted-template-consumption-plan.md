@@ -190,7 +190,7 @@ arbitrary minimum width.
 
 ## Preview to implementation
 
-`record_ui_preview` compiles actual route TSX against the prepared repository.
+`record-ui-preview` compiles actual route TSX against the prepared repository.
 Browser HTML is compiled transport, not a separately authored mock interface.
 Keep the preview product-facing and fixture-backed. Internal recording and
 planning happen without setup or acceptance questions.

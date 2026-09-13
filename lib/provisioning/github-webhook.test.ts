@@ -13,13 +13,13 @@ function signedRequest(event: string, body: unknown, signatureSecret = secret) {
   const bytes = JSON.stringify(body);
   const signature = `sha256=${createHmac("sha256", signatureSecret).update(bytes).digest("hex")}`;
   return new Request("https://builder.example.test/api/github/webhooks", {
-    method: "POST",
+    body: bytes,
     headers: {
       "content-type": "application/json",
       "x-github-event": event,
       "x-hub-signature-256": signature,
     },
-    body: bytes,
+    method: "POST",
   });
 }
 
@@ -35,16 +35,16 @@ function database() {
     transaction: <T>(operation: (transaction: FakeDatabase) => Promise<T>) => Promise<T>;
   }
   const value: FakeDatabase = {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async transaction<T>(operation: (transaction: FakeDatabase) => Promise<T>) {
+      return operation(value);
+    },
     update(table: unknown) {
       updates.push(table);
       return {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         set: () => ({ where: async () => {} }),
       };
-    },
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    async transaction<T>(operation: (transaction: FakeDatabase) => Promise<T>) {
-      return operation(value);
     },
   };
   return {
@@ -58,8 +58,8 @@ describe("GitHub provisioning revocation webhook", () => {
     const store = database();
     const handler = createGitHubProvisioningWebhookHandler({
       database: store.value,
-      secret,
       now: () => Date.parse("2026-08-30T12:00:00.000Z"),
+      secret,
     });
     expect(
       await handler(

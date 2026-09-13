@@ -14,16 +14,15 @@ function decodeVlq(value: string, start: number) {
   let shift = 0;
   let index = start;
   while (index < value.length) {
-    const digit = base64.indexOf(value[index]!);
-    if (digit === -1) return undefined;
+    const digit = base64.indexOf(value.charAt(index));
+    if (digit === -1) return;
     index += 1;
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     result += (digit & 31) << shift;
     shift += 5;
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    if (!(digit & 32)) return { value: result & 1 ? -(result >> 1) : result >> 1, index };
+    if (!(digit & 32)) return { index, value: result & 1 ? -(result >> 1) : result >> 1 };
   }
-  return undefined;
 }
 
 /**
@@ -45,7 +44,7 @@ export function originalCssSource(
     !map.sources.every((source) => typeof source === "string") ||
     (map.sourceRoot !== undefined && typeof map.sourceRoot !== "string")
   )
-    return undefined;
+    return;
   let source = 0;
   let originalLine = 0;
   let originalColumn = 0;
@@ -59,12 +58,14 @@ export function originalCssSource(
       let index = 0;
       while (index < segment.length) {
         const decoded = decodeVlq(segment, index);
-        if (!decoded) return undefined;
+        if (!decoded) return;
         fields.push(decoded.value);
         ({ index } = decoded);
       }
       if (!fields.length) continue;
-      generated += fields[0]!;
+      const [generatedDelta, sourceDelta, originalLineDelta, originalColumnDelta] = fields;
+      if (generatedDelta === undefined) return;
+      generated += generatedDelta;
       // A one-field segment is an explicit unmapped span. It must not inherit
       // the preceding segment's source merely because this lookup is later on
       // the same generated line.
@@ -72,25 +73,30 @@ export function originalCssSource(
         if (line === generatedLine && generated <= generatedColumn) candidate = undefined;
         continue;
       }
-      if (fields.length !== 4 && fields.length !== 5) return undefined;
-      source += fields[1]!;
-      originalLine += fields[2]!;
-      originalColumn += fields[3]!;
+      if (fields.length !== 4 && fields.length !== 5) return;
+      if (
+        sourceDelta === undefined ||
+        originalLineDelta === undefined ||
+        originalColumnDelta === undefined
+      )
+        return;
+      source += sourceDelta;
+      originalLine += originalLineDelta;
+      originalColumn += originalColumnDelta;
       if (line === generatedLine && generated <= generatedColumn)
-        candidate = { source, originalLine, originalColumn };
+        candidate = { originalColumn, originalLine, source };
     }
     if (line === generatedLine && candidate) {
       const path = map.sources[candidate.source];
-      if (typeof path !== "string" || !path) return undefined;
+      if (typeof path !== "string" || !path) return;
       return {
+        column: candidate.originalColumn + 1,
+        line: candidate.originalLine + 1,
         path: map.sourceRoot
           ? `${map.sourceRoot.replace(/\/$/u, "")}/${path.replace(/^\//u, "")}`
           : path,
-        line: candidate.originalLine + 1,
-        column: candidate.originalColumn + 1,
         sourceIndex: candidate.source,
       };
     }
   }
-  return undefined;
 }

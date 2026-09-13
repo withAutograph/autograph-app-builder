@@ -6,11 +6,11 @@ describe("self-reproduction evaluation", () => {
   it("does not mistake static configuration for instant-navigation evidence", () => {
     const audit = auditFramework([
       {
-        path: "next.config.ts",
         content: "export default { cacheComponents: true, partialPrefetching: true }",
+        path: "next.config.ts",
       },
-      { path: "app/page.tsx", content: "export default function Page() { return <main /> }" },
-      { path: "app/actions.ts", content: "'use server'; export async function save() {}" },
+      { content: "export default function Page() { return <main /> }", path: "app/page.tsx" },
+      { content: "'use server'; export async function save() {}", path: "app/actions.ts" },
     ]);
     expect(
       frameworkRequirements(audit, "candidate").find(
@@ -27,39 +27,39 @@ describe("self-reproduction evaluation", () => {
 
   it("flags a static mock missing durable workflows", () => {
     const requirements = buildRequirements([
-      { path: "app/page.tsx", content: "export default () => <p>Build an app</p>" },
+      { content: "export default () => <p>Build an app</p>", path: "app/page.tsx" },
     ]);
     expect(requirements.find((item) => item.id === "durable-draft")?.status).toBe("failed");
   });
 
   it("does not treat source matching as proof that a visible control works", () => {
-    const source = [{ path: "app/page.tsx", content: "Build an app Create app preview" }];
+    const source = [{ content: "Build an app Create app preview", path: "app/page.tsx" }];
     expect(
       buildRequirements(source).find((item) => item.id === "independent-creation")?.status,
     ).toBe("unassessed");
   });
 
   it("requires runtime evidence before treating draft persistence as passed", () => {
-    const source = [{ path: "app/draft.ts", content: "export const draft = 'persist'" }];
+    const source = [{ content: "export const draft = 'persist'", path: "app/draft.ts" }];
     expect(buildRequirements(source).find((item) => item.id === "durable-draft")?.status).toBe(
       "unassessed",
     );
     expect(
       buildRequirements(source, {
-        "durable-draft": { status: "failed", evidence: "Reload lost the draft." },
+        "durable-draft": { evidence: "Reload lost the draft.", status: "failed" },
       }).find((item) => item.id === "durable-draft")?.status,
     ).toBe("failed");
   });
   it("treats an imported interactive leaf as a narrow client boundary", () => {
     const audit = auditFramework([
       {
-        path: "app/page.tsx",
         content:
           'import Workspace from "../components/workspace"; export default function Page() { return <Workspace />; }',
+        path: "app/page.tsx",
       },
       {
-        path: "components/workspace.tsx",
         content: '"use client"; export default function Workspace() { return <main />; }',
+        path: "components/workspace.tsx",
       },
     ]);
     expect(audit.broadClientRoot).toBe(false);
@@ -69,12 +69,12 @@ describe("self-reproduction evaluation", () => {
   it("flags a client route root and ignores unreachable client modules", () => {
     const audit = auditFramework([
       {
-        path: "app/page.tsx",
         content: '"use client"; export default function Page() { return <main />; }',
+        path: "app/page.tsx",
       },
       {
-        path: "components/unreachable.tsx",
         content: '"use client"; export default function Unreachable() { return <main />; }',
+        path: "components/unreachable.tsx",
       },
     ]);
     expect(audit.broadClientRoot).toBe(true);
@@ -85,13 +85,13 @@ describe("self-reproduction evaluation", () => {
   it("resolves client boundaries through the src alias", () => {
     const audit = auditFramework([
       {
-        path: "src/app/page.tsx",
         content:
           'import Workspace from "@/components/workspace"; export default function Page() { return <Workspace />; }',
+        path: "src/app/page.tsx",
       },
       {
-        path: "src/components/workspace.tsx",
         content: '"use client"; export default function Workspace() { return <button />; }',
+        path: "src/components/workspace.tsx",
       },
     ]);
     expect(audit.clientBoundaryPaths).toEqual(["src/components/workspace.tsx"]);

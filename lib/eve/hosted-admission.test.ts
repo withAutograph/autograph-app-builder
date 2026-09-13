@@ -8,9 +8,8 @@ import { InMemoryHostedEveStore } from "./hosted-store";
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function principal(ownerUserId: string): HostedPrincipal {
   return {
-    issuer: "https://builder.example.test/api/auth",
     audience: "https://builder.example.test/mcp",
-    workspaceId: "workspace_one",
+    issuer: "https://builder.example.test/api/auth",
     ownerUserId,
     scopes: [
       "autograph:session",
@@ -20,31 +19,24 @@ function principal(ownerUserId: string): HostedPrincipal {
       "autograph:respond",
       "autograph:cancel",
     ],
+    workspaceId: "workspace_one",
   };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function service(input: {
-  store: InMemoryHostedEveStore;
   ownerUserId: string;
   status?: "working" | "waiting";
+  store: InMemoryHostedEveStore;
 }) {
   let sequence = 0;
   const transport: HostedEveTransport = {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    async start() {
-      sequence += 1;
-      return {
-        adapterSessionId: `${input.ownerUserId}_${sequence}`,
-        snapshot: { status: input.status ?? "waiting", events: [] },
-      };
-    },
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    async get() {
+    async cancel() {
       throw new Error("not used");
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    async send() {
+    async get() {
       throw new Error("not used");
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -52,8 +44,16 @@ function service(input: {
       throw new Error("not used");
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    async cancel() {
+    async send() {
       throw new Error("not used");
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async start() {
+      sequence += 1;
+      return {
+        adapterSessionId: `${input.ownerUserId}_${sequence}`,
+        snapshot: { events: [], status: input.status ?? "waiting" },
+      };
     },
   };
   return createHostedEveSessionService({
@@ -65,25 +65,25 @@ function service(input: {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function startTwice(hosted: ReturnType<typeof service>, first = "one", second = "two") {
-  await hosted.start({ prompt: "Build", clientRequestId: first });
-  return hosted.start({ prompt: "Build again", clientRequestId: second });
+  await hosted.start({ clientRequestId: first, prompt: "Build" });
+  return hosted.start({ clientRequestId: second, prompt: "Build again" });
 }
 
 describe("hosted start capacity", () => {
   it("does not impose App Builder start, subject, or workspace quotas", async () => {
     const store = new InMemoryHostedEveStore();
     const firstUser = service({
-      store,
       ownerUserId: "user_one",
       status: "working",
+      store,
     });
     await expect(startTwice(firstUser)).resolves.toMatchObject({
       sessionId: expect.any(String),
     });
     await expect(
-      service({ store, ownerUserId: "user_two", status: "working" }).start({
-        prompt: "Build in the same workspace",
+      service({ ownerUserId: "user_two", status: "working", store }).start({
         clientRequestId: "three",
+        prompt: "Build in the same workspace",
       }),
     ).resolves.toMatchObject({ sessionId: expect.any(String) });
   });

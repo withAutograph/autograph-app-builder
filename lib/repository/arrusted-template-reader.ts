@@ -12,8 +12,8 @@ const installationIdSchema = z.string().regex(/^[1-9]\d*$/u);
 const tokenSchema = z.string().min(20).max(1024);
 
 const requestedPermissions = {
-  contents: "read" as const,
   checks: "read" as const,
+  contents: "read" as const,
 };
 
 export interface ArrustedTemplateReaderConfig {
@@ -126,11 +126,11 @@ export function createArrustedTemplateReader(input: {
       let authentication: unknown;
       try {
         authentication = await app.octokit.auth({
-          type: "installation",
           installationId: installation.data,
           permissions: requestedPermissions,
-          repositoryIds: [ARRUSTED_TEMPLATE_REPOSITORY_ID],
           refresh: true,
+          repositoryIds: [ARRUSTED_TEMPLATE_REPOSITORY_ID],
+          type: "installation",
         });
       } catch {
         unavailable("token_mint");
@@ -154,11 +154,11 @@ export function createArrustedTemplateReader(input: {
       let inventory;
       try {
         inventory = await createGitHubTokenOctokit({
-          token,
           fetch: input.fetch,
+          token,
         }).request("GET /installation/repositories", {
-          per_page: 100,
           page: 1,
+          per_page: 100,
         });
       } catch {
         unavailable("repository_inventory");

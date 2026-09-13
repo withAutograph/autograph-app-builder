@@ -23,8 +23,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const document = getDocument(slug);
   if (!document || document.slug === "overview") return {};
   return {
-    title: document.title,
     description: document.description,
+    title: document.title,
   };
 }
 

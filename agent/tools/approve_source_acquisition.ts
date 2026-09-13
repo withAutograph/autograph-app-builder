@@ -9,9 +9,6 @@ import { inspectCanonicalArrustedSandboxWorkspace } from "@/lib/repository/arrus
 export default defineTool({
   description:
     "Automatically bind the exact eligible canonical Arrusted workspace clone as the internal fresh-template source. This does not clone, fetch, or materialize another workspace.",
-  inputSchema: z.object({
-    expectedSourceReceiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
-  }),
   async execute({ expectedSourceReceiptDigest }, ctx) {
     const current = sourceWorkflowState.get();
     const existing = existingRepositoryAcquisitionReceipt(current, expectedSourceReceiptDigest);
@@ -20,8 +17,8 @@ export default defineTool({
     let currentReceipt = current.receipt;
     if (current.receipt.version === SOURCE_RECEIPT_VERSION) {
       await inspectCanonicalArrustedSandboxWorkspace({
-        sandbox: await ctx.getSandbox(),
         receipt: current.receipt,
+        sandbox: await ctx.getSandbox(),
       });
     } else {
       currentReceipt = await inspectSourceReceipt(
@@ -32,11 +29,14 @@ export default defineTool({
     if (currentReceipt.digest !== expectedSourceReceiptDigest)
       throw new Error("The source changed after review.");
     sourceWorkflowState.update(() => ({
-      version: APP_BUILDER_SOURCE_VERSION,
+      approvedByCallId: ctx.callId,
       phase: "acquisition_approved",
       receipt: currentReceipt,
-      approvedByCallId: ctx.callId,
+      version: APP_BUILDER_SOURCE_VERSION,
     }));
     return currentReceipt;
   },
+  inputSchema: z.object({
+    expectedSourceReceiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+  }),
 });

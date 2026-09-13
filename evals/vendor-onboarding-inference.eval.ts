@@ -32,39 +32,39 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
     t.calledTool("inspect_source", { count: 1 });
     t.calledTool("prepare_workspace", { count: 1 });
     t.calledTool("record_prototype_artifact", {
+      count: 1,
       input: {
-        path: "prototype/vendor-onboarding/index.html",
-        mediaType: "text/html",
         content: (value) =>
           typeof value === "string" &&
           value.includes("Operations review queue") &&
           value.includes("Finance: verify tax information") &&
           value.includes('id="detail-title"'),
+        mediaType: "text/html",
+        path: "prototype/vendor-onboarding/index.html",
       },
-      count: 1,
     });
     t.calledTool("record_prototype_artifact", {
+      count: 1,
       input: { path: "prototype/vendor-onboarding/decisions.md" },
-      count: 1,
     });
     t.calledTool("record_prototype_artifact", {
+      count: 1,
       input: {
-        path: "prototype/vendor-onboarding/app-spec.md",
         content: (value) => typeof value === "string" && !value.includes("## Build handoff"),
+        path: "prototype/vendor-onboarding/app-spec.md",
       },
-      count: 1,
     });
     t.calledTool("record_prototype_artifact", {
+      count: 1,
       input: {
-        path: "prototype/vendor-onboarding/app-spec.md",
         content: (value) =>
           typeof value === "string" &&
           value.includes("## Build handoff") &&
           value.includes('"status": "build-ready"'),
+        path: "prototype/vendor-onboarding/app-spec.md",
       },
-      count: 1,
     });
-    t.calledTool("accept_app_spec", { status: "failed", count: 1 });
+    t.calledTool("accept_app_spec", { count: 1, status: "failed" });
     t.calledTool("accept_app_spec", { count: 1 });
     t.notCalledTool("prepare_target_dependencies");
     t.calledTool("plan_app_creation", { count: 1 });

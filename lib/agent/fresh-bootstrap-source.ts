@@ -20,9 +20,9 @@ export async function freshBootstrapSourceWorkspace(input: {
   if (input.receipt.version !== SOURCE_RECEIPT_VERSION) return undefined;
   const reverify = async () => {
     await inspectSourceBoundSandboxWorkspace({
-      sandbox: input.sandbox,
-      receipt: input.receipt,
       expectedWorkspace: input.workspace,
+      receipt: input.receipt,
+      sandbox: input.sandbox,
     });
   };
   await reverify();

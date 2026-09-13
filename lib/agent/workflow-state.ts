@@ -104,13 +104,11 @@ export type DependencyPreparationReceipt = TargetExecutionBinding & {
   digest: string;
 };
 
-export function sha256(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
-}
+export const sha256 = (value: string): string => createHash("sha256").update(value).digest("hex");
 
-export function assertExactDependencyPreparationReceipt(
+export const assertExactDependencyPreparationReceipt = (
   receipt: DependencyPreparationReceipt,
-): void {
+): void => {
   const { digest, ...unsigned } = receipt;
   if (
     receipt.version !== 2 ||
@@ -119,7 +117,7 @@ export function assertExactDependencyPreparationReceipt(
     digest !== sha256(JSON.stringify(unsigned))
   )
     throw new Error("The dependency preparation receipt is malformed.");
-}
+};
 
 export type TargetIdentityReceipt = TargetExecutionBinding & {
   version: 1;
@@ -322,54 +320,51 @@ export type PublicationWorkflowPhase = Extract<
   }
 >;
 
-export function isPublicationWorkflowPhase(
+export const isPublicationWorkflowPhase = (
   state: AppBuilderWorkflowState,
-): state is PublicationWorkflowPhase {
-  return (
-    state.phase === "publication_pending" ||
-    state.phase === "publication_failed" ||
-    state.phase === "published_local" ||
-    state.phase === "branch_publication_pending" ||
-    state.phase === "branch_publication_failed" ||
-    state.phase === "published_branch_worktree" ||
-    state.phase === "fresh_bootstrap_pending" ||
-    state.phase === "fresh_bootstrap_failed" ||
-    state.phase === "published_fresh_bootstrap"
-  );
-}
+): state is PublicationWorkflowPhase =>
+  state.phase === "publication_pending" ||
+  state.phase === "publication_failed" ||
+  state.phase === "published_local" ||
+  state.phase === "branch_publication_pending" ||
+  state.phase === "branch_publication_failed" ||
+  state.phase === "published_branch_worktree" ||
+  state.phase === "fresh_bootstrap_pending" ||
+  state.phase === "fresh_bootstrap_failed" ||
+  state.phase === "published_fresh_bootstrap";
 
 /**
  * The workflow aggregate is the sole mutation authority. Every operation that
  * can invalidate a reviewed publication must call this before any source,
  * sandbox, or target I/O.
  */
-export function assertUpstreamMutationAllowed(
+export const assertUpstreamMutationAllowed = (
   state: AppBuilderWorkflowState,
   operation: string,
-): void {
+): void => {
   if (isPublicationWorkflowPhase(state))
     throw new Error(
       `Local publication is ${state.phase}; ${operation} is permanently disabled for this workflow.`,
     );
-}
+};
 
-export function assertExactWorkflowState(
+export const assertExactWorkflowState = (
   latest: AppBuilderWorkflowState,
   expected: AppBuilderWorkflowState,
   operation: string,
-): void {
+): void => {
   if (sha256(JSON.stringify(latest)) !== sha256(JSON.stringify(expected)))
     throw new Error(`The workflow changed concurrently before ${operation}.`);
-}
+};
 
-export function assertCurrentGitHubDraftProposal(input: {
+export const assertCurrentGitHubDraftProposal = (input: {
   binding: GitHubDraftProposalBinding | undefined;
   expectedProposalDigest: string;
   reviewDigest: string;
   changeSetDigest: string;
   sourceReceiptDigest: string;
   githubSource: ImmutableGitHubSourceReceipt;
-}): DraftPullRequestProposal {
+}): DraftPullRequestProposal => {
   const { binding } = input;
   const proposal = binding?.proposal;
   if (
@@ -389,70 +384,67 @@ export function assertCurrentGitHubDraftProposal(input: {
       "The draft pull-request proposal is not the exact proposal sealed for this reviewed workflow.",
     );
   return proposal;
-}
+};
 
-export function assertPublicationJournalStatus(
+export const assertPublicationJournalStatus = (
   phase: "reviewed" | "publication_pending" | "publication_failed" | "published_local",
   status: "pending" | "failed" | "succeeded" | undefined,
-): void {
+): void => {
   const allowed: Record<typeof phase, readonly (typeof status)[]> = {
-    reviewed: [undefined],
-    publication_pending: [undefined, "pending", "failed", "succeeded"],
     publication_failed: [undefined, "failed"],
+    publication_pending: [undefined, "pending", "failed", "succeeded"],
     published_local: ["succeeded"],
+    reviewed: [undefined],
   };
   if (!allowed[phase].includes(status))
     throw new Error(
       `Workflow phase ${phase} cannot be paired with local-publication journal ${status ?? "absent"}.`,
     );
-}
+};
 
-export function assertFreshBootstrapJournalStatus(
+export const assertFreshBootstrapJournalStatus = (
   phase:
     | "reviewed"
     | "fresh_bootstrap_pending"
     | "fresh_bootstrap_failed"
     | "published_fresh_bootstrap",
   status: "pending" | "failed" | "succeeded" | undefined,
-): void {
+): void => {
   const allowed: Record<typeof phase, readonly (typeof status)[]> = {
-    reviewed: [undefined, "pending", "failed"],
-    fresh_bootstrap_pending: ["pending", "failed", "succeeded"],
     fresh_bootstrap_failed: ["failed", "succeeded"],
+    fresh_bootstrap_pending: ["pending", "failed", "succeeded"],
     published_fresh_bootstrap: ["succeeded"],
+    reviewed: [undefined, "pending", "failed"],
   };
   if (!allowed[phase].includes(status))
     throw new Error(
       `Workflow phase ${phase} cannot be paired with fresh-bootstrap journal ${status ?? "absent"}.`,
     );
-}
+};
 
-export function workflowWorkspace(
+export const workflowWorkspace = (
   state: AppBuilderWorkflowState,
-): PreparedSandboxWorkspace | undefined {
-  return state.phase === "empty" ? undefined : state.workspace;
-}
+): PreparedSandboxWorkspace | undefined => (state.phase === "empty" ? undefined : state.workspace);
 
-export function validAppId(appId: string): boolean {
-  return /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(appId);
-}
+export const validAppId = (appId: string): boolean =>
+  /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(appId);
 
 export const appBuilderWorkflowState = defineState<AppBuilderWorkflowState>(
   APP_BUILDER_WORKFLOW_STATE_KEY,
-  () => ({ version: APP_BUILDER_WORKFLOW_VERSION, phase: "empty" }),
+  () => ({ phase: "empty", version: APP_BUILDER_WORKFLOW_VERSION }),
 );
 
 /**
  * The only write gateway for agent tools. It preserves the optimistic-concurrency
  * guard while making transition ownership explicit at the workflow boundary.
  */
-export function updateExactWorkflow(input: {
+export const updateExactWorkflow = (input: {
   expected: AppBuilderWorkflowState;
   operation: string;
   transition: (current: AppBuilderWorkflowState) => AppBuilderWorkflowState;
-}): void {
+}): void => {
   appBuilderWorkflowState.update((current) => {
     assertExactWorkflowState(current, input.expected, input.operation);
     return input.transition(current);
   });
-}
+};

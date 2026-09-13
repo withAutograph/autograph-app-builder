@@ -5,12 +5,9 @@ export function createBoundedAuthorizationRefresh(input?: {
 }) {
   const maximumAttempts = input?.maximumAttempts ?? 3;
   const minimumIntervalMs = input?.minimumIntervalMs ?? 1000;
-  let state = { key: "", attempts: 0, lastAt: 0 };
+  let state = { attempts: 0, key: "", lastAt: 0 };
 
   return {
-    reset(key: string) {
-      state = { key, attempts: 0, lastAt: 0 };
-    },
     claim(key: string, now: number) {
       if (
         !key ||
@@ -22,6 +19,9 @@ export function createBoundedAuthorizationRefresh(input?: {
       state.attempts += 1;
       state.lastAt = now;
       return true;
+    },
+    reset(key: string) {
+      state = { attempts: 0, key, lastAt: 0 };
     },
   };
 }

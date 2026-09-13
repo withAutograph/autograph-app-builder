@@ -1,7 +1,7 @@
 import { chromium } from "playwright";
 import type { Page } from "playwright";
 import * as axe from "axe-core";
-import { join } from "node:path";
+import nodePath from "node:path";
 import { z } from "zod";
 import type { Observation } from "./evidence";
 import {
@@ -17,9 +17,9 @@ import { originalCssSource } from "./css-source-map";
 import type { CssSourceMap } from "./css-source-map";
 
 export const viewports = [
-  { name: "desktop", width: 1440, height: 900 },
-  { name: "desktop-wide", width: 1920, height: 1080 },
-  { name: "desktop-window", width: 1024, height: 768 },
+  { height: 900, name: "desktop", width: 1440 },
+  { height: 1080, name: "desktop-wide", width: 1920 },
+  { height: 768, name: "desktop-window", width: 1024 },
 ];
 
 export interface DesktopSize {
@@ -36,7 +36,7 @@ export function parseAdditionalDesktopSize(value: string): DesktopSize {
   const height = Number(match[2]);
   if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height))
     throw new Error("Desktop dimensions must be safe integers");
-  return { width, height };
+  return { height, width };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -53,49 +53,50 @@ export function captureViewports(additionalDesktopSize?: DesktopSize) {
 }
 export const scenariosSchema = z.array(
   z.object({
+    expect: z.object({ text: z.string().optional() }).optional(),
     name: z.string().min(1),
     steps: z.array(
       z
         .object({
           action: z.enum(["click", "fill", "select"]),
-          role: z.string().optional(),
           name: z.string().optional(),
+          role: z.string().optional(),
           selector: z.string().optional(),
           value: z.string().optional(),
         })
         .refine((s) => Boolean(s.selector || (s.role && s.name)), "Select a role/name or selector"),
     ),
-    expect: z.object({ text: z.string().optional() }).optional(),
   }),
 );
 export type Scenario = z.infer<typeof scenariosSchema>[number];
 export type Category = "color" | "typography" | "spacing" | "radius" | "border" | "shadow";
 export const properties: Record<string, Category> = {
-  color: "color",
   "background-color": "color",
+  "border-top-color": "border",
+  "border-top-left-radius": "radius",
+  "border-top-width": "border",
+  "box-shadow": "shadow",
+  color: "color",
+  "column-gap": "spacing",
   "font-family": "typography",
   "font-size": "typography",
   "font-weight": "typography",
-  "line-height": "typography",
   "letter-spacing": "typography",
-  "padding-top": "spacing",
-  "padding-right": "spacing",
+  "line-height": "typography",
+  "margin-bottom": "spacing",
+  "margin-top": "spacing",
   "padding-bottom": "spacing",
   "padding-left": "spacing",
-  "margin-top": "spacing",
-  "margin-bottom": "spacing",
-  "column-gap": "spacing",
+  "padding-right": "spacing",
+  "padding-top": "spacing",
   "row-gap": "spacing",
-  "border-top-left-radius": "radius",
-  "border-top-width": "border",
-  "border-top-color": "border",
-  "box-shadow": "shadow",
 };
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function classifyStyle(values: string[], computed: string, tokenValues: string[]) {
   const unique = [...new Set(values)];
   if (unique.length !== 1) return "unassessed" as const;
-  const value = unique[0]!;
+  const [value] = unique;
+  if (value === undefined) return "unassessed" as const;
   if (/var\(--/u.test(value)) return "token-reference" as const;
   if (
     /^(?<value>0(?:px|rem|em)?|auto|normal|none|inherit|initial|transparent)$/u.test(value) ||
@@ -129,8 +130,8 @@ function domClassSignature(node: { nodeName?: string; attributes?: string[] }) {
   const value = index >= 0 ? node.attributes?.[index + 1] : undefined;
   return value && node.nodeName
     ? {
-        tag: node.nodeName.toLowerCase(),
         classes: [...new Set(value.split(/\s+/u).filter(Boolean))].toSorted(),
+        tag: node.nodeName.toLowerCase(),
       }
     : undefined;
 }
@@ -141,7 +142,7 @@ function matchedSelector(match: {
   rule: { selectorList?: { selectors?: { text?: string }[] } };
 }) {
   const selectors = match.rule.selectorList?.selectors;
-  if (!selectors?.length) return undefined;
+  if (!selectors?.length) return;
   const indexes = match.matchingSelectors;
   if (indexes?.length === 1) return selectors[indexes[0]]?.text;
   return selectors.length === 1 ? selectors[0]?.text : undefined;
@@ -168,7 +169,7 @@ function singleGapValue(value: string): string | undefined {
 }
 
 export const sourcePath = (value: string | undefined) => {
-  if (!value) return undefined;
+  if (!value) return;
   try {
     const url = new URL(value);
     return url.protocol === "file:" ? decodeURIComponent(url.pathname) : url.pathname;
@@ -213,19 +214,21 @@ export function mappedSharedCssRule(input: {
   sharedCssSourceFiles: CssSourceFile[];
 }) {
   const { map, mapped, property, value, sharedCssRules, sharedCssSourceFiles } = input;
-  if (!map || !mapped || value === undefined) return undefined;
+  if (!map || !mapped || value === undefined) return;
   const sourceContent = map.sourcesContent?.[mapped.sourceIndex];
-  if (typeof sourceContent !== "string") return undefined;
+  if (typeof sourceContent !== "string") return;
   const files = sharedCssSourceFiles.filter(
     (file) =>
       arrustedSharedSource(file.path) &&
       generatedSource(mapped.path, [file.path]) &&
       file.content === sourceContent,
   );
-  if (files.length !== 1) return undefined;
+  if (files.length !== 1) return;
+  const [file] = files;
+  if (!file) return;
   const declarations = sharedCssRules.filter(
     (candidate) =>
-      candidate.source.path === files[0]!.path &&
+      candidate.source.path === file.path &&
       candidate.source.line === mapped.line &&
       candidate.source.column === mapped.column &&
       candidate.property === property &&
@@ -240,18 +243,20 @@ export async function settleFiniteMotion(page: Page) {
   await page.evaluate(async () => {
     // Let hydration/class updates start their CSS transitions before taking the
     // animation snapshot. A second frame is enough without adding a timer gate.
-    await new Promise<void>((resolve) => {
+    const { promise, resolve } = Promise.withResolvers<null>();
+    requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => resolve());
+        resolve(null);
       });
     });
+    await promise;
     const finite = document.getAnimations().filter((motion) => {
       if (motion.playState !== "running" && !motion.pending) return false;
       const timing = motion.effect?.getComputedTiming();
       const iterations = timing?.iterations ?? 1;
       return Number.isFinite(iterations) && Number.isFinite(timing?.duration);
     });
-    await Promise.all(finite.map((motion) => motion.finished.catch(() => undefined)));
+    await Promise.all(finite.map((motion) => motion.finished.catch(() => null)));
   });
 }
 
@@ -265,10 +270,10 @@ export async function measurePage(page: Page) {
     const rect = (el: Element) => {
       const r = el.getBoundingClientRect();
       return {
+        height: r.height,
+        width: r.width,
         x: r.x + scrollX,
         y: r.y + scrollY,
-        width: r.width,
-        height: r.height,
       };
     };
     // oxlint-disable-next-line unicorn/consistent-function-scoping
@@ -295,19 +300,19 @@ export async function measurePage(page: Page) {
       if (el.scrollHeight > el.clientHeight + 2 && /auto|scroll/u.test(style.overflowY))
         axes.push("y");
       return axes.map((axis) => ({
-        el,
         axis,
-        scrollWidth: el.scrollWidth,
-        scrollHeight: el.scrollHeight,
-        clientWidth: el.clientWidth,
         clientHeight: el.clientHeight,
+        clientWidth: el.clientWidth,
+        el,
+        scrollHeight: el.scrollHeight,
+        scrollWidth: el.scrollWidth,
       }));
     });
     if (document.documentElement.scrollWidth > innerWidth + 2)
       findings.push({
-        kind: "document-overflow",
         description:
           "Page is wider than the viewport; review whether horizontal scrolling is intended.",
+        kind: "document-overflow",
         region: rect(document.documentElement),
         reviewRequired: true,
       });
@@ -322,8 +327,8 @@ export async function measurePage(page: Page) {
         const b = parent.getBoundingClientRect();
         if (/hidden|clip/u.test(s.overflowX) && (a.left < b.left - 2 || a.right > b.right + 2)) {
           findings.push({
-            kind: "possible-clipping",
             description: `${label(el)} extends beyond a clipped ancestor.`,
+            kind: "possible-clipping",
             region: rect(el),
             reviewRequired: true,
           });
@@ -342,10 +347,14 @@ export async function measurePage(page: Page) {
         : [];
       if (headers.length === cells.length)
         for (const [i, h] of headers.entries()) {
-          if (Math.abs(h.getBoundingClientRect().left - cells[i]!.getBoundingClientRect().left) > 4)
+          const cell = cells[i];
+          if (
+            cell &&
+            Math.abs(h.getBoundingClientRect().left - cell.getBoundingClientRect().left) > 4
+          )
             findings.push({
-              kind: "possible-column-misalignment",
               description: `Column ${label(h)} and its first cell have different left edges.`,
+              kind: "possible-column-misalignment",
               region: rect(h),
               reviewRequired: true,
             });
@@ -354,8 +363,9 @@ export async function measurePage(page: Page) {
     // Only sibling interactive targets: generic rectangle overlap is too noisy.
     for (let i = 0; i < Math.min(controls.length, 150); i += 1)
       for (let j = i + 1; j < Math.min(controls.length, 150); j += 1) {
-        const a = controls[i]!;
-        const b = controls[j]!;
+        const a = controls[i];
+        const b = controls[j];
+        if (!a || !b) continue;
         if (a.parentElement !== b.parentElement || a.contains(b) || b.contains(a)) continue;
         const x = a.getBoundingClientRect();
         const y = b.getBoundingClientRect();
@@ -364,8 +374,8 @@ export async function measurePage(page: Page) {
           Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top) > 4
         )
           findings.push({
-            kind: "possible-overlap",
             description: `Interactive targets overlap: ${label(a)} / ${label(b)}.`,
+            kind: "possible-overlap",
             region: rect(a),
             reviewRequired: true,
           });
@@ -386,40 +396,40 @@ export async function measurePage(page: Page) {
       }
     ).axe.run();
     return {
-      title: document.title,
-      width: innerWidth,
-      height: innerHeight,
-      documentWidth: document.documentElement.scrollWidth,
+      accessibility: {
+        manualReviewCount: result.incomplete.length,
+        violations: result.violations.map((v) => ({
+          help: v.help,
+          id: v.id,
+          impact: v.impact,
+          nodes: v.nodes.map((n) => ({
+            summary: n.failureSummary,
+            target: n.target,
+          })),
+        })),
+      },
+      controls: controls.map((el) => ({
+        label: label(el),
+        region: rect(el),
+        role: el.getAttribute("role") || el.tagName.toLowerCase(),
+      })),
       documentHeight: document.documentElement.scrollHeight,
+      documentWidth: document.documentElement.scrollWidth,
       findings,
+      height: innerHeight,
       // Diagnostics only: an intentional scroll region is not an automatic
       // pass/fail conclusion about the surrounding layout.
       intentionalScrollContainers: scrolling.map((scrollContainer) => ({
-        label: label(scrollContainer.el),
         axis: scrollContainer.axis,
-        scrollWidth: scrollContainer.scrollWidth,
-        scrollHeight: scrollContainer.scrollHeight,
-        clientWidth: scrollContainer.clientWidth,
         clientHeight: scrollContainer.clientHeight,
+        clientWidth: scrollContainer.clientWidth,
+        label: label(scrollContainer.el),
         region: rect(scrollContainer.el),
+        scrollHeight: scrollContainer.scrollHeight,
+        scrollWidth: scrollContainer.scrollWidth,
       })),
-      controls: controls.map((el) => ({
-        label: label(el),
-        role: el.getAttribute("role") || el.tagName.toLowerCase(),
-        region: rect(el),
-      })),
-      accessibility: {
-        violations: result.violations.map((v) => ({
-          id: v.id,
-          impact: v.impact,
-          help: v.help,
-          nodes: v.nodes.map((n) => ({
-            target: n.target,
-            summary: n.failureSummary,
-          })),
-        })),
-        manualReviewCount: result.incomplete.length,
-      },
+      title: document.title,
+      width: innerWidth,
     };
   });
 }
@@ -458,7 +468,7 @@ export async function measureStyles(
     await session.send("CSS.enable");
     const sourceMaps = new Map<string, CssSourceMap | undefined>();
     const sourceMapFor = async (styleSheetId: string | undefined) => {
-      if (!styleSheetId) return undefined;
+      if (!styleSheetId) return;
       if (sourceMaps.has(styleSheetId)) return sourceMaps.get(styleSheetId);
       const header = headers.get(styleSheetId);
       const css = await session
@@ -535,15 +545,13 @@ export async function measureStyles(
         for (const prop of Object.keys(styleProperties)) {
           result[prop] = [];
           for (const [name] of Object.entries(tokenValues)) {
-            const relevant = prop.includes("color")
-              ? name.startsWith("--color-")
-              : prop.includes("font") || prop.includes("line") || prop.includes("letter")
-                ? /--(?<category>font|text|leading|tracking)/u.test(name)
-                : prop.includes("radius")
-                  ? name.includes("radius")
-                  : prop.includes("shadow")
-                    ? name.includes("shadow")
-                    : /spacing|space|radius|border/u.test(name);
+            let relevant: boolean;
+            if (prop.includes("color")) relevant = name.startsWith("--color-");
+            else if (prop.includes("font") || prop.includes("line") || prop.includes("letter"))
+              relevant = /--(?<category>font|text|leading|tracking)/u.test(name);
+            else if (prop.includes("radius")) relevant = name.includes("radius");
+            else if (prop.includes("shadow")) relevant = name.includes("shadow");
+            else relevant = /spacing|space|radius|border/u.test(name);
             if (!relevant) continue;
             el.style.removeProperty(prop);
             el.style.setProperty(prop, `var(${name})`);
@@ -554,7 +562,7 @@ export async function measureStyles(
         el.remove();
         return result;
       },
-      { tokens, properties },
+      { properties, tokens },
     );
     // CSS.enable normally emits existing headers, but source location is optional
     // in CDP. Missing headers deliberately remain unknown.
@@ -571,11 +579,14 @@ export async function measureStyles(
         .catch(() => ({ model: null }));
       if (!model || model.width <= 0 || model.height <= 0) continue;
       const y = model.content[1] ?? 0;
+      let region: "top" | "middle" | "bottom" = "bottom";
+      if (y < 300) region = "top";
+      else if (y < 1000) region = "middle";
       candidates.push({
-        nodeId,
-        model,
-        region: y < 300 ? "top" : y < 1000 ? "middle" : "bottom",
         interactive: interactiveNodes.has(nodeId),
+        model,
+        nodeId,
+        region,
       });
     }
     const selected: typeof candidates = [];
@@ -680,19 +691,18 @@ export async function measureStyles(
               )
             : [];
         const ownEvidence = gapFallback.length ? gapFallback : own;
-        const declarationEntries = inline.length
-          ? inline.map((p) => ({ p, rule: undefined, selector: undefined }))
-          : ownEvidence.length
-            ? ownEvidence
-            : inherited.flatMap((m) =>
-                m.rule.style.cssProperties
-                  .filter((p) => p.name === property && !p.disabled && p.parsedOk !== false)
-                  .map((p) => ({
-                    p,
-                    rule: m.rule,
-                    selector: matchedSelector(m),
-                  })),
-              );
+        let declarationEntries = inherited.flatMap((m) =>
+          m.rule.style.cssProperties
+            .filter((p) => p.name === property && !p.disabled && p.parsedOk !== false)
+            .map((p) => ({
+              p,
+              rule: m.rule as typeof m.rule | undefined,
+              selector: matchedSelector(m),
+            })),
+        );
+        if (ownEvidence.length) declarationEntries = ownEvidence;
+        if (inline.length)
+          declarationEntries = inline.map((p) => ({ p, rule: undefined, selector: undefined }));
         // Chrome can report the same matched rule twice. Collapse only entries
         // with the same owning rule location, selector, property, and value;
         // distinct cascade declarations remain deliberately ambiguous.
@@ -781,9 +791,9 @@ export async function measureStyles(
                 map: styleMap,
                 mapped,
                 property,
-                value: declaration?.value,
                 sharedCssRules,
                 sharedCssSourceFiles,
+                value: declaration?.value,
               })
             : undefined;
         const generated = generatedByPath || Boolean(generatedRule) || mappedGenerated;
@@ -818,17 +828,15 @@ export async function measureStyles(
         // Structural layout values are not adherence evidence, so exclude them
         // entirely rather than allowing downstream global scores to count them.
         if (classification === "structural") continue;
-        const provenance: Observation["provenance"] = generated
-          ? "generated"
-          : arrustedSharedSource(path) || mappedShared
-            ? "shared"
-            : "unknown";
+        let provenance: Observation["provenance"] = "unknown";
+        if (arrustedSharedSource(path) || mappedShared) provenance = "shared";
+        if (generated) provenance = "generated";
         const quad = model.content;
         const region = {
+          height: model.height,
+          width: model.width,
           x: quad[0] ?? 0,
           y: quad[1] ?? 0,
-          width: model.width,
-          height: model.height,
         };
         const cssSource = generatedRule
           ? generatedRule.source
@@ -836,63 +844,61 @@ export async function measureStyles(
             mapped ??
             (path
               ? {
-                  path,
-                  line: (rule?.style?.range?.startLine ?? 0) + 1,
                   column: (rule?.style?.range?.startColumn ?? 0) + 1,
+                  line: (rule?.style?.range?.startLine ?? 0) + 1,
+                  path,
                 }
               : undefined));
-        const originCandidate =
-          signatureGenerated && signatureOrigin.source
-            ? {
-                provenance: "generated" as const,
-                reason:
-                  "Exact rendered intrinsic tag/class signature and simple matched class selector match generated source; shared runtime assembly remains possible.",
-                source: signatureOrigin.source,
-              }
-            : tokenOrigin.provenance !== "unknown" && tokenOrigin.source
-              ? {
-                  provenance: tokenOrigin.provenance,
-                  reason:
-                    "Exact escaped Tailwind utility token occurs once in static source; it is reviewer evidence only, not declaration provenance.",
-                  source: tokenOrigin.source,
-                }
-              : undefined;
+        let originCandidate: BrowserStyleObservation["originCandidate"];
+        if (signatureGenerated && signatureOrigin.source)
+          originCandidate = {
+            provenance: "generated" as const,
+            reason:
+              "Exact rendered intrinsic tag/class signature and simple matched class selector match generated source; shared runtime assembly remains possible.",
+            source: signatureOrigin.source,
+          };
+        else if (tokenOrigin.provenance !== "unknown" && tokenOrigin.source)
+          originCandidate = {
+            provenance: tokenOrigin.provenance,
+            reason:
+              "Exact escaped Tailwind utility token occurs once in static source; it is reviewer evidence only, not declaration provenance.",
+            source: tokenOrigin.source,
+          };
         const source = cssSource;
+        let origin: BrowserStyleObservation["origin"] = "unknown";
+        if (inline.length) origin = "inline";
+        if (provenance === "shared") origin = "shared-rule";
+        if (provenance === "shared" && inheritedDeclaration) origin = "inherited-shared";
+        if (generated) origin = "generated-rule";
+        let verdict: BrowserStyleObservation["verdict"] = "unassessed";
+        if (
+          provenance === "generated" &&
+          (classification === "matching-literal" || classification === "generated-override")
+        )
+          verdict = "nonconforming";
+        if (provenance === "generated" && classification === "semantic-token-reference")
+          verdict = "conforming";
         observations.push({
-          node: `node-${nodeId}`,
-          property,
           category,
-          computed: cv[property] ?? "",
           classification,
+          computed: cv[property] ?? "",
+          cssSource,
           declarations: [...new Set(declarations)],
-          origin: generated
-            ? "generated-rule"
-            : provenance === "shared" && inheritedDeclaration
-              ? "inherited-shared"
-              : provenance === "shared"
-                ? "shared-rule"
-                : inline.length
-                  ? "inline"
-                  : "unknown",
-          id: `style-${nodeId}-${property}`,
           dimension: "styling",
-          verdict:
-            provenance === "generated" && classification === "semantic-token-reference"
-              ? "conforming"
-              : provenance === "generated" &&
-                  (classification === "matching-literal" || classification === "generated-override")
-                ? "nonconforming"
-                : "unassessed",
-          provenance,
           evidence: "browser",
+          id: `style-${nodeId}-${property}`,
+          node: `node-${nodeId}`,
+          origin,
+          originCandidate,
+          property,
+          provenance,
+          region,
+          selector,
+          source,
           summary: originCandidate
             ? `${property}: ${classification}; ${originCandidate.provenance} origin candidate requires review.`
             : `${property}: ${classification}`,
-          source,
-          selector,
-          cssSource,
-          originCandidate,
-          region,
+          verdict,
         });
       }
     }
@@ -914,9 +920,8 @@ export async function measureStyles(
         return [
           category,
           {
-            counts,
             assessed,
-            total: items.length,
+            counts,
             coveragePercent: items.length ? Math.round((assessed / items.length) * 100) : null,
             tokenReferencePercent: assessed
               ? Math.round(
@@ -929,31 +934,13 @@ export async function measureStyles(
                     100,
                 )
               : null,
+            total: items.length,
           },
         ];
       }),
     );
     return {
-      sampledElements: selected.length,
-      totalDomElements: nodeIds.length,
-      sampling: {
-        eligible: candidates.length,
-        sampled: selected.length,
-        coveragePercent: candidates.length
-          ? Math.round((selected.length / candidates.length) * 100)
-          : null,
-        regions: Object.fromEntries(
-          (["top", "middle", "bottom"] as const).map((region) => [
-            region,
-            {
-              eligible: candidates.filter((item) => item.region === region).length,
-              sampled: selected.filter((item) => item.region === region).length,
-            },
-          ]),
-        ),
-      },
       categories,
-      observations,
       limitations: [
         "Conservative matched-style evidence, not a full CSS cascade or React component provenance proof.",
         "Conflicting declarations, unknown variables and shorthand-only properties remain unassessed. Sampling is capped at 120 eligible elements and diversified by rendered region.",
@@ -965,6 +952,25 @@ export async function measureStyles(
               "No generated CSS source files were supplied; compiled stylesheet source maps cannot establish generated declaration provenance.",
             ]),
       ],
+      observations,
+      sampledElements: selected.length,
+      sampling: {
+        coveragePercent: candidates.length
+          ? Math.round((selected.length / candidates.length) * 100)
+          : null,
+        eligible: candidates.length,
+        regions: Object.fromEntries(
+          (["top", "middle", "bottom"] as const).map((region) => [
+            region,
+            {
+              eligible: candidates.filter((item) => item.region === region).length,
+              sampled: selected.filter((item) => item.region === region).length,
+            },
+          ]),
+        ),
+        sampled: selected.length,
+      },
+      totalDomElements: nodeIds.length,
     };
   } finally {
     await session.detach();
@@ -994,8 +1000,8 @@ export async function capturePreview(input: {
     for (const viewport of captureViewports(input.additionalDesktopSize)) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const context = await browser.newContext({
-        viewport: { width: viewport.width, height: viewport.height },
         deviceScaleFactor: 1,
+        viewport: { height: viewport.height, width: viewport.width },
       });
       // tsx preserves local function names using this helper when serializing
       // page.evaluate callbacks. Install it only in this disposable QA context.
@@ -1024,8 +1030,8 @@ export async function capturePreview(input: {
               const locator = step.selector
                 ? page.locator(step.selector)
                 : page.getByRole(step.role as Parameters<Page["getByRole"]>[0], {
-                    name: step.name,
                     exact: true,
+                    name: step.name,
                   });
               // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
               if (step.action === "click") await locator.click();
@@ -1041,13 +1047,13 @@ export async function capturePreview(input: {
                 .first()
                 .waitFor({ state: "visible" });
             interaction = {
-              status: "passed",
               expectedText: scenario.expect?.text,
+              status: "passed",
             };
           } catch {
             interaction = {
-              status: "failed",
               expectedText: scenario.expect?.text,
+              status: "failed",
             };
           }
         }
@@ -1076,20 +1082,20 @@ export async function capturePreview(input: {
             observation.capture = name;
             observation.id = `${name}-${observation.id}`;
           }
-        const path = join(input.output, `${name}.png`);
+        const outputPath = nodePath.join(input.output, `${name}.png`);
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await settleFiniteMotion(page);
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        await page.screenshot({ path, fullPage: true });
+        await page.screenshot({ fullPage: true, path: outputPath });
         captures.push({
-          name,
-          state: scenario?.name ?? "initial",
-          path,
-          width: viewport.width,
           height: Math.max(viewport.height, measurements.documentHeight),
-          measurements,
-          styles,
           interaction,
+          measurements,
+          name,
+          path: outputPath,
+          state: scenario?.name ?? "initial",
+          styles,
+          width: viewport.width,
         });
       }
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow

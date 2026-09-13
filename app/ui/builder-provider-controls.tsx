@@ -11,24 +11,24 @@ import type { ComboOption } from "./search-combobox";
 import styles from "./app-builder.module.css";
 
 const storageProviderOptions = [
-  { name: "GitHub", provider: "github", icon: FaGithub, available: true },
-  { name: "GitLab", provider: "gitlab", icon: SiGitlab, available: false },
+  { available: true, icon: FaGithub, name: "GitHub", provider: "github" },
+  { available: false, icon: SiGitlab, name: "GitLab", provider: "gitlab" },
   {
+    available: false,
+    icon: SiBitbucket,
     name: "Bitbucket",
     provider: "bitbucket",
-    icon: SiBitbucket,
-    available: false,
   },
 ] as const;
 
 const deploymentProviderOptions = [
-  { name: "Vercel", provider: "vercel", icon: SiVercel, available: true },
-  { name: "Netlify", provider: "netlify", icon: SiNetlify, available: false },
+  { available: true, icon: SiVercel, name: "Vercel", provider: "vercel" },
+  { available: false, icon: SiNetlify, name: "Netlify", provider: "netlify" },
   {
+    available: false,
+    icon: SiCloudflare,
     name: "Cloudflare",
     provider: "cloudflare",
-    icon: SiCloudflare,
-    available: false,
   },
 ] as const;
 
@@ -96,8 +96,8 @@ export function DeployToSection({
                 footerIcon={<PlusCircle size={18} />}
                 detailPills
                 menuFooter={{
-                  value: "create-team",
                   label: "Connect another Vercel team",
+                  value: "create-team",
                 }}
                 onFooterSelect={onConnect}
               />
@@ -197,8 +197,8 @@ export function StoreInSection({
                     optionIcon={() => <FaGithub size={16} />}
                     footerIcon={<Plus size={21} />}
                     menuFooter={{
-                      value: "add-github",
                       label: githubView.actionLabel,
+                      value: "add-github",
                     }}
                     onFooterSelect={onConnect}
                   />

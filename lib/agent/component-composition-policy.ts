@@ -29,17 +29,17 @@ export const ARRUSTED_COMPONENT_COMPOSITION_POLICY_PATH = "docs/component-compos
 
 export const arrustedComponentCompositionPolicySchema = z
   .object({
-    version: z.literal(1),
     kind: z.literal("arrusted-component-composition-v1"),
-    publicImports: sortedUnique(identifier),
-    tokenEntrypoints: sortedUnique(identifier),
     providers: sortedUnique(identifier),
+    publicImports: sortedUnique(identifier),
     routeGlue: z
       .object({
         allowedFiles: sortedUnique(relativePath),
         allowedStyleFiles: sortedUnique(relativePath),
       })
       .strict(),
+    tokenEntrypoints: sortedUnique(identifier),
+    version: z.literal(1),
   })
   .strict();
 
@@ -98,44 +98,44 @@ export function bindArrustedComponentCompositionPolicy(input: {
 }): CompositionPolicyResolution {
   if (!gitObject.safeParse(input.sourceSha).success)
     return {
-      status: "unavailable",
       reasons: ["The selected source SHA is invalid."],
+      status: "unavailable",
     };
   if (!gitObject.safeParse(input.sourceTree).success)
     return {
-      status: "unavailable",
       reasons: ["The selected source tree is invalid."],
+      status: "unavailable",
     };
   if (input.content === null)
     return {
-      status: "unavailable",
       reasons: [
         `Missing ${ARRUSTED_COMPONENT_COMPOSITION_POLICY_PATH} in the selected Arrusted source.`,
       ],
+      status: "unavailable",
     };
   let parsed: unknown;
   try {
     parsed = JSON.parse(input.content) as unknown;
   } catch {
     return {
-      status: "unavailable",
       reasons: ["The Arrusted component-composition manifest is not valid JSON."],
+      status: "unavailable",
     };
   }
   const policy = arrustedComponentCompositionPolicySchema.safeParse(parsed);
   if (!policy.success)
     return {
-      status: "unavailable",
       reasons: ["The Arrusted component-composition manifest is invalid."],
+      status: "unavailable",
     };
   return {
-    status: "available",
     binding: {
       policy: policy.data,
       policyDigest: digest(input.content),
       sourceSha: input.sourceSha,
       sourceTree: input.sourceTree,
     },
+    status: "available",
   };
 }
 
@@ -181,8 +181,8 @@ export function auditAppliedAppComposition(input: {
     if (/(?:^|\/)components(?:\/|$)/u.test(relative))
       violations.push({
         code: "local-component-file",
-        path: file.path,
         message: "Generated apps may not add local visual component files.",
+        path: file.path,
       });
 
     if (
@@ -194,42 +194,42 @@ export function auditAppliedAppComposition(input: {
     )
       violations.push({
         code: "local-component-definition",
-        path: file.path,
         message: "Generated apps may only define visual route glue named by the Arrusted policy.",
+        path: file.path,
       });
 
     if (isStyle && !allowedStyles.has(relative))
       violations.push({
         code: "unapproved-style-file",
-        path: file.path,
         message: "Generated apps may not add component-local style files.",
+        path: file.path,
       });
 
     if (isStyle && /--[A-Za-z][A-Za-z0-9-]*\s*:/u.test(file.content))
       violations.push({
         code: "replacement-design-token",
-        path: file.path,
         message: "Generated apps may not define replacement design tokens.",
+        path: file.path,
       });
 
     if (/style\s*=\s*\{\s*\{/u.test(file.content))
       violations.push({
         code: "inline-visual-style",
-        path: file.path,
         message: "Generated apps may not add inline visual styling.",
+        path: file.path,
       });
 
     for (const specifier of importsFrom(file.content)) {
       if (specifier.startsWith("@autograph/") && !allowedImports.has(specifier))
         violations.push({
           code: "unapproved-public-import",
-          path: file.path,
           message: `The import ${specifier} is not declared by the selected Arrusted policy.`,
+          path: file.path,
         });
     }
   }
 
   return violations.length === 0
-    ? { status: "passed", binding: input.binding, inspectedFiles }
-    : { status: "failed", binding: input.binding, inspectedFiles, violations };
+    ? { binding: input.binding, inspectedFiles, status: "passed" }
+    : { binding: input.binding, inspectedFiles, status: "failed", violations };
 }

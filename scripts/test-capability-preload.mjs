@@ -1,7 +1,7 @@
 import { createPrivateKey, createPublicKey, randomBytes, sign } from "node:crypto";
 import { fstatSync, readSync, realpathSync, statSync, writeSync } from "node:fs";
 import { createRequire, syncBuiltinESMExports } from "node:module";
-import { dirname, isAbsolute, resolve } from "node:path";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   MessageChannel,
@@ -27,10 +27,10 @@ const timeoutMs = 10_000;
 const preloadUrl = import.meta.url;
 const workerPortKey = "__appBuilderStructuralTestAuthorizationV2";
 const workerProfileKey = `${workerPortKey}Profile`;
-const repositoryRoot = resolve(import.meta.dirname, "..");
+const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const repositoryRootStat = statSync(repositoryRoot, { bigint: true });
 if (
-  !isAbsolute(repositoryRoot) ||
+  !path.isAbsolute(repositoryRoot) ||
   realpathSync(repositoryRoot) !== repositoryRoot ||
   !repositoryRootStat.isDirectory() ||
   repositoryRootStat.uid !== BigInt(process.getuid?.() ?? -1) ||
@@ -39,7 +39,7 @@ if (
 )
   throw new Error("Structural test package root was not owner-bound.");
 const require = createRequire(import.meta.url);
-const registry = require(resolve(repositoryRoot, "lib/testing/test-capability-registry.cjs"));
+const registry = require(path.resolve(repositoryRoot, "lib/testing/test-capability-registry.cjs"));
 const workerThreads = require("node:worker_threads");
 const allowedWorkerEnvironment = new Set([
   "HOME",
@@ -67,7 +67,8 @@ function workerEnvironment(source, eveProfile, eveEnvelope) {
       environment[name] = source[name];
   const hasEveEnvelope = eveEnvelope !== undefined;
   environment.EVE_DEV_WORKER_APP_ROOT = hasEveEnvelope ? undefined : repositoryRoot;
-  environment.EVE_DEV = hasEveEnvelope ? undefined : eveProfile ? "1" : undefined;
+  environment.EVE_DEV = undefined;
+  if (!hasEveEnvelope && eveProfile) environment.EVE_DEV = "1";
   if (eveEnvelope?.bodyTimeout === "360000")
     environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS = eveEnvelope.bodyTimeout;
   if (eveEnvelope?.headersTimeout === "360000")
@@ -77,16 +78,18 @@ function workerEnvironment(source, eveProfile, eveEnvelope) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonical(proof) {
-  return JSON.stringify({
-    version: proof.version,
-    nonce: proof.nonce,
-    context: proof.context,
-    authorization: proof.authorization,
-    expiresAt: proof.expiresAt,
-    capabilities: proof.capabilities,
-    publicKey: proof.publicKey,
-    gateAEvalProfile: proof.gateAEvalProfile,
-  });
+  return JSON.stringify(
+    Object.fromEntries([
+      ["version", proof.version],
+      ["nonce", proof.nonce],
+      ["context", proof.context],
+      ["authorization", proof.authorization],
+      ["expiresAt", proof.expiresAt],
+      ["capabilities", proof.capabilities],
+      ["publicKey", proof.publicKey],
+      ["gateAEvalProfile", proof.gateAEvalProfile],
+    ]),
+  );
 }
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactKeys(value, keys) {
@@ -172,8 +175,8 @@ function requestAuthorization() {
   )
     throw new Error("Structural test authorization response was malformed.");
   const privateKey = createPrivateKey({
-    key: Buffer.from(response.delegationPrivateKey, "base64"),
     format: "der",
+    key: Buffer.from(response.delegationPrivateKey, "base64"),
     type: "pkcs8",
   });
   const derivedPublic = createPublicKey(privateKey)
@@ -186,9 +189,9 @@ function requestAuthorization() {
   const capability = registry.complete(process, proof);
   return {
     capability,
+    gateAEvalProfile: response.gateAEvalProfile,
     privateKey,
     publicKey: response.publicKey,
-    gateAEvalProfile: response.gateAEvalProfile,
   };
 }
 
@@ -197,31 +200,31 @@ function workerFilename(value) {
   try {
     return realpathSync(value instanceof URL ? fileURLToPath(value) : String(value));
   } catch {
-    return undefined;
+    /* File path cannot be resolved. */
   }
 }
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function allowedWorkerPaths() {
   const paths = [
-    resolve(repositoryRoot, "scripts/test-capability-worker-fixture.mjs"),
-    resolve(repositoryRoot, "scripts/test-capability-worker-timeout-fixture.mjs"),
+    path.resolve(repositoryRoot, "scripts/test-capability-worker-fixture.mjs"),
+    path.resolve(repositoryRoot, "scripts/test-capability-worker-timeout-fixture.mjs"),
   ];
   for (const [pkg, relative] of [
     ["vitest", "dist/workers/threads.js"],
     ["eve", "dist/src/compiled/env-runner/node-worker.js"],
   ]) {
     try {
-      paths.push(resolve(dirname(require.resolve(`${pkg}/package.json`)), relative));
+      paths.push(path.resolve(path.dirname(require.resolve(`${pkg}/package.json`)), relative));
     } catch {
       /* optional owner */
     }
   }
   return new Set(
-    paths.map((path) => {
+    paths.map((workerPath) => {
       try {
-        return realpathSync(path);
+        return realpathSync(workerPath);
       } catch {
-        return path;
+        return workerPath;
       }
     }),
   );
@@ -229,8 +232,8 @@ function allowedWorkerPaths() {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function eveRuntimeWorkerPath() {
   return realpathSync(
-    resolve(
-      dirname(require.resolve("eve/package.json")),
+    path.resolve(
+      path.dirname(require.resolve("eve/package.json")),
       "dist/src/compiled/env-runner/node-worker.js",
     ),
   );
@@ -265,6 +268,14 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
       );
       super(filename, {
         ...options,
+        env: {
+          ...workerEnvironment(options.env ?? process.env, eveProfile, eveEnvelope),
+          APP_BUILDER_TEST_CAPABILITY_ID: undefined,
+          APP_BUILDER_TEST_MODEL: undefined,
+          NODE_OPTIONS: isTimeoutFixture ? undefined : `--import=${preloadUrl}`,
+        },
+        execArgv: [],
+        transferList: [...(options.transferList ?? []), channel.port2],
         workerData: {
           ...existingData,
           [workerPortKey]: channel.port2,
@@ -272,14 +283,6 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
           [workerProfileKey]: eveProfile ? "eve" : "vitest",
           [eveWorkerEnvelopeKey]: eveEnvelope,
           [gateAEvalProfileKey]: nestedGateAEvalProfile,
-        },
-        transferList: [...(options.transferList ?? []), channel.port2],
-        execArgv: [],
-        env: {
-          ...workerEnvironment(options.env ?? process.env, eveProfile, eveEnvelope),
-          NODE_OPTIONS: isTimeoutFixture ? undefined : `--import=${preloadUrl}`,
-          APP_BUILDER_TEST_MODEL: undefined,
-          APP_BUILDER_TEST_CAPABILITY_ID: undefined,
         },
       });
       let settled = false;
@@ -315,22 +318,22 @@ function installWorkerBroker(capabilities, privateKey, publicKey, eveProfile, ga
           return;
         }
         const proof = {
-          version: 2,
-          nonce: request.nonce,
-          context: request.context,
           authorization: randomBytes(32).toString("hex"),
-          expiresAt: Date.now() + 5000,
           capabilities,
-          publicKey,
+          context: request.context,
+          expiresAt: Date.now() + 5000,
           gateAEvalProfile: nestedGateAEvalProfile,
+          nonce: request.nonce,
+          publicKey,
+          version: 2,
         };
         const signature = sign(null, Buffer.from(canonical(proof)), privateKey).toString("base64");
         channel.port1.postMessage({
           ...proof,
-          signature,
           delegationPrivateKey: privateKey
             .export({ format: "der", type: "pkcs8" })
             .toString("base64"),
+          signature,
         });
         cleanup();
       });

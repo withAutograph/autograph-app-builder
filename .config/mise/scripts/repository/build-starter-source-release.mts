@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import path from "node:path";
 
 import { deterministicGzip } from "../../../../lib/sandbox/deterministic-gzip.ts";
 
@@ -35,7 +35,7 @@ function argumentsFrom(values: readonly string[]) {
   const origin = new URL(releaseOrigin);
   if (origin.protocol !== "https:" || origin.pathname !== "/" || origin.search || origin.hash)
     throw new Error("Release origin must be an exact HTTPS origin.");
-  return { root: realpathSync(root), output: resolve(output), origin };
+  return { origin, output: path.resolve(output), root: realpathSync(root) };
 }
 
 function git(root: string, args: readonly string[], encoding: "utf-8"): string;
@@ -70,13 +70,13 @@ const entries = git(input.root, ["ls-tree", "-r", "--full-tree", TARGET_SHA], "u
   .map((line) => {
     const match = TREE_ENTRY.exec(line);
     if (!match) throw new Error(`Unsupported starter tree entry: ${line}`);
-    const [, mode, path] = match;
-    const bytes = git(input.root, ["show", `${TARGET_SHA}:${path}`], "buffer");
+    const [, mode, relativePath] = match;
+    const bytes = git(input.root, ["show", `${TARGET_SHA}:${relativePath}`], "buffer");
     return {
-      path,
-      mode,
-      sha256: sha256(bytes),
       bytes: bytes.byteLength,
+      mode,
+      path: relativePath,
+      sha256: sha256(bytes),
     };
   });
 if (!entries.length) throw new Error("Pinned starter contains no files.");
@@ -89,43 +89,43 @@ const archiveName = `${archiveSha256}.tar.gz`;
 const archiveUrl = new URL(archiveName, input.origin).toString();
 const manifest = Buffer.from(
   `${JSON.stringify({
-    version: 1,
-    source: { repository: REPOSITORY, sha: TARGET_SHA, tree: TARGET_TREE },
     archive: {
-      url: archiveUrl,
-      sha256: archiveSha256,
       bytes: archive.byteLength,
+      sha256: archiveSha256,
+      url: archiveUrl,
     },
     files: entries,
+    source: { repository: REPOSITORY, sha: TARGET_SHA, tree: TARGET_TREE },
+    version: 1,
   })}\n`,
 );
 const manifestSha256 = sha256(manifest);
 const manifestName = `${manifestSha256}.json`;
-mkdirSync(input.output, { recursive: true, mode: 0o755 });
-writeFileSync(resolve(input.output, archiveName), archive, {
+mkdirSync(input.output, { mode: 0o755, recursive: true });
+writeFileSync(path.resolve(input.output, archiveName), archive, {
   flag: "wx",
   mode: 0o444,
 });
-writeFileSync(resolve(input.output, manifestName), manifest, {
+writeFileSync(path.resolve(input.output, manifestName), manifest, {
   flag: "wx",
   mode: 0o444,
 });
 process.stdout.write(
   `${JSON.stringify({
-    version: 1,
-    sourceSha: TARGET_SHA,
-    sourceTree: TARGET_TREE,
     archive: {
+      bytes: archive.byteLength,
       name: archiveName,
       sha256: archiveSha256,
-      bytes: archive.byteLength,
-    },
-    manifest: {
-      name: manifestName,
-      sha256: manifestSha256,
-      bytes: manifest.byteLength,
-      url: new URL(manifestName, input.origin).toString(),
     },
     fileCount: entries.length,
+    manifest: {
+      bytes: manifest.byteLength,
+      name: manifestName,
+      sha256: manifestSha256,
+      url: new URL(manifestName, input.origin).toString(),
+    },
+    sourceSha: TARGET_SHA,
+    sourceTree: TARGET_TREE,
+    version: 1,
   })}\n`,
 );

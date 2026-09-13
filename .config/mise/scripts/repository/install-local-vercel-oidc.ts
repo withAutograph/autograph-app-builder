@@ -7,7 +7,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, resolve } from "node:path";
+import path from "node:path";
 import { randomBytes } from "node:crypto";
 
 import {
@@ -17,13 +17,13 @@ import {
   validateLocalVercelOidcClaims,
 } from "../../../../lib/eve/local-vercel-oidc";
 
-const repositoryRoot = resolve(import.meta.dirname, "../../../../");
+const repositoryRoot = path.resolve(import.meta.dirname, "../../../../");
 if (process.cwd() !== repositoryRoot || process.argv.length !== 2) {
   throw new Error("The local OIDC installer invocation was invalid.");
 }
 
-const environmentPath = resolve(repositoryRoot, ".env.local");
-const projectPath = resolve(repositoryRoot, ".vercel/project.json");
+const environmentPath = path.resolve(repositoryRoot, ".env.local");
+const projectPath = path.resolve(repositoryRoot, ".vercel/project.json");
 const environment = readOwnerBoundLocalFile(environmentPath, {
   confidential: false,
 });
@@ -32,13 +32,13 @@ const project = parseLinkedVercelProject(
 );
 const token = parseLocalVercelOidcToken(environment);
 const claims = validateLocalVercelOidcClaims({
-  token,
-  project,
   nowEpochSeconds: Math.floor(Date.now() / 1000),
+  project,
+  token,
 });
 
-const temporaryPath = resolve(
-  dirname(environmentPath),
+const temporaryPath = path.resolve(
+  path.dirname(environmentPath),
   `.env.local.install-${randomBytes(12).toString("hex")}`,
 );
 let temporaryExists = false;
@@ -54,7 +54,7 @@ try {
   chmodSync(temporaryPath, 0o600);
   renameSync(temporaryPath, environmentPath);
   temporaryExists = false;
-  const directory = openSync(dirname(environmentPath), "r");
+  const directory = openSync(path.dirname(environmentPath), "r");
   try {
     fsyncSync(directory);
   } finally {
@@ -66,9 +66,9 @@ try {
 
 process.stdout.write(
   `${JSON.stringify({
-    schemaVersion: 1,
+    claims,
     installed: ".env.local",
     mode: "0600",
-    claims,
+    schemaVersion: 1,
   })}\n`,
 );

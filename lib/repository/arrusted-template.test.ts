@@ -6,38 +6,38 @@ import { inspectCanonicalTemplateSnapshotReceipt } from "./source-receipt";
 describe("canonical Arrusted source preparation", () => {
   it("reuses the recorded session workspace without legacy reinspection", async () => {
     const receipt = inspectCanonicalTemplateSnapshotReceipt({
+      readinessDigest: "c".repeat(64),
       snapshot: {
+        contents: {},
+        contract: [],
+        dirtyPaths: [],
         sourcePath: "/workspace/repository",
         sourceSha: "a".repeat(40),
         sourceTree: "b".repeat(40),
-        dirtyPaths: [],
-        contents: {},
-        contract: [],
       },
-      readinessDigest: "c".repeat(64),
     });
     if (receipt.version !== 4) throw new Error("Expected cloned source fixture");
     const workspace = {
-      workspaceId: "sandbox",
-      workspacePath: "/workspace/repository",
+      adapter: "arrusted-development-v0",
+      eligibilityDigest: receipt.eligibilityDigest,
       sourcePath: "/workspace/repository",
       sourceSha: receipt.sourceSha,
       sourceTree: receipt.sourceTree,
       workspaceDigest: "d".repeat(64),
-      adapter: "arrusted-development-v0",
-      eligibilityDigest: receipt.eligibilityDigest,
+      workspaceId: "sandbox",
+      workspacePath: "/workspace/repository",
     } as const;
     const run = vi.fn();
 
     await expect(
       inspectCanonicalArrustedSandboxWorkspace({
+        receipt,
         sandbox: {
           id: "sandbox",
-          run,
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           readTextFile: vi.fn(async () => JSON.stringify(workspace)),
+          run,
         } as never,
-        receipt,
       }),
     ).resolves.toEqual(workspace);
     expect(run).not.toHaveBeenCalled();

@@ -5,8 +5,6 @@ import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
 import { StoreInSection } from "./builder-provider-controls";
 
 const meta = {
-  title: "Components/Create App/Sections/Store In",
-  component: StoreInSection,
   args: {
     available: true,
     connected: true,
@@ -21,6 +19,7 @@ const meta = {
     repository: "vendor-portal",
     selected: "github",
   },
+  component: StoreInSection,
   decorators: [
     (Story) => (
       <CreateAppFormStoryLayout>
@@ -28,11 +27,12 @@ const meta = {
       </CreateAppFormStoryLayout>
     ),
   ],
+  title: "Components/Create App/Sections/Store In",
 } satisfies Meta<typeof StoreInSection>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Connected: Story = {};
-export const OptionalNone: Story = { args: { selected: null, gitScope: "" } };
+export const OptionalNone: Story = { args: { gitScope: "", selected: null } };
 export const ConnectRequired: Story = {
   args: { connected: false, gitScope: "" },
 };

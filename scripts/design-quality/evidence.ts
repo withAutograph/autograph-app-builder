@@ -44,15 +44,15 @@ export function scoreAdherence(
       return [
         dimension,
         {
-          conforming,
-          nonconforming,
-          unassessed,
           assessed,
-          total: rows.length,
-          percent: assessed ? (100 * conforming) / assessed : null,
-          coveragePercent: rows.length ? (100 * assessed) / rows.length : null,
-          staticCount: rows.filter((o) => o.evidence === "static").length,
           browserCount: rows.filter((o) => o.evidence === "browser").length,
+          conforming,
+          coveragePercent: rows.length ? (100 * assessed) / rows.length : null,
+          nonconforming,
+          percent: assessed ? (100 * conforming) / assessed : null,
+          staticCount: rows.filter((o) => o.evidence === "static").length,
+          total: rows.length,
+          unassessed,
         },
       ];
     }),
@@ -70,29 +70,36 @@ export function scoreAdherence(
       browserCount: number;
     }
   >;
-  const available = Object.values(scores).filter((d) => d.percent !== null);
+  const available = Object.values(scores).filter(
+    (d): d is typeof d & { percent: number } => d.percent !== null,
+  );
   const total = Object.values(scores).reduce((n, d) => n + d.total, 0);
   const assessed = Object.values(scores).reduce((n, d) => n + d.assessed, 0);
+  let status: "unassessed" | "complete" | "partial";
+  if (available.length === 0) {
+    status = "unassessed";
+  } else if (
+    sourceAvailable &&
+    available.length >= dimensions.length &&
+    assessed >= total &&
+    limitations.length === 0
+  ) {
+    status = "complete";
+  } else {
+    status = "partial";
+  }
   return {
-    version: evaluatorVersion,
-    status:
-      available.length === 0
-        ? "unassessed"
-        : sourceAvailable &&
-            available.length >= dimensions.length &&
-            assessed >= total &&
-            limitations.length === 0
-          ? "complete"
-          : "partial",
-    score: available.length
-      ? Math.round(available.reduce((n, d) => n + d.percent!, 0) / available.length)
-      : null,
     coveragePercent: total ? Math.round((10_000 * assessed) / total) / 100 : null,
     dimensions: scores,
-    observations: unique,
     limitations,
     method:
       "Equal average of available dimension percentages; each is conforming / assessed. Shared-library observations are excluded. Unknown provenance is unassessed. Static JSX is not proof of rendering. Coverage describes inspected evidence, not the entire app.",
+    observations: unique,
+    score: available.length
+      ? Math.round(available.reduce((n, d) => n + d.percent, 0) / available.length)
+      : null,
+    status,
+    version: evaluatorVersion,
   };
 }
 export type Adherence = ReturnType<typeof scoreAdherence>;

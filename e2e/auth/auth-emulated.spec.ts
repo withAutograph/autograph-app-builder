@@ -17,14 +17,14 @@ import {
 const onboardingAlreadyAuthenticatedCode = "PASSKEY_ONBOARDING_ALREADY_AUTHENTICATED";
 
 const emptyAuthCounts = {
-  users: 0,
-  passkeys: 0,
-  organizations: 0,
-  members: 0,
-  sessions: 0,
   activeSessions: 0,
-  passkeyOnboardingContexts: 0,
   githubInstallations: 0,
+  members: 0,
+  organizations: 0,
+  passkeyOnboardingContexts: 0,
+  passkeys: 0,
+  sessions: 0,
+  users: 0,
   vercelInstallations: 0,
 };
 
@@ -62,7 +62,7 @@ function reportPasskeyFailures(page: Page) {
     if (response.ok() || !new URL(response.url()).pathname.startsWith("/api/auth/passkey/")) {
       return;
     }
-    const body = await response.text().catch(() => undefined);
+    const body = await response.text().catch(() => {});
     if (body === undefined) return;
     console.error(
       "passkey request failed",
@@ -147,11 +147,14 @@ test("Sign In and Sign Up are passive, reciprocal, and geometrically identical",
   expect(passkeyRequests).toBe(0);
   expect(await authCounts()).toEqual(emptyAuthCounts);
 
-  const signUpURL = new URL(signUpHref!, page.url());
+  if (!signUpHref) throw new Error("Sign Up link must have an href");
+  const signUpURL = new URL(signUpHref, page.url());
   expect(signUpURL.searchParams.get("redirectTo")).toBe(
     "/auth/setting-up?callbackURL=%2Fdashboard%3Ftab%3Drecent%26tab%3Dsaved%23complete",
   );
-  const signInURL = new URL((await signInLink.getAttribute("href"))!, page.url());
+  const signInHref = await signInLink.getAttribute("href");
+  if (!signInHref) throw new Error("Sign In link must have an href");
+  const signInURL = new URL(signInHref, page.url());
   expect(signInURL.searchParams.get("redirectTo")).toBe(signUpURL.searchParams.get("redirectTo"));
 });
 
@@ -185,9 +188,9 @@ test("a sign-in challenge failure stays local without invoking WebAuthn", async 
   });
   await page.route("**/api/auth/passkey/generate-authenticate-options*", (route) =>
     route.fulfill({
-      status: 503,
-      contentType: "application/json",
       body: JSON.stringify({ code: "CHALLENGE_UNAVAILABLE" }),
+      contentType: "application/json",
+      status: 503,
     }),
   );
 
@@ -255,20 +258,21 @@ test("passkey registration guards Sign Up and supports returning login", async (
       /\/api\/auth\/passkey\/generate-register-options(?:\?|$)/u,
     );
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
-    expect(
-      new URL((await registrationOptionsRequest).url()).searchParams.get("authenticatorAttachment"),
-    ).toBe("platform");
+    const registrationOptions = await registrationOptionsRequest;
+    expect(new URL(registrationOptions.url()).searchParams.get("authenticatorAttachment")).toBe(
+      "platform",
+    );
     await expect
       .poll(() => authCounts(), { timeout: 30_000 })
       .toEqual({
-        users: 1,
-        passkeys: 1,
-        organizations: 1,
-        members: 1,
-        sessions: 1,
         activeSessions: 1,
-        passkeyOnboardingContexts: 0,
         githubInstallations: 0,
+        members: 1,
+        organizations: 1,
+        passkeyOnboardingContexts: 0,
+        passkeys: 1,
+        sessions: 1,
+        users: 1,
         vercelInstallations: 0,
       });
     expect(await authenticator.credentials()).toHaveLength(1);
@@ -297,7 +301,10 @@ test("passkey registration guards Sign Up and supports returning login", async (
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
     await expect(page).toHaveURL(/\/\?source=returning#complete$/u);
     await expect
-      .poll(async () => (await page.request.get("/api/auth/get-session")).json())
+      .poll(async () => {
+        const response = await page.request.get("/api/auth/get-session");
+        return response.json();
+      })
       .toMatchObject({ user: { emailVerified: false } });
     expect(await authCounts()).toEqual(registeredCounts);
     expect(await authenticator.credentials()).toHaveLength(1);
@@ -333,10 +340,19 @@ test("passkey registration keeps the alternate authenticator flow when platform 
     );
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
 
-    expect(
-      new URL((await registrationOptionsRequest).url()).searchParams.has("authenticatorAttachment"),
-    ).toBe(false);
-    await expect.poll(async () => (await authCounts()).passkeys, { timeout: 30_000 }).toBe(1);
+    const registrationOptions = await registrationOptionsRequest;
+    expect(new URL(registrationOptions.url()).searchParams.has("authenticatorAttachment")).toBe(
+      false,
+    );
+    await expect
+      .poll(
+        async () => {
+          const counts = await authCounts();
+          return counts.passkeys;
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(1);
     expect(await authenticator.credentials()).toHaveLength(1);
   } finally {
     await authenticator.dispose();
@@ -383,14 +399,14 @@ test("permanent Sign Up link preserves the callback after missing credentials", 
     expect(signUpAfterFailure).toEqual(signUpBeforeFailure);
     expect(authenticationVerificationRequests).toBe(0);
     expect(await authCounts()).toEqual({
-      users: 0,
-      passkeys: 0,
-      organizations: 0,
-      members: 0,
-      sessions: 0,
       activeSessions: 0,
-      passkeyOnboardingContexts: 0,
       githubInstallations: 0,
+      members: 0,
+      organizations: 0,
+      passkeyOnboardingContexts: 0,
+      passkeys: 0,
+      sessions: 0,
+      users: 0,
       vercelInstallations: 0,
     });
 
@@ -415,11 +431,11 @@ test("permanent Sign Up link preserves the callback after missing credentials", 
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
     await expect(page).toHaveURL(/\?source=brief#complete$/u);
     expect(await authCounts()).toMatchObject({
-      users: 1,
-      passkeys: 1,
-      organizations: 1,
-      members: 1,
       activeSessions: 1,
+      members: 1,
+      organizations: 1,
+      passkeys: 1,
+      users: 1,
     });
   } finally {
     await authenticator.dispose();
@@ -448,12 +464,12 @@ test("an interrupted passkey ceremony keeps the permanent Sign Up link", async (
   await expect(signUpLink).toBeVisible();
   await expect(page).toHaveURL(/\/auth\/sign-in/u);
   expect(await authCounts()).toMatchObject({
-    users: 0,
-    passkeys: 0,
-    organizations: 0,
     members: 0,
-    sessions: 0,
+    organizations: 0,
     passkeyOnboardingContexts: 0,
+    passkeys: 0,
+    sessions: 0,
+    users: 0,
   });
 });
 
@@ -477,13 +493,13 @@ test("cancelled passkey registration stays on Sign Up without partial state", as
   await expect(page).toHaveURL(/\/auth\/sign-up/u);
   const firstContextIds = await onboardingContextIds();
   expect(await authCounts()).toMatchObject({
-    users: 0,
-    passkeys: 0,
-    organizations: 0,
-    members: 0,
-    sessions: 0,
     activeSessions: 0,
+    members: 0,
+    organizations: 0,
     passkeyOnboardingContexts: 1,
+    passkeys: 0,
+    sessions: 0,
+    users: 0,
   });
   expect(firstContextIds).toHaveLength(1);
 
@@ -494,12 +510,12 @@ test("cancelled passkey registration stays on Sign Up without partial state", as
   expect(replacementContextIds).toHaveLength(1);
   expect(replacementContextIds).not.toEqual(firstContextIds);
   expect(await authCounts()).toMatchObject({
-    users: 0,
-    passkeys: 0,
-    organizations: 0,
     members: 0,
-    sessions: 0,
+    organizations: 0,
     passkeyOnboardingContexts: 1,
+    passkeys: 0,
+    sessions: 0,
+    users: 0,
   });
 });
 
@@ -513,9 +529,9 @@ for (const contextFailure of [
     let registrationOptionsRequests = 0;
     await page.route("**/api/auth/passkey/onboarding-context", (route) =>
       route.fulfill({
-        status: contextFailure.status,
-        contentType: "application/json",
         body: JSON.stringify({ code: "ONBOARDING_CONTEXT_UNAVAILABLE" }),
+        contentType: "application/json",
+        status: contextFailure.status,
       }),
     );
     page.on("request", (request) => {
@@ -544,9 +560,9 @@ test("a registration-options failure retains only its bounded onboarding context
   try {
     await page.route("**/api/auth/passkey/generate-register-options*", (route) =>
       route.fulfill({
-        status: 503,
-        contentType: "application/json",
         body: JSON.stringify({ code: "CHALLENGE_UNAVAILABLE" }),
+        contentType: "application/json",
+        status: 503,
       }),
     );
 
@@ -616,9 +632,9 @@ test("server rejection after an assertion stays on Sign In without changing iden
     await page.route("**/api/auth/passkey/verify-authentication", (route) => {
       verificationRequests += 1;
       return route.fulfill({
-        status: 401,
-        contentType: "application/json",
         body: JSON.stringify({ code: "INVALID_PASSKEY" }),
+        contentType: "application/json",
+        status: 401,
       });
     });
 
@@ -678,22 +694,16 @@ test("a session created after context issuance blocks registration", async ({ co
   reportPasskeyFailures(page);
   const authenticator = await VirtualAuthenticator.create(context, page);
   // Keep callback fixtures scoped to this scenario.
-  // oxlint-disable-next-line unicorn/consistent-function-scoping
-  let releaseOptionsResponse = () => {};
-  const optionsResponseMayContinue = new Promise<void>((resolve) => {
-    releaseOptionsResponse = resolve;
-  });
-  // oxlint-disable-next-line unicorn/consistent-function-scoping
-  let markOptionsGenerated = () => {};
-  const optionsGenerated = new Promise<void>((resolve) => {
-    markOptionsGenerated = resolve;
-  });
+  const optionsResponse = Promise.withResolvers<undefined>();
+  const { promise: optionsResponseMayContinue, resolve: releaseOptionsResponse } = optionsResponse;
+  const generatedOptions = Promise.withResolvers<undefined>();
+  const { promise: optionsGenerated, resolve: markOptionsGenerated } = generatedOptions;
   let sessionPage: Page | undefined;
 
   try {
     await page.route(/\/api\/auth\/passkey\/generate-register-options(?:\?|$)/u, async (route) => {
       const response = await route.fetch();
-      markOptionsGenerated();
+      markOptionsGenerated(undefined as undefined);
       await optionsResponseMayContinue;
       await route.fulfill({ response });
     });
@@ -711,7 +721,7 @@ test("a session created after context issuance blocks registration", async ({ co
     const verificationResponsePromise = page.waitForResponse(
       (response) => new URL(response.url()).pathname === "/api/auth/passkey/verify-registration",
     );
-    releaseOptionsResponse();
+    releaseOptionsResponse(undefined as undefined);
     await clickPromise;
     const verificationResponse = await verificationResponsePromise;
 
@@ -722,9 +732,10 @@ test("a session created after context issuance blocks registration", async ({ co
     await expect(page).toHaveURL(/\/\?source=verification-race#complete$/u);
     expect(await authCounts()).toEqual(baseline);
     expect(await authenticator.credentials()).toHaveLength(1);
-    expect((await authCounts()).passkeys).toBe(0);
+    const finalCounts = await authCounts();
+    expect(finalCounts.passkeys).toBe(0);
   } finally {
-    releaseOptionsResponse();
+    releaseOptionsResponse(undefined as undefined);
     await sessionPage?.close();
     await authenticator.dispose();
   }
@@ -761,13 +772,13 @@ test("a final persistence failure rolls back registration state", async ({ conte
     await expect(page).toHaveURL(/\/auth\/sign-up/u);
     expect(await authenticator.credentials()).toHaveLength(1);
     expect(await authCounts()).toMatchObject({
-      users: 0,
-      passkeys: 0,
-      organizations: 0,
-      members: 0,
-      sessions: 0,
       activeSessions: 0,
+      members: 0,
+      organizations: 0,
       passkeyOnboardingContexts: 1,
+      passkeys: 0,
+      sessions: 0,
+      users: 0,
     });
     expect(await currentSession(page)).toBeNull();
   } finally {
@@ -787,7 +798,15 @@ test("an authenticator credential missing from server storage is not recreated",
   try {
     await page.goto("/auth/sign-up");
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
-    await expect.poll(async () => (await authCounts()).passkeys, { timeout: 30_000 }).toBe(1);
+    await expect
+      .poll(
+        async () => {
+          const counts = await authCounts();
+          return counts.passkeys;
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(1);
     await signOut(page);
     const sql = postgres(databaseUrl, { max: 1 });
     try {
@@ -798,8 +817,9 @@ test("an authenticator credential missing from server storage is not recreated",
     await page.getByRole("button", { name: "Continue with Passkey" }).click();
     await expectPasskeyFailure(page);
     await expect(page.getByRole("link", { name: "Sign Up" })).toBeVisible();
-    expect((await authCounts()).passkeys).toBe(0);
-    expect((await authCounts()).users).toBe(1);
+    const finalCounts = await authCounts();
+    expect(finalCounts.passkeys).toBe(0);
+    expect(finalCounts.users).toBe(1);
   } finally {
     await authenticator.dispose();
   }
@@ -809,14 +829,15 @@ for (const provider of ["GitHub", "Vercel"] as const) {
   test(`${provider} Emulate completes OAuth provisioning and returning login`, async ({ page }) => {
     await finishOAuth(page, provider);
     expect(await authCounts()).toMatchObject({
-      users: 1,
-      organizations: 1,
-      members: 1,
       activeSessions: 1,
+      members: 1,
+      organizations: 1,
+      users: 1,
     });
     await signOut(page);
     await finishOAuth(page, provider);
-    expect((await authCounts()).users).toBe(1);
+    const counts = await authCounts();
+    expect(counts.users).toBe(1);
   });
 }
 
@@ -839,12 +860,16 @@ test("provider account supports multiple passkeys but retains its final passkey"
       /\/api\/auth\/passkey\/generate-register-options(?:\?|$)/u,
     );
     await dialog.getByRole("button", { name: "Add passkey" }).click();
+    const settingsRegistrationOptions = await settingsRegistrationOptionsRequest;
     expect(
-      new URL((await settingsRegistrationOptionsRequest).url()).searchParams.has(
-        "authenticatorAttachment",
-      ),
+      new URL(settingsRegistrationOptions.url()).searchParams.has("authenticatorAttachment"),
     ).toBe(false);
-    await expect.poll(async () => (await authCounts()).passkeys).toBe(1);
+    await expect
+      .poll(async () => {
+        const counts = await authCounts();
+        return counts.passkeys;
+      })
+      .toBe(1);
     await expect(dialog).toBeHidden();
 
     // Chromium permits only one internal authenticator per browser context.
@@ -855,7 +880,12 @@ test("provider account supports multiple passkeys but retains its final passkey"
     await page.getByRole("button", { name: "Add passkey" }).first().click();
     await dialog.getByLabel("Name").fill("Second passkey");
     await dialog.getByRole("button", { name: "Add passkey" }).click();
-    await expect.poll(async () => (await authCounts()).passkeys).toBe(2);
+    await expect
+      .poll(async () => {
+        const counts = await authCounts();
+        return counts.passkeys;
+      })
+      .toBe(2);
 
     const list = await page.request.get("/api/auth/passkey/list-user-passkeys");
     expect(list.ok()).toBeTruthy();
@@ -864,18 +894,21 @@ test("provider account supports multiple passkeys but retains its final passkey"
     const deletePasskey = (id: string) =>
       page.evaluate(async (passkeyId) => {
         const response = await fetch("/api/auth/passkey/delete-passkey", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id: passkeyId }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
         });
         return { ok: response.ok, status: response.status };
       }, id);
-    expect((await deletePasskey(credentials[0].id)).ok).toBeTruthy();
-    expect(await deletePasskey(credentials[1].id)).toMatchObject({
+    const firstDeletion = await deletePasskey(credentials[0].id);
+    expect(firstDeletion.ok).toBeTruthy();
+    const secondDeletion = await deletePasskey(credentials[1].id);
+    expect(secondDeletion).toMatchObject({
       ok: false,
       status: 400,
     });
-    expect((await authCounts()).passkeys).toBe(1);
+    const finalCounts = await authCounts();
+    expect(finalCounts.passkeys).toBe(1);
   } finally {
     await authenticator?.dispose();
   }

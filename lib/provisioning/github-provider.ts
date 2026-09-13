@@ -102,16 +102,16 @@ export function starterSourceBinding(source: StarterSource) {
         sourceSha: objectId.parse(source.provenance.sourceSha),
         sourceTree: objectId.parse(source.provenance.sourceTree),
         starter: {
-          sourceSha: objectId.parse(source.provenance.sourceSha),
-          sourceTree: objectId.parse(source.provenance.sourceTree),
-          repository: source.provenance.repository,
-          ref: source.provenance.ref,
+          contractDigest: digest.parse(source.provenance.contractDigest),
+          eligibilityDigest: digest.parse(source.provenance.eligibilityDigest),
           method: source.provenance.method,
           readinessDigest: digest.parse(source.provenance.readinessDigest),
           receiptVersion: source.provenance.receiptVersion,
+          ref: source.provenance.ref,
+          repository: source.provenance.repository,
           sourceReceiptDigest: digest.parse(source.provenance.sourceReceiptDigest),
-          eligibilityDigest: digest.parse(source.provenance.eligibilityDigest),
-          contractDigest: digest.parse(source.provenance.contractDigest),
+          sourceSha: objectId.parse(source.provenance.sourceSha),
+          sourceTree: objectId.parse(source.provenance.sourceTree),
         },
       };
     }
@@ -119,11 +119,11 @@ export function starterSourceBinding(source: StarterSource) {
       sourceSha: objectId.parse(source.provenance.sourceSha),
       sourceTree: objectId.parse(source.provenance.sourceTree),
       starter: {
+        method: source.provenance.method,
+        ref: source.provenance.ref,
+        repository: source.provenance.repository,
         sourceSha: objectId.parse(source.provenance.sourceSha),
         sourceTree: objectId.parse(source.provenance.sourceTree),
-        repository: source.provenance.repository,
-        ref: source.provenance.ref,
-        method: source.provenance.method,
       },
     };
   }
@@ -133,14 +133,14 @@ export function starterSourceBinding(source: StarterSource) {
     sourceSha: source.manifest.source.sha,
     sourceTree: source.manifest.source.tree,
     starter: {
+      archiveBytes: source.manifest.archive.bytes,
+      archiveSha256: source.manifest.archive.sha256,
+      manifestSha256: source.manifestSha256,
+      method: "starter-archive-v3" as const,
+      ref: "refs/heads/main" as const,
+      repository: source.manifest.source.repository,
       sourceSha: source.manifest.source.sha,
       sourceTree: source.manifest.source.tree,
-      repository: source.manifest.source.repository,
-      ref: "refs/heads/main" as const,
-      method: "starter-archive-v3" as const,
-      archiveSha256: source.manifest.archive.sha256,
-      archiveBytes: source.manifest.archive.bytes,
-      manifestSha256: source.manifestSha256,
     },
   };
 }
@@ -169,8 +169,8 @@ export async function provisionGitHubRepository(input: {
   const now = input.now ?? Date.now;
   const app = createGitHubApp({
     appId: config.appId,
-    privateKey: config.privateKey,
     fetch: request,
+    privateKey: config.privateKey,
   });
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -183,22 +183,22 @@ export async function provisionGitHubRepository(input: {
   }): Promise<JsonResponse> {
     try {
       const response = await createGitHubTokenOctokit({
-        token: args.token,
         fetch: request,
+        token: args.token,
       }).request(`${args.method ?? "GET"} ${args.path}`, {
         ...(record(args.body) ? args.body : {}),
       });
       if (!args.expected.includes(response.status))
         throw new Error(`github-status-${response.status}`);
-      return { status: response.status, body: response.data };
+      return { body: response.data, status: response.status };
     } catch (error) {
       const status = record(error) ? error.status : undefined;
       const response = record(error) ? error.response : undefined;
       if (status === 401) throw new Error("credential-rejected", { cause: error });
       if (typeof status === "number" && args.expected.includes(status))
         return {
-          status,
           body: record(response) ? response.data : undefined,
+          status,
         };
       throw new Error("provider-unavailable", { cause: error });
     }
@@ -207,7 +207,6 @@ export async function provisionGitHubRepository(input: {
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function installationToken() {
     const authentication = await app.octokit.auth({
-      type: "installation",
       installationId: input.installation.installationId,
       permissions: {
         administration: "write",
@@ -215,6 +214,7 @@ export async function provisionGitHubRepository(input: {
         metadata: "read",
       },
       refresh: true,
+      type: "installation",
     });
     const token = stringProperty(authentication, "token");
     const permissions = property(authentication, "permissions");
@@ -272,16 +272,16 @@ export async function provisionGitHubRepository(input: {
         ({ authentication } = await createGitHubOAuthApp({
           clientId: config.clientId,
           clientSecret: config.clientSecret,
-          redirectUrl: "https://github.com/login/oauth/access_token",
           fetch: request,
+          redirectUrl: "https://github.com/login/oauth/access_token",
         }).refreshToken({ refreshToken: credential.tokens.refreshToken }));
       } catch (error) {
         if (record(error) && error.status === 401) {
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await input.credentialStore.deactivate({
             authority: input.authority,
-            providerUserId: input.installation.accountId,
             now: new Date(now()),
+            providerUserId: input.installation.accountId,
           });
           throw new Error("credential-unavailable", { cause: error });
         }
@@ -297,15 +297,15 @@ export async function provisionGitHubRepository(input: {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const rotated = await input.credentialStore.rotate({
         authority: input.authority,
-        providerUserId: input.installation.accountId,
         expectedRevision: credential.revision,
+        now: new Date(refreshedAt),
+        providerUserId: input.installation.accountId,
         tokens: {
           accessToken,
           accessTokenExpiresAt,
           refreshToken,
           refreshTokenExpiresAt,
         },
-        now: new Date(refreshedAt),
       });
       if (rotated) return rotated.tokens.accessToken;
     }
@@ -321,9 +321,9 @@ export async function provisionGitHubRepository(input: {
         : await refreshUserToken();
     if (input.installation.accountType === "User") {
       const user = await github({
+        expected: [200],
         path: "/user",
         token,
-        expected: [200],
       });
       if (
         decimalProperty(user.body, "id") !== input.installation.accountId ||
@@ -339,27 +339,29 @@ export async function provisionGitHubRepository(input: {
     )
       await input.credentialStore.deactivate({
         authority: input.authority,
-        providerUserId: input.installation.accountId,
         now: new Date(now()),
+        providerUserId: input.installation.accountId,
       });
+    let code: "credential_unavailable" | "installation_inactive" | "provider_unavailable" =
+      "provider_unavailable";
+    if (error instanceof Error && error.message.includes("credential")) {
+      code = "credential_unavailable";
+    } else if (error instanceof Error && error.message.includes("installation")) {
+      code = "installation_inactive";
+    }
     return {
-      status: "failed",
-      code:
-        error instanceof Error && error.message.includes("credential")
-          ? "credential_unavailable"
-          : error instanceof Error && error.message.includes("installation")
-            ? "installation_inactive"
-            : "provider_unavailable",
+      code,
       retryable: true,
+      status: "failed",
     };
   }
 
   // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
   async function repository(name: string) {
     return github({
+      expected: [200, 404],
       path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}`,
       token,
-      expected: [200, 404],
     });
   }
 
@@ -368,14 +370,14 @@ export async function provisionGitHubRepository(input: {
     const blobs = new Map<string, string>();
     const writeBlob = async (file: (typeof input.source.files)[number]) => {
       const response = await github({
-        method: "POST",
-        path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/git/blobs`,
-        token,
         body: {
           content: Buffer.from(file.bytes).toString("base64"),
           encoding: "base64",
         },
         expected: [201],
+        method: "POST",
+        path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/git/blobs`,
+        token,
       });
       return [file.path, objectId.parse(stringProperty(response.body, "sha"))] as const;
     };
@@ -386,39 +388,39 @@ export async function provisionGitHubRepository(input: {
       for (const [path, sha] of values) blobs.set(path, sha);
     }
     const tree = await github({
-      method: "POST",
-      path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/git/trees`,
-      token,
       body: {
         tree: input.source.files.map((file) => ({
-          path: file.path,
           mode: file.mode,
-          type: "blob",
+          path: file.path,
           sha: blobs.get(file.path),
+          type: "blob",
         })),
       },
       expected: [201],
+      method: "POST",
+      path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/git/trees`,
+      token,
     });
     const treeSha = objectId.parse(stringProperty(tree.body, "sha"));
     if (treeSha !== source.sourceTree) throw new Error("source-tree-mismatch");
     const commit = await github({
+      body: {
+        message: "Initialize repository from supported Arrusted starter",
+        parents: [],
+        tree: treeSha,
+      },
+      expected: [201],
       method: "POST",
       path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/git/commits`,
       token,
-      body: {
-        message: "Initialize repository from supported Arrusted starter",
-        tree: treeSha,
-        parents: [],
-      },
-      expected: [201],
     });
     const commitSha = objectId.parse(stringProperty(commit.body, "sha"));
     await github({
+      body: { ref: "refs/heads/main", sha: commitSha },
+      expected: [201],
       method: "POST",
       path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/git/refs`,
       token,
-      body: { ref: "refs/heads/main", sha: commitSha },
-      expected: [201],
     });
   }
 
@@ -429,9 +431,9 @@ export async function provisionGitHubRepository(input: {
     if (stringProperty(repo.body, "description") !== marker(input.requestId))
       throw new Error("repository-marker-mismatch");
     const commit = await github({
+      expected: [200],
       path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/commits/main`,
       token,
-      expected: [200],
     });
     const commitData = property(commit.body, "commit");
     const treeData = property(commitData, "tree");
@@ -441,9 +443,9 @@ export async function provisionGitHubRepository(input: {
     const headTree = objectId.parse(stringProperty(treeData, "sha"));
     if (headTree !== source.sourceTree) throw new Error("source-tree-mismatch");
     const tree = await github({
+      expected: [200],
       path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/git/trees/${headTree}?recursive=1`,
       token,
-      expected: [200],
     });
     if (property(tree.body, "truncated") !== false) throw new Error("tree-truncated");
     const entries = property(tree.body, "tree");
@@ -451,15 +453,15 @@ export async function provisionGitHubRepository(input: {
     const observed = entries
       .filter((entry) => record(entry) && entry.type === "blob")
       .map((entry) => ({
-        path: stringProperty(entry, "path"),
         mode: stringProperty(entry, "mode"),
+        path: stringProperty(entry, "path"),
         sha: stringProperty(entry, "sha"),
       }))
       .toSorted((left, right) => left.path.localeCompare(right.path));
     const expected = input.source.files
       .map((file) => ({
-        path: file.path,
         mode: file.mode,
+        path: file.path,
         sha: gitBlobSha(file.bytes),
       }))
       .toSorted((left, right) => left.path.localeCompare(right.path));
@@ -477,25 +479,25 @@ export async function provisionGitHubRepository(input: {
     )
       throw new Error("repository-postcondition");
     return {
-      status: "succeeded",
-      installationId: input.installation.installationId,
-      repositoryId,
-      owner,
-      name: resolvedName,
-      fullName: `${owner}/${resolvedName}`,
-      url: `https://github.com/${owner}/${resolvedName}`,
-      scope: {
-        type: input.installation.accountType === "Organization" ? "organization" : "user",
-        id: input.installation.accountId,
-        login: input.installation.accountLogin,
-      },
-      visibility: isPrivate ? "private" : "public",
       defaultBranch: "main",
+      fullName: `${owner}/${resolvedName}`,
       headSha,
       headTree,
+      installationId: input.installation.installationId,
+      name: resolvedName,
+      owner,
+      repositoryId,
+      scope: {
+        id: input.installation.accountId,
+        login: input.installation.accountLogin,
+        type: input.installation.accountType === "Organization" ? "organization" : "user",
+      },
       starter: {
         ...source.starter,
       },
+      status: "succeeded",
+      url: `https://github.com/${owner}/${resolvedName}`,
+      visibility: isPrivate ? "private" : "public",
     };
   }
 
@@ -507,8 +509,8 @@ export async function provisionGitHubRepository(input: {
           ? input.requestedName
           : suffixedProviderName({
               base: input.requestedName,
-              suffix: (input.generateSuffix ?? suffix)(),
               maximumLength: 100,
+              suffix: (input.generateSuffix ?? suffix)(),
             });
       if (candidates.includes(candidate)) continue;
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -529,16 +531,16 @@ export async function provisionGitHubRepository(input: {
             : "/user/repos";
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const created = await github({
+          body: {
+            auto_init: false,
+            description: marker(input.requestId),
+            name: candidate,
+            private: input.private,
+          },
+          expected: [201, 422],
           method: "POST",
           path: createPath,
           token,
-          body: {
-            name: candidate,
-            private: input.private,
-            auto_init: false,
-            description: marker(input.requestId),
-          },
-          expected: [201, 422],
         });
         if (created.status === 422) {
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -560,9 +562,9 @@ export async function provisionGitHubRepository(input: {
         continue;
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const main = await github({
+        expected: [200, 404, 409],
         path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(candidate)}/commits/main`,
         token,
-        expected: [200, 404, 409],
       });
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       if (main.status !== 200) await writeStarter(candidate);
@@ -571,33 +573,33 @@ export async function provisionGitHubRepository(input: {
         return await readBack(candidate);
       } catch {
         return {
-          status: "failed",
           code: "postcondition_failed",
           retryable: false,
+          status: "failed",
         };
       }
     }
-    return { status: "failed", code: "name_conflict", retryable: true };
+    return { code: "name_conflict", retryable: true, status: "failed" };
   } catch (error) {
     if (error instanceof Error && error.message === "credential-rejected") {
       await input.credentialStore.deactivate({
         authority: input.authority,
-        providerUserId: input.installation.accountId,
         now: new Date(now()),
+        providerUserId: input.installation.accountId,
       });
       return {
-        status: "failed",
         code: "credential_unavailable",
         retryable: true,
+        status: "failed",
       };
     }
     return {
-      status: "failed",
       code:
         error instanceof Error && error.message.includes("source")
           ? "source_mismatch"
           : "provider_unavailable",
       retryable: true,
+      status: "failed",
     };
   }
 }

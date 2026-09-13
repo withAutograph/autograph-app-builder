@@ -6,35 +6,35 @@ import type { builderHandoffs } from "../db/schema";
 import { createPostgresBuilderHandoffStore } from "./postgres-store";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace-one",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "user-one",
+  workspaceId: "workspace-one",
 };
 const row = {
   ...authority,
-  handoffId: "123e4567-e89b-42d3-a456-426614174001",
-  creationRequestId: "123e4567-e89b-42d3-a456-426614174002",
-  requestDigest: "a".repeat(64),
-  intent: {
-    appName: "Vendor Review",
-    appId: "vendor-review",
-    brief: "Review new vendors.",
-    repository: { requestedName: "vendor-review", private: true },
-    modelId: "openai/gpt-5.6-terra",
-    connections: [],
-  },
   createdAt: new Date("2026-09-01T12:00:00Z"),
+  creationRequestId: "123e4567-e89b-42d3-a456-426614174002",
   expiresAt: new Date("2026-09-01T12:01:00Z"),
+  handoffId: "123e4567-e89b-42d3-a456-426614174001",
+  intent: {
+    appId: "vendor-review",
+    appName: "Vendor Review",
+    brief: "Review new vendors.",
+    connections: [],
+    modelId: "openai/gpt-5.6-terra",
+    repository: { private: true, requestedName: "vendor-review" },
+  },
   redeemedAt: null,
+  requestDigest: "a".repeat(64),
   sessionId: null,
 } satisfies typeof builderHandoffs.$inferSelect;
 const renewal = {
   authority,
-  handoffId: row.handoffId,
-  requestDigest: row.requestDigest,
-  now: row.expiresAt,
   expiresAt: new Date("2026-09-01T12:02:00Z"),
+  handoffId: row.handoffId,
+  now: row.expiresAt,
+  requestDigest: row.requestDigest,
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -55,6 +55,7 @@ function store(input: {
     }),
   }));
   const database = {
+    select,
     update: () => ({
       set: (values: unknown) => {
         set(values);
@@ -67,28 +68,35 @@ function store(input: {
         };
       },
     }),
-    select,
   } as unknown as Parameters<typeof createPostgresBuilderHandoffStore>[0];
+  const handoffs = createPostgresBuilderHandoffStore(database);
+  const { renewExpired } = handoffs;
+  if (!renewExpired) throw new Error("PostgreSQL handoff store must support renewal");
   return {
-    handoffs: createPostgresBuilderHandoffStore(database),
-    set,
-    updateWhere,
+    handoffs: {
+      ...handoffs,
+      renewExpired,
+    } as Omit<typeof handoffs, "renewExpired"> & {
+      renewExpired: NonNullable<typeof renewExpired>;
+    },
     readWhere,
     select,
+    set,
+    updateWhere,
   };
 }
 
 describe("PostgreSQL handoff renewal", () => {
   it("only extends expiry under an owner-bound expired-and-unbound CAS", async () => {
     const test = store({ updated: [{ ...row, expiresAt: renewal.expiresAt }] });
-    const result = await test.handoffs.renewExpired!(renewal);
+    const result = await test.handoffs.renewExpired(renewal);
     expect(result).toMatchObject({
       disposition: "renewed",
       record: {
-        handoffId: row.handoffId,
         creationRequestId: row.creationRequestId,
-        requestDigest: row.requestDigest,
         expiresAt: renewal.expiresAt,
+        handoffId: row.handoffId,
+        requestDigest: row.requestDigest,
       },
     });
     expect(test.set).toHaveBeenCalledExactlyOnceWith({
@@ -126,7 +134,7 @@ describe("PostgreSQL handoff renewal", () => {
     expect(readback.toISOString()).toBe("2026-09-01T12:01:00.000Z");
     const test = store({ updated: [{ ...row, expiresAt: renewal.expiresAt }] });
     const timestamp = new Date("2026-09-01T12:01:00.001Z");
-    expect(await test.handoffs.renewExpired!({ ...renewal, now: timestamp })).toMatchObject({
+    expect(await test.handoffs.renewExpired({ ...renewal, now: timestamp })).toMatchObject({
       disposition: "renewed",
     });
     const [[query]] = test.updateWhere.mock.calls;
@@ -139,12 +147,12 @@ describe("PostgreSQL handoff renewal", () => {
   });
 
   it("fails closed when a missed update reads back an expired unbound row", async () => {
-    expect(await store({ current: [row] }).handoffs.renewExpired!(renewal)).toBeUndefined();
+    expect(await store({ current: [row] }).handoffs.renewExpired(renewal)).toBeUndefined();
     // A previously bound session remains recoverable even after expiry.
     expect(
       await store({
         current: [{ ...row, redeemedAt: row.createdAt, sessionId: "session-one" }],
-      }).handoffs.renewExpired!(renewal),
+      }).handoffs.renewExpired(renewal),
     ).toMatchObject({
       disposition: "existing",
       record: { sessionId: "session-one" },
@@ -160,11 +168,11 @@ describe("PostgreSQL handoff renewal", () => {
         ...(bound ? { redeemedAt: row.createdAt, sessionId: "existing-session" } : {}),
       };
       const test = store({ current: [current] });
-      expect(await test.handoffs.renewExpired!(renewal)).toMatchObject({
+      expect(await test.handoffs.renewExpired(renewal)).toMatchObject({
         disposition: "existing",
         record: {
-          handoffId: row.handoffId,
           expiresAt: current.expiresAt,
+          handoffId: row.handoffId,
           ...(bound ? { sessionId: "existing-session" } : {}),
         },
       });
@@ -179,9 +187,9 @@ describe("PostgreSQL handoff renewal", () => {
   );
 
   it("does not treat a missing row or mismatched digest as renewal success", async () => {
-    expect(await store({}).handoffs.renewExpired!(renewal)).toBeUndefined();
+    expect(await store({}).handoffs.renewExpired(renewal)).toBeUndefined();
     expect(
-      await store({ current: [{ ...row, requestDigest: "b".repeat(64) }] }).handoffs.renewExpired!(
+      await store({ current: [{ ...row, requestDigest: "b".repeat(64) }] }).handoffs.renewExpired(
         renewal,
       ),
     ).toBeUndefined();
@@ -193,9 +201,9 @@ describe("PostgreSQL handoff renewal", () => {
       await test.handoffs.bindSession({
         authority,
         handoffId: row.handoffId,
+        now: row.expiresAt,
         requestDigest: row.requestDigest,
         sessionId: "session-one",
-        now: row.expiresAt,
       }),
     ).toBeUndefined();
     expect(test.updateWhere.mock.calls[0][0].sql).toContain('"builder_handoff"."expires_at" >');

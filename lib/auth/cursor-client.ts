@@ -12,23 +12,23 @@ export const cursorRedirectUri = "http://localhost:8787/callback";
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function cursorClientRegistration() {
   return {
-    clientId: cursorClientId,
-    name: "Autograph for Cursor",
-    clientSecret: null,
-    clientDiscoveryId: null,
-    userId: null,
-    referenceId: null,
-    disabled: false,
-    skipConsent: false,
     applicationType: "native",
-    tokenEndpointAuthMethod: "none",
-    grantTypes: ["authorization_code", "refresh_token"],
-    responseTypes: ["code"],
-    redirectUris: [cursorRedirectUri],
-    scopes: [...previewOAuthScopes],
     clientCredentialsScopes: [],
-    requirePKCE: true,
+    clientDiscoveryId: null,
+    clientId: cursorClientId,
+    clientSecret: null,
+    disabled: false,
     dpopBoundAccessTokens: false,
+    grantTypes: ["authorization_code", "refresh_token"],
+    name: "Autograph for Cursor",
+    redirectUris: [cursorRedirectUri],
+    referenceId: null,
+    requirePKCE: true,
+    responseTypes: ["code"],
+    scopes: [...previewOAuthScopes],
+    skipConsent: false,
+    tokenEndpointAuthMethod: "none",
+    userId: null,
   } satisfies Partial<typeof schema.oauthClient.$inferInsert>;
 }
 
@@ -112,10 +112,10 @@ export async function setupCursorClient(database: Database, resource: string) {
     await tx
       .insert(schema.oauthClientResource)
       .values({
-        id: randomUUID(),
         clientId: cursorClientId,
-        resourceId: resource,
         createdAt: new Date(),
+        id: randomUUID(),
+        resourceId: resource,
       })
       .onConflictDoNothing({
         target: [schema.oauthClientResource.clientId, schema.oauthClientResource.resourceId],
@@ -126,5 +126,5 @@ export async function setupCursorClient(database: Database, resource: string) {
       );
     }
   });
-  return { clientId: cursorClientId, resource, ready: true as const };
+  return { clientId: cursorClientId, ready: true as const, resource };
 }

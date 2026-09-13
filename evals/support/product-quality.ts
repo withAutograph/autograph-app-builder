@@ -21,18 +21,10 @@ export interface ProductQualityScenario {
 
 export const PRODUCT_QUALITY_SCENARIOS: readonly ProductQualityScenario[] = [
   {
-    id: "vendor-onboarding",
     brief:
       "Build an internal vendor-onboarding workflow for operations to review new vendor submissions, resolve missing information, and involve Finance when tax verification is actually required.",
     expected: {
-      replyIncludes: [
-        "Vendor Onboarding",
-        "operations review queue",
-        "vendor detail panel",
-        "conditional Finance verification step",
-      ],
       inferredChoices: ["vendor-onboarding", "operations review queue", "vendor detail panel"],
-      question: "forbidden",
       prototype: {
         appId: "vendor-onboarding",
         requiredText: [
@@ -41,48 +33,56 @@ export const PRODUCT_QUALITY_SCENARIOS: readonly ProductQualityScenario[] = [
           "Northstar Logistics",
         ],
       },
+      question: "forbidden",
+      replyIncludes: [
+        "Vendor Onboarding",
+        "operations review queue",
+        "vendor detail panel",
+        "conditional Finance verification step",
+      ],
     },
+    id: "vendor-onboarding",
   },
   {
-    id: "material-product-ambiguity",
     brief:
       "We need an internal vendor product, but we do not know whether it should focus on initial onboarding or ongoing compliance monitoring.",
     expected: {
+      question: "one-recommended",
       replyIncludes: [
         "meaningfully different products",
         "recommended",
         "continuously monitoring vendors",
       ],
-      question: "one-recommended",
     },
+    id: "material-product-ambiguity",
   },
   {
-    id: "explicit-preference",
     brief:
       "Build a vendor-onboarding workflow. Use a full-page step-by-step form for a single requester rather than a review queue, and keep Finance review conditional on tax information.",
     expected: {
+      inferredChoices: ["step-by-step form", "single requester"],
+      question: "forbidden",
       replyIncludes: [
         "Vendor Onboarding",
         "step-by-step form",
         "single requester",
         "conditional Finance review",
       ],
-      inferredChoices: ["step-by-step form", "single requester"],
-      question: "forbidden",
     },
+    id: "explicit-preference",
   },
   {
-    id: "unavailable-product-alternative",
     brief:
       "Build an anonymous public vendor portal where anyone can upload tax and banking documents without signing in.",
     expected: {
+      question: "forbidden",
       replyIncludes: [
         "anonymous public vendor portal is unavailable",
         "recommended alternative",
         "Vendor Intake",
       ],
-      question: "forbidden",
     },
+    id: "unavailable-product-alternative",
   },
 ];
 
@@ -124,11 +124,11 @@ export function evaluateConversationQuality(input: {
     hardFailures,
     score: {
       productFacing: messages.every(isProductFacing),
-      structured: hardFailures.every(
-        (failure) => !failure.includes("unnecessary product question"),
-      ),
       productive: input.scenario.expected.replyIncludes.every((expected) =>
         input.reply.includes(expected),
+      ),
+      structured: hardFailures.every(
+        (failure) => !failure.includes("unnecessary product question"),
       ),
     },
   };
@@ -176,9 +176,9 @@ export function evaluatePrototypeQuality(input: {
   return {
     hardFailures,
     score: {
+      contentComplete: !/lorem ipsum|todo:|placeholder text/iu.test(input.html),
       semanticStructure:
         /<main[\s>]/iu.test(input.html) && /<section\s+aria-labelledby=/iu.test(input.html),
-      contentComplete: !/lorem ipsum|todo:|placeholder text/iu.test(input.html),
     },
   };
 }

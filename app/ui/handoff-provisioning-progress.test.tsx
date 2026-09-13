@@ -28,17 +28,17 @@ function projection(
   status: "pending" | "settled" = "pending",
 ): BuilderProvisionProjection {
   return {
-    revision,
     provisioning: {
-      version: 1,
-      requestId,
-      requestDigest: "a".repeat(64),
       appId: "vendor-portal",
+      github: { code: "not_selected", retryable: false, status: "skipped" },
+      requestDigest: "a".repeat(64),
+      requestId,
       status,
-      github: { status: "skipped", code: "not_selected", retryable: false },
-      vercel: { status: "skipped", code: "not_selected", retryable: false },
       updatedAt: "2030-01-01T00:00:00.000Z",
+      vercel: { code: "not_selected", retryable: false, status: "skipped" },
+      version: 1,
     },
+    revision,
   };
 }
 
@@ -73,6 +73,12 @@ class TestEventSource {
     for (const listener of this.listeners.get(name) ?? []) listener(event);
   }
 }
+
+const streamAt = (index: number): TestEventSource => {
+  const stream = TestEventSource.instances[index];
+  if (!stream) throw new Error(`Expected EventSource instance at index ${index}`);
+  return stream;
+};
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -127,7 +133,7 @@ describe("HandoffProvisioningProgress", () => {
     await render();
 
     expect(actions.continue).toHaveBeenCalledWith(undefined, { handoffId });
-    const stream = TestEventSource.instances[0]!;
+    const stream = streamAt(0);
     expect(stream.url).toBe(
       `/api/builder/provision/stream?requestId=${encodeURIComponent(requestId)}&afterRevision=1`,
     );
@@ -170,7 +176,7 @@ describe("HandoffProvisioningProgress", () => {
   it("keeps the native EventSource instance open for cursor-preserving reconnects and closes it on unmount", async () => {
     vi.stubGlobal("EventSource", TestEventSource);
     await render();
-    const stream = TestEventSource.instances[0]!;
+    const stream = streamAt(0);
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     await act(async () => stream.emit("error"));
@@ -189,7 +195,7 @@ describe("HandoffProvisioningProgress", () => {
   it("explicitly reconnects from the last accepted revision without retrying provider work", async () => {
     vi.stubGlobal("EventSource", TestEventSource);
     await render();
-    const oldStream = TestEventSource.instances[0]!;
+    const oldStream = streamAt(0);
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
     await act(async () => oldStream.emit("snapshot", projection(7)));
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
@@ -198,7 +204,7 @@ describe("HandoffProvisioningProgress", () => {
     await act(async () => container?.querySelector<HTMLButtonElement>("button")?.click());
     expect(oldStream.closed).toBe(true);
     expect(TestEventSource.instances).toHaveLength(2);
-    const newStream = TestEventSource.instances[1]!;
+    const newStream = streamAt(1);
     expect(newStream.url).toContain("afterRevision=7");
     expect(actions.continue).toHaveBeenCalledOnce();
 

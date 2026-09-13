@@ -26,17 +26,15 @@ export default defineEval({
     const vendor = productQualityScenario("vendor-onboarding");
     const repository = createSupportedRepositoryFixture();
     await t.send(`Supported repository at ${repository}\nProduct brief: ${vendor.brief}`);
-    t.requireInputRequest({ toolName: "apply_app_creation" });
+    t.requireInputRequest({ toolName: "apply-app-creation" });
     await t.respondAll("approve");
     t.succeeded();
-    t.calledTool("record_prototype_artifact", {
+    t.calledTool("record-prototype-artifact", {
+      count: 1,
       input: {
-        path: "prototype/vendor-onboarding/index.html",
         content: (value) => {
           if (typeof value !== "string") return false;
           const report = evaluatePrototypeQuality({
-            scenario: vendor,
-            html: value,
             appSpec: `## Status and prototype
 
 prototype/vendor-onboarding/index.html
@@ -100,40 +98,42 @@ Confirmed.
   "optionalCapabilities": { "integrations": [], "hostedResources": [] }
 }
 \`\`\``,
+            html: value,
+            scenario: vendor,
           });
           return report.hardFailures.length === 0;
         },
+        path: "prototype/vendor-onboarding/index.html",
       },
-      count: 1,
     });
-    t.calledTool("record_prototype_artifact", {
+    t.calledTool("record-prototype-artifact", {
+      count: 1,
       input: {
-        path: "prototype/vendor-onboarding/decisions.md",
         content: (value) =>
           typeof value === "string" &&
           value.includes("Operations starts from a review queue") &&
           value.includes("Finance tax verification appears only"),
+        path: "prototype/vendor-onboarding/decisions.md",
       },
-      count: 1,
     });
-    t.calledTool("record_prototype_artifact", {
+    t.calledTool("record-prototype-artifact", {
+      count: 1,
       input: {
-        path: "prototype/vendor-onboarding/app-spec.md",
         content: (value) =>
           typeof value === "string" &&
           validateBuildReadyAppSpec(value).valid &&
           value.includes("prototype/vendor-onboarding/index.html"),
+        path: "prototype/vendor-onboarding/app-spec.md",
       },
-      count: 1,
     });
-    t.calledTool("apply_app_creation", { count: 1 });
-    t.calledTool("validate_app_creation", { count: 1 });
+    t.calledTool("apply-app-creation", { count: 1 });
+    t.calledTool("validate-app-creation", { count: 1 });
     t.check(
       t.reply,
       assertQuality(
         evaluateConversationQuality({
-          scenario: vendor,
           reply: String(t.reply),
+          scenario: vendor,
         }),
         vendor.id,
       ),
@@ -145,8 +145,8 @@ Confirmed.
       t.reply,
       assertQuality(
         evaluateConversationQuality({
-          scenario: ambiguity,
           reply: String(t.reply),
+          scenario: ambiguity,
         }),
         ambiguity.id,
       ),
@@ -158,8 +158,8 @@ Confirmed.
       t.reply,
       assertQuality(
         evaluateConversationQuality({
-          scenario: preference,
           reply: String(t.reply),
+          scenario: preference,
         }),
         preference.id,
       ),
@@ -171,8 +171,8 @@ Confirmed.
       t.reply,
       assertQuality(
         evaluateConversationQuality({
-          scenario: unavailable,
           reply: String(t.reply),
+          scenario: unavailable,
         }),
         unavailable.id,
       ),

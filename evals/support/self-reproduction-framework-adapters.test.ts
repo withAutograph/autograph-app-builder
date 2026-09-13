@@ -3,60 +3,60 @@ import { createDefaultFrameworkAdapter } from "./self-reproduction-framework-ada
 
 const source = [
   {
-    path: "app/page.tsx",
     content: "export default function Page(){return <main data-app-shell />}",
+    path: "app/page.tsx",
   },
   {
-    path: "app/layout.tsx",
     content:
       "export const instant=true; export default function Layout({children}){return <body>{children}</body>}",
+    path: "app/layout.tsx",
   },
-  { path: "app/loading.tsx", content: "export default function Loading(){return <p>Loading</p>}" },
-  { path: "app/actions.ts", content: '"use server"; export async function save(userId:string){}' },
-  { path: "next.config.ts", content: "export default {cacheComponents:true}" },
-  { path: "app/globals.css", content: ":root{--background:#fff;--foreground:#111}" },
+  { content: "export default function Loading(){return <p>Loading</p>}", path: "app/loading.tsx" },
+  { content: '"use server"; export async function save(userId:string){}', path: "app/actions.ts" },
+  { content: "export default {cacheComponents:true}", path: "next.config.ts" },
+  { content: ":root{--background:#fff;--foreground:#111}", path: "app/globals.css" },
 ];
 
 describe("default framework adapter", () => {
   it("fails clear missing Next source structure", async () => {
     const adapter = createDefaultFrameworkAdapter({
-      side: "candidate",
-      files: [],
       baseURL: "http://candidate",
+      files: [],
+      side: "candidate",
     });
     await expect(adapter.reviewSource("cache-components")).resolves.toMatchObject({
-      ready: false,
       disposition: "missing-functionality",
+      ready: false,
     });
   });
 
   it("keeps instant navigation unassessed without distinct semantic selectors", async () => {
     const adapter = createDefaultFrameworkAdapter({
-      side: "candidate",
-      files: source,
       baseURL: "http://candidate",
+      files: source,
+      side: "candidate",
     });
     await expect(adapter.instantNavigationRecipe()).resolves.toMatchObject({
-      ready: false,
       disposition: "not-run",
+      ready: false,
     });
   });
 
   it("records only browser assertions it can observe", async () => {
     const adapter = createDefaultFrameworkAdapter({
-      side: "reference",
-      files: source,
       baseURL: "http://reference",
+      files: source,
+      side: "reference",
     });
     const page = {
       goto: vi.fn(() => Promise.resolve()),
       locator: () => ({
+        evaluate: () =>
+          Promise.resolve({ background: "rgb(255, 255, 255)", foreground: "rgb(17, 17, 17)" }),
         textContent: () =>
           Promise.resolve(
             "A useful application shell with enough rendered content for evaluation.",
           ),
-        evaluate: () =>
-          Promise.resolve({ background: "rgb(255, 255, 255)", foreground: "rgb(17, 17, 17)" }),
       }),
     };
     const observed = await adapter.exerciseBrowser(page as never, "server-first");

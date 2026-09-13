@@ -16,44 +16,44 @@ const now = Date.parse("2026-08-27T12:00:00.000Z");
 function store(): PreviewActivationStore {
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    provisionInvitedUser: vi.fn(async () => ({
-      userRowsAffected: 1,
-      accountRowsAffected: 1,
-      membershipRowsAffected: 1,
-    })),
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     configureRuntimeRole: vi.fn(async () => ({
+      runtimeRoleAttributesExact: true,
+      runtimeRoleCanConnect: true,
+      runtimeRoleCanCreateSchemaObjects: false as const,
+      runtimeRoleCanUseSchema: true,
       runtimeRoleCreated: true,
       runtimeRoleLogin: true,
-      runtimeRoleCanConnect: true,
-      runtimeRoleCanUseSchema: true,
-      runtimeRoleCanCreateSchemaObjects: false as const,
-      runtimeRoleTablePrivilegesExact: true,
-      runtimeRoleSequencePrivilegesExact: true,
-      runtimeRoleAttributesExact: true,
       runtimeRoleMembershipCount: 0 as const,
+      runtimeRoleSequencePrivilegesExact: true,
+      runtimeRoleTablePrivilegesExact: true,
     })),
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     initializeOAuth: vi.fn(async () => ({
-      resourceRowsBefore: 0,
-      resourceRowsAfter: 1,
-      jwksRowsBefore: 0,
       jwksRowsAfter: 1,
+      jwksRowsBefore: 0,
+      resourceRowsAfter: 1,
+      resourceRowsBefore: 0,
+    })),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    provisionInvitedUser: vi.fn(async () => ({
+      accountRowsAffected: 1,
+      membershipRowsAffected: 1,
+      userRowsAffected: 1,
     })),
   };
 }
 
 const invite = {
-  version: 1 as const,
   action: "invited-user.provision" as const,
-  requestedAt: new Date(now).toISOString(),
-  issuer: "https://builder.example.test/api/auth",
-  resource: "https://builder.example.test/mcp",
-  userId: "user_one",
-  workspaceId: "workspace_one",
   email: "User@One.Example",
   githubAccountId: "128727",
   githubLogin: "jasonmorganson",
+  issuer: "https://builder.example.test/api/auth",
+  requestedAt: new Date(now).toISOString(),
+  resource: "https://builder.example.test/mcp",
+  userId: "user_one",
+  version: 1 as const,
+  workspaceId: "workspace_one",
 };
 
 describe("Preview activation prerequisite contract", () => {
@@ -61,17 +61,17 @@ describe("Preview activation prerequisite contract", () => {
     const plan = planPreviewActivation(invite);
     expect(JSON.stringify(plan)).not.toContain(invite.email);
     const receipt = await executePreviewActivation({
+      now: () => now,
       request: {
         ...invite,
         confirmationDigest: plan.requiredConfirmationDigest,
       },
       store: store(),
-      now: () => now,
     });
     expect(receipt.effects).toMatchObject({
-      userRowsAffected: 1,
       accountRowsAffected: 1,
       membershipRowsAffected: 1,
+      userRowsAffected: 1,
     });
     const serialized = JSON.stringify(receipt);
     expect(serialized).not.toContain(invite.email);
@@ -80,29 +80,29 @@ describe("Preview activation prerequisite contract", () => {
 
   it.each([
     {
-      version: 1,
       action: "runtime-role.configure",
+      password: "runtime role password",
       requestedAt: new Date(now).toISOString(),
       roleName: "app_builder_runtime",
-      password: "runtime role password",
+      version: 1,
     },
     {
-      version: 1,
       action: "oauth.initialize",
-      requestedAt: new Date(now).toISOString(),
-      issuer: "https://builder.example.test/api/auth",
-      resource: "https://builder.example.test/mcp",
       authSecret: "a".repeat(32),
+      issuer: "https://builder.example.test/api/auth",
+      requestedAt: new Date(now).toISOString(),
+      resource: "https://builder.example.test/mcp",
+      version: 1,
     },
   ])("supports a closed confirmation-bound $action receipt", async (request) => {
     const plan = planPreviewActivation(request);
     const receipt = await executePreviewActivation({
+      now: () => now,
       request: {
         ...request,
         confirmationDigest: plan.requiredConfirmationDigest,
       },
       store: store(),
-      now: () => now,
     });
     expect(receipt.action).toBe(request.action);
     expect(receipt.status).toBe("applied");
@@ -112,19 +112,19 @@ describe("Preview activation prerequisite contract", () => {
     const plan = planPreviewActivation(invite);
     await expect(
       executePreviewActivation({
+        now: () => now,
         request: { ...invite, confirmationDigest: `sha256:${"0".repeat(64)}` },
         store: store(),
-        now: () => now,
       }),
     ).rejects.toThrow("confirmation");
     await expect(
       executePreviewActivation({
+        now: () => now + 16 * 60_000,
         request: {
           ...invite,
           confirmationDigest: plan.requiredConfirmationDigest,
         },
         store: store(),
-        now: () => now + 16 * 60_000,
       }),
     ).rejects.toThrow("stale");
     expect(() =>
@@ -144,19 +144,19 @@ describe("Preview activation prerequisite contract", () => {
 
   it("rejects every extra runtime role authority and role membership", () => {
     const exact = {
+      bypassRls: false,
       canConnect: true,
-      canUseSchema: true,
       canCreateSchemaObjects: false,
-      tablePrivilegesExact: true,
-      sequencePrivilegesExact: true,
       canLogin: true,
-      inherits: false,
-      superuser: false,
+      canUseSchema: true,
       createDatabase: false,
       createRole: false,
-      replication: false,
-      bypassRls: false,
+      inherits: false,
       membershipCount: 0,
+      replication: false,
+      sequencePrivilegesExact: true,
+      superuser: false,
+      tablePrivilegesExact: true,
     } as const;
     expect(assertRuntimeRoleReadback(exact)).toEqual(exact);
     for (const drift of [
@@ -191,7 +191,8 @@ describe("Preview activation prerequisite contract", () => {
       readFile("drizzle/0002_hosted_workspace_membership.sql", "utf-8"),
     ]);
     const provisionStart = cli.indexOf("async provisionInvitedUser(input)");
-    const provisionEnd = cli.indexOf("async configureRuntimeRole(input)");
+    const configureStart = cli.indexOf("async configureRuntimeRole(input)");
+    const provisionEnd = configureStart > provisionStart ? configureStart : cli.length;
     expect(provisionStart).toBeGreaterThanOrEqual(0);
     expect(provisionEnd).toBeGreaterThan(provisionStart);
     const provision = cli.slice(provisionStart, provisionEnd);

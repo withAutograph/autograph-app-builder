@@ -59,12 +59,12 @@ export async function POST(request: Request, context: { params: Promise<{ provid
     if (phase !== null) return new Response("Invalid request", { status: 400 });
     const relay = signLocalVercelRelay(
       {
-        state,
         configurationId:
           process.env.EMULATE_VERCEL_CONFIGURATION_ID ?? EMULATED_VERCEL_CONFIGURATION_ID,
-        teamId: process.env.EMULATE_VERCEL_TEAM_ID ?? EMULATED_VERCEL_TEAM_ID,
-        origin,
         expiresAt: Date.now() + 600_000,
+        origin,
+        state,
+        teamId: process.env.EMULATE_VERCEL_TEAM_ID ?? EMULATED_VERCEL_TEAM_ID,
       },
       emulation.relaySecret,
     );
@@ -72,23 +72,23 @@ export async function POST(request: Request, context: { params: Promise<{ provid
     const response = await providerEmulationFetch(
       new URL(`${emulation.vercelOrigin}/oauth/authorize/callback`),
       {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
-          username: "autograph-dev",
           client_id: emulation.vercelClientId,
           redirect_uri: redirectUri,
           state: relay,
+          username: "autograph-dev",
         }),
-        redirect: "manual",
         cache: "no-store",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        method: "POST",
+        redirect: "manual",
       },
       emulation,
     );
     const destination = validEmulatorRedirect({
-      response,
       origin,
       path: "/local-connections/vercel/oauth-callback",
+      response,
       state: relay,
     });
     if (!destination) return new Response("Invalid emulated Vercel approval", { status: 400 });
@@ -111,25 +111,25 @@ export async function POST(request: Request, context: { params: Promise<{ provid
     const response = await providerEmulationFetch(
       new URL(`${emulation.githubOrigin}/login/oauth/callback`),
       {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
-          login: "autograph-dev",
           client_id: clientId,
-          redirect_uri: redirectUri,
-          state,
           code_challenge: codeChallenge,
           code_challenge_method: codeChallengeMethod,
+          login: "autograph-dev",
+          redirect_uri: redirectUri,
+          state,
         }),
-        redirect: "manual",
         cache: "no-store",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        method: "POST",
+        redirect: "manual",
       },
       emulation,
     );
     const destination = validEmulatorRedirect({
-      response,
       origin,
       path: "/github/installations/callback",
+      response,
       state,
     });
     if (!destination) return new Response("Invalid emulated GitHub approval", { status: 400 });

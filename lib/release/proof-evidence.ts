@@ -18,7 +18,7 @@ export function parseReviewedProof<const Evaluation extends ReleaseEvaluation>(
       try {
         return JSON.parse(value) as Record<string, unknown>;
       } catch {
-        return undefined;
+        return null;
       }
     })
     .findLast(
@@ -30,10 +30,10 @@ export function parseReviewedProof<const Evaluation extends ReleaseEvaluation>(
   if (terminal === undefined)
     throw new Error(`${evaluation} did not produce the reviewed proof receipt.`);
   return {
-    eval: evaluation,
-    terminalPhase: "reviewed",
     browserPreview: true,
-    publicationAttempted: false,
+    eval: evaluation,
     outputSha256: sha256(output),
+    publicationAttempted: false,
+    terminalPhase: "reviewed",
   } as const;
 }

@@ -29,12 +29,12 @@ function statusReceipt(
   recovered: boolean,
 ) {
   return {
-    version: state.version,
-    phase: state.phase,
-    recovered,
-    preparedByCallId: state.preparedByCallId,
-    workspace: state.workspace,
     artifacts: state.artifacts.map(prototypeArtifactReceipt),
+    phase: state.phase,
+    preparedByCallId: state.preparedByCallId,
+    recovered,
+    version: state.version,
+    workspace: state.workspace,
     ...(state.phase === "app_spec_accepted" ||
     state.phase === "dependencies_prepared" ||
     state.phase === "identity_resolved" ||
@@ -47,11 +47,11 @@ function statusReceipt(
     isReviewedPhase(state)
       ? {
           appSpec: {
+            acceptedByCallId: state.appSpec.acceptedByCallId,
             appId: state.appSpec.appId,
             artifactPath: state.appSpec.artifactPath,
-            digest: state.appSpec.digest,
             artifactRevision: state.appSpec.artifactRevision,
-            acceptedByCallId: state.appSpec.acceptedByCallId,
+            digest: state.appSpec.digest,
             ...(state.appSpec.approvalReceipt === undefined
               ? {}
               : { approvalReceipt: state.appSpec.approvalReceipt }),
@@ -91,10 +91,10 @@ function statusReceipt(
     ...(state.phase === "apply_failed"
       ? {
           apply: {
-            status: state.applyFailure.status,
             digest: state.applyFailure.digest,
             reason: state.applyFailure.reason,
             recoveryRequired: true,
+            status: state.applyFailure.status,
           },
         }
       : {}),
@@ -105,44 +105,44 @@ function statusReceipt(
     isReviewedPhase(state)
       ? {
           apply: {
-            status: state.applyReceipt.status,
-            digest: state.applyReceipt.digest,
             changedContentDigest: state.applyReceipt.changedContentDigest,
+            digest: state.applyReceipt.digest,
+            status: state.applyReceipt.status,
           },
         }
       : {}),
     ...(state.phase === "validation_pending"
       ? {
           validation: {
-            status: state.validationAttempt.status,
             digest: state.validationAttempt.digest,
             recoveryRequired: true,
+            status: state.validationAttempt.status,
           },
         }
       : {}),
     ...(state.phase === "validation_failed"
       ? {
           validation: {
-            status: state.validationFailure.status,
             digest: state.validationFailure.digest,
             reason: state.validationFailure.reason,
             recoveryRequired: true,
+            status: state.validationFailure.status,
           },
         }
       : {}),
     ...(state.phase === "validated" || isReviewedPhase(state)
       ? {
           validation: {
-            status: state.validationReceipt.status,
             digest: state.validationReceipt.digest,
+            status: state.validationReceipt.status,
           },
         }
       : {}),
     ...(isReviewedPhase(state)
       ? {
           review: {
-            digest: state.reviewReceipt.digest,
             changeSetDigest: state.reviewReceipt.changeSetDigest,
+            digest: state.reviewReceipt.digest,
           },
         }
       : {}),
@@ -152,7 +152,6 @@ function statusReceipt(
 export default defineTool({
   description:
     "Report the durable App Builder workflow phase and verify any prepared repository workspace without mutating it.",
-  inputSchema: z.object({}),
   async execute(_input, ctx) {
     const durable = appBuilderWorkflowState.get();
     if (hasTestCapability("simulated-target")) {
@@ -172,9 +171,9 @@ export default defineTool({
       );
     }
     const observed = await inspectSourceBoundSandboxWorkspace({
-      sandbox,
-      receipt: durable.sourceReceipt,
       expectedWorkspace: durable.workspace,
+      receipt: durable.sourceReceipt,
+      sandbox,
       ...(durable.githubSource === undefined ? {} : { githubSource: durable.githubSource }),
     });
     if (
@@ -187,4 +186,5 @@ export default defineTool({
       workspace: observed,
     };
   },
+  inputSchema: z.object({}),
 });

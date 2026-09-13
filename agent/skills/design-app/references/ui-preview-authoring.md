@@ -1,7 +1,7 @@
 # Preview authoring
 
 Use this contract before the first `record_ui_preview` call. Discover the current
-catalog with `inspect_repository({ paths: [...] })`: read `tsconfig.json` for
+catalog with `inspect-repository({ paths: [...] })`: read `tsconfig.json` for
 `@autograph/components`, `@autograph/compositions`, and `@autograph/icons` aliases,
 or their package export entrypoints. Follow the selected barrel's re-exports
 into implementations, then read relevant stories for actual props and usage.
@@ -34,7 +34,7 @@ single line or a giant JSX expression: preview source must remain readable so a
 compiler error can be located and repaired.
 
 If `record_ui_preview` reports an import, syntax, or compilation error, repair
-the reported source and call `record_ui_preview` again. Call `accept_ui_preview`
+the reported source and call `record_ui_preview` again. Call `accept-ui-preview`
 only after `record_ui_preview` has returned a current valid preview revision.
 
 ## Minimal source and matching manifest

@@ -10,41 +10,41 @@ import {
 import { sandboxExecutionPolicyDigest } from "./execution-policy";
 
 const principal: HostedPrincipal = {
-  issuer: "https://builder.example.test/api/auth",
   audience: "https://builder.example.test/mcp",
-  workspaceId: "workspace_1",
+  issuer: "https://builder.example.test/api/auth",
   ownerUserId: "user_1",
   scopes: ["eve:start"],
+  workspaceId: "workspace_1",
 };
 
 const lease = {
-  version: 1 as const,
-  principal,
-  adapterSessionId: "session_1",
-  providerSandboxId: "sandbox_1",
-  epoch: 1,
-  state: "active" as const,
-  policyDigest: sandboxExecutionPolicyDigest(),
   acquiredAtEpochMs: 1000,
-  heartbeatAtEpochMs: 1000,
+  adapterSessionId: "session_1",
+  epoch: 1,
   expiresAtEpochMs: 901_000,
+  heartbeatAtEpochMs: 1000,
+  policyDigest: sandboxExecutionPolicyDigest(),
+  principal,
+  providerSandboxId: "sandbox_1",
+  state: "active" as const,
+  version: 1 as const,
 };
 
 const row = {
-  issuer: principal.issuer,
-  audience: principal.audience,
-  workspaceId: principal.workspaceId,
-  ownerUserId: principal.ownerUserId,
-  adapterSessionId: lease.adapterSessionId,
-  providerSandboxId: lease.providerSandboxId,
-  epoch: lease.epoch,
-  state: lease.state,
-  policyDigest: lease.policyDigest,
-  record: lease,
   acquiredAt: new Date(lease.acquiredAtEpochMs),
-  heartbeatAt: new Date(lease.heartbeatAtEpochMs),
+  adapterSessionId: lease.adapterSessionId,
+  audience: principal.audience,
+  epoch: lease.epoch,
   expiresAt: new Date(lease.expiresAtEpochMs),
+  heartbeatAt: new Date(lease.heartbeatAtEpochMs),
+  issuer: principal.issuer,
+  ownerUserId: principal.ownerUserId,
+  policyDigest: lease.policyDigest,
+  providerSandboxId: lease.providerSandboxId,
+  record: lease,
   releasedAt: null,
+  state: lease.state,
+  workspaceId: principal.workspaceId,
 };
 
 describe("PostgreSQL sandbox execution lease authority", () => {

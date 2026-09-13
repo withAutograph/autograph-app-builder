@@ -44,8 +44,8 @@ describe("safe MCP tool errors", () => {
     const result = safeToolError(new AdapterNotConfiguredError());
     expect(result.content).toEqual([
       {
-        type: "text",
         text: "Autograph App Builder is not connected to its production service yet.",
+        type: "text",
       },
     ]);
     expect(result.structuredContent.error?.message).toBe(
@@ -81,10 +81,10 @@ describe("MCP App UI presentation", () => {
   it("keeps ordinary session results text-first", () => {
     const result = toolResult(
       {
-        sessionId: "session-one",
-        status: "working",
         cursor: 0,
         events: [],
+        sessionId: "session-one",
+        status: "working",
       },
       "Autograph App Builder started the app build.",
     );
@@ -95,18 +95,18 @@ describe("MCP App UI presentation", () => {
   it("offers Autograph App Builder progress for an outstanding input request", () => {
     const result = toolResult(
       {
-        sessionId: "session-one",
-        status: "input_required",
         cursor: 1,
         events: [],
         inputRequests: [
           {
-            requestId: "request-one",
-            kind: "approval",
-            title: "Continue?",
             allowFreeform: false,
+            kind: "approval",
+            requestId: "request-one",
+            title: "Continue?",
           },
         ],
+        sessionId: "session-one",
+        status: "input_required",
       },
       "Autograph App Builder needs input.",
     );
@@ -119,17 +119,17 @@ describe("MCP App UI presentation", () => {
   it("keeps prototype results out of the MCP App UI", () => {
     const result = toolResult(
       {
-        sessionId: "session-one",
-        status: "completed",
         cursor: 42,
         events: [],
         prototype: {
-          path: "prototype/vendor-onboarding/index.html",
-          mediaType: "text/html",
           content: "<!doctype html><html><body>Vendor queue</body></html>",
           digest: "a".repeat(64),
+          mediaType: "text/html",
+          path: "prototype/vendor-onboarding/index.html",
           revision: "b".repeat(64),
         },
+        sessionId: "session-one",
+        status: "completed",
       },
       "Autograph App Builder returned the latest progress.",
     );

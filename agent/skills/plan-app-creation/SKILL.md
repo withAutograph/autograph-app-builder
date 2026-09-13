@@ -1,5 +1,5 @@
 ---
-name: plan-app-creation
+name: plan_app_creation
 description: Validate an accepted AppSpec and produce a canonical, read-only AppSpec-bound app creation proposal. Use when a user explicitly asks to plan app creation, inspect an app contract, diagnose creation blockers, or refresh a stale proposal. Generic app-creation requests belong to $create-app.
 ---
 
@@ -20,14 +20,14 @@ through a generic shell.
    to `$scaffold-app-workspace` and stop this route-owned flow. Do not interpret
    a generic “create an app” request as bare scaffolding.
 2. References are bundled files, not skills. Never pass a reference path to
-   `load_skill`; that tool accepts only the top-level `plan-app-creation` name.
-   After this skill is loaded, use `read_skill_reference` with
-   `plan-app-creation` and `references/app-contract-v1.md`, then read the result
+   `load_skill`; that tool accepts only the top-level `plan_app_creation` name.
+   After this skill is loaded, use `read-skill-reference` with
+   `plan_app_creation` and `references/app-contract-v1.md`, then read the result
    completely.
 3. Read only the known product and design references needed from the exact
    prepared `workspacePath`. The typed planning operation owns target identity,
    collision, package, route, and topology inspection; do not run generic Git
-   status or pass a sandbox path to the app-runtime `inspect_repository` tool.
+   status or pass a sandbox path to the app-runtime `inspect-repository` tool.
    Do not modify production source or topology.
 4. Use the lowercase kebab-case app id already preserved or inferred by the
    active `$create-app` workflow as the only authored contract input. Do not ask

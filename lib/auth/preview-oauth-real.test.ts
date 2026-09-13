@@ -21,6 +21,13 @@ import {
   createRealOAuthHarness as setup,
 } from "./real-oauth-test-harness";
 
+const required = <T>(value: T | null | undefined, name: string): T => {
+  if (value === null || value === undefined) {
+    throw new Error(`Expected ${name}`);
+  }
+  return value;
+};
+
 describe("real Better Auth Preview OAuth handler", () => {
   it("reuses one web login for Cursor and Codex, persists consent, and refreshes actual tokens", async () => {
     const harness = await setup(["workspace_1"], codexClientMetadata);
@@ -38,15 +45,15 @@ describe("real Better Auth Preview OAuth handler", () => {
       const first = await grantRealOAuth(harness, browser, client, previewOAuthScopes.join(" "));
       expect(first.consentRequired).toBe(true);
       expect(first.claims).toMatchObject({
-        sub: user.id,
-        workspace_id: "workspace_1",
         aud: resource,
         iss: issuer,
+        sub: user.id,
+        workspace_id: "workspace_1",
       });
       expect(first.tokens).toMatchObject({
-        token_type: "Bearer",
         expires_in: 300,
         refresh_token: expect.any(String),
+        token_type: "Bearer",
       });
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const repeated = await grantRealOAuth(harness, browser, client, previewOAuthScopes.join(" "));
@@ -55,9 +62,9 @@ describe("real Better Auth Preview OAuth handler", () => {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const refreshed = await refreshRealOAuth(harness, client.id, first.tokens.refresh_token);
       expect(refreshed.claims).toMatchObject({
+        aud: resource,
         sub: user.id,
         workspace_id: "workspace_1",
-        aud: resource,
       });
       expect(refreshed.tokens.refresh_token).not.toBe(first.tokens.refresh_token);
       expect(refreshed.tokens.scope).toBe(previewOAuthScopes.join(" "));
@@ -85,7 +92,7 @@ describe("real Better Auth Preview OAuth handler", () => {
         }),
         { headers: browser, redirect: "manual" },
       );
-      const destination = new URL(response.headers.get("location")!);
+      const destination = new URL(required(response.headers.get("location"), "redirect location"));
       expect(destination.origin + destination.pathname).toBe(`${issuer}/error`);
       expect(destination.searchParams.get("error")).toBe("invalid_redirect");
     }
@@ -99,15 +106,19 @@ describe("real Better Auth Preview OAuth handler", () => {
       headers: browser,
       redirect: "manual",
     });
-    expect(new URL(response.headers.get("location")!).searchParams.has("error")).toBe(true);
+    expect(
+      new URL(required(response.headers.get("location"), "redirect location")).searchParams.has(
+        "error",
+      ),
+    ).toBe(true);
     expect(await harness.auth.api.getOAuthConsents({ headers: browser })).toEqual([]);
     const registration = await harness.customFetchImpl(`${issuer}/oauth2/register`, {
-      method: "POST",
-      headers: { origin, "content-type": "application/json" },
       body: JSON.stringify({
         client_name: "unapproved",
         redirect_uris: [cursorRedirectUri],
       }),
+      headers: { "content-type": "application/json", origin },
+      method: "POST",
     });
     expect(registration.ok).toBe(false);
     const clients = await harness.db.findMany({ model: "oauthClient" });
@@ -118,12 +129,12 @@ describe("real Better Auth Preview OAuth handler", () => {
     const discovery = await customFetchImpl(`${issuer}/.well-known/oauth-authorization-server`);
     expect(discovery.status).toBe(200);
     await expect(discovery.json()).resolves.toMatchObject({
-      issuer,
       authorization_endpoint: `${issuer}/oauth2/authorize`,
-      token_endpoint: `${issuer}/oauth2/token`,
-      jwks_uri: `${issuer}/jwks`,
       code_challenge_methods_supported: ["S256"],
       grant_types_supported: ["authorization_code", "refresh_token"],
+      issuer,
+      jwks_uri: `${issuer}/jwks`,
+      token_endpoint: `${issuer}/oauth2/token`,
     });
 
     const jwksResponse = await customFetchImpl(`${issuer}/jwks`);
@@ -134,8 +145,8 @@ describe("real Better Auth Preview OAuth handler", () => {
     expect(jwks.keys).toHaveLength(1);
     expect(jwks.keys[0]).toMatchObject({
       alg: "ES256",
-      kty: "EC",
       crv: "P-256",
+      kty: "EC",
     });
     expect(jwks.keys[0]).not.toHaveProperty("d");
 
@@ -176,18 +187,21 @@ describe("real Better Auth Preview OAuth handler", () => {
       redirect: "manual",
     });
     expect(getResponse.status).toBe(302);
-    const consentLocation = new URL(getResponse.headers.get("location")!, origin);
+    const consentLocation = new URL(
+      required(getResponse.headers.get("location"), "consent location"),
+      origin,
+    );
     expect(consentLocation.pathname).toBe("/auth/consent");
     expect(consentLocation.searchParams.get("sig")).toMatch(/^[A-Za-z0-9+/=]+$/u);
     const consentQuery = consentLocation.search.slice(1);
 
     const prelogin = await customFetchImpl(`${issuer}/oauth2/public-client-prelogin`, {
-      method: "POST",
-      headers: { origin, "content-type": "application/json" },
       body: JSON.stringify({
         client_id: clientId,
         oauth_query: consentQuery,
       }),
+      headers: { "content-type": "application/json", origin },
+      method: "POST",
     });
     expect(prelogin.status).toBe(200);
     await expect(prelogin.json()).resolves.toMatchObject({
@@ -196,39 +210,41 @@ describe("real Better Auth Preview OAuth handler", () => {
     });
 
     const consent = await customFetchImpl(`${issuer}/oauth2/consent`, {
-      method: "POST",
+      body: JSON.stringify({ accept: true, oauth_query: consentQuery }),
       headers: new Headers({
         ...Object.fromEntries(signedIn.entries()),
-        origin,
         "content-type": "application/json",
+        origin,
       }),
-      body: JSON.stringify({ accept: true, oauth_query: consentQuery }),
+      method: "POST",
     });
     expect(consent.status).toBe(200);
     const consentBody = (await consent.json()) as {
       redirect_uri?: string;
       url?: string;
     };
-    const callback = new URL(consentBody.redirect_uri ?? consentBody.url!);
+    const callback = new URL(
+      required(consentBody.redirect_uri ?? consentBody.url, "consent callback"),
+    );
     expect(callback.origin + callback.pathname).toBe(redirectUri);
     expect(callback.searchParams.get("state")).toBe("state_allow");
     const code = callback.searchParams.get("code");
     expect(code).toMatch(/^[A-Za-z0-9_-]+$/u);
 
     const token = await customFetchImpl(`${issuer}/oauth2/token`, {
-      method: "POST",
-      headers: {
-        origin,
-        "content-type": "application/x-www-form-urlencoded",
-      },
       body: new URLSearchParams({
-        grant_type: "authorization_code",
         client_id: clientId,
-        code: code!,
+        code: required(code, "authorization code"),
         code_verifier: verifier,
+        grant_type: "authorization_code",
         redirect_uri: redirectUri,
         resource,
       }),
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        origin,
+      },
+      method: "POST",
     });
     expect(token.status).toBe(200);
     const tokenBody = (await token.json()) as {
@@ -246,17 +262,17 @@ describe("real Better Auth Preview OAuth handler", () => {
     expect(tokenBody.refresh_token).toMatch(/^[A-Za-z0-9_-]+$/u);
 
     const refreshed = await customFetchImpl(`${issuer}/oauth2/token`, {
-      method: "POST",
-      headers: {
-        origin,
-        "content-type": "application/x-www-form-urlencoded",
-      },
       body: new URLSearchParams({
-        grant_type: "refresh_token",
         client_id: clientId,
-        refresh_token: tokenBody.refresh_token!,
+        grant_type: "refresh_token",
+        refresh_token: required(tokenBody.refresh_token, "refresh token"),
         resource,
       }),
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        origin,
+      },
+      method: "POST",
     });
     expect(refreshed.status).toBe(200);
     await expect(refreshed.json()).resolves.toMatchObject({
@@ -270,20 +286,22 @@ describe("real Better Auth Preview OAuth handler", () => {
     const jwksResponse = await customFetchImpl(`${issuer}/jwks`);
     const jwks = (await jwksResponse.json()) as { keys: JsonWebKey[] };
     const verified = await jwtVerify(tokenBody.access_token, createLocalJWKSet(jwks), {
-      issuer,
-      audience: resource,
       algorithms: ["ES256"],
+      audience: resource,
+      issuer,
     });
     expect(verified.payload).toMatchObject({
-      sub: expect.any(String),
-      workspace_id: "workspace_1",
       aud: resource,
       iss: issuer,
+      sub: expect.any(String),
+      workspace_id: "workspace_1",
     });
     expect(Number.isInteger(verified.payload.nbf)).toBe(true);
     expect(Number.isInteger(verified.payload.iat)).toBe(true);
     expect(Number.isInteger(verified.payload.exp)).toBe(true);
-    expect(verified.payload.exp! - verified.payload.iat!).toBe(300);
+    expect(
+      required(verified.payload.exp, "expiration") - required(verified.payload.iat, "issued at"),
+    ).toBe(300);
     expect(fetchClientMetadata).toHaveBeenCalledWith(clientId, expect.any(Object));
   });
 
@@ -303,60 +321,65 @@ describe("real Better Auth Preview OAuth handler", () => {
       }),
       { headers: signedIn, redirect: "manual" },
     );
-    const consentLocation = new URL(authorize.headers.get("location")!, origin);
+    const consentLocation = new URL(
+      required(authorize.headers.get("location"), "consent location"),
+      origin,
+    );
     const consent = await customFetchImpl(`${issuer}/oauth2/consent`, {
-      method: "POST",
-      headers: new Headers({
-        ...Object.fromEntries(signedIn.entries()),
-        origin,
-        "content-type": "application/json",
-      }),
       body: JSON.stringify({
         accept: true,
         oauth_query: consentLocation.search.slice(1),
       }),
+      headers: new Headers({
+        ...Object.fromEntries(signedIn.entries()),
+        "content-type": "application/json",
+        origin,
+      }),
+      method: "POST",
     });
     const consentBody = (await consent.json()) as {
       redirect_uri?: string;
       url?: string;
     };
-    const code = new URL(consentBody.redirect_uri ?? consentBody.url!).searchParams.get("code");
+    const code = new URL(
+      required(consentBody.redirect_uri ?? consentBody.url, "consent callback"),
+    ).searchParams.get("code");
     expect(code).toMatch(/^[A-Za-z0-9_-]+$/u);
 
     for (let attempt = 0; attempt < 60; attempt += 1) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const retry = await customFetchImpl(`${issuer}/oauth2/token`, {
-        method: "POST",
-        headers: {
-          origin,
-          "content-type": "application/x-www-form-urlencoded",
-        },
         body: new URLSearchParams({
-          grant_type: "authorization_code",
           client_id: codexClientId,
           code: `discarded-retry-${attempt}`,
           code_verifier: verifier,
+          grant_type: "authorization_code",
           redirect_uri: codexRedirectUris[0],
           resource,
         }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          origin,
+        },
+        method: "POST",
       });
       expect(retry.status).not.toBe(429);
     }
 
     const token = await customFetchImpl(`${issuer}/oauth2/token`, {
-      method: "POST",
-      headers: {
-        origin,
-        "content-type": "application/x-www-form-urlencoded",
-      },
       body: new URLSearchParams({
-        grant_type: "authorization_code",
         client_id: codexClientId,
-        code: code!,
+        code: required(code, "authorization code"),
         code_verifier: verifier,
+        grant_type: "authorization_code",
         redirect_uri: codexRedirectUris[0],
         resource,
       }),
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        origin,
+      },
+      method: "POST",
     });
     expect(token.status).toBe(200);
     const tokenBody = (await token.json()) as Record<string, unknown>;
@@ -375,12 +398,12 @@ describe("real Better Auth Preview OAuth handler", () => {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await customFetchImpl(`${issuer}/sign-in/email`, {
-        method: "POST",
-        headers: { origin, "content-type": "application/json" },
         body: JSON.stringify({
           email: `unknown-${attempt}@example.test`,
           password: "not-a-valid-password",
         }),
+        headers: { "content-type": "application/json", origin },
+        method: "POST",
       });
       signInStatuses.push(response.status);
     }
@@ -390,9 +413,9 @@ describe("real Better Auth Preview OAuth handler", () => {
     const jwks = (await jwksResponse.json()) as { keys: JsonWebKey[] };
     await expect(
       jwtVerify(tokenBody.access_token as string, createLocalJWKSet(jwks), {
-        issuer,
-        audience: resource,
         algorithms: ["ES256"],
+        audience: resource,
+        issuer,
       }),
     ).resolves.toMatchObject({
       payload: {
@@ -418,7 +441,10 @@ describe("real Better Auth Preview OAuth handler", () => {
     );
 
     expect(response.status).toBe(302);
-    const consentLocation = new URL(response.headers.get("location")!, origin);
+    const consentLocation = new URL(
+      required(response.headers.get("location"), "consent location"),
+      origin,
+    );
     expect(consentLocation.pathname).toBe("/auth/consent");
     expect(consentLocation.searchParams.get("client_id")).toBe(codexClientId);
     expect(consentLocation.searchParams.get("redirect_uri")).toBe(codexRedirectUris[0]);
@@ -434,7 +460,7 @@ describe("real Better Auth Preview OAuth handler", () => {
       redirect: "manual",
     });
     expect(rejected.status).toBe(302);
-    const errorLocation = new URL(rejected.headers.get("location")!);
+    const errorLocation = new URL(required(rejected.headers.get("location"), "error location"));
     expect(errorLocation.origin + errorLocation.pathname).toBe(`${issuer}/error`);
     expect(errorLocation.searchParams.get("error")).toBe("invalid_redirect");
   });
@@ -444,17 +470,20 @@ describe("real Better Auth Preview OAuth handler", () => {
     const signedIn = await signIn();
     const url = authorizationUrl("c".repeat(43), "state_post");
     const response = await customFetchImpl(`${issuer}/oauth2/authorize`, {
-      method: "POST",
+      body: url.searchParams,
       headers: new Headers({
         ...Object.fromEntries(signedIn.entries()),
-        origin,
         "content-type": "application/x-www-form-urlencoded",
+        origin,
       }),
-      body: url.searchParams,
+      method: "POST",
       redirect: "manual",
     });
     expect(response.status).toBe(302);
-    const location = new URL(response.headers.get("location")!, origin);
+    const location = new URL(
+      required(response.headers.get("location"), "consent location"),
+      origin,
+    );
     expect(location.pathname).toBe("/auth/consent");
     expect(location.searchParams.get("client_id")).toBe(clientId);
     expect(location.searchParams.get("sig")).toMatch(/^[A-Za-z0-9+/=]+$/u);
@@ -489,20 +518,23 @@ describe("real Better Auth Preview OAuth handler", () => {
       headers: signedIn,
       redirect: "manual",
     });
-    const consentLocation = new URL(authorize.headers.get("location")!, origin);
+    const consentLocation = new URL(
+      required(authorize.headers.get("location"), "consent location"),
+      origin,
+    );
     expect(consentLocation.pathname).toBe("/auth/consent");
     membershipState.activeWorkspaces = [];
     const consent = await customFetchImpl(`${issuer}/oauth2/consent`, {
-      method: "POST",
-      headers: new Headers({
-        ...Object.fromEntries(signedIn.entries()),
-        origin,
-        "content-type": "application/json",
-      }),
       body: JSON.stringify({
         accept: true,
         oauth_query: consentLocation.search.slice(1),
       }),
+      headers: new Headers({
+        ...Object.fromEntries(signedIn.entries()),
+        "content-type": "application/json",
+        origin,
+      }),
+      method: "POST",
     });
     expect(consent.status).toBe(500);
     expect(consent.headers.get("location")).toBeNull();
@@ -518,40 +550,45 @@ describe("real Better Auth Preview OAuth handler", () => {
       headers: signedIn,
       redirect: "manual",
     });
-    const consentLocation = new URL(authorize.headers.get("location")!, origin);
+    const consentLocation = new URL(
+      required(authorize.headers.get("location"), "consent location"),
+      origin,
+    );
     const consent = await customFetchImpl(`${issuer}/oauth2/consent`, {
-      method: "POST",
-      headers: new Headers({
-        ...Object.fromEntries(signedIn.entries()),
-        origin,
-        "content-type": "application/json",
-      }),
       body: JSON.stringify({
         accept: true,
         oauth_query: consentLocation.search.slice(1),
       }),
+      headers: new Headers({
+        ...Object.fromEntries(signedIn.entries()),
+        "content-type": "application/json",
+        origin,
+      }),
+      method: "POST",
     });
     const consentBody = (await consent.json()) as {
       redirect_uri?: string;
       url?: string;
     };
-    const code = new URL(consentBody.redirect_uri ?? consentBody.url!).searchParams.get("code");
+    const code = new URL(
+      required(consentBody.redirect_uri ?? consentBody.url, "consent callback"),
+    ).searchParams.get("code");
     expect(code).toMatch(/^[A-Za-z0-9_-]+$/u);
     membershipState.activeWorkspaces = [];
     const token = await customFetchImpl(`${issuer}/oauth2/token`, {
-      method: "POST",
-      headers: {
-        origin,
-        "content-type": "application/x-www-form-urlencoded",
-      },
       body: new URLSearchParams({
-        grant_type: "authorization_code",
         client_id: clientId,
-        code: code!,
+        code: required(code, "authorization code"),
         code_verifier: verifier,
+        grant_type: "authorization_code",
         redirect_uri: redirectUri,
         resource,
       }),
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        origin,
+      },
+      method: "POST",
     });
     expect(token.status).toBe(500);
     expect(await token.text()).not.toContain("access_token");
@@ -565,25 +602,30 @@ describe("real Better Auth Preview OAuth handler", () => {
       headers: signedIn,
       redirect: "manual",
     });
-    const consentLocation = new URL(authorize.headers.get("location")!, origin);
+    const consentLocation = new URL(
+      required(authorize.headers.get("location"), "consent location"),
+      origin,
+    );
     const denial = await customFetchImpl(`${issuer}/oauth2/consent`, {
-      method: "POST",
-      headers: new Headers({
-        ...Object.fromEntries(signedIn.entries()),
-        origin,
-        "content-type": "application/json",
-      }),
       body: JSON.stringify({
         accept: false,
         oauth_query: consentLocation.search.slice(1),
       }),
+      headers: new Headers({
+        ...Object.fromEntries(signedIn.entries()),
+        "content-type": "application/json",
+        origin,
+      }),
+      method: "POST",
     });
     expect(denial.status).toBe(200);
     const denialBody = (await denial.json()) as {
       redirect_uri?: string;
       url?: string;
     };
-    const denialLocation = new URL(denialBody.redirect_uri ?? denialBody.url!);
+    const denialLocation = new URL(
+      required(denialBody.redirect_uri ?? denialBody.url, "denial callback"),
+    );
     expect(denialLocation.searchParams.get("error")).toBe("access_denied");
     expect(denialLocation.searchParams.get("state")).toBe("state_deny");
     expect(denialLocation.searchParams.get("code")).toBeNull();

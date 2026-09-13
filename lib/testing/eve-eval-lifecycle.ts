@@ -4,7 +4,7 @@ import type { ChildProcess } from "node:child_process";
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, realpathSync } from "node:fs";
 import { lstat, readFile, readdir, realpath, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import nodePath from "node:path";
 import type { Duplex } from "node:stream";
 
 type EvalSignal = "SIGINT" | "SIGTERM";
@@ -65,18 +65,18 @@ function defaultProcessAlive(pid: number) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function contained(root: string, path: string) {
-  const candidate = relative(root, path);
+  const candidate = nodePath.relative(root, path);
   return (
     candidate !== "" &&
     candidate !== ".." &&
-    !candidate.startsWith(`..${sep}`) &&
-    !isAbsolute(candidate)
+    !candidate.startsWith(`..${nodePath.sep}`) &&
+    !nodePath.isAbsolute(candidate)
   );
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readLockOwner(lock: string) {
-  const ownerPath = join(lock, "owner.json");
+  const ownerPath = nodePath.join(lock, "owner.json");
   const info = await lstat(ownerPath);
   if (!info.isFile() || !ownerBound(info))
     throw new Error("owner.json was not an owner-bound regular file");
@@ -112,9 +112,13 @@ export async function reconcileDeadEveEvalPrewarmLocks(
 ): Promise<readonly EveEvalPrewarmLockReceipt[]> {
   const canonicalRoot = await realpath(appRoot);
   const rootInfo = await lstat(canonicalRoot);
-  if (resolve(appRoot) !== canonicalRoot || !rootInfo.isDirectory() || !ownerBound(rootInfo))
+  if (
+    nodePath.resolve(appRoot) !== canonicalRoot ||
+    !rootInfo.isDirectory() ||
+    !ownerBound(rootInfo)
+  )
     throw new Error("The Eve eval application root was not owner-bound.");
-  const locksRoot = join(canonicalRoot, ".eve", "sandbox-cache", "template-locks");
+  const locksRoot = nodePath.join(canonicalRoot, ".eve", "sandbox-cache", "template-locks");
   let backends;
   try {
     backends = await readdir(locksRoot, { withFileTypes: true });
@@ -124,18 +128,18 @@ export async function reconcileDeadEveEvalPrewarmLocks(
   }
   const receipts: EveEvalPrewarmLockReceipt[] = [];
   for (const backend of backends.toSorted((left, right) => left.name.localeCompare(right.name))) {
-    const backendPath = join(locksRoot, backend.name);
+    const backendPath = nodePath.join(locksRoot, backend.name);
     if (!backend.isDirectory() || backend.isSymbolicLink()) continue;
     const entries = await readdir(backendPath, { withFileTypes: true });
     for (const entry of entries.toSorted((left, right) => left.name.localeCompare(right.name))) {
       if (!entry.name.endsWith(".lock")) continue;
-      const lock = join(backendPath, entry.name);
-      const display = relative(canonicalRoot, lock);
+      const lock = nodePath.join(backendPath, entry.name);
+      const display = nodePath.relative(canonicalRoot, lock);
       if (!entry.isDirectory() || entry.isSymbolicLink() || !contained(locksRoot, lock)) {
         receipts.push({
           lock: display,
-          status: "preserved",
           reason: "lock path was not a contained regular directory",
+          status: "preserved",
         });
         continue;
       }
@@ -147,8 +151,8 @@ export async function reconcileDeadEveEvalPrewarmLocks(
       } catch (error) {
         receipts.push({
           lock: display,
-          status: "preserved",
           reason: error instanceof Error ? error.message : "owner read failed",
+          status: "preserved",
         });
         continue;
       }
@@ -167,8 +171,8 @@ export async function reconcileDeadEveEvalPrewarmLocks(
           receipts.push({
             lock: display,
             pid: owner.pid,
-            status: "preserved",
             reason: "lock owner changed during reconciliation",
+            status: "preserved",
           });
           continue;
         }
@@ -180,7 +184,7 @@ export async function reconcileDeadEveEvalPrewarmLocks(
           movedOwner.source !== owner.source ||
           !sameFile(movedOwner.info, owner.info)
         ) {
-          await rename(quarantine, lock).catch(() => undefined);
+          await rename(quarantine, lock).catch(() => null);
           throw new Error("lock owner changed while it was quarantined");
         }
         await rm(quarantine, { recursive: true });
@@ -190,8 +194,8 @@ export async function reconcileDeadEveEvalPrewarmLocks(
         receipts.push({
           lock: display,
           pid: owner.pid,
-          status: "preserved",
           reason: error instanceof Error ? error.message : "lock removal failed",
+          status: "preserved",
         });
       }
     }
@@ -203,10 +207,10 @@ export async function reconcileDeadEveEvalPrewarmLocks(
 export function createEveEvalRuntimeDirectories(
   parent: string = tmpdir(),
 ): Readonly<{ home: string; root: string; workflowData: string }> {
-  const root = realpathSync(mkdtempSync(join(parent, "app-builder-eval-")));
+  const root = realpathSync(mkdtempSync(nodePath.join(parent, "app-builder-eval-")));
   chmodSync(root, 0o700);
-  const home = join(root, "home");
-  const workflowData = join(root, "workflow-data");
+  const home = nodePath.join(root, "home");
+  const workflowData = nodePath.join(root, "workflow-data");
   mkdirSync(home, { mode: 0o700 });
   mkdirSync(workflowData, { mode: 0o700 });
   for (const path of [root, home, workflowData]) {
@@ -226,7 +230,9 @@ export function createEveEvalRuntimeDirectories(
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function signalExitCode(signal: NodeJS.Signals | null) {
-  return signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 128;
+  if (signal === "SIGINT") return 130;
+  if (signal === "SIGTERM") return 143;
+  return 128;
 }
 
 /**
@@ -245,7 +251,8 @@ export function waitForEveEvalChild(
 ): Promise<number> {
   const signalTarget = input.signalTarget ?? process;
   const gracefulTimeoutMs = input.gracefulTimeoutMs ?? 16_000;
-  return new Promise<number>((_resolve, reject) => {
+  const { promise, reject, resolve } = Promise.withResolvers<number>();
+  {
     let requestedSignal: EvalSignal | undefined;
     let forceTimer: ReturnType<typeof setTimeout> | undefined;
     let settled = false;
@@ -300,12 +307,13 @@ export function waitForEveEvalChild(
       // share the same descendant cleanup boundary.
       forceGroup();
       cleanup();
-      _resolve(code ?? signalExitCode(requestedSignal ?? signal));
+      resolve(code ?? signalExitCode(requestedSignal ?? signal));
     };
-    Object.assign(handlers, { interrupt, terminate, failed, exited });
+    Object.assign(handlers, { exited, failed, interrupt, terminate });
     signalTarget.on("SIGINT", handlers.interrupt);
     signalTarget.on("SIGTERM", handlers.terminate);
     input.child.once("error", handlers.failed);
     input.child.once("exit", handlers.exited);
-  });
+  }
+  return promise;
 }

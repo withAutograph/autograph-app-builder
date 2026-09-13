@@ -50,29 +50,29 @@ export interface AdditionalFieldProps {
 }
 
 /** Convert a `defaultValue` into a `Date` for the calendar. */
-function toDate(value: unknown): Date | undefined {
+const toDate = function toDate(value: unknown): Date | undefined {
   if (value instanceof Date) return value;
   if (typeof value === "string") {
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? undefined : parsed;
   }
   return undefined;
-}
+};
 
 /** Format a Date as `HH:mm:ss` for an `<input type="time">`. */
 // Keep this formatter local to the field component.
-function formatTime(date: Date) {
+const formatTime = function formatTime(date: Date) {
   // oxlint-disable-next-line unicorn/consistent-function-scoping
   const pad = (n: number) => n.toString().padStart(2, "0");
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-}
+};
 
 /**
  * Icon-only copy button used as an `InputGroupAddon`. `getValue` is invoked
  * lazily on click so the button copies the input's *live* value rather than a
  * stale snapshot — important when paired with editable inputs.
  */
-function CopyButton({
+const CopyButton = function CopyButton({
   getValue,
   isDisabled,
 }: {
@@ -84,12 +84,12 @@ function CopyButton({
     onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
   });
 
-  async function handleCopy() {
+  const handleCopy = async function handleCopy() {
     const value = getValue();
     if (!value) return;
 
     await copy(value);
-  }
+  };
 
   return (
     <InputGroupButton
@@ -105,10 +105,10 @@ function CopyButton({
       {copied ? <Check /> : <Copy />}
     </InputGroupButton>
   );
-}
+};
 
 /** Renders a single additional user field via shadcn primitives. */
-function DateInput({ name, field, isPending }: AdditionalFieldProps) {
+const DateInput = function DateInput({ name, field, isPending }: AdditionalFieldProps) {
   const { localization } = useAuth();
   const inputType = resolveInputType(field);
   const isDateTime = inputType === "datetime";
@@ -219,21 +219,23 @@ function DateInput({ name, field, isPending }: AdditionalFieldProps) {
       <FieldError>{error}</FieldError>
     </Field>
   );
-}
+};
 
-function SliderField({ name, field, isPending }: AdditionalFieldProps) {
+const SliderField = function SliderField({ name, field, isPending }: AdditionalFieldProps) {
   const maxFractionDigits = field.formatOptions?.maximumFractionDigits;
   const min = field.min ?? 0;
   const max = field.max ?? 100;
   const step = field.step ?? (maxFractionDigits ? 1 / 10 ** maxFractionDigits : 1);
-  const initial =
-    typeof field.defaultValue === "number"
-      ? field.defaultValue
-      : field.defaultValue !== null &&
-          field.defaultValue !== undefined &&
-          !Number.isNaN(Number(field.defaultValue))
-        ? Number(field.defaultValue)
-        : min;
+  let initial = min;
+  if (typeof field.defaultValue === "number") {
+    initial = field.defaultValue;
+  } else if (
+    field.defaultValue !== null &&
+    field.defaultValue !== undefined &&
+    !Number.isNaN(Number(field.defaultValue))
+  ) {
+    initial = Number(field.defaultValue);
+  }
 
   const [value, setValue] = useState<number>(initial);
 
@@ -262,9 +264,9 @@ function SliderField({ name, field, isPending }: AdditionalFieldProps) {
       <FieldError />
     </Field>
   );
-}
+};
 
-function InputField({ name, field, isPending }: AdditionalFieldProps) {
+const InputField = function InputField({ name, field, isPending }: AdditionalFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const hasPrefix = field.prefix !== null && field.prefix !== undefined;
@@ -273,7 +275,10 @@ function InputField({ name, field, isPending }: AdditionalFieldProps) {
   const isNumeric = field.type === "number";
   const maxFractionDigits = field.formatOptions?.maximumFractionDigits;
   const nativeInputType = isNumeric ? "number" : undefined;
-  const nativeInputMode = isNumeric ? (maxFractionDigits ? "decimal" : "numeric") : undefined;
+  let nativeInputMode: "decimal" | "numeric" | undefined;
+  if (isNumeric) {
+    nativeInputMode = maxFractionDigits ? "decimal" : "numeric";
+  }
   const nativeStep = maxFractionDigits ? 1 / 10 ** maxFractionDigits : undefined;
 
   if (hasPrefix || hasSuffix) {
@@ -343,9 +348,9 @@ function InputField({ name, field, isPending }: AdditionalFieldProps) {
       <FieldError />
     </Field>
   );
-}
+};
 
-export function AdditionalField({
+export const AdditionalField = function AdditionalField({
   name,
   field: configuredField,
   isPending,
@@ -378,19 +383,15 @@ export function AdditionalField({
   }
 
   if (inputType === "hidden") {
-    return (
-      <input
-        type="hidden"
-        name={name}
-        value={
-          field.defaultValue === null || field.defaultValue === undefined
-            ? ""
-            : field.defaultValue instanceof Date
-              ? field.defaultValue.toISOString()
-              : String(field.defaultValue)
-        }
-      />
-    );
+    let hiddenValue = "";
+    if (field.defaultValue !== null && field.defaultValue !== undefined) {
+      hiddenValue =
+        field.defaultValue instanceof Date
+          ? field.defaultValue.toISOString()
+          : String(field.defaultValue);
+    }
+
+    return <input type="hidden" name={name} value={hiddenValue} />;
   }
 
   if (inputType === "textarea") {
@@ -419,6 +420,11 @@ export function AdditionalField({
 
   if (inputType === "number") {
     const maxFractionDigits = field.formatOptions?.maximumFractionDigits;
+    let defaultValue: number | string | undefined;
+    if (field.defaultValue !== null && field.defaultValue !== undefined) {
+      defaultValue =
+        typeof field.defaultValue === "number" ? field.defaultValue : String(field.defaultValue);
+    }
 
     return (
       <Field>
@@ -432,13 +438,7 @@ export function AdditionalField({
           min={field.min}
           max={field.max}
           step={field.step ?? (maxFractionDigits ? 1 / 10 ** maxFractionDigits : undefined)}
-          defaultValue={
-            field.defaultValue === null || field.defaultValue === undefined
-              ? undefined
-              : typeof field.defaultValue === "number"
-                ? field.defaultValue
-                : String(field.defaultValue)
-          }
+          defaultValue={defaultValue}
           placeholder={field.placeholder}
           required={field.required}
           readOnly={field.readOnly}
@@ -563,7 +563,7 @@ export function AdditionalField({
   }
 
   return <InputField name={name} field={field} isPending={isPending} />;
-}
+};
 
 /**
  * Slider field. Radix Slider doesn't render the current value, so we render

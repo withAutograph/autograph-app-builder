@@ -1,8 +1,8 @@
-import { resolve } from "node:path";
+import path from "node:path";
 import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";
 
 const rootIndex = process.argv.indexOf("--root");
-const pluginRoot = resolve(rootIndex === -1 ? "." : process.argv[rootIndex + 1]);
+const pluginRoot = path.resolve(rootIndex === -1 ? "." : process.argv[rootIndex + 1]);
 if (rootIndex === -1 || process.argv[rootIndex + 1]) {
   // The option is absent or has a value.
 } else
@@ -10,10 +10,10 @@ if (rootIndex === -1 || process.argv[rootIndex + 1]) {
     "Usage: pnpm validate:plugin [--root <plugin-directory>] [--artifact] [--release]",
   );
 const result = await validateAgentPluginPackage({
-  pluginRoot,
-  repositoryRoot: resolve("."),
-  release: process.argv.includes("--release"),
   packageKind: process.argv.includes("--artifact") ? "generated-artifact" : "source",
+  pluginRoot,
+  release: process.argv.includes("--release"),
+  repositoryRoot: path.resolve("."),
 });
 console.log(
   result.packageKind === "source"

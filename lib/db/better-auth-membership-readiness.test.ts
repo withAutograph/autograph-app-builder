@@ -5,42 +5,42 @@ import { describe, expect, it } from "vitest";
 import { verifyBetterAuthMembershipReadBack } from "./better-auth-membership-readiness";
 
 const row = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace-a",
+  issuer: "https://builder.example/api/auth",
   userId: "user-a",
+  workspaceId: "workspace-a",
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function readBack() {
   return {
-    transactionReadOnly: true as const,
     activeLegacyRows: [row],
-    migratedRows: [{ ...row, role: "owner" as const }],
     inactiveLegacyCount: 1,
-    pendingInvitationCount: 2,
+    migratedRows: [{ ...row, role: "owner" as const }],
     nativeOrganizationCount: 0,
     orphanedActiveSessionCount: 0 as const,
+    pendingInvitationCount: 2,
+    transactionReadOnly: true as const,
   };
 }
 
 describe("Better Auth membership migration readiness", () => {
   it("returns a sanitized deterministic parity receipt", () => {
     const receipt = verifyBetterAuthMembershipReadBack({
-      readBack: readBack(),
       observedAt: new Date("2026-08-29T12:00:00.000Z"),
+      readBack: readBack(),
     });
 
     expect(receipt.status).toBe("migration-verified");
     expect(receipt.parity).toMatchObject({
       activeLegacyMemberships: 1,
-      migratedOrganizationMemberships: 1,
       exact: true,
+      migratedOrganizationMemberships: 1,
     });
     expect(receipt.retainedLegacyAuthority).toEqual({
-      inactiveMemberships: 1,
-      deletionPerformed: false,
       authPathRetirementProven: false,
+      deletionPerformed: false,
+      inactiveMemberships: 1,
     });
     expect(JSON.stringify(receipt)).not.toContain("workspace-a");
     expect(JSON.stringify(receipt)).not.toContain("user-a");
@@ -50,35 +50,35 @@ describe("Better Auth membership migration readiness", () => {
   it("rejects missing, extra, non-owner, and orphaned authority", () => {
     expect(() =>
       verifyBetterAuthMembershipReadBack({
-        readBack: { ...readBack(), migratedRows: [] },
         observedAt: new Date(),
+        readBack: { ...readBack(), migratedRows: [] },
       }),
     ).toThrow("does not exactly match");
     expect(() =>
       verifyBetterAuthMembershipReadBack({
+        observedAt: new Date(),
         readBack: {
           ...readBack(),
           migratedRows: [
             ...readBack().migratedRows,
-            { ...row, userId: "unexpected", role: "owner" },
+            { ...row, role: "owner", userId: "unexpected" },
           ],
         },
-        observedAt: new Date(),
       }),
     ).toThrow("does not exactly match");
     expect(() =>
       verifyBetterAuthMembershipReadBack({
+        observedAt: new Date(),
         readBack: {
           ...readBack(),
           migratedRows: [{ ...row, role: "member" }],
         },
-        observedAt: new Date(),
       }),
     ).toThrow();
     expect(() =>
       verifyBetterAuthMembershipReadBack({
-        readBack: { ...readBack(), orphanedActiveSessionCount: 1 },
         observedAt: new Date(),
+        readBack: { ...readBack(), orphanedActiveSessionCount: 1 },
       }),
     ).toThrow();
   });

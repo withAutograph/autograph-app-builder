@@ -1,5 +1,5 @@
 import { lstat, readFile, realpath, stat } from "node:fs/promises";
-import { isAbsolute } from "node:path";
+import nodePath from "node:path";
 
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -18,7 +18,7 @@ const MAX_REQUEST_BYTES = 16 * 1024;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readOwnerOnlyRequest(path: string): Promise<unknown> {
-  if (!isAbsolute(path)) throw new Error("Request path must be absolute.");
+  if (!nodePath.isAbsolute(path)) throw new Error("Request path must be absolute.");
   const [link, canonicalPath] = await Promise.all([lstat(path), realpath(path)]);
   if (link.isSymbolicLink() || canonicalPath !== path)
     throw new Error("Request path must be canonical and unsymlinked.");

@@ -13,13 +13,9 @@ import { recoverFreshBootstrap } from "@/lib/repository/node-fresh-bootstrap";
 import { freshBootstrapSourceWorkspace } from "@/lib/agent/fresh-bootstrap-source";
 
 export default defineTool({
+  approval: always(),
   description:
     "After a separate recovery approval, reconcile only the exact durable fresh-bootstrap journal and its exact stage/destination layout. It never resets or adopts an unrelated lease, stage, destination, or repository.",
-  inputSchema: z.strictObject({
-    expectedJournalDigest: freshBootstrapDigest,
-    expectedProposalDigest: freshBootstrapDigest,
-  }),
-  approval: always(),
   async execute(input, ctx) {
     const capability = await currentFreshBootstrapCapability();
     const workflow = appBuilderWorkflowState.get();
@@ -43,19 +39,19 @@ export default defineTool({
     const relativeRoot = workflow.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
     const sandbox = await ctx.getSandbox();
     const sourceWorkspace = await freshBootstrapSourceWorkspace({
-      sandbox,
       receipt: workflow.sourceReceipt,
+      sandbox,
       workspace: workflow.workspace,
     });
     const result = await recoverFreshBootstrap({
       capability,
-      proposal,
-      sourceReceipt: workflow.sourceReceipt,
-      review: workflow.reviewReceipt,
-      publishedByCallId: ctx.callId,
       expectedJournalDigest: input.expectedJournalDigest,
+      proposal,
+      publishedByCallId: ctx.callId,
       readOverlayFile: async (path) =>
         await sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` }),
+      review: workflow.reviewReceipt,
+      sourceReceipt: workflow.sourceReceipt,
       sourceWorkspace,
     });
     updateExactWorkflow({
@@ -76,16 +72,20 @@ export default defineTool({
         return result.ok
           ? {
               ...current,
-              phase: "published_fresh_bootstrap",
               freshBootstrapReceipt: result.receipt,
+              phase: "published_fresh_bootstrap",
             }
           : {
               ...current,
-              phase: "fresh_bootstrap_failed",
               freshBootstrapReceipt: result.receipt,
+              phase: "fresh_bootstrap_failed",
             };
       },
     });
     return result.receipt;
   },
+  inputSchema: z.strictObject({
+    expectedJournalDigest: freshBootstrapDigest,
+    expectedProposalDigest: freshBootstrapDigest,
+  }),
 });

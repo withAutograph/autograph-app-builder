@@ -75,8 +75,8 @@ describe("Eve durable turn execution envelope", () => {
       const isMember = vi.fn(async () => true);
       setHostedSandboxExecutionLeaseDependenciesForTest({
         enabled,
-        store,
         isMember,
+        store,
       });
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const stop = vi.fn(async () => {});

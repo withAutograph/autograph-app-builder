@@ -29,7 +29,7 @@ const fixedName = "Self reproduction parity draft";
 const fixedBrief = "Create one small independent issue tracker with durable server persistence.";
 
 function assertion(id: string, passed: boolean, detail: string): AssertionResult {
-  return { id, passed, detail };
+  return { detail, id, passed };
 }
 
 function requiredAssertions(workflowId: WorkflowId) {
@@ -38,8 +38,8 @@ function requiredAssertions(workflowId: WorkflowId) {
 
 function unsupported(workflowId: WorkflowId, detail: string) {
   return {
-    reason: detail,
     assertions: requiredAssertions(workflowId).map((id) => assertion(id, false, detail)),
+    reason: detail,
   };
 }
 
@@ -52,7 +52,7 @@ async function firstVisible(locators: Locator[]) {
         .catch(() => false)
     )
       return locator.first();
-  return undefined;
+  return;
 }
 
 function semanticCandidateAdapter(candidateUrl: string): TrustedBrowserWorkflowAdapter {
@@ -61,11 +61,13 @@ function semanticCandidateAdapter(candidateUrl: string): TrustedBrowserWorkflowA
     contextOptions: { baseURL: candidateUrl },
     async prepare(page, workflowId) {
       await page.goto("/");
-      const response = await page.request.get("/").catch(() => undefined);
+      const response = await page.request.get("/").catch(() => {
+        /* empty */
+      });
       if (!response?.ok())
         return {
-          ready: false,
           disposition: "infrastructure-unavailable",
+          ready: false,
           reason: `Candidate runtime did not answer at ${candidateUrl}.`,
         };
       state.set(workflowId, {});
@@ -87,7 +89,6 @@ function semanticCandidateAdapter(candidateUrl: string): TrustedBrowserWorkflowA
           .catch(() => false);
         await page.goBack();
         return {
-          reason: "Evaluator navigated the candidate documentation control and returned.",
           assertions: [
             assertion(
               "docs-readable",
@@ -100,6 +101,7 @@ function semanticCandidateAdapter(candidateUrl: string): TrustedBrowserWorkflowA
               "Browser back returned to rendered content.",
             ),
           ],
+          reason: "Evaluator navigated the candidate documentation control and returned.",
         };
       }
       if (workflowId === "durable-draft") {
@@ -128,10 +130,8 @@ function semanticCandidateAdapter(candidateUrl: string): TrustedBrowserWorkflowA
           fresh.getByPlaceholder(/app name/u),
         ]);
         const freshMatches = (await freshName?.inputValue().catch(() => "")) === fixedName;
-        state.set(workflowId, { value: fixedName, exercised: true });
+        state.set(workflowId, { exercised: true, value: fixedName });
         return {
-          reason:
-            "Evaluator edited semantic draft fields and checked reload plus an isolated browser context.",
           assertions: [
             assertion("write-acknowledged", reloadMatches, "The edit survived a reload."),
             assertion(
@@ -140,18 +140,20 @@ function semanticCandidateAdapter(candidateUrl: string): TrustedBrowserWorkflowA
               "The edit was read in a cookie-free browser context.",
             ),
           ],
+          reason:
+            "Evaluator edited semantic draft fields and checked reload plus an isolated browser context.",
         };
       }
       const labels: Partial<Record<WorkflowId, RegExp>> = {
-        authentication: /sign in|log in|continue with/u,
-        "provider-return-success": /connect.*github|connect.*vercel|provider/u,
-        "provider-return-error": /connect.*github|connect.*vercel|provider/u,
         "app-creation": /create app|build app|generate/u,
-        "preview-access": /preview|open app/u,
+        authentication: /sign in|log in|continue with/u,
         cancellation: /cancel|stop/u,
+        "independent-child": /create app|build app|generate/u,
+        "preview-access": /preview|open app/u,
+        "provider-return-error": /connect.*github|connect.*vercel|provider/u,
+        "provider-return-success": /connect.*github|connect.*vercel|provider/u,
         retry: /retry|try again/u,
         "session-recovery": /resume|recover|continue/u,
-        "independent-child": /create app|build app|generate/u,
       };
       const label = labels[workflowId];
       const control = label
@@ -162,7 +164,9 @@ function semanticCandidateAdapter(candidateUrl: string): TrustedBrowserWorkflowA
         : undefined;
       if (!control)
         return unsupported(workflowId, `Candidate exposes no semantic control for ${workflowId}.`);
-      await control.click().catch(() => undefined);
+      await control.click().catch(() => {
+        /* empty */
+      });
       state.set(workflowId, { exercised: true });
       return unsupported(
         workflowId,
@@ -173,7 +177,6 @@ function semanticCandidateAdapter(candidateUrl: string): TrustedBrowserWorkflowA
     async verify(workflowId) {
       if (workflowId === "durable-draft")
         return {
-          reason: "No candidate server readback contract was available.",
           assertions: [
             assertion(
               "revision-advanced",
@@ -181,10 +184,11 @@ function semanticCandidateAdapter(candidateUrl: string): TrustedBrowserWorkflowA
               "Browser storage is insufficient proof of a durable server revision.",
             ),
           ],
+          reason: "No candidate server readback contract was available.",
         };
       return {
-        reason: "Candidate verification was limited to evaluator-observed semantics.",
         assertions: [],
+        reason: "Candidate verification was limited to evaluator-observed semantics.",
       };
     },
   };
@@ -200,30 +204,12 @@ function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
   let initialDraftRevision = 0;
   return {
     contextOptions: { baseURL: referenceUrl, ignoreHTTPSErrors: true },
-    async prepare(_page, workflowId) {
-      if (!supported.has(workflowId))
-        return {
-          ready: false,
-          disposition: "not-run",
-          reason: `The checked-in reference adapter has no bounded real fixture for ${workflowId}.`,
-        };
-      if (new URL(referenceUrl).origin !== appOrigin)
-        return {
-          ready: false,
-          disposition: "infrastructure-unavailable",
-          reason: `Reference E2E helpers are bound to ${appOrigin}; received ${referenceUrl}.`,
-        };
-      await resetApplicationState();
-      initialDraftRevision = 0;
-      return { ready: true };
-    },
     async exercise(page, workflowId, freshPage) {
       if (workflowId === "documentation") {
         await page.goto("/docs");
         const readable = await page.locator("main, article").first().isVisible();
         await page.goto("/");
         return {
-          reason: "Evaluator opened the public documentation route and returned to the builder.",
           assertions: [
             assertion(
               "docs-readable",
@@ -236,6 +222,7 @@ function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
               "The public builder rendered after returning.",
             ),
           ],
+          reason: "Evaluator opened the public documentation route and returned to the builder.",
         };
       }
       await finishOAuth(page, "GitHub");
@@ -249,8 +236,6 @@ function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
         await fresh.goto("/");
         const isolated = (await currentSession(fresh)) === null;
         return {
-          reason:
-            "Evaluator used the real emulated OAuth flow, sign-out route, and an isolated browser context.",
           assertions: [
             assertion("sign-in-restores-draft", signedIn, "The real auth session was established."),
             assertion(
@@ -264,6 +249,8 @@ function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
               "A cookie-free browser context had no authenticated session.",
             ),
           ],
+          reason:
+            "Evaluator used the real emulated OAuth flow, sign-out route, and an isolated browser context.",
         };
       }
       await page.getByLabel("App Name").fill(fixedName);
@@ -272,7 +259,6 @@ function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
       if (workflowId === "provider-return-success") {
         await installProvider(page, "GitHub");
         return {
-          reason: "Evaluator completed the real emulated GitHub callback through the application.",
           assertions: [
             assertion(
               "callback-consumed",
@@ -285,6 +271,7 @@ function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
               "The draft survived provider return.",
             ),
           ],
+          reason: "Evaluator completed the real emulated GitHub callback through the application.",
         };
       }
       await page.reload();
@@ -294,8 +281,6 @@ function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
       await fresh.goto("/");
       await waitForBuilderReady(fresh);
       return {
-        reason:
-          "Evaluator waited for the Server Action acknowledgement, reloaded, and read the draft in a fresh authenticated context.",
         assertions: [
           assertion(
             "write-acknowledged",
@@ -308,13 +293,31 @@ function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
             "A fresh authenticated context read the same server-owned draft.",
           ),
         ],
+        reason:
+          "Evaluator waited for the Server Action acknowledgement, reloaded, and read the draft in a fresh authenticated context.",
       };
+    },
+    async prepare(_page, workflowId) {
+      if (!supported.has(workflowId))
+        return {
+          disposition: "not-run",
+          ready: false,
+          reason: `The checked-in reference adapter has no bounded real fixture for ${workflowId}.`,
+        };
+      if (new URL(referenceUrl).origin !== appOrigin)
+        return {
+          disposition: "infrastructure-unavailable",
+          ready: false,
+          reason: `Reference E2E helpers are bound to ${appOrigin}; received ${referenceUrl}.`,
+        };
+      await resetApplicationState();
+      initialDraftRevision = 0;
+      return { ready: true };
     },
     async verify(workflowId) {
       if (workflowId === "provider-return-success") {
         const counts = await applicationCounts();
         return {
-          reason: "Evaluator read the reference database after callback completion.",
           assertions: [
             assertion(
               "connection-persisted",
@@ -322,6 +325,7 @@ function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
               `Database reported ${counts.githubInstallations} GitHub binding(s).`,
             ),
           ],
+          reason: "Evaluator read the reference database after callback completion.",
         };
       }
       if (workflowId === "durable-draft") {
@@ -332,7 +336,6 @@ function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
             FROM builder_draft WHERE status = 'active' ORDER BY updated_at DESC LIMIT 1
           `;
           return {
-            reason: "Evaluator read the durable draft row directly from PostgreSQL.",
             assertions: [
               assertion(
                 "revision-advanced",
@@ -342,12 +345,13 @@ function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
                   : "No active durable draft row was found.",
               ),
             ],
+            reason: "Evaluator read the durable draft row directly from PostgreSQL.",
           };
         } finally {
           await sql.end();
         }
       }
-      return { reason: "The exercised assertions fully cover this workflow.", assertions: [] };
+      return { assertions: [], reason: "The exercised assertions fully cover this workflow." };
     },
   };
 }

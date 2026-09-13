@@ -5,32 +5,32 @@ import type { BuilderProvisioningDependencies } from "./service";
 
 const origin = "https://builder.example.test";
 const authority = {
-  issuer: `${origin}/api/auth`,
   audience: `${origin}/mcp`,
-  workspaceId: "workspace-1",
+  issuer: `${origin}/api/auth`,
   ownerUserId: "user-1",
+  workspaceId: "workspace-1",
 };
 const request = {
-  version: 1,
-  requestId: "123e4567-e89b-42d3-a456-426614174000",
-  operation: "github",
   appName: "Vendor Portal",
-  repository: { name: "vendor-portal", private: true },
+  operation: "github",
   providers: { githubInstallationId: "101" },
+  repository: { name: "vendor-portal", private: true },
+  requestId: "123e4567-e89b-42d3-a456-426614174000",
+  version: 1,
 } as const;
 const response = {
-  version: 1,
-  requestId: request.requestId,
-  requestDigest: "a".repeat(64),
   appId: "vendor-portal",
-  status: "settled",
   github: {
-    status: "failed",
     code: "provider_rejected",
     retryable: true,
+    status: "failed",
   },
-  vercel: { status: "skipped", code: "not_selected", retryable: false },
+  requestDigest: "a".repeat(64),
+  requestId: request.requestId,
+  status: "settled",
   updatedAt: "2026-08-30T12:00:00.000Z",
+  vercel: { code: "not_selected", retryable: false, status: "skipped" },
+  version: 1,
 } as const;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -42,20 +42,20 @@ describe("authenticated builder provisioning route", () => {
   it("requires a same-origin JSON POST and fails closed with the feature flag", async () => {
     const execute = vi.fn();
     const handler = createBuilderProvisioningRouteHandler({
-      origin,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      enabled: async () => false,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       authorityForRequest: async () => authority,
-      execute,
-      read: vi.fn(),
       dependencies: dependencies(),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      enabled: async () => false,
+      execute,
+      origin,
+      read: vi.fn(),
     });
     const disabled = await handler(
       new Request(`${origin}/api/builder/provision`, {
-        method: "POST",
-        headers: { origin, "content-type": "application/json" },
         body: JSON.stringify(request),
+        headers: { "content-type": "application/json", origin },
+        method: "POST",
       }),
     );
     expect(disabled.status).toBe(503);
@@ -64,12 +64,12 @@ describe("authenticated builder provisioning route", () => {
 
     const crossOrigin = await handler(
       new Request(`${origin}/api/builder/provision`, {
-        method: "POST",
-        headers: {
-          origin: "https://attacker.example.test",
-          "content-type": "application/json",
-        },
         body: JSON.stringify(request),
+        headers: {
+          "content-type": "application/json",
+          origin: "https://attacker.example.test",
+        },
+        method: "POST",
       }),
     );
     expect(crossOrigin.status).toBe(400);
@@ -81,20 +81,20 @@ describe("authenticated builder provisioning route", () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const read = vi.fn(async () => response);
     const handler = createBuilderProvisioningRouteHandler({
-      origin,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      enabled: async () => true,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       authorityForRequest: async () => authority,
-      execute,
-      read,
       dependencies: dependencies(),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      enabled: async () => true,
+      execute,
+      origin,
+      read,
     });
     const created = await handler(
       new Request(`${origin}/api/builder/provision`, {
-        method: "POST",
-        headers: { origin, "content-type": "application/json" },
         body: JSON.stringify(request),
+        headers: { "content-type": "application/json", origin },
+        method: "POST",
       }),
     );
     expect(created.status).toBe(200);
@@ -114,20 +114,20 @@ describe("authenticated builder provisioning route", () => {
   it("exposes a monotonic journal projection only to an authenticated reader", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const read = vi.fn(async () => ({
-      revision: 7,
       record: { response },
+      revision: 7,
     }));
     const handler = createBuilderProvisioningRouteHandler({
-      origin,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      enabled: async () => true,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       authorityForRequest: async () => authority,
-      execute: vi.fn(),
-      read: vi.fn(),
       dependencies: {
         journal: { read },
       } as unknown as BuilderProvisioningDependencies,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      enabled: async () => true,
+      execute: vi.fn(),
+      origin,
+      read: vi.fn(),
     });
 
     const projection = await handler(
@@ -136,8 +136,8 @@ describe("authenticated builder provisioning route", () => {
 
     expect(projection.status).toBe(200);
     expect(await projection.json()).toEqual({
-      revision: 7,
       provisioning: response,
+      revision: 7,
     });
     expect(read).toHaveBeenCalledWith(
       expect.objectContaining({ authority, requestId: request.requestId }),
@@ -148,23 +148,23 @@ describe("authenticated builder provisioning route", () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const reserve = vi.fn(async () => ({ record: { response } }));
     const handler = createBuilderProvisioningRouteHandler({
-      origin,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      enabled: async () => true,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       authorityForRequest: async () => authority,
-      execute: vi.fn(),
-      read: vi.fn(),
       dependencies: {
         journal: { reserve },
       } as unknown as BuilderProvisioningDependencies,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      enabled: async () => true,
+      execute: vi.fn(),
+      origin,
+      read: vi.fn(),
     });
 
     const reserved = await handler(
       new Request(`${origin}/api/builder/provision?mode=reserve`, {
-        method: "POST",
-        headers: { origin, "content-type": "application/json" },
         body: JSON.stringify(request),
+        headers: { "content-type": "application/json", origin },
+        method: "POST",
       }),
     );
 
@@ -175,23 +175,23 @@ describe("authenticated builder provisioning route", () => {
 
   it("does not disclose internal failures", async () => {
     const handler = createBuilderProvisioningRouteHandler({
-      origin,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      enabled: async () => true,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       authorityForRequest: async () => authority,
+      dependencies: dependencies(),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      enabled: async () => true,
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       execute: vi.fn(async () => {
         throw new Error("Bearer super-secret provider response");
       }),
+      origin,
       read: vi.fn(),
-      dependencies: dependencies(),
     });
     const failed = await handler(
       new Request(`${origin}/api/builder/provision`, {
-        method: "POST",
-        headers: { origin, "content-type": "application/json" },
         body: JSON.stringify(request),
+        headers: { "content-type": "application/json", origin },
+        method: "POST",
       }),
     );
     expect(await failed.json()).toEqual({ error: "provisioning_unavailable" });

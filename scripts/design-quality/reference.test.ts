@@ -1,9 +1,11 @@
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { checkJsxAttributes, readReference } from "./reference";
+
+const { join } = path;
 
 describe("readReference", () => {
   it("checks immutable same-file JSX aliases without admitting mutable or external values", async () => {
@@ -26,7 +28,6 @@ describe("readReference", () => {
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { RecordListDetailLayout } from "@autograph/compositions";
             import { imported } from "./imported";
             declare global { namespace JSX { interface Element { readonly kind: "jsx" } interface IntrinsicElements { main: {}; aside: {} } } }
@@ -44,10 +45,11 @@ describe("readReference", () => {
               const derived = makeLabel();
               return <><RecordListDetailLayout list={list} detail={detail} value={derived} callback={() => undefined} /><RecordListDetailLayout list={throughMutable} detail={imported} value={state} callback={() => undefined} /><RecordListDetailLayout list={cycleA} detail={destructured} nonNullable={null} value={state} callback={() => undefined} /></>;
             }`,
+          path: "app/page.tsx",
         },
         {
-          path: "app/imported.tsx",
           content: `export const imported = <main />;`,
+          path: "app/imported.tsx",
         },
       ],
     });
@@ -87,8 +89,8 @@ describe("readReference", () => {
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { DataTable, Loose } from "@autograph/compositions"; const compact = true; export function Page() { return <><DataTable spec={{ narrowLayout: compact ? "compact" : "full", columns: [{ id: "vendor" }] }} /><DataTable spec={{ narrowLayout: "compact", columns: [{ id: "vendor" }], unexpected: true }} /><Loose label={"untyped"} /></>; }`,
+          path: "app/page.tsx",
         },
       ],
     });
@@ -120,8 +122,8 @@ describe("readReference", () => {
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { PageHeader } from "@autograph/components"; export function Page() { return <><PageHeader title="ready" /><PageHeader title={"ready"} /><PageHeader title={"invalid"} /></>; }`,
+          path: "app/page.tsx",
         },
       ],
     });
@@ -139,9 +141,9 @@ describe("readReference", () => {
       join(root, "tsconfig.json"),
       JSON.stringify({
         compilerOptions: {
-          strict: true,
           noUncheckedIndexedAccess: true,
           paths: { "@autograph/components": ["./core/components.tsx"] },
+          strict: true,
         },
       }),
     );
@@ -153,8 +155,8 @@ describe("readReference", () => {
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { PageHeader } from "@autograph/components"; const items: Array<{ label: string }> = []; export function Page(){ return <PageHeader actions={[{ label: items[0].label }]} /> }`,
+          path: "app/page.tsx",
         },
       ],
     });
@@ -190,11 +192,11 @@ describe("readReference", () => {
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { Card } from "@autograph/components";
             declare global { namespace JSX { interface Element { readonly kind: "jsx" } interface IntrinsicElements { span: {} } } }
             declare const uncertain: any;
             export function Page() { return <><Card tag={<span />} onSelect={() => undefined} loose={uncertain} /><Card invalid={<span />} onSelect={uncertain} /><Card tag={uncertain} onSelect={() => undefined} /></>; }`,
+          path: "app/page.tsx",
         },
       ],
     });
@@ -229,8 +231,8 @@ describe("readReference", () => {
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { RecordDetailPanel } from "@autograph/compositions"; export function Page() { return <><RecordDetailPanel sections={[]} detail={{ mode: "compact", sections: [] }} /><RecordDetailPanel sections={[]} detail={{ mode: "wide", sections: [] }} /><RecordDetailPanel sections={[]} detail={{ sections: [] }} /></>; }`,
+          path: "app/page.tsx",
         },
       ],
     });
@@ -267,10 +269,10 @@ describe("readReference", () => {
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { RecordDetailPanel } from "@autograph/compositions";
             declare const stage: "ready" | "done";
             export function Page() { return <><RecordDetailPanel actions={stage === "ready" ? [{ id: "try", label: "Try", intent: "primary" }] : [{ id: "reset", label: "Reset" }]} /><RecordDetailPanel actions={stage === "ready" ? [{ id: "try", label: "Try", intent: "primary" }] : [{ id: "reset", label: "Reset", intent: "invalid" }]} /></>; }`,
+          path: "app/page.tsx",
         },
       ],
     });
@@ -301,8 +303,8 @@ describe("readReference", () => {
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { Tuples, Directory } from "@autograph/compositions"; declare const uncertain: any; export function Page() { return <><Tuples required={[]} optional={[]} rest={[]} /><Tuples required={[{ title: "one", sections: [] }, { title: "two", sections: [] }]} optional={[]} rest={[{ title: "one", sections: [] }]} /><Directory entries={{ west: { title: "West", sections: [] } }} /><Directory entries={{ west: { title: 1, sections: [] } }} /><Directory entries={{ ...uncertain }} /><Directory entries={uncertain} /></>; }`,
+          path: "app/page.tsx",
         },
       ],
     });
@@ -339,8 +341,8 @@ describe("readReference", () => {
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { Choice } from "@autograph/components"; export function Page() { return <><Choice value={{ value: "ready" }} /><Choice value={{ value: 123 }} /></>; }`,
+          path: "app/page.tsx",
         },
       ],
     });
@@ -369,8 +371,8 @@ describe("readReference", () => {
       arrustedRoot: root,
       files: [
         {
-          path: "app/page.tsx",
           content: `import { Choice, Loose, Variant } from "@autograph/components"; export function Page() { return <><Choice spec={{ id: "stock" }} /><Loose value={"untrusted target"} /><Variant mode={"invalid"} /></>; }`,
+          path: "app/page.tsx",
         },
       ],
     });
@@ -402,8 +404,8 @@ describe("readReference", () => {
     await writeFile(
       join(packageRoot, "package.json"),
       JSON.stringify({
-        name: "@autograph/compositions",
         exports: { ".": "./src/index.ts", "./table": "./src/table.ts" },
+        name: "@autograph/compositions",
       }),
     );
     await writeFile(join(packageRoot, "src/index.ts"), `export const Overview = () => null;`);
@@ -424,8 +426,8 @@ describe("readReference", () => {
     await writeFile(
       join(packageRoot, "package.json"),
       JSON.stringify({
-        name: "@autograph/components",
         exports: "./src/index.tsx",
+        name: "@autograph/components",
       }),
     );
     await writeFile(
@@ -437,8 +439,8 @@ describe("readReference", () => {
 
     const reference = await readReference(root);
     expect(reference.modules["@autograph/components"].exports.Button.props).toEqual({
+      label: { primitiveKinds: ["string"], required: true },
       variant: { required: false, values: ["primary", "secondary"] },
-      label: { required: true, primitiveKinds: ["string"] },
     });
     expect(reference.modules["@autograph/components"].exports.helper).toEqual({});
   });

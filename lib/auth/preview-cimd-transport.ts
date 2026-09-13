@@ -2,6 +2,7 @@ import { isPublicRoutableHost } from "@better-auth/core/utils/host";
 import type { ClientMetadataResourceFetch } from "@better-auth/oauth-provider";
 import type { LookupAddress, LookupOptions } from "node:dns";
 import { lookup as resolveHostname } from "node:dns/promises";
+import { once } from "node:events";
 import type { ClientRequest, IncomingMessage } from "node:http";
 import { request as requestHttps } from "node:https";
 import type { RequestOptions } from "node:https";
@@ -91,38 +92,25 @@ function responseHeaders(headers: IncomingMessage["headers"]): Headers {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function awaitWithAbort<T>(operation: Promise<T>, signal: AbortSignal) {
-  if (signal.aborted) return Promise.reject<T>(signal.reason);
+async function awaitWithAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted();
+  const cleanup = new AbortController();
 
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => {
-      signal.removeEventListener("abort", onAbort);
-      reject(signal.reason);
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-    // Resolve and reject the abort-aware wrapper without changing its settlement race.
-    // oxlint-disable promise/prefer-await-to-callbacks
-    // oxlint-disable promise/prefer-await-to-then
-    // oxlint-disable-next-line promise/prefer-await-to-then
-    operation
-      .then((value) => {
-        signal.removeEventListener("abort", onAbort);
-        resolve(value);
-      })
-      // Promise cleanup is intentionally attached to the operation chain.
-      // oxlint-disable-next-line promise/prefer-await-to-callbacks
-      .catch((error: unknown) => {
-        signal.removeEventListener("abort", onAbort);
-        reject(error);
-      });
-    // oxlint-enable promise/prefer-await-to-callbacks
-    // oxlint-enable promise/prefer-await-to-then
-  });
+  const abortOnSignal = async (): Promise<never> => {
+    await once(signal, "abort", { signal: cleanup.signal });
+    throw signal.reason;
+  };
+
+  try {
+    return await Promise.race([operation, abortOnSignal()]);
+  } finally {
+    cleanup.abort();
+  }
 }
 
 const DEFAULT_PREVIEW_CIMD_DEPENDENCIES: PreviewCimdTransportDependencies = {
-  resolveHostname,
   requestHttps,
+  resolveHostname,
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -159,36 +147,35 @@ export function createPreviewCimdTransport(
     const headers = Object.fromEntries(webRequest.headers.entries());
     headers.host = url.host;
 
-    return new Promise<Response>((resolve, reject) => {
-      const request = dependencies.requestHttps(
-        url,
-        {
-          agent: false,
-          headers,
-          lookup: createPinnedPreviewLookup(addresses),
-          method: webRequest.method,
-          servername:
-            isIP(url.hostname.replaceAll(/^\[|\]$/gu, "")) === 0 ? url.hostname : undefined,
-          signal,
-        },
-        (response) => {
-          const status = response.statusCode ?? 500;
-          const body =
-            webRequest.method === "HEAD" || BODY_FORBIDDEN_RESPONSE_STATUSES.has(status)
-              ? null
-              : (Readable.toWeb(response) as unknown as BodyInit);
-          resolve(
-            new Response(body, {
-              headers: responseHeaders(response.headers),
-              status,
-              statusText: response.statusMessage,
-            }),
-          );
-        },
-      );
-      request.once("error", reject);
-      request.end();
-    });
+    const { promise, reject, resolve } = Promise.withResolvers<Response>();
+    const request = dependencies.requestHttps(
+      url,
+      {
+        agent: false,
+        headers,
+        lookup: createPinnedPreviewLookup(addresses),
+        method: webRequest.method,
+        servername: isIP(url.hostname.replaceAll(/^\[|\]$/gu, "")) === 0 ? url.hostname : undefined,
+        signal,
+      },
+      (response) => {
+        const status = response.statusCode ?? 500;
+        const body =
+          webRequest.method === "HEAD" || BODY_FORBIDDEN_RESPONSE_STATUSES.has(status)
+            ? null
+            : (Readable.toWeb(response) as unknown as BodyInit);
+        resolve(
+          new Response(body, {
+            headers: responseHeaders(response.headers),
+            status,
+            statusText: response.statusMessage,
+          }),
+        );
+      },
+    );
+    request.once("error", reject);
+    request.end();
+    return promise;
   };
 }
 

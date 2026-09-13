@@ -22,39 +22,20 @@ export function providerEmulationSeed(input: SeedInput): {
   vercel: VercelSeedConfig;
 } {
   const github: GitHubSeedConfig = {
-    users: [
-      {
-        login: "autograph-dev",
-        name: "Autograph Developer",
-        email: "dev@autograph.local",
-      },
-    ],
-    orgs: [{ login: "autograph-local", name: "Autograph Local" }],
-    repos: [{ owner: "autograph-local", name: "demo-app", auto_init: true }],
-    tokens: {
-      emulate_preview_provider_token: {
-        login: "autograph-dev",
-        scopes: ["repo", "user"],
-      },
-      emulate_local_provider_token: {
-        login: "autograph-dev",
-        scopes: ["repo", "user"],
-      },
-    },
     apps: [
       {
         app_id: 12_345,
-        slug: "autograph-app-builder",
-        name: "Autograph App Builder",
-        ...(input.githubAppPrivateKey ? { private_key: input.githubAppPrivateKey } : {}),
         installations: [
           {
-            installation_id: EMULATED_GITHUB_INSTALLATION_ID,
             account: "autograph-local",
-            repository_selection: "selected",
+            installation_id: EMULATED_GITHUB_INSTALLATION_ID,
             repositories: [EMULATED_GITHUB_REPOSITORY],
+            repository_selection: "selected",
           },
         ],
+        name: "Autograph App Builder",
+        ...(input.githubAppPrivateKey ? { private_key: input.githubAppPrivateKey } : {}),
+        slug: "autograph-app-builder",
       },
     ],
     ...(input.strictGitHubOAuth
@@ -72,18 +53,29 @@ export function providerEmulationSeed(input: SeedInput): {
           ],
         }
       : {}),
+    orgs: [{ login: "autograph-local", name: "Autograph Local" }],
+    repos: [{ auto_init: true, name: "demo-app", owner: "autograph-local" }],
+    tokens: {
+      emulate_local_provider_token: {
+        login: "autograph-dev",
+        scopes: ["repo", "user"],
+      },
+      emulate_preview_provider_token: {
+        login: "autograph-dev",
+        scopes: ["repo", "user"],
+      },
+    },
+    users: [
+      {
+        email: "dev@autograph.local",
+        login: "autograph-dev",
+        name: "Autograph Developer",
+      },
+    ],
   };
   return {
     github,
     vercel: {
-      users: [
-        {
-          username: "autograph-dev",
-          name: "Autograph Developer",
-          email: "dev@autograph.local",
-        },
-      ],
-      teams: [{ slug: "autograph-local", name: "Autograph Local" }],
       integrations: [
         {
           client_id: input.vercelClientId,
@@ -93,6 +85,14 @@ export function providerEmulationSeed(input: SeedInput): {
             `${input.origin}/local-connections/vercel/oauth-callback`,
             `${input.origin}/api/auth/callback/vercel`,
           ],
+        },
+      ],
+      teams: [{ name: "Autograph Local", slug: "autograph-local" }],
+      users: [
+        {
+          email: "dev@autograph.local",
+          name: "Autograph Developer",
+          username: "autograph-dev",
         },
       ],
     },

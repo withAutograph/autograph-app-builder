@@ -38,7 +38,10 @@ describe("native route error recovery", () => {
       expect(container.textContent).not.toContain(error.message);
       expect(container.textContent).not.toContain(error.digest);
       expect(container.querySelector('[role="alert"]')).not.toBeNull();
-      const button = container.querySelector("button")!;
+      const button = container.querySelector("button");
+      if (!button) {
+        throw new Error("Expected retry button to be rendered");
+      }
       expect(button.disabled).toBe(true);
       button.click();
       expect(retry).not.toHaveBeenCalled();

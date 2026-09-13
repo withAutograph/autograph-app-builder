@@ -4,32 +4,41 @@ test("compiled public catalog cache reuses, revalidates, falls back, and recover
   request,
 }) => {
   const probe = "/production-cache-probe";
-  expect((await request.post(probe, { data: "reset" })).status()).toBe(204);
+  const reset = await request.post(probe, { data: "reset" });
+  expect(reset.status()).toBe(204);
   const cold = await request.get(probe);
   expect(cold.ok()).toBe(true);
   expect(await cold.json()).toMatchObject({
+    models: { cached: false, entries: [{ name: "Navigation catalog 1" }], status: "ready" },
     upstreamCalls: 1,
-    models: { status: "ready", cached: false, entries: [{ name: "Navigation catalog 1" }] },
   });
 
-  expect(await (await request.get(probe)).json()).toMatchObject({ upstreamCalls: 1 });
+  const cached = await request.get(probe);
+  expect(await cached.json()).toMatchObject({ upstreamCalls: 1 });
 
-  expect((await request.post(probe, { data: "advance" })).status()).toBe(204);
-  expect(await (await request.get(probe)).json()).toMatchObject({
+  const advance = await request.post(probe, { data: "advance" });
+  expect(advance.status()).toBe(204);
+  const revalidated = await request.get(probe);
+  expect(await revalidated.json()).toMatchObject({
+    models: { cached: false, entries: [{ name: "Navigation catalog 2" }], status: "ready" },
     upstreamCalls: 2,
-    models: { status: "ready", cached: false, entries: [{ name: "Navigation catalog 2" }] },
   });
 
-  expect((await request.post(probe, { data: "fail" })).status()).toBe(204);
-  expect(await (await request.get(probe)).json()).toMatchObject({
+  const fail = await request.post(probe, { data: "fail" });
+  expect(fail.status()).toBe(204);
+  const fallback = await request.get(probe);
+  expect(await fallback.json()).toMatchObject({
+    models: { cached: true, entries: [{ name: "Navigation catalog 2" }], status: "ready" },
     upstreamCalls: 3,
-    models: { status: "ready", cached: true, entries: [{ name: "Navigation catalog 2" }] },
   });
 
-  expect((await request.post(probe, { data: "recover" })).status()).toBe(204);
-  expect(await (await request.get(probe)).json()).toMatchObject({
+  const recover = await request.post(probe, { data: "recover" });
+  expect(recover.status()).toBe(204);
+  const recovered = await request.get(probe);
+  expect(await recovered.json()).toMatchObject({
+    models: { cached: false, entries: [{ name: "Navigation catalog 3" }], status: "ready" },
     upstreamCalls: 4,
-    models: { status: "ready", cached: false, entries: [{ name: "Navigation catalog 3" }] },
   });
-  expect(await (await request.get(probe)).json()).toMatchObject({ upstreamCalls: 4 });
+  const recached = await request.get(probe);
+  expect(await recached.json()).toMatchObject({ upstreamCalls: 4 });
 });

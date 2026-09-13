@@ -62,6 +62,50 @@ const branchSha = "3".repeat(40);
 const branchTree = "4".repeat(40);
 const reviewedBytes = new TextEncoder().encode("export default 'demo';\n");
 const reviewedBytesDigest = createHash("sha256").update(reviewedBytes).digest("hex");
+const reviewedAfter = (): { mode: "644"; digest: string } =>
+  Object.fromEntries([
+    ["mode", "644"],
+    ["digest", reviewedBytesDigest],
+  ]) as {
+    mode: "644";
+    digest: string;
+  };
+const reviewedChange = (
+  change: NormalizedChangeSet["changes"][number],
+): NormalizedChangeSet["changes"][number] => {
+  if (change.kind === "added") {
+    if (change.after === undefined) throw new Error("Added change is missing its postimage.");
+    const { after: postimage } = change;
+    const after = Object.fromEntries([
+      ["mode", postimage.mode],
+      ["digest", postimage.digest],
+    ]);
+    return Object.fromEntries([
+      ["path", change.path],
+      ["kind", change.kind],
+      ["after", after],
+    ]) as NormalizedChangeSet["changes"][number];
+  }
+  if (change.kind === "modified") {
+    if (change.after === undefined) throw new Error("Modified change is missing its postimage.");
+    const { after: postimage } = change;
+    const after = Object.fromEntries([
+      ["mode", postimage.mode],
+      ["digest", postimage.digest],
+    ]);
+    return Object.fromEntries([
+      ["path", change.path],
+      ["kind", change.kind],
+      ["before", change.before],
+      ["after", after],
+    ]) as NormalizedChangeSet["changes"][number];
+  }
+  return Object.fromEntries([
+    ["path", change.path],
+    ["kind", change.kind],
+    ["before", change.before],
+  ]) as NormalizedChangeSet["changes"][number];
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function publicationContentSource(
@@ -71,28 +115,28 @@ function publicationContentSource(
 ) {
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async readFile(path: string) {
+      onRead?.(path);
+      return bytes === null ? null : { bytes, digest: reviewedBytesDigest, mode };
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async readFreshTree() {
       onRead?.("README.md");
       return {
-        version: 1 as const,
+        files: [
+          {
+            bytes: templateBytes,
+            digest: templateDigest,
+            mode: "100644" as const,
+            objectId: templateObjectId,
+            path: "README.md",
+          },
+        ],
         kind: "fresh-repository-source-tree" as const,
         sourceSha: sha,
         sourceTree: tree,
-        files: [
-          {
-            path: "README.md",
-            mode: "100644" as const,
-            objectId: templateObjectId,
-            digest: templateDigest,
-            bytes: templateBytes,
-          },
-        ],
+        version: 1 as const,
       };
-    },
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    async readFile(path: string) {
-      onRead?.(path);
-      return bytes === null ? null : { mode, digest: reviewedBytesDigest, bytes };
     },
   };
 }
@@ -102,14 +146,14 @@ function source(
   sourceKind: SourceReceiptEvidence["sourceKind"] = "fresh-template",
 ): SourceReceiptEvidence {
   const unsigned = {
-    version: 3 as const,
+    adapter: SUPPORTED_TEMPLATE_ADAPTER,
+    contractDigest: "5".repeat(64),
+    eligibilityDigest: "4".repeat(64),
+    releaseEnabled: false as const,
     sourceKind,
     sourceSha: sha,
     sourceTree: tree,
-    adapter: SUPPORTED_TEMPLATE_ADAPTER,
-    eligibilityDigest: "4".repeat(64),
-    contractDigest: "5".repeat(64),
-    releaseEnabled: false as const,
+    version: 3 as const,
   } as const;
   return { ...unsigned, digest: hash(unsigned) };
 }
@@ -118,50 +162,50 @@ function source(
 function review(
   inputChanges: NormalizedChangeSet["changes"] = [
     {
-      path: "apps/demo/page.tsx",
+      after: reviewedAfter(),
       kind: "added" as const,
-      after: { mode: "644", digest: reviewedBytesDigest },
+      path: "apps/demo/page.tsx",
     },
   ],
   overrides: Partial<Pick<NormalizedChangeSet, "sourceReceiptDigest">> = {},
 ) {
-  const changes = [...inputChanges].toSorted((left, right) =>
-    compareOverlayPaths(left.path, right.path),
-  );
+  const changes = [...inputChanges]
+    .toSorted((left, right) => compareOverlayPaths(left.path, right.path))
+    .map(reviewedChange);
   const unsigned = {
-    version: 2 as const,
-    validationDigest: "6".repeat(64),
-    applyDigest: "7".repeat(64),
-    proposalDigest: "8".repeat(64),
-    contractDigest: "9".repeat(64),
-    repositoryContractDigest: "5".repeat(64),
-    sourceSha: sha,
-    sourceTree: tree,
-    sourceReceiptDigest: source().digest,
-    eligibilityDigest: "4".repeat(64),
-    workspaceDigest: "a".repeat(64),
     appSpecDigest: "b".repeat(64),
     appSpecPath: "prototype/demo/app-spec.md",
+    applyDigest: "7".repeat(64),
+    approvedPaths: changes.map(({ path }) => path),
     artifactRevision: "c".repeat(64),
-    dependencyReceiptDigest: "d".repeat(64),
-    identityDigest: "e".repeat(64),
-    imageDigest: `sha256:${"f".repeat(64)}`,
-    dependencyCacheDigest: "0".repeat(64),
-    dependencyCacheContentDigest: "1".repeat(64),
-    targetReceipt: {
-      version: 1 as const,
-      contractPath: ".config/repository-template.json",
-      topology: {
-        path: "apps.json",
-        oldDigest: "1".repeat(64),
-        newDigest: "2".repeat(64),
-      },
-    },
-    preTreeDigest: "3".repeat(64),
-    postTreeDigest: "4".repeat(64),
     changedContentDigest: hash(changes),
     changes,
-    approvedPaths: changes.map(({ path }) => path),
+    contractDigest: "9".repeat(64),
+    dependencyCacheContentDigest: "1".repeat(64),
+    dependencyCacheDigest: "0".repeat(64),
+    dependencyReceiptDigest: "d".repeat(64),
+    eligibilityDigest: "4".repeat(64),
+    identityDigest: "e".repeat(64),
+    imageDigest: `sha256:${"f".repeat(64)}`,
+    postTreeDigest: "4".repeat(64),
+    preTreeDigest: "3".repeat(64),
+    proposalDigest: "8".repeat(64),
+    repositoryContractDigest: "5".repeat(64),
+    sourceReceiptDigest: source().digest,
+    sourceSha: sha,
+    sourceTree: tree,
+    targetReceipt: {
+      contractPath: ".config/repository-template.json",
+      topology: {
+        newDigest: "2".repeat(64),
+        oldDigest: "1".repeat(64),
+        path: "apps.json",
+      },
+      version: 1 as const,
+    },
+    validationDigest: "6".repeat(64),
+    version: 2 as const,
+    workspaceDigest: "a".repeat(64),
     ...overrides,
   };
   const changeSet: NormalizedChangeSet = {
@@ -177,11 +221,11 @@ function installation(
   repositoryIds: readonly string[] = ["100"],
 ): GitHubInstallationIdentity {
   return createGitHubInstallationIdentity({
-    operation,
-    installationId: "10",
     accountId: "20",
     accountLogin: "withAutograph",
     accountType: "Organization",
+    installationId: "10",
+    operation,
     repositorySelection: "selected",
     selectedRepositoryIds: repositoryIds,
   });
@@ -193,18 +237,18 @@ function repository(
   overrides: Partial<Omit<GitHubRepositoryObservation, "version" | "digest">> = {},
 ): GitHubRepositoryObservation {
   return createRepositoryObservation({
-    repositoryId: "100",
-    owner: "withAutograph",
-    name: "example-app",
-    visibility: "private",
     defaultBranch: "main",
     headSha: sha,
     headTree: tree,
     installationIdentityDigest: identity.digest,
+    name: "example-app",
+    owner: "withAutograph",
     releaseGate: {
-      name: "REPOSITORY_RELEASE_ENABLED",
       configured: false,
+      name: "REPOSITORY_RELEASE_ENABLED",
     },
+    repositoryId: "100",
+    visibility: "private",
     ...overrides,
   });
 }
@@ -215,21 +259,21 @@ function freshReadBack(
   identity: GitHubInstallationIdentity,
 ): FreshRepositoryReadBack {
   const repo = repository(identity, {
-    repositoryId: "101",
-    owner: proposal.destinationOwner,
-    name: proposal.destinationName,
     headSha: branchSha,
     headTree: proposal.sourceTree,
+    name: proposal.destinationName,
+    owner: proposal.destinationOwner,
+    repositoryId: "101",
   });
   const unsigned = {
-    version: GITHUB_PUBLICATION_VERSION,
     idempotencyKey: proposal.idempotencyKey,
-    repository: repo,
     initialCommit: {
+      parents: [] as const,
       sha: branchSha,
       tree: proposal.sourceTree,
-      parents: [] as const,
     },
+    repository: repo,
+    version: GITHUB_PUBLICATION_VERSION,
   };
   return { ...unsigned, digest: hash(unsigned) };
 }
@@ -244,47 +288,47 @@ function draftReadBack(
     state === "absent"
       ? ({ status: "absent" } as const)
       : ({
-          status: "present",
           branchName: proposal.branchName,
           branchSha,
           branchTree,
-          normalizedChangedPaths: proposal.approvedPaths,
           changedContentDigest: proposal.changedContentDigest,
           idempotencyKey: proposal.idempotencyKey,
+          normalizedChangedPaths: proposal.approvedPaths,
+          status: "present",
         } as const);
   const pullRequest =
     state === "complete"
       ? ({
-          status: "present",
-          pullRequestId: "400",
-          pullRequestNumber: 7,
-          draft: true,
-          headRepositoryId: proposal.repositoryId,
-          headBranch: proposal.branchName,
-          headSha: branchSha,
-          baseRepositoryId: proposal.repositoryId,
           baseBranch: proposal.baseBranch,
+          baseRepositoryId: proposal.repositoryId,
           baseSha: proposal.baseSha,
           changeSetDigest: proposal.changeSetDigest,
+          draft: true,
+          headBranch: proposal.branchName,
+          headRepositoryId: proposal.repositoryId,
+          headSha: branchSha,
           idempotencyKey: proposal.idempotencyKey,
+          pullRequestId: "400",
+          pullRequestNumber: 7,
+          status: "present",
         } as const)
       : ({ status: "absent" } as const);
   const unsigned = {
-    version: GITHUB_PUBLICATION_VERSION,
-    idempotencyKey: proposal.idempotencyKey,
-    repository: repo,
-    changedPathsSinceBase: [] as readonly string[],
     branch,
+    changedPathsSinceBase: [] as readonly string[],
+    idempotencyKey: proposal.idempotencyKey,
     pullRequest,
+    repository: repo,
+    version: GITHUB_PUBLICATION_VERSION,
   };
   return { ...unsigned, digest: hash(unsigned) };
 }
 
 class Adapter implements GitHubPublicationAdapter {
   readonly identities = {
-    resolve: installation("resolve-existing-source"),
     create: installation("create-fresh-repository"),
     publish: installation("publish-draft-pull-request"),
+    resolve: installation("resolve-existing-source"),
   };
   resolveRepo = repository(this.identities.resolve);
   publishRepo = repository(this.identities.publish);
@@ -294,12 +338,12 @@ class Adapter implements GitHubPublicationAdapter {
   freshCalls = 0;
   draftCalls = 0;
   freshAcknowledgement: GitHubMutationAcknowledgement = {
-    status: "accepted",
     requestId: "fresh-request",
+    status: "accepted",
   };
   draftAcknowledgement: GitHubMutationAcknowledgement = {
-    status: "accepted",
     requestId: "draft-request",
+    status: "accepted",
   };
   throwFreshMutation = false;
   throwDraftMutation = false;
@@ -310,11 +354,9 @@ class Adapter implements GitHubPublicationAdapter {
 
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async inspectInstallation(operation: GitHubOperation) {
-    return operation === "resolve-existing-source"
-      ? this.identities.resolve
-      : operation === "create-fresh-repository"
-        ? this.identities.create
-        : this.identities.publish;
+    if (operation === "resolve-existing-source") return this.identities.resolve;
+    if (operation === "create-fresh-repository") return this.identities.create;
+    return this.identities.publish;
   }
 
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -369,21 +411,21 @@ class Adapter implements GitHubPublicationAdapter {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function freshProposal(adapter: Adapter) {
   return createFreshRepositoryProposal({
-    installation: adapter.identities.create,
-    source: source(),
-    review: review(),
-    destinationOwner: "withAutograph",
     destinationName: "new-app",
+    destinationOwner: "withAutograph",
+    installation: adapter.identities.create,
+    review: review(),
+    source: source(),
   });
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function draftProposal(adapter: Adapter) {
   return createDraftPullRequestProposal({
+    changedPathsSinceBase: [],
     installation: adapter.identities.publish,
     repository: adapter.publishRepo,
     review: review(),
-    changedPathsSinceBase: [],
     title: "Add demo",
   });
 }
@@ -393,32 +435,32 @@ describe("closed GitHub publication contract", () => {
     const adapter = new Adapter();
     const canonicalReview = review([
       {
+        after: reviewedAfter(),
+        kind: "added",
         path: "apps/demo/\u{10000}.tsx",
-        kind: "added",
-        after: { mode: "644", digest: reviewedBytesDigest },
       },
       {
+        after: reviewedAfter(),
+        kind: "added",
         path: ".codex/skills/example/agents/openai.yaml",
-        kind: "added",
-        after: { mode: "644", digest: reviewedBytesDigest },
       },
       {
+        after: reviewedAfter(),
+        kind: "added",
         path: "apps/demo/\u{E000}.tsx",
-        kind: "added",
-        after: { mode: "644", digest: reviewedBytesDigest },
       },
       {
-        path: ".codex/skills/example/SKILL.md",
+        after: reviewedAfter(),
         kind: "added",
-        after: { mode: "644", digest: reviewedBytesDigest },
+        path: ".codex/skills/example/SKILL.md",
       },
     ]);
     const roundTripped = structuredClone(canonicalReview);
     const proposal = createDraftPullRequestProposal({
+      changedPathsSinceBase: [],
       installation: adapter.identities.publish,
       repository: adapter.publishRepo,
       review: roundTripped,
-      changedPathsSinceBase: [],
       title: "Add demo",
     });
 
@@ -436,12 +478,12 @@ describe("closed GitHub publication contract", () => {
     const create = installation("create-fresh-repository");
     const publish = installation("publish-draft-pull-request");
     expect(resolve.permissions).toEqual({
-      metadata: "read",
-      contents: "read",
-      workflows: "none",
-      pullRequests: "none",
       administration: "none",
+      contents: "read",
+      metadata: "read",
+      pullRequests: "none",
       variables: "read",
+      workflows: "none",
     });
     expect(create.permissions.pullRequests).toBe("none");
     expect(create.permissions.administration).toBe("write");
@@ -453,11 +495,11 @@ describe("closed GitHub publication contract", () => {
 
   it("preserves all-repository selection in the closed installation identity", () => {
     const identity = createGitHubInstallationIdentity({
-      operation: "resolve-existing-source",
-      installationId: "10",
       accountId: "20",
       accountLogin: "withAutograph",
       accountType: "Organization",
+      installationId: "10",
+      operation: "resolve-existing-source",
       repositorySelection: "all",
       selectedRepositoryIds: ["100"],
     });
@@ -487,10 +529,10 @@ describe("closed GitHub publication contract", () => {
     const result = await resolveImmutableExistingSource({
       adapter,
       expectedInstallationId: "10",
-      repositoryId: "100",
-      ref: "refs/heads/main",
       expectedSha: sha,
       expectedTree: tree,
+      ref: "refs/heads/main",
+      repositoryId: "100",
       resolvedByCallId: "resolve-call",
     });
     expect(result.repository.repositoryId).toBe("100");
@@ -498,10 +540,10 @@ describe("closed GitHub publication contract", () => {
       resolveImmutableExistingSource({
         adapter,
         expectedInstallationId: "11",
-        repositoryId: "100",
-        ref: "refs/heads/main",
         expectedSha: sha,
         expectedTree: tree,
+        ref: "refs/heads/main",
+        repositoryId: "100",
         resolvedByCallId: "resolve-call",
       }),
     ).rejects.toThrow(/installation is not selected/u);
@@ -511,10 +553,10 @@ describe("closed GitHub publication contract", () => {
         resolveImmutableExistingSource({
           adapter,
           expectedInstallationId: "10",
-          repositoryId: "100",
-          ref,
           expectedSha: sha,
           expectedTree: tree,
+          ref,
+          repositoryId: "100",
           resolvedByCallId: "resolve-call",
         }),
       ).rejects.toThrow(/invalid/u);
@@ -529,7 +571,7 @@ describe("closed GitHub publication contract", () => {
       /non-canonical/u,
     );
     const active = repository(installation("resolve-existing-source"), {
-      releaseGate: { name: "REPOSITORY_RELEASE_ENABLED", configured: true },
+      releaseGate: { configured: true, name: "REPOSITORY_RELEASE_ENABLED" },
     });
     expect(active.releaseGate.configured).toBe(true);
     expect(() => assertExactRepositoryObservation(active)).not.toThrow();
@@ -541,8 +583,8 @@ describe("closed GitHub publication contract", () => {
     const unsigned = {
       ...proposal,
       releaseGate: {
-        name: "REPOSITORY_RELEASE_ENABLED" as const,
         configured: true,
+        name: "REPOSITORY_RELEASE_ENABLED" as const,
       },
     };
     delete (unsigned as Partial<typeof proposal>).digest;
@@ -557,13 +599,13 @@ describe("closed GitHub publication contract", () => {
     const adapter = new Adapter();
     expect(() =>
       createFreshRepositoryProposal({
+        destinationName: "new-app",
+        destinationOwner: "withAutograph",
         installation: adapter.identities.create,
-        source: source(),
         review: review(undefined, {
           sourceReceiptDigest: "0".repeat(64),
         }),
-        destinationOwner: "withAutograph",
-        destinationName: "new-app",
+        source: source(),
       }),
     ).toThrow(/exact source receipt/u);
   });
@@ -580,32 +622,32 @@ describe("closed GitHub publication contract", () => {
     ).toThrow(/schema/u);
     expect(() =>
       createFreshRepositoryProposal({
-        installation: adapter.identities.create,
-        source: source(),
-        review: review(),
-        destinationOwner: "withAutograph",
         destinationName: "../bad",
+        destinationOwner: "withAutograph",
+        installation: adapter.identities.create,
+        review: review(),
+        source: source(),
       }),
     ).toThrow(/outside/u);
     expect(() =>
       createDraftPullRequestProposal({
+        changedPathsSinceBase: [],
         installation: adapter.identities.publish,
         repository: adapter.publishRepo,
         review: review(),
-        changedPathsSinceBase: [],
         title: "bad\nbody",
       }),
     ).toThrow(/unauthorized/u);
     const canonicalReview = review();
     expect(() =>
       createDraftPullRequestProposal({
+        changedPathsSinceBase: [],
         installation: adapter.identities.publish,
         repository: adapter.publishRepo,
         review: {
           ...canonicalReview,
           changedContentDigest: "9".repeat(64),
         },
-        changedPathsSinceBase: [],
         title: "Add demo",
       }),
     ).toThrow(/non-canonical/u);
@@ -618,11 +660,11 @@ describe("closed GitHub publication contract", () => {
     const proposal = freshProposal(adapter);
     const result = await createApprovedFreshRepository({
       adapter,
-      store,
+      approvedByCallId: "approve",
+      contentSource: publicationContentSource(),
       proposal,
       review: review(),
-      contentSource: publicationContentSource(),
-      approvedByCallId: "approve",
+      store,
     });
     expect(result.parentCount).toBe(0);
     expect(result.initialCommitTree).toBe(proposal.sourceTree);
@@ -630,11 +672,11 @@ describe("closed GitHub publication contract", () => {
     expect(result.releaseGateAbsent).toBe(true);
     expect(adapter.freshContent?.files).toEqual([
       {
-        path: "README.md",
+        bytes: templateBytes,
+        digest: templateDigest,
         mode: "100644",
         objectId: templateObjectId,
-        digest: templateDigest,
-        bytes: templateBytes,
+        path: "README.md",
       },
     ]);
     assertCanonicalGitHubMutationReceipt(result);
@@ -655,9 +697,9 @@ describe("closed GitHub publication contract", () => {
     if (change?.kind === "added") expect(change.after.bytes).toEqual(reviewedBytes);
     expect(() =>
       assertExactGitHubPublicationContent({
+        content: { ...content, token: "secret" } as never,
         proposal,
         review: review(),
-        content: { ...content, token: "secret" } as never,
       }),
     ).toThrow(/schema is not closed/u);
   });
@@ -670,11 +712,14 @@ describe("closed GitHub publication contract", () => {
       proposal,
       source: {
         async readFreshTree() {
+          const exact = await publicationContentSource().readFreshTree();
+          const [file] = exact.files;
+          if (file === undefined) throw new Error("missing fixture file");
           return {
-            ...(await publicationContentSource().readFreshTree()),
+            ...exact,
             files: [
               {
-                ...(await publicationContentSource().readFreshTree()).files[0]!,
+                ...file,
                 bytes: mutable,
               },
             ],
@@ -693,7 +738,8 @@ describe("closed GitHub publication contract", () => {
           source: {
             async readFreshTree() {
               const exact = await publicationContentSource().readFreshTree();
-              const file = exact.files[0]!;
+              const [file] = exact.files;
+              if (file === undefined) throw new Error("missing fixture file");
               return {
                 ...exact,
                 ...(drift === "tree" ? { sourceTree: "0".repeat(40) } : {}),
@@ -719,19 +765,19 @@ describe("closed GitHub publication contract", () => {
     const proposal = freshProposal(adapter);
     const first = await createApprovedFreshRepository({
       adapter,
-      store,
+      approvedByCallId: "approve",
+      contentSource: publicationContentSource(),
       proposal,
       review: review(),
-      contentSource: publicationContentSource(),
-      approvedByCallId: "approve",
+      store,
     });
     const second = await createApprovedFreshRepository({
       adapter,
-      store,
+      approvedByCallId: "different-call",
+      contentSource: publicationContentSource(),
       proposal,
       review: review(),
-      contentSource: publicationContentSource(),
-      approvedByCallId: "different-call",
+      store,
     });
     expect(second).toEqual(first);
     expect(adapter.freshCalls).toBe(1);
@@ -745,26 +791,27 @@ describe("closed GitHub publication contract", () => {
     await expect(
       createApprovedFreshRepository({
         adapter,
-        store,
+        approvedByCallId: "approve",
+        contentSource: publicationContentSource(),
         proposal,
         review: review(),
-        contentSource: publicationContentSource(),
-        approvedByCallId: "approve",
+        store,
       }),
     ).rejects.toBeInstanceOf(GitHubOutcomeUnknownError);
-    expect((await store.read(proposal.digest))?.status).toBe("pending");
+    const pending = await store.read(proposal.digest);
+    expect(pending?.status).toBe("pending");
     adapter.throwFreshMutation = false;
     adapter.freshOutcome = freshReadBack(proposal, adapter.identities.create);
     let recoveryReads = 0;
     const recovered = await createApprovedFreshRepository({
       adapter,
-      store,
-      proposal,
-      review: review(),
+      approvedByCallId: "retry",
       contentSource: publicationContentSource(reviewedBytes, () => {
         recoveryReads += 1;
       }),
-      approvedByCallId: "retry",
+      proposal,
+      review: review(),
+      store,
     });
     expect(recovered.recoveredFromPending).toBe(true);
     expect(adapter.freshCalls).toBe(1);
@@ -782,34 +829,35 @@ describe("closed GitHub publication contract", () => {
       await expect(
         createApprovedFreshRepository({
           adapter,
-          store,
+          approvedByCallId: "approve",
+          contentSource: publicationContentSource(),
           proposal,
           review: review(),
-          contentSource: publicationContentSource(),
-          approvedByCallId: "approve",
+          store,
         }),
       ).rejects.toBeInstanceOf(GitHubOutcomeUnknownError);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      expect((await store.read(proposal.digest))?.status).toBe("pending");
+      const pending = await store.read(proposal.digest);
+      expect(pending?.status).toBe("pending");
     }
   });
 
   it("distinguishes explicit provider rejection and sanitizes its code", async () => {
     const adapter = new Adapter();
     adapter.freshAcknowledgement = {
-      status: "rejected",
       code: "secret raw provider message",
+      status: "rejected",
     };
     const store = new Store();
     const proposal = freshProposal(adapter);
     await expect(
       createApprovedFreshRepository({
         adapter,
-        store,
+        approvedByCallId: "approve",
+        contentSource: publicationContentSource(),
         proposal,
         review: review(),
-        contentSource: publicationContentSource(),
-        approvedByCallId: "approve",
+        store,
       }),
     ).rejects.toThrow(/rejected/u);
     const failure = await store.read(proposal.digest);
@@ -823,11 +871,11 @@ describe("closed GitHub publication contract", () => {
     const proposal = draftProposal(adapter);
     const result = await publishApprovedDraftPullRequest({
       adapter,
-      store,
+      approvedByCallId: "approve",
+      contentSource: publicationContentSource(),
       proposal,
       review: review(),
-      contentSource: publicationContentSource(),
-      approvedByCallId: "approve",
+      store,
     });
     expect(result.branchTree).toBe(branchTree);
     expect(result.normalizedChangedPaths).toEqual(proposal.approvedPaths);
@@ -848,8 +896,8 @@ describe("closed GitHub publication contract", () => {
     const adapter = new Adapter();
     adapter.publishRepo = repository(adapter.identities.publish, {
       releaseGate: {
-        name: "REPOSITORY_RELEASE_ENABLED",
         configured: true,
+        name: "REPOSITORY_RELEASE_ENABLED",
       },
     });
     const store = new Store();
@@ -858,11 +906,11 @@ describe("closed GitHub publication contract", () => {
 
     const result = await publishApprovedDraftPullRequest({
       adapter,
-      store,
+      approvedByCallId: "approve-active-repository",
+      contentSource: publicationContentSource(),
       proposal,
       review: review(),
-      contentSource: publicationContentSource(),
-      approvedByCallId: "approve-active-repository",
+      store,
     });
 
     expect(result.releaseGateUnchanged).toBe(true);
@@ -875,8 +923,8 @@ describe("closed GitHub publication contract", () => {
     const proposal = draftProposal(adapter);
     const changedGate = repository(adapter.identities.publish, {
       releaseGate: {
-        name: "REPOSITORY_RELEASE_ENABLED",
         configured: true,
+        name: "REPOSITORY_RELEASE_ENABLED",
       },
     });
     adapter.draftOutcome = draftReadBack(proposal, changedGate);
@@ -884,11 +932,11 @@ describe("closed GitHub publication contract", () => {
     await expect(
       publishApprovedDraftPullRequest({
         adapter,
-        store: new Store(),
+        approvedByCallId: "approve-stale-gate",
+        contentSource: publicationContentSource(),
         proposal,
         review: review(),
-        contentSource: publicationContentSource(),
-        approvedByCallId: "approve-stale-gate",
+        store: new Store(),
       }),
     ).rejects.toThrow(/stale or overlapping/u);
     expect(adapter.draftCalls).toBe(0);
@@ -897,21 +945,22 @@ describe("closed GitHub publication contract", () => {
   it("keeps content-source failures pending without provider dispatch and permits explicit recovery", async () => {
     const cases = [
       {
+        message: /postimage is missing/u,
         name: "missing",
         source: publicationContentSource(null),
-        message: /postimage is missing/u,
       },
       {
+        message: /postimage changed/u,
         name: "mode-drift",
         source: publicationContentSource(reviewedBytes, undefined, "755"),
-        message: /postimage changed/u,
       },
       {
+        message: /postimage changed/u,
         name: "byte-drift",
         source: publicationContentSource(new TextEncoder().encode("stale bytes\n")),
-        message: /postimage changed/u,
       },
       {
+        message: /content source failed/u,
         name: "source-error",
         source: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -919,7 +968,6 @@ describe("closed GitHub publication contract", () => {
             throw new Error("raw-content-source-secret");
           },
         },
-        message: /content source failed/u,
       },
     ];
     for (const fixture of cases) {
@@ -929,27 +977,28 @@ describe("closed GitHub publication contract", () => {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const failure = await publishApprovedDraftPullRequest({
         adapter,
-        store,
+        approvedByCallId: `approve-${fixture.name}`,
+        contentSource: fixture.source,
         proposal,
         review: review(),
-        contentSource: fixture.source,
-        approvedByCallId: `approve-${fixture.name}`,
+        store,
       }).catch((error: unknown) => error);
       expect(failure).toBeInstanceOf(Error);
       expect((failure as Error).message).toMatch(fixture.message);
       expect(JSON.stringify(failure)).not.toContain("raw-content-source-secret");
       expect(adapter.draftCalls).toBe(0);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      expect((await store.read(proposal.digest))?.status).toBe("pending");
+      const pending = await store.read(proposal.digest);
+      expect(pending?.status).toBe("pending");
 
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const recovered = await publishApprovedDraftPullRequest({
         adapter,
-        store,
+        approvedByCallId: `recover-${fixture.name}`,
+        contentSource: publicationContentSource(),
         proposal,
         review: review(),
-        contentSource: publicationContentSource(),
-        approvedByCallId: `recover-${fixture.name}`,
+        store,
       });
       expect(recovered.status).toBe("succeeded");
       expect(recovered.recoveredFromPending).toBe(false);
@@ -986,11 +1035,11 @@ describe("closed GitHub publication contract", () => {
       await expect(
         publishApprovedDraftPullRequest({
           adapter,
-          store: new Store(),
+          approvedByCallId: "approve",
+          contentSource: publicationContentSource(),
           proposal,
           review: review(),
-          contentSource: publicationContentSource(),
-          approvedByCallId: "approve",
+          store: new Store(),
         }),
       ).rejects.toThrow();
       expect(adapter.draftCalls).toBe(0);
@@ -1021,14 +1070,15 @@ describe("closed GitHub publication contract", () => {
     await expect(
       publishApprovedDraftPullRequest({
         adapter,
-        store,
+        approvedByCallId: "approve",
+        contentSource: publicationContentSource(),
         proposal,
         review: review(),
-        contentSource: publicationContentSource(),
-        approvedByCallId: "approve",
+        store,
       }),
     ).rejects.toBeInstanceOf(GitHubOutcomeUnknownError);
-    expect((await store.read(proposal.digest))?.status).toBe("pending");
+    const pending = await store.read(proposal.digest);
+    expect(pending?.status).toBe("pending");
   });
 
   it("keeps unknown-key provider read-back pending", async () => {
@@ -1053,14 +1103,15 @@ describe("closed GitHub publication contract", () => {
     await expect(
       publishApprovedDraftPullRequest({
         adapter,
-        store,
+        approvedByCallId: "approve",
+        contentSource: publicationContentSource(),
         proposal,
         review: review(),
-        contentSource: publicationContentSource(),
-        approvedByCallId: "approve",
+        store,
       }),
     ).rejects.toBeInstanceOf(GitHubOutcomeUnknownError);
-    expect((await store.read(proposal.digest))?.status).toBe("pending");
+    const pending = await store.read(proposal.digest);
+    expect(pending?.status).toBe("pending");
   });
 
   it("recovers a lost draft response without a duplicate branch or PR", async () => {
@@ -1071,11 +1122,11 @@ describe("closed GitHub publication contract", () => {
     await expect(
       publishApprovedDraftPullRequest({
         adapter,
-        store,
+        approvedByCallId: "approve",
+        contentSource: publicationContentSource(),
         proposal,
         review: review(),
-        contentSource: publicationContentSource(),
-        approvedByCallId: "approve",
+        store,
       }),
     ).rejects.toBeInstanceOf(GitHubOutcomeUnknownError);
     adapter.throwDraftMutation = false;
@@ -1083,13 +1134,13 @@ describe("closed GitHub publication contract", () => {
     let recoveryReads = 0;
     const recovered = await publishApprovedDraftPullRequest({
       adapter,
-      store,
-      proposal,
-      review: review(),
+      approvedByCallId: "retry",
       contentSource: publicationContentSource(reviewedBytes, () => {
         recoveryReads += 1;
       }),
-      approvedByCallId: "retry",
+      proposal,
+      review: review(),
+      store,
     });
     expect(recovered.recoveredFromPending).toBe(true);
     expect(adapter.draftCalls).toBe(1);
@@ -1101,22 +1152,22 @@ describe("closed GitHub publication contract", () => {
     const proposal = draftProposal(adapter);
     const store = new Store();
     store.values.set(proposal.digest, {
-      version: GITHUB_PUBLICATION_VERSION,
-      kind: "draft-pull-request",
-      status: "pending",
-      proposalDigest: proposal.digest,
-      idempotencyKey: "9".repeat(64),
       approvedByCallId: "approve",
       digest: "8".repeat(64),
+      idempotencyKey: "9".repeat(64),
+      kind: "draft-pull-request",
+      proposalDigest: proposal.digest,
+      status: "pending",
+      version: GITHUB_PUBLICATION_VERSION,
     });
     await expect(
       publishApprovedDraftPullRequest({
         adapter,
-        store,
+        approvedByCallId: "approve",
+        contentSource: publicationContentSource(),
         proposal,
         review: review(),
-        contentSource: publicationContentSource(),
-        approvedByCallId: "approve",
+        store,
       }),
     ).rejects.toThrow(/digest|proposal/u);
     expect(adapter.draftCalls).toBe(0);
@@ -1127,13 +1178,13 @@ describe("closed GitHub publication contract", () => {
     const proposal = draftProposal(adapter);
     const store = new Store();
     const unsigned = {
-      version: GITHUB_PUBLICATION_VERSION,
-      kind: "draft-pull-request" as const,
-      status: "pending" as const,
-      proposalDigest: proposal.digest,
-      idempotencyKey: proposal.idempotencyKey,
       approvedByCallId: "approve",
+      idempotencyKey: proposal.idempotencyKey,
+      kind: "draft-pull-request" as const,
+      proposalDigest: proposal.digest,
       rawProviderPayload: "must-not-be-accepted",
+      status: "pending" as const,
+      version: GITHUB_PUBLICATION_VERSION,
     };
     store.values.set(proposal.digest, {
       ...unsigned,
@@ -1142,11 +1193,11 @@ describe("closed GitHub publication contract", () => {
     await expect(
       publishApprovedDraftPullRequest({
         adapter,
-        store,
+        approvedByCallId: "approve",
+        contentSource: publicationContentSource(),
         proposal,
         review: review(),
-        contentSource: publicationContentSource(),
-        approvedByCallId: "approve",
+        store,
       }),
     ).rejects.toThrow(/schema/u);
     expect(adapter.draftCalls).toBe(0);
@@ -1164,11 +1215,11 @@ describe("closed GitHub publication contract", () => {
       await expect(
         publishApprovedDraftPullRequest({
           adapter,
-          store: new Store(),
+          approvedByCallId: "approve",
+          contentSource: publicationContentSource(),
           proposal: tampered,
           review: review(),
-          contentSource: publicationContentSource(),
-          approvedByCallId: "approve",
+          store: new Store(),
         }),
       ).rejects.toThrow();
     }

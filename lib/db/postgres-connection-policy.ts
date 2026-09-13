@@ -1,31 +1,31 @@
 import { z } from "zod";
 
 export const hostedRuntimePostgresOptions = {
-  max: 5,
   connect_timeout: 5,
-  idle_timeout: 20,
-  max_lifetime: 300,
-  prepare: false,
   connection: {
-    statement_timeout: 30_000,
-    lock_timeout: 5000,
     idle_in_transaction_session_timeout: 30_000,
+    lock_timeout: 5000,
+    statement_timeout: 30_000,
   },
-  onnotice: () => undefined,
+  idle_timeout: 20,
+  max: 5,
+  max_lifetime: 300,
+  onnotice: () => [][0],
+  prepare: false,
 } as const;
 
 export const hostedTaskPostgresOptions = {
-  max: 1,
   connect_timeout: 5,
-  idle_timeout: 5,
-  max_lifetime: 60,
-  prepare: false,
   connection: {
-    statement_timeout: 15_000,
-    lock_timeout: 5000,
     idle_in_transaction_session_timeout: 15_000,
+    lock_timeout: 5000,
+    statement_timeout: 15_000,
   },
-  onnotice: () => undefined,
+  idle_timeout: 5,
+  max: 1,
+  max_lifetime: 60,
+  onnotice: () => [][0],
+  prepare: false,
 } as const;
 
 const databaseUrlSchema = z

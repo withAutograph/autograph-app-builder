@@ -23,10 +23,6 @@ const sandboxOverviewPaths = ["README.md", "AGENTS.md", "package.json", "docs/RE
 export default defineTool({
   description:
     "Inspect the current repository. With paths, read repository-relative text files, including public component exports, implementations, stories, and documentation. Read actual component props before composing a preview; do not guess APIs. Without paths, return the repository overview. Never writes or publishes.",
-  inputSchema: z.object({
-    path: z.string().min(1).default(developmentWorkspacePath),
-    paths: z.array(z.string().min(1)).optional(),
-  }),
   async execute({ path, paths }, ctx) {
     if (paths?.length) {
       const sandbox = await ctx.getSandbox();
@@ -39,7 +35,7 @@ export default defineTool({
           path: `/workspace/repository/${relativePath}`,
         });
         if (content === null) missingPaths.push(requestedPath);
-        else files.push({ path: requestedPath, content });
+        else files.push({ content, path: requestedPath });
       }
       return { files, missingPaths };
     }
@@ -63,20 +59,20 @@ export default defineTool({
           "planning",
         );
         sourceWorkflowState.update(() => ({
-          version: APP_BUILDER_SOURCE_VERSION,
           phase: "reviewed",
           receipt,
+          version: APP_BUILDER_SOURCE_VERSION,
         }));
         updateExactWorkflow({
           expected: workflow,
           operation: "development workspace setup",
           transition: () => ({
-            version: APP_BUILDER_WORKFLOW_VERSION,
+            artifacts: [],
             phase: "prepared",
             preparedByCallId: ctx.callId,
-            workspace,
             sourceReceipt: receipt,
-            artifacts: [],
+            version: APP_BUILDER_WORKFLOW_VERSION,
+            workspace,
           }),
         });
       }
@@ -96,9 +92,13 @@ export default defineTool({
       else availablePaths.push(overviewPath);
     }
     return {
-      workspacePath: developmentWorkspacePath,
       availablePaths,
+      workspacePath: developmentWorkspacePath,
       ...(missingPaths.length === 0 ? {} : { missingPaths }),
     };
   },
+  inputSchema: z.object({
+    path: z.string().min(1).default(developmentWorkspacePath),
+    paths: z.array(z.string().min(1)).optional(),
+  }),
 });

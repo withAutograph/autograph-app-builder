@@ -4,8 +4,6 @@ import { CreateAppFormStoryLayout } from "@/.storybook/create-app/layouts";
 import { ConnectionsSection } from "./builder-connections";
 
 const meta = {
-  title: "Components/Create App/Sections/Connections",
-  component: ConnectionsSection,
   args: {
     connected: [],
     onAdd: fn(),
@@ -17,6 +15,7 @@ const meta = {
     selected: [],
     showMore: false,
   },
+  component: ConnectionsSection,
   decorators: [
     (Story) => (
       <CreateAppFormStoryLayout>
@@ -24,6 +23,7 @@ const meta = {
       </CreateAppFormStoryLayout>
     ),
   ],
+  title: "Components/Create App/Sections/Connections",
 } satisfies Meta<typeof ConnectionsSection>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -33,10 +33,10 @@ export const Filtered: Story = { args: { search: "quick" } };
 export const EmptySearch: Story = { args: { search: "missing" } };
 export const Added: Story = { args: { selected: ["QuickBooks"] } };
 export const Connected: Story = {
-  args: { selected: ["QuickBooks"], connected: ["QuickBooks"] },
+  args: { connected: ["QuickBooks"], selected: ["QuickBooks"] },
 };
 export const AddRemoveAndCustomize: Story = {
-  args: { selected: ["QuickBooks"], connected: ["QuickBooks"] },
+  args: { connected: ["QuickBooks"], selected: ["QuickBooks"] },
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole("button", { name: "Customize" }));

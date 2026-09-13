@@ -11,7 +11,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import nodePath from "node:path";
 import { promisify } from "node:util";
 
 import {
@@ -47,7 +47,7 @@ function parseArguments(args: readonly string[]) {
     throw new Error(
       "Usage: mise run release:publish -- --candidate-root /absolute/proven/candidate --token-file /absolute/owner-only/oauth-token",
     );
-  if (!isAbsolute(candidateRoot) || !isAbsolute(tokenFile))
+  if (!nodePath.isAbsolute(candidateRoot) || !nodePath.isAbsolute(tokenFile))
     throw new Error("Release candidate and token paths must be absolute.");
   return { candidateRoot, tokenFile };
 }
@@ -55,14 +55,14 @@ function parseArguments(args: readonly string[]) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requiredExecutable(name: string) {
   const value = process.env[name];
-  if (value === undefined || !isAbsolute(value))
+  if (value === undefined || !nodePath.isAbsolute(value))
     throw new Error(`mise must supply the absolute ${name} executable.`);
   return value;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function ownerToken(path: string) {
-  const canonical = await realpath(resolve(path));
+  const canonical = await realpath(nodePath.resolve(path));
   const info = await lstat(canonical);
   if (
     canonical !== path ||
@@ -73,7 +73,8 @@ async function ownerToken(path: string) {
     (info.mode & 0o077) !== 0
   )
     throw new Error("Release OAuth token must be a canonical owner-only file.");
-  const token = (await readFile(canonical, "utf-8")).trim();
+  const tokenContents = await readFile(canonical, "utf-8");
+  const token = tokenContents.trim();
   if (token === "" || token.length > 16_384 || /\s/u.test(token))
     throw new Error("Release OAuth token was malformed.");
   return token;
@@ -94,8 +95,9 @@ function deploymentIdentity(value: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function sealPublicationTree(root: string, current = root) {
-  for (const entry of await readdir(current, { withFileTypes: true })) {
-    const path = join(current, entry.name);
+  const entries = await readdir(current, { withFileTypes: true });
+  for (const entry of entries) {
+    const path = nodePath.join(current, entry.name);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const info = await lstat(path);
     if (info.isSymbolicLink()) throw new Error("Release publication staging contained a link.");
@@ -122,48 +124,50 @@ async function removePublicationTree(root: string) {
     if (info.isDirectory()) {
       await chmod(path, 0o700);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      for (const entry of await readdir(path)) await makeWritable(join(path, entry));
+      for (const entry of await readdir(path)) await makeWritable(nodePath.join(path, entry));
     } else await chmod(path, 0o600);
   }
   await makeWritable(root).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== "ENOENT") throw error;
   });
-  await rm(root, { recursive: true, force: true });
+  await rm(root, { force: true, recursive: true });
 }
 
 const parsedArguments = parseArguments(process.argv.slice(2));
-const candidateRoot = await realpath(resolve(parsedArguments.candidateRoot));
+const candidateRoot = await realpath(nodePath.resolve(parsedArguments.candidateRoot));
 if (candidateRoot !== parsedArguments.candidateRoot)
   throw new Error("Release candidate root must be canonical.");
 await verifyPromotionCandidate({ candidateRoot });
-const publicationReceiptPath = join(candidateRoot, "publication-receipt.json");
+const publicationReceiptPath = nodePath.join(candidateRoot, "publication-receipt.json");
 try {
   await lstat(publicationReceiptPath);
   throw new Error("This exact release candidate was already published.");
 } catch (error) {
   if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 }
-const publicationRoot = await realpath(await mkdtemp(join(tmpdir(), "autograph-release-publish-")));
+const publicationRoot = await realpath(
+  await mkdtemp(nodePath.join(tmpdir(), "autograph-release-publish-")),
+);
 await chmod(publicationRoot, 0o700);
 try {
   await cp(candidateRoot, publicationRoot, {
-    recursive: true,
     dereference: false,
     errorOnExist: true,
     force: false,
+    recursive: true,
   });
   await sealPublicationTree(publicationRoot);
   const { receipt } = await verifyPromotionCandidate({
     candidateRoot: publicationRoot,
   });
-  const builder = await exactCleanGitSource(resolve("."), "Builder");
+  const builder = await exactCleanGitSource(nodePath.resolve("."), "Builder");
   if (builder.commit !== receipt.builder.commit || builder.tree !== receipt.builder.tree)
     throw new Error("Release publication checkout does not match the proof.");
   const oauthToken = await ownerToken(parsedArguments.tokenFile);
 
   const executables = {
-    gh: requiredExecutable("APP_BUILDER_RELEASE_GH_BIN"),
     docker: requiredExecutable("APP_BUILDER_RELEASE_DOCKER_BIN"),
+    gh: requiredExecutable("APP_BUILDER_RELEASE_GH_BIN"),
     vercel: requiredExecutable("APP_BUILDER_RELEASE_VERCEL_BIN"),
   };
 
@@ -181,7 +185,7 @@ try {
           "--json",
           "tagName,isPrerelease,targetCommitish,assets",
         ],
-        { cwd: publicationRoot, env: process.env, encoding: "utf-8" },
+        { cwd: publicationRoot, encoding: "utf-8", env: process.env },
       );
       metadataRaw = result.stdout;
     } catch (error) {
@@ -200,10 +204,10 @@ try {
       assets?: { name?: unknown }[];
     };
     const expectedAssetNames = [
-      basename(receipt.package.archive),
-      basename(receipt.package.marketplaceArchive),
-      basename(receipt.package.checksums),
-      basename(receipt.package.receipt),
+      nodePath.basename(receipt.package.archive),
+      nodePath.basename(receipt.package.marketplaceArchive),
+      nodePath.basename(receipt.package.checksums),
+      nodePath.basename(receipt.package.receipt),
       "promotion-receipt.json",
     ].toSorted();
     if (
@@ -216,7 +220,7 @@ try {
     )
       throw new Error("Existing GitHub release did not match the promotion.");
     const downloadRoot = await realpath(
-      await mkdtemp(join(tmpdir(), "autograph-github-readback-")),
+      await mkdtemp(nodePath.join(tmpdir(), "autograph-github-readback-")),
     );
     const assets = [
       [receipt.package.archive, receipt.package.archiveSha256],
@@ -225,7 +229,7 @@ try {
       [receipt.package.receipt, receipt.package.receiptSha256],
       [
         "promotion-receipt.json",
-        sha256(await readFile(join(publicationRoot, "promotion-receipt.json"))),
+        sha256(await readFile(nodePath.join(publicationRoot, "promotion-receipt.json"))),
       ],
     ] as const;
     try {
@@ -240,10 +244,10 @@ try {
           "--dir",
           downloadRoot,
         ],
-        { cwd: publicationRoot, env: process.env, encoding: "utf-8" },
+        { cwd: publicationRoot, encoding: "utf-8", env: process.env },
       );
       for (const [path, expected] of assets) {
-        const downloaded = join(downloadRoot, basename(path));
+        const downloaded = nodePath.join(downloadRoot, nodePath.basename(path));
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const info = await lstat(downloaded);
         if (
@@ -255,7 +259,7 @@ try {
           throw new Error("Existing GitHub release assets did not match proof.");
       }
     } finally {
-      await rm(downloadRoot, { recursive: true, force: true });
+      await rm(downloadRoot, { force: true, recursive: true });
     }
     return true;
   };
@@ -266,14 +270,14 @@ try {
     throw new Error("Release asset publication must be the final mutation.");
   const execute = async (command: (typeof commands)[number]) => {
     const result = await execFileAsync(executables[command.tool], command.args, {
-      cwd: "cwd" in command ? join(publicationRoot, command.cwd) : publicationRoot,
-      env: process.env,
+      cwd: "cwd" in command ? nodePath.join(publicationRoot, command.cwd) : publicationRoot,
       encoding: "utf-8",
+      env: process.env,
       maxBuffer: 16 * 1024 * 1024,
     });
     if (result.stdout.trim() !== "") process.stdout.write(result.stdout);
     if (result.stderr.trim() !== "") process.stderr.write(result.stderr);
-    outputs.push({ tool: command.tool, stdoutSha256: sha256(result.stdout) });
+    outputs.push({ stdoutSha256: sha256(result.stdout), tool: command.tool });
     return result.stdout;
   };
   let deploymentUrl: string | undefined;
@@ -293,8 +297,8 @@ try {
     ["imagetools", "inspect", receipt.image.publicationTag, "--format", "{{json .Manifest}}"],
     {
       cwd: publicationRoot,
-      env: process.env,
       encoding: "utf-8",
+      env: process.env,
       maxBuffer: 4 * 1024 * 1024,
     },
   );
@@ -305,14 +309,14 @@ try {
   if (deploymentUrl === undefined) throw new Error("Production deployment did not complete.");
   const [deploymentReadback, endpointReadback] = await Promise.all([
     execFileAsync(executables.vercel, ["inspect", deploymentUrl, "--wait", "--json"], {
-      cwd: join(publicationRoot, receipt.deployment.root),
-      env: process.env,
+      cwd: nodePath.join(publicationRoot, receipt.deployment.root),
       encoding: "utf-8",
+      env: process.env,
     }),
     execFileAsync(executables.vercel, ["inspect", endpointOrigin, "--wait", "--json"], {
-      cwd: join(publicationRoot, receipt.deployment.root),
-      env: process.env,
+      cwd: nodePath.join(publicationRoot, receipt.deployment.root),
       encoding: "utf-8",
+      env: process.env,
     }),
   ]);
   const deployment = deploymentIdentity(deploymentReadback.stdout);
@@ -344,43 +348,43 @@ try {
     throw new Error("Deployed MCP endpoint did not expose the exact five tools.");
   const releaseExists = await exactGithubReleaseExists();
   if (releaseExists) {
-    outputs.push({ tool: "gh", stdoutSha256: sha256("reconciled") });
+    outputs.push({ stdoutSha256: sha256("reconciled"), tool: "gh" });
   } else {
     await execute(releaseCommand);
     const releaseExistsAfterPublish = await exactGithubReleaseExists();
-    if (releaseExistsAfterPublish) outputs.push({ tool: "gh", stdoutSha256: sha256("published") });
+    if (releaseExistsAfterPublish) outputs.push({ stdoutSha256: sha256("published"), tool: "gh" });
     else throw new Error("GitHub release readback was unavailable after publish.");
   }
 
   const unsigned = {
+    commands: outputs,
+    deployment: {
+      deploymentId: deployment.id,
+      deploymentUrl,
+      endpointOrigin,
+      mode: "prebuilt-production",
+      oauthMetadataSha256: sha256(metadataBytes),
+      outputTreeSha256: receipt.deployment.outputTreeSha256,
+      toolDiscoverySha256: sha256(JSON.stringify(deployedTools)),
+    },
     format: "autograph-release-publication-v1",
-    promotionDigest: receipt.digest,
     image: {
-      reference: receipt.image.reference,
       publicationTag: receipt.image.publicationTag,
+      reference: receipt.image.reference,
       remoteReadbackSha256: sha256(remote.stdout),
     },
     package: {
-      version: receipt.package.version,
-      releaseTag: `v${receipt.package.version}`,
       archiveSha256: receipt.package.archiveSha256,
       marketplaceArchiveSha256: receipt.package.marketplaceArchiveSha256,
+      releaseTag: `v${receipt.package.version}`,
+      version: receipt.package.version,
     },
-    deployment: {
-      endpointOrigin,
-      outputTreeSha256: receipt.deployment.outputTreeSha256,
-      deploymentId: deployment.id,
-      deploymentUrl,
-      mode: "prebuilt-production",
-      oauthMetadataSha256: sha256(metadataBytes),
-      toolDiscoverySha256: sha256(JSON.stringify(deployedTools)),
-    },
-    commands: outputs,
+    promotionDigest: receipt.digest,
   };
   const publication = { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
   await writeFile(publicationReceiptPath, `${JSON.stringify(publication, null, 2)}\n`, {
-    mode: 0o600,
     flag: "wx",
+    mode: 0o600,
   });
   console.log(`Published exact proven release: ${publication.digest}`);
 } finally {

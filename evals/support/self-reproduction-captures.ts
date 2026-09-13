@@ -61,12 +61,12 @@ export function unavailableCaptureObservations(reason: string): PairedCaptureRun
       side,
       desktopViewports.flatMap((viewport) =>
         captureStates.map((state): Observation => ({
-          requirementId: `capture/${viewport.name}/${state}`,
-          disposition: "infrastructure-unavailable",
-          reason,
-          method: "none",
           artifacts: [],
           assertions: [],
+          disposition: "infrastructure-unavailable",
+          method: "none",
+          reason,
+          requirementId: `capture/${viewport.name}/${state}`,
         })),
       ),
     ]),
@@ -99,13 +99,13 @@ export async function writePairedCaptureManifest(
           ];
         }),
       ) as Pick<PairedCaptureManifestRow, "reference" | "candidate">;
-      return { requirementId, viewport, state, ...pair };
+      return { requirementId, state, viewport, ...pair };
     }),
   );
   const manifest: PairedCaptureRun["manifest"] = {
+    rows,
     schemaVersion: "self-reproduction-captures/v1",
     visualScoresAdvisory: true,
-    rows,
   };
   const manifestPath = join(outputRoot, "parity/captures/manifest.json");
   await mkdir(dirname(manifestPath), { recursive: true });
@@ -120,7 +120,7 @@ export async function captureParity(input: {
   outputRoot: string;
   adapters: Partial<Record<(typeof sides)[number], CaptureAdapter>>;
 }): Promise<Record<(typeof sides)[number], Observation[]>> {
-  const output: Record<(typeof sides)[number], Observation[]> = { reference: [], candidate: [] };
+  const output: Record<(typeof sides)[number], Observation[]> = { candidate: [], reference: [] };
   for (const viewport of desktopViewports)
     for (const state of captureStates)
       for (const side of sides) {
@@ -128,12 +128,12 @@ export async function captureParity(input: {
         const adapter = input.adapters[side];
         if (!adapter) {
           output[side].push({
-            requirementId,
-            disposition: "not-run",
-            reason: "No evaluator adapter supplied.",
-            method: "none",
             artifacts: [],
             assertions: [],
+            disposition: "not-run",
+            method: "none",
+            reason: "No evaluator adapter supplied.",
+            requirementId,
           });
           continue;
         }
@@ -154,50 +154,50 @@ export async function captureParity(input: {
           if (prepared.ready) {
             const assertions = await adapter.exercise(page, state, async () => {
               await mkdir(dirname(join(input.outputRoot, png)), { recursive: true });
-              await page.screenshot({ path: join(input.outputRoot, png), fullPage: true });
+              await page.screenshot({ fullPage: true, path: join(input.outputRoot, png) });
               captured = true;
             });
             result = {
-              requirementId,
+              artifacts: captured ? [png, receipt] : [receipt],
+              assertions: assertions.map((assertion) => ({ ...assertion, artifacts: [receipt] })),
               disposition: "observed",
               method: "browser",
               reason: captured
                 ? "Paired fixture executed in an isolated browser context."
                 : "Adapter omitted the state capture.",
-              artifacts: captured ? [png, receipt] : [receipt],
-              assertions: assertions.map((assertion) => ({ ...assertion, artifacts: [receipt] })),
+              requirementId,
             };
           } else {
             result = {
-              requirementId,
-              disposition: prepared.disposition,
-              reason: prepared.reason,
-              method: "none",
               artifacts: [],
               assertions: [],
+              disposition: prepared.disposition,
+              method: "none",
+              reason: prepared.reason,
+              requirementId,
             };
           }
         } catch {
           // Unexpected UI/selector failures are failures, not infrastructure claims.
           // Avoid serializing arbitrary errors containing callback tokens or cookies.
           result = {
-            requirementId,
-            disposition: interactionStarted ? "observed" : "infrastructure-unavailable",
-            reason: interactionStarted
-              ? "Fixture interaction threw; inspect sanitized evaluator diagnostics."
-              : "The browser could not create an isolated fixture page.",
-            method: interactionStarted ? "browser" : "none",
             artifacts: [receipt],
             assertions: interactionStarted
               ? [
                   {
+                    artifacts: [receipt],
+                    detail: "The fixture did not complete.",
                     id: "fixture-execution",
                     passed: false,
-                    detail: "The fixture did not complete.",
-                    artifacts: [receipt],
                   },
                 ]
               : [],
+            disposition: interactionStarted ? "observed" : "infrastructure-unavailable",
+            method: interactionStarted ? "browser" : "none",
+            reason: interactionStarted
+              ? "Fixture interaction threw; inspect sanitized evaluator diagnostics."
+              : "The browser could not create an isolated fixture page.",
+            requirementId,
           };
         } finally {
           // Preserve the case receipt if the browser disconnected during cleanup.
@@ -208,7 +208,7 @@ export async function captureParity(input: {
         await mkdir(dirname(join(input.outputRoot, receipt)), { recursive: true });
         await writeFile(
           join(input.outputRoot, receipt),
-          `${JSON.stringify({ side, viewport, state, ...result }, null, 2)}\n`,
+          `${JSON.stringify({ side, state, viewport, ...result }, null, 2)}\n`,
           { mode: 0o600 },
         );
         output[side].push(result);
@@ -232,13 +232,13 @@ export async function runPairedCaptureEvidence(input: {
   let observations: Record<(typeof sides)[number], Observation[]>;
   try {
     observations = await captureParity({
+      adapters: input.adapters,
       browser,
       outputRoot: input.outputRoot,
-      adapters: input.adapters,
     });
   } finally {
     await browser.close();
   }
   const manifest = await writePairedCaptureManifest(input.outputRoot, observations);
-  return { observations, manifest };
+  return { manifest, observations };
 }

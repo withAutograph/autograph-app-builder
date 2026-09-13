@@ -39,7 +39,7 @@ export interface InternalEveEvent {
 const progressStates = new Set(["started", "completed", "failed"]);
 const silentInternalApprovalTools = new Set([
   "accept_app_spec",
-  "validate_app_creation",
+  "validate-app-creation",
   "accept_change_set",
 ]);
 const unavailableConfirmationMessage = "I couldn't verify this action, so it was not run.";
@@ -53,90 +53,91 @@ const gitObjectIdSchema = z.string().regex(/^[a-f0-9]{40}$/u);
 const immutableExecutionArtifactSchema = z.string().regex(/^(?!fixture@).+@sha256:[a-f0-9]{64}$/u);
 const prototypeRequestSchema = z
   .object({
-    path: z.string().regex(prototypePathPattern),
-    mediaType: z.literal("text/html"),
     content: z.string().min(1).max(maximumPrototypeBytes),
+    mediaType: z.literal("text/html"),
+    path: z.string().regex(prototypePathPattern),
   })
   .strict();
 const prototypeResultSchema = z
   .object({
     appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-    path: z.string().regex(prototypePathPattern),
-    mediaType: z.literal("text/html"),
     digest: lowercaseSha256Schema,
+    invalidated: z.boolean().optional(),
+    mediaType: z.literal("text/html"),
+    path: z.string().regex(prototypePathPattern),
+    recordedByCallId: z.string().min(1),
+    reused: z.boolean(),
     revision: lowercaseSha256Schema,
     sessionId: z.string().min(1),
-    recordedByCallId: z.string().min(1),
     size: z.number().int().min(1).max(maximumPrototypeBytes),
-    reused: z.boolean(),
-    invalidated: z.boolean().optional(),
   })
   .strict();
 const uiPreviewResultSchema = z
   .object({
     appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-    revision: lowercaseSha256Schema,
-    routes: z.array(z.string().startsWith("/")).min(1).max(16),
-    fidelity: z.literal("arrusted-component-catalog"),
-    functionality: z.literal("fixtures-only"),
     content: z.string().min(1).max(maximumPrototypeBytes),
     digest: lowercaseSha256Schema,
+    fidelity: z.literal("arrusted-component-catalog"),
+    functionality: z.literal("fixtures-only"),
+    revision: lowercaseSha256Schema,
+    routes: z.array(z.string().startsWith("/")).min(1).max(16),
   })
   .passthrough();
 const planRequestSchema = z
   .object({
-    expectedAppSpecDigest: lowercaseSha256Schema,
     existingAppChanges: z
       .array(
         z
           .object({
+            content: z.string().max(262_144),
             path: z
               .string()
               .min(1)
               .max(512)
               .regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._/@:-]+$/u),
-            content: z.string().max(262_144),
           })
           .strict(),
       )
       .min(1)
       .max(32)
       .optional(),
+    expectedAppSpecDigest: lowercaseSha256Schema,
   })
   .strict();
 const planResultSchema = z
   .object({
-    version: z.literal(1),
-    sourceSha: gitObjectIdSchema,
-    sourceTree: gitObjectIdSchema,
-    sourceReceiptDigest: lowercaseSha256Schema,
-    eligibilityDigest: lowercaseSha256Schema,
-    workspaceDigest: lowercaseSha256Schema,
-    imageDigest: immutableExecutionArtifactSchema,
-    dependencyCacheDigest: prefixedSha256Schema,
     appSpecDigest: lowercaseSha256Schema,
     artifactRevision: lowercaseSha256Schema,
-    identityDigest: lowercaseSha256Schema,
     contractDigest: lowercaseSha256Schema,
-    target: targetProposalSchema,
-    plannedByCallId: z.string().min(1),
+    dependencyCacheDigest: prefixedSha256Schema,
     digest: lowercaseSha256Schema,
+    eligibilityDigest: lowercaseSha256Schema,
+    identityDigest: lowercaseSha256Schema,
+    imageDigest: immutableExecutionArtifactSchema,
+    plannedByCallId: z.string().min(1),
     reused: z.boolean(),
+    sourceReceiptDigest: lowercaseSha256Schema,
+    sourceSha: gitObjectIdSchema,
+    sourceTree: gitObjectIdSchema,
+    target: targetProposalSchema,
+    version: z.literal(1),
+    workspaceDigest: lowercaseSha256Schema,
   })
   .strict();
 
-function sha256(value: string): string {
-  return createHash("sha256").update(value, "utf-8").digest("hex");
-}
+const sha256 = (value: string): string => createHash("sha256").update(value, "utf-8").digest("hex");
 
-function verifiedImplementationPlan(
+const verifiedImplementationPlan = (
   callId: string,
   request: z.infer<typeof planRequestSchema>,
   candidate: unknown,
-): PublicImplementationPlan | undefined {
+): PublicImplementationPlan | undefined => {
   const parsed = planResultSchema.safeParse(candidate);
   if (!parsed.success) return undefined;
   const result = parsed.data;
+  const rawResult = candidate as Record<string, unknown>;
+  const rawTarget = rawResult.target;
+  if (typeof rawTarget !== "object" || rawTarget === null) return undefined;
   const { target } = result;
   const requestedChanges = request.existingAppChanges;
   const iterationMatchesRequest =
@@ -150,51 +151,43 @@ function verifiedImplementationPlan(
             change.path === requestedChanges[index]?.path &&
             change.after.content === requestedChanges[index]?.content,
         );
-  const unsigned = {
-    version: result.version,
-    sourceSha: result.sourceSha,
-    sourceTree: result.sourceTree,
-    sourceReceiptDigest: result.sourceReceiptDigest,
-    eligibilityDigest: result.eligibilityDigest,
-    workspaceDigest: result.workspaceDigest,
-    imageDigest: result.imageDigest,
-    dependencyCacheDigest: result.dependencyCacheDigest,
-    appSpecDigest: result.appSpecDigest,
-    artifactRevision: result.artifactRevision,
-    identityDigest: result.identityDigest,
-    contractDigest: result.contractDigest,
-    target,
-    plannedByCallId: result.plannedByCallId,
-  };
   if (
     (!result.reused && result.plannedByCallId !== callId) ||
     result.appSpecDigest !== request.expectedAppSpecDigest ||
     target.contract.appSpec.sha256 !== request.expectedAppSpecDigest ||
     target.plan.product.appSpec.sha256 !== request.expectedAppSpecDigest ||
     !iterationMatchesRequest ||
-    result.contractDigest !== sha256(JSON.stringify(target.contract)) ||
-    result.digest !== sha256(JSON.stringify(unsigned)) ||
+    result.contractDigest !==
+      sha256(JSON.stringify((rawTarget as Record<string, unknown>).contract)) ||
+    result.digest !==
+      sha256(
+        JSON.stringify(
+          Object.fromEntries(
+            Object.entries(rawResult).filter(([key]) => key !== "digest" && key !== "reused"),
+          ),
+        ),
+      ) ||
     target.blockers.length !== 0 ||
     target.mutations.length !== 0
   )
     return undefined;
   return publicImplementationPlanSchema.parse({
     appId: target.contract.appId,
-    runtime: target.plan.source.runtime,
     packageName: target.plan.source.packageName,
     projectName: target.plan.topology.projectName,
-    routes: target.plan.topology.routes,
     readOnly: true,
+    routes: target.plan.topology.routes,
+    runtime: target.plan.source.runtime,
   });
-}
+};
 
 /**
  * Projects a compact product plan only after the installed runtime durably
  * completes its fixed target-planning tool with exact request/result bindings.
  */
-export function latestInstalledImplementationPlan(
+export const latestInstalledImplementationPlan = (
   events: readonly MessageStreamEvent[],
-): PublicImplementationPlan | undefined {
+): PublicImplementationPlan | undefined => {
   const requested = new Map<string, z.infer<typeof planRequestSchema>>();
   let latest: PublicImplementationPlan | undefined;
 
@@ -242,16 +235,16 @@ export function latestInstalledImplementationPlan(
   }
 
   return latest;
-}
+};
 
 /**
  * Recovers only a successfully recorded HTML prototype from Eve's durable
  * action stream. Raw tool input is never projected without its matching,
  * completed receipt.
  */
-export function latestInstalledPrototype(
+export const latestInstalledPrototype = (
   events: readonly MessageStreamEvent[],
-): PublicPrototype | undefined {
+): PublicPrototype | undefined => {
   const requested = new Map<string, z.infer<typeof prototypeRequestSchema>>();
   let latest: PublicPrototype | undefined;
 
@@ -282,10 +275,10 @@ export function latestInstalledPrototype(
       const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
       if (!preview.success || sha256(preview.data.content) !== preview.data.digest) continue;
       latest = publicPrototypeSchema.parse({
-        path: `prototype/${preview.data.appId}/index.html`,
-        mediaType: "text/html",
         content: preview.data.content,
         digest: preview.data.digest,
+        mediaType: "text/html",
+        path: `prototype/${preview.data.appId}/index.html`,
         revision: preview.data.digest,
       });
       continue;
@@ -301,9 +294,9 @@ export function latestInstalledPrototype(
     const digest = sha256(input.content);
     const revision = sha256(
       JSON.stringify({
-        path: input.path,
-        mediaType: input.mediaType,
         digest,
+        mediaType: input.mediaType,
+        path: input.path,
       }),
     );
     const size = Buffer.byteLength(input.content, "utf-8");
@@ -320,21 +313,21 @@ export function latestInstalledPrototype(
       continue;
 
     latest = publicPrototypeSchema.parse({
-      path: input.path,
-      mediaType: input.mediaType,
       content: input.content,
       digest,
+      mediaType: input.mediaType,
+      path: input.path,
       revision,
     });
   }
 
   return latest;
-}
+};
 
 /** Projects component-backed preview metadata only from a completed tool receipt. */
-export function latestInstalledUiPreview(
+export const latestInstalledUiPreview = (
   events: readonly MessageStreamEvent[],
-): PublicUiPreview | undefined {
+): PublicUiPreview | undefined => {
   let latest: PublicUiPreview | undefined;
   for (const event of events) {
     if (
@@ -349,16 +342,16 @@ export function latestInstalledUiPreview(
     if (!preview.success || sha256(preview.data.content) !== preview.data.digest) continue;
     latest = publicUiPreviewSchema.parse({
       appId: preview.data.appId,
-      revision: preview.data.revision,
-      routes: preview.data.routes,
       fidelity: preview.data.fidelity,
       functionality: preview.data.functionality,
+      revision: preview.data.revision,
+      routes: preview.data.routes,
     });
   }
   return latest;
-}
+};
 
-function inputRequest(request: {
+const inputRequest = (request: {
   requestId: string;
   kind: "question" | "session-limit" | "tool-approval";
   prompt: string;
@@ -369,10 +362,10 @@ function inputRequest(request: {
     toolName: string;
     input: unknown;
   };
-}): PublicInputRequest | undefined {
+}): PublicInputRequest | undefined => {
   const approvalTitles = {
-    apply_app_creation: "Build this app?",
-    publish_github_draft_pr: "Approve draft PR publication",
+    "apply-app-creation": "Build this app?",
+    "publish-github-draft-pr": "Approve draft PR publication",
   } as const;
   const toolName = request.action?.toolName;
   if (
@@ -385,68 +378,72 @@ function inputRequest(request: {
     request.kind === "tool-approval" && toolName !== undefined && toolName in approvalTitles
       ? approvalTitles[toolName as keyof typeof approvalTitles]
       : request.prompt;
-  const description =
-    request.kind === "tool-approval" && toolName === "apply_app_creation"
-      ? (z
-          .object({ productSummary: z.string().trim().min(1).max(600) })
-          .safeParse(request.action?.input).data?.productSummary ??
-        "Build and validate the preview shown above. This changes only the private App Builder workspace.")
-      : request.kind === "tool-approval" && toolName !== undefined && toolName in approvalTitles
-        ? publicApprovalDescription(request.action?.input, toolName)
-        : undefined;
+  let description: string | undefined;
+  if (request.kind === "tool-approval" && toolName === "apply-app-creation") {
+    description =
+      z
+        .object({ productSummary: z.string().trim().min(1).max(600) })
+        .safeParse(request.action?.input).data?.productSummary ??
+      "Build and validate the preview shown above. This changes only the private App Builder workspace.";
+  } else if (
+    request.kind === "tool-approval" &&
+    toolName !== undefined &&
+    toolName in approvalTitles
+  ) {
+    description = publicApprovalDescription(request.action?.input, toolName);
+  }
   if (
     request.kind === "tool-approval" &&
     toolName !== undefined &&
     toolName in approvalTitles &&
-    toolName !== "apply_app_creation" &&
+    toolName !== "apply-app-creation" &&
     description === undefined
   )
     return undefined;
   return {
-    requestId: request.requestId,
+    allowFreeform: request.allowFreeform ?? false,
     kind: request.kind === "tool-approval" ? "approval" : "question",
-    title,
+    requestId: request.requestId,
     ...(description === undefined ? {} : { description }),
     ...(request.options === undefined
       ? {}
       : { options: request.options.map(({ id, label }) => ({ id, label })) }),
-    allowFreeform: request.allowFreeform ?? false,
+    title,
   };
-}
+};
 
 /** Converts only the installed Eve 0.43 events that belong in the public MCP projection. */
-export function projectInstalledEveEvent(
+export const projectInstalledEveEvent = (
   event: MessageStreamEvent,
   index: number,
-): InternalEveEvent[] {
+): InternalEveEvent[] => {
   switch (event.type) {
     case "message.completed": {
       return event.data.message === null
         ? []
         : [
             {
-              type: "assistant.message",
               index,
-              turnId: event.data.turnId,
               text: event.data.message,
+              turnId: event.data.turnId,
+              type: "assistant.message",
             },
           ];
     }
     case "step.started":
     case "step.completed":
     case "step.failed": {
+      let state: "completed" | "failed" | "started";
+      if (event.type === "step.started") state = "started";
+      else if (event.type === "step.completed") state = "completed";
+      else state = "failed";
       return [
         {
-          type: "progress",
           index,
-          turnId: event.data.turnId,
           label: "Agent step",
-          state:
-            event.type === "step.started"
-              ? "started"
-              : event.type === "step.completed"
-                ? "completed"
-                : "failed",
+          state,
+          turnId: event.data.turnId,
+          type: "progress",
         },
       ];
     }
@@ -455,34 +452,34 @@ export function projectInstalledEveEvent(
       return projectedRequests.some((request) => request === undefined)
         ? [
             {
-              type: "error.public",
-              index,
               code: "confirmation_unavailable",
+              index,
               message: unavailableConfirmationMessage,
+              type: "error.public",
             },
-            { type: "status", index, status: "failed" },
+            { index, status: "failed", type: "status" },
           ]
         : projectedRequests.map((request) => ({
-            type: "input.requested" as const,
             index,
             request,
+            type: "input.requested" as const,
           }));
     }
     case "input.resolved": {
       return [
         {
-          type: "input.resolved",
           index,
           requestIds: event.data.resolutions.map(({ requestId }) => requestId),
+          type: "input.resolved",
         },
       ];
     }
     case "approval.settled": {
       return [
         {
-          type: "input.resolved",
           index,
           requestIds: [event.data.requestId],
+          type: "input.resolved",
         },
       ];
     }
@@ -496,22 +493,21 @@ export function projectInstalledEveEvent(
         : undefined;
       return [
         {
-          type: "input.requested",
           index,
           request: {
+            description: storeIn?.description ?? event.data.description,
+            kind: "authorization",
             requestId:
               event.data.attemptId ??
               event.data.candidateId ??
               `${event.data.turnId}:${event.data.name}`,
-            kind: "authorization",
             title: storeIn?.title ?? event.data.name,
-            description: storeIn?.description ?? event.data.description,
             ...(storeIn === undefined
               ? {}
               : {
                   presentation: {
-                    section: "store-in" as const,
                     control: "provider" as const,
+                    section: "store-in" as const,
                   },
                 }),
             ...(authorization === undefined
@@ -538,38 +534,39 @@ export function projectInstalledEveEvent(
                 }),
             allowFreeform: false,
           },
+          type: "input.requested",
         },
       ];
     }
     case "turn.cancelled": {
-      return [{ type: "status", index, status: "cancelled" }];
+      return [{ index, status: "cancelled", type: "status" }];
     }
     case "session.waiting": {
-      return [{ type: "status", index, status: "waiting" }];
+      return [{ index, status: "waiting", type: "status" }];
     }
     case "session.completed": {
-      return [{ type: "status", index, status: "completed" }];
+      return [{ index, status: "completed", type: "status" }];
     }
     case "session.failed": {
       return [
         {
-          type: "error.public",
-          index,
           code: "unable_to_continue",
+          index,
           message: unavailableContinuationMessage,
+          type: "error.public",
         },
-        { type: "status", index, status: "failed" },
+        { index, status: "failed", type: "status" },
       ];
     }
     default: {
       return [];
     }
   }
-}
+};
 
-export function outstandingInstalledEveRequests(
+export const outstandingInstalledEveRequests = (
   events: readonly MessageStreamEvent[],
-): PublicInputRequest[] {
+): PublicInputRequest[] => {
   const outstanding = new Map<string, PublicInputRequest>();
   for (const event of events) {
     if (event.type === "input.requested") {
@@ -585,11 +582,11 @@ export function outstandingInstalledEveRequests(
     if (event.type === "approval.settled") outstanding.delete(event.data.requestId);
   }
   return [...outstanding.values()];
-}
+};
 
-export function outstandingInternalEveRequests(
+export const outstandingInternalEveRequests = (
   events: readonly InternalEveEvent[],
-): PublicInputRequest[] {
+): PublicInputRequest[] => {
   const outstanding = new Map<string, PublicInputRequest>();
   for (const event of events) {
     if (event.type === "input.requested" && event.request !== undefined)
@@ -598,9 +595,11 @@ export function outstandingInternalEveRequests(
       for (const requestId of event.requestIds ?? []) outstanding.delete(requestId);
   }
   return [...outstanding.values()];
-}
+};
 
-export function deriveInstalledEveStatus(events: readonly MessageStreamEvent[]): EveSessionStatus {
+export const deriveInstalledEveStatus = (
+  events: readonly MessageStreamEvent[],
+): EveSessionStatus => {
   const outstanding = new Set<string>();
   let boundary: EveSessionStatus = "working";
   for (const event of events) {
@@ -622,47 +621,47 @@ export function deriveInstalledEveStatus(events: readonly MessageStreamEvent[]):
   if (boundary === "completed" || boundary === "failed") return boundary;
   if (outstanding.size > 0) return "input_required";
   return boundary;
-}
+};
 
 /** Project one durable Eve stream into a dense, cursor-addressable public stream. */
-export function toPublicEvent(event: InternalEveEvent): PublicEveEvent | null {
+export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null => {
   switch (event.type) {
     case "assistant.message": {
       return event.turnId && event.text !== undefined
         ? {
-            type: "assistant_message",
             index: event.index,
-            turnId: event.turnId,
             text: event.text,
+            turnId: event.turnId,
+            type: "assistant_message",
           }
         : null;
     }
     case "progress": {
       return event.label && event.state && progressStates.has(event.state)
         ? {
-            type: "progress",
             index: event.index,
-            turnId: event.turnId,
             label: event.label,
             state: event.state as "started" | "completed" | "failed",
+            turnId: event.turnId,
+            type: "progress",
           }
         : null;
     }
     case "input.requested": {
       return event.request
-        ? { type: "input_required", index: event.index, request: event.request }
+        ? { index: event.index, request: event.request, type: "input_required" }
         : null;
     }
     case "status": {
-      return event.status ? { type: "status", index: event.index, status: event.status } : null;
+      return event.status ? { index: event.index, status: event.status, type: "status" } : null;
     }
     case "error.public": {
       return event.code && event.message
         ? {
-            type: "error",
-            index: event.index,
             code: event.code,
+            index: event.index,
             message: event.message,
+            type: "error",
           }
         : null;
     }
@@ -670,16 +669,17 @@ export function toPublicEvent(event: InternalEveEvent): PublicEveEvent | null {
       return null;
     }
   }
-}
+};
 
-export function projectInstalledEveEvents(events: readonly MessageStreamEvent[]): PublicEveEvent[] {
-  return events
+export const projectInstalledEveEvents = (
+  events: readonly MessageStreamEvent[],
+): PublicEveEvent[] =>
+  events
     .flatMap((event) => projectInstalledEveEvent(event, 0))
     .flatMap((event) => {
       const projected = toPublicEvent(event);
       return projected === null ? [] : [projected];
     })
     .map((event, index) => ({ ...event, index }));
-}
 
 /** Allowlist an internal event. Unknown, reasoning, and raw tool events are dropped. */

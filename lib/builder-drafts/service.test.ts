@@ -5,10 +5,10 @@ import { createBuilderDraftService } from "./service";
 import type { BuilderDraftAuthority, BuilderDraftRow, BuilderDraftStore } from "./service";
 
 const authority: BuilderDraftAuthority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace-one",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "user-one",
+  workspaceId: "workspace-one",
 };
 
 const otherAuthority: BuilderDraftAuthority = {
@@ -38,44 +38,6 @@ function memoryStore(): BuilderDraftStore {
 
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    async read(input) {
-      return find(input);
-    },
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    async readActive(input) {
-      return findActive(input);
-    },
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    async saveActive(input) {
-      const active = findActive(input);
-      if (active?.lastClientMutationId === input.clientMutationId)
-        return { row: active, idempotent: true, concurrent: false };
-      if (active) {
-        const concurrent = active.revision !== input.expectedRevision;
-        active.revision += 1;
-        active.record = input.record;
-        active.lastClientMutationId = input.clientMutationId;
-        active.updatedAt = input.now;
-        return { row: active, idempotent: false, concurrent };
-      }
-      const row: BuilderDraftRow = {
-        authority: input.authority,
-        draftId: input.draftId,
-        status: "active",
-        revision: 1,
-        record: input.record,
-        lastClientMutationId: input.clientMutationId,
-        createdAt: input.now,
-        updatedAt: input.now,
-      };
-      rows.push(row);
-      return {
-        row,
-        idempotent: false,
-        concurrent: input.expectedRevision !== 0,
-      };
-    },
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async archive(input) {
       const row = find(input);
       if (
@@ -101,37 +63,75 @@ function memoryStore(): BuilderDraftStore {
       }
       return deleted;
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async read(input) {
+      return find(input);
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async readActive(input) {
+      return findActive(input);
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async saveActive(input) {
+      const active = findActive(input);
+      if (active?.lastClientMutationId === input.clientMutationId)
+        return { concurrent: false, idempotent: true, row: active };
+      if (active) {
+        const concurrent = active.revision !== input.expectedRevision;
+        active.revision += 1;
+        active.record = input.record;
+        active.lastClientMutationId = input.clientMutationId;
+        active.updatedAt = input.now;
+        return { concurrent, idempotent: false, row: active };
+      }
+      const row: BuilderDraftRow = {
+        authority: input.authority,
+        createdAt: input.now,
+        draftId: input.draftId,
+        lastClientMutationId: input.clientMutationId,
+        record: input.record,
+        revision: 1,
+        status: "active",
+        updatedAt: input.now,
+      };
+      rows.push(row);
+      return {
+        concurrent: input.expectedRevision !== 0,
+        idempotent: false,
+        row,
+      };
+    },
   };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function record(brief = "A saved builder brief."): BuilderDraftRecord {
   return {
-    version: 1,
     draft: {
-      version: 1,
+      appNameEditedByUser: false,
+      connectedConnections: [],
+      deploymentProvider: "vercel",
+      focusOrigin: "github",
       form: {
         appName: "Vendor portal",
-        repository: "vendor-portal",
         brief,
-        privateRepository: true,
         buildDestination: "codex",
         connections: [],
         modelId: "gpt-5",
+        privateRepository: true,
+        repository: "vendor-portal",
       },
-      team: "",
       gitScope: "",
       model: "gpt-5",
-      zdrOnly: false,
-      showMoreConnections: false,
-      search: "",
-      connectedConnections: [],
-      storageProvider: "github",
-      deploymentProvider: "vercel",
-      focusOrigin: "github",
-      appNameEditedByUser: false,
       repositoryEditedByUser: false,
+      search: "",
+      showMoreConnections: false,
+      storageProvider: "github",
+      team: "",
+      version: 1,
+      zdrOnly: false,
     },
+    version: 1,
   };
 }
 
@@ -145,11 +145,11 @@ function saveInput(
   } = {},
 ): SaveActiveBuilderDraftInput {
   return {
-    version: 1,
+    clientMutationId: input.clientMutationId ?? firstMutation,
     draftId: input.draftId ?? draftId,
     expectedRevision: input.expectedRevision ?? 0,
-    clientMutationId: input.clientMutationId ?? firstMutation,
     record: input.record ?? record(),
+    version: 1,
   };
 }
 
@@ -171,17 +171,17 @@ describe("builder draft service", () => {
     const stale = await service.saveActive(
       authority,
       saveInput({
-        draftId: otherDraftId,
         clientMutationId: secondMutation,
+        draftId: otherDraftId,
         record: record("The later device save wins."),
       }),
     );
-    expect(retry).toMatchObject({ idempotent: true, concurrent: false });
-    expect(stale).toMatchObject({ idempotent: false, concurrent: true });
+    expect(retry).toMatchObject({ concurrent: false, idempotent: true });
+    expect(stale).toMatchObject({ concurrent: true, idempotent: false });
     expect(stale.row).toMatchObject({
       draftId,
-      revision: 2,
       record: record("The later device save wins."),
+      revision: 2,
     });
   });
 
@@ -210,8 +210,8 @@ describe("builder draft service", () => {
     );
     expect(await service.archive(authority, draftId, 1)).toBe(false);
     expect(await service.readActive(authority)).toMatchObject({
-      revision: 2,
       record: record("Newer device edit"),
+      revision: 2,
     });
     expect(await service.archive(otherAuthority, draftId, 2)).toBe(false);
     expect(await service.archive(authority, draftId, 2)).toBe(true);
@@ -221,8 +221,8 @@ describe("builder draft service", () => {
   it("scheduled cleanup removes only inactive active drafts", async () => {
     let time = new Date("2026-01-01T00:00:00.000Z");
     const service = createBuilderDraftService({
-      store: memoryStore(),
       now: () => time,
+      store: memoryStore(),
     });
     await service.saveActive(authority, saveInput());
     time = new Date("2026-02-01T00:00:00.000Z");

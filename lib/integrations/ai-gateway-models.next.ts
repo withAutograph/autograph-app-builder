@@ -13,9 +13,9 @@ async function cachedGatewayModels() {
   // Never retain a failure/fallback for a full catalog lifetime. A later read
   // retries, while the validated last-known-good catalog keeps the form usable.
   if (models.status === "unavailable" || models.cached) {
-    cacheLife({ stale: 30, revalidate: 1, expire: 60 });
+    cacheLife({ expire: 60, revalidate: 1, stale: 30 });
   } else {
-    cacheLife({ stale: 300, revalidate: 300, expire: 3600 });
+    cacheLife({ expire: 3600, revalidate: 300, stale: 300 });
   }
   return models;
 }

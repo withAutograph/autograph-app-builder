@@ -43,14 +43,13 @@ function exactGitHubPublicationAuthority(sessionAuth: unknown) {
     return exactForwardedSessionAuthority(sessionAuth);
   } catch (error) {
     if (error instanceof HostedSessionAuthorityError) {
-      throw new TypeError(
-        error.code === "mismatch"
-          ? "Hosted GitHub publication requires matching current and initiating authority."
-          : error.code === "subject"
-            ? "Hosted GitHub publication requires one exact forwarded user subject."
-            : "Hosted GitHub publication requires exact forwarded user authority.",
-        { cause: error },
-      );
+      let message = "Hosted GitHub publication requires exact forwarded user authority.";
+      if (error.code === "mismatch") {
+        message = "Hosted GitHub publication requires matching current and initiating authority.";
+      } else if (error.code === "subject") {
+        message = "Hosted GitHub publication requires one exact forwarded user subject.";
+      }
+      throw new TypeError(message, { cause: error });
     }
     throw error;
   }
@@ -79,13 +78,13 @@ export interface HostedGitHubPublicationRuntimeResolverDependencies {
 }
 
 const defaultDependencies: HostedGitHubPublicationRuntimeResolverDependencies = {
+  installations: createPostgresHostedGitHubInstallationStore,
+  membership: createPostgresWorkspaceMembership,
+  publicationStores: createPostgresGitHubPublicationStores,
   async readPreparedHandoff(sessionAuth) {
     const { readPreparedHandoffContext } = await import("./handoff-context");
     return readPreparedHandoffContext(sessionAuth);
   },
-  membership: createPostgresWorkspaceMembership,
-  installations: createPostgresHostedGitHubInstallationStore,
-  publicationStores: createPostgresGitHubPublicationStores,
 };
 
 /**
@@ -169,8 +168,8 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
       const stores = dependencies.publicationStores(pool, authority);
       const adapter = await input.providerFactory({ authority, installation });
       return composeGitHubPublicationRuntime({
-        enabled: true,
         adapter,
+        enabled: true,
         proposals: stores.proposals,
         receipts: stores.receipts,
       });

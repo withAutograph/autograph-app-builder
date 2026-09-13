@@ -13,19 +13,19 @@ import styles from "./app-builder.module.css";
 export function BuilderDraftStatus() {
   const { draftSaveError, draftSyncNotice, autosave, setDraftSaveError } =
     useBuilderControllerContext();
+  let autosaveMessage = "Your draft saves automatically.";
+  if (autosave.status === "saving") {
+    autosaveMessage = "Saving your draft…";
+  } else if (autosave.status === "saved") {
+    autosaveMessage = "Draft saved";
+  } else if (autosave.status === "offline") {
+    autosaveMessage = "Offline — your draft will retry when you’re back online.";
+  } else if (autosave.status === "error") {
+    autosaveMessage = "Your latest edit is safe on this device and will retry.";
+  }
   return (
     <p className={styles.draftStatus} role="status" aria-live="polite">
-      {draftSaveError ||
-        draftSyncNotice ||
-        (autosave.status === "saving"
-          ? "Saving your draft…"
-          : autosave.status === "saved"
-            ? "Draft saved"
-            : autosave.status === "offline"
-              ? "Offline — your draft will retry when you’re back online."
-              : autosave.status === "error"
-                ? "Your latest edit is safe on this device and will retry."
-                : "Your draft saves automatically.")}
+      {draftSaveError || draftSyncNotice || autosaveMessage}
       {autosave.status === "error" || draftSaveError ? (
         <button
           type="button"

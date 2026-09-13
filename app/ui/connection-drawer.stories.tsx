@@ -3,15 +3,15 @@ import { expect, fn, userEvent, within } from "storybook/test";
 import { ConnectionDrawer } from "./builder-connections";
 
 const meta = {
-  title: "Components/Connections/Connection Drawer",
-  component: ConnectionDrawer,
   args: {
     flow: { name: "QuickBooks", stage: "connect" },
     onClose: fn(),
     onConnected: fn(),
     onStageChange: fn(),
   },
+  component: ConnectionDrawer,
   parameters: { layout: "fullscreen" },
+  title: "Components/Connections/Connection Drawer",
 } satisfies Meta<typeof ConnectionDrawer>;
 export default meta;
 type Story = StoryObj<typeof meta>;

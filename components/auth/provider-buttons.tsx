@@ -48,6 +48,13 @@ export function ProviderButtons({ socialLayout = "auto", view = "signIn" }: Prov
     return socialLayout;
   }, [socialLayout, socialProviders?.length]);
 
+  let providerDisplay: "full" | "name" | "icon" = "icon";
+  if (resolvedSocialLayout === "vertical") {
+    providerDisplay = "full";
+  } else if (resolvedSocialLayout === "grid") {
+    providerDisplay = "name";
+  }
+
   return (
     <div
       data-auth-social-ready={isClientReady ? "true" : "false"}
@@ -64,13 +71,7 @@ export function ProviderButtons({ socialLayout = "auto", view = "signIn" }: Prov
           provider={provider}
           isReady={isClientReady}
           view={view}
-          display={
-            resolvedSocialLayout === "vertical"
-              ? "full"
-              : resolvedSocialLayout === "grid"
-                ? "name"
-                : "icon"
-          }
+          display={providerDisplay}
           className={cn(resolvedSocialLayout === "horizontal" && "flex-1")}
         />
       ))}

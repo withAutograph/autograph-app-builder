@@ -1,5 +1,5 @@
 import { lstat, readFile, realpath, stat } from "node:fs/promises";
-import { isAbsolute } from "node:path";
+import path from "node:path";
 
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -23,15 +23,15 @@ const actions = [
 ] as const;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function readPrivateRequest(path: string): Promise<unknown> {
-  if (!isAbsolute(path)) {
+async function readPrivateRequest(requestPath: string): Promise<unknown> {
+  if (!path.isAbsolute(requestPath)) {
     throw new Error("Hosted admin request path must be absolute.");
   }
-  const [link, canonicalPath] = await Promise.all([lstat(path), realpath(path)]);
-  if (link.isSymbolicLink() || canonicalPath !== path) {
+  const [link, canonicalPath] = await Promise.all([lstat(requestPath), realpath(requestPath)]);
+  if (link.isSymbolicLink() || canonicalPath !== requestPath) {
     throw new Error("Hosted admin request path must be canonical and unsymlinked.");
   }
-  const metadata = await stat(path);
+  const metadata = await stat(requestPath);
   if (
     !metadata.isFile() ||
     metadata.uid !== process.getuid?.() ||
@@ -42,7 +42,7 @@ async function readPrivateRequest(path: string): Promise<unknown> {
   ) {
     throw new Error("Hosted admin request must be an owner-only nonempty regular file.");
   }
-  return JSON.parse(await readFile(path, "utf-8"));
+  return JSON.parse(await readFile(requestPath, "utf-8"));
 }
 
 const argv = process.argv.slice(2);

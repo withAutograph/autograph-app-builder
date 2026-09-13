@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -20,19 +20,19 @@ import type { DevelopmentVercelBootstrapInput } from "./development-toolchain";
 function input(override: Partial<DevelopmentVercelBootstrapInput> = {}) {
   const sourceArchive = Buffer.from("source");
   return {
-    sourceRoot: "/private/source",
-    sourceFingerprint: "a".repeat(64),
-    sourceSha: "b".repeat(40),
-    sourceTree: "c".repeat(40),
     dependencyKey: "d".repeat(64),
-    sourceArchive,
-    sourceArchiveSha256: "41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d",
     lockfiles: {
       ".config/mise/config.toml": "1".repeat(64),
       ".config/mise/mise.lock": "2".repeat(64),
-      "bun.lock": "3".repeat(64),
       "Cargo.lock": "4".repeat(64),
+      "bun.lock": "3".repeat(64),
     },
+    sourceArchive,
+    sourceArchiveSha256: "41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d",
+    sourceFingerprint: "a".repeat(64),
+    sourceRoot: "/private/source",
+    sourceSha: "b".repeat(40),
+    sourceTree: "c".repeat(40),
     ...override,
   } satisfies DevelopmentVercelBootstrapInput;
 }
@@ -116,50 +116,57 @@ describe("Development Vercel Sandbox dependency template", () => {
   });
 
   it("keeps Bun links inside the closure and rebinds only workspace links", async () => {
-    const root = await realpath(await mkdtemp(join(tmpdir(), "app-builder-development-links-")));
+    const root = await realpath(
+      await mkdtemp(path.join(tmpdir(), "app-builder-development-links-")),
+    );
     try {
-      const source = join(root, "source");
-      const modules = join(source, "node_modules");
-      const packageRoot = join(modules, ".bun/path-to-regexp@8.4.2/node_modules/path-to-regexp");
-      const workspacePackage = join(source, "packages/shared");
-      const workspaceBin = join(workspacePackage, "bin/shared.mjs");
+      const source = path.join(root, "source");
+      const modules = path.join(source, "node_modules");
+      const packageRoot = path.join(
+        modules,
+        ".bun/path-to-regexp@8.4.2/node_modules/path-to-regexp",
+      );
+      const workspacePackage = path.join(source, "packages/shared");
+      const workspaceBin = path.join(workspacePackage, "bin/shared.mjs");
       await mkdir(packageRoot, { recursive: true });
-      await mkdir(join(workspacePackage, "bin"), { recursive: true });
-      await mkdir(join(modules, ".bin"));
-      await writeFile(join(packageRoot, "package.json"), "{}\n");
-      await writeFile(join(workspacePackage, "package.json"), "{}\n");
+      await mkdir(path.join(workspacePackage, "bin"), { recursive: true });
+      await mkdir(path.join(modules, ".bin"));
+      await writeFile(path.join(packageRoot, "package.json"), "{}\n");
+      await writeFile(path.join(workspacePackage, "package.json"), "{}\n");
       await writeFile(workspaceBin, "export {};\n");
-      await symlink(packageRoot, join(modules, "path-to-regexp"));
-      await symlink(workspacePackage, join(modules, "workspace-shared"));
-      await symlink("../workspace-shared/bin/shared.mjs", join(modules, ".bin/shared"));
+      await symlink(packageRoot, path.join(modules, "path-to-regexp"));
+      await symlink(workspacePackage, path.join(modules, "workspace-shared"));
+      await symlink("../workspace-shared/bin/shared.mjs", path.join(modules, ".bin/shared"));
 
       execFileSync(process.execPath, ["-", source], {
         input: developmentDependencySymlinkScript,
       });
 
-      expect(await readlink(join(modules, "path-to-regexp"))).toBe(
+      expect(await readlink(path.join(modules, "path-to-regexp"))).toBe(
         ".bun/path-to-regexp@8.4.2/node_modules/path-to-regexp",
       );
-      expect(await readlink(join(modules, "workspace-shared"))).toBe(
+      expect(await readlink(path.join(modules, "workspace-shared"))).toBe(
         "/workspace/repository/packages/shared",
       );
-      expect(await readlink(join(modules, ".bin/shared"))).toBe(
+      expect(await readlink(path.join(modules, ".bin/shared"))).toBe(
         "/workspace/repository/packages/shared/bin/shared.mjs",
       );
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
 
   it("rejects unresolved and outside dependency links", async () => {
-    const root = await realpath(await mkdtemp(join(tmpdir(), "app-builder-development-links-")));
+    const root = await realpath(
+      await mkdtemp(path.join(tmpdir(), "app-builder-development-links-")),
+    );
     try {
-      const source = join(root, "source");
-      const modules = join(source, "node_modules");
-      const outside = join(root, "outside");
+      const source = path.join(root, "source");
+      const modules = path.join(source, "node_modules");
+      const outside = path.join(root, "outside");
       await mkdir(modules, { recursive: true });
       await mkdir(outside);
-      await symlink(join(source, "missing"), join(modules, "missing"));
+      await symlink(path.join(source, "missing"), path.join(modules, "missing"));
       const unresolved = spawnSync(process.execPath, ["-", source], {
         input: developmentDependencySymlinkScript,
       });
@@ -168,8 +175,8 @@ describe("Development Vercel Sandbox dependency template", () => {
         "Unresolved development dependency link: missing",
       );
 
-      await rm(join(modules, "missing"));
-      await symlink(outside, join(modules, "outside"));
+      await rm(path.join(modules, "missing"));
+      await symlink(outside, path.join(modules, "outside"));
       const escaped = spawnSync(process.execPath, ["-", source], {
         input: developmentDependencySymlinkScript,
       });
@@ -178,7 +185,7 @@ describe("Development Vercel Sandbox dependency template", () => {
         "Development dependency link escaped the source: outside",
       );
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
 

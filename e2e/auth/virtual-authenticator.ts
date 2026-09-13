@@ -20,13 +20,13 @@ export class VirtualAuthenticator {
     await session.send("WebAuthn.enable");
     const { authenticatorId } = await session.send("WebAuthn.addVirtualAuthenticator", {
       options: {
-        protocol: "ctap2",
+        automaticPresenceSimulation: true,
         ctap2Version: "ctap2_1",
-        transport: "internal",
         hasResidentKey: true,
         hasUserVerification: true,
         isUserVerified: true,
-        automaticPresenceSimulation: true,
+        protocol: "ctap2",
+        transport: "internal",
       },
     });
     return new VirtualAuthenticator(session, authenticatorId);

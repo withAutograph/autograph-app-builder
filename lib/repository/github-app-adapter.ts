@@ -29,51 +29,51 @@ const safeProviderCode = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u);
 
 const permissionSnapshotSchema = z
   .object({
-    metadata: z.literal("read"),
-    contents: z.enum(["read", "write"]),
-    workflows: z.enum(["none", "write"]),
-    pullRequests: z.enum(["none", "write"]),
     administration: z.enum(["none", "write"]),
+    contents: z.enum(["read", "write"]),
+    metadata: z.literal("read"),
+    pullRequests: z.enum(["none", "write"]),
     variables: z.literal("read"),
+    workflows: z.enum(["none", "write"]),
   })
   .strict();
 
 const installationSnapshotSchema = z
   .object({
-    installationId: decimal,
     accountId: decimal,
     accountLogin: z.string().min(1).max(100),
     accountType: z.enum(["Organization", "User"]),
+    grantedPermissions: permissionSnapshotSchema,
+    installationId: decimal,
     repositorySelection: z.enum(["all", "selected"]),
     selectedRepositoryIds: z.array(decimal),
-    grantedPermissions: permissionSnapshotSchema,
   })
   .strict();
 
 const repositorySnapshotSchema = z
   .object({
-    repositoryId: decimal,
-    owner: z.string().min(1).max(100),
-    name: z.string().min(1).max(100),
-    visibility: z.literal("private"),
     defaultBranch: z.string().min(1).max(200),
     headSha: objectId,
     headTree: objectId,
+    name: z.string().min(1).max(100),
+    owner: z.string().min(1).max(100),
+    repositoryId: decimal,
     repositoryVariableNames: z.array(z.string().min(1).max(255)),
+    visibility: z.literal("private"),
   })
   .strict();
 
 const freshReadBackSchema = z
   .object({
     idempotencyKey: digest,
-    repository: repositorySnapshotSchema,
     initialCommit: z
       .object({
+        parents: z.array(objectId),
         sha: objectId,
         tree: objectId,
-        parents: z.array(objectId),
       })
       .strict(),
+    repository: repositorySnapshotSchema,
   })
   .strict();
 
@@ -81,13 +81,13 @@ const branchSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("absent") }).strict(),
   z
     .object({
-      status: z.literal("present"),
       branchName: z.string().min(1).max(200),
       branchSha: objectId,
       branchTree: objectId,
-      normalizedChangedPaths: z.array(z.string()),
       changedContentDigest: digest,
       idempotencyKey: digest,
+      normalizedChangedPaths: z.array(z.string()),
+      status: z.literal("present"),
     })
     .strict(),
 ]);
@@ -96,40 +96,40 @@ const pullRequestSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("absent") }).strict(),
   z
     .object({
-      status: z.literal("present"),
-      pullRequestId: decimal,
-      pullRequestNumber: z.number().int().positive().safe(),
-      draft: z.boolean(),
-      headRepositoryId: decimal,
-      headBranch: z.string().min(1).max(200),
-      headSha: objectId,
-      baseRepositoryId: decimal,
       baseBranch: z.string().min(1).max(200),
+      baseRepositoryId: decimal,
       baseSha: objectId,
       changeSetDigest: digest,
+      draft: z.boolean(),
+      headBranch: z.string().min(1).max(200),
+      headRepositoryId: decimal,
+      headSha: objectId,
       idempotencyKey: digest,
+      pullRequestId: decimal,
+      pullRequestNumber: z.number().int().positive().safe(),
+      status: z.literal("present"),
     })
     .strict(),
 ]);
 
 const draftReadBackSchema = z
   .object({
-    idempotencyKey: digest,
-    repository: repositorySnapshotSchema,
-    changedPathsSinceBase: z.array(z.string()),
     branch: branchSchema,
+    changedPathsSinceBase: z.array(z.string()),
+    idempotencyKey: digest,
     pullRequest: pullRequestSchema,
+    repository: repositorySnapshotSchema,
   })
   .strict();
 
 const acknowledgementSchema = z.discriminatedUnion("status", [
   z
     .object({
-      status: z.literal("accepted"),
       requestId: z.string().regex(/^[-A-Za-z0-9_]{1,128}$/u),
+      status: z.literal("accepted"),
     })
     .strict(),
-  z.object({ status: z.literal("rejected"), code: safeProviderCode }).strict(),
+  z.object({ code: safeProviderCode, status: z.literal("rejected") }).strict(),
 ]);
 
 type RequestedPermissions = z.infer<typeof permissionSnapshotSchema>;
@@ -180,18 +180,18 @@ function repositoryObservation(
 ): GitHubRepositoryObservation {
   const snapshot = parseProviderResponse(repositorySnapshotSchema, snapshotInput);
   return createRepositoryObservation({
-    repositoryId: snapshot.repositoryId,
-    owner: snapshot.owner,
-    name: snapshot.name,
-    visibility: snapshot.visibility,
     defaultBranch: snapshot.defaultBranch,
     headSha: snapshot.headSha,
     headTree: snapshot.headTree,
     installationIdentityDigest,
+    name: snapshot.name,
+    owner: snapshot.owner,
     releaseGate: {
-      name: REPOSITORY_RELEASE_GATE,
       configured: snapshot.repositoryVariableNames.includes(REPOSITORY_RELEASE_GATE),
+      name: REPOSITORY_RELEASE_GATE,
     },
+    repositoryId: snapshot.repositoryId,
+    visibility: snapshot.visibility,
   });
 }
 
@@ -219,11 +219,11 @@ export function createGitHubAppPublicationAdapter(
       throw new Error("GitHub installation permissions do not match the operation.");
     }
     return createGitHubInstallationIdentity({
-      operation,
-      installationId: snapshot.installationId,
       accountId: snapshot.accountId,
       accountLogin: snapshot.accountLogin,
       accountType: snapshot.accountType,
+      installationId: snapshot.installationId,
+      operation,
       repositorySelection: snapshot.repositorySelection,
       selectedRepositoryIds: snapshot.selectedRepositoryIds,
     });
@@ -239,17 +239,38 @@ export function createGitHubAppPublicationAdapter(
   }
 
   return {
-    inspectInstallation,
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-    async inspectRepository(input) {
-      const { operation, repositoryId, ref } = input;
-      return observationFor(operation, () => provider.inspectRepository({ repositoryId, ref }));
+    async createPrivateFreshHistoryRepository(proposal, content) {
+      return parseProviderResponse(
+        acknowledgementSchema,
+        await sanitizedProviderCall(() =>
+          provider.createPrivateFreshHistoryRepository(proposal, content),
+        ),
+      ) as GitHubMutationAcknowledgement;
     },
     async inspectDestination(input) {
       const raw = await sanitizedProviderCall(() => provider.inspectDestination(input));
       if (raw === "absent") return "absent";
       const identity = await inspectInstallation("create-fresh-repository");
       return repositoryObservation(raw, identity.digest);
+    },
+    async inspectDraftPublication(proposal) {
+      const snapshot = parseProviderResponse(
+        draftReadBackSchema,
+        await sanitizedProviderCall(() => provider.inspectDraftPublication(proposal)),
+      );
+      const identity = await inspectInstallation("publish-draft-pull-request");
+      const unsigned = {
+        branch: snapshot.branch,
+        changedPathsSinceBase: snapshot.changedPathsSinceBase,
+        idempotencyKey: snapshot.idempotencyKey,
+        pullRequest: snapshot.pullRequest,
+        repository: repositoryObservation(snapshot.repository, identity.digest),
+        version: GITHUB_PUBLICATION_VERSION,
+      };
+      return {
+        ...unsigned,
+        digest: hash(unsigned),
+      } as DraftPublicationReadBack;
     },
     async inspectFreshRepositoryOutcome(proposal) {
       const raw = await sanitizedProviderCall(() =>
@@ -262,43 +283,22 @@ export function createGitHubAppPublicationAdapter(
       }
       const identity = await inspectInstallation("create-fresh-repository");
       const unsigned = {
-        version: GITHUB_PUBLICATION_VERSION,
         idempotencyKey: snapshot.idempotencyKey,
-        repository: repositoryObservation(snapshot.repository, identity.digest),
         initialCommit: {
+          parents: [] as const,
           sha: snapshot.initialCommit.sha,
           tree: snapshot.initialCommit.tree,
-          parents: [] as const,
         },
+        repository: repositoryObservation(snapshot.repository, identity.digest),
+        version: GITHUB_PUBLICATION_VERSION,
       };
       return { ...unsigned, digest: hash(unsigned) };
     },
-    async createPrivateFreshHistoryRepository(proposal, content) {
-      return parseProviderResponse(
-        acknowledgementSchema,
-        await sanitizedProviderCall(() =>
-          provider.createPrivateFreshHistoryRepository(proposal, content),
-        ),
-      ) as GitHubMutationAcknowledgement;
-    },
-    async inspectDraftPublication(proposal) {
-      const snapshot = parseProviderResponse(
-        draftReadBackSchema,
-        await sanitizedProviderCall(() => provider.inspectDraftPublication(proposal)),
-      );
-      const identity = await inspectInstallation("publish-draft-pull-request");
-      const unsigned = {
-        version: GITHUB_PUBLICATION_VERSION,
-        idempotencyKey: snapshot.idempotencyKey,
-        repository: repositoryObservation(snapshot.repository, identity.digest),
-        changedPathsSinceBase: snapshot.changedPathsSinceBase,
-        branch: snapshot.branch,
-        pullRequest: snapshot.pullRequest,
-      };
-      return {
-        ...unsigned,
-        digest: hash(unsigned),
-      } as DraftPublicationReadBack;
+    inspectInstallation,
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async inspectRepository(input) {
+      const { operation, repositoryId, ref } = input;
+      return observationFor(operation, () => provider.inspectRepository({ ref, repositoryId }));
     },
     async publishDraftPullRequest(proposal, content) {
       return parseProviderResponse(
@@ -334,11 +334,11 @@ export function createGitHubAppSourceResolutionAdapter(
     if (JSON.stringify(snapshot.grantedPermissions) !== JSON.stringify(expected))
       throw new Error("GitHub installation permissions do not match the operation.");
     return createGitHubInstallationIdentity({
-      operation,
-      installationId: snapshot.installationId,
       accountId: snapshot.accountId,
       accountLogin: snapshot.accountLogin,
       accountType: snapshot.accountType,
+      installationId: snapshot.installationId,
+      operation,
       repositorySelection: snapshot.repositorySelection,
       selectedRepositoryIds: snapshot.selectedRepositoryIds,
     });
@@ -349,7 +349,7 @@ export function createGitHubAppSourceResolutionAdapter(
     async inspectRepository({ operation, repositoryId, ref }) {
       const identity = await inspectInstallation(operation);
       return repositoryObservation(
-        await sanitizedProviderCall(() => provider.inspectRepository({ repositoryId, ref })),
+        await sanitizedProviderCall(() => provider.inspectRepository({ ref, repositoryId })),
         identity.digest,
       );
     },

@@ -16,29 +16,29 @@ const content =
   '<!doctype html><html><body><script>document.body.dataset.ready="yes"</script>Vendor queue</body></html>';
 const digest = createHash("sha256").update(content).digest("hex");
 const prototype = {
-  path: "prototype/vendor-onboarding/index.html",
-  mediaType: "text/html" as const,
   content,
   digest,
+  mediaType: "text/html" as const,
+  path: "prototype/vendor-onboarding/index.html",
   revision: "b".repeat(64),
 };
 const result = {
-  sessionId: "session-one",
-  status: "completed" as const,
   cursor: 12,
   events: [],
   prototype,
+  sessionId: "session-one",
+  status: "completed" as const,
 };
 
 describe("Browser prototype preview", () => {
   it("uses the supervisor-owned non-default loopback origin only in exact development mode", () => {
     const developmentRequestUrl = prototypePreviewRequestUrl({
       environment: {
-        APP_BUILDER_EXECUTION_MODE: "development",
-        APP_BUILDER_EXECUTION_BUNDLE: "local-development",
-        APP_BUILDER_SANDBOX_PROVIDER: "vercel",
-        APP_BUILDER_LOCAL_ADAPTER: "1",
         APP_BUILDER_DEVELOPMENT_ORIGIN: loopbackDevelopmentOrigin(3100),
+        APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+        APP_BUILDER_EXECUTION_MODE: "development",
+        APP_BUILDER_LOCAL_ADAPTER: "1",
+        APP_BUILDER_SANDBOX_PROVIDER: "vercel",
         EVE_HOSTED_ADAPTER: "0",
       },
       requestUrl: "http://localhost:3000/mcp",
@@ -50,11 +50,11 @@ describe("Browser prototype preview", () => {
     expect(
       prototypePreviewRequestUrl({
         environment: {
-          APP_BUILDER_EXECUTION_MODE: "development",
-          APP_BUILDER_EXECUTION_BUNDLE: "local-development",
-          APP_BUILDER_SANDBOX_PROVIDER: "vercel",
-          APP_BUILDER_LOCAL_ADAPTER: "0",
           APP_BUILDER_DEVELOPMENT_ORIGIN: loopbackDevelopmentOrigin(3100),
+          APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+          APP_BUILDER_EXECUTION_MODE: "development",
+          APP_BUILDER_LOCAL_ADAPTER: "0",
+          APP_BUILDER_SANDBOX_PROVIDER: "vercel",
           EVE_HOSTED_ADAPTER: "1",
         },
         requestUrl: "https://builder.example.test/mcp",
@@ -80,7 +80,7 @@ describe("Browser prototype preview", () => {
     const handler = createPrototypePreviewRequestHandler({ resolvePrototype });
     const response = await handler(
       new Request(`https://builder.example.test/preview/session-one/${digest}`),
-      { sessionId: "session-one", digest },
+      { digest, sessionId: "session-one" },
     );
 
     expect(response.status).toBe(200);
@@ -104,24 +104,24 @@ describe("Browser prototype preview", () => {
   it("makes malformed, stale, tampered, and unavailable previews indistinguishable", async () => {
     const cases = [
       {
-        route: { sessionId: "../other", digest },
         prototype,
+        route: { digest, sessionId: "../other" },
       },
       {
-        route: { sessionId: "session-one", digest: "c".repeat(64) },
         prototype,
+        route: { digest: "c".repeat(64), sessionId: "session-one" },
       },
       {
-        route: { sessionId: "session-one", digest },
         prototype: { ...prototype, content: `${content}tampered` },
+        route: { digest, sessionId: "session-one" },
       },
       {
-        route: { sessionId: "session-one", digest },
         prototype: undefined,
+        route: { digest, sessionId: "session-one" },
       },
       {
-        route: { sessionId: "session-one", digest },
         prototype: new Error("private resolver failure"),
+        route: { digest, sessionId: "session-one" },
       },
     ];
     const projections = await Promise.all(
@@ -138,30 +138,30 @@ describe("Browser prototype preview", () => {
           candidate.route,
         );
         return {
-          status: response.status,
           body: await response.text(),
           cache: response.headers.get("cache-control"),
           contentSecurityPolicy: response.headers.get("content-security-policy"),
           contentType: response.headers.get("content-type"),
+          contentTypeOptions: response.headers.get("x-content-type-options"),
           crossOriginResourcePolicy: response.headers.get("cross-origin-resource-policy"),
           permissionsPolicy: response.headers.get("permissions-policy"),
           referrerPolicy: response.headers.get("referrer-policy"),
-          contentTypeOptions: response.headers.get("x-content-type-options"),
+          status: response.status,
         };
       }),
     );
     expect(new Set(projections.map((projection) => JSON.stringify(projection))).size).toBe(1);
     expect(projections[0]).toEqual({
-      status: 404,
       body: "",
       cache: "private, no-store, max-age=0",
       contentSecurityPolicy: prototypePreviewContentSecurityPolicy,
       contentType: "text/html; charset=utf-8",
+      contentTypeOptions: "nosniff",
       crossOriginResourcePolicy: "same-origin",
       permissionsPolicy:
         "camera=(), display-capture=(), geolocation=(), microphone=(), payment=(), usb=()",
       referrerPolicy: "no-referrer",
-      contentTypeOptions: "nosniff",
+      status: 404,
     });
   });
 
@@ -180,9 +180,9 @@ describe("Browser prototype preview", () => {
       }),
     ).resolves.toEqual(prototype);
     expect(get).toHaveBeenCalledWith({
-      sessionId: "session-one",
       cursor: 0,
       limit: 1,
+      sessionId: "session-one",
     });
   });
 

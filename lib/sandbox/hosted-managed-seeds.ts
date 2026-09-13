@@ -1,4 +1,4 @@
-import { posix } from "node:path";
+import nodePath from "node:path";
 
 import type { SandboxSeedFile } from "eve/sandbox";
 
@@ -13,8 +13,8 @@ export const HOSTED_MANAGED_SKILLS_TARGET = "$HOME/.agents/skills";
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readHostedManagedSeedFiles(): readonly SandboxSeedFile[] {
-  return HOSTED_MANAGED_SKILL_CONTENTS.map(({ content, path }) => ({
+  return HOSTED_MANAGED_SKILL_CONTENTS.map(({ content, path: seedPath }) => ({
     content: Buffer.from(content, "utf-8"),
-    path: posix.join(HOSTED_MANAGED_SKILLS_TARGET, path),
+    path: nodePath.posix.join(HOSTED_MANAGED_SKILLS_TARGET, seedPath),
   }));
 }

@@ -27,8 +27,8 @@ function listRegularFiles(directory: string, relativeDirectory = "."): string[] 
 const skillEntries = listRegularFiles(skillSourceRoot)
   .toSorted((left, right) => left.localeCompare(right))
   .map((path) => ({
-    path,
     content: readFileSync(join(skillSourceRoot, path), "utf-8"),
+    path,
   }));
 
 if (skillEntries.length === 0) throw new Error("The hosted managed skill seed set is empty.");

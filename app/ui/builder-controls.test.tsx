@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ConnectionsSection } from "./builder-connections";
 import { DeployToSection, StoreInSection } from "./builder-provider-controls";
 
-const ignoreChange = () => undefined;
+const ignoreChange = () => {};
 
 describe("builder control islands", () => {
   it("renders provider controls without duplicating server-owned section shells", () => {

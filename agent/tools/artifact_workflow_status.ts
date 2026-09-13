@@ -38,27 +38,92 @@ function isReviewedPhase(state: ReturnType<typeof appBuilderWorkflowState.get>):
 export default defineTool({
   description:
     "Return session-bound artifact workflow receipt metadata without artifact content or mutation.",
-  inputSchema: z.object({}),
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase === "empty")
       return {
-        version: state.version,
         phase: state.phase,
         sessionId: ctx.session.id,
+        version: state.version,
       };
     if (state.artifacts.some(({ sessionId }) => sessionId !== ctx.session.id))
       throw new Error("Prototype artifact state belongs to a different session.");
+    let publication = {};
+    if (state.phase === "publication_pending") {
+      publication = {
+        publication: {
+          callId: state.publicationCallId,
+          proposalDigest: state.publicationProposal.digest,
+          status: "pending",
+        },
+      };
+    } else if (state.phase === "publication_failed" || state.phase === "published_local") {
+      publication = {
+        publication: {
+          digest: state.publicationReceipt.digest,
+          recoveryRequired: state.publicationReceipt.recoveryRequired,
+          status: state.publicationReceipt.status,
+        },
+      };
+    }
+    let branchPublication = {};
+    if (state.phase === "branch_publication_pending") {
+      branchPublication = {
+        branchPublication: {
+          callId: state.branchPublicationCallId,
+          proposalDigest: state.branchPublicationProposal.digest,
+          status: "pending",
+        },
+      };
+    } else if (
+      state.phase === "branch_publication_failed" ||
+      state.phase === "published_branch_worktree"
+    ) {
+      branchPublication = {
+        branchPublication: {
+          branchName: state.branchPublicationReceipt.branchName,
+          digest: state.branchPublicationReceipt.digest,
+          recoveryRequired: state.branchPublicationReceipt.recoveryRequired,
+          status: state.branchPublicationReceipt.status,
+          worktreePath: state.branchPublicationReceipt.worktreePath,
+        },
+      };
+    }
+    let freshBootstrap = {};
+    if (state.phase === "fresh_bootstrap_pending") {
+      freshBootstrap = {
+        freshBootstrap: {
+          callId: state.freshBootstrapCallId,
+          githubOutcome: "unavailable",
+          proposalDigest: state.freshBootstrapProposal.digest,
+          status: "pending",
+        },
+      };
+    } else if (
+      state.phase === "fresh_bootstrap_failed" ||
+      state.phase === "published_fresh_bootstrap"
+    ) {
+      freshBootstrap = {
+        freshBootstrap: {
+          destinationPath: state.freshBootstrapReceipt.destinationPath,
+          digest: state.freshBootstrapReceipt.digest,
+          githubOutcome: "unavailable",
+          proposalDigest: state.freshBootstrapReceipt.proposalDigest,
+          recoveryRequired: state.freshBootstrapReceipt.recoveryRequired,
+          status: state.freshBootstrapReceipt.status,
+        },
+      };
+    }
     return {
-      version: state.version,
-      sessionId: ctx.session.id,
-      phase: state.phase,
       artifacts: state.artifacts.map(prototypeArtifactReceipt),
+      phase: state.phase,
+      sessionId: ctx.session.id,
+      version: state.version,
       workspace: {
+        eligibilityDigest: state.workspace.eligibilityDigest,
         sourceSha: state.workspace.sourceSha,
         sourceTree: state.workspace.sourceTree,
-        eligibilityDigest: state.workspace.eligibilityDigest,
         workspaceDigest: state.workspace.workspaceDigest,
       },
       ...(state.phase === "app_spec_accepted" ||
@@ -73,9 +138,9 @@ export default defineTool({
       isReviewedPhase(state)
         ? {
             appSpec: {
-              path: state.appSpec.artifactPath,
-              digest: state.appSpec.digest,
               artifactRevision: state.appSpec.artifactRevision,
+              digest: state.appSpec.digest,
+              path: state.appSpec.artifactPath,
             },
           }
         : {}),
@@ -112,10 +177,10 @@ export default defineTool({
       ...(state.phase === "apply_failed"
         ? {
             apply: {
-              status: state.applyFailure.status,
               digest: state.applyFailure.digest,
               reason: state.applyFailure.reason,
               recoveryRequired: true,
+              status: state.applyFailure.status,
             },
           }
         : {}),
@@ -126,104 +191,51 @@ export default defineTool({
       isReviewedPhase(state)
         ? {
             apply: {
-              status: state.applyReceipt.status,
-              digest: state.applyReceipt.digest,
               changedContentDigest: state.applyReceipt.changedContentDigest,
+              digest: state.applyReceipt.digest,
+              status: state.applyReceipt.status,
             },
           }
         : {}),
       ...(state.phase === "validation_pending"
         ? {
             validation: {
-              status: state.validationAttempt.status,
               digest: state.validationAttempt.digest,
               recoveryRequired: true,
+              status: state.validationAttempt.status,
             },
           }
         : {}),
       ...(state.phase === "validation_failed"
         ? {
             validation: {
-              status: state.validationFailure.status,
               digest: state.validationFailure.digest,
               reason: state.validationFailure.reason,
               recoveryRequired: true,
+              status: state.validationFailure.status,
             },
           }
         : {}),
       ...(state.phase === "validated" || isReviewedPhase(state)
         ? {
             validation: {
-              status: state.validationReceipt.status,
               digest: state.validationReceipt.digest,
+              status: state.validationReceipt.status,
             },
           }
         : {}),
       ...(isReviewedPhase(state)
         ? {
             review: {
-              digest: state.reviewReceipt.digest,
               changeSetDigest: state.reviewReceipt.changeSetDigest,
+              digest: state.reviewReceipt.digest,
             },
           }
         : {}),
-      ...(state.phase === "publication_pending"
-        ? {
-            publication: {
-              status: "pending",
-              proposalDigest: state.publicationProposal.digest,
-              callId: state.publicationCallId,
-            },
-          }
-        : state.phase === "publication_failed" || state.phase === "published_local"
-          ? {
-              publication: {
-                status: state.publicationReceipt.status,
-                digest: state.publicationReceipt.digest,
-                recoveryRequired: state.publicationReceipt.recoveryRequired,
-              },
-            }
-          : {}),
-      ...(state.phase === "branch_publication_pending"
-        ? {
-            branchPublication: {
-              status: "pending",
-              proposalDigest: state.branchPublicationProposal.digest,
-              callId: state.branchPublicationCallId,
-            },
-          }
-        : state.phase === "branch_publication_failed" || state.phase === "published_branch_worktree"
-          ? {
-              branchPublication: {
-                status: state.branchPublicationReceipt.status,
-                digest: state.branchPublicationReceipt.digest,
-                branchName: state.branchPublicationReceipt.branchName,
-                worktreePath: state.branchPublicationReceipt.worktreePath,
-                recoveryRequired: state.branchPublicationReceipt.recoveryRequired,
-              },
-            }
-          : {}),
-      ...(state.phase === "fresh_bootstrap_pending"
-        ? {
-            freshBootstrap: {
-              status: "pending",
-              proposalDigest: state.freshBootstrapProposal.digest,
-              callId: state.freshBootstrapCallId,
-              githubOutcome: "unavailable",
-            },
-          }
-        : state.phase === "fresh_bootstrap_failed" || state.phase === "published_fresh_bootstrap"
-          ? {
-              freshBootstrap: {
-                status: state.freshBootstrapReceipt.status,
-                digest: state.freshBootstrapReceipt.digest,
-                proposalDigest: state.freshBootstrapReceipt.proposalDigest,
-                destinationPath: state.freshBootstrapReceipt.destinationPath,
-                recoveryRequired: state.freshBootstrapReceipt.recoveryRequired,
-                githubOutcome: "unavailable",
-              },
-            }
-          : {}),
+      ...publication,
+      ...branchPublication,
+      ...freshBootstrap,
     };
   },
+  inputSchema: z.object({}),
 });

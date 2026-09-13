@@ -7,27 +7,24 @@ const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 
 export const approvalReceiptSchema = z
   .strictObject({
-    format: z.literal("autograph-eve-approval-receipt-v2"),
-    phase: z.enum(["appspec", "change_set", "publication"]),
-    outcome: z.enum(["accept-appspec", "accept-change-set", "create-draft-pr"]),
-    repositoryId: z.string().regex(/^\d+$/u),
-    repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u),
     baseRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]+$/u),
     baseSha: gitObjectIdSchema,
+    format: z.literal("autograph-eve-approval-receipt-v2"),
+    outcome: z.enum(["accept-appspec", "accept_change_set", "create-draft-pr"]),
+    phase: z.enum(["appspec", "change_set", "publication"]),
+    repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u),
+    repositoryId: z.string().regex(/^\d+$/u),
     subjectDigest: digest,
   })
   .superRefine((receipt, context) => {
-    const expectedOutcome =
-      receipt.phase === "appspec"
-        ? "accept-appspec"
-        : receipt.phase === "change_set"
-          ? "accept-change-set"
-          : "create-draft-pr";
+    let expectedOutcome = "create-draft-pr";
+    if (receipt.phase === "appspec") expectedOutcome = "accept-appspec";
+    else if (receipt.phase === "change_set") expectedOutcome = "accept_change_set";
     if (receipt.outcome !== expectedOutcome)
       context.addIssue({
         code: "custom",
-        path: ["outcome"],
         message: "Approval outcome does not match its phase.",
+        path: ["outcome"],
       });
   });
 
@@ -45,10 +42,10 @@ export function parseApprovalReceipt(value: unknown): ApprovalReceipt {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function approvalTarget(receipt: ApprovalReceipt): ApprovalTarget {
   return {
-    repositoryId: receipt.repositoryId,
-    repository: receipt.repository,
     baseRef: receipt.baseRef,
     baseSha: receipt.baseSha,
+    repository: receipt.repository,
+    repositoryId: receipt.repositoryId,
   };
 }
 
@@ -57,10 +54,10 @@ export function approvalTargetFromGitHubSource(
   source: ImmutableGitHubSourceReceipt,
 ): ApprovalTarget {
   return {
-    repositoryId: source.repository.repositoryId,
-    repository: `${source.repository.owner}/${source.repository.name}`,
     baseRef: source.resolvedRef,
     baseSha: source.resolvedSha,
+    repository: `${source.repository.owner}/${source.repository.name}`,
+    repositoryId: source.repository.repositoryId,
   };
 }
 
@@ -72,12 +69,9 @@ export function assertApprovalReceipt(input: {
   subjectDigest: string;
 }): ApprovalReceipt {
   const actual = parseApprovalReceipt(input.actual);
-  const expectedOutcome =
-    input.phase === "appspec"
-      ? "accept-appspec"
-      : input.phase === "change_set"
-        ? "accept-change-set"
-        : "create-draft-pr";
+  let expectedOutcome = "create-draft-pr";
+  if (input.phase === "appspec") expectedOutcome = "accept-appspec";
+  else if (input.phase === "change_set") expectedOutcome = "accept_change_set";
   if (
     actual.phase !== input.phase ||
     actual.outcome !== expectedOutcome ||
@@ -97,14 +91,10 @@ export function publicApprovalDescription(input: unknown, toolName?: string): st
   const record = input as Record<string, unknown>;
   if (Object.hasOwn(record, "approvalReceipt")) {
     const parsed = approvalReceiptSchema.safeParse(record.approvalReceipt);
-    const expectedPhase =
-      toolName === "accept_app_spec"
-        ? "appspec"
-        : toolName === "accept_change_set"
-          ? "change_set"
-          : toolName === "publish_github_draft_pr"
-            ? "publication"
-            : undefined;
+    let expectedPhase: ApprovalReceipt["phase"] | undefined;
+    if (toolName === "accept_app_spec") expectedPhase = "appspec";
+    else if (toolName === "accept_change_set") expectedPhase = "change_set";
+    else if (toolName === "publish-github-draft-pr") expectedPhase = "publication";
     return parsed.success && (expectedPhase === undefined || parsed.data.phase === expectedPhase)
       ? JSON.stringify(parsed.data)
       : undefined;
@@ -112,27 +102,27 @@ export function publicApprovalDescription(input: unknown, toolName?: string): st
   if (toolName === "accept_app_spec") {
     const parsed = z
       .strictObject({
-        format: z.literal("autograph-local-approval-subject-v1"),
-        phase: z.literal("appspec"),
-        outcome: z.literal("accept-appspec"),
         appId,
-        subjectDigest: digest,
         artifactRevision: digest,
+        eligibilityDigest: digest,
+        format: z.literal("autograph-local-approval-subject-v1"),
+        outcome: z.literal("accept-appspec"),
+        phase: z.literal("appspec"),
         sourceSha: gitObjectIdSchema,
         sourceTree: gitObjectIdSchema,
-        eligibilityDigest: digest,
+        subjectDigest: digest,
         workspaceDigest: digest,
       })
       .safeParse({
-        format: "autograph-local-approval-subject-v1",
-        phase: "appspec",
-        outcome: "accept-appspec",
         appId: record.appId,
-        subjectDigest: record.expectedArtifactDigest,
         artifactRevision: record.expectedArtifactRevision,
+        eligibilityDigest: record.expectedEligibilityDigest,
+        format: "autograph-local-approval-subject-v1",
+        outcome: "accept-appspec",
+        phase: "appspec",
         sourceSha: record.expectedSourceSha,
         sourceTree: record.expectedSourceTree,
-        eligibilityDigest: record.expectedEligibilityDigest,
+        subjectDigest: record.expectedArtifactDigest,
         workspaceDigest: record.expectedWorkspaceDigest,
       });
     return parsed.success ? JSON.stringify(parsed.data) : undefined;
@@ -147,14 +137,14 @@ export function publicApprovalDescription(input: unknown, toolName?: string): st
     const parsed = z
       .strictObject({
         format: z.literal("autograph-local-approval-subject-v1"),
+        outcome: z.literal("accept_change_set"),
         phase: z.literal("change_set"),
-        outcome: z.literal("accept-change-set"),
         subjectDigest: digest,
       })
       .safeParse({
         format: "autograph-local-approval-subject-v1",
+        outcome: "accept_change_set",
         phase: "change_set",
-        outcome: "accept-change-set",
         subjectDigest: changeSet?.digest,
       });
     return parsed.success ? JSON.stringify(parsed.data) : undefined;
@@ -177,8 +167,8 @@ export function approvalRequestDecision(input: {
       publicApprovalDescription(input.toolInput, input.toolName) === undefined
     )
       return {
-        type: "denied",
         reason: "The local approval subject is missing or invalid.",
+        type: "denied",
       };
     return "user-approval";
   }
@@ -186,14 +176,14 @@ export function approvalRequestDecision(input: {
     assertApprovalReceipt({
       actual: approvalReceiptSchema.parse(receipt),
       phase: input.phase,
-      target: approvalTargetFromGitHubSource(input.githubSource),
       subjectDigest: input.subjectDigest,
+      target: approvalTargetFromGitHubSource(input.githubSource),
     });
     return "user-approval";
   } catch {
     return {
-      type: "denied",
       reason: "The GitHub-bound approval receipt is missing, stale, or for the wrong phase.",
+      type: "denied",
     };
   }
 }

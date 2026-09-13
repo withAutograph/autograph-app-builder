@@ -18,19 +18,19 @@ export default defineEval({
 
     await t.send("Report artifact workflow status.");
     t.succeeded();
-    t.calledTool("artifact_workflow_status", { count: 2 });
+    t.calledTool("artifact-workflow-status", { count: 2 });
     await t.send("Record a replacement prototype artifact.");
     t.succeeded();
     t.notEvent("input.requested");
     t.notCalledTool("bash");
-    t.notCalledTool("write_file");
+    t.notCalledTool("write-file");
     t.check(t.reply, includes("invalidated the accepted AppSpec and proposal"));
 
     await t.send("Report artifact workflow status.");
     t.succeeded();
-    t.calledTool("artifact_workflow_status", { count: 2 });
+    t.calledTool("artifact-workflow-status", { count: 2 });
     t.check(t.reply, includes('"phase":"prepared"'));
     t.notCalledTool("bash");
-    t.notCalledTool("write_file");
+    t.notCalledTool("write-file");
   },
 });

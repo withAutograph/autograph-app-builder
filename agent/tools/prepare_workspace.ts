@@ -23,7 +23,6 @@ import sourceStatus from "./source_status";
 export default defineTool({
   description:
     "Prepare the current writable repository checkout for product work. This is automatic and records the provider-created checkout without treating normal source or layout changes as failures.",
-  inputSchema: z.object({}),
   async execute(_input, ctx) {
     const development = canAutoSelectDevelopmentSource();
     const current = appBuilderWorkflowState.get();
@@ -36,25 +35,22 @@ export default defineTool({
       assertExactImmutableGitHubSourceReceipt(source.githubSource);
     }
     const sandbox = await ctx.getSandbox();
-    const canonicalWorkspace = development
-      ? undefined
-      : source.receipt.version === SOURCE_RECEIPT_VERSION
-        ? await (async () => {
-            const observed = await readPreparedSandboxWorkspaceRecord(sandbox);
-            if (observed === undefined)
-              throw new Error("The canonical Arrusted workspace is missing.");
-            return observed;
-          })()
-        : undefined;
-    const githubWorkspace = development
-      ? undefined
-      : source.githubSource === undefined
-        ? undefined
-        : await inspectGitHubSourceSandboxWorkspace({
-            sandbox,
-            receipt: source.receipt,
-            githubSource: source.githubSource,
-          });
+    let canonicalWorkspace;
+    if (!development && source.receipt.version === SOURCE_RECEIPT_VERSION) {
+      canonicalWorkspace = await (async () => {
+        const observed = await readPreparedSandboxWorkspaceRecord(sandbox);
+        if (observed === undefined) throw new Error("The canonical Arrusted workspace is missing.");
+        return observed;
+      })();
+    }
+    let githubWorkspace;
+    if (!development && source.githubSource !== undefined) {
+      githubWorkspace = await inspectGitHubSourceSandboxWorkspace({
+        githubSource: source.githubSource,
+        receipt: source.receipt,
+        sandbox,
+      });
+    }
     const currentReceipt = source.receipt;
     const {
       sourcePath: path,
@@ -105,16 +101,17 @@ export default defineTool({
       transition: (latest) =>
         latest.phase === "empty" || latest.phase === "prepared"
           ? {
-              version: APP_BUILDER_WORKFLOW_VERSION,
+              artifacts: [],
+              ...(source.githubSource === undefined ? {} : { githubSource: source.githubSource }),
               phase: "prepared",
               preparedByCallId: ctx.callId,
-              workspace,
               sourceReceipt: currentReceipt,
-              ...(source.githubSource === undefined ? {} : { githubSource: source.githubSource }),
-              artifacts: [],
+              version: APP_BUILDER_WORKFLOW_VERSION,
+              workspace,
             }
           : latest,
     });
     return workspace;
   },
+  inputSchema: z.object({}),
 });

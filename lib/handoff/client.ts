@@ -60,8 +60,8 @@ export function buildCursorInstallUrl(mcpUrl: string, ready: boolean) {
   )
     throw new Error("mcp-url-invalid");
   const config = JSON.stringify({
-    url: url.href,
     auth: { CLIENT_ID: "autograph-cursor-desktop" },
+    url: url.href,
   });
   const encoded = btoa(
     Array.from(new TextEncoder().encode(config), (byte) => String.fromCodePoint(byte)).join(""),

@@ -1,5 +1,5 @@
 import { lstat, readFile, realpath, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import path from "node:path";
 
 import { hostedProofScenarioSchema, runHostedProof } from "./hosted-portable-proof";
 import { verifyPortableProofArtifact } from "./portable-proof-artifact";
@@ -21,7 +21,7 @@ const required = (name: string) => {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function secretFile(pathValue: string) {
-  const requested = resolve(pathValue);
+  const requested = path.resolve(pathValue);
   const info = await lstat(requested);
   if (!info.isFile() || info.isSymbolicLink())
     throw new Error("OAuth token input must be a regular, non-symbolic file.");
@@ -30,26 +30,27 @@ async function secretFile(pathValue: string) {
     throw new Error("OAuth token input must be owner-bound with mode 0600.");
   const canonical = await realpath(requested);
   if (canonical !== requested) throw new Error("OAuth token input path must be canonical.");
-  const token = (await readFile(canonical, "utf-8")).trim();
+  const tokenContents = await readFile(canonical, "utf-8");
+  const token = tokenContents.trim();
   if (token === "" || token.length > 16_384 || /\s/u.test(token))
     throw new Error("OAuth token input was malformed.");
   return token;
 }
 
-const releaseRoot = await realpath(resolve(required("--release")));
-const installRoot = await realpath(resolve(required("--install-root")));
-const requestedScenario = resolve(required("--scenario"));
+const releaseRoot = await realpath(path.resolve(required("--release")));
+const installRoot = await realpath(path.resolve(required("--install-root")));
+const requestedScenario = path.resolve(required("--scenario"));
 const scenarioInfo = await lstat(requestedScenario);
 if (!scenarioInfo.isFile() || scenarioInfo.isSymbolicLink())
   throw new Error("Proof scenario must be a regular, non-symbolic file.");
 const scenarioPath = await realpath(requestedScenario);
 const verifiedArtifact = await verifyPortableProofArtifact({
-  releaseRoot,
   installRoot,
-  repositoryRoot: resolve("."),
+  releaseRoot,
+  repositoryRoot: path.resolve("."),
 });
 const release = verifiedArtifact.receipt;
-const receiptPath = join(releaseRoot, "release-receipt.json");
+const receiptPath = path.join(releaseRoot, "release-receipt.json");
 
 const scenarioBytes = await readFile(scenarioPath);
 const scenario = hostedProofScenarioSchema.parse(JSON.parse(scenarioBytes.toString("utf-8")));
@@ -57,8 +58,8 @@ const token = await secretFile(required("--token-file"));
 const crossTenantToken = await secretFile(required("--cross-tenant-token-file"));
 if (token === crossTenantToken)
   throw new Error("Cross-tenant proof requires a distinct principal token.");
-const output = resolve(required("--receipt"));
-if ((await realpath(dirname(output))) !== dirname(output))
+const output = path.resolve(required("--receipt"));
+if ((await realpath(path.dirname(output))) !== path.dirname(output))
   throw new Error("Receipt parent must be canonical.");
 try {
   await lstat(output);
@@ -68,58 +69,58 @@ try {
 }
 
 const result = await runHostedProof({
-  endpoint: release.endpoint,
-  token,
   crossTenantToken,
+  endpoint: release.endpoint,
+  permitApprovals: process.argv.includes("--permit-approvals"),
+  releaseArchiveSha256: release.archive.sha256,
   scenario,
   sourceSha: release.source.sha,
   sourceTree: release.source.tree,
-  releaseArchiveSha256: release.archive.sha256,
-  permitApprovals: process.argv.includes("--permit-approvals"),
+  token,
 });
 const proof = {
-  format: "autograph-hosted-fresh-client-proof-v1",
-  specification: "agent-plugins/1.0.0",
-  portableClientsPrepared: ["codex", "vscode", "cursor"],
-  liveProofClient: "agent-plugins-streamable-http-harness",
-  release: {
-    source: release.source,
-    archive: release.archive,
-    receiptSha256: sha256(await readFile(receiptPath)),
-  },
   endpoint: { origin: result.endpointOrigin, route: "/mcp" },
-  scenario: {
-    name: basename(scenarioPath),
-    sha256: sha256(scenarioBytes),
-    approvalsPermitted: process.argv.includes("--permit-approvals"),
-  },
   evidence: {
-    tools: result.discoveredTools,
-    missingAuthRejected: result.missingAuthRejected,
+    cancellationProved: result.cancellationProved,
+    discardedStartResponseRecovered: result.discardedStartResponseRecovered,
+    draftPrEvidenceDigest: result.draftPrEvidenceDigest,
+    draftPrEvidenceProved: result.publicationEvidenceProved,
+    idempotentStart: result.idempotentStart,
     invalidAuthRejected: result.invalidAuthRejected,
+    iterationProved: result.iterationProved,
+    missingAuthRejected: result.missingAuthRejected,
+    mutualWorkspaceDenial: result.mutualWorkspaceDenial,
     oauthMetadataBound: result.oauthMetadataBound,
     oauthMetadataDigest: result.oauthMetadataDigest,
     primaryIdentityDigest: result.primaryIdentityDigest,
-    secondaryIdentityDigest: result.secondaryIdentityDigest,
-    idempotentStart: result.idempotentStart,
-    discardedStartResponseRecovered: result.discardedStartResponseRecovered,
-    responseCount: result.responseCount,
-    responseBatchCount: result.responseBatchCount,
-    iterationProved: result.iterationProved,
-    draftPrEvidenceProved: result.publicationEvidenceProved,
-    draftPrEvidenceDigest: result.draftPrEvidenceDigest,
-    staleSessionRejected: result.staleSessionRejected,
-    mutualWorkspaceDenial: result.mutualWorkspaceDenial,
-    cancellationProved: result.cancellationProved,
-    publicResponsesScanned: result.publicResponsesScanned,
     publicResponseDisclosureScanDigest: result.publicResponseDisclosureScanDigest,
+    publicResponsesScanned: result.publicResponsesScanned,
+    responseBatchCount: result.responseBatchCount,
+    responseCount: result.responseCount,
+    secondaryIdentityDigest: result.secondaryIdentityDigest,
     sessionEvidenceDigest: result.sessionEvidenceDigest,
+    staleSessionRejected: result.staleSessionRejected,
+    tools: result.discoveredTools,
+  },
+  format: "autograph-hosted-fresh-client-proof-v1",
+  liveProofClient: "agent-plugins-streamable-http-harness",
+  portableClientsPrepared: ["codex", "vscode", "cursor"],
+  productionClaimed: false,
+  release: {
+    archive: release.archive,
+    receiptSha256: sha256(await readFile(receiptPath)),
+    source: release.source,
+  },
+  scenario: {
+    approvalsPermitted: process.argv.includes("--permit-approvals"),
+    name: path.basename(scenarioPath),
+    sha256: sha256(scenarioBytes),
   },
   secretsPersisted: false,
-  productionClaimed: false,
+  specification: "agent-plugins/1.0.0",
 };
 await writeFile(output, `${JSON.stringify(proof, null, 2)}\n`, {
-  mode: 0o600,
   flag: "wx",
+  mode: 0o600,
 });
 console.log(`Hosted proof passed; sanitized receipt: ${output}`);

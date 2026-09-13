@@ -1,11 +1,14 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-const repositoryRoot = resolve(import.meta.dirname, "../..");
-const guidancePath = resolve(repositoryRoot, "agent/skills/create-app/references/react-19-3.md");
-const homePagePath = resolve(repositoryRoot, "app/(product)/page.tsx");
-const handoffPagePath = resolve(repositoryRoot, "app/(product)/handoff/[id]/page.tsx");
+const repositoryRoot = path.resolve(import.meta.dirname, "../..");
+const guidancePath = path.resolve(
+  repositoryRoot,
+  "agent/skills/create-app/references/react-19-3.md",
+);
+const homePagePath = path.resolve(repositoryRoot, "app/(product)/page.tsx");
+const handoffPagePath = path.resolve(repositoryRoot, "app/(product)/handoff/[id]/page.tsx");
 
 describe("React 19.3 generated-app guidance", () => {
   const guidance = readFileSync(guidancePath, "utf-8");

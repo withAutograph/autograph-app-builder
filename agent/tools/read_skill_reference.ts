@@ -4,24 +4,23 @@ import { HOSTED_MANAGED_SKILL_CONTENTS } from "@/lib/sandbox/hosted-managed-seed
 
 export const readSkillReferenceInputSchema = z.discriminatedUnion("skill", [
   z.strictObject({
-    skill: z.literal("design-app"),
     reference: z.enum([
       "references/app-spec.md",
       "references/interactions.md",
       "references/questions.md",
       "references/target-repository-routing.md",
     ]),
+    skill: z.literal("design-app"),
   }),
   z.strictObject({
-    skill: z.literal("plan-app-creation"),
     reference: z.literal("references/app-contract-v1.md"),
+    skill: z.literal("plan_app_creation"),
   }),
 ]);
 
 export default defineTool({
   description:
     "Read one allowlisted reference bundled with an already selected top-level app-creation skill. Use load_skill only for the top-level skill name, then use this tool for its named reference file. This tool cannot read target repository files or arbitrary paths.",
-  inputSchema: readSkillReferenceInputSchema,
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async execute({ skill, reference }) {
     const bundled = HOSTED_MANAGED_SKILL_CONTENTS.find(
@@ -29,9 +28,10 @@ export default defineTool({
     );
     if (!bundled) throw new Error("The selected skill reference is not bundled.");
     return {
-      skill,
-      reference,
       content: bundled.content,
+      reference,
+      skill,
     };
   },
+  inputSchema: readSkillReferenceInputSchema,
 });

@@ -3,21 +3,21 @@ import { describe, expect, it, vi } from "vitest";
 import { createPostgresPreviewOrganizationAuthority } from "./postgres-organization-user-authority";
 
 const binding = {
-  issuer: "https://new.autograph.so/api/auth",
   audience: "https://new.autograph.so/mcp",
+  issuer: "https://new.autograph.so/api/auth",
 };
 
 const user = {
-  name: "Jason Morgan",
+  banned: false,
   email: "jason@example.com",
   email_verified: true,
-  banned: false,
+  name: "Jason Morgan",
 };
 
 const organization = {
   organization_id: "organization_one",
-  workspace_id: "workspace_one",
   role: "owner",
+  workspace_id: "workspace_one",
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -73,8 +73,8 @@ describe("PostgreSQL Better Auth organization authority", () => {
       [
         {
           organization_id: "organization_invited",
-          workspace_id: "workspace_invited",
           role: "member",
+          workspace_id: "workspace_invited",
         },
       ],
     ]);
@@ -108,13 +108,13 @@ describe("PostgreSQL Better Auth organization authority", () => {
       [organization],
     ]);
     const authority = createPostgresPreviewOrganizationAuthority(state.database, binding, {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      isSelfServiceSignupEnabled: vi.fn(async () => true),
       generateId: vi
         .fn()
         .mockReturnValueOnce("organization_one")
         .mockReturnValueOnce("workspace_one")
         .mockReturnValueOnce("member_one"),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      isSelfServiceSignupEnabled: vi.fn(async () => true),
     });
 
     await expect(
@@ -146,13 +146,13 @@ describe("PostgreSQL Better Auth organization authority", () => {
       [organization],
     ]);
     const authority = createPostgresPreviewOrganizationAuthority(state.database, binding, {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      isSelfServiceSignupEnabled: vi.fn(async () => true),
       generateId: vi
         .fn()
         .mockReturnValueOnce("organization_one")
         .mockReturnValueOnce("workspace_one")
         .mockReturnValueOnce("member_one"),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      isSelfServiceSignupEnabled: vi.fn(async () => true),
     });
 
     await expect(
@@ -215,30 +215,31 @@ describe("PostgreSQL Better Auth organization authority", () => {
   it.each([
     {
       name: "an unverified user",
-      results: [[{ ...user, email_verified: false }], [], []],
       reason: "verified-identity-required",
+      results: [[{ ...user, email_verified: false }], [], []],
     },
     {
       name: "a suspended user",
-      results: [[{ ...user, banned: true }]],
       reason: "access-revoked",
+      results: [[{ ...user, banned: true }]],
     },
     {
       name: "a user without a GitHub or Vercel account",
-      results: [[user], [], []],
       reason: "verified-identity-required",
+      results: [[user], [], []],
     },
     {
       name: "multiple exact memberships",
+      reason: "workspace-ambiguous",
       results: [
         [user],
         [{ provider_id: "github" }],
         [organization, { ...organization, organization_id: "organization_two" }],
       ],
-      reason: "workspace-ambiguous",
     },
     {
       name: "multiple exact invitations",
+      reason: "workspace-ambiguous",
       results: [
         [user],
         [{ provider_id: "github" }],
@@ -247,21 +248,21 @@ describe("PostgreSQL Better Auth organization authority", () => {
           {
             id: "invitation_one",
             organization_id: "organization_one",
-            workspace_id: "workspace_one",
             role: "member",
+            workspace_id: "workspace_one",
           },
           {
             id: "invitation_two",
             organization_id: "organization_two",
-            workspace_id: "workspace_two",
             role: "member",
+            workspace_id: "workspace_two",
           },
         ],
       ],
-      reason: "workspace-ambiguous",
     },
     {
       name: "a revoked personal workspace membership",
+      reason: "access-revoked",
       results: [
         [user],
         [{ provider_id: "github" }],
@@ -269,7 +270,6 @@ describe("PostgreSQL Better Auth organization authority", () => {
         [],
         [{ organization_id: "organization_one" }],
       ],
-      reason: "access-revoked",
     },
   ] as const)("fails closed for $name", async ({ results, reason }) => {
     const state = createDatabase([...results]);
@@ -285,25 +285,25 @@ describe("PostgreSQL Better Auth organization authority", () => {
 
     await expect(
       authority.activeWorkspaceForUser({
-        issuer: binding.issuer,
         audience: binding.audience,
+        issuer: binding.issuer,
         ownerUserId: "user_one",
       }),
     ).resolves.toBe("workspace_one");
     await expect(
       authority.isActiveMember({
-        issuer: binding.issuer,
         audience: binding.audience,
-        workspaceId: "workspace_one",
+        issuer: binding.issuer,
         ownerUserId: "user_one",
+        workspaceId: "workspace_one",
       }),
     ).resolves.toBe(true);
     await expect(
       authority.isActiveMember({
-        issuer: "https://other.example.test/api/auth",
         audience: binding.audience,
-        workspaceId: "workspace_one",
+        issuer: "https://other.example.test/api/auth",
         ownerUserId: "user_one",
+        workspaceId: "workspace_one",
       }),
     ).resolves.toBe(false);
     expect(state.execute).toHaveBeenCalledTimes(2);

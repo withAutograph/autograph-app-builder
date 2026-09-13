@@ -12,10 +12,10 @@ import {
 import type { BuilderHandoffStore } from "./service";
 
 const authority = {
-  issuer: "https://builder.example/api/auth",
   audience: "https://builder.example/mcp",
-  workspaceId: "workspace-one",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "user-one",
+  workspaceId: "workspace-one",
 };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -33,34 +33,10 @@ function memoryStore(): BuilderHandoffStore {
   };
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    async reserve(record) {
-      const key = JSON.stringify([record.authority, record.creationRequestId]);
-      const existing = byRequest.get(key);
-      if (existing) return { disposition: "existing", record: existing };
-      byId.set(record.handoffId, record);
-      byRequest.set(key, record);
-      return { disposition: "created", record };
-    },
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    async read(input) {
-      return readOwned(input);
-    },
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    async renewExpired(input) {
-      const record = readOwned(input);
-      if (!record || record.requestDigest !== input.requestDigest) return undefined;
-      if (record.sessionId !== undefined || record.expiresAt > input.now)
-        return { disposition: "existing", record };
-      const updated = { ...record, expiresAt: input.expiresAt };
-      byId.set(record.handoffId, updated);
-      byRequest.set(JSON.stringify([record.authority, record.creationRequestId]), updated);
-      return { disposition: "renewed", record: updated };
-    },
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async bindSession(input) {
       const record = readOwned(input);
       if (!record || record.requestDigest !== input.requestDigest || input.now >= record.expiresAt)
-        return undefined;
+        return;
       if (record.sessionId !== undefined) return record;
       const updated = {
         ...record,
@@ -71,20 +47,44 @@ function memoryStore(): BuilderHandoffStore {
       byRequest.set(JSON.stringify([record.authority, record.creationRequestId]), updated);
       return updated;
     },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async read(input) {
+      return readOwned(input);
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async renewExpired(input) {
+      const record = readOwned(input);
+      if (!record || record.requestDigest !== input.requestDigest) return;
+      if (record.sessionId !== undefined || record.expiresAt > input.now)
+        return { disposition: "existing", record };
+      const updated = { ...record, expiresAt: input.expiresAt };
+      byId.set(record.handoffId, updated);
+      byRequest.set(JSON.stringify([record.authority, record.creationRequestId]), updated);
+      return { disposition: "renewed", record: updated };
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async reserve(record) {
+      const key = JSON.stringify([record.authority, record.creationRequestId]);
+      const existing = byRequest.get(key);
+      if (existing) return { disposition: "existing", record: existing };
+      byId.set(record.handoffId, record);
+      byRequest.set(key, record);
+      return { disposition: "created", record };
+    },
   };
 }
 
 const intent = {
-  appName: "Vendor Onboarding",
   appId: "vendor-onboarding",
+  appName: "Vendor Onboarding",
   brief: "Help operations review new vendors.",
+  connections: ["Ramp"],
+  modelId: "openai/gpt-5.6-terra" as const,
   repository: {
-    requestedName: "vendor-onboarding",
     private: true,
+    requestedName: "vendor-onboarding",
     resolvedFullName: "withAutograph/vendor-onboarding",
   },
-  modelId: "openai/gpt-5.6-terra" as const,
-  connections: ["Ramp"],
 };
 
 describe("opaque App Builder handoffs", () => {
@@ -117,9 +117,9 @@ describe("opaque App Builder handoffs", () => {
   it("allows owner status after expiry while still rejecting a new start", async () => {
     let time = new Date("2026-09-01T12:00:00Z");
     const service = createBuilderHandoffService({
-      store: memoryStore(),
-      now: () => time,
       lifetimeMs: 60_000,
+      now: () => time,
+      store: memoryStore(),
     });
     const created = await service.create({
       authority,
@@ -154,7 +154,7 @@ describe("opaque App Builder handoffs", () => {
   it("renews the same start identity across concurrent tabs, lost replies, and service restart", async () => {
     let time = new Date("2026-09-01T12:00:00Z");
     const store = memoryStore();
-    const options = { store, now: () => time, lifetimeMs: 60_000 };
+    const options = { lifetimeMs: 60_000, now: () => time, store };
     const service = createBuilderHandoffService(options);
     const prepared = {
       ...intent,
@@ -171,8 +171,8 @@ describe("opaque App Builder handoffs", () => {
     });
     const request = {
       authority,
-      handoffId: original.handoffId,
       creationRequestId: randomUUID(),
+      handoffId: original.handoffId,
     };
     const originalRecord = await service.read(request);
     time = original.expiresAt;
@@ -198,8 +198,8 @@ describe("opaque App Builder handoffs", () => {
     expect(extended.intent).toEqual(prepared);
     expect(extended.expiresAt.getTime()).toBe(original.expiresAt.getTime() + 60_000);
     expect(await createBuilderHandoffService(options).renew(request)).toMatchObject({
-      handoffId: original.handoffId,
       disposition: "existing",
+      handoffId: original.handoffId,
     });
     time = extended.expiresAt;
     const next = await service.renew(request);
@@ -214,7 +214,7 @@ describe("opaque App Builder handoffs", () => {
   it("recovers the same durable start when its bind was lost across expiry", async () => {
     let time = new Date("2026-09-01T12:00:00Z");
     const store = memoryStore();
-    const options = { store, now: () => time, lifetimeMs: 60_000 };
+    const options = { lifetimeMs: 60_000, now: () => time, store };
     const service = createBuilderHandoffService(options);
     const created = await service.create({
       authority,
@@ -228,8 +228,11 @@ describe("opaque App Builder handoffs", () => {
     // Models a durable engine start, deduplicated by the supplied client key.
     const starts = new Map<string, string>();
     const start = (key: string) => {
-      if (!starts.has(key)) starts.set(key, randomUUID());
-      return starts.get(key)!;
+      const existing = starts.get(key);
+      if (existing !== undefined) return existing;
+      const session = randomUUID();
+      starts.set(key, session);
+      return session;
     };
     const sessionId = start(before.deterministicClientRequestId);
     time = created.expiresAt;
@@ -253,15 +256,15 @@ describe("opaque App Builder handoffs", () => {
     expect(starts.size).toBe(1);
     await restarted.bindSession(binding);
     expect(await restarted.resolve(lookup)).toMatchObject({
-      status: "redeemed",
       sessionId,
+      status: "redeemed",
     });
     const continued = await restarted.read(lookup);
     time = continued.expiresAt;
     expect(await restarted.renew({ ...lookup, creationRequestId: randomUUID() })).toMatchObject({
-      handoffId: created.handoffId,
-      expiresAt: continued.expiresAt,
       disposition: "existing",
+      expiresAt: continued.expiresAt,
+      handoffId: created.handoffId,
     });
     expect(await restarted.read(lookup)).toEqual(continued);
   });
@@ -271,9 +274,9 @@ describe("opaque App Builder handoffs", () => {
     const store = memoryStore();
     delete store.renewExpired;
     const service = createBuilderHandoffService({
-      store,
-      now: () => time,
       lifetimeMs: 60_000,
+      now: () => time,
+      store,
     });
     const original = await service.create({
       authority,
@@ -282,15 +285,16 @@ describe("opaque App Builder handoffs", () => {
     });
     const request = {
       authority,
-      handoffId: original.handoffId,
       creationRequestId: randomUUID(),
+      handoffId: original.handoffId,
     };
     expect(await service.renew(request)).toMatchObject({
       handoffId: original.handoffId,
     });
     time = original.expiresAt;
     await expect(service.renew(request)).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
-    expect((await service.read(request)).expiresAt).toEqual(original.expiresAt);
+    const read = await service.read(request);
+    expect(read.expiresAt).toEqual(original.expiresAt);
   });
 
   it.each(["renewed", "existing"] as const)(
@@ -299,9 +303,9 @@ describe("opaque App Builder handoffs", () => {
       let time = new Date("2026-09-01T12:00:00Z");
       const store = memoryStore();
       const service = createBuilderHandoffService({
-        store,
-        now: () => time,
         lifetimeMs: 60_000,
+        now: () => time,
+        store,
       });
       const created = await service.create({
         authority,
@@ -333,21 +337,18 @@ describe("opaque App Builder handoffs", () => {
       });
       const lookup = { authority, handoffId: created.handoffId };
       const record = await service.read(lookup);
-      const forged =
-        field === "handoffId"
-          ? { ...record, handoffId: randomUUID() }
-          : {
-              ...record,
-              authority: {
-                ...authority,
-                [field]:
-                  field === "issuer"
-                    ? "https://builder.example:443/api/auth"
-                    : field === "audience"
-                      ? "https://builder.example:443/mcp"
-                      : "other",
-              },
-            };
+      let forged: BuilderHandoffRecord;
+      if (field === "handoffId") {
+        forged = { ...record, handoffId: randomUUID() };
+      } else {
+        let replacement = "other";
+        if (field === "issuer") replacement = "https://builder.example:443/api/auth";
+        if (field === "audience") replacement = "https://builder.example:443/mcp";
+        forged = {
+          ...record,
+          authority: { ...authority, [field]: replacement },
+        };
+      }
       vi.spyOn(store, "read").mockResolvedValue(forged);
       await Promise.all(
         [service.read, service.status, service.resolve].map((read) =>
@@ -364,9 +365,9 @@ describe("opaque App Builder handoffs", () => {
     let time = new Date("2026-09-01T12:00:00Z");
     const store = memoryStore();
     const service = createBuilderHandoffService({
-      store,
-      now: () => time,
       lifetimeMs: 60_000,
+      now: () => time,
+      store,
     });
     const creation = { authority, creationRequestId: randomUUID(), intent };
     const created = await service.create(creation);
@@ -403,8 +404,8 @@ describe("opaque App Builder handoffs", () => {
     ).rejects.toBeInstanceOf(BuilderHandoffUnavailableError);
     vi.mocked(store.bindSession).mockResolvedValue({
       ...record,
-      requestDigest: "b".repeat(64),
       redeemedAt: record.createdAt,
+      requestDigest: "b".repeat(64),
       sessionId: "session-one",
     });
     await expect(
@@ -419,9 +420,9 @@ describe("opaque App Builder handoffs", () => {
   it("does not fork live or continued handoffs even after the continued handoff expires", async () => {
     let time = new Date("2026-09-01T12:00:00Z");
     const service = createBuilderHandoffService({
-      store: memoryStore(),
-      now: () => time,
       lifetimeMs: 60_000,
+      now: () => time,
+      store: memoryStore(),
     });
     const created = await service.create({
       authority,
@@ -431,8 +432,8 @@ describe("opaque App Builder handoffs", () => {
     const lookup = { authority, handoffId: created.handoffId };
     const renewal = { ...lookup, creationRequestId: randomUUID() };
     expect(await service.renew(renewal)).toMatchObject({
-      handoffId: created.handoffId,
       disposition: "existing",
+      handoffId: created.handoffId,
     });
     const { requestDigest } = await service.read(lookup);
     await service.bindSession({
@@ -443,12 +444,12 @@ describe("opaque App Builder handoffs", () => {
     time = created.expiresAt;
     expect(await service.status(lookup)).toMatchObject({ status: "continued" });
     expect(await service.resolve(lookup)).toMatchObject({
-      status: "redeemed",
       sessionId: "private-engine-session",
+      status: "redeemed",
     });
     expect(await service.renew(renewal)).toMatchObject({
-      handoffId: created.handoffId,
       disposition: "existing",
+      handoffId: created.handoffId,
     });
   });
 
@@ -468,15 +469,15 @@ describe("opaque App Builder handoffs", () => {
       expect(resolved.prompt.split("\n", 1)[0]).toBe(
         `Create ${intent.appName} with Autograph App Builder.`,
       );
-      expect(resolved.prompt).toContain("Call prepared_app_context before any provider work");
+      expect(resolved.prompt).toContain("Call prepared-app-context before any provider work");
     }
   });
 
   it("returns one opaque handoff for an idempotent creation request", async () => {
     const service = createBuilderHandoffService({
-      store: memoryStore(),
-      now: () => new Date("2026-09-01T12:00:00.000Z"),
       createId: () => "9fd16a55-7818-4e34-93e8-7dd6f3b86d27",
+      now: () => new Date("2026-09-01T12:00:00.000Z"),
+      store: memoryStore(),
     });
     const request = {
       authority,
@@ -493,8 +494,8 @@ describe("opaque App Builder handoffs", () => {
 
   it("rejects request-id reuse for different product intent", async () => {
     const service = createBuilderHandoffService({
-      store: memoryStore(),
       createId: () => "9fd16a55-7818-4e34-93e8-7dd6f3b86d27",
+      store: memoryStore(),
     });
     const request = {
       authority,
@@ -513,9 +514,9 @@ describe("opaque App Builder handoffs", () => {
   it("binds one session and returns it on a lost-response retry", async () => {
     const now = { value: new Date("2026-09-01T12:00:00.000Z") };
     const service = createBuilderHandoffService({
-      store: memoryStore(),
-      now: () => now.value,
       createId: () => "9fd16a55-7818-4e34-93e8-7dd6f3b86d27",
+      now: () => now.value,
+      store: memoryStore(),
     });
     const created = await service.create({
       authority,
@@ -537,18 +538,18 @@ describe("opaque App Builder handoffs", () => {
       sessionId: "session-one",
     });
     expect(await service.resolve({ authority, handoffId: created.handoffId })).toMatchObject({
-      status: "redeemed",
       sessionId: "session-one",
+      status: "redeemed",
     });
   });
 
   it("keeps expired and cross-tenant handoffs indistinguishable", async () => {
     const now = { value: new Date("2026-09-01T12:00:00.000Z") };
     const service = createBuilderHandoffService({
-      store: memoryStore(),
-      now: () => now.value,
       createId: () => "9fd16a55-7818-4e34-93e8-7dd6f3b86d27",
       lifetimeMs: 60_000,
+      now: () => now.value,
+      store: memoryStore(),
     });
     const created = await service.create({
       authority,
