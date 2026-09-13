@@ -1,6 +1,58 @@
 # Self-reproduction evidence
 
-Run the opt-in native Eve benchmark with the canonical Arrusted template:
+## Current status and acceptance contract
+
+The existing staged native Eve runs and comparison reports provide diagnostic
+findings about generated output, template setup, and infrastructure. They do
+**not** establish that an ordinary user can ask App Builder to reproduce itself
+out of the box. Preserve those artifacts and their original source revisions,
+prompts, stage inputs, and candidate bytes; do not relabel them as product-level
+baseline evidence. A passing infrastructure probe or internal stage is not a
+passing product workflow.
+
+A qualifying self-reproduction run starts with one checked-in product brief
+submitted through the supported web App Builder or the
+[five public MCP tools](../public-mcp-contract.md). Subsequent input is limited
+to ordinary product questions answered from the fixed answer sheet and normal
+approval replies. Record each response. Do not provide reference source,
+screenshots, evaluator findings, manual implementation assistance, or internal
+stage instructions to the generator.
+
+The brief requests a complete independent working replica. The ordinary shared
+Builder workflow must clone the canonical Arrusted repository, install and set
+up its dependencies, plan, implement, recover from errors, and validate the
+result. The evaluator must not replace those responsibilities by preparing a
+candidate workspace or driving internal Eve planning and implementation stages.
+If a necessary step is missing, repair the shared product workflow and test it
+through the same supported entrypoint. Do not add an eval-only implementation
+path, hosting service, or orchestration layer to bypass the missing behavior.
+
+The evaluator may prepare isolated synthetic users and provider emulators,
+observe the normal workflow, retain evidence, and independently start the
+exported output for comparison. These comparison fixtures must remain outside
+generator input. They must not repair the output or earn credit for generated
+functionality: an independently launched candidate and an evaluator-created
+Sandbox prove only their recorded infrastructure assertions.
+
+Completion requires evidence from that product-level run and an assessment of
+the full requested replica, including its own persistence and orchestration and
+its creation of one small independent app through its own backend. Report each
+requirement as passed, failed, blocked, or unassessed. Missing functionality is a
+failure; unavailable infrastructure is a blocker. Neither infrastructure success
+nor internal-stage success substitutes for product behavior. Keep visual scores
+advisory, preserve partial results, and report remaining evidence gaps explicitly.
+Anonymous entry is excluded from the current repair scope. Hosted publication
+and provisioning remain unverified unless separately authorized and exercised.
+
+## Existing diagnostic runner and retained evidence
+
+The following commands describe the existing native Eve diagnostic harness.
+They remain useful for investigating gaps and replaying comparisons, but do not
+by themselves satisfy the product-level acceptance contract above. The current
+harness can clone the template for its own runtime; that is evaluator setup
+provenance, not evidence that the ordinary Builder performed the clone.
+
+Run the opt-in native Eve diagnostic with the canonical Arrusted template:
 
 ```sh
 mise run eval:self-reproduction

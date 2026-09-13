@@ -60,6 +60,21 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   checks, not normal edit-loop steps. Use direct local tools and the fast create
   and existing-app fixtures while iterating.
 
+## App Builder self-reproduction eval
+
+- Measure the supported product: submit one product brief through the web App
+  Builder or its [five public MCP tools](docs/public-mcp-contract.md), then answer
+  ordinary product questions and approval requests. Do not drive internal Eve
+  stages or supply implementation instructions between stages.
+- The shared Builder workflow owns Arrusted cloning, dependency installation,
+  planning, implementation, recovery, and validation. Fix missing automation in
+  that workflow; do not make the evaluator perform it on the Builder's behalf.
+- The evaluator observes, compares, and reports. Staged Eve runs, template setup
+  checks, and infrastructure probes are diagnostic evidence, not proof that the
+  Builder reproduces itself out of the box. Preserve their original provenance.
+- Follow the [self-reproduction acceptance contract](docs/evals/self-reproduction.md)
+  before describing a run as product-level self-reproduction evidence.
+
 ## Delegation and integration
 
 - Keep one coordinator responsible for integration, publication, merge, and
