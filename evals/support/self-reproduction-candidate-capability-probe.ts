@@ -1,3 +1,6 @@
+import { DEVELOPMENT_SANDBOX_ENVIRONMENT } from "../../lib/sandbox/development-toolchain";
+import { runSandboxRuntimeComparison } from "./self-reproduction-runtime-comparison";
+
 /** Evaluator-only tooling; install in scratch space, never the generated app. */
 export const candidateCapabilityTooling = {
   directory: ".scratch/self-reproduction-capabilities",
@@ -87,7 +90,7 @@ const receipt = await exercise({
     const result = await generateText({
       model: input.model,
       prompt: "Reply with the single word ready.",
-      maxOutputTokens: 16,
+      maxOutputTokens: 256,
       maxRetries: 0,
       abortSignal: AbortSignal.timeout(60000),
     });
@@ -115,4 +118,57 @@ const receipt = await exercise({
 await writeFile(process.argv[3], JSON.stringify(receipt));
 `,
   };
+}
+
+/** Opt-in infrastructure diagnostic; setup never writes generated application files. */
+export async function runCandidateCapabilityProbe(input: {
+  session: Parameters<typeof runSandboxRuntimeComparison>[0]["session"];
+  abortSignal: AbortSignal;
+  model: string;
+}) {
+  const setup = { exitCode: null as number | null, stdout: "", stderr: "" };
+  try {
+    await input.session.writeTextFile({
+      path: `${candidateCapabilityTooling.directory}/package.json`,
+      content: JSON.stringify({
+        private: true,
+        dependencies: candidateCapabilityTooling.dependencies,
+      }),
+    });
+    const environment = Object.entries(DEVELOPMENT_SANDBOX_ENVIRONMENT)
+      .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+      .join(" ");
+    const result = await input.session.run({
+      command: `${environment} bun install --cwd ${candidateCapabilityTooling.directory}`,
+      abortSignal: input.abortSignal,
+    });
+    Object.assign(setup, {
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    });
+    if (result.exitCode !== 0)
+      return {
+        status: "blocked" as const,
+        applicationFunctionalCredit: false,
+        setup,
+        comparison: null,
+        reason: "Evaluator-only capability tooling installation failed.",
+      };
+    const comparison = await runSandboxRuntimeComparison({
+      session: input.session,
+      abortSignal: input.abortSignal,
+      ...sandboxCandidateCapabilityProbe(),
+      payload: { model: input.model },
+    });
+    return { status: comparison.status, applicationFunctionalCredit: false, setup, comparison };
+  } catch {
+    return {
+      status: "blocked" as const,
+      applicationFunctionalCredit: false,
+      setup,
+      comparison: null,
+      reason: "Evaluator-only capability tooling or runtime unavailable.",
+    };
+  }
 }

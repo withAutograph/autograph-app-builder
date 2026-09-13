@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { expect, it, vi } from "vitest";
 import {
   exerciseCandidateCapabilities,
+  runCandidateCapabilityProbe,
   sandboxCandidateCapabilityProbe,
 } from "./self-reproduction-candidate-capability-probe";
 
@@ -59,4 +60,50 @@ it("serializes a valid standalone Node module without credentials", () => {
   });
   expect(checked.stderr).toBe("");
   expect(checked.status).toBe(0);
+});
+
+it("retains failed scratch installation without attempting a product mutation", async () => {
+  const writeTextFile = vi.fn(() => Promise.resolve());
+  const run = vi.fn(() =>
+    Promise.resolve({ exitCode: 1, stdout: "install output", stderr: "install failed" }),
+  );
+  const receipt = await runCandidateCapabilityProbe({
+    session: { writeTextFile, run, readTextFile: vi.fn(), readBinaryFile: vi.fn() } as never,
+    abortSignal: new AbortController().signal,
+    model: "openai/gpt-5.6-terra",
+  });
+  expect(writeTextFile).toHaveBeenCalledWith(
+    expect.objectContaining({ path: ".scratch/self-reproduction-capabilities/package.json" }),
+  );
+  expect(run).toHaveBeenCalledOnce();
+  expect(run.mock.calls[0]).toBeDefined();
+  expect(receipt.status).toBe("blocked");
+  expect(receipt.setup.stderr).toBe("install failed");
+  expect(receipt.comparison).toBeNull();
+});
+
+it("runs the standalone probe only after scratch tooling setup", async () => {
+  const writes: string[] = [];
+  const run = vi.fn(() => Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }));
+  const receipt = await runCandidateCapabilityProbe({
+    session: {
+      writeTextFile: ({ path }: { path: string }) => {
+        writes.push(path);
+        return Promise.resolve();
+      },
+      run,
+      readTextFile: () => Promise.resolve(JSON.stringify({ applicationFunctionalCredit: false })),
+      readBinaryFile: vi.fn(),
+    } as never,
+    abortSignal: new AbortController().signal,
+    model: "openai/gpt-5.6-terra",
+  });
+  expect(writes[0]).toBe(".scratch/self-reproduction-capabilities/package.json");
+  expect(
+    writes.every(
+      (path) => path.startsWith(".scratch/") || path.startsWith(".self-reproduction-comparison/"),
+    ),
+  ).toBe(true);
+  expect(run).toHaveBeenCalledTimes(2);
+  expect(receipt.status).toBe("completed");
 });
