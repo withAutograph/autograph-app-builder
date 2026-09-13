@@ -75,6 +75,50 @@ the `CaptureAdapter` contract from
 this module. The runner ingests the resulting evaluator-owned observations into
 `parity-evidence.json` and writes an advisory side-by-side manifest at
 `parity/captures/manifest.json`.
+The default adapter treats absent required semantic controls as missing
+functionality. It leaves loading, empty, and error states unassessed when the
+URL does not expose an evaluator-owned fixture for that state; visiting a
+landing page is not evidence that those product states are missing.
+
+For functional workflow parity, the runner automatically loads the checked-in
+`evals/self-reproduction/workflow-adapter.ts`. With the reference development
+stack and a candidate runtime already running, use:
+
+```sh
+mise run eval:self-reproduction -- --report-only \
+  --candidate-root /absolute/path/to/exported-candidate \
+  --reference-url https://localhost:3001 \
+  --candidate-url http://127.0.0.1:4173 \
+  --output-dir /absolute/external/evidence/comparison
+```
+
+The reference binding uses the existing emulated OAuth/provider fixtures and
+PostgreSQL readbacks for authentication, durable drafts, provider return, and
+documentation. The candidate binding navigates its real URL and looks for
+required controls by accessible role and name. Missing candidate controls are
+failures; browser-only state cannot earn durable server-write credit. Reference
+workflows that do not yet have a bounded evaluator fixture remain unassessed.
+
+A specialized adapter can be selected with
+`--workflow-adapter-module evals/path/to/workflow-adapters.mts`. The path must
+remain under this repository's `evals/` directory. It exports
+`createWorkflowAdapters({ referenceUrl, candidateUrl, outputRoot })` and returns
+reference/candidate implementations of `TrustedBrowserWorkflowAdapter`. Each
+adapter seeds through that side's real fixture boundary, drives the rendered
+application, and performs evaluator-owned server readback. The runner writes
+one receipt per side and workflow under `parity/workflows/` plus
+`trusted-workflow-receipts.json`; receipts already written remain available
+when a later adapter or report step fails. Missing product behavior fails,
+unavailable fixture/browser infrastructure blocks, and omitted adapters remain
+unassessed.
+
+The self-hosted GitHub workflow uses the same checked-in adapter. Optional
+repository or environment variables `REFERENCE_URL` and `CANDIDATE_URL` become
+`SELF_REPRODUCTION_REFERENCE_URL` and
+`SELF_REPRODUCTION_CANDIDATE_URL`. `WORKFLOW_ADAPTER_MODULE` can select a custom
+module under `evals/`. Leave the URL variables unset for generation-only runs;
+the report records honest not-run receipts instead of treating absent runtimes
+as success.
 
 The report labels an operator-supplied candidate separately from the live
 generation that produced it. Credentials and dependencies are never copied.

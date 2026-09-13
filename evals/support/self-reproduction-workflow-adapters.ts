@@ -2,7 +2,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import type { Browser, BrowserContext, Page } from "playwright";
+import type { Browser, BrowserContext, BrowserContextOptions, Page } from "playwright";
 
 import { runtimeReceiptSchema } from "./self-reproduction-parity-evidence";
 import { sides, workflowMatrix } from "./self-reproduction-parity";
@@ -19,11 +19,12 @@ export type Preparation =
   | { ready: true }
   | {
       ready: false;
-      disposition: "missing-functionality" | "infrastructure-unavailable";
+      disposition: "not-run" | "missing-functionality" | "infrastructure-unavailable";
       reason: string;
     };
 
 export interface TrustedBrowserWorkflowAdapter {
+  contextOptions?: BrowserContextOptions;
   /** Seeds only records owned by this eval run in the side's real persistence layer. */
   prepare: (page: Page, workflowId: WorkflowId) => Promise<Preparation>;
   /** Drives the rendered application. It may request isolated contexts for auth/readback checks. */
@@ -103,7 +104,7 @@ export async function runTrustedBrowserWorkflows(input: {
         };
       } else {
         try {
-          const context = await input.browser.newContext();
+          const context = await input.browser.newContext(adapter.contextOptions);
           contexts.push(context);
           const page = await context.newPage();
           const prepared = await adapter.prepare(page, workflow.id);
@@ -119,7 +120,7 @@ export async function runTrustedBrowserWorkflows(input: {
             };
           } else {
             const exercised = await adapter.exercise(page, workflow.id, async () => {
-              const fresh = await input.browser.newContext();
+              const fresh = await input.browser.newContext(adapter.contextOptions);
               contexts.push(fresh);
               return await fresh.newPage();
             });

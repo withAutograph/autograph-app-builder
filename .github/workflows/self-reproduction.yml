@@ -16,6 +16,9 @@ jobs:
     environment: self-reproduction
     env:
       SELF_REPRODUCTION_ARRUSTED_ROOT: ${{ vars.ARRUSTED_ROOT }}
+      SELF_REPRODUCTION_WORKFLOW_ADAPTER_MODULE: ${{ vars.WORKFLOW_ADAPTER_MODULE }}
+      SELF_REPRODUCTION_REFERENCE_URL: ${{ vars.REFERENCE_URL }}
+      SELF_REPRODUCTION_CANDIDATE_URL: ${{ vars.CANDIDATE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v3
