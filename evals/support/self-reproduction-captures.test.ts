@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Browser } from "playwright";
 import { describe, expect, it, vi } from "vitest";
-import { captureParity } from "./self-reproduction-captures";
+import { captureParity, runPairedCaptureEvidence } from "./self-reproduction-captures";
 import type { CaptureAdapter } from "./self-reproduction-captures";
 import { requirements } from "./self-reproduction-parity";
 
@@ -87,6 +87,52 @@ describe("paired capture orchestration", () => {
         result.candidate.every((row) => row.disposition === "infrastructure-unavailable"),
       ).toBe(true);
       expect(adapter.prepare).not.toHaveBeenCalled();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it("owns one browser and writes a side-by-side advisory manifest", async () => {
+    const root = await mkdtemp(join(tmpdir(), "parity-capture-manifest-"));
+    const closeBrowser = vi.fn(() => Promise.resolve());
+    const closeContext = vi.fn(() => Promise.resolve());
+    const newContext = vi.fn(() =>
+      Promise.resolve({
+        newPage: () =>
+          Promise.resolve({
+            screenshot: ({ path }: { path: string }) => writeFile(path, "png"),
+          }),
+        close: closeContext,
+      }),
+    );
+    const adapter: CaptureAdapter = {
+      prepare: () => Promise.resolve({ ready: true }),
+      exercise: async (_page, state, capture) => {
+        await capture();
+        return requirements
+          .find((row) => row.id === `capture/desktop/${state}`)!
+          .assertions.map((id) => ({ id, passed: true, detail: "Observed." }));
+      },
+    };
+    try {
+      const result = await runPairedCaptureEvidence({
+        outputRoot: root,
+        adapters: { reference: adapter, candidate: adapter },
+        launch: () => Promise.resolve({ newContext, close: closeBrowser } as unknown as Browser),
+      });
+      expect(closeBrowser).toHaveBeenCalledOnce();
+      expect(closeContext).toHaveBeenCalledTimes(30);
+      expect(result.manifest.rows).toHaveLength(15);
+      expect(result.manifest.visualScoresAdvisory).toBe(true);
+      expect(result.manifest.rows[0]).toMatchObject({
+        reference: { disposition: "observed" },
+        candidate: { disposition: "observed" },
+      });
+      const manifest = JSON.parse(
+        await readFile(join(root, "parity/captures/manifest.json"), "utf-8"),
+      );
+      expect(manifest.rows).toHaveLength(15);
+      expect(manifest.rows[0].reference.png).toContain("/reference.png");
+      expect(manifest.rows[0].candidate.png).toContain("/candidate.png");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
