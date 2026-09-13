@@ -192,3 +192,30 @@ it("stops a known worker at its cleanup deadline even if inspection fails", asyn
   expect(result.diagnostics).toContain("worker-inspection-unavailable");
   expect(f.worker.stop).toHaveBeenCalledOnce();
 });
+
+it("retains a known worker after status advances a pending start reservation", async () => {
+  const f = fixture();
+  const pending = Promise.withResolvers<{ workerId: string }>();
+  const entered = Promise.withResolvers<null>();
+  f.worker.start.mockImplementationOnce(() => {
+    entered.resolve(null);
+    return pending.promise;
+  });
+  const starting = f.controller.start("owner");
+  await entered.promise;
+  const duplicate = await f.controller.start("owner");
+  const interrupted = await f.controller.status("owner", duplicate.id);
+  expect(interrupted.status).toBe("interrupted");
+  pending.resolve({ workerId: "known-late-worker" });
+  const retained = await starting;
+  expect(retained.status).toBe("running");
+  expect(f.records.get(duplicate.id)?.workerId).toBe("known-late-worker");
+  expect(retained.cleanup).toBe("pending");
+  expect(retained.diagnostics).not.toContain(
+    "worker-creation-outcome-unknown; no replacement launched",
+  );
+  const completed = await f.controller.status("owner", duplicate.id);
+  expect(completed.status).toBe("completed");
+  expect(f.worker.stop).toHaveBeenCalledWith("known-late-worker");
+  expect(f.worker.start).toHaveBeenCalledOnce();
+});

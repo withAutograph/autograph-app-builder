@@ -98,6 +98,30 @@ export const createHostedSelfReproductionController = (input: {
       ? next
       : await readRecord(record.id);
   };
+  const retainWorkerReceipt = async (original: HostedEvalRecord, knownWorkerId: string) => {
+    let record = original;
+    // Status may advance the reservation while Sandbox creation is still in flight.
+    // Keep the known worker receipt until a CAS succeeds or another observer retained it.
+    while (!record.workerId) {
+      const next: HostedEvalRecord = {
+        ...record,
+        cleanup: "pending",
+        diagnostics: record.diagnostics.filter(
+          (diagnostic) =>
+            diagnostic !== "worker-creation-outcome-unknown; no replacement launched" &&
+            diagnostic !== "worker-recovery-unavailable",
+        ),
+        revision: record.revision + 1,
+        status: "running",
+        workerId: knownWorkerId,
+      };
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Retry the same known receipt after concurrent durable revision changes.
+      if (await input.store.compareAndSet(record.revision, next)) return next;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Read the actual winning revision before retrying its receipt write.
+      record = await readRecord(record.id);
+    }
+    return record;
+  };
   const authorizedRecord = async (token: string, id: string) => {
     const identity = await input.authorize(token);
     if (identityKey(identity) !== id) throw new Error("Eval run access denied.");
@@ -238,7 +262,7 @@ export const createHostedSelfReproductionController = (input: {
           operationId: record.operationId,
           workload: hostedEvalWorkload,
         });
-        record = await update(record, { status: "running", workerId: worker.workerId });
+        record = await retainWorkerReceipt(record, worker.workerId);
       } catch {
         record = await update(record, {
           cleanup: "unknown",
