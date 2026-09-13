@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { encryptOverrides } from "flags";
 import { expect } from "playwright/test";
@@ -25,6 +26,7 @@ import type {
 
 export interface WorkflowAdapterFactoryInput {
   referenceUrl?: string;
+  referenceFixtureRoot?: string;
   candidateUrl?: string;
   outputRoot: string;
 }
@@ -125,7 +127,10 @@ function semanticCandidateAdapter(candidateUrl: string): TrustedBrowserWorkflowA
   };
 }
 
-function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
+function referenceAdapter(
+  referenceUrl: string,
+  fixtureRoot = process.cwd(),
+): TrustedBrowserWorkflowAdapter {
   const supported = new Set<WorkflowId>([
     "authentication",
     "durable-draft",
@@ -151,7 +156,9 @@ function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
         };
       if (workflowId === "authentication") {
         try {
-          const secret = (await readFile(".emulate/flags-secret", "utf-8")).trim();
+          const secret = (
+            await readFile(join(fixtureRoot, ".emulate/flags-secret"), "utf-8")
+          ).trim();
           passkeyOverride = await encryptOverrides({ passkeys: true }, secret, "1h");
         } catch {
           return {
@@ -219,7 +226,7 @@ function referenceAdapter(referenceUrl: string): TrustedBrowserWorkflowAdapter {
           (await currentSession(restored))?.user?.id === ownerId &&
           (await restored.getByLabel("App Name").inputValue()) === fixedName &&
           (await restored.getByLabel("App Brief", { exact: true }).inputValue()) === fixedBrief;
-        await restored.getByRole("radio", { name: "Codex", exact: true }).check();
+        await restored.getByRole("radio", { name: "ChatGPT / Codex", exact: true }).check();
         await restored.getByRole("button", { name: "Create App", exact: true }).click();
         await expect(restored).toHaveURL(/\/handoff\/[0-9a-f-]{36}$/u);
         const handoffId = new URL(restored.url()).pathname.split("/").at(-1);
@@ -364,7 +371,9 @@ export function createWorkflowAdapters(
   input: WorkflowAdapterFactoryInput,
 ): Partial<Record<"reference" | "candidate", TrustedBrowserWorkflowAdapter>> {
   return {
-    ...(input.referenceUrl ? { reference: referenceAdapter(input.referenceUrl) } : {}),
+    ...(input.referenceUrl
+      ? { reference: referenceAdapter(input.referenceUrl, input.referenceFixtureRoot) }
+      : {}),
     ...(input.candidateUrl ? { candidate: semanticCandidateAdapter(input.candidateUrl) } : {}),
   };
 }

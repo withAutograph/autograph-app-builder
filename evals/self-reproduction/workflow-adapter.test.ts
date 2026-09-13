@@ -92,3 +92,13 @@ it("blocks authentication when the evaluator passkey fixture cannot be configure
     disposition: "infrastructure-unavailable",
   });
 });
+
+it("reads the isolated reference fixture flag secret", async () => {
+  const { reference } = createWorkflowAdapters({
+    outputRoot: "/tmp/evidence",
+    referenceUrl: "https://localhost:3001",
+    referenceFixtureRoot: "/tmp/isolated-reference",
+  });
+  await reference?.prepare({} as Page, "authentication");
+  expect(readFile).toHaveBeenCalledWith("/tmp/isolated-reference/.emulate/flags-secret", "utf-8");
+});
