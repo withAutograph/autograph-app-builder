@@ -3,7 +3,7 @@
 This record covers the single live acceptance generation retained at
 `/private/tmp/app-builder-self-reproduction-true-eval-20260913-r12` and the
 latest report-only runtime replay retained at
-`/private/tmp/app-builder-self-reproduction-true-eval-20260913-r12-runtime-v9`.
+`/private/tmp/app-builder-self-reproduction-true-eval-20260913-r12-runtime-v12`.
 The generated source was not patched and no generation reroll was selected.
 
 ## Outcome
@@ -27,11 +27,11 @@ project-scoped Vercel Sandbox and reached the candidate's declared production
 build. Dependency installation, pinned toolchain installation, microfrontend
 configuration generation, and candidate route registration all completed.
 Next.js 16.3.0 compiled the candidate and completed TypeScript checking, then
-failed while prerendering `/_not-found`:
+failed while prerendering `/_global-error`:
 
 ```text
 InvariantError: Invariant: Expected workStore to be initialized.
-Export encountered an error on /_not-found/page: /_not-found
+Export encountered an error on /_global-error/page: /_global-error
 ```
 
 The build also emitted a non-fatal PostCSS warning for the Arrusted shared
@@ -64,12 +64,12 @@ failures to a real Next.js production build failure in the untouched candidate.
 
 ## Evidence limits
 
-The current `runtime-v9` machine report contains 76 requirements, all marked
-`unassessed`, even though the candidate production build failed. That status is
-not an acceptable final interpretation: candidate requirements that require a
-runnable app must be reported as failed due missing functionality, while
-infrastructure failures must remain blockers. Anonymous entry is intentionally
-outside the current cleanup priority.
+The `runtime-v12` machine report contains 76 requirements. All 37 in-scope
+candidate requirements are marked `failed`: 11 workflows, 11 framework rows,
+and 15 visual-state captures. Candidate anonymous entry is the sole unassessed
+candidate row, matching the current cleanup priority. All 38 reference rows are
+unassessed because this report-only replay did not receive a running reference
+URL. Runtime infrastructure failures use the separate `blocked` classification.
 
 No visual similarity score is available. The absence of paired screenshots is
 not evidence of visual parity. No authenticated workflow, durable draft
@@ -92,23 +92,15 @@ required by the baseline scope.
    components resolve under the repository's Vitest configuration.
 2. **Generated candidate production build failure.** Expected: the candidate
    builds and starts independently in Vercel Sandbox. Observed: Next.js fails
-   prerendering `/_not-found` after compile and typecheck. Evidence:
-   `candidate-runtime.json` from `runtime-v9`. Responsible layer is not yet
+   prerendering `/_global-error` after compile and typecheck. Evidence:
+   `candidate-runtime.json` from `runtime-v12`. Responsible layer is not yet
    confirmed. Recommended repair: reproduce this exact candidate/reference
    combination in a focused build investigation and assign the fix only after
    locating the invalid boundary.
-3. **Failure classification.** Expected: unavailable candidate behavior caused
-   by a candidate build failure is failed, with artifact-backed reasons.
-   Observed: the current machine report leaves all 76 rows unassessed. Evidence:
-   `report.json` from `runtime-v9`. Likely layer: evaluator runtime fallback
-   mapping. Recommended repair: synthesize evaluator-owned failure observations
-   for affected candidate rows while preserving explicit observations and
-   blocker semantics.
-4. **Executable comparison.** Expected: matching reference and candidate states
+3. **Executable comparison.** Expected: matching reference and candidate states
    produce workflow receipts and paired captures at all configured desktop
    viewports. Observed: no candidate server was available. Evidence:
    `candidate-runtime.json` and the empty capture set. Likely layer: downstream
    consequence of gap 2. Recommended repair: rerun report-only assessment after
    the responsible product/runtime fix; do not patch this baseline candidate or
    claim scores from source inspection.
-

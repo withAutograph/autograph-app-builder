@@ -32,12 +32,21 @@ import {
   evidenceSink,
   sanitizeEvidence,
 } from "../evals/support/self-reproduction-evidence";
-import { assessParity, workflowMatrix } from "../evals/support/self-reproduction-parity";
+import {
+  assessParity,
+  captureStates,
+  desktopViewports,
+  workflowMatrix,
+} from "../evals/support/self-reproduction-parity";
 import type {
   Assessment,
   Observation,
   ParityEvidence,
 } from "../evals/support/self-reproduction-parity";
+import {
+  candidateRuntimeCaptureFailureObservations,
+  candidateRuntimeFailureObservations,
+} from "../evals/support/self-reproduction-runtime";
 import type { CandidateRuntimeReceipt } from "../evals/support/self-reproduction-runtime";
 import { parityEvidenceFromReceipts } from "../evals/support/self-reproduction-parity-evidence";
 import type { TrustedBrowserWorkflowAdapter } from "../evals/support/self-reproduction-workflow-adapters";
@@ -537,8 +546,13 @@ const blockedFramework = (side: "reference" | "candidate") =>
     evidence: [`${side} source was unavailable.`],
   }));
 
-function runtimeObservations(): Observation[] {
+function runtimeObservations(existingRequirementIds: ReadonlySet<string>): Observation[] {
   if (candidateRuntime.status === "not-run") return [];
+  if (candidateRuntime.status !== "available")
+    return candidateRuntimeFailureObservations({
+      receipt: candidateRuntime,
+      existingRequirementIds,
+    });
   const artifact = "candidate-runtime.json";
   const notRun = workflowMatrix
     .filter((row) => row.id !== "anonymous-entry" && row.id !== "documentation")
@@ -609,23 +623,38 @@ async function saveReport() {
       : blockedFramework("candidate")),
   ];
   const candidateOutput = candidate.status === "available" ? "available" : "missing";
+  const effectiveTrustedWorkflowReceipts = trustedWorkflowReceipts.filter((receipt) => {
+    if (candidateRuntime.status === "available" || candidateRuntime.status === "not-run") return true;
+    if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) return true;
+    const candidateReceipt = receipt as {
+      side?: unknown;
+      observation?: { disposition?: unknown };
+    };
+    return !(
+      candidateReceipt.side === "candidate" &&
+      candidateReceipt.observation?.disposition === "not-run"
+    );
+  });
   const trustedIds = new Set(
-    trustedWorkflowReceipts.flatMap((receipt) => {
+    effectiveTrustedWorkflowReceipts.flatMap((receipt) => {
       if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) return [];
-      const { observation } = receipt as { observation?: { requirementId?: unknown } };
-      return typeof observation?.requirementId === "string" ? [observation.requirementId] : [];
+      const { side, observation } = receipt as {
+        side?: unknown;
+        observation?: { requirementId?: unknown };
+      };
+      return side === "candidate" && typeof observation?.requirementId === "string"
+        ? [observation.requirementId]
+        : [];
     }),
   );
-  const legacyRuntimeReceipts = runtimeObservations()
-    .filter((observation) => !trustedIds.has(observation.requirementId))
-    .map((observation) => ({
+  const legacyRuntimeReceipts = runtimeObservations(trustedIds).map((observation) => ({
       schemaVersion: "self-reproduction-runtime-receipt/v1" as const,
       producer: "evaluator" as const,
       side: "candidate" as const,
       observation,
     }));
   const completedCaptures = pairedCaptures;
-  const captureReceipts =
+  const observedCaptureReceipts =
     completedCaptures?.manifest.rows.flatMap((row) =>
       (["reference", "candidate"] as const).flatMap((side) => {
         const observation = completedCaptures.observations[side].find(
@@ -636,6 +665,23 @@ async function saveReport() {
           : [];
       }),
     ) ?? [];
+  const observedCandidateCaptureIds = new Set(
+    observedCaptureReceipts
+      .filter((receipt) => receipt.side === "candidate")
+      .map((receipt) => receipt.requirementId),
+  );
+  const failedRuntimeCaptureReceipts = candidateRuntimeCaptureFailureObservations({
+    receipt: candidateRuntime,
+    existingRequirementIds: observedCandidateCaptureIds,
+  }).map((observation) => {
+    const [, viewportName, stateName] = observation.requirementId.split("/");
+    const viewport = desktopViewports.find((item) => item.name === viewportName);
+    const state = captureStates.find((item) => item === stateName);
+    if (!viewport || !state)
+      throw new Error(`Invalid candidate runtime capture requirement ${observation.requirementId}.`);
+    return { side: "candidate" as const, viewport, state, ...observation };
+  });
+  const captureReceipts = [...observedCaptureReceipts, ...failedRuntimeCaptureReceipts];
   const parityEvidence: ParityEvidence = parityEvidenceFromReceipts({
     runId: basename(output),
     reference: {
@@ -657,7 +703,7 @@ async function saveReport() {
         (candidate.revision as { commit?: unknown } | undefined)?.commit ?? "generated-export",
       ),
     },
-    runtimeReceipts: [...legacyRuntimeReceipts, ...trustedWorkflowReceipts],
+    runtimeReceipts: [...legacyRuntimeReceipts, ...effectiveTrustedWorkflowReceipts],
     captureReceipts,
   });
   await jsonFile("parity-evidence.json", parityEvidence);
