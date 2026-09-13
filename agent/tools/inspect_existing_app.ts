@@ -75,7 +75,7 @@ export default defineDynamic({
             const path = requestedPaths[index];
             if (path === undefined) return;
             const content = await sandbox.readTextFile({
-              path: `repository/${path}`,
+              path: ["repository", path].join("/"),
             });
             if (content === null) {
               missingPaths.push(path);
