@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -5,6 +6,8 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 import {
   assertExternalReferenceRoot,
+  reserveReferencePort,
+  referenceEmulatorsReady,
   snapshotReferenceSource,
 } from "./self-reproduction-reference-runtime";
 
@@ -28,5 +31,39 @@ it("copies live tracked changes without credentials or ignored runtime files", a
   } finally {
     await rm(root, { recursive: true, force: true });
     await rm(fixture, { recursive: true, force: true });
+  }
+});
+
+it("holds dual-stack reservations until explicit release", async () => {
+  const held = await reserveReferencePort();
+  try {
+    await expect(reserveReferencePort(held.port)).rejects.toMatchObject({ code: "EADDRINUSE" });
+  } finally {
+    await held.release();
+  }
+  const released = await reserveReferencePort(held.port);
+  await released.release();
+});
+
+it("requires both emulator API readbacks, not merely the reference app", async () => {
+  const held = await reserveReferencePort();
+  const { port } = held;
+  await held.release();
+  let calls = 0;
+  const server = createServer((request, response) => {
+    calls += 1;
+    response.writeHead(request.url === "/v2/user" ? 200 : 404);
+    response.end("{}");
+  });
+  await new Promise<void>((resolve) => {
+    server.listen(port, "::", resolve);
+  });
+  try {
+    expect(await referenceEmulatorsReady(port)).toBe(false);
+    expect(calls).toBe(1);
+  } finally {
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+    });
   }
 });

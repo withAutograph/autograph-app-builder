@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { copyFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { get } from "node:https";
+import { get as getHttp } from "node:http";
 import { createServer } from "node:net";
 import { dirname, isAbsolute, join, relative, resolve as resolvePath } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -58,18 +59,46 @@ export async function snapshotReferenceSource(
   }
 }
 
-async function availablePort(requestedPort = 0): Promise<number> {
+export async function reserveReferencePort(requestedPort = 0) {
   const server = createServer();
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(requestedPort, "127.0.0.1", resolve);
+    // Emulator listens on the dual-stack wildcard, not IPv4 loopback alone.
+    server.listen({ port: requestedPort, host: "::", ipv6Only: false }, resolve);
   });
   const address = server.address();
-  const port = typeof address === "object" && address ? address.port : 0;
-  await new Promise<void>((resolve) => {
-    server.close(() => resolve());
-  });
-  return port;
+  if (!address || typeof address === "string") throw new Error("Port reservation unavailable.");
+  return {
+    port: address.port,
+    release: () =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      }),
+  };
+}
+
+export async function referenceEmulatorsReady(basePort: number): Promise<boolean> {
+  const checks = await Promise.all(
+    ["/v2/user", "/user"].map(
+      (path, index) =>
+        new Promise<boolean>((resolve) => {
+          const request = getHttp(
+            `http://localhost:${basePort + index}${path}`,
+            {
+              headers: { authorization: "Bearer emulate_local_provider_token" },
+              timeout: 2000,
+            },
+            (response) => {
+              response.resume();
+              resolve(response.statusCode === 200);
+            },
+          );
+          request.on("error", () => resolve(false));
+          request.on("timeout", () => request.destroy());
+        }),
+    ),
+  );
+  return checks.every(Boolean);
 }
 
 function probe(url: string): Promise<boolean> {
@@ -91,16 +120,33 @@ export async function startSelfReproductionReferenceRuntime(input: {
 }): Promise<{ receipt: ReferenceRuntimeReceipt; stop: () => Promise<void> }> {
   const fixtureRoot = join(resolvePath(input.runtimeRoot), `reference-${randomUUID()}`);
   assertExternalReferenceRoot(input.sourceRoot, fixtureRoot);
-  const appPort = await availablePort();
-  const databasePort = await availablePort();
-  let emulatorPort = await availablePort();
-  for (;;) {
-    try {
-      await availablePort(emulatorPort + 1);
-      break;
-    } catch {
-      emulatorPort = await availablePort();
+  const reservations: Awaited<ReturnType<typeof reserveReferencePort>>[] = [];
+  const reserve = async (port = 0) => {
+    const reservation = await reserveReferencePort(port);
+    reservations.push(reservation);
+    return reservation.port;
+  };
+  const releaseReservations = async () => {
+    await Promise.all(reservations.splice(0).map((reservation) => reservation.release()));
+  };
+  let appPort: number;
+  let databasePort: number;
+  let emulatorPort: number;
+  try {
+    appPort = await reserve();
+    databasePort = await reserve();
+    for (;;) {
+      emulatorPort = await reserve();
+      try {
+        await reserve(emulatorPort + 1);
+        break;
+      } catch {
+        await reservations.pop()!.release();
+      }
     }
+  } catch (error) {
+    await releaseReservations();
+    throw error;
   }
   const environment = {
     APP_BUILDER_LOCAL_PORT: String(appPort),
@@ -170,6 +216,7 @@ export async function startSelfReproductionReferenceRuntime(input: {
     const log = join(fixtureRoot, "reference-server.log");
     receipt.logs.push(log);
     const output = createWriteStream(log);
+    await releaseReservations();
     server = spawn(input.miseExecutable, ["run", "app:dev-emulated"], {
       cwd: fixtureRoot,
       env: {
@@ -192,15 +239,20 @@ export async function startSelfReproductionReferenceRuntime(input: {
     while (Date.now() < deadline) {
       if (startupError || server.exitCode !== null)
         throw new Error("Reference server exited during startup.");
-      if (await probe(`${receipt.referenceUrl}/auth/sign-in`)) {
+      if (
+        (await probe(`${receipt.referenceUrl}/auth/sign-in`)) &&
+        (await referenceEmulatorsReady(emulatorPort))
+      ) {
         receipt.status = "available";
-        receipt.reason = "Isolated emulated reference authentication server is ready.";
+        receipt.reason =
+          "Isolated reference authentication server and both provider emulators are ready.";
         break;
       }
       await delay(500);
     }
     if (receipt.status !== "available") throw new Error("Reference server readiness timed out.");
   } catch (error) {
+    await releaseReservations();
     receipt.reason = error instanceof Error ? error.message : "Reference setup failed.";
     await stop();
   }
