@@ -23,14 +23,14 @@ describe("approval-bound implementation files", () => {
         content: "CREATE TABLE drafts (id text PRIMARY KEY);",
       },
     ]);
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const writeTextFile = vi.fn(async () => {});
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const executor = vi.fn(async () => ({
-      exitCode: 0,
-      stderr: "",
-      stdout: "receipt",
-    }));
+    const writeTextFile = vi.fn(() => Promise.resolve());
+    const executor = vi.fn(() =>
+      Promise.resolve({
+        exitCode: 0,
+        stderr: "",
+        stdout: "receipt",
+      }),
+    );
     const wrapped = withImplementationFiles(executor, files);
 
     await expect(
@@ -63,9 +63,9 @@ describe("approval-bound implementation files", () => {
       assertImplementationArchitecture(
         [
           {
-            path: "app/page.tsx",
             content:
               '"use client"; localStorage.setItem("draft", "value"); export default function Page() { return null; }',
+            path: "app/page.tsx",
           },
         ],
         "kernel",
@@ -78,14 +78,14 @@ describe("approval-bound implementation files", () => {
       assertImplementationArchitecture(
         [
           {
-            path: "app/page.tsx",
             content:
               'import Form from "./form"; export default function Page() { return <Form />; }',
+            path: "app/page.tsx",
           },
-          { path: "app/actions.ts", content: '"use server"; export async function save() {}' },
+          { content: '"use server"; export async function save() {}', path: "app/actions.ts" },
           {
-            path: "app/form.tsx",
             content: '"use client"; export default function Form() { return <button />; }',
+            path: "app/form.tsx",
           },
         ],
         "kernel",

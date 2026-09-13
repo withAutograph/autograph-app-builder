@@ -1,6 +1,6 @@
 /* oxlint-disable eslint/no-await-in-loop -- paired browser states must execute sequentially to preserve isolation and deterministic evidence. */
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import path from "node:path";
 import { chromium } from "playwright";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { captureStates, desktopViewports, sides } from "./self-reproduction-parity";
@@ -107,8 +107,8 @@ export async function writePairedCaptureManifest(
     schemaVersion: "self-reproduction-captures/v1",
     visualScoresAdvisory: true,
   };
-  const manifestPath = join(outputRoot, "parity/captures/manifest.json");
-  await mkdir(dirname(manifestPath), { recursive: true });
+  const manifestPath = path.join(outputRoot, "parity/captures/manifest.json");
+  await mkdir(path.dirname(manifestPath), { recursive: true });
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
   return manifest;
 }
@@ -153,8 +153,8 @@ export async function captureParity(input: {
           const prepared = await adapter.prepare(page, state);
           if (prepared.ready) {
             const assertions = await adapter.exercise(page, state, async () => {
-              await mkdir(dirname(join(input.outputRoot, png)), { recursive: true });
-              await page.screenshot({ fullPage: true, path: join(input.outputRoot, png) });
+              await mkdir(path.dirname(path.join(input.outputRoot, png)), { recursive: true });
+              await page.screenshot({ fullPage: true, path: path.join(input.outputRoot, png) });
               captured = true;
             });
             result = {
@@ -205,9 +205,9 @@ export async function captureParity(input: {
             // Cleanup errors are intentionally ignored.
           });
         }
-        await mkdir(dirname(join(input.outputRoot, receipt)), { recursive: true });
+        await mkdir(path.dirname(path.join(input.outputRoot, receipt)), { recursive: true });
         await writeFile(
-          join(input.outputRoot, receipt),
+          path.join(input.outputRoot, receipt),
           `${JSON.stringify({ side, state, viewport, ...result }, null, 2)}\n`,
           { mode: 0o600 },
         );

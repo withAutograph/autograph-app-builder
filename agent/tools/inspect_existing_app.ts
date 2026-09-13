@@ -68,26 +68,31 @@ export default defineDynamic({
             .toSorted()
             .slice(0, 512);
           let total = 0;
-          const files = [];
-          const missingPaths = [];
-          const omittedPaths = [];
-          for (const path of requestedPaths) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+          const files: { content: string; path: string }[] = [];
+          const missingPaths: string[] = [];
+          const omittedPaths: string[] = [];
+          const readRequestedPath = async (index: number): Promise<void> => {
+            const path = requestedPaths[index];
+            if (path === undefined) return;
             const content = await sandbox.readTextFile({
-              path: `repository/${path}`,
+              path: ["repository", path].join("/"),
             });
             if (content === null) {
               missingPaths.push(path);
-              continue;
+              await readRequestedPath(index + 1);
+              return;
             }
             const size = Buffer.byteLength(content);
             if (size > maximumFileBytes || total + size > maximumTotalBytes) {
               omittedPaths.push(path);
-              continue;
+              await readRequestedPath(index + 1);
+              return;
             }
             total += size;
             files.push({ content, path });
-          }
+            await readRequestedPath(index + 1);
+          };
+          await readRequestedPath(0);
           return {
             appId,
             availablePaths,

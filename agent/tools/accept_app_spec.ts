@@ -27,11 +27,10 @@ import planAppCreation from "./plan_app_creation";
  * own state transition makes retries safe.  This guard avoids even invoking
  * it again once the accepted design has already produced a proposal.
  */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function planAcceptedAppSpec(
+const planAcceptedAppSpec = async (
   ctx: Parameters<typeof planAppCreation.execute>[1],
   existingAppChanges?: { path: string; content: string }[],
-) {
+) => {
   const latest = appBuilderWorkflowState.get();
   await continueAcceptedAppSpec({
     phase: latest.phase,
@@ -50,7 +49,7 @@ async function planAcceptedAppSpec(
       latest.phase === "validated" ||
       latest.phase === "reviewed",
   });
-}
+};
 
 export default defineTool({
   description:

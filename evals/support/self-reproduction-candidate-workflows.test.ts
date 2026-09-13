@@ -6,35 +6,26 @@ import {
   sandboxCandidateWorkflowComparison,
 } from "./self-reproduction-candidate-workflows";
 
-function browserFixture(
+const browserFixture = (
   visible = false,
   reachable = true,
   missingDocs = false,
   serverRequest = false,
-) {
+) => {
   const locator = {
+    allTextContents: async () => ["Synthetic control"],
+    blur: vi.fn(),
+    click: vi.fn(),
+    count: async () => 0,
+    fill: vi.fn(),
     first: () => locator,
+    inputValue: async () => "Default draft value",
     isVisible: async () => visible,
     textContent: async () =>
       "Unchanged visible candidate content long enough to look like documentation",
-    click: vi.fn(),
-    fill: vi.fn(),
-    blur: vi.fn(),
     waitFor: async () => {},
-    inputValue: async () => "Default draft value",
-    count: async () => 0,
-    allTextContents: async () => ["Synthetic control"],
   };
   const page = {
-    setDefaultTimeout: vi.fn(),
-    on: (
-      _event: string,
-      listener: (request: { method: () => string; url: () => string }) => void,
-    ) => {
-      if (serverRequest)
-        listener({ method: () => "POST", url: () => "https://candidate.example/api/create" });
-    },
-    goto: async () => ({ ok: () => reachable }),
     getByRole: (_role: string, options?: { name?: RegExp }) => {
       if (missingDocs && options?.name?.source.includes("docs")) {
         const absent = { ...locator, first: () => absent, isVisible: async () => false };
@@ -42,15 +33,24 @@ function browserFixture(
       }
       return locator;
     },
-    locator: () => locator,
     getByText: () => locator,
-    waitForLoadState: vi.fn(),
     goBack: vi.fn(),
-    waitForTimeout: vi.fn(),
+    goto: async () => ({ ok: () => reachable }),
+    locator: () => locator,
+    on: (
+      _event: string,
+      listener: (request: { method: () => string; url: () => string }) => void,
+    ) => {
+      if (serverRequest)
+        listener({ method: () => "POST", url: () => "https://candidate.example/api/create" });
+    },
     reload: vi.fn(),
+    setDefaultTimeout: vi.fn(),
     url: () => "https://candidate.example/app/",
+    waitForLoadState: vi.fn(),
+    waitForTimeout: vi.fn(),
   };
-  const context = { newPage: async () => page, close: vi.fn() };
+  const context = { close: vi.fn(), newPage: async () => page };
   return { newContext: async () => context };
 }
 
@@ -116,13 +116,13 @@ it("preserves unknown assertions when converting retained evaluator outcomes", (
   const receipts = candidateWorkflowReceipts(
     [
       {
+        assertions: [
+          { detail: "Observed acknowledgement", id: "write-acknowledged", passed: true },
+          { detail: "No readback fixture", id: "revision-advanced", passed: null },
+        ],
+        reason: "Durability needs readback",
         requirementId: "durable-draft",
         status: "unassessed",
-        reason: "Durability needs readback",
-        assertions: [
-          { id: "write-acknowledged", passed: true, detail: "Observed acknowledgement" },
-          { id: "revision-advanced", passed: null, detail: "No readback fixture" },
-        ],
       },
     ],
     "candidate-workflows.json",
@@ -146,10 +146,10 @@ it("retains a proven failure if later infrastructure prevents completion", () =>
   const receipts = candidateWorkflowReceipts(
     [
       {
+        assertions: [{ detail: "Inert Docs control", id: "docs-readable", passed: false }],
+        reason: "Browser later disconnected",
         requirementId: "documentation",
         status: "blocked",
-        reason: "Browser later disconnected",
-        assertions: [{ id: "docs-readable", passed: false, detail: "Inert Docs control" }],
       },
     ],
     "candidate-workflows.json",

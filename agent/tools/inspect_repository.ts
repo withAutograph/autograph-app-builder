@@ -26,17 +26,20 @@ export default defineTool({
   async execute({ path, paths }, ctx) {
     if (paths?.length) {
       const sandbox = await ctx.getSandbox();
-      const files = [];
-      const missingPaths = [];
-      for (const requestedPath of paths) {
+      const files: { content: string; path: string }[] = [];
+      const missingPaths: string[] = [];
+      const readRequestedPath = async (index: number): Promise<void> => {
+        const requestedPath = paths[index];
+        if (requestedPath === undefined) return;
         const relativePath = requestedPath.replace(/^\/workspace\/repository\//u, "");
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const content = await sandbox.readTextFile({
-          path: `/workspace/repository/${relativePath}`,
+          path: ["/workspace/repository", relativePath].join("/"),
         });
         if (content === null) missingPaths.push(requestedPath);
         else files.push({ content, path: requestedPath });
-      }
+        await readRequestedPath(index + 1);
+      };
+      await readRequestedPath(0);
       return { files, missingPaths };
     }
     // Some models use the runtime-visible workspace path for their first
@@ -83,14 +86,17 @@ export default defineTool({
     const sandbox = await ctx.getSandbox();
     const availablePaths: string[] = [];
     const missingPaths: string[] = [];
-    for (const overviewPath of sandboxOverviewPaths) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+    const readOverviewPath = async (index: number): Promise<void> => {
+      const overviewPath = sandboxOverviewPaths[index];
+      if (overviewPath === undefined) return;
       const content = await sandbox.readTextFile({
-        path: `repository/${overviewPath}`,
+        path: ["repository", overviewPath].join("/"),
       });
       if (content === null) missingPaths.push(overviewPath);
       else availablePaths.push(overviewPath);
-    }
+      await readOverviewPath(index + 1);
+    };
+    await readOverviewPath(0);
     return {
       availablePaths,
       workspacePath: developmentWorkspacePath,

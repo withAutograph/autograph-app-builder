@@ -16,8 +16,7 @@ import {
   proposalFromJournal,
 } from "@/lib/repository/local-publication";
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function publicationWorkflow() {
+const publicationWorkflow = () => {
   const workflow = appBuilderWorkflowState.get();
   if (
     workflow.phase !== "reviewed" &&
@@ -29,15 +28,14 @@ function publicationWorkflow() {
       "An exact separately reviewed change set is required before local publication.",
     );
   return workflow;
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function assertJournalMatchesWorkflow(
+const assertJournalMatchesWorkflow = (
   workflow: ReturnType<typeof publicationWorkflow>,
   destinationPath: string,
   expectedReviewDigest: string,
   journal: NonNullable<Awaited<ReturnType<typeof readLocalPublicationJournal>>>,
-) {
+) => {
   if (
     destinationPath !== workflow.sourceReceipt.sourcePath ||
     destinationPath !== journal.destinationPath ||
@@ -67,15 +65,14 @@ function assertJournalMatchesWorkflow(
   const expectedStatus = workflow.phase === "publication_failed" ? "failed" : "succeeded";
   if (journal.status !== expectedStatus || workflow.publicationReceipt.digest !== journal.digest)
     throw new Error("The terminal workflow does not have its exact terminal publication journal.");
-}
+};
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function exactLocalPublicationProposal(input: {
+export const exactLocalPublicationProposal = async (input: {
   destinationPath: string;
   expectedReviewDigest: string;
-}) {
+}) => {
   if (process.env.APP_BUILDER_LOCAL_PUBLICATION !== "1")
     throw new Error(
       "Local publication is disabled until APP_BUILDER_LOCAL_PUBLICATION=1 is explicitly configured.",
@@ -99,7 +96,7 @@ export async function exactLocalPublicationProposal(input: {
   )
     throw new Error("The selected destination is not the exact original source checkout.");
   return proposal;
-}
+};
 
 export default defineTool({
   description:

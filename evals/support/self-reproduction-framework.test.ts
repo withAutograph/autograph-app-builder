@@ -1,13 +1,13 @@
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
 import { runTrustedFrameworkEvidence } from "./self-reproduction-framework";
 import { frameworkMatrix } from "./self-reproduction-parity";
 
-function browser() {
+const browser = () => {
   const close = vi.fn(() => Promise.resolve());
   const page = {};
   return {
@@ -17,11 +17,12 @@ function browser() {
       newContext: () => Promise.resolve({ close, newPage: () => Promise.resolve(page) }),
     } as never,
   };
-}
+};
 
 const adapter = {
   exerciseBrowser: (_page: unknown, id: string) => {
-    const requirement = frameworkMatrix.find((row) => row.id === id)!;
+    const requirement = frameworkMatrix.find((row) => row.id === id);
+    if (!requirement) throw new Error(`Unknown framework requirement: ${id}`);
     return Promise.resolve({
       artifacts: [],
       assertions: requirement.assertions.map((assertion) => ({
@@ -57,7 +58,7 @@ const adapter = {
 
 describe("trusted framework evidence", () => {
   it("combines source and browser evidence and uses instant navigation", async () => {
-    const outputRoot = await mkdtemp(join(tmpdir(), "self-reproduction-framework-"));
+    const outputRoot = await mkdtemp(path.join(tmpdir(), "self-reproduction-framework-"));
     const fixture = browser();
     const runInstant = vi.fn(() => Promise.resolve());
     const result = await runTrustedFrameworkEvidence({
@@ -75,7 +76,7 @@ describe("trusted framework evidence", () => {
     expect(
       JSON.parse(
         await readFile(
-          join(outputRoot, "parity/framework/instant-navigation/candidate.json"),
+          path.join(outputRoot, "parity/framework/instant-navigation/candidate.json"),
           "utf-8",
         ),
       ),
@@ -83,7 +84,7 @@ describe("trusted framework evidence", () => {
   });
 
   it("does not credit source review when browser evidence is unavailable", async () => {
-    const outputRoot = await mkdtemp(join(tmpdir(), "self-reproduction-framework-missing-"));
+    const outputRoot = await mkdtemp(path.join(tmpdir(), "self-reproduction-framework-missing-"));
     const fixture = browser();
     const result = await runTrustedFrameworkEvidence({
       adapters: {

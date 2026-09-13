@@ -8,8 +8,7 @@ import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 
 export default defineTool({
   description: "Read one exact session-scoped prototype artifact by its content digest.",
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
-  async execute({ path, digest }, ctx) {
+  execute({ path, digest }, ctx) {
     const current = appBuilderWorkflowState.get();
     if (current.phase === "empty") throw new Error("No prototype artifact is available.");
     const artifact = exactPrototypeArtifact(current.artifacts, {

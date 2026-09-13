@@ -1,6 +1,6 @@
 /* oxlint-disable eslint/no-await-in-loop -- workflow cases run sequentially to preserve deterministic durable state. */
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import path from "node:path";
 
 import type { Browser, BrowserContext, BrowserContextOptions, Page } from "playwright";
 
@@ -52,38 +52,36 @@ export interface TrustedWorkflowRun {
 
 const testedWorkflows = workflowMatrix.filter((item) => item.id !== "anonymous-entry");
 
-function failedObservation(
+const failedObservation = (
   requirementId: WorkflowId,
   reason: string,
   receipt: string,
-): Observation {
-  return {
-    artifacts: [receipt],
-    assertions: [
-      {
-        artifacts: [receipt],
-        detail: "The trusted browser workflow did not complete.",
-        id: "fixture-execution",
-        passed: false,
-      },
-    ],
-    disposition: "observed",
-    method: "browser",
-    reason,
-    requirementId,
-  };
-}
+): Observation => ({
+  artifacts: [receipt],
+  assertions: [
+    {
+      artifacts: [receipt],
+      detail: "The trusted browser workflow did not complete.",
+      id: "fixture-execution",
+      passed: false,
+    },
+  ],
+  disposition: "observed",
+  method: "browser",
+  reason,
+  requirementId,
+});
 
 /**
  * Uses already-running applications and an already-available browser. The
  * adapters are evaluator code: generated applications can expose normal
  * fixture endpoints, but cannot author observations or assertion outcomes.
  */
-export async function runTrustedBrowserWorkflows(input: {
+export const runTrustedBrowserWorkflows = async (input: {
   browser: Browser;
   outputRoot: string;
   adapters: Partial<Record<(typeof sides)[number], TrustedBrowserWorkflowAdapter>>;
-}): Promise<TrustedWorkflowRun> {
+}): Promise<TrustedWorkflowRun> => {
   const observations: TrustedWorkflowRun["observations"] = { candidate: [], reference: [] };
   const receipts: unknown[] = [];
   for (const side of sides)
@@ -161,9 +159,9 @@ export async function runTrustedBrowserWorkflows(input: {
         schemaVersion: "self-reproduction-runtime-receipt/v1",
         side,
       });
-      await mkdir(dirname(join(input.outputRoot, receiptPath)), { recursive: true });
+      await mkdir(path.dirname(path.join(input.outputRoot, receiptPath)), { recursive: true });
       await writeFile(
-        join(input.outputRoot, receiptPath),
+        path.join(input.outputRoot, receiptPath),
         `${JSON.stringify(receipt, null, 2)}\n`,
         {
           mode: 0o600,
@@ -173,4 +171,4 @@ export async function runTrustedBrowserWorkflows(input: {
       receipts.push(receipt);
     }
   return { observations, receipts };
-}
+};

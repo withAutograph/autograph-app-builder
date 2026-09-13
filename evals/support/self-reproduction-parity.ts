@@ -305,8 +305,8 @@ export async function assessParity(
         const complete = requirement.assertions.every((id) =>
           observation.assertions.some((item) => item.id === id && item.passed),
         );
-        const retained =
-          artifacts.length > 0 && (await Promise.all(artifacts.map(artifactExists))).every(Boolean);
+        const artifactResults = await Promise.all(artifacts.map(artifactExists));
+        const retained = artifacts.length > 0 && artifactResults.every(Boolean);
         const screenshot =
           requirement.kind !== "capture" ||
           observation.artifacts.some((path) => path.endsWith(".png"));

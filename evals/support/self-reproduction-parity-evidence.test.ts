@@ -13,12 +13,13 @@ const base = {
   runId: "receipt-fixture",
 };
 
-function runtimeReceipt(
+const runtimeReceipt = (
   requirementId: string,
   disposition: "observed" | "missing-functionality" | "infrastructure-unavailable" | "not-run",
   passed = true,
-) {
-  const row = requirements.find((item) => item.id === requirementId)!;
+) => {
+  const row = requirements.find((item) => item.id === requirementId);
+  if (!row) throw new Error(`Unknown parity requirement: ${requirementId}`);
   return {
     observation: {
       artifacts: ["parity/runtime/result.json"],
@@ -37,7 +38,7 @@ function runtimeReceipt(
     schemaVersion: "self-reproduction-runtime-receipt/v1",
     side: "candidate",
   };
-}
+};
 
 describe("parity receipt ingestion", () => {
   it("maps evaluator runtime receipts to passed, failed, blocked and unassessed reason codes", async () => {
@@ -50,9 +51,8 @@ describe("parity receipt ingestion", () => {
         runtimeReceipt("retry", "not-run"),
       ],
     });
-    const rows = (await assessParity(evidence, artifactExists)).rows.filter(
-      (row) => row.side === "candidate",
-    );
+    const assessedEvidence = await assessParity(evidence, artifactExists);
+    const rows = assessedEvidence.rows.filter((row) => row.side === "candidate");
     expect(rows.find((row) => row.requirementId === "durable-draft")).toMatchObject({
       reasonCode: "observed-complete",
       status: "passed",
@@ -84,10 +84,12 @@ describe("parity receipt ingestion", () => {
       ...base,
       candidate: { ...base.candidate, output: "infrastructure-unavailable" },
     });
-    const missingRow = (await assessParity(missing, artifactExists)).rows.find(
+    const missingAssessment = await assessParity(missing, artifactExists);
+    const missingRow = missingAssessment.rows.find(
       (row) => row.side === "candidate" && row.requirementId === "durable-draft",
     );
-    const unavailableRow = (await assessParity(unavailable, artifactExists)).rows.find(
+    const unavailableAssessment = await assessParity(unavailable, artifactExists);
+    const unavailableRow = unavailableAssessment.rows.find(
       (row) => row.side === "candidate" && row.requirementId === "durable-draft",
     );
     expect(missingRow).toMatchObject({ reasonCode: "output-missing", status: "failed" });
@@ -100,7 +102,8 @@ describe("parity receipt ingestion", () => {
   it("ingests capture receipts only when viewport, state and requirement agree", async () => {
     const [viewport] = desktopViewports;
     const requirementId = `capture/${viewport.name}/keyboard`;
-    const row = requirements.find((item) => item.id === requirementId)!;
+    const row = requirements.find((item) => item.id === requirementId);
+    if (!row) throw new Error(`Unknown parity requirement: ${requirementId}`);
     const receipt = {
       artifacts: ["parity/captures/keyboard.png", "parity/captures/keyboard.json"],
       assertions: row.assertions.map((id) => ({
@@ -118,7 +121,8 @@ describe("parity receipt ingestion", () => {
       viewport,
     };
     const evidence = parityEvidenceFromReceipts({ ...base, captureReceipts: [receipt] });
-    const assessed = (await assessParity(evidence, artifactExists)).rows.find(
+    const assessedEvidence = await assessParity(evidence, artifactExists);
+    const assessed = assessedEvidence.rows.find(
       (item) => item.side === "candidate" && item.requirementId === requirementId,
     );
     expect(assessed).toMatchObject({ reasonCode: "observed-complete", status: "passed" });

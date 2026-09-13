@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import path from "node:path";
 
 import { defineEval } from "eve/evals";
 import { satisfies } from "eve/evals/expect";
@@ -44,11 +44,11 @@ export default defineEval({
     };
     emit({ kind: "eval-started" });
     const brief = await readFile(
-      resolve(process.cwd(), "evals/self-reproduction/brief.md"),
+      path.resolve(process.cwd(), "evals/self-reproduction/brief.md"),
       "utf-8",
     );
     const answers = await readFile(
-      resolve(process.cwd(), "evals/self-reproduction/answers.json"),
+      path.resolve(process.cwd(), "evals/self-reproduction/answers.json"),
       "utf-8",
     );
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;

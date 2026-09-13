@@ -2,7 +2,7 @@ import { selfReproductionDraft } from "./self-reproduction-draft-fixture";
 import { desktopViewports } from "./self-reproduction-parity";
 
 /** Diagnostic captures only; these do not stand in for seeded parity states. */
-export function sandboxBrowserComparison() {
+export const sandboxBrowserComparison = () => {
   const artifactPaths = desktopViewports.flatMap(({ name }) => [
     `${name}/root.png`,
     `${name}/documentation.png`,
@@ -71,5 +71,5 @@ try {
   await browser.close();
 }
 `;
-  return { script, artifactPaths };
+  return { artifactPaths, script };
 }
