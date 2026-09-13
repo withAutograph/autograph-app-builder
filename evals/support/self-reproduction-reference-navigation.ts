@@ -77,7 +77,7 @@ export const referenceNavigationObservation = (input: {
       : "Exact production navigation cases are missing or did not execute; aggregate test counts provide no credit.",
     requirementId: "instant-navigation",
   };
-}
+};
 
 /** Opt-in execution uses the existing isolated production test lifecycle and JSON reporter. */
 export const runReferenceNavigationEvidence = async (input: {
@@ -148,4 +148,4 @@ export const runReferenceNavigationEvidence = async (input: {
     schemaVersion: "self-reproduction-runtime-receipt/v1" as const,
     side: "reference" as const,
   };
-}
+};

@@ -14,13 +14,13 @@ describe("approval-bound implementation files", () => {
         path: "apps/stock-exceptions/app/page.tsx",
       },
       {
-        path: "apps/stock-exceptions/app/api/drafts/route.ts",
         content: "export async function POST() { return Response.json({ saved: true }); }",
+        path: "apps/stock-exceptions/app/api/drafts/route.ts",
       },
-      { path: "apps/stock-exceptions/server/worker.mts", content: "export const worker = true;" },
+      { content: "export const worker = true;", path: "apps/stock-exceptions/server/worker.mts" },
       {
-        path: "apps/stock-exceptions/db/migrations/001.sql",
         content: "CREATE TABLE drafts (id text PRIMARY KEY);",
+        path: "apps/stock-exceptions/db/migrations/001.sql",
       },
     ]);
     const writeTextFile = vi.fn(() => Promise.resolve());
@@ -49,8 +49,8 @@ describe("approval-bound implementation files", () => {
     });
     for (const [index, file] of files.entries()) {
       expect(writeTextFile).toHaveBeenNthCalledWith(index + 1, {
-        path: `repository/${file.path}`,
         content: file.content,
+        path: `repository/${file.path}`,
       });
     }
     expect(

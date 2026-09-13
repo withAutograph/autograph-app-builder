@@ -131,7 +131,7 @@ export const exerciseReferenceLifecycle = async (input: {
       "independent child generation",
     ],
   };
-}
+};
 
 /** Uses the evaluator-owned disposable reference database; retains rows for readback. */
 export const runReferenceLifecycle = async (input: { databaseUrl: string; outputRoot: string }) => {
@@ -178,4 +178,4 @@ export const runReferenceLifecycle = async (input: { databaseUrl: string; output
   } finally {
     await sql.end();
   }
-}
+};

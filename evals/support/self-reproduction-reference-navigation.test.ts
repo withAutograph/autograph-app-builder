@@ -6,15 +6,15 @@ const titles = [
   "real Sign In Link uses a prefetched production destination",
 ];
 const report = (statuses: string[]) => ({
-    suites: [
-      {
-        file: "navigation.spec.ts",
-        specs: titles.map((title, index) => ({
-          tests: [{ results: [{ status: statuses[index] }] }],
-          title,
-        })),
-      },
-    ],
+  suites: [
+    {
+      file: "navigation.spec.ts",
+      specs: titles.map((title, index) => ({
+        tests: [{ results: [{ status: statuses[index] }] }],
+        title,
+      })),
+    },
+  ],
 });
 describe("reference navigation evidence", () => {
   it("credits exact direct and Link tests with resolved controls", () => {

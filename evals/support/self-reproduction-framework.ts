@@ -164,7 +164,9 @@ export const runTrustedFrameworkEvidence = async (input: {
           }
         } catch (error) {
           const diagnosticPath = `parity/framework/${requirement.id}/${side}-error.json`;
-          await mkdir(path.dirname(path.join(input.outputRoot, diagnosticPath)), { recursive: true });
+          await mkdir(path.dirname(path.join(input.outputRoot, diagnosticPath)), {
+            recursive: true,
+          });
           await writeFile(
             path.join(input.outputRoot, diagnosticPath),
             JSON.stringify(
@@ -207,9 +209,9 @@ export const runTrustedFrameworkEvidence = async (input: {
         schemaVersion: "self-reproduction-runtime-receipt/v1",
         side,
       });
-        await mkdir(path.dirname(path.join(input.outputRoot, receiptPath)), { recursive: true });
+      await mkdir(path.dirname(path.join(input.outputRoot, receiptPath)), { recursive: true });
       await writeFile(
-          path.join(input.outputRoot, receiptPath),
+        path.join(input.outputRoot, receiptPath),
         `${JSON.stringify(receipt, null, 2)}\n`,
         {
           mode: 0o600,
@@ -219,4 +221,4 @@ export const runTrustedFrameworkEvidence = async (input: {
       receipts.push(receipt);
     }
   return { observations, receipts };
-}
+};

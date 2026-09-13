@@ -7,25 +7,22 @@ interface SourceFile {
 }
 
 /** Structural hints guide a reviewer; they do not establish framework behavior. */
-const structuralHints = (files: readonly SourceFile[]) => (
-  {
-    appRouterEntries: files
-      .filter((file) => /(?:^|\/)app\/(?:page|layout)\.[cm]?[jt]sx?$/u.test(file.path))
-      .map((file) => file.path),
-    clientDirectiveFiles: files
-      .filter((file) => /^\s*["']use client["']/u.test(file.content))
-      .map((file) => file.path),
-    serverDirectiveFiles: files
-      .filter((file) => /["']use server["']/u.test(file.content))
-      .map((file) => file.path),
-    suspenseCandidateFiles: files
-      .filter(
-        (file) =>
-          /Suspense/u.test(file.content) || /(?:^|\/)loading\.[cm]?[jt]sx?$/u.test(file.path),
-      )
-      .map((file) => file.path),
-  }
-)
+const structuralHints = (files: readonly SourceFile[]) => ({
+  appRouterEntries: files
+    .filter((file) => /(?:^|\/)app\/(?:page|layout)\.[cm]?[jt]sx?$/u.test(file.path))
+    .map((file) => file.path),
+  clientDirectiveFiles: files
+    .filter((file) => /^\s*["']use client["']/u.test(file.content))
+    .map((file) => file.path),
+  serverDirectiveFiles: files
+    .filter((file) => /["']use server["']/u.test(file.content))
+    .map((file) => file.path),
+  suspenseCandidateFiles: files
+    .filter(
+      (file) => /Suspense/u.test(file.content) || /(?:^|\/)loading\.[cm]?[jt]sx?$/u.test(file.path),
+    )
+    .map((file) => file.path),
+});
 
 /**
  * Default discovery reports source hints only. Evaluator-owned reviews and
@@ -70,20 +67,18 @@ export const createDefaultFrameworkAdapter = (input: {
           reason: `No evaluator-owned source review is bound. Structural hints (not assertion evidence): ${JSON.stringify(hints)}`,
         })),
   };
-}
+};
 
 export const defaultFrameworkRequirementIds = frameworkMatrix.map((row) => row.id);
 
 export const createDefaultFrameworkAdapters = (input: {
   reference?: { files: readonly SourceFile[]; baseURL: string };
   candidate?: { files: readonly SourceFile[]; baseURL: string };
-}): Partial<Record<"reference" | "candidate", TrustedFrameworkAdapter>> => (
-  {
-    ...(input.reference
-      ? { reference: createDefaultFrameworkAdapter({ side: "reference", ...input.reference }) }
-      : {}),
-    ...(input.candidate
-      ? { candidate: createDefaultFrameworkAdapter({ side: "candidate", ...input.candidate }) }
-      : {}),
-  }
-)
+}): Partial<Record<"reference" | "candidate", TrustedFrameworkAdapter>> => ({
+  ...(input.reference
+    ? { reference: createDefaultFrameworkAdapter({ side: "reference", ...input.reference }) }
+    : {}),
+  ...(input.candidate
+    ? { candidate: createDefaultFrameworkAdapter({ side: "candidate", ...input.candidate }) }
+    : {}),
+});

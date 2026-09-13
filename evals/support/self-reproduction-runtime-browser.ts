@@ -72,4 +72,4 @@ try {
 }
 `;
   return { artifactPaths, script };
-}
+};

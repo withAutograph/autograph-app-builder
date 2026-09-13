@@ -157,7 +157,9 @@ it("keeps a missing browser fixture unassessed after a source review", async () 
 });
 
 it("retains an executed instant assertion failure as observed failure", async () => {
-  const outputRoot = await mkdtemp(path.join(tmpdir(), "self-reproduction-framework-instant-failure-"));
+  const outputRoot = await mkdtemp(
+    path.join(tmpdir(), "self-reproduction-framework-instant-failure-"),
+  );
   const result = await runTrustedFrameworkEvidence({
     adapters: { candidate: adapter as never },
     browser: browser().value,

@@ -104,7 +104,8 @@ export const exerciseCandidateBrowserWorkflows = async (
               returnNavigationPassed =
                 (await exists(originalEditor)) &&
                 (await originalEditor.inputValue()) === originalValue;
-            else if (navigated) returnNavigationPassed = page.url() === initialURL && (await exists(docs));
+            else if (navigated)
+              returnNavigationPassed = page.url() === initialURL && (await exists(docs));
             else returnNavigationPassed = null;
             check(
               "return-navigation-works",
@@ -137,7 +138,10 @@ export const exerciseCandidateBrowserWorkflows = async (
             const nameValue = await name.inputValue();
             const briefValue = await brief.inputValue();
             let draftDurability: boolean | null;
-            if (nameValue === "Evaluator persistence sentinel" && briefValue.includes("independent issue tracker"))
+            if (
+              nameValue === "Evaluator persistence sentinel" &&
+              briefValue.includes("independent issue tracker")
+            )
               draftDurability = true;
             else if (writes.length > 0 || !acknowledged) draftDurability = null;
             else draftDurability = false;
@@ -244,15 +248,15 @@ export const exerciseCandidateBrowserWorkflows = async (
               else linkedStatus = false;
               let linkedReason: string;
               if (count > 0)
-                linkedReason = "Creation exposed a navigable artifact link; its contents still require verification.";
+                linkedReason =
+                  "Creation exposed a navigable artifact link; its contents still require verification.";
               else if (writes.length > 0)
-                linkedReason = "A server request was observed but no child artifact is available yet; completion needs a durable job fixture.";
-              else linkedReason = "No server operation or navigable child artifact exists after the visible creation flow.";
-              check(
-                "child-artifact-linked",
-                linkedStatus,
-                linkedReason,
-              );
+                linkedReason =
+                  "A server request was observed but no child artifact is available yet; completion needs a durable job fixture.";
+              else
+                linkedReason =
+                  "No server operation or navigable child artifact exists after the visible creation flow.";
+              check("child-artifact-linked", linkedStatus, linkedReason);
               if (count > 0) {
                 const href = await links.first().getAttribute("href");
                 if (
@@ -329,7 +333,7 @@ export const exerciseCandidateBrowserWorkflows = async (
     await retain(outcomes);
   }
   return outcomes;
-}
+};
 
 export const sandboxCandidateWorkflowComparison = () => {
   const script = `
@@ -344,13 +348,14 @@ try { await run(browser,input.baseURL,async outcomes => {await writeFile(process
 finally {await browser.close();}
 `;
   return { artifactPaths: [] as string[], script };
-}
+};
 
 /** Convert only evaluator-produced observations; unknown assertions stay unknown. */
 export const candidateWorkflowReceipts = (
   outcomes: CandidateWorkflowOutcome[],
   artifactPath: string,
-) => outcomes.map((outcome) =>
+) =>
+  outcomes.map((outcome) =>
     runtimeReceiptSchema.parse({
       observation: {
         artifacts: [artifactPath],
@@ -365,7 +370,10 @@ export const candidateWorkflowReceipts = (
           if (outcome.assertions.some((item) => item.passed === false)) return "observed";
           if (outcome.status === "blocked") return "infrastructure-unavailable";
           if (outcome.status === "unassessed") return "not-run";
-          if (outcome.status === "failed" && !outcome.assertions.some((item) => item.passed === false))
+          if (
+            outcome.status === "failed" &&
+            !outcome.assertions.some((item) => item.passed === false)
+          )
             return "missing-functionality";
           return "observed";
         })(),

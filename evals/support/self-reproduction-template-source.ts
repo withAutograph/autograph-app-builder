@@ -52,4 +52,4 @@ export const prepareSelfReproductionTemplateSource = async (input: {
     // Local source checkouts need not have an origin remote.
   }
   return { acquisition, remote, revision, sourcePath };
-}
+};

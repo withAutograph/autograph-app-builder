@@ -52,7 +52,7 @@ const browserFixture = (
   };
   const context = { close: vi.fn(), newPage: async () => page };
   return { newContext: async () => context };
-}
+};
 
 it("leaves unfamiliar layouts unassessed and retains each partial outcome", async () => {
   const retain = vi.fn();

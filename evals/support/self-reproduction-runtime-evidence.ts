@@ -39,4 +39,4 @@ export const mergeRuntimeEvidence = (input: {
     dispositions.set(key, observation.disposition);
   }
   return [...invalid, ...receipts.values()];
-}
+};

@@ -86,7 +86,7 @@ export default defineEval({
     try {
       assertAcceptedAppSpec(status);
     } catch (error) {
-      emit({ kind: "eval-completed", candidate: { status: "unavailable", reason: String(error) } });
+      emit({ candidate: { reason: String(error), status: "unavailable" }, kind: "eval-completed" });
       throw error;
     }
 
@@ -196,11 +196,11 @@ export default defineEval({
 
     if (phase !== "validated" && phase !== "reviewed") {
       emit({
-        kind: "eval-completed",
         candidate: {
-          status: "unavailable",
           reason: `Generation stopped in workflow phase ${String(phase)}.`,
+          status: "unavailable",
         },
+        kind: "eval-completed",
       });
       throw new Error(`Cannot review or export a candidate in workflow phase ${String(phase)}.`);
     }

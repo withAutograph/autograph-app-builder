@@ -6,18 +6,18 @@ const observation = (
   disposition: Observation["disposition"],
   reason: string = disposition,
 ): Observation => ({
-    artifacts: ["candidate-runtime.json"],
-    assertions: [],
-    disposition,
-    method: "browser",
-    reason,
-    requirementId: "documentation",
+  artifacts: ["candidate-runtime.json"],
+  assertions: [],
+  disposition,
+  method: "browser",
+  reason,
+  requirementId: "documentation",
 });
 const receipt = (value: Observation, side = "candidate") => ({
-    observation: value,
-    producer: "evaluator",
-    schemaVersion: "self-reproduction-runtime-receipt/v1",
-    side,
+  observation: value,
+  producer: "evaluator",
+  schemaVersion: "self-reproduction-runtime-receipt/v1",
+  side,
 });
 
 describe("runtime evidence precedence", () => {
