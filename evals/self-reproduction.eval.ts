@@ -105,13 +105,21 @@ export default defineEval({
         await respondAll("build");
         await send("Proceed with the selected build now.");
       }
-      if (
-        t.pendingInputRequests.length !== 1 ||
-        t.pendingInputRequests[0]?.action.toolName !== "apply_app_creation"
-      )
-        throw new Error("Expected one apply_app_creation approval request.");
-      emit({ kind: "response", request: "apply_app_creation", response: "approve" });
-      await respondAll("approve");
+      const approvePendingApply = async (approvals = 0): Promise<number> => {
+        if (
+          approvals >= 3 ||
+          t.pendingInputRequests.length !== 1 ||
+          t.pendingInputRequests[0]?.action.toolName !== "apply_app_creation"
+        )
+          return approvals;
+        emit({ kind: "response", request: "apply_app_creation", response: "approve" });
+        await respondAll("approve");
+        return approvePendingApply(approvals + 1);
+      };
+      const approvals = await approvePendingApply();
+      if (approvals === 0) throw new Error("Expected one apply_app_creation approval request.");
+      if (t.pendingInputRequests.length > 0)
+        throw new Error("Apply repair exceeded the bounded approval sequence.");
     };
     const readWorkflowPhase = async () => {
       const turn = await send("Report the current artifact workflow status without changing it.");
