@@ -108,6 +108,7 @@ let pairedCaptures: PairedCaptureRun | undefined;
 let trustedWorkflowReceipts: unknown[] = [];
 let trustedFrameworkReceipts: unknown[] = [];
 let referenceFixtureRoot: string | undefined;
+let referenceDatabaseUrl: string | undefined;
 let stopReference: (() => Promise<void>) | undefined;
 let candidateRuntime: CandidateRuntimeReceipt | { status: "not-run" | "failed"; reason: string } = {
   status: "not-run",
@@ -991,6 +992,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       if (reference.receipt.status === "available") {
         values["reference-url"] = reference.receipt.referenceUrl;
         referenceFixtureRoot = reference.receipt.fixtureRoot;
+        referenceDatabaseUrl = reference.receipt.databaseUrl;
         Object.assign(process.env, reference.receipt.environment);
       }
     }
@@ -1057,6 +1059,14 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     }
     await saveReport();
     await runConfiguredPairedCaptures();
+    if (referenceDatabaseUrl) {
+      const { runReferenceLifecycle } =
+        await import("../evals/support/self-reproduction-reference-lifecycle");
+      await runReferenceLifecycle({
+        databaseUrl: referenceDatabaseUrl,
+        outputRoot: join(output, "reference-service-diagnostics"),
+      });
+    }
   } catch (error) {
     errors.push(String(sanitizeEvidence(error instanceof Error ? error.message : String(error))));
     generation = { ...generation, status: "failed" };
