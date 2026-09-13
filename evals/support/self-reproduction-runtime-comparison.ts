@@ -54,9 +54,9 @@ export async function runSandboxRuntimeComparison(input: {
   }
   // Recover partial output even after an evaluator exception or nonzero exit.
   try {
-    result.output = JSON.parse(
-      await input.session.readTextFile({ path: `${directory}/output.json` }),
-    );
+    const output = await input.session.readTextFile({ path: `${directory}/output.json` });
+    if (output === null) throw new Error("Evaluator output file is missing.");
+    result.output = JSON.parse(output);
   } catch (error) {
     result.errors.push(
       `Comparison output: ${error instanceof Error ? error.message : String(error)}`,
@@ -66,6 +66,7 @@ export async function runSandboxRuntimeComparison(input: {
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve partial artifacts individually
       const content = await input.session.readBinaryFile({ path: `${directory}/${path}` });
+      if (content === null) throw new Error("Evaluator artifact file is missing.");
       result.artifacts.push({ path, content });
     } catch (error) {
       result.errors.push(

@@ -1,3 +1,4 @@
+/* oxlint-disable eslint/require-await -- async fixtures implement Sandbox and browser APIs. */
 import { describe, expect, it, vi } from "vitest";
 import { runSandboxRuntimeComparison } from "./self-reproduction-runtime-comparison";
 
