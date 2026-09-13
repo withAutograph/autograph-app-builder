@@ -9,7 +9,7 @@ import {
 } from "@/lib/repository/branch-worktree-publication";
 import { publishReviewedChangeSetToBranchWorktree } from "@/lib/repository/node-branch-worktree-publication";
 import { branchWorktreePublicationProposalSchema } from "@/lib/agent/branch-worktree-publication-schema";
-import { exactBranchWorktreePublicationProposal } from "./branch-worktree-publication-status";
+import { exactBranchWorktreePublicationProposal } from "./branch_worktree_publication_status";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
 export default defineTool({
