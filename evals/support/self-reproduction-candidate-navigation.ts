@@ -44,13 +44,33 @@ export const exerciseCandidateNavigation = async (
     const initialURL = page.url();
     await name.fill("Navigation continuity sentinel");
     await brief.fill("Keep this draft through browser Back and Forward.");
-    const header = await page.locator("header").first().elementHandle();
+    const initialContent = await page.locator("body").textContent();
     await docs.focus();
     await docs.press("Enter");
     const back = page.getByRole("button", { name: /back to builder|return to builder/iu }).first();
-    await back.waitFor({ state: "visible", timeout: 10_000 });
+    try {
+      await back.waitFor({ state: "visible", timeout: 10_000 });
+    } catch {
+      const inert =
+        page.url() === initialURL && (await page.locator("body").textContent()) === initialContent;
+      observation.disposition = inert ? "missing-functionality" : "not-run";
+      observation.reason = inert
+        ? "The known Docs control accepted keyboard activation but left URL and visible content unchanged. Browser history continuity cannot proceed."
+        : "Docs changed the application, but its destination does not match the supported history fixture.";
+      if (inert)
+        observation.assertions = [
+          {
+            id: "back-forward-preserves-draft",
+            passed: false,
+            detail:
+              "Docs activation produced no product transition to traverse with browser history.",
+            artifacts: [],
+          },
+        ];
+      await capture("documentation");
+      return observation;
+    }
     const docsURL = page.url();
-    const sharedDuringDocs = header ? await header.evaluate((node) => node.isConnected) : undefined;
     await capture("documentation");
     await page.goBack({ waitUntil: "domcontentloaded" });
     await name.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {
@@ -63,9 +83,6 @@ export const exerciseCandidateNavigation = async (
       (await brief.inputValue()) === "Keep this draft through browser Back and Forward.";
     const focusRestored =
       restored && (await docs.evaluate((node) => node === document.activeElement));
-    const sharedAfterBack = header
-      ? await header.evaluate((node) => node.isConnected).catch(() => false)
-      : undefined;
     await capture("back");
     await page.goForward({ waitUntil: "domcontentloaded" });
     await back.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {
@@ -86,30 +103,24 @@ export const exerciseCandidateNavigation = async (
         detail: "Browser Back must restore focus to the activated Docs control.",
         artifacts: [],
       },
-      ...(header
-        ? [
-            {
-              id: "shared-layout-state-preserved",
-              passed: Boolean(sharedDuringDocs && sharedAfterBack),
-              detail:
-                "The original shared header DOM instance must remain connected during Docs navigation and browser return.",
-              artifacts: [],
-            },
-          ]
-        : []),
     ];
     observation.disposition = observation.assertions.some((assertion) => !assertion.passed)
       ? "missing-functionality"
       : "observed";
     observation.reason =
-      "Executed real browser Back/Forward with edited draft inputs and focus readback; no instant-navigation or authentication credit is implied.";
+      "Executed real browser Back/Forward with edited draft inputs and focus readback; shared-layout state has no bound contract and remains unassessed. No instant-navigation or authentication credit is implied.";
     return observation;
   } catch {
     return {
       ...observation,
-      disposition: "not-run",
+      disposition:
+        observation.disposition === "missing-functionality"
+          ? "missing-functionality"
+          : "infrastructure-unavailable",
       reason:
-        "The known entry controls were found, but the browser history fixture could not complete; retained screenshots are diagnostic.",
+        observation.disposition === "missing-functionality"
+          ? observation.reason
+          : "The browser history probe could not complete after fixture binding; retained diagnostics do not establish a product outcome.",
     };
   }
 };
@@ -136,4 +147,28 @@ try {
   await writeFile(outputPath, JSON.stringify({ observation }));
 } finally { await browser.close(); }
 `,
+});
+
+/** Failed execution must remain a linked blocker, independently of runtime readiness. */
+export const candidateNavigationReceipt = (output: { observation?: Observation } | null) => ({
+  schemaVersion: "self-reproduction-runtime-receipt/v1" as const,
+  producer: "evaluator" as const,
+  side: "candidate" as const,
+  observation: output?.observation
+    ? {
+        ...output.observation,
+        artifacts: [
+          "candidate-navigation.json",
+          ...output.observation.artifacts.map((path) => `candidate-navigation/${path}`),
+        ],
+      }
+    : {
+        requirementId: "navigation-continuity",
+        disposition: "infrastructure-unavailable" as const,
+        method: "none" as const,
+        assertions: [],
+        artifacts: ["candidate-navigation.json"],
+        reason:
+          "Candidate runtime was available, but the separate navigation probe failed to retain an evaluator observation.",
+      },
 });

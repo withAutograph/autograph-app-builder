@@ -1,4 +1,7 @@
-import { sandboxCandidateNavigation } from "../evals/support/self-reproduction-candidate-navigation";
+import {
+  candidateNavigationReceipt,
+  sandboxCandidateNavigation,
+} from "../evals/support/self-reproduction-candidate-navigation";
 import type { Page } from "playwright";
 /* oxlint-disable eslint/no-await-in-loop -- evidence files are written sequentially to preserve a recoverable audit trail. */
 import { execFileSync, spawn } from "node:child_process";
@@ -1113,24 +1116,17 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
                   await writeFile(target, artifact.content, { mode: 0o600 });
                 }
                 const navigationOutput = navigation.output as { observation?: Observation } | null;
-                if (navigationOutput?.observation) {
-                  sandboxNavigationReceipts = [
-                    {
-                      schemaVersion: "self-reproduction-runtime-receipt/v1",
-                      producer: "evaluator",
-                      side: "candidate",
-                      observation: {
-                        ...navigationOutput.observation,
-                        artifacts: [
-                          "candidate-navigation.json",
-                          ...navigationOutput.observation.artifacts.map(
-                            (path) => `candidate-navigation/${path}`,
-                          ),
-                        ],
-                      },
-                    },
-                  ];
-                }
+                sandboxNavigationReceipts = [candidateNavigationReceipt(navigationOutput)];
+                captures.push({
+                  label: "candidate navigation diagnostic",
+                  files: [
+                    "candidate-navigation.json",
+                    ...navigationArtifacts.map(({ path }) => `candidate-navigation/${path}`),
+                  ],
+                  status:
+                    navigationOutput?.observation?.disposition ??
+                    "blocked: navigation probe failed",
+                });
                 const comparison = await runSandboxRuntimeComparison({
                   session,
                   ...sandboxBrowserComparison(),
