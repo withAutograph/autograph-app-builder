@@ -405,13 +405,13 @@ function reportHtml(report: {
 }) {
   const rows = report.requirements.map(requirementRow).join("");
   const gaps = report.gaps.length
-    ? `<ol>${report.gaps.map((gap) => `<li><strong>${escape(String(gap.priority).toUpperCase())}: ${escape(String(gap.title))}</strong><p>${escape(String(gap.expected))}</p><p>${escape(String(gap.recommendation))}</p><small>${escape(String(gap.confirmed ? "Confirmed source gap" : "Blocked; cause not established"))}</small></li>`).join("")}</ol>`
+    ? `<ol>${report.gaps.map((gap) => `<li><strong>${escape(String(gap.priority).toUpperCase())}: ${escape(String(gap.title))}</strong><p>${escape(String(gap.expected))}</p><p>${escape(String(gap.recommendation))}</p><small>${escape(String(gap.confirmed ? "Observed failure; see retained evidence" : "Incomplete assessment; see status and reason"))}</small></li>`).join("")}</ol>`
     : "<p>No failed or blocked requirements were recorded.</p>";
   const diagnosticPairs = desktopViewports
     .map(({ name }) => {
       const reference = report.captures
         .find((item) => item.label === "reference")
-        ?.files.find((file) => file.endsWith(`/${name}.png`));
+        ?.files.find((file) => file.endsWith(`/${name}.png`) || file.endsWith(`/${name}-0.png`));
       const candidateCapture = report.captures
         .find((item) => item.label === "candidate diagnostic routes")
         ?.files.find((file) => file.endsWith(`/${name}/root.png`));
@@ -782,11 +782,20 @@ async function saveReport() {
       note: "Source scans are diagnostic only and never award parity credit.",
     },
     gaps: parityAssessment.rows
-      .filter((row) => row.status !== "passed")
+      .filter((row) => row.status !== "passed" && row.requirementId !== "anonymous-entry")
       .map((row) => ({
         priority: row.status === "failed" ? "high" : "medium",
         title: `${row.side}: ${row.requirementId}`,
-        expected: "Evaluator-owned behavioral evidence for every required assertion.",
+        expected:
+          workflowMatrix.find((workflow) => workflow.id === row.requirementId)?.action ??
+          "Evaluator-owned evidence for every required framework or interaction assertion.",
+        observed: row.reason,
+        evidence: row.artifacts,
+        status: row.status,
+        responsibleLayer:
+          row.status === "failed"
+            ? `${row.side} behavior or implementation; cause is documented separately`
+            : "evaluator fixture or execution infrastructure",
         recommendation: row.reason,
         confirmed: row.status === "failed",
       })),

@@ -82,3 +82,42 @@ pairs explicitly without claiming equivalent seeded states.
 
 Anonymous entry remains outside the requested cleanup priority. Hosted
 publication and provider provisioning remain unverified by design.
+
+## Executed comparison follow-up
+
+The unchanged candidate was replayed at
+`/private/tmp/self-reproduction-candidate-behavior-assessment-20260913` using
+the repaired evaluator. Production installation, build, startup, and browser
+execution passed. Actual Docs navigation and return passed. Draft reload,
+provider persistence, independent child output, cancellation persistence, and
+session recovery failed. The observed results agree with the source findings.
+
+Keyboard focus and activation passed at all three desktop sizes. Two panel
+resizing checks confirmed missing controls; the first capture raced hydration
+and remains unassessed in that preserved run. The evaluator now waits for the
+actual controls before identifying the layout. Loading, empty, and error capture
+fixtures remain unassessed; screenshots of ordinary states do not replace them.
+
+The reference passed five real browser workflows plus the separately retained
+production instant-navigation evidence. Its isolated production suite passed
+11 tests, with three assertions mapped to the instant-navigation requirement.
+The original controlled lifecycle diagnostic remains separate from browser or
+live-model proof.
+
+An evaluator source review adds confirmed missing authentication, app creation,
+preview access, provider-error handling, retry, and five framework failures.
+The supplementary assessment combines those findings with the executed results:
+candidate **17 failed, 4 passed, 17 unassessed**; reference **6 passed, 32
+unassessed**. These are requirement counts, not an aggregate similarity score.
+Anonymous entry is included only as an unassessed row and excluded from priorities.
+
+Reference capture failure was traced to the CommonJS `axe-core` namespace import
+under the production Node/tsx launcher. The corrected default import passed a
+subprocess regression and all three live reference captures. Supplementary
+reports retain capture provenance and qualify state differences explicitly.
+
+Arrusted PR 1360 merged as `6e8fcd700b2a6d5b686b2acfade770da06f8fb58` after
+passing required checks. The new automatic acquisition helper then cloned that
+canonical `main` revision through Git's configured authentication, with its
+receipt retained in `/private/tmp/self-reproduction-default-clone-proof-20260913`.
+The remaining candidate defects are not import-resolution failures.
