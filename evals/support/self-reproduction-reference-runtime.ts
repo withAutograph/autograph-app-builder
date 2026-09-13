@@ -1,4 +1,5 @@
 /* oxlint-disable eslint/no-await-in-loop -- Sequential copying and readiness polling bound resource use. */
+import { startSelfReproductionPostgres } from "./self-reproduction-postgres";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
@@ -117,6 +118,7 @@ export async function startSelfReproductionReferenceRuntime(input: {
   runtimeRoot: string;
   miseExecutable: string;
   startupTimeoutMs?: number;
+  databaseBackend?: "docker" | "process";
 }): Promise<{ receipt: ReferenceRuntimeReceipt; stop: () => Promise<void> }> {
   const fixtureRoot = join(resolvePath(input.runtimeRoot), `reference-${randomUUID()}`);
   assertExternalReferenceRoot(input.sourceRoot, fixtureRoot);
@@ -152,7 +154,7 @@ export async function startSelfReproductionReferenceRuntime(input: {
     APP_BUILDER_LOCAL_PORT: String(appPort),
     APP_BUILDER_DATABASE_PORT: String(databasePort),
     APP_BUILDER_DATABASE_CONTAINER: `self-reproduction-${randomUUID()}`,
-    APP_BUILDER_EXTERNAL_DATABASE: "0",
+    APP_BUILDER_EXTERNAL_DATABASE: input.databaseBackend === "process" ? "1" : "0",
     EMULATE_BASE_PORT: String(emulatorPort),
   };
   const receipt: ReferenceRuntimeReceipt = {
@@ -166,6 +168,7 @@ export async function startSelfReproductionReferenceRuntime(input: {
     environment,
     logs: [],
   };
+  let database: Awaited<ReturnType<typeof startSelfReproductionPostgres>> | undefined;
   let server: ReturnType<typeof spawn> | undefined;
   const run = async (args: string[], name: string): Promise<void> => {
     const log = join(fixtureRoot, `${name}.log`);
@@ -208,6 +211,7 @@ export async function startSelfReproductionReferenceRuntime(input: {
       });
       server = undefined;
     }
+    await database?.stop();
   };
   try {
     await snapshotReferenceSource(input.sourceRoot, fixtureRoot);
@@ -217,6 +221,13 @@ export async function startSelfReproductionReferenceRuntime(input: {
     receipt.logs.push(log);
     const output = createWriteStream(log);
     await releaseReservations();
+    if (input.databaseBackend === "process") {
+      database = await startSelfReproductionPostgres({
+        stateRoot: join(input.runtimeRoot, `postgres-${randomUUID()}`),
+        port: databasePort,
+      });
+      receipt.logs.push(database.log);
+    }
     server = spawn(input.miseExecutable, ["run", "app:dev-emulated"], {
       cwd: fixtureRoot,
       env: {
