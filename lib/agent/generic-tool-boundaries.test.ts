@@ -5,7 +5,10 @@ import { describe, expect, it } from "vitest";
 
 describe("generic sandbox tool boundaries", () => {
   it.each(["agent", "bash", "read-file", "write-file"])("keeps %s unavailable", async (tool) => {
-    const source = await readFile(path.resolve(process.cwd(), `agent/tools/${tool}.ts`), "utf-8");
+    const source = await readFile(
+      path.resolve(process.cwd(), `agent/tools/${tool.replaceAll("-", "_")}.ts`),
+      "utf-8",
+    );
 
     expect(source).toContain('import { disableTool } from "eve/tools";');
     expect(source).toContain("export default disableTool();");
@@ -13,8 +16,8 @@ describe("generic sandbox tool boundaries", () => {
 
   it("keeps repository inspection separate from existing-application reads", async () => {
     const [router, inspector] = await Promise.all([
-      readFile(path.resolve(process.cwd(), "agent/tools/inspect-repository.ts"), "utf-8"),
-      readFile(path.resolve(process.cwd(), "agent/tools/inspect-existing-app.ts"), "utf-8"),
+      readFile(path.resolve(process.cwd(), "agent/tools/inspect_repository.ts"), "utf-8"),
+      readFile(path.resolve(process.cwd(), "agent/tools/inspect_existing_app.ts"), "utf-8"),
     ]);
 
     expect(router).not.toContain("inspect-existing-app");
@@ -27,7 +30,7 @@ describe("generic sandbox tool boundaries", () => {
 
   it("prepares the configured development source when a model inspects its sandbox path", async () => {
     const router = await readFile(
-      path.resolve(process.cwd(), "agent/tools/inspect-repository.ts"),
+      path.resolve(process.cwd(), "agent/tools/inspect_repository.ts"),
       "utf-8",
     );
 

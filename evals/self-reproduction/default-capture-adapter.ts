@@ -42,13 +42,13 @@ function stateTarget(page: Page, state: CaptureState) {
 function unavailableState(state: CaptureState, side: "reference" | "candidate") {
   if (["loading", "empty", "error"].includes(state))
     return {
-      ready: false as const,
       disposition: "not-run" as const,
+      ready: false as const,
       reason: `The default semantic adapter has no evaluator-owned ${state} fixture binding for the ${side} application.`,
     };
   return {
-    ready: false as const,
     disposition: "missing-functionality" as const,
+    ready: false as const,
     reason: `The ${side} application exposes no visible semantic control for ${state}.`,
   };
 }
@@ -58,26 +58,14 @@ export function createSemanticCaptureAdapter(
   side: "reference" | "candidate",
 ): CaptureAdapter {
   return {
-    async prepare(page, state) {
-      try {
-        await page.goto(baseURL, { waitUntil: "domcontentloaded" });
-        return (await stateTarget(page, state)) ? { ready: true } : unavailableState(state, side);
-      } catch {
-        return {
-          ready: false,
-          disposition: "infrastructure-unavailable",
-          reason: "The application URL could not be opened by the evaluator browser.",
-        };
-      }
-    },
     async exercise(page, state, capture) {
       const target = await stateTarget(page, state);
       if (!target)
         return [
           {
+            detail: `The ${state} target disappeared before exercise.`,
             id: "fixture-execution",
             passed: false,
-            detail: `The ${state} target disappeared before exercise.`,
           },
         ];
       if (state === "panel-resize") {
@@ -94,14 +82,14 @@ export function createSemanticCaptureAdapter(
         await capture();
         return [
           {
+            detail: `Separator x-position changed from ${before?.x ?? "unavailable"} to ${after?.x ?? "unavailable"}.`,
             id: "panel-dimension-changed",
             passed: Boolean(before && after && Math.abs(after.x - before.x) >= 8),
-            detail: `Separator x-position changed from ${before?.x ?? "unavailable"} to ${after?.x ?? "unavailable"}.`,
           },
           {
+            detail: "Primary page content remained visible after the resize gesture.",
             id: "content-remains-reachable",
             passed: await page.locator("main, body").first().isVisible(),
-            detail: "Primary page content remained visible after the resize gesture.",
           },
         ];
       }
@@ -113,11 +101,11 @@ export function createSemanticCaptureAdapter(
         await page.keyboard.press("Enter");
         await page.waitForTimeout(100);
         return [
-          { id: "focus-visible", passed: focused, detail: "Semantic control received focus." },
+          { detail: "Semantic control received focus.", id: "focus-visible", passed: focused },
           {
+            detail: "Enter activation was compared against URL and visible page content.",
             id: "keyboard-activation-changes-state",
             passed: (await signature(page)) !== before,
-            detail: "Enter activation was compared against URL and visible page content.",
           },
         ];
       }
@@ -126,14 +114,14 @@ export function createSemanticCaptureAdapter(
         const text = (await target.textContent().catch(() => "")) ?? "";
         return [
           {
+            detail: "Pending UI stayed visible.",
             id: "pending-held",
             passed: await target.isVisible(),
-            detail: "Pending UI stayed visible.",
           },
           {
+            detail: "Pending UI exposed visible text or an accessible label.",
             id: "useful-loading-visible",
             passed: text.trim().length > 0 || (await target.getAttribute("aria-label")) !== null,
-            detail: "Pending UI exposed visible text or an accessible label.",
           },
         ];
       }
@@ -149,31 +137,43 @@ export function createSemanticCaptureAdapter(
       return state === "empty"
         ? [
             {
+              detail: "Empty-state guidance was visible.",
               id: "empty-state-visible",
               passed: true,
-              detail: "Empty-state guidance was visible.",
             },
             {
+              detail: "The empty-state action changed UI state.",
               id: "next-action-works",
               passed: changed,
-              detail: "The empty-state action changed UI state.",
             },
           ]
         : [
-            { id: "error-visible", passed: true, detail: "Error feedback was visible." },
+            { detail: "Error feedback was visible.", id: "error-visible", passed: true },
             {
+              detail: "The recovery action changed UI state.",
               id: "recovery-action-works",
               passed: changed,
-              detail: "The recovery action changed UI state.",
             },
           ];
+    },
+    async prepare(page, state) {
+      try {
+        await page.goto(baseURL, { waitUntil: "domcontentloaded" });
+        return (await stateTarget(page, state)) ? { ready: true } : unavailableState(state, side);
+      } catch {
+        return {
+          disposition: "infrastructure-unavailable",
+          ready: false,
+          reason: "The application URL could not be opened by the evaluator browser.",
+        };
+      }
     },
   };
 }
 
 export function createCaptureAdapters(input: { referenceURL: string; candidateURL: string }) {
   return Promise.resolve({
-    reference: createSemanticCaptureAdapter(new URL(input.referenceURL).href, "reference"),
     candidate: createSemanticCaptureAdapter(new URL(input.candidateURL).href, "candidate"),
+    reference: createSemanticCaptureAdapter(new URL(input.referenceURL).href, "reference"),
   });
 }

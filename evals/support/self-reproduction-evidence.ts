@@ -121,13 +121,15 @@ function changeSetStatusOutput(
       }
     | undefined;
   if (event?.type !== "action.result" || !event.data?.result) return undefined;
-  if (event.data.result.toolName === "change-set-status") {
+  if (["change-set-status", "change_set_status"].includes(event.data.result.toolName as string)) {
     const { output } = event.data.result;
     return output && typeof output === "object" && !Array.isArray(output)
       ? (output as Record<string, unknown>)
       : undefined;
   }
-  return event.data.toolName === "change-set-status" ? event.data.result : undefined;
+  return ["change-set-status", "change_set_status"].includes(event.data.toolName as string)
+    ? event.data.result
+    : undefined;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

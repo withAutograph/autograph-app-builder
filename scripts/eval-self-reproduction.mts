@@ -60,20 +60,20 @@ import type { CaptureAdapter, PairedCaptureRun } from "../evals/support/self-rep
 const root = resolve(import.meta.dirname, "..");
 const { values } = parseArgs({
   options: {
-    "candidate-root": { type: "string" },
     "arrusted-root": { type: "string" },
-    "candidate-url": { type: "string" },
+    "candidate-root": { type: "string" },
     "candidate-runtime": { type: "boolean" },
-    "reference-url": { type: "string" },
+    "candidate-url": { type: "string" },
     "capture-adapter": { type: "string" },
-    "workflow-adapter-module": { type: "string" },
-    "output-dir": { type: "string" },
     "generation-timeout-ms": { type: "string" },
-    "report-only": { type: "boolean" },
     generator: { type: "string" },
-    "generator-arg": { type: "string", multiple: true },
-    json: { type: "boolean" },
+    "generator-arg": { multiple: true, type: "string" },
     help: { type: "boolean" },
+    json: { type: "boolean" },
+    "output-dir": { type: "string" },
+    "reference-url": { type: "string" },
+    "report-only": { type: "boolean" },
+    "workflow-adapter-module": { type: "string" },
   },
 });
 const now = new Date().toISOString();
@@ -95,17 +95,17 @@ let revisions: Record<string, unknown> = {};
 let settings: Record<string, unknown> = {};
 let candidateFiles: Awaited<ReturnType<typeof readSource>> | undefined;
 let referenceFiles: Awaited<ReturnType<typeof readSource>> | undefined;
-let workflowEvidence: WorkflowEvidence | undefined;
+let workflowEvidence: WorkflowEvidence | null = null;
 let parityAssessment: Assessment | undefined;
 let pairedCaptures: PairedCaptureRun | undefined;
 let trustedWorkflowReceipts: unknown[] = [];
 let candidateRuntime: CandidateRuntimeReceipt | { status: "not-run" | "failed"; reason: string } = {
-  status: "not-run",
   reason: "Candidate runtime evaluation was not requested.",
+  status: "not-run",
 };
 let candidate: Record<string, unknown> = {
-  status: "unavailable",
   reason: "No candidate export has been supplied.",
+  status: "unavailable",
 };
 const errors: string[] = [];
 
@@ -137,23 +137,23 @@ async function runConfiguredPairedCaptures() {
   if (typeof loaded.createCaptureAdapters !== "function")
     throw new Error("Capture adapter must export createCaptureAdapters().");
   const adapters = await loaded.createCaptureAdapters({
-    referenceURL: values["reference-url"],
     candidateURL: values["candidate-url"],
+    referenceURL: values["reference-url"],
   });
   try {
-    pairedCaptures = await runPairedCaptureEvidence({ outputRoot: output, adapters });
+    pairedCaptures = await runPairedCaptureEvidence({ adapters, outputRoot: output });
   } catch {
     const observations = unavailableCaptureObservations(
       "The evaluator could not launch or retain its paired browser capture runtime.",
     );
     pairedCaptures = {
-      observations,
       manifest: await writePairedCaptureManifest(output, observations),
+      observations,
     };
   }
   captures.push({
-    label: "paired-state-manifest",
     files: ["parity/captures/manifest.json"],
+    label: "paired-state-manifest",
     status: "captured",
   });
 }
@@ -202,17 +202,17 @@ async function runConfiguredWorkflowAdapters(candidateRoot: string | undefined) 
       workflowMatrix
         .filter((workflow) => workflow.id !== "anonymous-entry")
         .map((workflow) => ({
-          schemaVersion: "self-reproduction-runtime-receipt/v1" as const,
-          producer: "evaluator" as const,
-          side,
           observation: {
-            requirementId: workflow.id,
-            disposition: "not-run" as const,
-            reason: "The checked-in evaluator adapter has no runtime binding for this side.",
-            method: "none" as const,
             artifacts: [],
             assertions: [],
+            disposition: "not-run" as const,
+            method: "none" as const,
+            reason: "The checked-in evaluator adapter has no runtime binding for this side.",
+            requirementId: workflow.id,
           },
+          producer: "evaluator" as const,
+          schemaVersion: "self-reproduction-runtime-receipt/v1" as const,
+          side,
         })),
     );
     // oxlint-disable-next-line eslint/no-use-before-define -- artifact writer is initialized before runtime execution
@@ -224,7 +224,7 @@ async function runConfiguredWorkflowAdapters(candidateRoot: string | undefined) 
   try {
     const { runTrustedBrowserWorkflows } =
       await import("../evals/support/self-reproduction-workflow-adapters");
-    const run = await runTrustedBrowserWorkflows({ browser, outputRoot: output, adapters });
+    const run = await runTrustedBrowserWorkflows({ adapters, browser, outputRoot: output });
     trustedWorkflowReceipts = run.receipts;
   } finally {
     await browser.close();
@@ -241,11 +241,11 @@ function loadProjectOidc(): { token: string; teamId: string; projectId: string }
     readOwnerBoundLocalFile(join(root, ".vercel/project.json"), { confidential: false }),
   );
   validateLocalVercelOidcClaims({
-    token,
-    project,
     nowEpochSeconds: Math.floor(Date.now() / 1000),
+    project,
+    token,
   });
-  return { token, teamId: project.orgId, projectId: project.projectId };
+  return { projectId: project.projectId, teamId: project.orgId, token };
 }
 
 async function readCandidateSource(
@@ -263,7 +263,7 @@ async function readCandidateSource(
         !/^(?:[^.]+|.*\.(?:[cm]?[jt]sx?|css|mdx?|json|pkl|toml|ya?ml))$/u.test(entry.name)
       )
         return [];
-      return [{ path: relative(directory, path), content: await readFile(path, "utf-8") }];
+      return [{ content: await readFile(path, "utf-8"), path: relative(directory, path) }];
     }),
   );
   return nested.flat();
@@ -278,7 +278,7 @@ async function trackedWorkspaceArchive(directory: string): Promise<Buffer> {
     .split("\0")
     .filter(Boolean);
   const chunks: Buffer[] = [];
-  const archive = createTar({ cwd: directory, portable: true, noMtime: true }, tracked);
+  const archive = createTar({ cwd: directory, noMtime: true, portable: true }, tracked);
   for await (const chunk of archive) chunks.push(Buffer.from(chunk));
   return Buffer.concat(chunks);
 }
@@ -306,7 +306,7 @@ function escape(value: string) {
   return value.replaceAll(
     /[&<>"']/gu,
     (character) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!,
+      ({ '"': "&quot;", "&": "&amp;", "'": "&#39;", "<": "&lt;", ">": "&gt;" })[character]!,
   );
 }
 
@@ -315,22 +315,22 @@ async function jsonFile(name: string, data: unknown) {
 }
 
 function revision(directory: string | undefined) {
-  if (!directory) return { status: "unavailable", reason: "Source checkout not supplied." };
+  if (!directory) return { reason: "Source checkout not supplied.", status: "unavailable" };
   try {
     return {
-      commit: execFileSync("git", ["rev-parse", "HEAD"], {
+      changes: execFileSync("git", ["status", "--porcelain"], {
         cwd: directory,
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "pipe"],
       }).trim(),
-      changes: execFileSync("git", ["status", "--porcelain"], {
+      commit: execFileSync("git", ["rev-parse", "HEAD"], {
         cwd: directory,
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "pipe"],
       }).trim(),
     };
   } catch {
-    return { status: "unavailable", reason: "Git revision could not be read." };
+    return { reason: "Git revision could not be read.", status: "unavailable" };
   }
 }
 
@@ -359,12 +359,12 @@ function reportHtml(report: {
 }
 
 async function runGenerator(arrustedRoot: string | undefined) {
-  if (values["report-only"]) return { status: "not-run", reason: "Report-only mode selected." };
+  if (values["report-only"]) return { reason: "Report-only mode selected.", status: "not-run" };
   if (!values.generator && !arrustedRoot)
     return {
-      status: "blocked",
       reason:
         "Set SELF_REPRODUCTION_ARRUSTED_ROOT or --arrusted-root to the canonical Arrusted checkout.",
+      status: "blocked",
     };
   const deadline = Number(values["generation-timeout-ms"] ?? "900000");
   if (!Number.isSafeInteger(deadline) || deadline <= 0)
@@ -392,11 +392,11 @@ async function runGenerator(arrustedRoot: string | undefined) {
   const command = values.generator ?? resolve(root, ".config/mise/scripts/trusted-node-launcher");
   settings = {
     ...settings,
-    command,
     args,
-    timeoutMs: deadline,
-    strict: true,
+    command,
     liveModel: !values.generator,
+    strict: true,
+    timeoutMs: deadline,
   };
   await jsonFile("settings.json", settings);
   const stdout = evidenceSink(
@@ -419,9 +419,9 @@ async function runGenerator(arrustedRoot: string | undefined) {
   }>((_resolve) => {
     const child = spawn(command, args, {
       cwd: root,
-      stdio: ["ignore", "pipe", "pipe"],
       detached: true,
       env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
     });
     let force: ReturnType<typeof setTimeout> | undefined;
     const stop = (reason: string) => {
@@ -482,9 +482,9 @@ async function runGenerator(arrustedRoot: string | undefined) {
   await jsonFile(
     "native-result.json",
     native ?? {
-      status: "unavailable",
       reason:
         "Native runner did not emit complete result JSON; retained incremental transcript and diagnostics.",
+      status: "unavailable",
     },
   );
   const completion = evidenceCompletion(result.exitCode, records);
@@ -496,43 +496,43 @@ async function runGenerator(arrustedRoot: string | undefined) {
   return {
     ...completion,
     ...result,
-    ...(interrupted ? { status: "failed", interrupted } : {}),
+    ...(interrupted ? { interrupted, status: "failed" } : {}),
     elapsedMs: Date.now() - childStarted,
     nativeResult: "native-result.json",
     ...(native
       ? nativePassed
         ? {}
-        : { status: "failed", reason: "Native strict eval did not pass." }
-      : { status: "failed", reason: "Native result JSON unavailable; evidence is incomplete." }),
+        : { reason: "Native strict eval did not pass.", status: "failed" }
+      : { reason: "Native result JSON unavailable; evidence is incomplete.", status: "failed" }),
   };
 }
 
 async function capture(label: string, url: string | undefined, sourceRoot: string | undefined) {
-  if (!url) return { label, files: [], status: "unassessed: URL not supplied" };
+  if (!url) return { files: [], label, status: "unassessed: URL not supplied" };
   const destination = join(output, "captures", label);
   try {
-    await mkdir(destination, { recursive: true, mode: 0o700 });
+    await mkdir(destination, { mode: 0o700, recursive: true });
     const { capturePreview } = await import("./design-quality/browser");
     const previewFiles = await capturePreview({
-      url,
-      output: destination,
-      tokens: {},
-      scenarios: [],
       generatedSourcePaths: sourceRoot
         ? (await readSource(sourceRoot)).map((file) => file.path)
         : [],
+      output: destination,
+      scenarios: [],
+      tokens: {},
+      url,
     });
     return {
-      label,
       files: previewFiles.map((item) => `captures/${label}/${basename(item.path)}`),
+      label,
       status: "captured",
     };
   } catch {
     return {
-      label,
       files: await readdir(destination)
         .then((files) => files.map((file) => `captures/${label}/${file}`))
         .catch(() => []),
+      label,
       status:
         "blocked: preview was unavailable or could not be captured; any partial files are retained",
     };
@@ -542,30 +542,30 @@ async function capture(label: string, url: string | undefined, sourceRoot: strin
 const blockedFramework = (side: "reference" | "candidate") =>
   frameworkRequirements(auditFramework([]), side).map((item) => ({
     ...item,
-    status: "blocked" as const,
     evidence: [`${side} source was unavailable.`],
+    status: "blocked" as const,
   }));
 
 function runtimeObservations(existingRequirementIds: ReadonlySet<string>): Observation[] {
   if (candidateRuntime.status === "not-run") return [];
   if (candidateRuntime.status !== "available")
     return candidateRuntimeFailureObservations({
-      receipt: candidateRuntime,
       existingRequirementIds,
+      receipt: candidateRuntime,
     });
   const artifact = "candidate-runtime.json";
   const notRun = workflowMatrix
     .filter((row) => row.id !== "anonymous-entry" && row.id !== "documentation")
     .map((row): Observation => ({
-      requirementId: row.id,
+      artifacts: [artifact],
+      assertions: [],
       disposition: "not-run",
+      method: "none",
       reason:
         candidateRuntime.status === "available"
           ? "Candidate runtime started, but no trusted workflow adapter exists for this behavior."
           : `Candidate runtime prerequisite failed: ${candidateRuntime.reason}`,
-      assertions: [],
-      artifacts: [artifact],
-      method: "none",
+      requirementId: row.id,
     }));
   if (!("probes" in candidateRuntime)) return notRun;
   const docs = candidateRuntime.probes.find((probe) => probe.id === "documentation");
@@ -573,48 +573,48 @@ function runtimeObservations(existingRequirementIds: ReadonlySet<string>): Obser
     return [
       ...notRun,
       {
-        requirementId: "documentation",
-        disposition: "not-run",
-        reason: `Candidate runtime prerequisite failed: ${candidateRuntime.reason}`,
-        assertions: [],
         artifacts: [artifact],
+        assertions: [],
+        disposition: "not-run",
         method: "none",
+        reason: `Candidate runtime prerequisite failed: ${candidateRuntime.reason}`,
+        requirementId: "documentation",
       },
     ];
   return [
     ...notRun,
     {
-      requirementId: "documentation",
+      artifacts: [artifact],
+      assertions: [
+        {
+          artifacts: [artifact],
+          detail: `Evaluator HTTP probe returned ${docs.status ?? "no response"}.`,
+          id: "docs-readable",
+          passed: docs.passed,
+        },
+        {
+          artifacts: [artifact],
+          detail: docs.detail,
+          id: "return-navigation-works",
+          passed: docs.passed,
+        },
+      ],
       disposition:
         docs.disposition === "infrastructure-unavailable"
           ? "infrastructure-unavailable"
           : docs.passed
             ? "observed"
             : "missing-functionality",
-      reason: docs.detail,
-      assertions: [
-        {
-          id: "docs-readable",
-          passed: docs.passed,
-          detail: `Evaluator HTTP probe returned ${docs.status ?? "no response"}.`,
-          artifacts: [artifact],
-        },
-        {
-          id: "return-navigation-works",
-          passed: docs.passed,
-          detail: docs.detail,
-          artifacts: [artifact],
-        },
-      ],
-      artifacts: [artifact],
       method: "browser",
+      reason: docs.detail,
+      requirementId: "documentation",
     },
   ];
 }
 
 async function saveReport() {
   const diagnosticRequirements = [
-    ...buildRequirements(candidateFiles, workflowEvidence),
+    ...buildRequirements(candidateFiles, workflowEvidence ?? undefined),
     ...(referenceFiles
       ? frameworkRequirements(auditFramework(referenceFiles), "reference")
       : blockedFramework("reference")),
@@ -649,10 +649,10 @@ async function saveReport() {
     }),
   );
   const legacyRuntimeReceipts = runtimeObservations(trustedIds).map((observation) => ({
-    schemaVersion: "self-reproduction-runtime-receipt/v1" as const,
-    producer: "evaluator" as const,
-    side: "candidate" as const,
     observation,
+    producer: "evaluator" as const,
+    schemaVersion: "self-reproduction-runtime-receipt/v1" as const,
+    side: "candidate" as const,
   }));
   const completedCaptures = pairedCaptures;
   const observedCaptureReceipts =
@@ -662,7 +662,7 @@ async function saveReport() {
           (item) => item.requirementId === row.requirementId,
         );
         return observation
-          ? [{ side, viewport: row.viewport, state: row.state, ...observation }]
+          ? [{ side, state: row.state, viewport: row.viewport, ...observation }]
           : [];
       }),
     ) ?? [];
@@ -672,8 +672,8 @@ async function saveReport() {
       .map((receipt) => receipt.requirementId),
   );
   const failedRuntimeCaptureReceipts = candidateRuntimeCaptureFailureObservations({
-    receipt: candidateRuntime,
     existingRequirementIds: observedCandidateCaptureIds,
+    receipt: candidateRuntime,
   }).map((observation) => {
     const [, viewportName, stateName] = observation.requirementId.split("/");
     const viewport = desktopViewports.find((item) => item.name === viewportName);
@@ -682,20 +682,10 @@ async function saveReport() {
       throw new Error(
         `Invalid candidate runtime capture requirement ${observation.requirementId}.`,
       );
-    return { side: "candidate" as const, viewport, state, ...observation };
+    return { side: "candidate" as const, state, viewport, ...observation };
   });
   const captureReceipts = [...observedCaptureReceipts, ...failedRuntimeCaptureReceipts];
   const parityEvidence: ParityEvidence = parityEvidenceFromReceipts({
-    runId: basename(output),
-    reference: {
-      output: referenceFiles ? "available" : "missing",
-      reason: referenceFiles
-        ? "Reference source is available; behavioral parity observations have not run."
-        : "Reference source is unavailable.",
-      sourceRevision: String(
-        (revisions.builder as { commit?: unknown } | undefined)?.commit ?? "unavailable",
-      ),
-    },
     candidate: {
       output: candidateOutput,
       reason:
@@ -706,8 +696,18 @@ async function saveReport() {
         (candidate.revision as { commit?: unknown } | undefined)?.commit ?? "generated-export",
       ),
     },
-    runtimeReceipts: [...legacyRuntimeReceipts, ...effectiveTrustedWorkflowReceipts],
     captureReceipts,
+    reference: {
+      output: referenceFiles ? "available" : "missing",
+      reason: referenceFiles
+        ? "Reference source is available; behavioral parity observations have not run."
+        : "Reference source is unavailable.",
+      sourceRevision: String(
+        (revisions.builder as { commit?: unknown } | undefined)?.commit ?? "unavailable",
+      ),
+    },
+    runId: basename(output),
+    runtimeReceipts: [...legacyRuntimeReceipts, ...effectiveTrustedWorkflowReceipts],
   });
   await jsonFile("parity-evidence.json", parityEvidence);
   parityAssessment = await assessParity(parityEvidence, async (path) => {
@@ -720,57 +720,57 @@ async function saveReport() {
   });
   await jsonFile("parity-assessment.json", parityAssessment);
   const receipt = {
-    version: 1,
+    candidate,
+    candidateRuntime,
     createdAt: now,
     elapsedMs: Date.now() - started,
-    input,
-    settings,
-    revisions,
+    errors,
     generation,
+    input,
+    revisions,
+    settings,
+    toolOutcomes: records
+      .filter((record) => record.kind === "turn-completed")
+      .flatMap((record) => (Array.isArray(record.toolCalls) ? record.toolCalls : [])),
     transcript: {
       path: "generation-transcript.jsonl",
       records: records.length,
       status: records.length ? "available" : "unavailable",
     },
-    toolOutcomes: records
-      .filter((record) => record.kind === "turn-completed")
-      .flatMap((record) => (Array.isArray(record.toolCalls) ? record.toolCalls : [])),
-    candidate,
-    candidateRuntime,
-    errors,
+    version: 1,
   };
   const report = {
     ...receipt,
-    reference: referenceFiles
-      ? { framework: auditFramework(referenceFiles), sourceFiles: referenceFiles.length }
-      : { status: "unavailable" },
-    requirements: parityAssessment.rows,
+    captures: captures.length
+      ? captures
+      : [
+          { files: [], label: "reference", status: "unassessed: capture has not run" },
+          { files: [], label: "candidate", status: "unassessed: capture has not run" },
+        ],
     diagnostics: {
-      sourceScans: diagnosticRequirements,
-      sourceScanGaps: prioritizedGaps(diagnosticRequirements),
       note: "Source scans are diagnostic only and never award parity credit.",
+      sourceScanGaps: prioritizedGaps(diagnosticRequirements),
+      sourceScans: diagnosticRequirements,
     },
     gaps: parityAssessment.rows
       .filter((row) => row.status !== "passed")
       .map((row) => ({
-        priority: row.status === "failed" ? "high" : "medium",
-        title: `${row.side}: ${row.requirementId}`,
-        expected: "Evaluator-owned behavioral evidence for every required assertion.",
-        recommendation: row.reason,
         confirmed: row.status === "failed",
+        expected: "Evaluator-owned behavioral evidence for every required assertion.",
+        priority: row.status === "failed" ? "high" : "medium",
+        recommendation: row.reason,
+        title: `${row.side}: ${row.requirementId}`,
       })),
-    captures: captures.length
-      ? captures
-      : [
-          { label: "reference", files: [], status: "unassessed: capture has not run" },
-          { label: "candidate", files: [], status: "unassessed: capture has not run" },
-        ],
-    pairedCaptureManifest: pairedCaptures ? "parity/captures/manifest.json" : undefined,
     limitations: [
       "No deployment, provider publication, or provisioning is performed by this report pipeline.",
       "The native eval retains reviewed sandbox status but does not export a candidate tree; supply --candidate-root with --report-only for an independently exported tree.",
       "Paired captures require running reference and candidate URLs and Playwright Chromium. They do not establish runtime workflow or instant-navigation acceptance.",
     ],
+    pairedCaptureManifest: pairedCaptures ? "parity/captures/manifest.json" : undefined,
+    reference: referenceFiles
+      ? { framework: auditFramework(referenceFiles), sourceFiles: referenceFiles.length }
+      : { status: "unavailable" },
+    requirements: parityAssessment.rows,
   };
   await jsonFile("receipt.json", receipt);
   await jsonFile("candidate-inventory.json", candidate);
@@ -821,7 +821,7 @@ complete paired desktop state matrix against both supplied URLs.
 The checked-in brief and fixed answers are always preserved unchanged.`);
     return;
   }
-  await mkdir(output, { recursive: true, mode: 0o700 });
+  await mkdir(output, { mode: 0o700, recursive: true });
   const actualOutput = await realpath(output);
   const inside = relative(await realpath(root), actualOutput);
   if (!inside || (!inside.startsWith(`..${sep}`) && inside !== ".."))
@@ -829,18 +829,18 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
   console.log(`Self-reproduction evidence: ${output}`);
   await writeFile(join(output, "generation-transcript.jsonl"), "", { mode: 0o600 });
   await jsonFile("native-result.json", {
-    status: "unavailable",
     reason: "Native eval has not completed.",
+    status: "unavailable",
   });
   await jsonFile("candidate-runtime.json", candidateRuntime);
   await jsonFile("trusted-workflow-receipts.json", trustedWorkflowReceipts);
   await jsonFile("settings.json", {
-    status: "unavailable",
     reason: "Settings have not been read.",
+    status: "unavailable",
   });
   await jsonFile("revisions.json", {
-    status: "unavailable",
     reason: "Revisions have not been read.",
+    status: "unavailable",
   });
   await writeFile(join(output, "eval.log"), "", { mode: 0o600 });
   await writeFile(join(output, "eval-output.log"), "", { mode: 0o600 });
@@ -853,7 +853,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         resolve(root, "..", "arrusted-development"),
         join(homedir(), "Documents/GitHub/withAutograph/arrusted-development"),
       ].find((directory) => existsSync(directory));
-    revisions = { builder: revision(root), arrusted: revision(arrustedRoot) };
+    revisions = { arrusted: revision(arrustedRoot), builder: revision(root) };
     await jsonFile("revisions.json", revisions);
     await mkdir(join(output, "generator-input"), { mode: 0o700, recursive: true });
     const inputs: Record<string, unknown> = {};
@@ -862,7 +862,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       await writeFile(join(output, "generator-input", file), content, { mode: 0o600 });
       inputs[file] = { path: `generator-input/${file}`, sha256: digest(content) };
     }
-    input = { status: "preserved", files: inputs, referenceSourceExposedToGenerator: false };
+    input = { files: inputs, referenceSourceExposedToGenerator: false, status: "preserved" };
     await mkdir(join(output, "settings-source"), { mode: 0o700, recursive: true });
     for (const file of [
       "agent/agent.ts",
@@ -877,13 +877,13 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       );
     }
     settings = {
-      status: "preserved",
-      source: "settings-source/",
       model: activeBuilderModelId,
+      publication: "disabled by sandbox eval profile",
       reasoningConfiguration:
         "Preserved verbatim in settings-source/agent.ts; effective runtime identity is retained in transcript events.",
       runtimeIdentity: "See session.started events in generation-transcript.jsonl",
-      publication: "disabled by sandbox eval profile",
+      source: "settings-source/",
+      status: "preserved",
     };
     await jsonFile("settings.json", settings);
     generation = { status: "running" };
@@ -900,30 +900,30 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         // Persist the audited source bytes, never the candidate's credentials or dependency tree.
         for (const file of candidateFiles) {
           const destination = join(output, "candidate", file.path);
-          await mkdir(resolve(destination, ".."), { recursive: true, mode: 0o700 });
+          await mkdir(resolve(destination, ".."), { mode: 0o700, recursive: true });
           await writeFile(destination, String(sanitizeEvidence(file.content)), { mode: 0o600 });
         }
         candidate = {
-          status: "available",
-          provenance: "operator-supplied export; not automatically attributed to this generation",
-          revision: revision(candidateRoot),
           files: candidateFiles.map((file) => ({
             path: `candidate/${file.path}`,
             sha256: digest(String(sanitizeEvidence(file.content))),
           })),
+          provenance: "operator-supplied export; not automatically attributed to this generation",
+          revision: revision(candidateRoot),
+          status: "available",
         };
         workflowEvidence = await readFile(
           join(candidateRoot, "self-reproduction.workflow-results.json"),
           "utf-8",
         )
           .then((value) => JSON.parse(value) as WorkflowEvidence)
-          .catch(() => undefined);
+          .catch(() => null);
         if (workflowEvidence) await jsonFile("workflow-results.json", workflowEvidence);
       } catch (error) {
         candidateFiles = undefined;
         candidate = {
-          status: "unavailable",
           reason: error instanceof Error ? error.message : String(error),
+          status: "unavailable",
         };
       }
     } else {
@@ -932,22 +932,22 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         candidateFiles = exported;
         for (const file of exported) {
           const destination = join(output, "candidate", file.path);
-          await mkdir(resolve(destination, ".."), { recursive: true, mode: 0o700 });
+          await mkdir(resolve(destination, ".."), { mode: 0o700, recursive: true });
           await writeFile(destination, file.content, { mode: 0o600 });
         }
         candidate = {
-          status: "available",
-          provenance: candidateExportProvenanceFromEvidence(records),
           files: exported.map((file) => ({
             path: `candidate/${file.path}`,
             sha256: digest(file.content),
           })),
+          provenance: candidateExportProvenanceFromEvidence(records),
+          status: "available",
         };
       } else
         candidate = {
-          status: "unavailable",
           reason:
             "The native run did not retain a valid reviewed candidate export. Framework and workflow comparison remain blocked.",
+          status: "unavailable",
         };
     }
     await saveReport();
@@ -961,19 +961,19 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       candidateRuntime =
         candidateFiles && workspaceArchive
           ? await evaluateCandidateRuntime({
-              files: candidateFiles.map((file) => ({ path: file.path, content: file.content })),
-              workspaceArchive,
-              candidateAppId: candidateAppId(candidateFiles),
-              publicBasePath: `/${candidateAppId(candidateFiles)}`,
-              credentials,
               appRoot: "/workspace",
+              candidateAppId: candidateAppId(candidateFiles),
+              credentials,
+              files: candidateFiles.map((file) => ({ content: file.content, path: file.path })),
+              publicBasePath: `/${candidateAppId(candidateFiles)}`,
+              workspaceArchive,
             })
           : {
-              status: "failed",
               reason:
                 candidateFiles === undefined
                   ? "Candidate output was unavailable, so its runtime could not start."
                   : "The Arrusted workspace source was unavailable, so workspace dependencies could not be resolved.",
+              status: "failed",
             };
       await jsonFile("candidate-runtime.json", candidateRuntime);
     }

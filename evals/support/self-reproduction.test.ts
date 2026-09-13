@@ -53,13 +53,13 @@ describe("self-reproduction evaluation", () => {
   it("treats an imported interactive leaf as a narrow client boundary", () => {
     const audit = auditFramework([
       {
-        path: "app/page.tsx",
         content:
           'import Workspace from "../components/workspace"; export default function Page() { return <Workspace />; }',
+        path: "app/page.tsx",
       },
       {
-        path: "components/workspace.tsx",
         content: '"use client"; export default function Workspace() { return <main />; }',
+        path: "components/workspace.tsx",
       },
     ]);
     expect(audit.broadClientRoot).toBe(false);
@@ -69,12 +69,12 @@ describe("self-reproduction evaluation", () => {
   it("flags a client route root and ignores unreachable client modules", () => {
     const audit = auditFramework([
       {
-        path: "app/page.tsx",
         content: '"use client"; export default function Page() { return <main />; }',
+        path: "app/page.tsx",
       },
       {
-        path: "components/unreachable.tsx",
         content: '"use client"; export default function Unreachable() { return <main />; }',
+        path: "components/unreachable.tsx",
       },
     ]);
     expect(audit.broadClientRoot).toBe(true);
@@ -85,13 +85,13 @@ describe("self-reproduction evaluation", () => {
   it("resolves client boundaries through the src alias", () => {
     const audit = auditFramework([
       {
-        path: "src/app/page.tsx",
         content:
           'import Workspace from "@/components/workspace"; export default function Page() { return <Workspace />; }',
+        path: "src/app/page.tsx",
       },
       {
-        path: "src/components/workspace.tsx",
         content: '"use client"; export default function Workspace() { return <button />; }',
+        path: "src/components/workspace.tsx",
       },
     ]);
     expect(audit.clientBoundaryPaths).toEqual(["src/components/workspace.tsx"]);

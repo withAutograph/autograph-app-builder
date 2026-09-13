@@ -60,15 +60,15 @@ function runtimeFailureObservations(input: {
         !input.existingRequirementIds?.has(requirement.id),
     )
     .map((requirement) => ({
-      requirementId: requirement.id,
+      artifacts: [artifact],
+      assertions: [],
       disposition,
+      method: "none",
       reason:
         disposition === "missing-functionality"
           ? `Candidate runtime prerequisite failed: ${input.receipt.reason}`
           : `Candidate runtime infrastructure was unavailable: ${input.receipt.reason}`,
-      assertions: [],
-      artifacts: [artifact],
-      method: "none",
+      requirementId: requirement.id,
     }));
 }
 
@@ -95,12 +95,12 @@ async function command(
   value: string,
   abortSignal: AbortSignal,
 ): Promise<RuntimeCommandReceipt> {
-  const result = await handle.session.run({ command: value, abortSignal });
+  const result = await handle.session.run({ abortSignal, command: value });
   return {
     command: value,
     exitCode: result.exitCode,
-    stdout: excerpt(result.stdout),
     stderr: excerpt(result.stderr),
+    stdout: excerpt(result.stdout),
   };
 }
 
@@ -193,14 +193,14 @@ export async function evaluateCandidateRuntime(input: {
   try {
     const backend = input.backend ?? vercel({ networkPolicy: "allow-all", ...input.credentials });
     handle = await backend.create({
-      templateKey: null,
+      runtimeContext: { appRoot: input.appRoot ?? "/workspace" },
       sessionKey: `self-reproduction-runtime-${randomUUID()}`,
       tags: { purpose: "self-reproduction-eval" },
-      runtimeContext: { appRoot: input.appRoot ?? "/workspace" },
+      templateKey: null,
     });
     await handle.session.writeBinaryFile({
-      path: ".self-reproduction-workspace.tar",
       content: input.workspaceArchive,
+      path: ".self-reproduction-workspace.tar",
     });
     const unpack = await command(
       handle,
@@ -210,46 +210,46 @@ export async function evaluateCandidateRuntime(input: {
     commands.push(unpack);
     if (unpack.exitCode !== 0)
       return {
-        producer: "evaluator",
-        sandboxId: handle.session.id,
-        status: "failed",
-        reason: "Reference workspace reconstruction failed.",
         commands,
         probes: [],
+        producer: "evaluator",
+        reason: "Reference workspace reconstruction failed.",
+        sandboxId: handle.session.id,
+        status: "failed",
       };
     await Promise.all([
       ...input.files.map((file) =>
         handle!.session.writeTextFile({
-          path: `apps/${input.candidateAppId}/${file.path}`,
           content: String(file.content),
+          path: `apps/${input.candidateAppId}/${file.path}`,
         }),
       ),
       handle.session.writeTextFile({
-        path: ".self-reproduction-register.mjs",
         content: registerMicrofrontendScript(
           input.candidateAppId,
           candidatePackageName(input.files, input.candidateAppId),
         ),
+        path: ".self-reproduction-register.mjs",
       }),
       handle.session.writeTextFile({
-        path: ".self-reproduction-readiness.mjs",
         content: readinessScript(input.publicBasePath),
+        path: ".self-reproduction-readiness.mjs",
       }),
       handle.session.writeTextFile({
-        path: ".self-reproduction-browser.mjs",
         content: browserProbeScript(input.publicBasePath),
+        path: ".self-reproduction-browser.mjs",
       }),
     ]);
     const runtime = await command(handle, developmentPinnedToolchainCommand(), controller.signal);
     commands.push(runtime);
     if (runtime.exitCode !== 0)
       return {
-        producer: "evaluator",
-        sandboxId: handle.session.id,
-        status: "infrastructure-unavailable",
-        reason: "Candidate runtime toolchain installation failed.",
         commands,
         probes: [],
+        producer: "evaluator",
+        reason: "Candidate runtime toolchain installation failed.",
+        sandboxId: handle.session.id,
+        status: "infrastructure-unavailable",
       };
     const runtimeEnvironment = Object.entries(DEVELOPMENT_SANDBOX_ENVIRONMENT)
       .map(([name, value]) => `${name}=${value}`)
@@ -259,12 +259,12 @@ export async function evaluateCandidateRuntime(input: {
     commands.push(install);
     if (install.exitCode !== 0)
       return {
-        producer: "evaluator",
-        sandboxId: handle.session.id,
-        status: "failed",
-        reason: "Candidate dependency installation failed.",
         commands,
         probes: [],
+        producer: "evaluator",
+        reason: "Candidate dependency installation failed.",
+        sandboxId: handle.session.id,
+        status: "failed",
       };
     const microfrontends = await command(
       handle,
@@ -274,12 +274,12 @@ export async function evaluateCandidateRuntime(input: {
     commands.push(microfrontends);
     if (microfrontends.exitCode !== 0)
       return {
-        producer: "evaluator",
-        sandboxId: handle.session.id,
-        status: "failed",
-        reason: "Candidate microfrontend configuration failed.",
         commands,
         probes: [],
+        producer: "evaluator",
+        reason: "Candidate microfrontend configuration failed.",
+        sandboxId: handle.session.id,
+        status: "failed",
       };
     const registration = await command(
       handle,
@@ -289,12 +289,12 @@ export async function evaluateCandidateRuntime(input: {
     commands.push(registration);
     if (registration.exitCode !== 0)
       return {
-        producer: "evaluator",
-        sandboxId: handle.session.id,
-        status: "failed",
-        reason: "Candidate microfrontend registration failed.",
         commands,
         probes: [],
+        producer: "evaluator",
+        reason: "Candidate microfrontend registration failed.",
+        sandboxId: handle.session.id,
+        status: "failed",
       };
     const build = await command(
       handle,
@@ -304,16 +304,16 @@ export async function evaluateCandidateRuntime(input: {
     commands.push(build);
     if (build.exitCode !== 0)
       return {
-        producer: "evaluator",
-        sandboxId: handle.session.id,
-        status: "failed",
-        reason: "Candidate build failed.",
         commands,
         probes: [],
+        producer: "evaluator",
+        reason: "Candidate build failed.",
+        sandboxId: handle.session.id,
+        status: "failed",
       };
     await handle.session.spawn({
-      command: `${bun} run --cwd apps/${input.candidateAppId} start -- --hostname 127.0.0.1 --port 3000`,
       abortSignal: controller.signal,
+      command: `${bun} run --cwd apps/${input.candidateAppId} start -- --hostname 127.0.0.1 --port 3000`,
     });
     const probe = await command(
       handle,
@@ -337,25 +337,25 @@ export async function evaluateCandidateRuntime(input: {
         if (Array.isArray(browserProbes)) probes.push(...browserProbes);
       } else
         probes.push({
-          id: "documentation",
-          url: `http://127.0.0.1:3000${input.publicBasePath}/docs`,
-          status: null,
-          passed: false,
           detail: `Evaluator browser was unavailable: ${browser.stderr || browser.stdout}`,
-          method: "browser",
           disposition: "infrastructure-unavailable",
+          id: "documentation",
+          method: "browser",
+          passed: false,
+          status: null,
+          url: `http://127.0.0.1:3000${input.publicBasePath}/docs`,
         });
     }
     return {
+      commands,
+      probes: Array.isArray(probes) ? probes : [],
       producer: "evaluator",
-      sandboxId: handle.session.id,
-      status: root?.passed === true ? "available" : "failed",
       reason:
         root?.passed === true
           ? "Candidate runtime became ready."
           : "Candidate runtime was not reachable.",
-      commands,
-      probes: Array.isArray(probes) ? probes : [],
+      sandboxId: handle.session.id,
+      status: root?.passed === true ? "available" : "failed",
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -372,6 +372,8 @@ export async function evaluateCandidateRuntime(input: {
     };
   } finally {
     clearTimeout(timer);
-    await handle?.shutdown().catch(() => undefined);
+    await handle?.shutdown().catch(() => {
+      /* empty */
+    });
   }
 }

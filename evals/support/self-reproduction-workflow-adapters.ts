@@ -58,19 +58,19 @@ function failedObservation(
   receipt: string,
 ): Observation {
   return {
-    requirementId,
-    disposition: "observed",
-    reason,
-    method: "browser",
     artifacts: [receipt],
     assertions: [
       {
+        artifacts: [receipt],
+        detail: "The trusted browser workflow did not complete.",
         id: "fixture-execution",
         passed: false,
-        detail: "The trusted browser workflow did not complete.",
-        artifacts: [receipt],
       },
     ],
+    disposition: "observed",
+    method: "browser",
+    reason,
+    requirementId,
   };
 }
 
@@ -84,7 +84,7 @@ export async function runTrustedBrowserWorkflows(input: {
   outputRoot: string;
   adapters: Partial<Record<(typeof sides)[number], TrustedBrowserWorkflowAdapter>>;
 }): Promise<TrustedWorkflowRun> {
-  const observations: TrustedWorkflowRun["observations"] = { reference: [], candidate: [] };
+  const observations: TrustedWorkflowRun["observations"] = { candidate: [], reference: [] };
   const receipts: unknown[] = [];
   for (const side of sides)
     for (const workflow of testedWorkflows) {
@@ -95,12 +95,12 @@ export async function runTrustedBrowserWorkflows(input: {
       // oxlint-disable-next-line eslint/no-negated-condition, unicorn/no-negated-condition -- absent adapter is the explicit unassessed branch
       if (!adapter) {
         observation = {
-          requirementId: workflow.id,
-          disposition: "not-run",
-          reason: "No trusted evaluator adapter was supplied for this side.",
-          method: "none",
           artifacts: [],
           assertions: [],
+          disposition: "not-run",
+          method: "none",
+          reason: "No trusted evaluator adapter was supplied for this side.",
+          requirementId: workflow.id,
         };
       } else {
         try {
@@ -111,12 +111,12 @@ export async function runTrustedBrowserWorkflows(input: {
           // oxlint-disable-next-line eslint/no-negated-condition, unicorn/no-negated-condition -- rejected preparation carries the required failure classification
           if (!prepared.ready) {
             observation = {
-              requirementId: workflow.id,
-              disposition: prepared.disposition,
-              reason: prepared.reason,
-              method: "none",
               artifacts: [],
               assertions: [],
+              disposition: prepared.disposition,
+              method: "none",
+              reason: prepared.reason,
+              requirementId: workflow.id,
             };
           } else {
             const exercised = await adapter.exercise(page, workflow.id, async () => {
@@ -131,15 +131,15 @@ export async function runTrustedBrowserWorkflows(input: {
               ...(verified.artifacts ?? []),
             ];
             observation = {
-              requirementId: workflow.id,
-              disposition: "observed",
-              reason: `${exercised.reason} ${verified.reason}`,
-              method: "browser",
               artifacts: [...new Set(artifacts)],
               assertions: [...exercised.assertions, ...verified.assertions].map((assertion) => ({
                 ...assertion,
                 artifacts: [...new Set([receiptPath, ...(assertion.artifacts ?? [])])],
               })),
+              disposition: "observed",
+              method: "browser",
+              reason: `${exercised.reason} ${verified.reason}`,
+              requirementId: workflow.id,
             };
           }
         } catch {
@@ -156,10 +156,10 @@ export async function runTrustedBrowserWorkflows(input: {
         }
       }
       const receipt = runtimeReceiptSchema.parse({
-        schemaVersion: "self-reproduction-runtime-receipt/v1",
-        producer: "evaluator",
-        side,
         observation,
+        producer: "evaluator",
+        schemaVersion: "self-reproduction-runtime-receipt/v1",
+        side,
       });
       await mkdir(dirname(join(input.outputRoot, receiptPath)), { recursive: true });
       await writeFile(

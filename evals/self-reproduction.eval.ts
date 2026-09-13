@@ -6,10 +6,9 @@ import { satisfies } from "eve/evals/expect";
 import { evidencePrefix, sanitizeEvidence } from "./support/self-reproduction-evidence";
 
 export default defineEval({
-  tags: ["self-reproduction", "sandbox", "live-model"],
-  timeoutMs: 900_000,
   description:
     "The live App Builder model creates an independent App Builder replica from the checked-in product brief.",
+  tags: ["self-reproduction", "sandbox", "live-model"],
   async test(t) {
     const emit = (record: Record<string, unknown>) =>
       t.log(
@@ -21,7 +20,7 @@ export default defineEval({
       const live = await t.start(prompt);
       let observed = 0;
       const checkpoint = () => {
-        for (const event of live.events.slice(observed)) emit({ kind: "event", event });
+        for (const event of live.events.slice(observed)) emit({ event, kind: "event" });
         observed = live.events.length;
       };
       const timer = setInterval(checkpoint, 1000);
@@ -29,11 +28,11 @@ export default defineEval({
         const turn = await live.result();
         checkpoint();
         emit({
-          kind: "turn-completed",
-          status: turn.status,
-          message: turn.message,
-          toolCalls: turn.toolCalls,
           elapsedMs: Date.now() - started,
+          kind: "turn-completed",
+          message: turn.message,
+          status: turn.status,
+          toolCalls: turn.toolCalls,
         });
         turn.expectOk();
         return turn;
@@ -87,13 +86,13 @@ export default defineEval({
       const started = Date.now();
       const before = t.events.length;
       const turn = await t.respondAll(response);
-      for (const event of t.events.slice(before)) emit({ kind: "event", event });
+      for (const event of t.events.slice(before)) emit({ event, kind: "event" });
       emit({
-        kind: "turn-completed",
-        status: turn.status,
-        message: turn.message,
-        toolCalls: turn.toolCalls,
         elapsedMs: Date.now() - started,
+        kind: "turn-completed",
+        message: turn.message,
+        status: turn.status,
+        toolCalls: turn.toolCalls,
       });
       turn.expectOk();
       return turn;
@@ -172,11 +171,11 @@ export default defineEval({
         ),
       );
       emit({
-        kind: "eval-completed",
         candidate: {
-          status: "available",
           source: "unreviewed validation-failed change_set_status.exportFiles",
+          status: "available",
         },
+        kind: "eval-completed",
       });
       return;
     }
@@ -220,11 +219,12 @@ export default defineEval({
     await send("Report artifact workflow status.");
     t.succeeded();
     emit({
-      kind: "eval-completed",
       candidate: {
-        status: "available",
         source: "change_set_status.exportFiles",
+        status: "available",
       },
+      kind: "eval-completed",
     });
   },
+  timeoutMs: 900_000,
 });

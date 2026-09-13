@@ -104,24 +104,24 @@ describe("self-reproduction evidence persistence", () => {
     const { sink, records } = capture();
     sink.write(
       receipt({
-        kind: "event",
         event: {
-          type: "action.result",
           data: {
             result: {
-              toolName: "change_set_status",
               output: {
                 exportFiles: [
                   {
-                    path: "apps/replica/app/actions.ts",
                     content:
                       'const token = randomUUID(); const sessionCookie = "session"; API_KEY=private-value',
+                    path: "apps/replica/app/actions.ts",
                   },
                 ],
               },
+              toolName: "change_set_status",
             },
           },
+          type: "action.result",
         },
+        kind: "event",
       }),
     );
     sink.end();

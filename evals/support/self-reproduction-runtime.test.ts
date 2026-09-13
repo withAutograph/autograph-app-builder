@@ -10,53 +10,53 @@ function backend(results: { exitCode: number; stdout?: string; stderr?: string }
   const shutdown = vi.fn(() => Promise.resolve());
   const run = vi.fn(() => {
     const result = results.shift()!;
-    return Promise.resolve({ stdout: "", stderr: "", ...result });
+    return Promise.resolve({ stderr: "", stdout: "", ...result });
   });
   const writeTextFile = vi.fn(() => Promise.resolve());
   const writeBinaryFile = vi.fn(() => Promise.resolve());
   const spawn = vi.fn(() =>
     Promise.resolve({
-      stdout: new ReadableStream(),
-      stderr: new ReadableStream(),
-      wait: () => Promise.resolve({ exitCode: 0 }),
       kill: () => Promise.resolve(),
+      stderr: new ReadableStream(),
+      stdout: new ReadableStream(),
+      wait: () => Promise.resolve({ exitCode: 0 }),
     }),
   );
   return {
     backend: {
-      name: "fixture",
-      prewarm: () => Promise.resolve({ reused: false }),
       create: () =>
         Promise.resolve({
+          captureState: () =>
+            Promise.resolve({ backendName: "fixture", metadata: {}, sessionKey: "fixture" }),
           session: {
             id: "sandbox-fixture",
             run,
             spawn,
-            writeTextFile,
             writeBinaryFile,
+            writeTextFile,
           },
+          shutdown,
+          stop: () => Promise.resolve(),
           useSessionFn: () => {
             throw new Error("unused");
           },
-          captureState: () =>
-            Promise.resolve({ backendName: "fixture", metadata: {}, sessionKey: "fixture" }),
-          stop: () => Promise.resolve(),
-          shutdown,
         }),
+      name: "fixture",
+      prewarm: () => Promise.resolve({ reused: false }),
     } as never,
     run,
-    spawn,
-    writeTextFile,
-    writeBinaryFile,
     shutdown,
+    spawn,
+    writeBinaryFile,
+    writeTextFile,
   };
 }
 
 describe("self-reproduction candidate runtime", () => {
   it("turns a candidate build failure into failed evidence for every in-scope requirement", () => {
     const observations = candidateRuntimeFailureObservations({
-      receipt: { status: "failed", reason: "Candidate build failed." },
       existingRequirementIds: new Set(["documentation"]),
+      receipt: { reason: "Candidate build failed.", status: "failed" },
     });
 
     expect(observations).not.toHaveLength(0);
@@ -68,19 +68,19 @@ describe("self-reproduction candidate runtime", () => {
     );
     expect(observations).toContainEqual(
       expect.objectContaining({
-        requirementId: "durable-draft",
-        disposition: "missing-functionality",
         artifacts: ["candidate-runtime.json"],
+        disposition: "missing-functionality",
+        requirementId: "durable-draft",
       }),
     );
     expect(observations.some((item) => item.requirementId.startsWith("capture/"))).toBe(false);
     const captures = candidateRuntimeCaptureFailureObservations({
-      receipt: { status: "failed", reason: "Candidate build failed." },
+      receipt: { reason: "Candidate build failed.", status: "failed" },
     });
     expect(captures).toContainEqual(
       expect.objectContaining({
-        requirementId: "capture/desktop/error",
         disposition: "missing-functionality",
+        requirementId: "capture/desktop/error",
       }),
     );
     expect(captures.every((item) => item.requirementId.startsWith("capture/"))).toBe(true);
@@ -89,11 +89,11 @@ describe("self-reproduction candidate runtime", () => {
   it("classifies runtime infrastructure loss as blocked evidence", () => {
     const observations = candidateRuntimeFailureObservations({
       receipt: {
-        producer: "evaluator",
-        status: "infrastructure-unavailable",
-        reason: "Vercel Sandbox unavailable.",
         commands: [],
         probes: [],
+        producer: "evaluator",
+        reason: "Vercel Sandbox unavailable.",
+        status: "infrastructure-unavailable",
       },
     });
 
@@ -115,13 +115,13 @@ describe("self-reproduction candidate runtime", () => {
         exitCode: 0,
         stdout: JSON.stringify([
           {
-            id: "root",
-            url: "http://127.0.0.1:3000/candidate",
-            status: 200,
-            passed: true,
             detail: "ok",
-            method: "http",
             disposition: "observed",
+            id: "root",
+            method: "http",
+            passed: true,
+            status: 200,
+            url: "http://127.0.0.1:3000/candidate",
           },
         ]),
       },
@@ -129,23 +129,23 @@ describe("self-reproduction candidate runtime", () => {
         exitCode: 0,
         stdout: JSON.stringify([
           {
-            id: "documentation",
-            url: "http://127.0.0.1:3000/candidate/docs",
-            status: 200,
-            passed: true,
             detail: "ok",
-            method: "browser",
             disposition: "observed",
+            id: "documentation",
+            method: "browser",
+            passed: true,
+            status: 200,
+            url: "http://127.0.0.1:3000/candidate/docs",
           },
         ]),
       },
     ]);
     const receipt = await evaluateCandidateRuntime({
       backend: fixture.backend,
-      workspaceArchive: Buffer.from("archive"),
       candidateAppId: "candidate",
+      files: [{ content: "{}", path: "package.json" }],
       publicBasePath: "/candidate",
-      files: [{ path: "package.json", content: "{}" }],
+      workspaceArchive: Buffer.from("archive"),
     });
     expect(receipt).toMatchObject({ producer: "evaluator", status: "available" });
     expect(receipt.probes).toHaveLength(2);
@@ -166,12 +166,12 @@ describe("self-reproduction candidate runtime", () => {
     ]);
     const receipt = await evaluateCandidateRuntime({
       backend: fixture.backend,
-      workspaceArchive: Buffer.from("archive"),
       candidateAppId: "candidate",
-      publicBasePath: "/candidate",
       files: [],
+      publicBasePath: "/candidate",
+      workspaceArchive: Buffer.from("archive"),
     });
-    expect(receipt).toMatchObject({ status: "failed", reason: "Candidate build failed." });
+    expect(receipt).toMatchObject({ reason: "Candidate build failed.", status: "failed" });
     expect(receipt.commands[5]?.stderr).toContain("Type error");
     expect(fixture.spawn).not.toHaveBeenCalled();
     expect(fixture.shutdown).toHaveBeenCalledOnce();
@@ -180,15 +180,15 @@ describe("self-reproduction candidate runtime", () => {
   it("classifies provider creation failure as unavailable infrastructure", async () => {
     const receipt = await evaluateCandidateRuntime({
       backend: {
+        create: () => Promise.reject(new Error("Vercel OIDC credential unavailable")),
         name: "fixture",
         prewarm: () => Promise.resolve({ reused: false }),
-        create: () => Promise.reject(new Error("Vercel OIDC credential unavailable")),
       },
-      workspaceArchive: Buffer.from("archive"),
       candidateAppId: "candidate",
-      publicBasePath: "/candidate",
       files: [],
+      publicBasePath: "/candidate",
+      workspaceArchive: Buffer.from("archive"),
     });
-    expect(receipt).toMatchObject({ status: "infrastructure-unavailable", probes: [] });
+    expect(receipt).toMatchObject({ probes: [], status: "infrastructure-unavailable" });
   });
 });

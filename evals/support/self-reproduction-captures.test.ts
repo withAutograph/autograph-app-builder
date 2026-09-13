@@ -105,53 +105,53 @@ describe("paired capture orchestration", () => {
     }
   });
   it("owns one browser and writes a side-by-side advisory manifest", async () => {
-    const root = await mkdtemp(join(tmpdir(), "parity-capture-manifest-"));
+    const root = await mkdtemp(nodePath.join(tmpdir(), "parity-capture-manifest-"));
     const closeBrowser = vi.fn(() => Promise.resolve());
     const closeContext = vi.fn(() => Promise.resolve());
     const newContext = vi.fn(() =>
       Promise.resolve({
+        close: closeContext,
         newPage: () =>
           Promise.resolve({
             screenshot: ({ path }: { path: string }) => writeFile(path, "png"),
           }),
-        close: closeContext,
       }),
     );
     const adapter: CaptureAdapter = {
-      prepare: () => Promise.resolve({ ready: true }),
       exercise: async (_page, state, capture) => {
         await capture();
         return requirements
           .find((row) => row.id === `capture/desktop/${state}`)!
-          .assertions.map((id) => ({ id, passed: true, detail: "Observed." }));
+          .assertions.map((id) => ({ detail: "Observed.", id, passed: true }));
       },
+      prepare: () => Promise.resolve({ ready: true }),
     };
     try {
       const result = await runPairedCaptureEvidence({
+        adapters: { candidate: adapter, reference: adapter },
+        launch: () => Promise.resolve({ close: closeBrowser, newContext } as unknown as Browser),
         outputRoot: root,
-        adapters: { reference: adapter, candidate: adapter },
-        launch: () => Promise.resolve({ newContext, close: closeBrowser } as unknown as Browser),
       });
       expect(closeBrowser).toHaveBeenCalledOnce();
       expect(closeContext).toHaveBeenCalledTimes(30);
       expect(result.manifest.rows).toHaveLength(15);
       expect(result.manifest.visualScoresAdvisory).toBe(true);
       expect(result.manifest.rows[0]).toMatchObject({
-        reference: { disposition: "observed" },
         candidate: { disposition: "observed" },
+        reference: { disposition: "observed" },
       });
       const manifest = JSON.parse(
-        await readFile(join(root, "parity/captures/manifest.json"), "utf-8"),
+        await readFile(nodePath.join(root, "parity/captures/manifest.json"), "utf-8"),
       );
       expect(manifest.rows).toHaveLength(15);
       expect(manifest.rows[0].reference.png).toContain("/reference.png");
       expect(manifest.rows[0].candidate.png).toContain("/candidate.png");
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
   it("reports browser launch failure as blocked paired evidence", async () => {
-    const root = await mkdtemp(join(tmpdir(), "parity-capture-blocked-manifest-"));
+    const root = await mkdtemp(nodePath.join(tmpdir(), "parity-capture-blocked-manifest-"));
     try {
       const observations = unavailableCaptureObservations("Chromium could not launch.");
       const manifest = await writePairedCaptureManifest(root, observations);
@@ -162,13 +162,13 @@ describe("paired capture orchestration", () => {
         ),
       ).toBe(true);
       expect(manifest.rows[0]).toMatchObject({
-        reference: { disposition: "infrastructure-unavailable" },
         candidate: { disposition: "infrastructure-unavailable" },
+        reference: { disposition: "infrastructure-unavailable" },
       });
       expect(manifest.rows[0]!.reference).not.toHaveProperty("png");
       expect(manifest.rows[0]!.reference).not.toHaveProperty("receipt");
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, { force: true, recursive: true });
     }
   });
 });
