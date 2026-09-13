@@ -1,3 +1,5 @@
+import { candidateNavigationReceipt } from "./self-reproduction-candidate-navigation";
+import { runtimeReceiptSchema } from "./self-reproduction-parity-evidence";
 /* oxlint-disable eslint/no-await-in-loop -- preserve ordered evidence copies and deterministic merges. */
 import { copyFile, mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -66,6 +68,7 @@ export async function writeSupplementaryAssessment(input: {
   outputDirectory: string;
   referenceCapturesDirectory?: string;
   referenceRunDirectory?: string;
+  candidateNavigationRunDirectory?: string;
 }) {
   const output = join(
     await realpath(dirname(resolve(input.outputDirectory))),
@@ -77,6 +80,11 @@ export async function writeSupplementaryAssessment(input: {
   const roots = await Promise.all(
     [input.runDirectory, input.sourceReviewDirectory].map((path) => realpath(path)),
   );
+  const navigationRoot = input.candidateNavigationRunDirectory
+    ? await realpath(input.candidateNavigationRunDirectory)
+    : undefined;
+  if (navigationRoot && (output === navigationRoot || output.startsWith(`${navigationRoot}${sep}`)))
+    throw new Error("Supplementary output must be separate from navigation replay evidence.");
   const replayRoot = input.referenceRunDirectory
     ? await realpath(input.referenceRunDirectory)
     : undefined;
@@ -180,6 +188,9 @@ export async function writeSupplementaryAssessment(input: {
       })),
     ),
   });
+  let candidateNavigationReplay:
+    | { provenance: string; receipt: string; reason: string }
+    | undefined;
   for (const side of sides) {
     evidence[side].observations = await Promise.all(
       evidence[side].observations.map((item) => rebase(item, roots[0]!, "original")),
@@ -191,6 +202,35 @@ export async function writeSupplementaryAssessment(input: {
       for (const item of replay.reference.observations)
         observations.set(item.requirementId, await rebase(item, replayRoot, referencePrefix));
       evidence.reference = { ...replay.reference, observations: [...observations.values()] };
+    }
+    if (side === "candidate" && navigationRoot) {
+      const retained = JSON.parse(
+        await readFile(join(navigationRoot, "candidate-navigation.json"), "utf-8"),
+      );
+      const navigation = runtimeReceiptSchema.parse(
+        candidateNavigationReceipt(retained.output ?? null),
+      );
+      if (navigation.observation.requirementId !== "navigation-continuity")
+        throw new Error("Navigation replay must contain only navigation-continuity evidence.");
+      const item = await rebase(
+        navigation.observation,
+        navigationRoot,
+        "candidate-navigation-replay",
+      );
+      await copy(navigationRoot, "revisions.json", "candidate-navigation-replay");
+      const index = evidence.candidate.observations.findIndex(
+        (prior) => prior.requirementId === item.requirementId,
+      );
+      const prior = evidence.candidate.observations[index];
+      const merged = prior ? mergeSupplementaryObservation(item, prior) : item;
+      if (index === -1) evidence.candidate.observations.push(merged);
+      else evidence.candidate.observations[index] = merged;
+      candidateNavigationReplay = {
+        provenance: "candidate-navigation-replay/revisions.json",
+        receipt: "candidate-navigation-replay/candidate-navigation.json",
+        reason:
+          "Only candidate navigation assertions come from this retained browser run. No new runtime or generation was executed.",
+      };
     }
     for (const raw of review.observations?.[side] ?? []) {
       const item = raw as Observation;
@@ -345,6 +385,7 @@ export async function writeSupplementaryAssessment(input: {
     missingEvidence: missing,
     screenshotPairs,
     referenceReplay,
+    candidateNavigationReplay,
     assessment,
   };
   await writeFile(join(output, "parity-evidence.json"), JSON.stringify(evidence, null, 2));
@@ -353,7 +394,7 @@ export async function writeSupplementaryAssessment(input: {
     (row) =>
       `| ${row.side} | ${row.requirementId} | ${row.status} | ${row.reason.replaceAll("|", "\\|").replaceAll("\n", " ")} |`,
   );
-  const md = `# Supplementary self-reproduction assessment\n\nOriginal run: ${evidence.runId}.${referenceReplay ? ` Reference replay: ${referenceReplay.runId}, source revision ${referenceReplay.sourceRevision ?? "unavailable"}; candidate evidence remains original. See reference-replay/revisions.json.` : ""} No generation or runtime rerun. Source review supplements retained behavioral evidence. Anonymous entry remains excluded from cleanup priority.\n\n| Side | Requirement | Status | Evidence finding |\n| --- | --- | --- | --- |\n${rows.join("\n")}\n\n## Diagnostic initial screenshots\n\n${screenshotPairs.map((pair) => `- ${pair.viewport}: [reference](${pair.reference}), [candidate](${pair.candidate}). ${pair.qualification}`).join("\n")}\n`;
+  const md = `# Supplementary self-reproduction assessment\n\nOriginal run: ${evidence.runId}.${referenceReplay ? ` Reference replay: ${referenceReplay.runId}, source revision ${referenceReplay.sourceRevision ?? "unavailable"}; candidate evidence remains original. See reference-replay/revisions.json.` : ""} ${candidateNavigationReplay ? `Navigation replay: [browser evidence](${candidateNavigationReplay.receipt}) and [source provenance](${candidateNavigationReplay.provenance}). ` : ""}No generation or runtime rerun. Source review supplements retained behavioral evidence. Anonymous entry remains excluded from cleanup priority.\n\n| Side | Requirement | Status | Evidence finding |\n| --- | --- | --- | --- |\n${rows.join("\n")}\n\n## Diagnostic initial screenshots\n\n${screenshotPairs.map((pair) => `- ${pair.viewport}: [reference](${pair.reference}), [candidate](${pair.candidate}). ${pair.qualification}`).join("\n")}\n`;
   await writeFile(join(output, "report.md"), md);
   // oxlint-disable-next-line unicorn/consistent-function-scoping -- report-only HTML helper.
   const escape = (text: string) =>

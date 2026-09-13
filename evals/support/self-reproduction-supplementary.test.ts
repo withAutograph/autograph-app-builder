@@ -101,8 +101,39 @@ describe("supplementary assessment", () => {
         }),
       );
       await writeFile(join(review, "source-evidence.json"), "");
+      const navigation = join(root, "navigation");
+      await mkdir(join(navigation, "candidate-navigation"), { recursive: true });
+      await writeFile(join(navigation, "candidate-navigation", "back.png"), "retained screenshot");
+      await writeFile(
+        join(navigation, "revisions.json"),
+        JSON.stringify({ candidate: "retained revision" }),
+      );
+      await writeFile(
+        join(navigation, "candidate-navigation.json"),
+        JSON.stringify({
+          status: "completed",
+          output: {
+            observation: {
+              requirementId: "navigation-continuity",
+              disposition: "missing-functionality",
+              method: "browser",
+              reason: "Browser Back did not restore the edited draft.",
+              artifacts: ["back.png"],
+              assertions: [
+                {
+                  id: "back-forward-preserves-draft",
+                  passed: false,
+                  detail: "Draft missing after Back.",
+                  artifacts: [],
+                },
+              ],
+            },
+          },
+        }),
+      );
       const result = await writeSupplementaryAssessment({
         runDirectory: run,
+        candidateNavigationRunDirectory: navigation,
         sourceReviewDirectory: review,
         outputDirectory: join(root, "out"),
         referenceCapturesDirectory: captures,
@@ -112,6 +143,20 @@ describe("supplementary assessment", () => {
           (row) => row.side === "candidate" && row.requirementId === "server-first",
         )?.status,
       ).toBe("unassessed");
+      expect(
+        result.assessment.rows.find(
+          (row) => row.side === "candidate" && row.requirementId === "navigation-continuity",
+        )?.status,
+      ).toBe("failed");
+      expect(result.candidateNavigationReplay?.receipt).toBe(
+        "candidate-navigation-replay/candidate-navigation.json",
+      );
+      expect(
+        await readFile(
+          join(root, "out", "candidate-navigation-replay", "candidate-navigation", "back.png"),
+          "utf-8",
+        ),
+      ).toBe("retained screenshot");
       expect(await readFile(join(run, "parity-evidence.json"), "utf-8")).toBe(original);
       expect(
         result.missingEvidence.some((item) => item.includes("nonempty contained regular file")),
