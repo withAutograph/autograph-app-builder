@@ -116,3 +116,29 @@ it("streams retained artifacts larger than five megabytes without a buffered res
   expect(response.headers.has("content-length")).toBe(false);
   expect(Buffer.from(await response.arrayBuffer()).equals(Buffer.from(content))).toBe(true);
 });
+
+it.each(["SELF_REPRODUCTION_GITHUB_AUDIENCE", "VERCEL_PROJECT_ID", "VERCEL_GIT_COMMIT_SHA"])(
+  "leaves runtime disabled without %s and makes no network request",
+  async (missing) => {
+    const environment: Record<string, string | undefined> = {
+      DATABASE_URL: "postgresql://unreachable.invalid/fixture",
+      SELF_REPRODUCTION_GITHUB_AUDIENCE: "https://builder.example/api/evals/self-reproduction",
+      VERCEL_ENV: "production",
+      VERCEL_GIT_COMMIT_SHA: "deployment-owned-revision",
+      VERCEL_PROJECT_ID: "prj_fixture",
+      VERCEL_TEAM_ID: "team_fixture",
+      [missing]: undefined,
+    };
+    const fetch = vi.spyOn(globalThis, "fetch");
+    try {
+      expect(hostedSelfReproductionRuntime(environment)).toBeUndefined();
+      const response = await createHostedEvalHttpHandler(() =>
+        hostedSelfReproductionRuntime(environment),
+      )(request({ action: "start" }));
+      expect(response.status).toBe(503);
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      fetch.mockRestore();
+    }
+  },
+);

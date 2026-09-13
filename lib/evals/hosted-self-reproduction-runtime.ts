@@ -1,3 +1,7 @@
+import {
+  hostedRuntimePostgresOptions,
+  parseHostedDatabaseUrl,
+} from "../db/postgres-connection-policy";
 import type { Sql } from "postgres";
 import { createGitHubEvalAuthorizer } from "../eve/github-eval-oidc";
 import type { HostedEvalHttpRuntime } from "./hosted-self-reproduction-http";
@@ -42,7 +46,7 @@ export const hostedSelfReproductionRuntime = (
       ]);
       let database = databases.get(databaseUrl);
       if (!database) {
-        database = postgres(databaseUrl);
+        database = postgres(parseHostedDatabaseUrl(databaseUrl), hostedRuntimePostgresOptions);
         databases.set(databaseUrl, database);
       }
       const storage = createPostgresHostedEvalStorage(database);
