@@ -3,6 +3,7 @@ import { copyFile, mkdir, readFile, realpath, stat, writeFile } from "node:fs/pr
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   assessParity,
+  desktopViewports,
   observationSchema,
   parityEvidenceSchema,
   sides,
@@ -201,6 +202,92 @@ export async function writeSupplementaryAssessment(input: {
         });
     }
   }
+  if (!input.referenceCapturesDirectory) {
+    const fixturePath = "captures/reference/fixture.json";
+    const fixtureArtifact = `original/${fixturePath}`;
+    const reportedFiles = new Set<string>(
+      (originalReport.captures ?? []).flatMap(
+        (capture: { files?: string[] }) => capture.files ?? [],
+      ),
+    );
+    const referenceFiles = new Set<string>(
+      (originalReport.captures ?? [])
+        .filter((capture: { label?: string }) => capture.label === "reference")
+        .flatMap((capture: { files?: string[] }) => capture.files ?? []),
+    );
+    if (referenceFiles.has(fixturePath) && copied.has(fixtureArtifact)) {
+      try {
+        const fixtures: unknown = JSON.parse(
+          await readFile(join(output, fixtureArtifact), "utf-8"),
+        );
+        if (!Array.isArray(fixtures))
+          throw new Error("Expected retained reference fixture receipts.");
+        await copy(roots[0]!, "candidate-browser-comparison.json", "original");
+        let candidateOutcomes: {
+          viewport?: string;
+          fixture?: {
+            status?: string;
+            matched?: boolean;
+            draft?: { appName?: string; brief?: string };
+          };
+        }[] = [];
+        if (copied.has("original/candidate-browser-comparison.json")) {
+          const comparison = JSON.parse(
+            await readFile(join(output, "original/candidate-browser-comparison.json"), "utf-8"),
+          );
+          candidateOutcomes = comparison.output?.outcomes ?? [];
+        }
+        for (const viewport of desktopViewports) {
+          const fixture = fixtures.find(
+            (item) =>
+              item?.status === "ready" &&
+              item.state === "authenticated-durable-draft" &&
+              item.viewport?.width === viewport.width &&
+              item.viewport?.height === viewport.height,
+          );
+          const referencePath = `captures/reference/${viewport.name}-0.png`;
+          const reference = `original/${referencePath}`;
+          const candidate = `original/candidate-browser/${viewport.name}/root.png`;
+          if (
+            !fixture ||
+            !referenceFiles.has(referencePath) ||
+            !copied.has(reference) ||
+            !copied.has(candidate) ||
+            !reportedFiles.has(`candidate-browser/${viewport.name}/root.png`)
+          ) {
+            missing.push(
+              `paired-capture/${viewport.name}: blocked; ready authenticated fixture and both report-listed screenshots are required.`,
+            );
+            continue;
+          }
+          const candidateFixture = candidateOutcomes.find(
+            (item) => item.viewport === viewport.name,
+          )?.fixture;
+          const matched =
+            candidateFixture?.status === "prepared" &&
+            candidateFixture.matched === true &&
+            candidateFixture.draft?.appName === fixture.draft?.appName &&
+            candidateFixture.draft?.brief === fixture.draft?.brief;
+          screenshotPairs.push({
+            candidate,
+            qualification: matched
+              ? "The reference authenticated owner and candidate visible controls use matching synthetic draft values. This is a layout comparison; candidate authentication and durable persistence are not established by matching inputs."
+              : "Authenticated durable reference draft versus candidate diagnostic screen. Matching visible inputs are unassessed; authentication and persistence parity are not established.",
+            reference,
+            viewport: viewport.name,
+          });
+        }
+      } catch {
+        missing.push(
+          "paired-capture: blocked; retained reference fixture provenance could not be read.",
+        );
+      }
+    } else {
+      missing.push(
+        "paired-capture: blocked; no report-listed authenticated reference fixture receipt was retained.",
+      );
+    }
+  }
   const assessment = await assessParity(evidence, (path) => Promise.resolve(copied.has(path)));
   // Source failures still need their retained source evidence to count as assessed.
   for (const row of assessment.rows)
@@ -259,7 +346,7 @@ export async function writeSupplementaryAssessment(input: {
     join(output, "index.html"),
     `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Supplementary self-reproduction assessment</title><style>
 body{font:15px/1.5 system-ui,sans-serif;margin:32px auto;padding:0 24px;max-width:1500px;color:#202124;background:#fafafa}h1{font-size:28px;margin-bottom:8px}h2{margin-top:32px}a{color:#1555a3}table{border-collapse:collapse;width:100%;background:white}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #ddd;vertical-align:top}thead{background:#eee}.summary{max-width:650px}.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}figure{margin:0;background:white;border:1px solid #ddd}figcaption{padding:10px;font-weight:600}img{display:block;width:100%;height:auto}.qualification{color:#555}.failed{color:#a12622;font-weight:600}.passed{color:#256029}.findings{overflow-x:auto}.provenance{display:flex;flex-wrap:wrap;gap:16px}.note{max-width:1000px}li{margin:6px 0}
-</style></head><body><h1>How close did the generated app get?</h1><p class="note">Supplementary assessment of <strong>${escape(evidence.runId)}</strong>. Existing runtime evidence plus evaluator source review; no generation or runtime rerun. Counts describe requirement evidence, not a numerical similarity score. Anonymous entry is excluded from cleanup priority.</p><table class="summary"><thead><tr><th>Application</th><th>Passed</th><th>Failed</th><th>Blocked</th><th>Unassessed</th></tr></thead><tbody>${counts}</tbody></table><p class="provenance"><a href="original/report.json">Original runtime report</a><a href="original/revisions.json">Original revisions</a><a href="source-review/source-evidence.json">Source review provenance</a>${input.referenceCapturesDirectory ? '<a href="reference-captures/capture-provenance.json">Capture provenance</a>' : ""}<a href="report.json">Assessment JSON</a><a href="report.md">Markdown report</a></p><h2>Initial screen comparison</h2>${pairMarkup || "<p>No paired captures retained.</p>"}<h2>Confirmed candidate gaps</h2><p>Workflow failures appear before framework and capture findings. These are separate requirements, not necessarily independent root causes.</p><ul>${priorities.map((row) => `<li><strong>${escape(row.requirementId)}</strong> — ${escape(row.reason)}</li>`).join("")}</ul><h2>All requirement outcomes</h2><div class="findings"><table><thead><tr><th>Side</th><th>Requirement</th><th>Status</th><th>Finding</th><th>Artifacts</th></tr></thead><tbody>${findings}</tbody></table></div><details><summary>Other retained screenshots (${images.length})</summary><ul>${images.map((path) => `<li><a href="${escape(path)}">${escape(path)}</a></li>`).join("")}</ul></details></body></html>`,
+</style></head><body><h1>How close did the generated app get?</h1><p class="note">Supplementary assessment of <strong>${escape(evidence.runId)}</strong>. Existing runtime evidence plus evaluator source review; no generation or runtime rerun. Counts describe requirement evidence, not a numerical similarity score. Anonymous entry is excluded from cleanup priority.</p><table class="summary"><thead><tr><th>Application</th><th>Passed</th><th>Failed</th><th>Blocked</th><th>Unassessed</th></tr></thead><tbody>${counts}</tbody></table><p class="provenance"><a href="original/report.json">Original runtime report</a><a href="original/revisions.json">Original revisions</a><a href="source-review/source-evidence.json">Source review provenance</a>${input.referenceCapturesDirectory ? '<a href="reference-captures/capture-provenance.json">Capture provenance</a>' : copied.has("original/captures/reference/fixture.json") ? '<a href="original/captures/reference/fixture.json">Capture fixture provenance</a>' : ""}<a href="report.json">Assessment JSON</a><a href="report.md">Markdown report</a></p><h2>Initial screen comparison</h2>${pairMarkup || "<p>No paired captures retained.</p>"}<h2>Confirmed candidate gaps</h2><p>Workflow failures appear before framework and capture findings. These are separate requirements, not necessarily independent root causes.</p><ul>${priorities.map((row) => `<li><strong>${escape(row.requirementId)}</strong> — ${escape(row.reason)}</li>`).join("")}</ul><h2>All requirement outcomes</h2><div class="findings"><table><thead><tr><th>Side</th><th>Requirement</th><th>Status</th><th>Finding</th><th>Artifacts</th></tr></thead><tbody>${findings}</tbody></table></div><details><summary>Other retained screenshots (${images.length})</summary><ul>${images.map((path) => `<li><a href="${escape(path)}">${escape(path)}</a></li>`).join("")}</ul></details></body></html>`,
   );
   return report;
 }

@@ -148,3 +148,110 @@ describe("supplementary assessment", () => {
     }
   });
 });
+
+const save = async (directory: string, path: string, value: unknown) => {
+  const target = join(directory, path);
+  await mkdir(target.slice(0, target.lastIndexOf("/")), { recursive: true });
+  await writeFile(target, JSON.stringify(value));
+};
+
+it.each(["ready", "blocked", "unlisted"])(
+  "automatically pairs only retained ready listed fixtures: %s",
+  async (state) => {
+    const root = await mkdtemp(join(tmpdir(), "supplementary-auto-"));
+    try {
+      const run = join(root, "run");
+      const review = join(root, "review");
+      const viewports = [
+        { name: "desktop", width: 1440, height: 900 },
+        { name: "desktop-wide", width: 1920, height: 1080 },
+        { name: "desktop-window", width: 1024, height: 768 },
+      ];
+      const side = {
+        output: "available",
+        reason: "Retained",
+        sourceRevision: "original-revision",
+        observations: [],
+      };
+      await save(run, "parity-evidence.json", {
+        schemaVersion: "self-reproduction-parity/v1",
+        runId: "automatic",
+        producer: "evaluator",
+        fixtureVersion: 1,
+        reference: side,
+        candidate: side,
+      });
+      await save(run, "revisions.json", { reference: "original-revision" });
+      await save(review, "observations.json", {
+        schemaVersion: "self-reproduction-source-review/v1",
+        observations: {},
+      });
+      await save(review, "source-evidence.json", { source: "unchanged" });
+      await save(review, "report.md", "Source review");
+      const draft = { appName: "Same name", brief: "Same brief" };
+      await save(
+        run,
+        "captures/reference/fixture.json",
+        viewports.map((viewport) => ({
+          status: state === "blocked" ? "blocked" : "ready",
+          state: "authenticated-durable-draft",
+          viewport,
+          draft,
+        })),
+      );
+      await save(run, "candidate-browser-comparison.json", {
+        output: {
+          outcomes: viewports.map((viewport) => ({
+            viewport: viewport.name,
+            fixture: { status: "prepared", matched: true, draft },
+          })),
+        },
+      });
+      await Promise.all(
+        viewports.flatMap(({ name }) => [
+          save(run, `captures/reference/${name}-0.png`, "reference image"),
+          save(run, `candidate-browser/${name}/root.png`, "candidate image"),
+        ]),
+      );
+      await save(run, "report.json", {
+        captures: [
+          {
+            label: "reference",
+            files: [
+              "captures/reference/fixture.json",
+              ...(state === "unlisted"
+                ? []
+                : viewports.map(({ name }) => `captures/reference/${name}-0.png`)),
+            ],
+          },
+          {
+            label: "candidate",
+            files: viewports.map(({ name }) => `candidate-browser/${name}/root.png`),
+          },
+        ],
+      });
+      const report = await writeSupplementaryAssessment({
+        runDirectory: run,
+        sourceReviewDirectory: review,
+        outputDirectory: join(root, "out"),
+      });
+      expect(report.screenshotPairs).toHaveLength(state === "ready" ? 3 : 0);
+      if (state === "ready") {
+        expect(
+          report.screenshotPairs.every(({ qualification }) =>
+            qualification.includes("matching synthetic draft values"),
+          ),
+        ).toBe(true);
+        expect(await readFile(join(root, "out/original/revisions.json"), "utf-8")).toBe(
+          await readFile(join(run, "revisions.json"), "utf-8"),
+        );
+      } else {
+        expect(
+          report.missingEvidence.some((entry) => entry.includes("paired-capture/desktop: blocked")),
+        ).toBe(true);
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
