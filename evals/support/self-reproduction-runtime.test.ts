@@ -55,6 +55,7 @@ describe("self-reproduction candidate runtime", () => {
       { exitCode: 0 },
       { exitCode: 0 },
       { exitCode: 0 },
+      { exitCode: 0 },
       {
         exitCode: 0,
         stdout: JSON.stringify([
@@ -104,6 +105,7 @@ describe("self-reproduction candidate runtime", () => {
       { exitCode: 0 },
       { exitCode: 0 },
       { exitCode: 0 },
+      { exitCode: 0 },
       { exitCode: 1, stderr: "Type error in app/page.tsx" },
     ]);
     const receipt = await evaluateCandidateRuntime({
@@ -114,7 +116,7 @@ describe("self-reproduction candidate runtime", () => {
       files: [],
     });
     expect(receipt).toMatchObject({ status: "failed", reason: "Candidate build failed." });
-    expect(receipt.commands[3]?.stderr).toContain("Type error");
+    expect(receipt.commands[4]?.stderr).toContain("Type error");
     expect(fixture.spawn).not.toHaveBeenCalled();
     expect(fixture.shutdown).toHaveBeenCalledOnce();
   });

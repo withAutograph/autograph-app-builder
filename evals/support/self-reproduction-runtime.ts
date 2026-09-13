@@ -172,9 +172,24 @@ export async function evaluateCandidateRuntime(input: {
         commands,
         probes: [],
       };
+    const microfrontends = await command(
+      handle,
+      `${bun} .config/mise/scripts/repository/generate-microfrontends.ts`,
+      controller.signal,
+    );
+    commands.push(microfrontends);
+    if (microfrontends.exitCode !== 0)
+      return {
+        producer: "evaluator",
+        sandboxId: handle.session.id,
+        status: "failed",
+        reason: "Candidate microfrontend configuration failed.",
+        commands,
+        probes: [],
+      };
     const build = await command(
       handle,
-      `${bun} run --cwd apps/${input.candidateAppId} build`,
+      `VC_MICROFRONTENDS_CONFIG=/workspace/.scratch/microfrontends/microfrontends.json ${bun} run --cwd apps/${input.candidateAppId} build`,
       controller.signal,
     );
     commands.push(build);
