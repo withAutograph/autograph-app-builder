@@ -79,6 +79,7 @@ const { values } = parseArgs({
     "arrusted-root": { type: "string" },
     "candidate-url": { type: "string" },
     "candidate-runtime": { type: "boolean" },
+    "candidate-capability-probe": { type: "boolean" },
     "debug-prerender": { type: "boolean" },
     "reference-url": { type: "string" },
     "reference-runtime": { type: "boolean" },
@@ -432,7 +433,7 @@ function reportHtml(report: {
         `<li><strong>${escape(item.label)}</strong>: ${escape(item.status)}${item.files.length ? ` — ${item.files.map((file) => `<a href="${escape(file)}">${escape(basename(file))}</a>${/\.(?:png|jpe?g|webp)$/iu.test(file) ? `<img src="${escape(file)}" alt="${escape(item.label)} ${escape(basename(file))}" style="display:block;max-width:100%;margin:12px 0">` : ""}`).join(", ")}` : ""}</li>`,
     )
     .join("");
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>One unassisted baseline. Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escape(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escape(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Side</th><th>Requirement</th><th>Reason</th><th>Artifacts</th></tr></thead><tbody>${rows}</tbody></table><h2>Browser evidence</h2>${diagnosticPairs}<ul>${captureItems || "<li>Not captured.</li>"}</ul></main></html>`;
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>App Builder self-reproduction eval</title><style>body{font:16px/1.5 system-ui;margin:32px auto;padding:0 24px;max-width:1280px;color:#202124}table{border-collapse:collapse;width:100%}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}td:first-child{text-transform:uppercase;font-weight:700}pre{white-space:pre-wrap;background:#f5f5f5;padding:16px}li{margin:14px 0}</style><main><h1>App Builder self-reproduction eval</h1><p>${report.generation.status === "not-run" ? "Comparison-only replay; no generation was run." : "One unassisted baseline."} Static evidence does not prove runtime behavior. Missing or unavailable evidence is never reported as success.</p><p>${escape(report.createdAt)} · <a href="report.json">JSON evidence</a> · <a href="report.md">Markdown summary</a></p><h2>Generation</h2><pre>${escape(JSON.stringify(report.generation, null, 2))}</pre><h2>Prioritized gaps</h2>${gaps}<h2>Requirements</h2><table><thead><tr><th>Status</th><th>Side</th><th>Requirement</th><th>Reason</th><th>Artifacts</th></tr></thead><tbody>${rows}</tbody></table><h2>Runtime and browser evidence</h2>${diagnosticPairs}<ul>${captureItems || "<li>Not captured.</li>"}</ul></main></html>`;
 }
 
 async function runGenerator(arrustedRoot: string | undefined) {
@@ -875,7 +876,7 @@ async function main() {
   if (values.help) {
     console.log(`Usage: mise run eval:self-reproduction -- [--arrusted-root PATH] [--output-dir EXTERNAL_PATH]
   [--reference-url URL] [--candidate-url URL] [--capture-adapter evals/PATH] [--generation-timeout-ms N]
-  [--candidate-runtime] [--debug-prerender] [--reference-runtime]
+  [--candidate-runtime] [--candidate-capability-probe] [--debug-prerender] [--reference-runtime]
   [--workflow-adapter-module EVALUATOR_MODULE]
   [--report-only --candidate-root PATH]
 
@@ -883,6 +884,8 @@ Explicitly runs the native live Eve benchmark with strict assertions and writes
 sanitized evidence outside the source tree. No publication or deployment.
 --report-only audits an existing candidate without running generation.
 --reference-runtime starts an isolated emulated reference; live native runs do this by default.
+--candidate-capability-probe checks live model and child Sandbox access during a replay.
+Native live runs include this infrastructure proof; it gives no product functionality credit.
 --candidate-runtime starts the exported candidate in an evaluator-owned Vercel Sandbox
 and retains build, readiness, and public documentation probe receipts.
 --debug-prerender retains an additional diagnostic build after production build failure;
@@ -1074,6 +1077,25 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
               appRoot: "/workspace",
               debugPrerender: values["debug-prerender"],
               onReady: async ({ session, baseURL, abortSignal }) => {
+                if (
+                  values["candidate-capability-probe"] ||
+                  (!values["report-only"] && !values.generator)
+                ) {
+                  const { runCandidateCapabilityProbe } =
+                    await import("../evals/support/self-reproduction-candidate-capability-probe");
+                  const capabilityProof = await runCandidateCapabilityProbe({
+                    session,
+                    abortSignal,
+                    model: activeBuilderModelId,
+                  });
+                  await jsonFile("candidate-capability-proof.json", capabilityProof);
+                  captures.push({
+                    label: "candidate infrastructure proof",
+                    files: ["candidate-capability-proof.json"],
+                    status:
+                      "Live access diagnostic only; no generated application functionality credit.",
+                  });
+                }
                 const comparison = await runSandboxRuntimeComparison({
                   session,
                   ...sandboxBrowserComparison(),
