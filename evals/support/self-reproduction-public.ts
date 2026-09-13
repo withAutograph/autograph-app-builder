@@ -155,7 +155,7 @@ export const makePublicTransport = async (
   };
 };
 
-export const runPublicSession = async (options: {
+interface SessionOptions {
   state: PublicState;
   transport: PublicTransport;
   save: () => void;
@@ -164,7 +164,96 @@ export const runPublicSession = async (options: {
   timeoutMs: number;
   pollMs: number;
   sleep?: (ms: number) => Promise<void>;
-}) => {
+}
+
+type AcceptSession = (raw: unknown) => void;
+const sendPendingMessage = async (options: SessionOptions, accept: AcceptSession) => {
+  const { state, save, transport } = options;
+  if (options.message !== undefined && !state.pendingMessage) {
+    if (!options.message.trim() || options.message.length > 32_000) {
+      throw new Error("Message must contain 1 to 32000 characters");
+    }
+    if (state.session?.status !== "waiting" || state.session.inputRequests?.length) {
+      throw new Error(
+        "Ordinary messages require a waiting public conversation without structured input requests",
+      );
+    }
+    state.pendingMessage = { clientRequestId: randomUUID(), message: options.message };
+    save();
+  }
+  if (state.pendingMessage) {
+    const pending = state.pendingMessage;
+    if (!state.session) {
+      throw new Error("Missing public session for pending message");
+    }
+    accept(
+      await transport.call("autograph_send", { ...pending, sessionId: state.session.sessionId }),
+    );
+    delete state.pendingMessage;
+    save();
+  }
+};
+const validateResponses = (session: EveSessionResult, responses: Responses) => {
+  const requests = session.inputRequests ?? [];
+  eveRespondInputSchema.parse({
+    clientRequestId: "validation",
+    responses,
+    sessionId: session.sessionId,
+  });
+  for (const item of responses) {
+    const request = requests.find((entry) => entry.requestId === item.requestId);
+    if (!request) {
+      throw new Error("Unknown request");
+    }
+    if (request.kind === "approval" && item.response.kind === "answer") {
+      throw new Error("Approval requires explicit approve or deny");
+    }
+    if (request.kind === "question" && item.response.kind !== "answer") {
+      throw new Error("Question requires an ordinary answer");
+    }
+    const { response } = item;
+    if (
+      response.kind === "answer" &&
+      ((!request.allowFreeform && !response.optionId) ||
+        (response.optionId && !request.options?.some((option) => option.id === response.optionId)))
+    ) {
+      throw new Error("Answer must use a supported option");
+    }
+  }
+};
+// Persist a complete response batch before any public continuation call.
+const prepareResponse = (options: SessionOptions, session: EveSessionResult): boolean => {
+  const { state, save } = options;
+  const requests = session.inputRequests ?? [];
+  if (requests.some((request) => request.kind === "authorization")) {
+    state.outcome = "blocked_authorization_requires_product_ui";
+    save();
+    return false;
+  }
+  if (!requests.length || !options.responses) {
+    state.outcome = "input_required";
+    save();
+    return false;
+  }
+  const { responses } = options;
+  const requested = new Set(requests.map((request) => request.requestId));
+  if (
+    responses.length !== requests.length ||
+    responses.some(
+      (item) => !requested.has(item.requestId) || state.answered.includes(item.requestId),
+    )
+  ) {
+    state.outcome = "input_required";
+    save();
+    return false;
+  }
+  validateResponses(session, responses);
+  state.pendingResponse = { clientRequestId: randomUUID(), responses };
+  save();
+  return true;
+};
+
+export const runPublicSession = async (options: SessionOptions) => {
   const { state, transport, save } = options;
   if (options.message !== undefined && !state.session) {
     throw new Error("An ordinary message requires an existing public session");
@@ -212,29 +301,7 @@ export const runPublicSession = async (options: {
   if (state.pendingResponse) {
     await respond();
   }
-  if (options.message !== undefined && !state.pendingMessage) {
-    if (!options.message.trim() || options.message.length > 32_000) {
-      throw new Error("Message must contain 1 to 32000 characters");
-    }
-    if (state.session?.status !== "waiting" || state.session.inputRequests?.length) {
-      throw new Error(
-        "Ordinary messages require a waiting public conversation without structured input requests",
-      );
-    }
-    state.pendingMessage = { clientRequestId: randomUUID(), message: options.message };
-    save();
-  }
-  if (state.pendingMessage) {
-    const pending = state.pendingMessage;
-    if (!state.session) {
-      throw new Error("Missing public session for pending message");
-    }
-    accept(
-      await transport.call("autograph_send", { ...pending, sessionId: state.session.sessionId }),
-    );
-    delete state.pendingMessage;
-    save();
-  }
+  await sendPendingMessage(options, accept);
   while (Date.now() < deadline) {
     const { session } = state;
     if (!session) {
@@ -251,57 +318,9 @@ export const runPublicSession = async (options: {
       return;
     }
     if (session.status === "input_required") {
-      const requests = session.inputRequests ?? [];
-      if (requests.some((request) => request.kind === "authorization")) {
-        state.outcome = "blocked_authorization_requires_product_ui";
-        save();
+      if (!prepareResponse(options, session)) {
         return;
       }
-      if (!requests.length || !options.responses) {
-        state.outcome = "input_required";
-        save();
-        return;
-      }
-      const { responses } = options;
-      const requested = new Set(requests.map((request) => request.requestId));
-      if (
-        responses.length !== requests.length ||
-        responses.some(
-          (item) => !requested.has(item.requestId) || state.answered.includes(item.requestId),
-        )
-      ) {
-        state.outcome = "input_required";
-        save();
-        return;
-      }
-      eveRespondInputSchema.parse({
-        clientRequestId: "validation",
-        responses,
-        sessionId: session.sessionId,
-      });
-      for (const item of responses) {
-        const request = requests.find((entry) => entry.requestId === item.requestId);
-        if (!request) {
-          throw new Error("Unknown request");
-        }
-        if (request.kind === "approval" && item.response.kind === "answer") {
-          throw new Error("Approval requires explicit approve or deny");
-        }
-        if (request.kind === "question" && item.response.kind !== "answer") {
-          throw new Error("Question requires an ordinary answer");
-        }
-        const { response } = item;
-        if (
-          response.kind === "answer" &&
-          ((!request.allowFreeform && !response.optionId) ||
-            (response.optionId &&
-              !request.options?.some((option) => option.id === response.optionId)))
-        ) {
-          throw new Error("Answer must use a supported option");
-        }
-      }
-      state.pendingResponse = { clientRequestId: randomUUID(), responses };
-      save();
       await respond();
     } else {
       await (options.sleep ?? delay)(options.pollMs);
