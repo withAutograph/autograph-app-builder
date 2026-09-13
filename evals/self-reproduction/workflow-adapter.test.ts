@@ -102,3 +102,11 @@ it("reads the isolated reference fixture flag secret", async () => {
   await reference?.prepare({} as Page, "authentication");
   expect(readFile).toHaveBeenCalledWith("/tmp/isolated-reference/.emulate/flags-secret", "utf-8");
 });
+
+it("binds the real reference provider denial and replay fixture", async () => {
+  const { reference } = createWorkflowAdapters({
+    outputRoot: "/tmp/evidence",
+    referenceUrl: "https://localhost:3001",
+  });
+  expect(await reference?.prepare({} as Page, "provider-return-error")).toEqual({ ready: true });
+});

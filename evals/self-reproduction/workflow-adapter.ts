@@ -14,6 +14,8 @@ import {
   databaseUrl,
   finishOAuth,
   installProvider,
+  openProviderConnection,
+  advanceProviderConnectionToApproval,
   resetApplicationState,
   waitForBuilderReady,
 } from "../../e2e/support/harness";
@@ -135,6 +137,7 @@ function referenceAdapter(
     "authentication",
     "durable-draft",
     "provider-return-success",
+    "provider-return-error",
     "documentation",
   ]);
   let initialDraftRevision = 0;
@@ -280,6 +283,55 @@ function referenceAdapter(
               "other-user-denied",
               otherUserDenied,
               "A distinct authenticated passkey user received only handoff_unavailable while the owner could read the prepared handoff.",
+            ),
+          ],
+        };
+      }
+      if (workflowId === "provider-return-error") {
+        await openProviderConnection(page, "GitHub");
+        await advanceProviderConnectionToApproval(page, "GitHub");
+        await page.getByRole("button", { name: "Connect emulated GitHub", exact: true }).click();
+        await expect(page).toHaveURL(/\/local-connections\/github\?.*phase=authorize/u);
+        const state = new URL(page.url()).searchParams.get("state");
+        if (!state) throw new Error("Emulated GitHub authorization did not retain callback state.");
+        const callback = new URL("/github/installations/callback", referenceUrl);
+        callback.searchParams.set("state", state);
+        callback.searchParams.set("error", "access_denied");
+        await page.goto(callback.href);
+        await expect(page).toHaveURL(/github=failed/u);
+        await waitForBuilderReady(page);
+        const errorVisible = await page
+          .getByText(
+            /GitHub.*could not|could not.*GitHub|GitHub.*failed|GitHub.*invalid|GitHub.*expired/iu,
+          )
+          .first()
+          .isVisible();
+        const preserved =
+          (await page.getByLabel("App Name").inputValue()) === fixedName &&
+          (await page.getByLabel("App Brief", { exact: true }).inputValue()) === fixedBrief;
+        await page.goto(callback.href);
+        await expect(page).toHaveURL(/github=failed/u);
+        const rejected =
+          new URL(page.url()).searchParams.get("github") === "failed" &&
+          (await applicationCounts()).githubInstallations === 0;
+        return {
+          reason:
+            "Returned a denial using actual pending emulated OAuth state, then replayed the consumed callback through the application.",
+          assertions: [
+            assertion(
+              "error-visible",
+              errorVisible,
+              "The application rendered provider failure feedback after denial.",
+            ),
+            assertion(
+              "draft-preserved",
+              preserved,
+              "The acknowledged draft fields survived the denied callback.",
+            ),
+            assertion(
+              "replayed-state-rejected",
+              rejected,
+              "Replayed callback returned failure and created no GitHub binding.",
             ),
           ],
         };
