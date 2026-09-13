@@ -82,7 +82,7 @@ function candidatePackageName(files: readonly SandboxSeedFile[], appId: string) 
 
 const registerMicrofrontendScript = (appId: string, packageName: string) => String.raw`
 import { readFile, writeFile } from "node:fs/promises";
-const path = "/workspace/.scratch/microfrontends/microfrontends.json";
+const path = "/workspace/microfrontends.json";
 const config = JSON.parse(await readFile(path, "utf8"));
 config.applications["apps-" + ${JSON.stringify(appId)}] = {
   packageName: ${JSON.stringify(packageName)},
