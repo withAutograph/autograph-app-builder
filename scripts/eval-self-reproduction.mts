@@ -251,7 +251,7 @@ async function readCandidateSource(
       if (entry.isDirectory()) return readCandidateSource(directory, path);
       if (
         !entry.isFile() ||
-        !/^(?:[^.]+|.*\.(?:[cm]?[jt]sx?|css|mdx?|json|toml|ya?ml))$/u.test(entry.name)
+        !/^(?:[^.]+|.*\.(?:[cm]?[jt]sx?|css|mdx?|json|pkl|toml|ya?ml))$/u.test(entry.name)
       )
         return [];
       return [{ path: relative(directory, path), content: await readFile(path, "utf-8") }];
