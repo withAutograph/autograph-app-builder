@@ -172,6 +172,43 @@ describe("self-reproduction candidate runtime", () => {
     expect(onReady).toHaveBeenCalledOnce();
   });
 
+  it("retains ready runtime evidence when evaluator callback fails and redacts its diagnostic", async () => {
+    const root = {
+      id: "root",
+      passed: true,
+      disposition: "observed",
+      method: "http",
+      status: 200,
+      url: "http://127.0.0.1:3000",
+      detail: "ok",
+    };
+    const fixture = backend([
+      ...Array.from({ length: 6 }, () => ({ exitCode: 0 })),
+      { exitCode: 0, stdout: JSON.stringify([root]) },
+      { exitCode: 0 },
+      { exitCode: 0, stdout: "[]" },
+    ]);
+    const receipt = await evaluateCandidateRuntime({
+      backend: fixture.backend,
+      candidateAppId: "candidate",
+      files: [],
+      workspaceArchive: Buffer.from("archive"),
+      credentials: { token: "private-credential", teamId: "team", projectId: "project" },
+      onReady: () => Promise.reject(new Error("Evaluator disk write failed: private-credential")),
+    });
+    expect(receipt.status).toBe("available");
+    expect(receipt.probes).toEqual([root]);
+    expect(receipt.evaluatorErrors).toEqual([
+      {
+        stage: "onReady",
+        disposition: "infrastructure-unavailable",
+        detail: "Evaluator disk write failed: [REDACTED]",
+      },
+    ]);
+    expect(candidateRuntimeFailureObservations({ receipt })).toEqual([]);
+    expect(fixture.shutdown).toHaveBeenCalledOnce();
+  });
+
   it("retains build diagnostics and never starts a failed candidate", async () => {
     const fixture = backend([
       { exitCode: 0 },

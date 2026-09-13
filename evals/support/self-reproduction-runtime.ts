@@ -23,6 +23,11 @@ export interface RuntimeCommandReceipt {
 export interface CandidateRuntimeReceipt {
   producer: "evaluator";
   sandboxId?: string;
+  evaluatorErrors?: {
+    stage: "onReady";
+    disposition: "infrastructure-unavailable";
+    detail: string;
+  }[];
   status: "available" | "failed" | "infrastructure-unavailable";
   reason: string;
   commands: RuntimeCommandReceipt[];
@@ -205,6 +210,7 @@ async function executeCandidateRuntime(input: {
     signal: AbortSignal,
   ) => runCommand(handle, value, signal, input.credentials ? [input.credentials.token] : []);
   const commands: RuntimeCommandReceipt[] = [];
+  const evaluatorErrors: NonNullable<CandidateRuntimeReceipt["evaluatorErrors"]> = [];
   let handle: SandboxBackendHandle<Record<string, never>> | undefined;
   const controller = new AbortController();
   const timer = setTimeout(
@@ -422,11 +428,19 @@ async function executeCandidateRuntime(input: {
         controller.signal,
       );
       commands.push(browserSetup);
-      await input.onReady?.({
-        session: handle.session,
-        baseURL: `http://127.0.0.1:3000${runtimeBasePath}`,
-        abortSignal: controller.signal,
-      });
+      try {
+        await input.onReady?.({
+          session: handle.session,
+          baseURL: `http://127.0.0.1:3000${runtimeBasePath}`,
+          abortSignal: controller.signal,
+        });
+      } catch (error) {
+        evaluatorErrors.push({
+          stage: "onReady",
+          disposition: "infrastructure-unavailable",
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
       const browser = await command(
         handle,
         `${runtimeEnvironment} node .self-reproduction-browser.mjs`,
@@ -450,6 +464,7 @@ async function executeCandidateRuntime(input: {
     return {
       commands,
       probes: Array.isArray(probes) ? probes : [],
+      evaluatorErrors,
       producer: "evaluator",
       reason:
         root?.passed === true
