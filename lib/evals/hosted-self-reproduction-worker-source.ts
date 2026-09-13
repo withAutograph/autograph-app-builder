@@ -26,7 +26,7 @@ export const hostedAmazonBrowserPackages = [
   "cairo",
   "gtk3",
   "dbus-libs",
-] as const;
+];
 
 /** Standalone trusted worker JavaScript. Keep as data so bundlers cannot rewrite imports. */
 export const hostedEvalWorkerSource = [
