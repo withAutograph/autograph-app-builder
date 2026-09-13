@@ -2,7 +2,7 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { copyFile, mkdir, realpath, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { get } from "node:https";
 import { createServer } from "node:net";
 import { dirname, isAbsolute, join, relative, resolve as resolvePath } from "node:path";
@@ -49,6 +49,7 @@ export async function snapshotReferenceSource(
     try {
       // Materialize trusted tracked symlink targets as ordinary fixture files.
       const target = await realpath(source);
+      if (!(await stat(target)).isFile()) continue;
       await mkdir(dirname(join(fixtureRoot, file)), { recursive: true });
       await copyFile(target, join(fixtureRoot, file));
     } catch (error) {
@@ -126,7 +127,12 @@ export async function startSelfReproductionReferenceRuntime(input: {
     const output = createWriteStream(log);
     const child = spawn(input.miseExecutable, args, {
       cwd: fixtureRoot,
-      env: { ...process.env, ...environment, MISE_BIN_PATH: input.miseExecutable },
+      env: {
+        ...process.env,
+        ...environment,
+        MISE_BIN_PATH: input.miseExecutable,
+        PATH: `${dirname(input.miseExecutable)}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+      },
       stdio: ["ignore", "pipe", "pipe"],
     });
     child.stdout.pipe(output, { end: false });
@@ -164,7 +170,12 @@ export async function startSelfReproductionReferenceRuntime(input: {
     const output = createWriteStream(log);
     server = spawn(input.miseExecutable, ["run", "app:dev-emulated"], {
       cwd: fixtureRoot,
-      env: { ...process.env, ...environment, MISE_BIN_PATH: input.miseExecutable },
+      env: {
+        ...process.env,
+        ...environment,
+        MISE_BIN_PATH: input.miseExecutable,
+        PATH: `${dirname(input.miseExecutable)}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+      },
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
