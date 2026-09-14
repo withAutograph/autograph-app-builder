@@ -2,7 +2,7 @@
 export const currentReviewResults = <T extends { name: string }>(results: readonly T[]): T[] =>
   results.slice(results.findLastIndex(({ name }) => name === "validate_app_creation") + 1);
 
-export const unavailableReviewReply = (phase: unknown): string | undefined => {
+export const unavailableReviewReply = (phase: string | undefined): string | undefined => {
   if (phase === "validated" || phase === "reviewed") {
     return undefined;
   }

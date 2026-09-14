@@ -13,6 +13,11 @@ const staysProductFacing = satisfies(
   "assistant reply stays product-facing during existing-app iteration",
 );
 
+const validatedCallSchema = z.object({
+  output: z.object({ status: z.literal("validated") }),
+  status: z.literal("completed"),
+});
+
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 const existingChangesSchema = z
   .array(
@@ -83,12 +88,7 @@ Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
     await t.require(
       validationCall,
       satisfies(
-        (call) =>
-          call.status === "completed" &&
-          typeof call.output === "object" &&
-          call.output !== null &&
-          "status" in call.output &&
-          call.output.status === "validated",
+        (call) => validatedCallSchema.safeParse(call).success,
         "current validation receipt passed",
       ),
     );
