@@ -58,8 +58,10 @@ export function prototypePreviewRequestUrl(input: {
   const origin = new URL(configured);
   const port = unprivilegedPortSchema.safeParse(origin.port);
   if (
-    origin.protocol !== "http:" ||
-    origin.hostname !== "127.0.0.1" ||
+    !(
+      (origin.protocol === "http:" && origin.hostname === "127.0.0.1") ||
+      (origin.protocol === "https:" && origin.hostname === "localhost")
+    ) ||
     !port.success ||
     origin.username !== "" ||
     origin.password !== "" ||
@@ -68,7 +70,7 @@ export function prototypePreviewRequestUrl(input: {
     origin.hash !== ""
   ) {
     throw new Error(
-      "The local development preview origin must be an exact unprivileged 127.0.0.1 HTTP origin.",
+      "The local development preview origin must be an exact unprivileged 127.0.0.1 HTTP or localhost HTTPS origin.",
     );
   }
   return new URL("/mcp", origin).href;

@@ -5,7 +5,8 @@ import YAML from "yaml";
 
 import { providerEmulationSeed } from "../lib/integrations/provider-emulation-seed";
 
-const stateDirectory = path.join(process.cwd(), ".emulate");
+const stateDirectory =
+  process.env.APP_BUILDER_EMULATED_STATE_ROOT ?? path.join(process.cwd(), ".emulate");
 const keyPath = path.join(stateDirectory, "github-app-private-key.pem");
 const configPath = path.join(stateDirectory, "config.yaml");
 const relayPath = path.join(stateDirectory, "relay-secret");

@@ -487,3 +487,47 @@ describe("Preview OAuth runtime configuration", () => {
     expect(message).not.toContain(secret);
   });
 });
+
+it("permits local adapter auth only in explicit emulated development", () => {
+  const local = {
+    APP_BUILDER_DATABASE_PORT: "54339",
+    APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+    APP_BUILDER_EXECUTION_MODE: "development",
+    APP_BUILDER_LOCAL_ADAPTER: "1",
+    APP_BUILDER_LOCAL_AUTH_EMULATION: "1",
+    APP_BUILDER_LOCAL_PROVIDER_EMULATION: "1",
+    BETTER_AUTH_SECRET: "a".repeat(32),
+    BETTER_AUTH_URL: "https://localhost:3001/api/auth",
+    EMULATE_GITHUB_REPOSITORY: "autograph-local/demo-app",
+    EMULATE_LOCAL_RELAY_SECRET: "a".repeat(32),
+    EMULATE_PROVIDER_TOKEN: "a".repeat(20),
+    EVE_HOSTED_ADAPTER: "0",
+    GITHUB_CLIENT_ID: "local-github-client",
+    GITHUB_CLIENT_SECRET: "local-github-secret".repeat(2),
+    GITHUB_EMULATOR_URL: "http://localhost:4001",
+    MCP_RESOURCE_URL: "https://localhost:3001/mcp",
+    PASSKEY_ONBOARDING: "local-preview-v1",
+    VERCEL_AUTH_CLIENT_ID: "local-vercel-client",
+    VERCEL_AUTH_CLIENT_SECRET: "local-vercel-secret".repeat(2),
+    VERCEL_EMULATOR_URL: "http://localhost:4000",
+  };
+  expect(readPreviewOAuthRuntimeConfig(local)).toMatchObject({
+    environment: "local",
+    hostedAdapter: "0",
+    localDevelopmentEmulation: true,
+    passkeyOnboarding: { origin: "https://localhost:3001", rpId: "localhost" },
+  });
+  for (const override of [
+    { APP_BUILDER_EXECUTION_MODE: undefined },
+    { APP_BUILDER_EXECUTION_BUNDLE: undefined },
+    { APP_BUILDER_LOCAL_ADAPTER: "0" },
+    { APP_BUILDER_LOCAL_AUTH_EMULATION: "0" },
+    { VERCEL_ENV: "preview" },
+    { VERCEL_ENV: "production" },
+    { EVE_HOSTED_VERCEL_ENVIRONMENT: "preview" },
+    { BETTER_AUTH_URL: "https://other.test/api/auth" },
+    { MCP_RESOURCE_URL: "https://localhost:4000/mcp" },
+  ]) {
+    expect(() => readPreviewOAuthRuntimeConfig({ ...local, ...override })).toThrow();
+  }
+});

@@ -206,3 +206,25 @@ describe("Browser prototype preview", () => {
     expect(get).toHaveBeenCalledTimes(2);
   });
 });
+
+it("keeps explicit HTTPS development previews on localhost", () => {
+  const environment = {
+    APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+    APP_BUILDER_EXECUTION_MODE: "development",
+    APP_BUILDER_LOCAL_ADAPTER: "1",
+    APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+    EVE_HOSTED_ADAPTER: "0",
+  };
+  expect(
+    prototypePreviewRequestUrl({
+      environment: { ...environment, APP_BUILDER_DEVELOPMENT_ORIGIN: "https://localhost:3100" },
+      requestUrl: "http://127.0.0.1:3100/mcp",
+    }),
+  ).toBe("https://localhost:3100/mcp");
+  expect(() =>
+    prototypePreviewRequestUrl({
+      environment: { ...environment, APP_BUILDER_DEVELOPMENT_ORIGIN: "https://example.test:3100" },
+      requestUrl: "http://127.0.0.1:3100/mcp",
+    }),
+  ).toThrow();
+});

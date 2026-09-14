@@ -9,14 +9,38 @@ github_emulate_port=$((emulate_base_port + 1))
 database_port=${APP_BUILDER_DATABASE_PORT:-54329}
 app_protocol=https
 app_origin=$app_protocol://localhost:$app_port
-pid_file=.emulate/dev-emulated.pids
+state_dir=${APP_BUILDER_EMULATED_STATE_ROOT:-$PWD/.emulate}
+pid_file="$state_dir/dev-emulated.pids"
 "$(mise which pnpm)" exec tsx scripts/prepare-emulate-config.mts "$app_origin"
 emulate_pid=
 app_pid=
+database_owned=0
+cleanup() {
+  if [ -n "$app_pid" ]; then
+    pkill -TERM -P "$app_pid" 2>/dev/null || true
+    kill "$app_pid" 2>/dev/null || true
+    wait "$app_pid" 2>/dev/null || true
+  fi
+  if [ -n "$emulate_pid" ]; then
+    pkill -TERM -P "$emulate_pid" 2>/dev/null || true
+    kill "$emulate_pid" 2>/dev/null || true
+    wait "$emulate_pid" 2>/dev/null || true
+  fi
+  if [ "$database_owned" = 1 ]; then
+    "$docker" stop "$database_container" >/dev/null 2>&1 || true
+  fi
+  rm -f "$pid_file"
+}
+trap cleanup EXIT INT TERM
+
+if [ "${APP_BUILDER_EMULATED_SERVICES_ONLY:-0}" = 1 ] && lsof -nP -iTCP:"$emulate_base_port" -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "Emulated web provider port is already in use. Configure EMULATE_BASE_PORT through mise or stop the owning local stack; this command will not reuse or stop an unrelated emulator." >&2
+  exit 78
+fi
 if ! lsof -nP -iTCP:"$emulate_base_port" -sTCP:LISTEN >/dev/null 2>&1; then
   "$(mise which node)" node_modules/emulate/dist/index.js \
     start --port "$emulate_base_port" --service vercel,github \
-    --seed .emulate/config.yaml &
+    --seed "$state_dir/config.yaml" &
   emulate_pid=$!
 fi
 docker=$(mise which docker)
@@ -29,9 +53,13 @@ if [ "$external_database" != 1 ]; then
       --env POSTGRES_HOST_AUTH_METHOD=trust \
       --env POSTGRES_DB=autograph_app_builder \
       --publish "127.0.0.1:$database_port:5432" \
-      --volume "$PWD/.emulate/postgres:/var/lib/postgresql" \
+      --volume "$state_dir/postgres:/var/lib/postgresql" \
       postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40 \
       -c max_connections=500 >/dev/null
+    if [ "${APP_BUILDER_EMULATED_SERVICES_ONLY:-0}" = 1 ]; then database_owned=1; fi
+  fi
+  if [ "${APP_BUILDER_EMULATED_SERVICES_ONLY:-0}" = 1 ] && [ "$("$docker" inspect --format "{{.State.Running}}" "$database_container")" != true ]; then
+    database_owned=1
   fi
   "$docker" start "$database_container" >/dev/null 2>&1 || true
   attempt=0
@@ -61,21 +89,6 @@ else
     sleep 0.5
   done
 fi
-cleanup() {
-  if [ -n "$app_pid" ]; then
-    pkill -TERM -P "$app_pid" 2>/dev/null || true
-    kill "$app_pid" 2>/dev/null || true
-    wait "$app_pid" 2>/dev/null || true
-  fi
-  if [ -n "$emulate_pid" ]; then
-    pkill -TERM -P "$emulate_pid" 2>/dev/null || true
-    kill "$emulate_pid" 2>/dev/null || true
-    wait "$emulate_pid" 2>/dev/null || true
-  fi
-  rm -f "$pid_file"
-}
-trap cleanup EXIT INT TERM
-
 export APP_BUILDER_LOCAL_PROVIDER_EMULATION=1
 export APP_BUILDER_LOCAL_AUTH_EMULATION=1
 export APP_BUILDER_LOCAL_PORT="$app_port"
@@ -84,8 +97,8 @@ export PASSKEY_ONBOARDING=local-preview-v1
 export EVE_HOSTED_ADAPTER=1
 export BETTER_AUTH_URL="$app_origin/api/auth"
 export MCP_RESOURCE_URL="$app_origin/mcp"
-export BETTER_AUTH_SECRET="$(tr -d '\n' < .emulate/better-auth-secret)"
-export FLAGS_SECRET="$(tr -d '\n' < .emulate/flags-secret)"
+export BETTER_AUTH_SECRET="$(tr -d '\n' < "$state_dir/better-auth-secret")"
+export FLAGS_SECRET="$(tr -d '\n' < "$state_dir/flags-secret")"
 export GITHUB_CLIENT_ID=Iv1_local_app_client
 export GITHUB_CLIENT_SECRET=local-github-client-secret-value
 export GITHUB_APP_ID=12345
@@ -107,7 +120,13 @@ export EMULATE_VERCEL_CONFIGURATION_ID=icfg_local_1
 export EMULATE_VERCEL_TEAM_ID=autograph-local
 export EMULATE_GITHUB_INSTALLATION_ID=1001
 export EMULATE_GITHUB_REPOSITORY=autograph-local/demo-app
-export EMULATE_LOCAL_RELAY_SECRET="$(tr -d '\n' < .emulate/relay-secret)"
+export EMULATE_LOCAL_RELAY_SECRET="$(tr -d '\n' < "$state_dir/relay-secret")"
+if [ "${APP_BUILDER_EMULATED_SERVICES_ONLY:-0}" = 1 ]; then
+  "$(mise which node)" --import tsx scripts/emulated-web-service-receipt.mts &
+  app_pid=$!
+  wait "$app_pid"
+  exit $?
+fi
 .config/mise/scripts/trusted-node-launcher \
   "$(mise which node)" node_modules/next/dist/bin/next dev \
   --experimental-https --hostname 0.0.0.0 --port "$app_port" "$@" &
