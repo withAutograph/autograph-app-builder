@@ -138,6 +138,10 @@ app-owned files and reuse the same component-backed preview flow.
    Use `apply_app_creation` for the approved implementation. The prepared
    checkout remains the live working source; do not assume apply creates a
    fresh overlay or that normal source edits require a new workspace.
+   When apply rejects a submission, send corrected files as an incremental
+   retry: omitted files from the same approved proposal remain staged, and
+   supplied paths replace their earlier contents. A new proposal starts a new
+   staged implementation.
    Preserve unrelated changes. Repair actual reported technical failures
    through the supported tools when safe, without requesting the same approval
    again. If recovery is unavailable, explain the incomplete product outcome.
