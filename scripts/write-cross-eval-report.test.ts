@@ -150,5 +150,24 @@ it("rejects supplemental success overriding failed runner evidence", () => {
         ],
       },
     }),
-  ).toThrow("cannot pass failed runner");
+  ).toThrow("requires passing nonempty runner");
 });
+
+it.each([undefined, "errored", "skipped", "passed"])(
+  "rejects supplemental success without completed assertions (%s)",
+  (verdict) => {
+    expect(() =>
+      buildCrossEvalReport({
+        baseline: {},
+        inventory,
+        revision: "abc",
+        summaries: [{ evals: verdict === undefined ? [] : [{ id: "missing", verdict }] }],
+        supplemental: {
+          scenarios: [
+            { evidence: ["receipt.json"], id: "missing", reason: "works", status: "passed" },
+          ],
+        },
+      }),
+    ).toThrow("requires passing nonempty runner");
+  },
+);

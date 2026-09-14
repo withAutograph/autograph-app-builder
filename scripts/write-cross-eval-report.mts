@@ -123,10 +123,12 @@ export function buildCrossEvalReport(input: {
       }
       if (
         supplement.status === "passed" &&
-        (runner?.verdict === "failed" || (runner?.assertions.failed ?? 0) > 0)
+        (runner?.verdict !== "passed" ||
+          runner.assertions.total === 0 ||
+          runner.assertions.failed > 0)
       ) {
         throw new Error(
-          `Supplemental assessment cannot pass failed runner evidence for ${item.id}.`,
+          `Supplemental assessment requires passing nonempty runner evidence for ${item.id}.`,
         );
       }
       status = String(supplement.status);
