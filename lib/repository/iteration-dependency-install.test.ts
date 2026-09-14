@@ -155,7 +155,7 @@ const executeCueActivation = async function executeCueActivation(
       chmod(miseBin, 0o755),
       chmod(nodePath.join(runtimeBin, "bun"), 0o755),
     ]);
-    execFileSync("/bin/sh", ["-c", command], {
+    execFileSync("/bin/bash", ["-c", command], {
       cwd: root,
       env: {
         ...process.env,
