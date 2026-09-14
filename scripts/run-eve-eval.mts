@@ -3,12 +3,7 @@ import path from "node:path";
 import { reconcileDeadEveEvalPrewarmLocks } from "../lib/testing/eve-eval-lifecycle";
 import { createGateAEvalProfile } from "./gate-a-eval-profile.mjs";
 import { runWithTestCapability } from "./run-with-test-capability.mts";
-import {
-  parseLinkedVercelProject,
-  parseLocalVercelOidcToken,
-  readOwnerBoundLocalFile,
-  validateLocalVercelOidcToken,
-} from "../lib/eve/local-vercel-oidc";
+import { loadEveEvalOidc } from "./eve-eval-oidc";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const eveEntry = path.resolve(repositoryRoot, "node_modules/eve/bin/eve.js");
@@ -103,6 +98,7 @@ if (
 )
   throw new Error("The fresh Gate A fault requires the recovery evaluation.");
 const sandboxEvaluations = new Set([
+  "design-guidance",
   "sandbox-toolchain",
   "sandbox-identity-planning",
   "sandbox-reviewed-change-set",
@@ -117,13 +113,13 @@ if (
 if (
   (gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === "hosted-artifact") &&
   args[0] === "sandbox-identity-planning" &&
-  (gateAEvalProfile.image === null || gateAEvalProfile.sourceRoot === null)
+  gateAEvalProfile.sourceRoot === null
 )
   throw new Error("The sandbox identity/planning proof requires exact inputs.");
 if (
   (gateAEvalProfile.profile === "sandbox" || gateAEvalProfile.profile === "hosted-artifact") &&
   args[0] === "sandbox-reviewed-change-set" &&
-  (gateAEvalProfile.image === null || gateAEvalProfile.sourceRoot === null)
+  gateAEvalProfile.sourceRoot === null
 )
   throw new Error("The sandbox reviewed change-set proof requires exact inputs.");
 if (args.some((argument) => argument.startsWith("--gate-a-")))
@@ -142,23 +138,8 @@ if (realSandbox) {
 }
 if (liveModel && (gateAEvalProfile.profile !== "sandbox" || args[0] !== "self-reproduction"))
   throw new Error("The live model is restricted to the self-reproduction sandbox evaluation.");
-if (liveModel) {
-  const project = parseLinkedVercelProject(
-    readOwnerBoundLocalFile(path.resolve(repositoryRoot, ".vercel/project.json"), {
-      confidential: false,
-    }),
-  );
-  const token = parseLocalVercelOidcToken(
-    readOwnerBoundLocalFile(path.resolve(repositoryRoot, ".env.local"), { confidential: true }),
-  );
-  process.env.VERCEL_OIDC_TOKEN = validateLocalVercelOidcToken({
-    nowEpochSeconds: Math.floor(Date.now() / 1000),
-    project,
-    token,
-  });
-  process.env.VERCEL_TEAM_ID = project.orgId;
-  process.env.VERCEL_PROJECT_ID = project.projectId;
-}
+loadEveEvalOidc({ realSandbox, repositoryRoot });
+
 let capabilities: string[];
 if (liveModel) {
   capabilities = [];

@@ -14,6 +14,9 @@ export const gateAEnvironmentFields = Object.freeze([
   "APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT",
   "APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT",
   "APP_BUILDER_REAL_SANDBOX",
+  "APP_BUILDER_EXECUTION_MODE",
+  "APP_BUILDER_SANDBOX_PROVIDER",
+  "APP_BUILDER_EXECUTION_BUNDLE",
   "APP_BUILDER_HOSTED_ARTIFACT_PROOF",
   "APP_BUILDER_SANDBOX_IMAGE",
   "APP_BUILDER_LOCAL_ADAPTER",
@@ -241,6 +244,9 @@ export function installGateAEvalProfile(environment, value, repositoryRoot) {
     if (profile.fault !== null) environment.APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT = profile.fault;
   } else {
     environment.APP_BUILDER_REAL_SANDBOX = "1";
+    environment.APP_BUILDER_EXECUTION_MODE = "development";
+    environment.APP_BUILDER_SANDBOX_PROVIDER = "vercel";
+    environment.APP_BUILDER_EXECUTION_BUNDLE = "local-development";
     environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS = "360000";
     environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS = "360000";
     if (profile.profile === "hosted-artifact") environment.APP_BUILDER_HOSTED_ARTIFACT_PROOF = "1";
