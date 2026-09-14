@@ -174,3 +174,39 @@ it("preserves interrupted captures as incomplete on resume without launching dup
     readFileSync(path.join(outputDir, "preview-observations/observer-error.json"), "utf-8"),
   ).toContain("incomplete");
 });
+
+it("bounds a hanging executor, signals owned cleanup and keeps minimal snapshots", async () => {
+  const outputDir = directory();
+  const pending = Promise.withResolvers<number>();
+  let aborted = false;
+  const observer = createAutomaticPreviewObserver({
+    execute: async (invocation) => {
+      const snapshot = readFileSync(invocation.stateFile, "utf-8");
+      expect(snapshot).not.toContain("full brief");
+      expect(snapshot).not.toContain("clientRequestId");
+      expect(snapshot).toContain("private-secret");
+      expect(path.dirname(invocation.stateFile)).not.toBe(invocation.outputDir);
+      invocation.signal.addEventListener("abort", () => {
+        aborted = true;
+      });
+      return await pending.promise;
+    },
+    outputDir,
+    repositoryRoot: "/reference",
+    timeoutMs: 10,
+  });
+  const current = state();
+  observer.observe(current);
+  await observer.finish();
+  expect(aborted).toBe(true);
+  expect(current.outcome).toBe("working");
+  const ledger = readFileSync(path.join(outputDir, "preview-observations/ledger.json"), "utf-8");
+  expect(ledger).toContain("timed_out");
+  expect(ledger).toContain('"exitCode": null');
+  expect(ledger).toContain("finishedAt");
+  expect(ledger).toContain("capture/report.json");
+  expect(ledger).not.toContain("private-secret");
+  expect(readFileSync(path.join(outputDir, "preview-observations/index.html"), "utf-8")).toContain(
+    "Capture report",
+  );
+});

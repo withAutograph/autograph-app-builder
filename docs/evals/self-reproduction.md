@@ -264,3 +264,11 @@ functional pass: inspect its assessment and coverage. Expired receipts, failed
 captures, and interrupted captures remain recorded; resume does not silently
 rerun them. Capture failures do not alter public session outcomes, supply replies,
 or grant approvals. The observer neither launches nor repairs the candidate.
+
+Automatic captures have a three-minute runner deadline. On timeout the driver
+terminates its owned observer process group (including its browser children),
+records `timed_out`, and finishes the public run without changing its outcome.
+The public report links the capture index and sanitized ledger. The ledger keeps
+runner exit codes, start/finish timestamps, and relative report paths; product
+findings remain in each separate capture report. Private snapshots contain only
+source revision, outcome, and session preview metadata, not prompts or replies.
