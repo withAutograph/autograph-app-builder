@@ -3,9 +3,6 @@ import { z } from "zod";
 
 const jsonSchema = z.json();
 type Json = z.infer<typeof jsonSchema>;
-const graphSchema = z.array(jsonSchema);
-const dictionarySchema = z.record(z.string(), jsonSchema);
-const referenceSchema = z.number().int();
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 const countSchema = z.number().int().nonnegative();
@@ -53,73 +50,22 @@ const actionResultSchema = z.object({
       toolName: z.string(),
     }),
     sequence: countSchema,
-    status: z.string(),
+    status: z.enum(["completed", "failed", "rejected"]),
     stepIndex: countSchema,
     turnId: z.string(),
   }),
   type: z.literal("action.result"),
 });
 interface ToolObservation {
-  callDigest?: string;
+  callDigest: string;
+  turnDigest: string;
+  sequence: number;
+  stepIndex: number;
+  runtimeStatus: "completed" | "failed" | "rejected";
   sourceAssessment?: z.infer<typeof assessmentSchema>;
   status: string;
   tool: string;
 }
-
-/** Parse retained data only; tagged classes are never instantiated. */
-export const decodeOwnerGraph = (serialized: string): Json => {
-  const parsed = z.union([graphSchema, z.literal(-1)]).parse(JSON.parse(serialized));
-  if (parsed === -1) {
-    return null;
-  }
-  const values = parsed;
-  const cache = new Map<number, Json>();
-  const resolveReference = (index: number, depth = 0): Json => {
-    if (depth > 100) {
-      throw new Error("unsupported graph depth");
-    }
-    if (index < 0) {
-      return null;
-    }
-    if (!Number.isInteger(index) || index >= values.length) {
-      throw new Error("invalid graph reference");
-    }
-    const cached = cache.get(index);
-    if (cached !== undefined) {
-      return cached;
-    }
-    const value = values[index];
-    if (value === undefined) {
-      throw new Error("missing graph value");
-    }
-    if (Array.isArray(value)) {
-      // Tagged classes are outside the supported plain-data observation scope.
-      if (z.string().safeParse(value[0]).success) {
-        return null;
-      }
-      const result: Json[] = [];
-      cache.set(index, result);
-      for (const child of value) {
-        result.push(resolveReference(referenceSchema.parse(child), depth + 1));
-      }
-      return result;
-    }
-    const dictionary = dictionarySchema.safeParse(value);
-    if (!dictionary.success) {
-      return value;
-    }
-    const result: z.infer<typeof dictionarySchema> = {};
-    cache.set(index, result);
-    for (const [key, child] of Object.entries(dictionary.data)) {
-      Object.defineProperty(result, key, {
-        enumerable: true,
-        value: resolveReference(referenceSchema.parse(child), depth + 1),
-      });
-    }
-    return result;
-  };
-  return resolveReference(0);
-};
 
 export const decodeOwnerStreamChunk = (bytes: Buffer): Json => {
   if (
@@ -154,9 +100,13 @@ export const observeSourceReviews = (originalRequest: string | undefined, record
       const output = outputSchema.safeParse(result.output);
       const row: ToolObservation = {
         callDigest: hash(result.callId),
+        runtimeStatus: parsed.data.data.status,
+        sequence: parsed.data.data.sequence,
         sourceAssessment: output.success ? output.data.sourceAssessment : undefined,
         status: output.success ? (output.data.status ?? "unassessed") : "unassessed",
+        stepIndex: parsed.data.data.stepIndex,
         tool: result.toolName,
+        turnDigest: hash(parsed.data.data.turnId),
       };
       paired.set(key, row);
       rows.push(row);

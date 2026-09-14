@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFile, readdir, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
@@ -66,7 +67,23 @@ const readRun = async (runId: string) => {
 };
 const groups = await Promise.all(runIds.map(readRun));
 const events = groups.flat();
+let observerRevision: string | null = null;
+let observerDirty: boolean | null = null;
+try {
+  const cwd = path.resolve(import.meta.dirname, "..");
+  observerRevision = execFileSync("/usr/bin/git", ["rev-parse", "HEAD"], {
+    cwd,
+    encoding: "utf-8",
+  }).trim();
+  observerDirty =
+    execFileSync("/usr/bin/git", ["status", "--porcelain"], { cwd, encoding: "utf-8" }).trim() !==
+    "";
+} catch {
+  // Missing source metadata does not turn unavailable evidence into a result.
+}
 const report = {
+  observerDirty,
+  observerRevision,
   ...observeSourceReviews(original, events),
   coverage: {
     inputAvailable: original !== undefined,

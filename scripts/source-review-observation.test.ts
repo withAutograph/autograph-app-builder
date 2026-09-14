@@ -4,11 +4,7 @@ import {
   unavailableSourceAssessment,
   validateSourceJudgment,
 } from "../lib/agent/product-source-review";
-import {
-  decodeOwnerGraph,
-  decodeOwnerStreamChunk,
-  observeSourceReviews,
-} from "./source-review-observation";
+import { decodeOwnerStreamChunk, observeSourceReviews } from "./source-review-observation";
 
 const input = {
   appSpec: "Build real persistence",
@@ -102,17 +98,6 @@ it("does not credit missing original input or absent canonical review", () => {
   expect(observeSourceReviews(undefined, [event(clean)]).status).toBe("unassessed");
   expect(observeSourceReviews("brief", []).status).toBe("unassessed");
 });
-it("resolves graph references without instantiating tagged classes", () => {
-  expect(decodeOwnerGraph(JSON.stringify([{ a: 1, b: 1 }, { value: 2 }, "retained"]))).toEqual({
-    a: { value: "retained" },
-    b: { value: "retained" },
-  });
-  expect(decodeOwnerGraph(JSON.stringify([["Class", 1], "payload"]))).toBeNull();
-});
-it("supports the installed undefined root sentinel", () => {
-  expect(decodeOwnerGraph("-1")).toBeNull();
-});
-
 it("decodes the installed framed owner stream without searching payload text", () => {
   const payload = { content: JSON.stringify(event(clean)), role: "user" };
   const encoded = Buffer.from(
@@ -124,4 +109,32 @@ it("decodes the installed framed owner stream without searching payload text", (
   expect(observeSourceReviews("brief", [decodeOwnerStreamChunk(frame)]).rows).toEqual([]);
   frame.writeUInt32BE(1, 1);
   expect(() => decodeOwnerStreamChunk(frame)).toThrow("unsupported stream frame");
+});
+
+it("retains failed runtime results independently of unassessed product output", () => {
+  const report = observeSourceReviews("brief", [
+    z.json().parse({
+      data: {
+        result: {
+          callId: "private-call",
+          kind: "tool-result",
+          output: { error: "private detail" },
+          toolName: "validate_app_creation",
+        },
+        sequence: 7,
+        status: "failed",
+        stepIndex: 3,
+        turnId: "private-turn",
+      },
+      type: "action.result",
+    }),
+  ]);
+  expect(report.rows[0]).toMatchObject({
+    runtimeStatus: "failed",
+    sequence: 7,
+    status: "unassessed",
+    stepIndex: 3,
+  });
+  expect(report.rows[0].turnDigest).toMatch(/^[a-f0-9]{64}$/u);
+  expect(JSON.stringify(report)).not.toContain("private");
 });

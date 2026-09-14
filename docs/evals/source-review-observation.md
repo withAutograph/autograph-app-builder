@@ -14,7 +14,8 @@ with owner-only permissions. Do not supply another user's store or run IDs.
 The observer supports installed framed devl Uint8Array stream encoding. Unsupported
 or unreadable records are counted, and tagged classes are never instantiated.
 Only top-level canonical action.result events from streams named by the owner run mapping qualify. Results are deduplicated by turn, tool name and callId; nested message/input text is never interpreted as runtime evidence. The output allowlist contains hashed
-call IDs, original-request digest,  result status,
+call and turn IDs, event sequence/step coordinates, original-request digest,
+runtime completion/failure/rejection separately from tool output status,
 source-assessment status/model/usage/digests and hashed citation paths with line
 numbers and excerpt digests. Source, request text, explanation text, tool
 arguments, credentials, URLs and messages remain private.
@@ -27,3 +28,7 @@ independence, generation or product correctness credit. Missing assessments
 remain unassessed, including sessions generated before source review existed.
 
 Requested or successful write counts are not established by this observer.
+
+Reports record the observer checkout revision and whether it had uncommitted
+changes; unavailable Git metadata remains null. These identify observer code,
+not the original generation revision. Preserve the public-run manifest separately.
