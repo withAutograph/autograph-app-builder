@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { VercelInstallationBinding } from "../integrations/vercel-installation";
 import type { GitHubProvisionResult, VercelProvisionResult } from "./contracts";
 import { suffixedProviderName } from "./names";
+import { runSequentiallyUntil } from "../async-sequential";
 
 const projectSchema = z
   .object({
@@ -77,7 +78,9 @@ export async function provisionVercelProject(input: {
       throw new Error("provider-unavailable");
     }
     const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength > 2 * 1024 * 1024) {throw new Error("invalid-response");}
+    if (bytes.byteLength > 2 * 1024 * 1024) {
+      throw new Error("invalid-response");
+    }
     let body: unknown;
     try {
       body = bytes.byteLength
@@ -86,9 +89,12 @@ export async function provisionVercelProject(input: {
     } catch {
       throw new Error("invalid-response");
     }
-    if (response.status === 401) {throw new Error("credential-rejected");}
-    if (!args.expected.includes(response.status))
-      {throw new Error(`vercel-status-${response.status}`);}
+    if (response.status === 401) {
+      throw new Error("credential-rejected");
+    }
+    if (!args.expected.includes(response.status)) {
+      throw new Error(`vercel-status-${response.status}`);
+    }
     return { body, status: response.status };
   }
 
@@ -113,18 +119,26 @@ export async function provisionVercelProject(input: {
               maximumLength: 100,
               suffix: (input.generateSuffix ?? suffix)(),
             });
-      if (candidates.includes(candidate)) {continue;}
+      if (candidates.includes(candidate)) {
+        continue;
+      }
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await input.persistCandidate(candidate);
       candidates.push(candidate);
     }
-    for (const candidate of candidates.slice(0, 5)) {
+    const result = await runSequentiallyUntil<typeof candidates[number], VercelProvisionResult>(
+      candidates.slice(0, 5),
+      async (candidate) => {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const before = await inspect(candidate);
       const wasAbsent = input.persistedAbsentCandidates.includes(candidate);
-      if (before.status === 200 && !wasAbsent) {continue;}
+      if (before.status === 200 && !wasAbsent) {
+        return;
+      }
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      if (before.status === 404 && !wasAbsent) {await input.persistAbsent(candidate);}
+      if (before.status === 404 && !wasAbsent) {
+        await input.persistAbsent(candidate);
+      }
       if (before.status === 404) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const created = await vercel({
@@ -155,17 +169,20 @@ export async function provisionVercelProject(input: {
         if (created.status === 409) {
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const recovered = await inspect(candidate);
-          if (recovered.status !== 200) {continue;}
+          if (recovered.status !== 200) {
+            return;
+          }
         }
       }
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const observed = await inspect(candidate);
-      if (observed.status !== 200)
-        {return {
+      if (observed.status !== 200) {
+        return {
           code: "postcondition_failed",
           retryable: false,
           status: "failed",
-        };}
+        };
+      }
       const project = projectSchema.parse(observed.body);
       if (
         project.name !== candidate ||
@@ -173,12 +190,13 @@ export async function provisionVercelProject(input: {
         (linkedRepository !== undefined &&
           `${project.link?.org}/${project.link?.repo}` !== linkedRepository) ||
         (linkedRepository === undefined && project.link !== undefined)
-      )
-        {return {
+      ) {
+        return {
           code: "postcondition_failed",
           retryable: false,
           status: "failed",
-        };}
+        };
+      }
       return {
         dashboardUrl: `https://vercel.com/${input.installation.slug}/${project.name}`,
         framework: "nextjs",
@@ -194,8 +212,9 @@ export async function provisionVercelProject(input: {
         status: "succeeded",
         ...(linkedRepository ? { linkedGitHubRepository: linkedRepository } : {}),
       };
-    }
-    return { code: "name_conflict", retryable: true, status: "failed" };
+      },
+    );
+    return result ?? { code: "name_conflict", retryable: true, status: "failed" };
   } catch (error) {
     return {
       code:
