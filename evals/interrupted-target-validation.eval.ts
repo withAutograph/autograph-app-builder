@@ -6,7 +6,7 @@ import { createSupportedRepositoryFixture } from "./support/supported-repository
 
 export default defineEval({
   description:
-    "An interrupted command records a durable timeout failure; explicit retry retains honest recovery state.",
+    "An interrupted command records a durable timeout failure; explicit retry reattempts the command and retains failure while the timeout persists.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
     await t.send(`Prepare supported repository at ${repository}`);
@@ -23,6 +23,7 @@ export default defineEval({
     const validation = await t.send("Validate the applied creation.");
     t.succeeded();
     validation.notEvent("input.requested");
+    validation.calledTool("validate_app_creation", { count: 1 });
     t.check(t.reply, includes("did not pass its quality checks"));
     t.check(t.reply, includes("needs another revision"));
     t.notCalledTool("bash");
@@ -34,9 +35,12 @@ export default defineEval({
     t.check(t.reply, includes('"recoveryRequired":true'));
     t.check(t.reply, includes('"reason":"command-timeout"'));
 
+    t.calledTool("validate_app_creation", { count: 1 });
+
     const retry = await t.send("Retry target validation after a lost response.");
     t.succeeded();
     retry.notEvent("input.requested");
+    retry.calledTool("validate_app_creation", { count: 1 });
     t.check(t.reply, includes("did not pass its quality checks"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
@@ -44,5 +48,6 @@ export default defineEval({
     t.check(t.reply, includes('"phase":"validation_failed"'));
     t.check(t.reply, includes('"reason":"command-timeout"'));
     t.check(t.reply, includes('"recoveryRequired":true'));
+    t.calledTool("validate_app_creation", { count: 2 });
   },
 });
