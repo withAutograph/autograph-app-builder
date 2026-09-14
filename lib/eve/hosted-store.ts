@@ -9,6 +9,7 @@ import {
   publicImplementationPlanSchema,
   publicPrototypeSchema,
   publicUiPreviewSchema,
+  publicWorkingPreviewSchema,
   publicSessionResumabilitySchema,
   publicSessionStageSchema,
   publicSessionSummarySchema,
@@ -82,6 +83,7 @@ export const hostedSessionCheckpointSchema = z
     truncatedBeforeIndex: z.number().int().nonnegative().optional(),
     uiPreview: publicUiPreviewSchema.optional(),
     version: z.literal(1),
+    workingPreview: publicWorkingPreviewSchema.optional(),
   })
   .strict()
   .refine(

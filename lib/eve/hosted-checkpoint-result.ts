@@ -21,6 +21,9 @@ export function resultFromHostedCheckpoint(
     ...(checkpoint.inputRequests === undefined ? {} : { inputRequests: checkpoint.inputRequests }),
     ...(checkpoint.prototype === undefined ? {} : { prototype: checkpoint.prototype }),
     ...(checkpoint.uiPreview === undefined ? {} : { uiPreview: checkpoint.uiPreview }),
+    ...(checkpoint.workingPreview === undefined
+      ? {}
+      : { workingPreview: checkpoint.workingPreview }),
     ...(checkpoint.implementationPlan === undefined
       ? {}
       : { implementationPlan: checkpoint.implementationPlan }),

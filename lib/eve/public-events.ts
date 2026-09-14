@@ -4,6 +4,7 @@ import {
   publicImplementationPlanSchema,
   publicPrototypeSchema,
   publicUiPreviewSchema,
+  publicWorkingPreviewSchema,
 } from "../mcp/contracts";
 import type {
   EveSessionStatus,
@@ -12,6 +13,7 @@ import type {
   PublicInputRequest,
   PublicPrototype,
   PublicUiPreview,
+  PublicWorkingPreview,
 } from "../mcp/contracts";
 import { targetProposalSchema } from "../repository/target-planning";
 import type { MessageStreamEvent } from "eve/client";
@@ -347,6 +349,28 @@ export const latestInstalledUiPreview = (
       revision: preview.data.revision,
       routes: preview.data.routes,
     });
+  }
+  return latest;
+};
+
+/** Only the shared runtime's successful launch receipt can attest to a working app. */
+export const latestInstalledWorkingPreview = (
+  events: readonly MessageStreamEvent[],
+): PublicWorkingPreview | undefined => {
+  let latest: PublicWorkingPreview | undefined;
+  for (const event of events) {
+    if (
+      event.type !== "action.result" ||
+      event.data.status !== "completed" ||
+      event.data.result.kind !== "tool-result" ||
+      event.data.result.isError === true ||
+      event.data.result.toolName !== "start_app_preview"
+    )
+      continue;
+    const output = z
+      .object({ workingPreview: publicWorkingPreviewSchema })
+      .safeParse(event.data.result.output);
+    if (output.success) latest = output.data.workingPreview;
   }
   return latest;
 };

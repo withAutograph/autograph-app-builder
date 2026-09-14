@@ -16,6 +16,7 @@ import {
   latestInstalledImplementationPlan,
   latestInstalledPrototype,
   latestInstalledUiPreview,
+  latestInstalledWorkingPreview,
   projectInstalledEveEvent,
 } from "./public-events";
 
@@ -311,6 +312,7 @@ async function readInstalledSnapshot(input: {
     .map((event, index) => ({ ...event, index }));
   const prototype = latestInstalledPrototype(events);
   const uiPreview = latestInstalledUiPreview(events);
+  const workingPreview = latestInstalledWorkingPreview(events);
   const implementationPlan = latestInstalledImplementationPlan(events);
   return {
     installed: events,
@@ -319,6 +321,7 @@ async function readInstalledSnapshot(input: {
       status: deriveInstalledEveStatus(events),
       ...(prototype === undefined ? {} : { prototype }),
       ...(uiPreview === undefined ? {} : { uiPreview }),
+      ...(workingPreview === undefined ? {} : { workingPreview }),
       ...(implementationPlan === undefined ? {} : { implementationPlan }),
     },
   };
