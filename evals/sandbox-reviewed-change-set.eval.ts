@@ -15,12 +15,12 @@ const staysProductFacing = satisfies(
 
 export default defineEval({
   description:
-    "The exact digest sandbox applies and validates one supported-source proposal, then records the reviewed change set without publication.",
-  tags: ["sandbox-image-proof", "reviewed-change-set"],
+    "The current Vercel Sandbox applies and validates one supported-source proposal, then records the reviewed change set without publication.",
+  tags: ["sandbox-integration", "reviewed-change-set"],
   async test(t) {
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
     if (repository === undefined || repository.length === 0)
-      throw new Error("The signed sandbox proof source root is missing.");
+      throw new Error("The supported source root is missing.");
 
     await t.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
@@ -28,15 +28,16 @@ export default defineEval({
     await t.send(`Accept build-ready AppSpec for builder-reviewed-proof:\n${BUILD_READY_APP_SPEC}`);
     t.succeeded();
 
-    await t.send("Prepare offline target dependencies.");
+    await t.send("Prepare target dependencies.");
     t.succeeded();
 
     await t.send("Run target identity and planning.");
     t.succeeded();
 
     await t.send("Apply the current creation proposal.");
+    t.requireInputRequest({ toolName: "apply_app_creation" });
+    await t.respondAll("approve");
     t.succeeded();
-    t.notEvent("input.requested");
     t.check(t.reply, includes("private preview"));
     t.check(t.reply, staysProductFacing);
 

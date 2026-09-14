@@ -5,12 +5,12 @@ import { BUILD_READY_APP_SPEC } from "./support/app-spec";
 
 export default defineEval({
   description:
-    "The exact digest sandbox prepares the supported source and reaches only the typed planned phase.",
-  tags: ["sandbox-image-proof"],
+    "The current Vercel Sandbox prepares supported source and reaches only the typed planned phase.",
+  tags: ["sandbox-integration"],
   async test(t) {
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
     if (repository === undefined || repository.length === 0)
-      throw new Error("The signed sandbox proof source root is missing.");
+      throw new Error("The supported source root is missing.");
 
     await t.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
@@ -18,9 +18,9 @@ export default defineEval({
     await t.send(`Accept build-ready AppSpec for builder-proof:\n${BUILD_READY_APP_SPEC}`);
     t.succeeded();
 
-    await t.send("Prepare offline target dependencies.");
+    await t.send("Prepare target dependencies.");
     t.succeeded();
-    t.check(t.reply, includes("target-bound offline dependency closure"));
+    t.check(t.reply, includes("target-bound dependency closure"));
 
     await t.send("Run target identity and planning.");
     t.succeeded();

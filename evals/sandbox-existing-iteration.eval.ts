@@ -13,12 +13,12 @@ const staysProductFacing = satisfies(
 
 export default defineEval({
   description:
-    "The exact candidate image inspects and iterates the existing Vendor application through review without publication.",
-  tags: ["sandbox-image-proof", "existing-app-iteration"],
+    "The current Vercel Sandbox inspects and edits the existing Vendor application through review without publication.",
+  tags: ["sandbox-integration", "existing-app-iteration"],
   async test(t) {
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
     if (repository === undefined || repository.length === 0)
-      throw new Error("The signed sandbox proof source root is missing.");
+      throw new Error("The supported source root is missing.");
 
     await t.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
@@ -27,7 +27,7 @@ export default defineEval({
     await t.send("Inspect existing Vendor application.");
     t.succeeded();
     t.calledTool("inspect_existing_app", { count: 2 });
-    await t.send("Prepare offline target dependencies.");
+    await t.send("Prepare target dependencies.");
     t.succeeded();
     await t.send(
       "Update the Vendor review so operations can see when tax verification is required.",
@@ -37,6 +37,8 @@ export default defineEval({
     t.succeeded();
     t.check(t.reply, includes("tax verification is required"));
     await t.send("Apply the current creation proposal.");
+    t.requireInputRequest({ toolName: "apply_app_creation" });
+    await t.respondAll("approve");
     t.succeeded();
     t.check(t.reply, includes("private preview"));
     t.check(t.reply, staysProductFacing);

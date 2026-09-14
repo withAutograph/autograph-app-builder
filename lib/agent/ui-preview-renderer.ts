@@ -87,11 +87,44 @@ const themeStyle = css.css.replace(/<\\/style/gi, "<\\\\/style");
 const bundledStyle = bundledCss.join("\\n").replace(/<\\/style/gi, "<\\\\/style");
 const script = js.replace(/<\\/script/gi, "<\\\\/script");
 await writeFile(path.join(root, "index.html"), '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${input.appId}</title><style>' + themeStyle + '</style><style>' + bundledStyle + '</style></head><body><div id="root"></div><script>' + script + '</script></body></html>');`;
+  const browserCheck = `import { readFile } from "node:fs/promises";
+import { chromium } from "playwright";
+const html = await readFile(new URL("./index.html", import.meta.url), "utf-8");
+const browser = await chromium.launch({ headless: true });
+try {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const failures = [];
+  page.on("console", message => {
+    if (message.type() === "error") failures.push(message.text());
+  });
+  page.on("pageerror", error => failures.push(error.message));
+  await page.setContent(html, { waitUntil: "networkidle" });
+  const controls = page.getByRole("button");
+  const count = await controls.count();
+  let interacted = false;
+  for (let index = 0; index < count; index += 1) {
+    const control = controls.nth(index);
+    if (!(await control.isVisible()) || !(await control.isEnabled())) continue;
+    const before = await page.locator("body").innerHTML();
+    await control.click();
+    await page.waitForTimeout(50);
+    if ((await page.locator("body").innerHTML()) !== before) {
+      interacted = true;
+      break;
+    }
+  }
+  if (failures.length > 0) throw new Error("Rendered preview reported browser errors: " + failures.join("; "));
+  if (!interacted) throw new Error("Rendered preview did not expose a working interactive control.");
+  process.stdout.write(JSON.stringify({ interacted: true, viewport: "1440x900" }) + "\\n");
+} finally {
+  await browser.close();
+}`;
   return {
     files: [
       ...input.files,
       { content: entry, path: "entry.tsx" },
       { content: renderer, path: "render.mts" },
+      { content: browserCheck, path: "browser-check.mjs" },
     ],
     root,
   };
@@ -137,5 +170,21 @@ export async function renderUiPreview(
     path: `/workspace/repository/${bundle.root}/index.html`,
   });
   if (html === null) throw new Error("The preview compiler did not produce a document.");
+  if (process.env.APP_BUILDER_REAL_SANDBOX === "1") {
+    const installation = await sandbox.run({
+      command: "bun node_modules/playwright/cli.js install --with-deps chromium",
+      workingDirectory: "/workspace/repository",
+    });
+    if (installation.exitCode !== 0)
+      throw new Error(installation.stderr || installation.stdout || "Browser installation failed.");
+    const interaction = await sandbox.run({
+      command: `bun ${bundle.root}/browser-check.mjs`,
+      workingDirectory: "/workspace/repository",
+    });
+    if (interaction.exitCode !== 0)
+      throw new Error(
+        interaction.stderr || interaction.stdout || "Browser interaction verification failed.",
+      );
+  }
   return html;
 }

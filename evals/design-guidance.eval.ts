@@ -3,14 +3,15 @@ import { includes, satisfies } from "eve/evals/expect";
 
 import { renewalReviewDesignPrompt } from "../lib/testing/prompt-driven-design";
 import { isProductFacing } from "./support/public-conversation";
-import { createSupportedRepositoryFixture } from "./support/supported-repository";
 
 export default defineEval({
   description:
-    "An ambiguous product brief reaches a component-backed, assumption-aware UI review without HTML, local surrogates, planning, or backend work.",
-  tags: ["product-quality", "design-guidance"],
+    "An ambiguous product brief compiles against the supported source and passes real browser interaction in Vercel Sandbox before UI review.",
+  tags: ["product-quality", "design-guidance", "sandbox-integration"],
   async test(t) {
-    const repository = createSupportedRepositoryFixture();
+    const repository = process.env.REPOSITORY_LOCAL_ROOTS;
+    if (repository === undefined || repository.length === 0)
+      throw new Error("The supported source root is missing.");
     await t.send(`Supported repository at ${repository}
 ${renewalReviewDesignPrompt}`);
 
@@ -64,6 +65,13 @@ ${renewalReviewDesignPrompt}`);
     t.notCalledTool("apply_app_creation");
     t.notCalledTool("validate_app_creation");
     t.notCalledTool("prepare_target_dependencies");
+    process.stdout.write(
+      `${JSON.stringify({
+        browserInteraction: "required-by-record-ui-preview",
+        renderer: "current-supported-source",
+        version: 1,
+      })}\n`,
+    );
     t.check(t.reply, includes("Renewal Review"));
     t.check(t.reply, includes("existing table and review components"));
     t.check(t.reply, includes("remains open"));
