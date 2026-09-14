@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { existsSync, realpathSync } from "node:fs";
 import { readFile, readdir, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
@@ -15,11 +16,22 @@ const runIds = z
   .array(z.string().regex(/^wrun_[A-Za-z0-9]+$/u))
   .min(1)
   .parse(args.flatMap((v, i) => (v === "--run-id" ? [args[i + 1]] : [])));
-const inside = (root: string) => {
-  const relative = path.relative(root, destination);
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+const canonical = (value: string) => {
+  let parent = path.resolve(value);
+  while (!existsSync(parent)) {
+    parent = path.dirname(parent);
+  }
+  return path.resolve(realpathSync(parent), path.relative(parent, path.resolve(value)));
 };
-if (inside(path.resolve(import.meta.dirname, "..")) || inside(path.resolve(store))) {
+const canonicalDestination = canonical(destination);
+const inside = (root: string) => {
+  const relative = path.relative(canonical(root), canonicalDestination);
+  return (
+    relative === "" ||
+    (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
+  );
+};
+if (inside(path.resolve(import.meta.dirname, "..")) || inside(store)) {
   throw new Error("Output must be external");
 }
 await mkdir(destination, { mode: 0o700 });
@@ -57,7 +69,14 @@ const readRun = async (runId: string) => {
         }),
       );
     };
-    const groups = await Promise.all(mapping.streams.map(readStream));
+    const streams = await Promise.allSettled(mapping.streams.map(readStream));
+    const groups = streams.flatMap((stream) => {
+      if (stream.status === "fulfilled") {
+        return [stream.value];
+      }
+      unreadable += 1;
+      return [];
+    });
     // Flatten stream groups, then each chunk’s zero-or-one decoded event.
     return groups.flat().flat();
   } catch {
