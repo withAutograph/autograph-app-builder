@@ -18,13 +18,20 @@ const citationSchema = z.object({
 const assessmentSchema = z.object({
   bindingDigest: digestSchema.optional(),
   evidenceDigest: digestSchema.optional(),
-  findings: z.array(z.object({ citations: z.array(citationSchema) })).default([]),
+  findings: z
+    .array(
+      z.object({
+        citations: z.array(citationSchema),
+        requirementQuoteDigest: digestSchema.optional(),
+      }),
+    )
+    .default([]),
   modelId: z
     .string()
     .regex(/^openai\/gpt-[a-z0-9.-]+$/u)
     .optional(),
   reviewCompleted: z.boolean(),
-  status: z.enum(["failed", "passed", "unavailable"]),
+  status: z.enum(["failed", "unassessed", "blocked"]),
   usage: z
     .object({
       inputTokens: countSchema.optional(),
@@ -59,7 +66,11 @@ interface ToolObservation {
 
 /** Parse retained data only; tagged classes are never instantiated. */
 export const decodeOwnerGraph = (serialized: string): Json => {
-  const values = graphSchema.parse(JSON.parse(serialized));
+  const parsed = z.union([graphSchema, z.literal(-1)]).parse(JSON.parse(serialized));
+  if (parsed === -1) {
+    return null;
+  }
+  const values = parsed;
   const cache = new Map<number, Json>();
   const resolveReference = (index: number, depth = 0): Json => {
     if (depth > 100) {

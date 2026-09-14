@@ -52,17 +52,22 @@ const readStep = async (file: string) => {
       JSON.parse(await readFile(path.resolve(store, "steps", file), "utf-8")),
     );
     const values = [step.input, step.output].flatMap((encoded) => {
-      if (encoded === undefined) {
+      try {
+        if (encoded === undefined) {
+          return [];
+        }
+        let bytes = Buffer.from(encoded.data, "base64");
+        if (bytes.subarray(0, 4).toString() === "zstd") {
+          bytes = zstdDecompressSync(bytes.subarray(4), { maxOutputLength: 64 * 1024 * 1024 });
+        }
+        if (bytes.subarray(0, 4).toString() !== "devl") {
+          throw new Error("unsupported owner encoding");
+        }
+        return [decodeOwnerGraph(bytes.subarray(4).toString())];
+      } catch {
+        unreadable += 1;
         return [];
       }
-      let bytes = Buffer.from(encoded.data, "base64");
-      if (bytes.subarray(0, 4).toString() === "zstd") {
-        bytes = zstdDecompressSync(bytes.subarray(4), { maxOutputLength: 64 * 1024 * 1024 });
-      }
-      if (bytes.subarray(0, 4).toString() !== "devl") {
-        throw new Error("unsupported owner encoding");
-      }
-      return [decodeOwnerGraph(bytes.subarray(4).toString())];
     });
     return [{ time: step.createdAt, values }];
   } catch {
