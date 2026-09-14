@@ -923,12 +923,12 @@ const developmentWorkspaceInspectionProgram = [
   "process.stdout.write(JSON.stringify({repositoryInput,realRepository,realWorkspace,workspaceRoot}));",
 ].join("");
 
-const developmentWorkspaceInspectionReceipt = JSON.stringify({
+const developmentWorkspaceInspectionReceipt = {
   realRepository: "/workspace/repository",
   realWorkspace: "/workspace",
   repositoryInput: "/workspace/repository",
   workspaceRoot: "/workspace",
-});
+} as const;
 
 const verifyDevelopmentSandboxWorkspace = async function verifyDevelopmentSandboxWorkspace(
   sandbox: SandboxSession,
@@ -944,10 +944,30 @@ const verifyDevelopmentSandboxWorkspace = async function verifyDevelopmentSandbo
   const normalizedStdout = inspection.stdout
     .replaceAll(new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
     .trim();
+  if (inspection.exitCode !== 0)
+    throw new Error("The prepared development workspace inspection command failed.");
   if (
     Buffer.byteLength(inspection.stdout) > sandboxOperationOutputBytes ||
-    Buffer.byteLength(inspection.stderr) > sandboxOperationOutputBytes ||
-    normalizedStdout !== developmentWorkspaceInspectionReceipt
+    Buffer.byteLength(inspection.stderr) > sandboxOperationOutputBytes
+  )
+    throw new Error("The prepared development workspace inspection output was too large.");
+  let observed: unknown;
+  try {
+    observed = JSON.parse(normalizedStdout) as unknown;
+  } catch {
+    throw new Error("The prepared development workspace escaped its sandbox boundary.");
+  }
+  if (
+    typeof observed !== "object" ||
+    observed === null ||
+    Array.isArray(observed) ||
+    !exactKeys(
+      observed as Record<string, unknown>,
+      Object.keys(developmentWorkspaceInspectionReceipt),
+    ) ||
+    Object.entries(developmentWorkspaceInspectionReceipt).some(
+      ([key, expected]) => (observed as Record<string, unknown>)[key] !== expected,
+    )
   )
     throw new Error("The prepared development workspace escaped its sandbox boundary.");
 };
@@ -1332,12 +1352,14 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
   // builder-owned state into source files.  A missing/corrupt previous
   // manifest simply receives a complete first transfer.
   let previousFiles: PreparedSourceFile[] = [];
+  let previousManifestValid = false;
   const previousManifest = await sandbox.readTextFile({
     path: sandboxSourceFilesPath,
   });
   if (previousManifest !== null) {
     try {
       previousFiles = parsePreparedSourceFiles(JSON.parse(previousManifest) as unknown);
+      previousManifestValid = true;
     } catch {
       previousFiles = [];
     }
@@ -1351,10 +1373,10 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
     const previous = previousByPath.get(file.path);
     return previous === undefined || previous.sha256 !== file.sha256 || previous.mode !== file.mode;
   });
-  // A development preparation is a direct working-tree upload. Replacing the
-  // ephemeral checkout is simpler and more reliable than rejecting legitimate
-  // repository shapes because an optimization manifest cannot describe them.
-  const firstTransfer = true;
+  // Without a valid source manifest, overlay the full live source. Do not
+  // replace the repository: it also owns generated app files and dependency
+  // state that are intentionally outside the source transport.
+  const fullTransfer = !previousManifestValid;
 
   await ensureSandboxDirectories(sandbox, [".app-builder"]);
   await sandbox.writeTextFile({
@@ -1372,16 +1394,8 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
     )}\n`,
     path: ".app-builder/prepare-intent.json",
   });
-  if (firstTransfer) {
-    await sandbox.removePath({
-      force: true,
-      path: "repository",
-      recursive: true,
-    });
-    const archive = developmentWorkingTreeArchive(
-      sourcePath,
-      sourceFiles.map(({ path }) => path),
-    );
+  if (fullTransfer) {
+    const archive = developmentWorkingTreeArchive(sourcePath, names);
     await sandbox.writeBinaryFile({
       content: archive,
       path: sandboxSourceArchivePath,
@@ -1419,8 +1433,28 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
         path: `repository/${file.path}`,
       });
     }
+    const nonRegularPaths = names.filter((path) => !currentByPath.has(path));
+    if (nonRegularPaths.length > 0) {
+      const archive = developmentWorkingTreeArchive(sourcePath, nonRegularPaths);
+      await sandbox.writeBinaryFile({ content: archive, path: sandboxSourceArchivePath });
+      try {
+        const extraction = await sandbox.run({
+          abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
+          command: `tar --extract --gzip --file ${sandboxSourceArchivePath} --directory repository --no-same-owner --no-same-permissions`,
+          workingDirectory: "/workspace",
+        });
+        if (
+          Buffer.byteLength(extraction.stdout) > sandboxOperationOutputBytes ||
+          Buffer.byteLength(extraction.stderr) > sandboxOperationOutputBytes ||
+          extraction.exitCode !== 0
+        )
+          throw new Error("The development source could not be materialized.");
+      } finally {
+        await sandbox.removePath({ force: true, path: sandboxSourceArchivePath });
+      }
+    }
   }
-  const modeUpdates = firstTransfer ? sourceFiles : changedFiles;
+  const modeUpdates = fullTransfer ? sourceFiles : changedFiles;
   if (modeUpdates.length > 0) {
     // Keep the path list out of the shell command. Large working trees can
     // exceed argv limits, and source paths must be revalidated inside the
