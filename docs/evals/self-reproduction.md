@@ -14,7 +14,11 @@ A qualifying self-reproduction run starts with one checked-in product brief
 submitted through the supported web App Builder or the
 [five public MCP tools](../public-mcp-contract.md). Subsequent input is limited
 to ordinary product questions answered from the fixed answer sheet and normal
-approval replies. Record each response. Do not provide reference source,
+approval replies. A test client may perform these public interactions
+programmatically for expedience and reproducibility; manually clicking or opening
+a fresh Codex task is not an acceptance requirement. This permission does not
+extend to internal workflow APIs or stage control. Record each response. Do not
+provide reference source,
 screenshots, evaluator findings, manual implementation assistance, or internal
 stage instructions to the generator.
 
@@ -44,14 +48,63 @@ advisory, preserve partial results, and report remaining evidence gaps explicitl
 Anonymous entry is excluded from the current repair scope. Hosted publication
 and provisioning remain unverified unless separately authorized and exercised.
 
-## Observation command and retained diagnostics
+## Public entrypoint driver and retained diagnostics
 
 The old staged native Eve driver and its self-hosted GitHub workflow are retired.
-`mise run eval:self-reproduction` no longer starts internal generation. Submit
-[the product brief](../../evals/self-reproduction/brief.md) through the normal
-App Builder entrypoint, retain the public conversation and unchanged output,
-then use `--report-only` for comparison. If the public connection is unavailable,
-report that blocker; do not substitute an internal agent runner.
+The public driver, `scripts/self-reproduction-public.mts`, submits
+[the product brief](../../evals/self-reproduction/brief.md) through the supported
+Streamable HTTP MCP endpoint. It behaves as an ordinary user client: start one
+request with `autograph_start`, observe with `autograph_get`, and use
+`autograph_respond` for structured product questions and approvals, or
+`autograph_send` for an ordinary chat reply to a public product question. It does not
+call internal Eve stages, prepare the candidate, or repair generated code.
+
+Use the existing supported App Builder service and its ordinary authentication.
+For local development, keep the normal `mise run dev` stack running. The public
+driver does not create an eval-specific hosting service or substitute an internal
+agent runner when the public connection is unavailable.
+
+```sh
+mise run eval:self-reproduction -- \
+  --endpoint http://127.0.0.1:3000/mcp \
+  --output-dir /absolute/external/evidence/public-baseline
+```
+
+Supply the actual supported MCP URL for the running service. The example port is
+illustrative, not a separate eval listener. Generated files, runtime state, and
+evidence must remain outside the reference source tree.
+
+When the product asks a question, answer from the
+[fixed answer sheet](../../evals/self-reproduction/answers.json), preserving the
+actual `requestId` values and the complete request batch in `--responses-file`.
+Only approve effects within the benchmark's existing authorization. Connection
+or authorization cards must use the normal product flow; a text reply cannot
+pretend a provider was connected. Do not append internal implementation advice,
+stage prompts, reference material, or evaluator feedback to an answer.
+
+```sh
+mise run eval:self-reproduction -- \
+  --endpoint http://127.0.0.1:3000/mcp \
+  --output-dir /absolute/external/evidence/public-baseline \
+  --resume \
+  --responses-file /absolute/external/evidence/product-responses.json
+```
+
+If the Builder asks an ordinary question in chat without an `inputRequests` card,
+resume with `--message-file /absolute/path/to/reply.txt` instead. The file contains
+only the ordinary user reply, such as approval of a local build. This is not a
+channel for evaluator findings, repair instructions, or workflow-stage prompts.
+The driver records the reply and preserves its idempotency key before sending.
+
+Resume the saved public session and cursor rather than creating a better reroll.
+Keep the prompt, public transcript, requests and replies, outcome, and errors as
+original generation evidence. Missing authentication, an unavailable endpoint,
+or an unanswered product request must retain partial evidence and an explicit
+blocked outcome. Successful submission is not successful self-reproduction:
+only the returned product behavior and unchanged candidate can establish that.
+
+After the public run, `mise run eval:self-reproduction -- --report-only` compares
+the exported output. This comparison command does not start internal generation.
 
 Historical native transcripts, source revisions, reports and setup probes remain
 useful diagnostics. They are not relabeled as product-level baseline evidence.

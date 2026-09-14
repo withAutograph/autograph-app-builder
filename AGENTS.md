@@ -64,12 +64,19 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - Measure the supported product: submit one product brief through the web App
   Builder or its [five public MCP tools](docs/public-mcp-contract.md), then answer
-  ordinary product questions and approval requests. Do not drive internal Eve
+  ordinary product questions and approval requests. A reproducible test client
+  may call those same public tools programmatically: one `autograph_start`,
+  `autograph_get` polling, `autograph_respond` for structured product requests,
+  and `autograph_send` for ordinary replies to public chat questions.
+  Preserve session IDs, cursors, and every reply; resume the saved public session
+  instead of silently starting a replacement run. Do not drive internal Eve
   stages or supply implementation instructions between stages.
 - The shared Builder workflow owns Arrusted cloning, dependency installation,
   planning, implementation, recovery, and validation. Fix missing automation in
   that workflow; do not make the evaluator perform it on the Builder's behalf.
-- The evaluator observes, compares, and reports. Staged Eve runs, template setup
+- Beyond submitting the brief and ordinary public replies, the evaluator only
+  observes, compares, and reports. Programmatic public interaction is allowed;
+  directing private workflow operations is not. Staged Eve runs, template setup
   checks, and infrastructure probes are diagnostic evidence, not proof that the
   Builder reproduces itself out of the box. Preserve their original provenance.
 - Follow the [self-reproduction acceptance contract](docs/evals/self-reproduction.md)
