@@ -605,9 +605,8 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
           };
         }
       }
-      for (const change of proposal.iteration.changes)
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      {
+      for (const change of proposal.iteration.changes) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await sandbox.writeTextFile({
           content: change.after.content,
           path: `${relativeRoot}/${change.path}`,
@@ -698,9 +697,8 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
   return async ({ sandbox, appId, applyRoot, proposal }) => {
     const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
     if ("operation" in proposal) {
-      for (const change of proposal.iteration.changes)
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      {
+      for (const change of proposal.iteration.changes) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await sandbox.writeTextFile({
           content: change.after.content,
           path: `${relativeRoot}/${change.path}`,
