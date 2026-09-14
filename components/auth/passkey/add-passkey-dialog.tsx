@@ -79,7 +79,7 @@ export function AddPasskeyDialog({ open, onOpenChange }: AddPasskeyDialogProps) 
             <FreshSessionPrompt
               onFresh={() => {
                 const request = pendingRequest.current;
-                if (request) submitRequest(request);
+                if (request) {submitRequest(request);}
               }}
             />
           </>

@@ -20,8 +20,8 @@ async function RedirectAccountVisitor() {
       headers: requestHeaders,
     }),
   );
-  if (state.status === "anonymous") redirect(signInForWorkspaceRedirect(origin));
-  if (state.status !== "ready") redirect(workspaceOnboardingRedirect(origin, state.status));
+  if (state.status === "anonymous") {redirect(signInForWorkspaceRedirect(origin));}
+  if (state.status !== "ready") {redirect(workspaceOnboardingRedirect(origin, state.status));}
 
   return null;
 }

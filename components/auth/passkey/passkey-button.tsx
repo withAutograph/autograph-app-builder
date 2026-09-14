@@ -42,7 +42,7 @@ async function awaitPasskeyResponse<T>(operation: Promise<T>): Promise<T> {
     );
     return await Promise.race([operation, timeoutRejection.promise]);
   } finally {
-    if (timeout !== undefined) window.clearTimeout(timeout);
+    if (timeout !== undefined) {window.clearTimeout(timeout);}
   }
 }
 
@@ -103,7 +103,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         }),
       );
       const resultError = passkeyClientError(result);
-      if (resultError) throw resultError;
+      if (resultError) {throw resultError;}
       navigate({ to: resolvedRedirectTo });
     } catch {
       setFailed(true);
@@ -153,7 +153,7 @@ export function PasskeyButton({ view }: PasskeyButtonProps) {
         return;
       }
       const resultError = passkeyClientError(result);
-      if (resultError) throw resultError;
+      if (resultError) {throw resultError;}
       navigate({ to: resolvedRedirectTo });
     } catch (error) {
       if (authenticatedRedirectTo && isPasskeyOnboardingAlreadyAuthenticated(error)) {

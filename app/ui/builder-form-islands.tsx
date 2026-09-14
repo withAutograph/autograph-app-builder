@@ -121,7 +121,7 @@ export function BuilderModel() {
           checked &&
           !integrations.models.entries.some((entry) => entry.id === model && entry.zdr === "all")
         )
-          setModel("");
+          {setModel("");}
       }}
       onRetry={() => router.refresh()}
     />

@@ -17,14 +17,14 @@ export async function GET(request: Request, context: { params: Promise<{ provide
   try {
     const emulation = readProviderEmulation(process.env);
     if (!emulation || emulation.mode !== "preview")
-      throw new Error("Preview authentication emulation is unavailable.");
+      {throw new Error("Preview authentication emulation is unavailable.");}
     const referer = new URL(request.headers.get("referer") ?? "");
     const { provider } = await context.params;
     if (
       referer.origin !== emulation.canonicalOrigin ||
       referer.pathname !== `/local-oauth/${provider}/authorize`
     )
-      throw new Error("Invalid approval referer.");
+      {throw new Error("Invalid approval referer.");}
     const { searchParams } = new URL(request.url);
     return completeAuthorization(
       { params: Promise.resolve({ provider }) },
@@ -50,7 +50,7 @@ export async function POST(request: Request, context: { params: Promise<{ provid
   try {
     const emulation = readProviderEmulation(process.env);
     if (!emulation || request.headers.get("origin") !== emulation.canonicalOrigin)
-      throw new Error("Invalid approval origin.");
+      {throw new Error("Invalid approval origin.");}
     const form = await request.formData();
     return completeAuthorization(
       context,

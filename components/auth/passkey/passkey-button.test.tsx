@@ -31,7 +31,7 @@ let root: Root | undefined;
 let container: HTMLDivElement;
 afterEach(async () => {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  if (root) await act(async () => root?.unmount());
+  if (root) {await act(async () => root?.unmount());}
   root = undefined;
   container?.remove();
   vi.clearAllMocks();
@@ -44,7 +44,7 @@ it.each(["signIn", "signUp"] as const)(
     container.innerHTML = renderToString(<PasskeyButton view={view} />);
     document.body.append(container);
     const button = container.querySelector("button");
-    if (!button) throw new Error("Expected passkey button to render");
+    if (!button) {throw new Error("Expected passkey button to render");}
     expect(button.disabled).toBe(true);
     button.click();
     expect(auth.signIn).not.toHaveBeenCalled();
@@ -67,7 +67,7 @@ it("shows an inline retry after a hydrated verification transport failure", asyn
     root = hydrateRoot(container, <PasskeyButton view="signIn" />);
   });
   const button = container.querySelector("button");
-  if (!button) throw new Error("Expected passkey button to render");
+  if (!button) {throw new Error("Expected passkey button to render");}
   await act(
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async () => button.click(),

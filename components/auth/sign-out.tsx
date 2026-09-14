@@ -28,7 +28,7 @@ export function SignOut({ className }: SignOutProps) {
   const hasSignedOut = useRef(false);
 
   useEffect(() => {
-    if (hasSignedOut.current) return;
+    if (hasSignedOut.current) {return;}
     hasSignedOut.current = true;
 
     signOut();

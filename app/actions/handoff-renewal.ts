@@ -61,7 +61,7 @@ async function sameOriginHeaders() {
 function toControlData(
   value: Awaited<ReturnType<typeof getBuilderHandoffPageData>>,
 ): HandoffControlData | undefined {
-  if (!value) return;
+  if (!value) {return;}
   return {
     cursorInstallReady: value.cursorInstallReady,
     destination: value.destination,
@@ -84,7 +84,7 @@ export async function renewBuilderHandoff(
   untrustedInput: { handoffId: string; creationRequestId: string },
 ): Promise<HandoffRenewalActionState> {
   const parsed = renewalInputSchema.safeParse(untrustedInput);
-  if (!parsed.success) return { status: "error" };
+  if (!parsed.success) {return { status: "error" };}
 
   const input = parsed.data;
   try {
@@ -99,12 +99,12 @@ export async function renewBuilderHandoff(
       ),
       input.handoffId,
     );
-    if (response.status === 401) return { status: "sign-in" };
-    if (response.status === 403 || response.status === 404) return { status: "unavailable" };
-    if (!response.ok) return { status: "error" };
+    if (response.status === 401) {return { status: "sign-in" };}
+    if (response.status === 403 || response.status === 404) {return { status: "unavailable" };}
+    if (!response.ok) {return { status: "error" };}
 
     const renewed = renewedHandoffSchema.safeParse(await response.json());
-    if (!renewed.success) return { status: "error" };
+    if (!renewed.success) {return { status: "error" };}
     const handoff = toControlData(
       await getBuilderHandoffPageData({
         environment: process.env,
@@ -112,7 +112,7 @@ export async function renewBuilderHandoff(
         headers: await headers(),
       }),
     );
-    if (!handoff) return { status: "unavailable" };
+    if (!handoff) {return { status: "unavailable" };}
     refresh();
     return { handoff, status: "renewed" };
   } catch {

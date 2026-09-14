@@ -51,7 +51,7 @@ async function click(text: string) {
     (element) => element.textContent === text,
   );
   expect(button).toBeDefined();
-  if (!button) throw new Error(`Button not found: ${text}`);
+  if (!button) {throw new Error(`Button not found: ${text}`);}
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   await act(async () => button.click());
 }
@@ -65,7 +65,7 @@ function visibility(value: "visible" | "hidden") {
 }
 afterEach(async () => {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  if (root) await act(async () => root?.unmount());
+  if (root) {await act(async () => root?.unmount());}
   root = undefined;
   container?.remove();
   sessionStorage.clear();
@@ -85,7 +85,7 @@ describe("destination adapters", () => {
       const match = prompt.match(/autograph_start with (?<payload>\{[^\n]+\})\./u);
       const serializedPayload = match?.groups?.payload;
       expect(serializedPayload).toBeDefined();
-      if (!serializedPayload) throw new Error("Handoff prompt payload not found");
+      if (!serializedPayload) {throw new Error("Handoff prompt payload not found");}
       const payload = JSON.parse(serializedPayload);
       expect(payload).toEqual({
         clientRequestId: `web-handoff:${id}`,
@@ -102,13 +102,13 @@ describe("destination adapters", () => {
     expect(buildCursorInstallUrl(initial.mcpUrl, false)).toBeUndefined();
     const installUrl = buildCursorInstallUrl(initial.mcpUrl, true);
     expect(installUrl).toBeDefined();
-    if (!installUrl) throw new Error("Cursor install URL not found");
+    if (!installUrl) {throw new Error("Cursor install URL not found");}
     const url = new URL(installUrl);
     expect(url.protocol).toBe("cursor:");
     expect(url.pathname).toBe("/mcp/install");
     const config = url.searchParams.get("config");
     expect(config).toBeDefined();
-    if (!config) throw new Error("Cursor install config not found");
+    if (!config) {throw new Error("Cursor install config not found");}
     expect(JSON.parse(atob(config))).toEqual({
       auth: { CLIENT_ID: "autograph-cursor-desktop" },
       url: initial.mcpUrl,
@@ -148,7 +148,7 @@ describe("durable handoff controls", () => {
         (element) => element.textContent === actionLabel,
       );
       expect(button).toBeDefined();
-      if (!button) throw new Error(`Button not found: ${actionLabel}`);
+      if (!button) {throw new Error(`Button not found: ${actionLabel}`);}
       expect(button.disabled).toBe(true);
       expect(container.querySelector("input")?.matches(":disabled")).toBe(true);
       button.click();
@@ -336,7 +336,7 @@ describe("durable handoff controls", () => {
     expect(container.querySelector("textarea")).toBeNull();
     const signIn = container.querySelector("a");
     expect(signIn).toBeDefined();
-    if (!signIn) throw new Error("Sign-in link not found");
+    if (!signIn) {throw new Error("Sign-in link not found");}
     expect(new URL(signIn.href).searchParams.get("callbackURL")).toBe(`/handoff/${id}`);
   });
   it.each([401, 403, 404])(
@@ -348,7 +348,7 @@ describe("durable handoff controls", () => {
       await render();
       const signIn = container.querySelector("a");
       expect(signIn).toBeDefined();
-      if (!signIn) throw new Error("Sign-in link not found");
+      if (!signIn) {throw new Error("Sign-in link not found");}
       expect(new URL(signIn.href).searchParams.get("callbackURL")).toBe(`/handoff/${id}`);
       expect(container.querySelector("textarea")).toBeNull();
       expect(

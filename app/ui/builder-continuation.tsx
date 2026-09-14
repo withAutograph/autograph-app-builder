@@ -94,9 +94,9 @@ export function BuilderContinuation({
     return () => window.cancelAnimationFrame(frame);
   }, []);
   useEffect(() => {
-    if (!continuation || continuationPending) return;
-    if (continuation.status === "error") return;
-    if (completedHandoff.current === continuation.handoff.handoffId) return;
+    if (!continuation || continuationPending) {return;}
+    if (continuation.status === "error") {return;}
+    if (completedHandoff.current === continuation.handoff.handoffId) {return;}
     completedHandoff.current = continuation.handoff.handoffId;
     router.replace(`/handoff/${continuation.handoff.handoffId}`);
   }, [continuation, continuationPending, router]);
@@ -140,7 +140,7 @@ export function BuilderContinuation({
             };
           }
           const request = continuationRequest.current;
-          if (!request) return;
+          if (!request) {return;}
           savedContinuation.current = {
             creationRequestId: request.creationRequestId,
             draftCheckpoint,
@@ -149,7 +149,7 @@ export function BuilderContinuation({
             version: 1,
           };
           const input = savedContinuation.current;
-          if (input) startTransition(() => dispatchContinuation(input));
+          if (input) {startTransition(() => dispatchContinuation(input));}
         }}
       >
         {children}
@@ -166,7 +166,7 @@ export function BuilderContinuation({
             type="button"
             onClick={() => {
               const input = savedContinuation.current;
-              if (input) startTransition(() => dispatchContinuation(input));
+              if (input) {startTransition(() => dispatchContinuation(input));}
             }}
           >
             Retry saved handoff

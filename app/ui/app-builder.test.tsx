@@ -202,7 +202,7 @@ function AppBuilder(
 ) {
   const { user, connectionsEnabled = true, comingSoonEnabled = true, ...componentProps } = props;
   void user;
-  if (!componentProps.authenticated) return <AnonymousBuilder />;
+  if (!componentProps.authenticated) {return <AnonymousBuilder />;}
   const { authenticated: _authenticated, ...authenticatedProps } = componentProps;
   return (
     <div className={styles.appShell}>
@@ -270,7 +270,7 @@ async function press(element: HTMLElement, key: string) {
 }
 
 const requireElement = <T extends Element>(element: T | null | undefined) => {
-  if (!element) throw new Error("Expected interactive element to exist");
+  if (!element) {throw new Error("Expected interactive element to exist");}
   return element;
 };
 
@@ -283,7 +283,7 @@ const waitForFrame = () => {
 afterEach(async () => {
   vi.useRealTimers();
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  if (root) await act(async () => root?.unmount());
+  if (root) {await act(async () => root?.unmount());}
   container?.remove();
   root = undefined;
   container = undefined;

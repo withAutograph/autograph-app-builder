@@ -86,7 +86,7 @@ async function sameOriginHeaders(contentType?: string) {
   const forwarded = new Headers(incoming);
   const { origin } = new URL(requestUrl("/"));
   forwarded.set("origin", origin);
-  if (contentType) forwarded.set("content-type", contentType);
+  if (contentType) {forwarded.set("content-type", contentType);}
   return forwarded;
 }
 
@@ -222,17 +222,17 @@ function unavailableProvisioning(
         ? input.form.githubInstallationId !== undefined
         : input.form.vercelInstallationId !== undefined;
     if (!selected)
-      return {
+      {return {
         code: "not_selected" as const,
         retryable: false,
         status: "skipped" as const,
-      };
+      };}
     if (code === "feature_disabled")
-      return {
+      {return {
         code: "feature_disabled" as const,
         retryable: false,
         status: "skipped" as const,
-      };
+      };}
     return {
       code: "provider_unavailable" as const,
       retryable: true,
@@ -285,18 +285,18 @@ export async function continueBuilderHandoff(
   untrustedInput: BuilderHandoffContinuationInput,
 ): Promise<BuilderHandoffContinuationState> {
   const parsed = handoffContinuationInputSchema.safeParse(untrustedInput);
-  if (!parsed.success) return { status: "error" };
+  if (!parsed.success) {return { status: "error" };}
   try {
     const context = await getAuthenticatedBuilderDraftContext({
       environment: process.env,
       headers: await headers(),
     });
-    if (!context) return { status: "error" };
+    if (!context) {return { status: "error" };}
     const { draftCheckpoint, ...request } = parsed.data;
     const draft = await context.drafts.read(context.authority, draftCheckpoint.draftId);
     // A newer device revision must never be silently provisioned with an older
     // device's form. The client refreshes that revision before trying again.
-    if (!draft || draft.revision !== draftCheckpoint.revision) return { status: "error" };
+    if (!draft || draft.revision !== draftCheckpoint.revision) {return { status: "error" };}
     const input = resolvedHandoffContinuationInputSchema.parse({
       ...request,
       form: draft.record.draft.form,
@@ -340,7 +340,7 @@ export async function continueHandoffProvisioning(
   untrustedInput: { handoffId: string; retryProvider?: "github" | "vercel" },
 ): Promise<HandoffProvisioningContinuationState> {
   const parsed = handoffProvisioningContinuationInputSchema.safeParse(untrustedInput);
-  if (!parsed.success) return { status: "error" };
+  if (!parsed.success) {return { status: "error" };}
   try {
     const data = await getBuilderHandoffPageData({
       environment: process.env,
@@ -349,12 +349,12 @@ export async function continueHandoffProvisioning(
     });
     const requestId = data?.intent.provisioningRequestId;
     const providers = data?.intent.providers;
-    if (!data || !requestId || !providers) return { status: "error" };
+    if (!data || !requestId || !providers) {return { status: "error" };}
 
     const run = async (operation: "github" | "vercel") => {
       const selected =
         operation === "github" ? providers.githubInstallationId : providers.vercelInstallationId;
-      if (!selected) return;
+      if (!selected) {return;}
       await provisionBuilderProvider({
         appName: data.intent.appName,
         operation,
@@ -371,11 +371,11 @@ export async function continueHandoffProvisioning(
     if (parsed.data.retryProvider) {
       await run(parsed.data.retryProvider);
     } else {
-      if (providers.githubInstallationId) await run("github");
+      if (providers.githubInstallationId) {await run("github");}
       // The Vercel operation durably records `github_required` when GitHub
       // has not succeeded, so the journal settles instead of leaving an
       // indefinite pending handoff. A later GitHub retry safely re-runs it.
-      if (providers.vercelInstallationId) await run("vercel");
+      if (providers.vercelInstallationId) {await run("vercel");}
     }
     refresh();
     return { status: "updated" };

@@ -64,7 +64,7 @@ type Pending<T> = BuilderDraftOutboxEntry<T>;
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function createMutationId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function")
-    return crypto.randomUUID();
+    {return crypto.randomUUID();}
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
@@ -108,7 +108,7 @@ export function useBuilderDraftAutosave<T>(
   }, [options.isOnline, options.onAcknowledged, options.onVisibilityFlush, options.save]);
 
   const updateStatus = useCallback((next: BuilderDraftAutosaveStatus, nextError?: Error) => {
-    if (!mounted.current) return;
+    if (!mounted.current) {return;}
     setStatus(next);
     setError(nextError);
   }, []);
@@ -125,7 +125,7 @@ export function useBuilderDraftAutosave<T>(
         timer.current = undefined;
       }
 
-      if (draining.current) return draining.current;
+      if (draining.current) {return draining.current;}
       const run = async () => {
         while (queued.current) {
           if (!online()) {
@@ -145,7 +145,7 @@ export function useBuilderDraftAutosave<T>(
               snapshot: current.snapshot,
             });
             if (acknowledgement.mutationId !== current.mutationId)
-              throw new Error("builder-draft-acknowledgement-mismatch");
+              {throw new Error("builder-draft-acknowledgement-mismatch");}
             acknowledgedRevision.current = Math.max(
               acknowledgedRevision.current,
               acknowledgement.revision,
@@ -158,9 +158,9 @@ export function useBuilderDraftAutosave<T>(
                 })
               : options.outbox.clearIfMutationId(current.mutationId));
             onAcknowledged.current?.(acknowledgement);
-            if (mounted.current) setLastSavedAt(acknowledgement.savedAt);
+            if (mounted.current) {setLastSavedAt(acknowledgement.savedAt);}
           } catch (saveError) {
-            if (!queued.current) queued.current = current;
+            if (!queued.current) {queued.current = current;}
             updateStatus(
               online() ? "error" : "offline",
               saveError instanceof Error ? saveError : new Error("builder-draft-save-failed"),
@@ -176,7 +176,7 @@ export function useBuilderDraftAutosave<T>(
       try {
         return await pending;
       } finally {
-        if (draining.current === pending) draining.current = undefined;
+        if (draining.current === pending) {draining.current = undefined;}
       }
     },
     [online, options.outbox, updateStatus],
@@ -192,7 +192,7 @@ export function useBuilderDraftAutosave<T>(
         const drained = await dispatch(reason);
         // An offline/error result deliberately retains the outbox entry for a
         // later retry. Do not spin indefinitely while the save is unavailable.
-        if (!drained) return;
+        if (!drained) {return;}
       } while (queued.current);
     },
     [dispatch],
@@ -210,7 +210,7 @@ export function useBuilderDraftAutosave<T>(
       queued.current = entry;
       void options.outbox.write(entry);
       updateStatus(online() ? "saving" : "offline");
-      if (timer.current) clearTimeout(timer.current);
+      if (timer.current) {clearTimeout(timer.current);}
       timer.current = setTimeout(() => {
         timer.current = undefined;
         void dispatch("debounce");
@@ -224,7 +224,7 @@ export function useBuilderDraftAutosave<T>(
 
   const resumePending = useCallback(async () => {
     const entry = await options.outbox.read();
-    if (!mounted.current || !entry || queued.current) return;
+    if (!mounted.current || !entry || queued.current) {return;}
     queued.current = entry;
     updateStatus(online() ? "saving" : "offline");
     await flush("flush");
@@ -244,13 +244,13 @@ export function useBuilderDraftAutosave<T>(
 
   const discardSupersededByRemoteRevision = useCallback(
     async (revision: number) => {
-      if (!Number.isSafeInteger(revision) || revision <= acknowledgedRevision.current) return false;
+      if (!Number.isSafeInteger(revision) || revision <= acknowledgedRevision.current) {return false;}
       acknowledgedRevision.current = revision;
       if (queued.current && (queued.current.baseRevision ?? 0) < revision)
-        queued.current = undefined;
+        {queued.current = undefined;}
       const pending = await options.outbox.read();
       if (pending && (pending.baseRevision ?? 0) < revision)
-        await options.outbox.clearIfMutationId(pending.mutationId);
+        {await options.outbox.clearIfMutationId(pending.mutationId);}
       updateStatus("saved");
       return true;
     },
@@ -267,7 +267,7 @@ export function useBuilderDraftAutosave<T>(
 
   useEffect(() => {
     const visibility = () => {
-      if (document.visibilityState !== "hidden") return;
+      if (document.visibilityState !== "hidden") {return;}
       onVisibilityFlush.current?.("visibilitychange");
       void flush("visibilitychange");
     };
@@ -288,7 +288,7 @@ export function useBuilderDraftAutosave<T>(
     mounted.current = true;
     return () => {
       mounted.current = false;
-      if (timer.current) clearTimeout(timer.current);
+      if (timer.current) {clearTimeout(timer.current);}
     };
   }, []);
 

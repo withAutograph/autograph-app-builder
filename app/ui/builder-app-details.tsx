@@ -78,7 +78,7 @@ export function AppDetailsSection({
       </p>
     </>
   );
-  if (bare) return controls;
+  if (bare) {return controls;}
   return (
     <fieldset
       className={`${styles.sectionField} ${styles.appDetailsSection}`}

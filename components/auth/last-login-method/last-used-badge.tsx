@@ -22,7 +22,7 @@ export function LastUsedBadge({ method, compact, floating }: LastUsedBadgeProps)
   const { method: lastLoginMethod, localization } = useLastLoginMethod();
   const methods = Array.isArray(method) ? method : [method];
 
-  if (!lastLoginMethod || !methods.includes(lastLoginMethod)) return null;
+  if (!lastLoginMethod || !methods.includes(lastLoginMethod)) {return null;}
 
   return (
     <Badge

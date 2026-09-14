@@ -36,7 +36,7 @@ async function RedirectAuthenticatedVisitor({
 }: {
   searchParams: Promise<AuthPageSearchParams>;
 }) {
-  if (!(await hasAuthenticatedVisitor())) return null;
+  if (!(await hasAuthenticatedVisitor())) {return null;}
 
   const query = await searchParams;
   const origin = getPreviewOAuthDeploymentOrigin(process.env);

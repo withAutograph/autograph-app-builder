@@ -51,7 +51,7 @@ export function UserProfile({ className }: UserProfileProps) {
     const additionalFieldValues: Record<string, unknown> = {};
 
     for (const field of additionalFields ?? []) {
-      if (field.profile === false || field.readOnly) continue;
+      if (field.profile === false || field.readOnly) {continue;}
       const value = parseAdditionalFieldValue(field, formData.get(field.name) as string | null);
 
       if (field.validate) {
@@ -124,7 +124,7 @@ export function UserProfile({ className }: UserProfileProps) {
             </Field>
 
             {additionalFields?.map((field) => {
-              if (field.profile === false) return null;
+              if (field.profile === false) {return null;}
 
               if (!session) {
                 if (field.inputType === "hidden") {
