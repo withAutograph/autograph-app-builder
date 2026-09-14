@@ -3843,10 +3843,6 @@ const existingFindingOverrides: { files: string[]; rules: Record<string, "off"> 
 
 const followupFindingOverrides: { files: string[]; rules: Record<string, "off"> }[] = [
   {
-    files: ["**/evals/g2-provider-brief-first-attempt.model.test.ts"],
-    rules: { "typescript/no-deprecated": "off" },
-  },
-  {
     files: ["**/evals/support/self-reproduction-candidate-navigation.ts"],
     rules: { "typescript/no-unnecessary-type-conversion": "off" },
   },
