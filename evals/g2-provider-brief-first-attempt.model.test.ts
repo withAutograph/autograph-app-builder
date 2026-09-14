@@ -67,6 +67,7 @@ describe.skipIf(!optIn)("G2 provider-named product brief", () => {
     }
 
     const { steps, toolCalls } = await generateText({
+      instructions: await productionAppSpecInstructions(),
       maxOutputTokens: 8000,
       maxRetries: 0,
       model: modelId,
@@ -76,7 +77,6 @@ Use the production authoring guidance supplied above. Record one AppSpec artifac
 
 Product brief:
 ${productBrief}`,
-      system: await productionAppSpecInstructions(),
       toolChoice: {
         toolName: "record-prototype-artifact",
         type: "tool",
