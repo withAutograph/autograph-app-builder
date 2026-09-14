@@ -17,19 +17,22 @@ export default defineTool({
   description:
     "After a separate approval, create one deterministic branch and builder-owned worktree at the exact reviewed base and apply only the approved postimages there. It never mutates the original checkout, commits, pushes, publishes remotely, or invokes a provider or release operation.",
   async execute({ publication: expected }, ctx) {
-    if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "1")
+    if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION !== "1") {
       throw new Error("Branch-worktree publication is disabled on this host.");
+    }
     const workflow = appBuilderWorkflowState.get();
-    if (workflow.phase !== "reviewed")
+    if (workflow.phase !== "reviewed") {
       throw new Error(
         "Initial branch-worktree publication requires the exact reviewed phase; use status and explicit recovery for an existing attempt.",
       );
+    }
     assertExactBranchWorktreeProposal(expected);
     const proposal = await exactBranchWorktreePublicationProposal({
       expectedReviewDigest: expected.reviewDigest,
     });
-    if (!exactBranchWorktreeProposalMatch(proposal, expected))
+    if (!exactBranchWorktreeProposalMatch(proposal, expected)) {
       throw new Error("Publication preconditions changed after approval.");
+    }
     let pendingWorkflow: ReturnType<typeof appBuilderWorkflowState.get> | undefined;
     const relativeRoot = workflow.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
     const result = await publishReviewedChangeSetToBranchWorktree({
@@ -39,8 +42,9 @@ export default defineTool({
             expected: workflow,
             operation: "branch publication pending recording",
             transition: (current) => {
-              if (current.phase !== "reviewed")
+              if (current.phase !== "reviewed") {
                 throw new Error("The reviewed workflow changed before publication.");
+              }
               return {
                 ...current,
                 branchPublicationCallId: ctx.callId,
@@ -71,7 +75,9 @@ export default defineTool({
         workflow.appSpec.appId === "branch-publication-partial-failure"
           ? {
               afterPathMutation: (_path: string, index: number) => {
-                if (index === 0) throw new Error("Fixture partial branch-worktree apply failure.");
+                if (index === 0) {
+                  throw new Error("Fixture partial branch-worktree apply failure.");
+                }
               },
             }
           : {}),
@@ -85,8 +91,9 @@ export default defineTool({
       review: workflow.reviewReceipt,
       sourceReceipt: workflow.sourceReceipt,
     });
-    if (pendingWorkflow === undefined)
+    if (pendingWorkflow === undefined) {
       throw new Error("The durable branch publication intent was not bound to workflow state.");
+    }
     const exactPendingWorkflow = pendingWorkflow;
     updateExactWorkflow({
       expected: exactPendingWorkflow,
@@ -96,8 +103,9 @@ export default defineTool({
           current.phase !== "branch_publication_pending" ||
           current.branchPublicationCallId !== ctx.callId ||
           !exactBranchWorktreeProposalMatch(current.branchPublicationProposal, proposal)
-        )
+        ) {
           throw new Error("The pending publication workflow changed before terminal recording.");
+        }
         return result.status === "succeeded"
           ? {
               ...current,

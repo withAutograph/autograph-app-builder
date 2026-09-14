@@ -31,9 +31,10 @@ describe("release proof evidence", () => {
       receipt({ browserPreview: false }),
       receipt({ publicationAttempted: true }),
       "no structural receipt",
-    ])
+    ]) {
       expect(() => parseReviewedProof(invalid, "sandbox-reviewed-change-set")).toThrow(
         "reviewed proof receipt",
       );
+    }
   });
 });

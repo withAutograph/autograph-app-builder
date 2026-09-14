@@ -114,14 +114,18 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
       for (let attempt = 0; attempt < 8; attempt += 1) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const target = await read({ authority, draftId: input.draftId });
-        if (target?.status === "archived") throw new Error("builder-draft-archived");
+        if (target?.status === "archived") {
+          throw new Error("builder-draft-archived");
+        }
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const current = await readActive({ authority });
-        if (input.expectedRevision > 0 && current?.draftId !== input.draftId)
+        if (input.expectedRevision > 0 && current?.draftId !== input.draftId) {
           throw new Error("builder-draft-stale");
+        }
         if (current) {
-          if (current.lastClientMutationId === input.clientMutationId)
+          if (current.lastClientMutationId === input.clientMutationId) {
             return { concurrent: false, idempotent: true, row: current };
+          }
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const rows = await database
             .update(schema.builderDrafts)
@@ -176,7 +180,9 @@ function createUnlockedBuilderDraftStore(database: Database): BuilderDraftStore 
           // A completed handoff's draft is read-only. Never reactivate it from
           // delayed page-hide transport or an old provider-return tab.
         } catch (error) {
-          if (!isUniqueViolation(error)) throw error;
+          if (!isUniqueViolation(error)) {
+            throw error;
+          }
         }
       }
       throw new Error("builder-draft-contention");

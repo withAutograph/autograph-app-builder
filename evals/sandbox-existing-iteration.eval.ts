@@ -54,8 +54,9 @@ export default defineEval({
   tags: ["sandbox-integration", "existing-app-iteration"],
   async test(t) {
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
-    if (repository === undefined || repository.length === 0)
+    if (repository === undefined || repository.length === 0) {
       throw new Error("The supported source root is missing.");
+    }
 
     await t.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
@@ -111,8 +112,9 @@ Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
             event.type !== "action.result" ||
             event.data.result.kind !== "tool-result" ||
             event.data.result.toolName !== "artifact_workflow_status"
-          )
+          ) {
             return false;
+          }
           return reviewedStateSchema.safeParse(event.data.result.output).success;
         }),
     );
@@ -123,25 +125,35 @@ Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
         const inspected: { path: string; content: string }[] = [];
         const changes: { path: string; after?: { digest?: string } }[] = [];
         for (const event of events) {
-          if (event.type !== "action.result" || event.data.result.kind !== "tool-result") continue;
+          if (event.type !== "action.result" || event.data.result.kind !== "tool-result") {
+            continue;
+          }
           const { result } = event.data;
           if (result.toolName === "inspect_existing_app") {
             const output = inspectedOutputSchema.safeParse(result.output);
-            if (output.success) inspected.push(...(output.data.files ?? []));
+            if (output.success) {
+              inspected.push(...(output.data.files ?? []));
+            }
           }
           if (result.toolName === "change_set_status") {
             const output = changeSetOutputSchema.safeParse(result.output);
-            if (output.success) changes.push(...(output.data.changes ?? []));
+            if (output.success) {
+              changes.push(...(output.data.changes ?? []));
+            }
           }
         }
         return inspected.some(({ path, content }) => {
-          if (!path.startsWith("apps/vendor/")) return false;
+          if (!path.startsWith("apps/vendor/")) {
+            return false;
+          }
           const expected = content.replace(
             /(?<opening>return\s*\(\s*<(?:main|div|section)\b[^>]*>)/u,
             (opening) =>
               `${opening}\n<p data-vendor-review-status="tax-verification">Tax verification required</p>`,
           );
-          if (expected === content) return false;
+          if (expected === content) {
+            return false;
+          }
           const expectedDigest = createHash("sha256").update(expected).digest("hex");
           return changes.some(
             (change) => change.path === path && change.after?.digest === expectedDigest,
@@ -159,8 +171,9 @@ Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
       "validate_app_creation",
       "change_set_status",
       "accept_change_set",
-    ])
+    ]) {
       t.calledTool(tool, { count: 1 });
+    }
 
     for (const tool of [
       "publish_reviewed_change_set",
@@ -170,8 +183,9 @@ Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
       "create_github_repository",
       "bash",
       "write_file",
-    ])
+    ]) {
       t.notCalledTool(tool);
+    }
   },
   timeoutMs: 360_000,
 });

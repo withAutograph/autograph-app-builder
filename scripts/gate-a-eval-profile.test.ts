@@ -131,13 +131,14 @@ describe("closed Gate A eval profile", () => {
       "ghcr.io/example/toolchain:latest",
       "@sha256:nope",
       `user:secret@ghcr.io/example/toolchain@sha256:${"a".repeat(64)}`,
-    ])
+    ]) {
       expect(() =>
         createGateAEvalProfile(
           { image: hostile, profile: "sandbox", sourceRoot: null },
           repositoryRoot,
         ),
       ).toThrow(/sandbox image/u);
+    }
   });
 
   it("preserves the hosted artifact source reader without a development binding", async () => {
@@ -198,7 +199,9 @@ describe("closed Gate A eval profile", () => {
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
       WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
     });
-    if (profile?.profile !== "sandbox") throw new Error("Expected sandbox profile.");
+    if (profile?.profile !== "sandbox") {
+      throw new Error("Expected sandbox profile.");
+    }
     expect(() =>
       validateGateAEvalProfile(
         {
@@ -249,7 +252,9 @@ describe("closed Gate A eval profile", () => {
       },
       repositoryRoot,
     );
-    if (profile?.profile !== "fresh") throw new Error("Expected fresh profile.");
+    if (profile?.profile !== "fresh") {
+      throw new Error("Expected fresh profile.");
+    }
     expect(() =>
       validateGateAEvalProfile(
         {

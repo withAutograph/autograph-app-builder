@@ -10,7 +10,9 @@ async function sourceFiles(directory: string): Promise<string[]> {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     entries.map(async (entry) => {
       const filePath = path.join(directory, entry.name);
-      if (entry.isDirectory()) return sourceFiles(filePath);
+      if (entry.isDirectory()) {
+        return sourceFiles(filePath);
+      }
       return entry.isFile() && /\.[jt]sx?$/u.test(entry.name) ? [filePath] : [];
     }),
   );

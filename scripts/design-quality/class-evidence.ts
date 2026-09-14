@@ -19,14 +19,19 @@ export interface ClassTokenEvidence {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function staticClassName(attribute: ts.JsxAttribute): string | undefined {
   const { initializer } = attribute;
-  if (!initializer) return undefined;
-  if (ts.isStringLiteral(initializer)) return initializer.text;
+  if (!initializer) {
+    return undefined;
+  }
+  if (ts.isStringLiteral(initializer)) {
+    return initializer.text;
+  }
   if (
     ts.isJsxExpression(initializer) &&
     initializer.expression &&
     ts.isStringLiteral(initializer.expression)
-  )
+  ) {
     return initializer.expression.text;
+  }
   return undefined;
 }
 
@@ -93,7 +98,7 @@ export function collectClassTokenEvidence(files: SourceFile[]): ClassTokenEviden
   const candidates: ClassTokenEvidence[] = [];
   const add = (source: ts.SourceFile, node: ts.Node, value: string) => {
     const start = source.getLineAndCharacterOfPosition(node.getStart(source));
-    for (const token of value.trim().split(/\s+/u).filter(Boolean))
+    for (const token of value.trim().split(/\s+/u).filter(Boolean)) {
       candidates.push({
         source: {
           column: start.character + 1,
@@ -102,6 +107,7 @@ export function collectClassTokenEvidence(files: SourceFile[]): ClassTokenEviden
         },
         token,
       });
+    }
   };
   for (const file of files.filter((sourceFile) => /\.tsx?$/iu.test(sourceFile.path))) {
     const source = ts.createSourceFile(
@@ -114,16 +120,21 @@ export function collectClassTokenEvidence(files: SourceFile[]): ClassTokenEviden
     const visit = (node: ts.Node) => {
       if (ts.isJsxAttribute(node) && ts.isIdentifier(node.name) && node.name.text === "className") {
         const value = staticClassName(node);
-        if (value) add(source, node, value);
+        if (value) {
+          add(source, node, value);
+        }
       }
       if (
         ts.isCallExpression(node) &&
         ts.isIdentifier(node.expression) &&
         node.expression.text === "cx"
-      )
-        for (const argument of node.arguments)
-          if (ts.isStringLiteral(argument) || ts.isNoSubstitutionTemplateLiteral(argument))
+      ) {
+        for (const argument of node.arguments) {
+          if (ts.isStringLiteral(argument) || ts.isNoSubstitutionTemplateLiteral(argument)) {
             add(source, argument, argument.text);
+          }
+        }
+      }
       ts.forEachChild(node, visit);
     };
     visit(source);
@@ -164,19 +175,29 @@ export function signatureAttribution(
   tag: string,
   classes: string[],
 ): SignatureAttribution {
-  if (!shared) return { provenance: "unknown" };
+  if (!shared) {
+    return { provenance: "unknown" };
+  }
   const generatedMatch = uniqueIntrinsicSignature(generated, tag, classes);
   const sharedMatch = uniqueIntrinsicSignature(shared, tag, classes);
-  if (generatedMatch && sharedMatch) return { provenance: "unknown" };
-  if (generatedMatch) return { provenance: "generated", source: generatedMatch.source };
-  if (sharedMatch) return { provenance: "shared", source: sharedMatch.source };
+  if (generatedMatch && sharedMatch) {
+    return { provenance: "unknown" };
+  }
+  if (generatedMatch) {
+    return { provenance: "generated", source: generatedMatch.source };
+  }
+  if (sharedMatch) {
+    return { provenance: "shared", source: sharedMatch.source };
+  }
   return { provenance: "unknown" };
 }
 
 /** Compound, grouped, or stateful selectors deliberately do not prove origin. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function exactClassSelector(selector: string | undefined) {
-  if (!selector || !/^\.[A-Za-z_-][A-Za-z0-9_-]*$/u.test(selector.trim())) return;
+  if (!selector || !/^\.[A-Za-z_-][A-Za-z0-9_-]*$/u.test(selector.trim())) {
+    return;
+  }
   return selector.trim().slice(1);
 }
 
@@ -192,37 +213,57 @@ export function generatedSignatureSelector(
 /** Reads one escaped Tailwind utility token, optionally followed by attribute state. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function escapedTailwindClassToken(selector: string | undefined) {
-  if (!selector?.startsWith(".")) return;
+  if (!selector?.startsWith(".")) {
+    return;
+  }
   let token = "";
   let index = 1;
   for (; index < selector.length; index += 1) {
     const character = selector[index];
-    if (!character) return;
+    if (!character) {
+      return;
+    }
     if (character === "\\") {
       const escaped = selector[index + 1];
-      if (!escaped) return;
+      if (!escaped) {
+        return;
+      }
       token += escaped;
       index += 1;
-    } else if (character === "[") break;
-    else if (/[A-Za-z0-9_-]/u.test(character)) token += character;
-    else return;
+    } else if (character === "[") {
+      break;
+    } else if (/[A-Za-z0-9_-]/u.test(character)) {
+      token += character;
+    } else {
+      return;
+    }
   }
-  if (!token) return;
+  if (!token) {
+    return;
+  }
   while (index < selector.length) {
-    if (selector[index] !== "[") return;
+    if (selector[index] !== "[") {
+      return;
+    }
     index += 1;
     let quote: string | undefined;
     let closed = false;
     for (; index < selector.length; index += 1) {
       const character = selector[index];
-      if (!character) return;
+      if (!character) {
+        return;
+      }
       if (character === "\\") {
-        if (index + 1 >= selector.length) return;
+        if (index + 1 >= selector.length) {
+          return;
+        }
         index += 1;
         continue;
       }
       if (quote) {
-        if (character === quote) quote = undefined;
+        if (character === quote) {
+          quote = undefined;
+        }
         continue;
       }
       if (character === '"' || character === "'") {
@@ -234,9 +275,13 @@ export function escapedTailwindClassToken(selector: string | undefined) {
         index += 1;
         break;
       }
-      if (character === "[") return;
+      if (character === "[") {
+        return;
+      }
     }
-    if (!closed || quote) return;
+    if (!closed || quote) {
+      return;
+    }
   }
   return token;
 }
@@ -248,12 +293,18 @@ export function classTokenAttribution(
   selector: string | undefined,
 ): SignatureAttribution {
   const token = escapedTailwindClassToken(selector);
-  if (!token || !shared) return { provenance: "unknown" };
+  if (!token || !shared) {
+    return { provenance: "unknown" };
+  }
   const generatedMatches = generated.filter((candidate) => candidate.token === token);
   const sharedMatches = shared.filter((candidate) => candidate.token === token);
-  if (generatedMatches.length + sharedMatches.length !== 1) return { provenance: "unknown" };
+  if (generatedMatches.length + sharedMatches.length !== 1) {
+    return { provenance: "unknown" };
+  }
   const match = generatedMatches[0] ?? sharedMatches[0];
-  if (!match) return { provenance: "unknown" };
+  if (!match) {
+    return { provenance: "unknown" };
+  }
   return {
     provenance: generatedMatches.length ? "generated" : "shared",
     source: match.source,

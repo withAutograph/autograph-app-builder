@@ -18,8 +18,9 @@ export default defineEval({
   tags: ["sandbox-integration"],
   async test(t) {
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
-    if (repository === undefined || repository.length === 0)
+    if (repository === undefined || repository.length === 0) {
       throw new Error("The supported source root is missing.");
+    }
 
     await t.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
@@ -44,8 +45,9 @@ export default defineEval({
           event.type !== "action.result" ||
           event.data.result.kind !== "tool-result" ||
           event.data.result.toolName !== "artifact_workflow_status"
-        )
+        ) {
           return false;
+        }
         return plannedStateSchema.safeParse(event.data.result.output).success;
       }),
     );
@@ -66,8 +68,9 @@ export default defineEval({
       "create_github_repository",
       "bash",
       "write_file",
-    ])
+    ]) {
       t.notCalledTool(tool);
+    }
   },
   timeoutMs: 360_000,
 });

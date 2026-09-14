@@ -6,7 +6,9 @@ describe("Eve eval fetch signal isolation", () => {
   it("derives one signal per request while retaining cancellation", async () => {
     const observedSignals: AbortSignal[] = [];
     const fetchImplementation = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
-      if (init?.signal !== undefined && init.signal !== null) observedSignals.push(init.signal);
+      if (init?.signal !== undefined && init.signal !== null) {
+        observedSignals.push(init.signal);
+      }
       return Promise.resolve(new Response(null, { status: 204 }));
     });
     const fetch = isolateAbortSignalPerFetch(fetchImplementation);

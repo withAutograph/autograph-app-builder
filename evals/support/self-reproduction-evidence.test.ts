@@ -30,8 +30,9 @@ function receipt(record: unknown) {
 }
 
 afterEach(() => {
-  for (const directory of directories.splice(0))
+  for (const directory of directories.splice(0)) {
     rmSync(directory, { force: true, recursive: true });
+  }
 });
 
 describe("self-reproduction evidence completion", () => {
@@ -77,7 +78,9 @@ describe("self-reproduction evidence persistence", () => {
       nested: { password: "private-password-value" },
     });
     // Every credential, field name, and record prefix crosses a chunk boundary.
-    for (const character of raw) sink.write(character);
+    for (const character of raw) {
+      sink.write(character);
+    }
     sink.end();
 
     for (const artifactPath of [logPath, transcriptPath]) {
@@ -88,8 +91,9 @@ describe("self-reproduction evidence persistence", () => {
         "private-key-value",
         "private-query-value",
         "private-password-value",
-      ])
+      ]) {
         expect(persisted).not.toContain(secret);
+      }
       expect(persisted).toContain("[REDACTED]");
     }
     expect(records).toHaveLength(1);

@@ -86,13 +86,14 @@ export function BuildWithSection({
       </label>
     </div>
   );
-  if (bare)
+  if (bare) {
     return (
       <>
         {controls}
         {children}
       </>
     );
+  }
   return (
     <>
       <SectionShell

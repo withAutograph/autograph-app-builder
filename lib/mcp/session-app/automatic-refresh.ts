@@ -14,8 +14,9 @@ export function createBoundedAuthorizationRefresh(input?: {
         key !== state.key ||
         state.attempts >= maximumAttempts ||
         now - state.lastAt < minimumIntervalMs
-      )
+      ) {
         return false;
+      }
       state.attempts += 1;
       state.lastAt = now;
       return true;

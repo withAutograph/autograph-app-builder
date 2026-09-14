@@ -34,15 +34,21 @@ type SignalTarget = Readonly<{
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function required(environment: Environment, name: string) {
   const value = environment[name];
-  if (value === undefined || value.length === 0)
+  if (value === undefined || value.length === 0) {
     throw new Error(`Local Eve ${name} binding was unavailable.`);
+  }
   return value;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function ownerDirectory(path: string, label: string, ownerOnly = false) {
-  if (!nodePath.isAbsolute(path) || nodePath.resolve(path) !== path || realpathSync(path) !== path)
+  if (
+    !nodePath.isAbsolute(path) ||
+    nodePath.resolve(path) !== path ||
+    realpathSync(path) !== path
+  ) {
     throw new Error(`${label} was not an absolute canonical directory.`);
+  }
   const info = lstatSync(path);
   if (
     info.isSymbolicLink() ||
@@ -50,8 +56,9 @@ function ownerDirectory(path: string, label: string, ownerOnly = false) {
     info.uid !== process.getuid?.() ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & (ownerOnly ? 0o777 : 0o022)) !== (ownerOnly ? 0o700 : 0)
-  )
+  ) {
     throw new Error(`${label} was not owner-bound.`);
+  }
   return path;
 }
 
@@ -83,47 +90,55 @@ function exactRoots(repositoryRoot: string, environment: Environment) {
     "Development Eve supervisor root",
     true,
   );
-  if (!contained(runsRoot, supervisorRoot) || nodePath.dirname(supervisorRoot) !== runsRoot)
+  if (!contained(runsRoot, supervisorRoot) || nodePath.dirname(supervisorRoot) !== runsRoot) {
     throw new Error("Development Eve supervisor was outside the runs root.");
+  }
   const cycleRoot = ownerDirectory(
     nodePath.dirname(nodePath.dirname(applicationRoot)),
     "Development Eve cycle root",
     true,
   );
-  if (!contained(supervisorRoot, cycleRoot) || nodePath.dirname(cycleRoot) !== supervisorRoot)
+  if (!contained(supervisorRoot, cycleRoot) || nodePath.dirname(cycleRoot) !== supervisorRoot) {
     throw new Error("Development Eve cycle was outside the supervisor root.");
-  if (applicationRoot !== nodePath.join(cycleRoot, "eve-application/source"))
+  }
+  if (applicationRoot !== nodePath.join(cycleRoot, "eve-application/source")) {
     throw new Error("Development Eve application root was not supervisor-bound.");
+  }
   const sourceRoot = ownerDirectory(
     required(environment, "REPOSITORY_LOCAL_ROOTS"),
     "Development Arrusted source root",
   );
   const activeRun = nodePath.dirname(sourceRoot);
-  if (!contained(runsRoot, activeRun) || nodePath.dirname(activeRun) !== runsRoot)
+  if (!contained(runsRoot, activeRun) || nodePath.dirname(activeRun) !== runsRoot) {
     throw new Error("Development Arrusted source was outside the active run.");
-  if (sourceRoot !== nodePath.join(activeRun, "source"))
+  }
+  if (sourceRoot !== nodePath.join(activeRun, "source")) {
     throw new Error("Development Arrusted source was outside the active run.");
+  }
   const runtimeHome = ownerDirectory(
     required(environment, "APP_BUILDER_DEV_RUNTIME_HOME"),
     "Development runtime home",
     true,
   );
-  if (runtimeHome !== nodePath.join(cycleRoot, "home"))
+  if (runtimeHome !== nodePath.join(cycleRoot, "home")) {
     throw new Error("Development runtime home was not supervisor-bound.");
+  }
   const workflowData = ownerDirectory(
     required(environment, "WORKFLOW_LOCAL_DATA_DIR"),
     "Development workflow data root",
     true,
   );
-  if (workflowData !== nodePath.join(cycleRoot, "workflow-data"))
+  if (workflowData !== nodePath.join(cycleRoot, "workflow-data")) {
     throw new Error("Development workflow data was not supervisor-bound.");
+  }
   const destinationRoot = ownerDirectory(
     required(environment, "REPOSITORY_WORKSPACE_ROOT"),
     "Development destination root",
     true,
   );
-  if (repositoryRoot === applicationRoot)
+  if (repositoryRoot === applicationRoot) {
     throw new Error("Development Eve cannot reuse the live checkout root.");
+  }
   return {
     activeRun,
     applicationRoot,
@@ -156,15 +171,19 @@ function exactBinding(environment: Environment) {
     environment.MSB_LIBKRUNFW_PATH !== undefined ||
     environment.VERCEL_TOKEN !== undefined ||
     environment.AI_GATEWAY_API_KEY !== undefined
-  )
+  ) {
     throw new Error("Local Eve execution authority was not closed.");
+  }
   const port = required(environment, "APP_BUILDER_EVE_PORT");
-  if (!/^\d{4,5}$/u.test(port) || Number(port) < 1024 || Number(port) > 65_535)
+  if (!/^\d{4,5}$/u.test(port) || Number(port) < 1024 || Number(port) > 65_535) {
     throw new Error("Local Eve port was invalid.");
-  if (environment.EVE_AGENT_HOST !== `http://127.0.0.1:${port}`)
+  }
+  if (environment.EVE_AGENT_HOST !== `http://127.0.0.1:${port}`) {
     throw new Error("Local Eve loopback binding was invalid.");
-  if (environment.WORKFLOW_LOCAL_BASE_URL !== `http://127.0.0.1:${port}`)
+  }
+  if (environment.WORKFLOW_LOCAL_BASE_URL !== `http://127.0.0.1:${port}`) {
     throw new Error("Local Eve workflow queue binding was invalid.");
+  }
   const sourceSha = required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_SHA");
   const sourceTree = required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_TREE");
   const fingerprint = required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT");
@@ -174,8 +193,9 @@ function exactBinding(environment: Environment) {
     !gitObject.test(sourceTree) ||
     !sha256.test(fingerprint) ||
     !sha256.test(dependencyKey)
-  )
+  ) {
     throw new Error("Local Eve development identity was invalid.");
+  }
   return { dependencyKey, fingerprint, port, sourceSha, sourceTree };
 }
 

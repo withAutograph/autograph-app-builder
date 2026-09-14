@@ -4,21 +4,28 @@ import { validateAgentPluginPackage } from "../lib/plugin/agent-plugin-package";
 
 const argument = (name: string) => {
   const index = process.argv.indexOf(name);
-  if (index === -1) return;
+  if (index === -1) {
+    return;
+  }
   const value = process.argv[index + 1];
-  if (!value || value.startsWith("--")) throw new Error(`Missing value for ${name}.`);
+  if (!value || value.startsWith("--")) {
+    throw new Error(`Missing value for ${name}.`);
+  }
   return value;
 };
 const client = argument("--client");
 const sourceValue = argument("--source");
 const destinationValue = argument("--destination");
-if (!sourceValue || !destinationValue || !["vscode", "cursor", "codex"].includes(client ?? ""))
+if (!sourceValue || !destinationValue || !["vscode", "cursor", "codex"].includes(client ?? "")) {
   throw new Error(
     "Usage: --client vscode|cursor|codex --source RELEASE_ROOT --destination DIRECTORY",
   );
+}
 const source = await realpath(path.resolve(sourceValue));
 const sourceStats = await lstat(source);
-if (!sourceStats.isDirectory()) throw new Error("Release root must be a real directory.");
+if (!sourceStats.isDirectory()) {
+  throw new Error("Release root must be a real directory.");
+}
 const requestedDestination = path.resolve(destinationValue);
 await mkdir(requestedDestination, { mode: 0o700, recursive: true });
 const destination = await realpath(requestedDestination);
@@ -33,7 +40,9 @@ try {
   await lstat(clientRoot);
   throw new Error(`Client install already exists: ${clientRoot}`);
 } catch (error) {
-  if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+    throw error;
+  }
 }
 await mkdir(clientRoot, { mode: 0o700 });
 await cp(path.join(source, "app-builder"), path.join(clientRoot, "app-builder"), {

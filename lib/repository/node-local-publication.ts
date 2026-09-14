@@ -81,8 +81,9 @@ const fixedGitEnvironment = function fixedGitEnvironment(): NodeJS.ProcessEnv {
     "GIT_CONFIG_COUNT",
     "GIT_CONFIG_KEY_0",
     "GIT_CONFIG_VALUE_0",
-  ])
+  ]) {
     Reflect.deleteProperty(environment, name);
+  }
   return environment;
 };
 
@@ -115,10 +116,11 @@ const fixedGitApply = function fixedGitApply(
       maxBuffer: 64 * 1024 * 1024,
     },
   );
-  if (result.status !== 0)
+  if (result.status !== 0) {
     throw new Error(
       `Fixed git apply failed: ${result.stderr.toString("utf-8").trim() || "unknown error"}`,
     );
+  }
 };
 
 const materializePatchFile = async function materializePatchFile(
@@ -127,7 +129,9 @@ const materializePatchFile = async function materializePatchFile(
   path: string,
   state: { bytes: Uint8Array; mode: string } | undefined,
 ): Promise<void> {
-  if (state === undefined) return;
+  if (state === undefined) {
+    return;
+  }
   const target = nodePath.resolve(root, side, path);
   await mkdir(nodePath.dirname(target), { mode: 0o755, recursive: true });
   await writeFile(target, state.bytes, {
@@ -151,7 +155,9 @@ const buildExactGitPatch = async function buildExactGitPatch(input: {
   try {
     for (const path of input.executionPaths) {
       const change = input.changes.find((candidate) => candidate.path === path);
-      if (change === undefined) throw new Error(`Missing approved change for ${path}.`);
+      if (change === undefined) {
+        throw new Error(`Missing approved change for ${path}.`);
+      }
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const item = await mkdtemp(nodePath.resolve(scratch, "item-"));
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -160,7 +166,9 @@ const buildExactGitPatch = async function buildExactGitPatch(input: {
         mkdir(nodePath.resolve(item, "new")),
       ]);
       const before = input.preimages.get(path);
-      if (before === undefined) throw new Error(`Missing approved preimage for ${path}.`);
+      if (before === undefined) {
+        throw new Error(`Missing approved preimage for ${path}.`);
+      }
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await materializePatchFile(
         item,
@@ -185,8 +193,9 @@ const buildExactGitPatch = async function buildExactGitPatch(input: {
         ["diff", "--no-index", "--binary", "--no-prefix", "--no-renames", "--", "old", "new"],
         { cwd: item, env: fixedGitEnvironment(), maxBuffer: 64 * 1024 * 1024 },
       );
-      if (result.status !== 1)
+      if (result.status !== 1) {
         throw new Error(`Could not build the exact publication patch for ${path}.`);
+      }
       chunks.push(result.stdout);
     }
     return Buffer.concat(chunks);
@@ -214,7 +223,9 @@ const fieldAfter = function fieldAfter(record: string, spaceCount: number): stri
   let offset = 0;
   for (let count = 0; count < spaceCount; count += 1) {
     offset = record.indexOf(" ", offset);
-    if (offset < 0) throw new Error("Git returned malformed porcelain-v2 status.");
+    if (offset < 0) {
+      throw new Error("Git returned malformed porcelain-v2 status.");
+    }
     offset += 1;
   }
   return record.slice(offset);
@@ -246,7 +257,9 @@ export const parseGitStatusV2 = function parseGitStatusV2(
   const result: ParsedGitStatus[] = [];
   for (let index = 0; index < records.length; index += 1) {
     const record = records[index];
-    if (record === "" || record.startsWith("# ") || record.startsWith("! ")) continue;
+    if (record === "" || record.startsWith("# ") || record.startsWith("! ")) {
+      continue;
+    }
     if (record.startsWith("? ")) {
       result.push({
         indexStatus: "?",
@@ -269,8 +282,9 @@ export const parseGitStatusV2 = function parseGitStatusV2(
       const xy = record.slice(2, 4);
       const path = fieldAfter(record, 9);
       const originalPath = records[index + 1];
-      if (originalPath === undefined || originalPath === "")
+      if (originalPath === undefined || originalPath === "") {
         throw new Error("Git returned a truncated rename record.");
+      }
       index += 1;
       result.push({
         originalPath,
@@ -299,13 +313,18 @@ export const parseGitStatusV2 = function parseGitStatusV2(
 const fileState = async function fileState(path: string, includeBytes = true): Promise<FileState> {
   try {
     const stat = await lstat(path);
-    if (stat.isSymbolicLink()) return { kind: "symlink" };
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    if (stat.isDirectory()) return { kind: "directory", mode: (stat.mode & 0o777).toString(8) };
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    if (!stat.isFile()) return { kind: "special", mode: (stat.mode & 0o777).toString(8) };
-    if (stat.size > LOCAL_PUBLICATION_MAX_FILE_BYTES)
+    if (stat.isSymbolicLink()) {
+      return { kind: "symlink" };
+    }
+    if (stat.isDirectory()) {
+      return { kind: "directory", mode: (stat.mode % 0o1000).toString(8) };
+    }
+    if (!stat.isFile()) {
+      return { kind: "special", mode: (stat.mode % 0o1000).toString(8) };
+    }
+    if (stat.size > LOCAL_PUBLICATION_MAX_FILE_BYTES) {
       throw new Error(`File exceeds the local-publication size limit: ${path}`);
+    }
     const bytes = includeBytes ? await readFile(path) : undefined;
     return {
       kind: "regular",
@@ -314,7 +333,9 @@ const fileState = async function fileState(path: string, includeBytes = true): P
       ...(bytes === undefined ? {} : { bytes, digest: contentDigest(bytes) }),
     };
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { kind: "absent" };
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { kind: "absent" };
+    }
     throw error;
   }
 };
@@ -326,8 +347,9 @@ const dirtyEntry = async function dirtyEntry(
   if (
     !safeSourcePath(parsed.path) ||
     (parsed.originalPath !== undefined && !safeSourcePath(parsed.originalPath))
-  )
+  ) {
     throw new Error("Git reported an unsafe dirty path.");
+  }
   const state = await fileState(nodePath.resolve(root, parsed.path));
   return {
     ...parsed,
@@ -354,13 +376,15 @@ export const inspectLocalPublicationDestination =
     destinationPath: string;
     sourceReceipt: SourceReceipt;
   }): Promise<DestinationSnapshot> {
-    if (nodePath.resolve(input.destinationPath) !== input.sourceReceipt.sourcePath)
+    if (nodePath.resolve(input.destinationPath) !== input.sourceReceipt.sourcePath) {
       throw new Error(
         "The destination must be the canonical original source path, not a symlink or alias.",
       );
+    }
     const canonicalPath = await resolveAllowedRepository(input.destinationPath);
-    if (canonicalPath !== input.sourceReceipt.sourcePath)
+    if (canonicalPath !== input.sourceReceipt.sourcePath) {
       throw new Error("The selected destination is not the exact original source checkout.");
+    }
     const [headSha, headTree] = [
       git(canonicalPath, ["rev-parse", "HEAD"]).trim(),
       git(canonicalPath, ["rev-parse", "HEAD^{tree}"]).trim(),
@@ -376,8 +400,9 @@ export const inspectLocalPublicationDestination =
     const indexPath = await gitOwnedPath(canonicalPath, "index");
     const indexFileDigest = contentDigest(await readFile(indexPath));
     const remoteDigest = stableDigest(git(canonicalPath, ["remote", "-v"]));
-    if (!rootStat.isDirectory() || !gitDirectoryStat.isDirectory())
+    if (!rootStat.isDirectory() || !gitDirectoryStat.isDirectory()) {
       throw new Error("The repository root or Git directory is not a directory.");
+    }
     const parsed = parseGitStatusV2(
       git(canonicalPath, ["status", "--porcelain=v2", "-z", "--untracked-files=all"]),
     );
@@ -402,8 +427,9 @@ export const inspectLocalPublicationDestination =
       };
     });
     const totalBytes = dirty.reduce((sum, entry) => sum + (entry.size ?? 0), 0);
-    if (totalBytes > LOCAL_PUBLICATION_MAX_DIRTY_BYTES)
+    if (totalBytes > LOCAL_PUBLICATION_MAX_DIRTY_BYTES) {
       throw new Error("The unrelated dirty snapshot exceeds the local-publication size limit.");
+    }
     const dirtyDigest = stableDigest(dirty);
     const stable = {
       canonicalPath,
@@ -457,9 +483,13 @@ const safeTarget = async function safeTarget(
   createParents: boolean,
   createdDirs: string[],
 ): Promise<string> {
-  if (!safeSourcePath(relativePath)) throw new Error("The approved path is unsafe.");
+  if (!safeSourcePath(relativePath)) {
+    throw new Error("The approved path is unsafe.");
+  }
   const target = nodePath.resolve(root, relativePath);
-  if (!within(root, target)) throw new Error("The approved path escapes the destination.");
+  if (!within(root, target)) {
+    throw new Error("The approved path escapes the destination.");
+  }
   const segments = relativePath.split("/").slice(0, -1);
   let cursor = root;
   for (const segment of segments) {
@@ -477,8 +507,9 @@ const safeTarget = async function safeTarget(
     }
   }
   const leaf = await fileState(target, false);
-  if (leaf.kind === "symlink" || leaf.kind === "directory" || leaf.kind === "special")
+  if (leaf.kind === "symlink" || leaf.kind === "directory" || leaf.kind === "special") {
     throw new Error("The approved path names a symlink or non-regular entry.");
+  }
   return target;
 };
 
@@ -550,8 +581,9 @@ const assertJournal = function assertJournal(journal: LocalPublicationJournal): 
     journal === null ||
     typeof journal !== "object" ||
     (journal.status !== "pending" && journal.status !== "succeeded" && journal.status !== "failed")
-  )
+  ) {
     throw new Error("The durable local-publication journal has an unsupported state.");
+  }
   assertCanonicalLocalPublicationJournal(journal);
 };
 
@@ -565,7 +597,9 @@ export const readLocalPublicationJournal = async function readLocalPublicationJo
     assertJournal(journal);
     return journal;
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return undefined;
+    }
     throw new Error("The durable local-publication journal is unreadable.", {
       cause: error,
     });
@@ -607,8 +641,9 @@ const verifyPreconditions = async function verifyPreconditions(input: {
     input.proposal.sourceReceiptDigest !== input.sourceReceipt.digest ||
     input.proposal.reviewDigest !== input.review.digest ||
     input.proposal.changeSetDigest !== input.review.changeSetDigest
-  )
+  ) {
     throw new Error("The source, review, or approved proposal changed before publication.");
+  }
   const snapshot = await inspectLocalPublicationDestination({
     destinationPath: input.proposal.destinationPath,
     sourceReceipt: input.sourceReceipt,
@@ -618,14 +653,16 @@ const verifyPreconditions = async function verifyPreconditions(input: {
     review: input.review,
     sourceReceipt: input.sourceReceipt,
   });
-  if (!exactProposalMatch(current, input.proposal))
+  if (!exactProposalMatch(current, input.proposal)) {
     throw new Error("The destination preconditions changed after approval.");
+  }
   for (const change of input.proposal.changes) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const target = await safeTarget(snapshot.canonicalPath, change.path, false, []);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    if (!assertFileMatches(await fileState(target), change.before))
+    if (!assertFileMatches(await fileState(target), change.before)) {
       throw new Error(`The approved preimage changed for ${change.path}.`);
+    }
   }
   return snapshot;
 };
@@ -643,20 +680,23 @@ export const verifyPublishedChangeSet = async function verifyPublishedChangeSet(
     input.receipt.reviewDigest !== input.review.digest ||
     input.receipt.changeSetDigest !== input.review.changeSetDigest ||
     input.receipt.destinationPath !== input.sourceReceipt.sourcePath
-  )
+  ) {
     throw new Error("The successful publication no longer matches the exact workflow or review.");
+  }
   const root = await resolveAllowedRepository(input.receipt.destinationPath);
   if (
     git(root, ["rev-parse", "HEAD"]).trim() !== input.receipt.baseSha ||
     git(root, ["rev-parse", "HEAD^{tree}"]).trim() !== input.receipt.sourceTree
-  )
+  ) {
     throw new Error("The destination Git identity changed after local publication.");
+  }
   for (const change of input.receipt.changes) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const target = await safeTarget(root, change.path, false, []);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    if (!assertFileMatches(await fileState(target), change.after))
+    if (!assertFileMatches(await fileState(target), change.after)) {
       throw new Error(`The local-publication postimage changed for ${change.path}.`);
+    }
   }
   if (
     input.receipt.postconditionDigest !==
@@ -666,8 +706,9 @@ export const verifyPublishedChangeSet = async function verifyPublishedChangeSet(
         postimage,
       })),
     )
-  )
+  ) {
     throw new Error("The local-publication postcondition digest is malformed.");
+  }
   const destination = await inspectLocalPublicationDestination({
     destinationPath: root,
     sourceReceipt: input.sourceReceipt,
@@ -676,13 +717,15 @@ export const verifyPublishedChangeSet = async function verifyPublishedChangeSet(
     destination.statusDigest !== input.receipt.afterStatusDigest ||
     unrelatedProjectionDigest(destination, input.receipt.approvedPaths) !==
       input.receipt.unrelatedProjectionDigest
-  )
+  ) {
     throw new Error(
       "The destination status or unrelated-work projection changed after publication.",
     );
+  }
   const durable = await readLocalPublicationJournal(root);
-  if (durable?.status !== "succeeded" || durable.digest !== input.receipt.digest)
+  if (durable?.status !== "succeeded" || durable.digest !== input.receipt.digest) {
     throw new Error("The durable local-publication journal does not match the success receipt.");
+  }
 };
 
 export const publishReviewedChangeSet = async function publishReviewedChangeSet(input: {
@@ -693,10 +736,11 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
   publishedByCallId: string;
   hooks?: LocalPublicationFaultHooks;
 }): Promise<LocalPublicationResult> {
-  if (process.env.APP_BUILDER_LOCAL_PUBLICATION !== "1")
+  if (process.env.APP_BUILDER_LOCAL_PUBLICATION !== "1") {
     throw new Error(
       "Local publication is disabled until APP_BUILDER_LOCAL_PUBLICATION=1 is explicitly configured.",
     );
+  }
   const { digest: proposalDigest, ...proposalFields } = input.proposal;
   let release: (() => Promise<void>) | undefined;
   const preimages = new Map<string, FileState>();
@@ -712,24 +756,30 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
   try {
     release = await acquireLock(input.proposal.destinationPath);
     const existing = await readLocalPublicationJournal(input.proposal.destinationPath);
-    if (existing !== undefined)
+    if (existing !== undefined) {
       throw new Error(
         `A durable local-publication ${existing.status} receipt already exists; automatic retry is disabled.`,
       );
+    }
     const snapshot = await verifyPreconditions(input);
     beforeStatusDigest = snapshot.statusDigest;
     let totalBytes = 0;
     for (const change of input.proposal.changes) {
-      if (change.after === undefined) continue;
+      if (change.after === undefined) {
+        continue;
+      }
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const bytes = await input.readOverlayFile(change.path);
-      if (bytes === null || contentDigest(bytes) !== change.after.digest)
+      if (bytes === null || contentDigest(bytes) !== change.after.digest) {
         throw new Error(`The immutable apply overlay is stale for ${change.path}.`);
-      if (bytes.byteLength > LOCAL_PUBLICATION_MAX_FILE_BYTES)
+      }
+      if (bytes.byteLength > LOCAL_PUBLICATION_MAX_FILE_BYTES) {
         throw new Error(`The approved postimage exceeds the per-file limit for ${change.path}.`);
+      }
       totalBytes += bytes.byteLength;
-      if (totalBytes > LOCAL_PUBLICATION_MAX_CHANGE_BYTES)
+      if (totalBytes > LOCAL_PUBLICATION_MAX_CHANGE_BYTES) {
         throw new Error("The reviewed change set exceeds the aggregate size limit.");
+      }
       overlay.set(change.path, bytes);
     }
     for (const change of input.proposal.changes) {
@@ -737,8 +787,9 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       const target = await safeTarget(snapshot.canonicalPath, change.path, false, []);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const before = await fileState(target);
-      if (!assertFileMatches(before, change.before))
+      if (!assertFileMatches(before, change.before)) {
         throw new Error(`The approved preimage changed for ${change.path}.`);
+      }
       preimages.set(change.path, before);
     }
     patch = await buildExactGitPatch({
@@ -772,7 +823,9 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
     for (let index = 0; index < input.proposal.executionPaths.length; index += 1) {
       const path = input.proposal.executionPaths[index];
       const change = input.proposal.changes.find((candidate) => candidate.path === path);
-      if (change === undefined) throw new Error(`Missing approved change for ${path}.`);
+      if (change === undefined) {
+        throw new Error(`Missing approved change for ${path}.`);
+      }
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await input.hooks?.beforeMutation?.(change.path, index);
     }
@@ -784,12 +837,16 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       immediate.gitDirectoryPath !== input.proposal.gitDirectoryPath ||
       immediate.gitDirectoryIdentity.device !== input.proposal.gitDirectoryIdentity.device ||
       immediate.gitDirectoryIdentity.inode !== input.proposal.gitDirectoryIdentity.inode
-    )
+    ) {
       throw new Error("Repository filesystem identity changed before Git apply.");
+    }
     fixedGitApply(snapshot.canonicalPath, patch, { check: true });
     mutationDispatched = true;
-    if (input.hooks?.dispatchGitApply === undefined) fixedGitApply(snapshot.canonicalPath, patch);
-    else await input.hooks.dispatchGitApply();
+    if (input.hooks?.dispatchGitApply === undefined) {
+      fixedGitApply(snapshot.canonicalPath, patch);
+    } else {
+      await input.hooks.dispatchGitApply();
+    }
     mutationCallReturned = true;
     appliedPaths = [...input.proposal.executionPaths];
     pending = { ...pending, appliedPaths, digest: "" };
@@ -805,8 +862,9 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const target = await safeTarget(snapshot.canonicalPath, change.path, false, []);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      if (!assertFileMatches(await fileState(target), change.after))
+      if (!assertFileMatches(await fileState(target), change.after)) {
         throw new Error(`The published postimage failed verification: ${change.path}.`);
+      }
     }
     const after = await inspectLocalPublicationDestination({
       destinationPath: snapshot.canonicalPath,
@@ -818,8 +876,9 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       after.headReference !== input.proposal.headReference ||
       after.indexFileDigest !== input.proposal.indexFileDigest ||
       after.remoteDigest !== input.proposal.remoteDigest
-    )
+    ) {
       throw new Error("Unrelated state or Git metadata changed during publication.");
+    }
     const successUnsigned = {
       ...proposalFields,
       afterStatusDigest: after.statusDigest,
@@ -846,7 +905,9 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
     await writeJournal(journalPath, receipt);
     return { ok: true, receipt };
   } catch (error: unknown) {
-    if (pendingWritten && input.hooks?.preservePendingOnFailure === true) throw error;
+    if (pendingWritten && input.hooks?.preservePendingOnFailure === true) {
+      throw error;
+    }
     failureMessage = error instanceof Error ? error.message : "Unknown local-publication failure.";
     const rolledBackPaths: string[] = [];
     const conflictedPaths: string[] = [];
@@ -869,14 +930,20 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
           const target = await safeTarget(input.proposal.destinationPath, path, false, []);
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const observed = await fileState(target);
-          if (assertFileMatches(observed, change.after)) observedPost.push(path);
-          else if (!assertFileMatches(observed, change.before) && !mutationCallReturned)
+          if (assertFileMatches(observed, change.after)) {
+            observedPost.push(path);
+          } else if (!assertFileMatches(observed, change.before) && !mutationCallReturned) {
             uncertainPaths.push(path);
+          }
         } catch {
-          if (!mutationCallReturned) uncertainPaths.push(path);
+          if (!mutationCallReturned) {
+            uncertainPaths.push(path);
+          }
         }
       }
-      if (!mutationCallReturned) appliedPaths = [...observedPost];
+      if (!mutationCallReturned) {
+        appliedPaths = [...observedPost];
+      }
       conflictedPaths.push(...appliedPaths.filter((path) => !observedPost.includes(path)));
       if (observedPost.length > 0) {
         try {
@@ -908,10 +975,15 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const target = await safeTarget(input.proposal.destinationPath, path, false, []);
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-          if (assertFileMatches(await fileState(target), change.before)) rolledBackPaths.push(path);
-          else if (!conflictedPaths.includes(path)) conflictedPaths.push(path);
+          if (assertFileMatches(await fileState(target), change.before)) {
+            rolledBackPaths.push(path);
+          } else if (!conflictedPaths.includes(path)) {
+            conflictedPaths.push(path);
+          }
         } catch {
-          if (!conflictedPaths.includes(path)) conflictedPaths.push(path);
+          if (!conflictedPaths.includes(path)) {
+            conflictedPaths.push(path);
+          }
         }
       }
       const executionPosition = new Map(
@@ -942,9 +1014,13 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       uncertainPaths.length > 0 ||
       appliedPaths.length !== rolledBackPaths.length;
     let reason: "rollback-conflict" | "mutation-failed" | "precondition-failed";
-    if (recoveryRequired) reason = "rollback-conflict";
-    else if (pendingWritten) reason = "mutation-failed";
-    else reason = "precondition-failed";
+    if (recoveryRequired) {
+      reason = "rollback-conflict";
+    } else if (pendingWritten) {
+      reason = "mutation-failed";
+    } else {
+      reason = "precondition-failed";
+    }
     const failureUnsigned = {
       ...proposalFields,
       afterStatusDigest,
@@ -992,6 +1068,7 @@ export const assertNoApprovedOverlap = function assertNoApprovedOverlap(
           (entry.originalPath !== undefined && pathsOverlap(path, entry.originalPath)),
       ),
     )
-  )
+  ) {
     throw new Error("A dirty path overlaps the approved publication path set.");
+  }
 };

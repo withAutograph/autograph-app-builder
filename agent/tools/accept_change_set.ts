@@ -12,8 +12,9 @@ export default defineTool({
     "Record the current reviewed change summary after repository validation succeeds. This is internal and never publishes or changes an external repository.",
   async execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
-    if (state.phase !== "validated" && state.phase !== "reviewed")
+    if (state.phase !== "validated" && state.phase !== "reviewed") {
       throw new Error("Run the repository validation before reviewing its changes.");
+    }
     const changeSet = await exactNormalizedChangeSet({
       sandbox: await ctx.getSandbox(),
       state,
@@ -23,7 +24,7 @@ export default defineTool({
         changeSet,
         state.reviewReceipt.reviewedByCallId,
       );
-      if (expectedReceipt.digest === state.reviewReceipt.digest)
+      if (expectedReceipt.digest === state.reviewReceipt.digest) {
         return {
           ...state.reviewReceipt,
           productAcceptance: productAcceptanceObligations(
@@ -32,6 +33,7 @@ export default defineTool({
           ),
           reused: true,
         };
+      }
     }
     const receipt = createReviewedChangeSetReceipt(changeSet, ctx.callId);
     appBuilderWorkflowState.update(() => ({

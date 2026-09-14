@@ -28,8 +28,9 @@ export const mergeRuntimeEvidence = (input: {
     if (
       receipts.has(key) &&
       (dispositions.get(key) !== "not-run" || observation.disposition === "not-run")
-    )
+    ) {
       continue;
+    }
     receipts.set(key, {
       observation,
       producer: "evaluator",

@@ -51,7 +51,9 @@ export interface AdditionalFieldProps {
 
 /** Convert a `defaultValue` into a `Date` for the calendar. */
 const toDate = function toDate(value: unknown): Date | undefined {
-  if (value instanceof Date) return value;
+  if (value instanceof Date) {
+    return value;
+  }
   if (typeof value === "string") {
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? undefined : parsed;
@@ -86,7 +88,9 @@ const CopyButton = function CopyButton({
 
   const handleCopy = async function handleCopy() {
     const value = getValue();
-    if (!value) return;
+    if (!value) {
+      return;
+    }
 
     await copy(value);
   };
@@ -190,8 +194,12 @@ const DateInput = function DateInput({ name, field, isPending }: AdditionalField
               captionLayout="dropdown"
               onSelect={(value) => {
                 setDate(value);
-                if (value) setError(undefined);
-                if (!isDateTime) setOpen(false);
+                if (value) {
+                  setError(undefined);
+                }
+                if (!isDateTime) {
+                  setOpen(false);
+                }
               }}
             />
           </PopoverContent>

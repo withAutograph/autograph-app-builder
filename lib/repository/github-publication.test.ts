@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
+import { runSequentially } from "../async-sequential";
 
 import {
   GITHUB_PUBLICATION_VERSION,
@@ -74,7 +75,9 @@ const reviewedChange = (
   change: NormalizedChangeSet["changes"][number],
 ): NormalizedChangeSet["changes"][number] => {
   if (change.kind === "added") {
-    if (change.after === undefined) throw new Error("Added change is missing its postimage.");
+    if (change.after === undefined) {
+      throw new Error("Added change is missing its postimage.");
+    }
     const { after: postimage } = change;
     const after = Object.fromEntries([
       ["mode", postimage.mode],
@@ -87,7 +90,9 @@ const reviewedChange = (
     ]) as NormalizedChangeSet["changes"][number];
   }
   if (change.kind === "modified") {
-    if (change.after === undefined) throw new Error("Modified change is missing its postimage.");
+    if (change.after === undefined) {
+      throw new Error("Modified change is missing its postimage.");
+    }
     const { after: postimage } = change;
     const after = Object.fromEntries([
       ["mode", postimage.mode],
@@ -354,8 +359,12 @@ class Adapter implements GitHubPublicationAdapter {
 
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async inspectInstallation(operation: GitHubOperation) {
-    if (operation === "resolve-existing-source") return this.identities.resolve;
-    if (operation === "create-fresh-repository") return this.identities.create;
+    if (operation === "resolve-existing-source") {
+      return this.identities.resolve;
+    }
+    if (operation === "create-fresh-repository") {
+      return this.identities.create;
+    }
     return this.identities.publish;
   }
 
@@ -371,7 +380,9 @@ class Adapter implements GitHubPublicationAdapter {
 
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async inspectFreshRepositoryOutcome() {
-    if (this.throwFreshReadBack) throw new Error("read-back-failed");
+    if (this.throwFreshReadBack) {
+      throw new Error("read-back-failed");
+    }
     return this.freshOutcome;
   }
 
@@ -382,15 +393,20 @@ class Adapter implements GitHubPublicationAdapter {
   ) {
     this.freshCalls += 1;
     this.freshContent = content;
-    if (this.throwFreshMutation) throw new Error("transport-failed");
-    if (this.freshAcknowledgement.status === "accepted")
+    if (this.throwFreshMutation) {
+      throw new Error("transport-failed");
+    }
+    if (this.freshAcknowledgement.status === "accepted") {
       this.freshOutcome = freshReadBack(proposal, this.identities.create);
+    }
     return this.freshAcknowledgement;
   }
 
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async inspectDraftPublication(proposal: DraftPullRequestProposal) {
-    if (this.throwDraftReadBack) throw new Error("read-back-failed");
+    if (this.throwDraftReadBack) {
+      throw new Error("read-back-failed");
+    }
     return this.draftOutcome ?? draftReadBack(proposal, this.publishRepo);
   }
 
@@ -401,9 +417,12 @@ class Adapter implements GitHubPublicationAdapter {
   ) {
     this.draftCalls += 1;
     this.draftContent = content;
-    if (this.throwDraftMutation) throw new Error("transport-failed");
-    if (this.draftAcknowledgement.status === "accepted")
+    if (this.throwDraftMutation) {
+      throw new Error("transport-failed");
+    }
+    if (this.draftAcknowledgement.status === "accepted") {
       this.draftOutcome = draftReadBack(proposal, this.publishRepo, "complete");
+    }
     return this.draftAcknowledgement;
   }
 }
@@ -547,19 +566,22 @@ describe("closed GitHub publication contract", () => {
         resolvedByCallId: "resolve-call",
       }),
     ).rejects.toThrow(/installation is not selected/u);
-    for (const ref of ["main", "refs/tags/v1", "refs/heads/../main", "refs/heads/x.lock"])
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await expect(
-        resolveImmutableExistingSource({
-          adapter,
-          expectedInstallationId: "10",
-          expectedSha: sha,
-          expectedTree: tree,
-          ref,
-          repositoryId: "100",
-          resolvedByCallId: "resolve-call",
-        }),
-      ).rejects.toThrow(/invalid/u);
+    await runSequentially(
+      ["main", "refs/tags/v1", "refs/heads/../main", "refs/heads/x.lock"],
+      async (ref) => {
+        await expect(
+          resolveImmutableExistingSource({
+            adapter,
+            expectedInstallationId: "10",
+            expectedSha: sha,
+            expectedTree: tree,
+            ref,
+            repositoryId: "100",
+            resolvedByCallId: "resolve-call",
+          }),
+        ).rejects.toThrow(/invalid/u);
+      },
+    );
   });
 
   it("accepts exact active release-gate observations and rejects schema or digest drift", () => {
@@ -694,7 +716,9 @@ describe("closed GitHub publication contract", () => {
     sourceBytes.fill(0);
     const [change] = content.changes;
     expect(change?.kind).toBe("added");
-    if (change?.kind === "added") expect(change.after.bytes).toEqual(reviewedBytes);
+    if (change?.kind === "added") {
+      expect(change.after.bytes).toEqual(reviewedBytes);
+    }
     expect(() =>
       assertExactGitHubPublicationContent({
         content: { ...content, token: "secret" } as never,
@@ -714,7 +738,9 @@ describe("closed GitHub publication contract", () => {
         async readFreshTree() {
           const exact = await publicationContentSource().readFreshTree();
           const [file] = exact.files;
-          if (file === undefined) throw new Error("missing fixture file");
+          if (file === undefined) {
+            throw new Error("missing fixture file");
+          }
           return {
             ...exact,
             files: [
@@ -739,7 +765,9 @@ describe("closed GitHub publication contract", () => {
             async readFreshTree() {
               const exact = await publicationContentSource().readFreshTree();
               const [file] = exact.files;
-              if (file === undefined) throw new Error("missing fixture file");
+              if (file === undefined) {
+                throw new Error("missing fixture file");
+              }
               return {
                 ...exact,
                 ...(drift === "tree" ? { sourceTree: "0".repeat(40) } : {}),
@@ -823,8 +851,11 @@ describe("closed GitHub publication contract", () => {
       const adapter = new Adapter();
       const store = new Store();
       const proposal = freshProposal(adapter);
-      if (failure === "read-back") adapter.throwFreshReadBack = true;
-      else store.rejectTerminal = true;
+      if (failure === "read-back") {
+        adapter.throwFreshReadBack = true;
+      } else {
+        store.rejectTerminal = true;
+      }
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await expect(
         createApprovedFreshRepository({

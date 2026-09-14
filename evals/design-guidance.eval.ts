@@ -11,8 +11,9 @@ export default defineEval({
   tags: ["product-quality", "design-guidance", "sandbox-integration"],
   async test(t) {
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
-    if (repository === undefined || repository.length === 0)
+    if (repository === undefined || repository.length === 0) {
       throw new Error("The supported source root is missing.");
+    }
     await t.send(`Supported repository at ${repository}
 ${renewalReviewDesignPrompt}`);
 
@@ -39,7 +40,9 @@ ${renewalReviewDesignPrompt}`);
               !file.content.includes("fetch("),
           ),
         manifest: (value) => {
-          if (typeof value !== "object" || value === null) return false;
+          if (typeof value !== "object" || value === null) {
+            return false;
+          }
           const manifest = value as {
             productionComponents?: unknown[];
             productionCompositions?: { name?: unknown }[];

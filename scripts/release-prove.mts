@@ -47,14 +47,16 @@ function parseArguments(args: readonly string[]) {
       !name.startsWith("--") ||
       value.startsWith("--") ||
       values.has(name)
-    )
+    ) {
       throw new Error("Release proof arguments must be unique --name value pairs.");
+    }
     values.set(name, value);
   }
   const required = (name: string) => {
     const value = values.get(name);
-    if (value === undefined || value === "")
+    if (value === undefined || value === "") {
       throw new Error(`Missing required release proof option ${name}.`);
+    }
     values.delete(name);
     return value;
   };
@@ -63,18 +65,21 @@ function parseArguments(args: readonly string[]) {
     endpoint: required("--endpoint"),
     output: required("--output"),
   };
-  if (values.size !== 0)
+  if (values.size !== 0) {
     throw new Error(`Unsupported release proof options: ${[...values.keys()].join(", ")}.`);
-  if (!path.isAbsolute(parsed.arrustedRoot) || !path.isAbsolute(parsed.output))
+  }
+  if (!path.isAbsolute(parsed.arrustedRoot) || !path.isAbsolute(parsed.output)) {
     throw new Error("Release proof roots must be absolute.");
+  }
   return parsed;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requiredExecutable(name: string) {
   const value = process.env[name];
-  if (value === undefined || !path.isAbsolute(value))
+  if (value === undefined || !path.isAbsolute(value)) {
     throw new Error(`mise must supply the absolute ${name} executable.`);
+  }
   return value;
 }
 
@@ -94,8 +99,12 @@ async function run(
     env: options.environment ?? process.env,
     maxBuffer: 32 * 1024 * 1024,
   });
-  if (!options.capture && result.stdout.trim() !== "") process.stdout.write(result.stdout);
-  if (!options.capture && result.stderr.trim() !== "") process.stderr.write(result.stderr);
+  if (!options.capture && result.stdout.trim() !== "") {
+    process.stdout.write(result.stdout);
+  }
+  if (!options.capture && result.stderr.trim() !== "") {
+    process.stderr.write(result.stderr);
+  }
   return result.stdout;
 }
 
@@ -108,8 +117,9 @@ async function ownerBoundFile(filePath: string, label: string) {
     info.uid !== process.getuid?.() ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & 0o022) !== 0
-  )
+  ) {
     throw new Error(`${label} must be a current-user-owned regular file.`);
+  }
   return readFile(filePath);
 }
 
@@ -117,22 +127,25 @@ const args = parseArguments(process.argv.slice(2));
 const endpointOrigin = releaseEndpoint(args.endpoint);
 const builder = await exactCleanGitSource(repositoryRoot, "Builder");
 const arrusted = await exactCleanGitSource(args.arrustedRoot, "Arrusted");
-if (arrusted.commit !== ARRUSTED_IMAGE_TARGET_SHA || arrusted.tree !== ARRUSTED_IMAGE_TARGET_TREE)
+if (arrusted.commit !== ARRUSTED_IMAGE_TARGET_SHA || arrusted.tree !== ARRUSTED_IMAGE_TARGET_TREE) {
   throw new Error("Arrusted release source does not match the source-bound image target.");
+}
 const projectBinding = await ownerBoundFile(
   path.join(repositoryRoot, ".vercel/project.json"),
   "Vercel release project binding",
 );
 const outputParent = await realpath(path.dirname(args.output));
-if (path.join(outputParent, path.basename(args.output)) !== args.output)
+if (path.join(outputParent, path.basename(args.output)) !== args.output) {
   throw new Error("Release output must be an absolute canonical child path.");
+}
 try {
   await mkdir(args.output, { mode: 0o700 });
 } catch (error) {
-  if ((error as NodeJS.ErrnoException).code === "EEXIST")
+  if ((error as NodeJS.ErrnoException).code === "EEXIST") {
     throw new Error(`Release candidate already exists: ${args.output}`, {
       cause: error,
     });
+  }
   throw error;
 }
 const output = await realpath(args.output);
@@ -289,8 +302,9 @@ try {
     finalBuilder.tree !== builder.tree ||
     finalArrusted.commit !== arrusted.commit ||
     finalArrusted.tree !== arrusted.tree
-  )
+  ) {
     throw new Error("Release sources changed while the candidate was proved.");
+  }
   const closureSha256 = sha256(
     JSON.stringify({
       arrusted: { commit: arrusted.commit, tree: arrusted.tree },

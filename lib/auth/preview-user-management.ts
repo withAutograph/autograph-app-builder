@@ -128,7 +128,9 @@ export function createPreviewUserManagementLifecycle(authority: PreviewOrganizat
     ) {
       // Passkey onboarding provisions its organization and activates it using
       // the same adapter transaction that creates the credential and session.
-      if (context?.path === "/passkey/verify-registration") return;
+      if (context?.path === "/passkey/verify-registration") {
+        return;
+      }
       try {
         const ensured = await authority.ensureOrganizationForVerifiedUser({
           userId: session.userId,
@@ -156,8 +158,12 @@ export function createPreviewUserManagementLifecycle(authority: PreviewOrganizat
       user: PreviewVerifiedUser & Record<string, unknown>,
       context: { path?: string } | null,
     ) {
-      if (!identityCallbackPaths.has(context?.path ?? "")) return;
-      if (!user.emailVerified) throw identityUnavailable();
+      if (!identityCallbackPaths.has(context?.path ?? "")) {
+        return;
+      }
+      if (!user.emailVerified) {
+        throw identityUnavailable();
+      }
       return {
         data: {
           ...user,

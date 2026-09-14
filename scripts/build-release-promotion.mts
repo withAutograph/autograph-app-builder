@@ -14,8 +14,12 @@ const gitObject = z.string().regex(/^[0-9a-f]{40}$/u);
 const option = (name: string) => {
   const index = process.argv.indexOf(name);
   const value = index === -1 ? undefined : process.argv[index + 1];
-  if (!value || value.startsWith("--")) throw new Error(`Missing ${name}.`);
-  if (process.argv.includes(name, index + 1)) throw new Error(`Duplicate ${name}.`);
+  if (!value || value.startsWith("--")) {
+    throw new Error(`Missing ${name}.`);
+  }
+  if (process.argv.includes(name, index + 1)) {
+    throw new Error(`Duplicate ${name}.`);
+  }
   return value;
 };
 
@@ -29,16 +33,21 @@ if (
   deploymentUrl.pathname !== "/" ||
   deploymentUrl.search ||
   deploymentUrl.hash
-)
+) {
   throw new Error("Deployment URL must be one exact provider-owned Vercel origin.");
-if (!path.isAbsolute(outputInput)) throw new Error("Release output must be absolute.");
+}
+if (!path.isAbsolute(outputInput)) {
+  throw new Error("Release output must be absolute.");
+}
 const outputParent = await realpath(path.resolve(outputInput, ".."));
 const output = path.join(outputParent, path.basename(outputInput));
 try {
   await lstat(output);
   throw new Error(`Release output already exists: ${output}`);
 } catch (error) {
-  if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+    throw error;
+  }
 }
 await mkdir(output, { mode: 0o700 });
 
@@ -52,8 +61,9 @@ const git = (...args: string[]) =>
       PATH: "/usr/bin:/bin",
     },
   }).trim();
-if (git("status", "--porcelain=v1", "--untracked-files=all") !== "")
+if (git("status", "--porcelain=v1", "--untracked-files=all") !== "") {
   throw new Error("Release promotion requires a clean exact checkout.");
+}
 const source = {
   repository: "https://github.com/withAutograph/autograph-app-builder",
   sha: git("rev-parse", "HEAD"),
@@ -63,8 +73,9 @@ gitObject.parse(source.sha);
 gitObject.parse(source.tree);
 
 const node = process.env.APP_BUILDER_RELEASE_NODE_BIN;
-if (!node || !path.isAbsolute(node))
+if (!node || !path.isAbsolute(node)) {
   throw new Error("mise must supply APP_BUILDER_RELEASE_NODE_BIN.");
+}
 const packageRoot = path.join(output, "package");
 execFileSync(
   node,
@@ -103,20 +114,24 @@ const portable = await verifyPortableProofArtifact({
   releaseRoot: packageRoot,
   repositoryRoot,
 });
-if (JSON.stringify(portable.receipt.tools) !== JSON.stringify(TOOL_NAMES))
+if (JSON.stringify(portable.receipt.tools) !== JSON.stringify(TOOL_NAMES)) {
   throw new Error("Release did not expose exactly the five Autograph tools.");
+}
 if (
   portable.receipt.source.sha !== source.sha ||
   portable.receipt.source.tree !== source.tree ||
   portable.receipt.endpoint !== endpoint
-)
+) {
   throw new Error("Portable package source or endpoint binding drifted.");
+}
 
 const response = await fetch(`${new URL(endpoint).origin}/healthz`, {
   redirect: "error",
   signal: AbortSignal.timeout(15_000),
 });
-if (!response.ok) throw new Error("Canonical release health check failed.");
+if (!response.ok) {
+  throw new Error("Canonical release health check failed.");
+}
 const health = Buffer.from(await response.arrayBuffer());
 const digest = (value: Uint8Array | string) => createHash("sha256").update(value).digest("hex");
 const packageReceipt = await readFile(path.join(packageRoot, "release-receipt.json"));

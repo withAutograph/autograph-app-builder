@@ -38,7 +38,9 @@ export function ChangeAvatar({ className }: ChangeAvatarProps) {
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
     e.target.value = "";
 

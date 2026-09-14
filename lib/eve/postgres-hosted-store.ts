@@ -307,7 +307,9 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         }
         const current = toDurableHostedSessionRecord(parseHostedSessionRow(rows[0]));
         // Hold the row lock while refusing late observations after cancellation.
-        if (current.status === "cancelled") return current;
+        if (current.status === "cancelled") {
+          return current;
+        }
         const checkpointDigest = hostedSessionCheckpointDigest(input.checkpoint);
         const checkpointProgressDigest = hostedSessionCheckpointProgressDigest(input.checkpoint);
         const observed = durableHostedSessionRecordSchema.parse({
@@ -348,13 +350,16 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       const principal = hostedPrincipalSchema.parse(input.principal);
       return database.transaction(async (transaction) => {
         const row = await sessionById(transaction, principal, input.sessionId, true);
-        if (row === null) throw new Error("Hosted session was not found.");
+        if (row === null) {
+          throw new Error("Hosted session was not found.");
+        }
         const current = toDurableHostedSessionRecord(row);
         if (
           current.adapterGeneration !== input.expectedAdapterGeneration ||
           current.checkpointDigest !== input.expectedCheckpointDigest
-        )
+        ) {
           throw new Error("Hosted session recovery raced another continuation.");
+        }
         const replaced = durableHostedSessionRecordSchema.parse({
           ...current,
           adapterGeneration: current.adapterGeneration + 1,
@@ -381,7 +386,9 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
             ),
           )
           .returning();
-        if (updated.length !== 1) throw new Error("Hosted session recovery was not durable.");
+        if (updated.length !== 1) {
+          throw new Error("Hosted session recovery was not durable.");
+        }
         return parseHostedSessionRow(updated[0]);
       });
     },
@@ -419,8 +426,9 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           if (
             candidate.sessionId === undefined ||
             (await sessionById(transaction, principal, candidate.sessionId, true)) === null
-          )
+          ) {
             return { disposition: "conflict" as const };
+          }
           const active = await transaction
             .select({ value: count() })
             .from(agentOperations)
@@ -432,15 +440,19 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
                 ne(agentOperations.operationId, candidate.operationId),
               ),
             );
-          if ((active[0]?.value ?? 0) > 0)
+          if ((active[0]?.value ?? 0) > 0) {
             return {
               disposition: "rejected" as const,
               reason: "session_busy" as const,
             };
+          }
         }
         if (candidate.kind === "start" && candidate.resumeSessionId !== undefined) {
-          if ((await sessionById(transaction, principal, candidate.resumeSessionId, true)) === null)
+          if (
+            (await sessionById(transaction, principal, candidate.resumeSessionId, true)) === null
+          ) {
             return { disposition: "conflict" as const };
+          }
           const activeResume = await transaction
             .select({ value: count() })
             .from(agentOperations)
@@ -453,11 +465,12 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
                 ne(agentOperations.operationId, candidate.operationId),
               ),
             );
-          if ((activeResume[0]?.value ?? 0) > 0)
+          if ((activeResume[0]?.value ?? 0) > 0) {
             return {
               disposition: "rejected" as const,
               reason: "session_busy" as const,
             };
+          }
         }
         try {
           const inserted = await transaction
@@ -480,7 +493,9 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
               candidate.kind,
               candidate.clientRequestId,
             ));
-          if (raced === null) throw error;
+          if (raced === null) {
+            throw error;
+          }
           return isExactReservation(raced, candidate)
             ? { disposition: "existing" as const, operation: raced }
             : { disposition: "conflict" as const };

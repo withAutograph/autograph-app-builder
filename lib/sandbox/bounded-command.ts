@@ -26,7 +26,9 @@ async function collectBounded(
   for (;;) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const next = await reader.read();
-    if (next.done) break;
+    if (next.done) {
+      break;
+    }
     state.bytes += next.value.byteLength;
     observed();
     if (state.bytes > state.maximumBytes) {
@@ -64,11 +66,17 @@ function resettableTimeoutRejection(error: Error, timeoutMs: number) {
     try {
       await delay(timeoutMs, undefined, { ref: false, signal: currentController.signal });
     } catch {
-      if (cleared) throw currentController.signal.reason;
-      if (currentController !== controller) return waitForTimeout();
+      if (cleared) {
+        throw currentController.signal.reason;
+      }
+      if (currentController !== controller) {
+        return waitForTimeout();
+      }
       throw error;
     }
-    if (currentController === controller) throw error;
+    if (currentController === controller) {
+      throw error;
+    }
     return waitForTimeout();
   };
   const promise = waitForTimeout();
@@ -164,8 +172,11 @@ export async function runBoundedSandboxCommand(
     completion.catch(() => null);
     const abortRejection = Promise.withResolvers<never>();
     const rejectOnAbort = () => abortRejection.reject(signal.reason);
-    if (signal.aborted) rejectOnAbort();
-    else signal.addEventListener("abort", rejectOnAbort, { once: true });
+    if (signal.aborted) {
+      rejectOnAbort();
+    } else {
+      signal.addEventListener("abort", rejectOnAbort, { once: true });
+    }
     const [stdout, stderr, result] = await Promise.race([
       completion,
       wallTimeout.promise,
@@ -184,9 +195,12 @@ export async function runBoundedSandboxCommand(
       ...(process === undefined ? [] : [Promise.resolve(process.kill())]),
     ];
     await settleWithin(Promise.allSettled(cleanup), killCleanupTimeoutMs);
-    if (error instanceof SandboxCommandLimitError) throw error;
-    if (controller.signal.reason instanceof SandboxCommandLimitError)
+    if (error instanceof SandboxCommandLimitError) {
+      throw error;
+    }
+    if (controller.signal.reason instanceof SandboxCommandLimitError) {
       throw controller.signal.reason;
+    }
     throw error;
   } finally {
     wallTimeout.clear();

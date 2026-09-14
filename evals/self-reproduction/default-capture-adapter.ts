@@ -17,23 +17,27 @@ const signature = async (page: Page) => {
 };
 
 const stateTarget = (page: Page, state: CaptureState) => {
-  if (state === "panel-resize")
+  if (state === "panel-resize") {
     return firstVisible([page.getByRole("separator"), page.locator("[data-panel-resize-handle]")]);
-  if (state === "loading")
+  }
+  if (state === "loading") {
     return firstVisible([
       page.getByRole("progressbar"),
       page.locator('[aria-busy="true"]'),
       page.getByText(/building|creating|generating|loading|preparing/iu),
     ]);
-  if (state === "empty")
+  }
+  if (state === "empty") {
     return firstVisible([
       page.getByText(/no apps|no drafts|create your first|get started|what should this app do/iu),
     ]);
-  if (state === "error")
+  }
+  if (state === "error") {
     return firstVisible([
       page.getByRole("alert"),
       page.getByText(/failed|error|could not|try again/iu),
     ]);
+  }
   return firstVisible([
     page.getByRole("button", { name: /build|create|continue|connect|documentation|docs/iu }),
     page.getByRole("link", { name: /build|create|continue|connect|documentation|docs/iu }),
@@ -41,12 +45,13 @@ const stateTarget = (page: Page, state: CaptureState) => {
 };
 
 const unavailableState = (state: CaptureState, side: "reference" | "candidate") => {
-  if (["loading", "empty", "error"].includes(state))
+  if (["loading", "empty", "error"].includes(state)) {
     return {
       disposition: "not-run" as const,
       ready: false as const,
       reason: `The default semantic adapter has no evaluator-owned ${state} fixture binding for the ${side} application.`,
     };
+  }
   return {
     disposition: "missing-functionality" as const,
     ready: false as const,
@@ -60,7 +65,7 @@ export const createSemanticCaptureAdapter = (
 ): CaptureAdapter => ({
   async exercise(page, state, capture) {
     const target = await stateTarget(page, state);
-    if (!target)
+    if (!target) {
       return [
         {
           detail: `The ${state} target disappeared before exercise.`,
@@ -68,6 +73,7 @@ export const createSemanticCaptureAdapter = (
           passed: false,
         },
       ];
+    }
     if (state === "panel-resize") {
       const before = await target.boundingBox();
       if (before) {

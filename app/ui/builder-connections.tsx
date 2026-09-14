@@ -112,7 +112,9 @@ export function ConnectionsSection({
           .filter((name) => !selected.includes(name))
           .map((name) => {
             const comingSoon = comingSoonConnections.has(name);
-            if (comingSoon && !comingSoonEnabled) return null;
+            if (comingSoon && !comingSoonEnabled) {
+              return null;
+            }
             return (
               <button
                 type="button"
@@ -191,7 +193,9 @@ export function ConnectionDrawer({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        onClose();
+      }
     };
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", handleKeyDown);
@@ -201,7 +205,7 @@ export function ConnectionDrawer({
     };
   }, [onClose]);
 
-  if (showSuccess)
+  if (showSuccess) {
     return (
       <div className={styles.connectionSuccess} role="dialog" aria-modal="true">
         <div>
@@ -222,6 +226,7 @@ export function ConnectionDrawer({
         </div>
       </div>
     );
+  }
 
   return (
     <div className={styles.drawerBackdrop} onMouseDown={onClose}>

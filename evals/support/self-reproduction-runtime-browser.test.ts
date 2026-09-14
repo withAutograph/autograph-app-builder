@@ -51,7 +51,9 @@ describe("sandbox diagnostic browser captures", () => {
       { argv: ["node", "runner", "input", "output"] },
     );
     const outputText = writes.at(-1);
-    if (!outputText) throw new Error("Expected browser comparison output.");
+    if (!outputText) {
+      throw new Error("Expected browser comparison output.");
+    }
     const output = JSON.parse(outputText);
     expect(output.outcomes).toHaveLength(desktopViewports.length);
     expect(

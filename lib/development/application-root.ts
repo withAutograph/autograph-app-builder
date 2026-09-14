@@ -13,6 +13,7 @@ import nodePath from "node:path";
 
 import { createDevelopmentSnapshot, removeDevelopmentSnapshot } from "./local-mode";
 import type { DevelopmentSnapshot } from "./local-mode";
+import { runSequentially } from "../async-sequential";
 
 /**
  * A development snapshot records an immutable baseline commit/tree/fingerprint
@@ -27,13 +28,18 @@ async function makeDevelopmentWorkAreaWritable(
   preserveRuntime = false,
 ): Promise<void> {
   const info = await lstat(path);
-  if (info.isSymbolicLink()) return;
-  if (info.uid !== process.getuid?.())
+  if (info.isSymbolicLink()) {
+    return;
+  }
+  if (info.uid !== process.getuid?.()) {
     throw new Error("A local Eve application entry was not owner-bound.");
+  }
   if (info.isDirectory()) {
     await chmod(path, 0o700);
     for (const entry of await readdir(path)) {
-      if (preserveRuntime && (entry === ".eve" || entry === "node_modules")) continue;
+      if (preserveRuntime && (entry === ".eve" || entry === "node_modules")) {
+        continue;
+      }
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await makeDevelopmentWorkAreaWritable(nodePath.join(path, entry), preserveRuntime);
     }
@@ -69,14 +75,17 @@ export async function createDevelopmentApplication(input: {
       modulesInfo.uid !== process.getuid?.() ||
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       (modulesInfo.mode & 0o022) !== 0
-    )
+    ) {
       throw new Error("App Builder node_modules was not owner-bound.");
+    }
     await symlink(modules, nodePath.join(application.root, "node_modules"));
     try {
       await lstat(nodePath.join(application.root, ".eve"));
       throw new Error("A development Eve application inherited stale state.");
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
     }
     return application;
   } catch (error) {
@@ -149,7 +158,9 @@ export async function refreshDevelopmentApplication(input: {
       await lstat(nodePath.join(snapshot.root, ".eve"));
       throw new Error("A live development checkout cannot supply Eve state.");
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
     }
     // The stage's baseline identity is immutable, but its filesystem is a
     // mutable local work area. Normalize the whole incoming tree before
@@ -157,14 +168,14 @@ export async function refreshDevelopmentApplication(input: {
     // the destination.
     await makeDevelopmentWorkAreaWritable(snapshot.root);
     await makeDevelopmentWorkAreaWritable(applicationRoot, true);
-    for (const entry of await readdir(applicationRoot)) {
-      if (entry === ".eve" || entry === "node_modules") continue;
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await rm(nodePath.join(applicationRoot, entry), { force: true, recursive: true });
-    }
-    for (const entry of await readdir(snapshot.root))
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+    await runSequentially(await readdir(applicationRoot), async (entry) => {
+      if (entry !== ".eve" && entry !== "node_modules") {
+        await rm(nodePath.join(applicationRoot, entry), { force: true, recursive: true });
+      }
+    });
+    await runSequentially(await readdir(snapshot.root), async (entry) => {
       await rename(nodePath.join(snapshot.root, entry), nodePath.join(applicationRoot, entry));
+    });
     // `rename` preserves modes.  Reassert the work-area contract after the
     // refresh so every installed application file remains writable for live
     // generation and overlays, not merely the staging parent used by rename.

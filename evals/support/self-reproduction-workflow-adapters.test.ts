@@ -15,7 +15,9 @@ import type {
 
 const assertionIds = (id: WorkflowId) => {
   const requirement = requirements.find((item) => item.id === id);
-  if (!requirement) throw new Error(`Unknown workflow: ${id}`);
+  if (!requirement) {
+    throw new Error(`Unknown workflow: ${id}`);
+  }
   return requirement.assertions;
 };
 
@@ -25,8 +27,9 @@ const adapter = (input?: {
   fail?: WorkflowId;
 }): TrustedBrowserWorkflowAdapter => ({
   exercise: async (_page, id, freshPage) => {
-    if (id === "authentication" || id === "durable-draft" || id === "session-recovery")
+    if (id === "authentication" || id === "durable-draft" || id === "session-recovery") {
       await freshPage();
+    }
     return {
       assertions: assertionIds(id)
         .filter((_, index) => index % 2 === 0)
@@ -39,18 +42,20 @@ const adapter = (input?: {
     };
   },
   prepare: (_page, id) => {
-    if (id === input?.missing)
+    if (id === input?.missing) {
       return Promise.resolve({
         disposition: "missing-functionality" as const,
         ready: false as const,
         reason: "Control absent.",
       });
-    if (id === input?.unavailable)
+    }
+    if (id === input?.unavailable) {
       return Promise.resolve({
         disposition: "infrastructure-unavailable" as const,
         ready: false as const,
         reason: "Fixture database unavailable.",
       });
+    }
     return Promise.resolve({ ready: true as const });
   },
   verify: (id) =>

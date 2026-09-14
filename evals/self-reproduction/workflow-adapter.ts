@@ -51,14 +51,22 @@ const unsupported = (workflowId: WorkflowId, detail: string) => ({
 });
 
 const firstVisible = async (locators: Locator[]) => {
-  for (const locator of locators)
+  const find = async (index: number): Promise<Locator | undefined> => {
+    const locator = locators[index];
+    if (locator === undefined) {
+      return;
+    }
     if (
       await locator
         .first()
         .isVisible()
         .catch(() => false)
-    )
+    ) {
       return locator.first();
+    }
+    return await find(index + 1);
+  };
+  return await find(0);
 };
 
 const semanticCandidateAdapter = (candidateUrl: string): TrustedBrowserWorkflowAdapter => {
@@ -70,8 +78,9 @@ const semanticCandidateAdapter = (candidateUrl: string): TrustedBrowserWorkflowA
         page.getByRole("link", { name: /docs|documentation/iu }),
         page.getByRole("button", { name: /docs|documentation/iu }),
       ]);
-      if (!docs)
+      if (!docs) {
         return unsupported(workflowId, "Candidate exposes no semantic documentation control.");
+      }
       const initialUrl = page.url();
       const initialContent = await page.locator("body").textContent();
       await docs.click();
@@ -81,7 +90,9 @@ const semanticCandidateAdapter = (candidateUrl: string): TrustedBrowserWorkflowA
         ((await content.textContent()) ?? "").trim().length > 0 &&
         (await page.locator("body").textContent()) !== initialContent;
       const navigated = page.url() !== initialUrl;
-      if (navigated) await page.goBack();
+      if (navigated) {
+        await page.goBack();
+      }
       return {
         assertions: [
           assertion(
@@ -102,19 +113,21 @@ const semanticCandidateAdapter = (candidateUrl: string): TrustedBrowserWorkflowA
       };
     },
     async prepare(page, workflowId) {
-      if (workflowId !== "documentation")
+      if (workflowId !== "documentation") {
         return {
           disposition: "not-run",
           ready: false,
           reason: `The checked-in candidate adapter has no authenticated fixture and server readback binding for ${workflowId}.`,
         };
+      }
       const response = await page.goto(entryUrl);
-      if (!response?.ok())
+      if (!response?.ok()) {
         return {
           disposition: "infrastructure-unavailable",
           ready: false,
           reason: `Candidate runtime did not answer at ${entryUrl}.`,
         };
+      }
       return { ready: true };
     },
     // oxlint-disable-next-line eslint/require-await -- adapter contract is uniformly asynchronous
@@ -172,8 +185,9 @@ const referenceAdapter = (
       if (workflowId === "authentication") {
         const ownerSession = await currentSession(page);
         const ownerId = ownerSession?.user?.id;
-        if (typeof ownerId !== "string")
-          throw new Error("Reference OAuth did not establish an owner identity.");
+        if (typeof ownerId !== "string") {
+          throw new TypeError("Reference OAuth did not establish an owner identity.");
+        }
         const sql = postgres(databaseUrl, { max: 1 });
         let persisted = false;
         try {
@@ -265,7 +279,9 @@ const referenceAdapter = (
         await page.getByRole("button", { exact: true, name: "Connect emulated GitHub" }).click();
         await expect(page).toHaveURL(/\/local-connections\/github\?.*phase=authorize/u);
         const state = new URL(page.url()).searchParams.get("state");
-        if (!state) throw new Error("Emulated GitHub authorization did not retain callback state.");
+        if (!state) {
+          throw new Error("Emulated GitHub authorization did not retain callback state.");
+        }
         const callback = new URL("/github/installations/callback", referenceUrl);
         callback.searchParams.set("state", state);
         callback.searchParams.set("error", "access_denied");
@@ -351,18 +367,20 @@ const referenceAdapter = (
       };
     },
     async prepare(_page, workflowId) {
-      if (!supported.has(workflowId))
+      if (!supported.has(workflowId)) {
         return {
           disposition: "not-run",
           ready: false,
           reason: `The checked-in reference adapter has no bounded real fixture for ${workflowId}.`,
         };
-      if (new URL(referenceUrl).origin !== appOrigin)
+      }
+      if (new URL(referenceUrl).origin !== appOrigin) {
         return {
           disposition: "infrastructure-unavailable",
           ready: false,
           reason: `Reference E2E helpers are bound to ${appOrigin}; received ${referenceUrl}.`,
         };
+      }
       if (workflowId === "authentication") {
         try {
           const secretContents = await readFile(

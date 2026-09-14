@@ -8,7 +8,9 @@ export async function readArchivedReport(directory: string) {
   try {
     bytes = await readFile(path.join(directory, "report.json"), "utf-8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return null;
+    }
     throw error;
   }
   return JSON.parse(bytes);

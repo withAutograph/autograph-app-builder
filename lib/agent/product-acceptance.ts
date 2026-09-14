@@ -12,15 +12,22 @@ export const productAcceptanceObligations = (
   for (const line of lines) {
     const marker = /^\s*(?<marker>```+|~~~+)/u.exec(line)?.groups?.marker;
     if (marker) {
-      if (fence === undefined) fence = marker.charAt(0);
-      else if (marker.charAt(0) === fence) fence = undefined;
+      if (fence === undefined) {
+        fence = marker.charAt(0);
+      } else if (marker.charAt(0) === fence) {
+        fence = undefined;
+      }
     }
     if (fence === undefined && /^##\s+/u.test(line)) {
-      if (inWalkthrough) break;
+      if (inWalkthrough) {
+        break;
+      }
       inWalkthrough = /^##\s+Acceptance walkthrough\s*$/iu.test(line);
       continue;
     }
-    if (inWalkthrough) selected.push(line);
+    if (inWalkthrough) {
+      selected.push(line);
+    }
   }
   const walkthrough = selected.join("\n").trim();
   return {

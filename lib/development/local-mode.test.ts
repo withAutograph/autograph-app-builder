@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import pathModule from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
+import { runSequentially } from "../async-sequential";
 
 import {
   DEVELOPMENT_DEPENDENCY_BOOTSTRAP_VERSION,
@@ -33,13 +34,16 @@ afterEach(async () => {
   // oxlint-disable-next-line unicorn/consistent-function-scoping
   const makeWritable = async (path: string) => {
     await chmod(path, 0o700).catch(() => {});
-    for (const entry of await readdir(path, { withFileTypes: true }).catch(() => [])) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      if (entry.isDirectory()) await makeWritable(join(path, entry.name));
-      else if (!entry.isSymbolicLink())
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        await chmod(join(path, entry.name), 0o600).catch(() => {});
-    }
+    await runSequentially(
+      await readdir(path, { withFileTypes: true }).catch(() => []),
+      async (entry) => {
+        if (entry.isDirectory()) {
+          await makeWritable(join(path, entry.name));
+        } else if (!entry.isSymbolicLink()) {
+          await chmod(join(path, entry.name), 0o600).catch(() => {});
+        }
+      },
+    );
   };
   await Promise.all(roots.map(makeWritable));
   await Promise.all(
