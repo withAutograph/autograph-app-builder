@@ -118,11 +118,7 @@ describe("existing-app dependency installation", () => {
     expect(result.exitCode).toBe(0);
     const receipt = targetApplyCommandReceiptSchema.parse(JSON.parse(result.stdout));
     expect(receipt.appId).toBe("vendor");
-    expect(state.events).toEqual([
-      "read:repository/apps/vendor/package.json",
-      "write",
-      "install",
-    ]);
+    expect(state.events).toEqual(["read:repository/apps/vendor/package.json", "write", "install"]);
     expect(state.policies).toEqual(["allow-all"]);
     expect(state.sandbox.run).toHaveBeenCalledExactlyOnceWith({
       command: "bun install",
