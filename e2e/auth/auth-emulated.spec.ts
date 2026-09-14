@@ -114,6 +114,33 @@ test("passkey UI defaults off without a Vercel flag override", async ({ browser 
   }
 });
 
+test("server-rendered reciprocal auth links preserve callbacks before hydration", async ({
+  request,
+}) => {
+  const callbackURL = "/dashboard?tab=recent&tab=saved#complete";
+  const redirectTo =
+    "/auth/setting-up?callbackURL=%2Fdashboard%3Ftab%3Drecent%26tab%3Dsaved%23complete";
+  await Promise.all(
+    [
+      ["sign-in", "sign-up"],
+      ["sign-up", "sign-in"],
+    ].map(async ([route, alternate]) => {
+      // Read actual response HTML without running hydration or stream-reveal scripts.
+      const response = await request.get(
+        `/auth/${route}?callbackURL=${encodeURIComponent(callbackURL)}`,
+      );
+      expect(response.ok()).toBe(true);
+      const html = await response.text();
+      expect(html).toContain(
+        `href="/auth/${alternate}?redirectTo=${encodeURIComponent(redirectTo)}"`,
+      );
+      expect(html).not.toContain(
+        `href="/auth/${alternate}?redirectTo=${encodeURIComponent("/auth/setting-up?callbackURL=%2F")}"`,
+      );
+    }),
+  );
+});
+
 test("Sign In and Sign Up are passive, reciprocal, and geometrically identical", async ({
   page,
 }) => {

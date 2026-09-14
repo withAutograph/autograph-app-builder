@@ -1,7 +1,11 @@
 import { defineAgent } from "eve";
 import { mockModel } from "eve/evals";
 
-import { currentReviewResults } from "@/lib/testing/current-review-results";
+import { currentReviewResults, unavailableReviewReply } from "@/lib/testing/current-review-results";
+import {
+  addVendorTaxVerificationStatus,
+  selectVendorReviewSourcePath,
+} from "@/lib/testing/vendor-iteration";
 
 import { renewalReviewUiPreview } from "@/lib/testing/prompt-driven-design";
 
@@ -576,10 +580,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       const candidates = result?.availablePaths?.filter((candidate) =>
         /^apps\/vendor\/.+[.](?:ts|tsx|js|jsx)$/u.test(candidate),
       );
-      const path =
-        candidates?.find((candidate) => /(?:^|\/)page[.]tsx$/u.test(candidate)) ??
-        candidates?.find((candidate) => /[.]tsx$/u.test(candidate)) ??
-        candidates?.at(0);
+      const path = selectVendorReviewSourcePath(candidates ?? []);
       if (path === undefined) {
         return "The existing Vendor application has no bounded source file suitable for iteration.";
       }
@@ -701,10 +702,12 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     }
     const status = statusResult.output as
-      | { appSpec?: { digest?: string }; phase?: string }
+      | { appSpec?: { appId?: string; digest?: string }; phase?: string }
       | undefined;
     if (status?.phase === "planned") {
-      return "The app is ready in the private preview.";
+      return status.appSpec?.appId === "vendor"
+        ? "The Vendor review now shows when tax verification is required, and the update is ready for the private preview."
+        : "The app is ready in the private preview.";
     }
     if (status?.phase !== "dependencies_prepared" || status.appSpec?.digest === undefined) {
       return "Approved offline dependency preparation is required before target planning.";
@@ -717,14 +720,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         .find(({ name }) => name === "inspect_existing_app")?.output as
         | { files?: readonly { path: string; content: string }[] }
         | undefined;
-      const existingAppChanges = existing?.files?.flatMap(({ path, content }) => {
-        const changed = content.replace(
-          /(?<opening>return\s*\(\s*<(?:main|div|section)\b[^>]*>)/u,
-          (opening) =>
-            `${opening}\n<p data-vendor-review-status="tax-verification">Tax verification required</p>`,
-        );
-        return changed === content ? [] : [{ content: changed, path }];
-      });
+      const existingAppChanges =
+        existing?.files === undefined ? undefined : addVendorTaxVerificationStatus(existing.files);
       return {
         toolCalls: [
           {
@@ -951,15 +948,16 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (stale) {
       requiredAccepts = 3;
     }
-    const status = [...toolResults].toReversed().find(({ name }) => name === "workspace_status");
+    const status = [...reviewResults].toReversed().find(({ name }) => name === "workspace_status");
     const latestStatus = status?.output as
       | { phase?: string; validation?: { digest?: string } }
       | undefined;
-    if (
-      status === undefined ||
-      (latestStatus?.phase !== "validated" && latestStatus?.phase !== "reviewed")
-    ) {
+    if (status === undefined) {
       return { toolCalls: [{ input: {}, name: "workspace_status" }] };
+    }
+    const unavailableReply = unavailableReviewReply(latestStatus?.phase);
+    if (unavailableReply !== undefined) {
+      return unavailableReply;
     }
     const proposal = [...reviewResults]
       .toReversed()
@@ -1651,8 +1649,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ? "AppSpec mutation was denied by the terminal publication workflow."
       : "AppSpec mutation unexpectedly succeeded.";
   }
+  const vendorTaxIterationRequest =
+    "Update the Vendor review so operations can see when tax verification is required.\n";
   const appSpecMatch =
-    /^accept build-ready appspec for (?<appId>[a-z0-9-]+):\n(?<appSpec>[\s\S]+)$/iu.exec(
+    /^(?:Update the Vendor review so operations can see when tax verification is required\.\n)?accept build-ready appspec for (?<appId>[a-z0-9-]+):\n(?<appSpec>[\s\S]+)$/iu.exec(
       lastUserMessage ?? "",
     );
   if (appSpecMatch !== null) {
@@ -1705,11 +1705,53 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ) {
         return "A verified prepared workspace is required before AppSpec acceptance.";
       }
+      let existingAppChanges: { content: string; path: string }[] | undefined;
+      if (appId === "vendor" && lastUserMessage?.startsWith(vendorTaxIterationRequest)) {
+        const inspections = toolResults.filter(({ name }) => name === "inspect_existing_app");
+        const latestInspection = inspections.at(-1)?.output as
+          | {
+              availablePaths?: readonly string[];
+              files?: readonly { content: string; path: string }[];
+            }
+          | undefined;
+        if (latestInspection === undefined) {
+          return {
+            toolCalls: [
+              {
+                input: { appId: "vendor", paths: [] },
+                name: "inspect_existing_app",
+              },
+            ],
+          };
+        }
+        if ((latestInspection.files?.length ?? 0) === 0) {
+          const candidates = latestInspection.availablePaths?.filter((candidate) =>
+            /^apps\/vendor\/.+[.](?:ts|tsx|js|jsx)$/u.test(candidate),
+          );
+          const path = selectVendorReviewSourcePath(candidates ?? []);
+          if (path === undefined) {
+            return "The existing Vendor application has no bounded source file suitable for iteration.";
+          }
+          return {
+            toolCalls: [
+              {
+                input: { appId: "vendor", paths: [path] },
+                name: "inspect_existing_app",
+              },
+            ],
+          };
+        }
+        existingAppChanges = addVendorTaxVerificationStatus(latestInspection.files ?? []);
+        if (existingAppChanges === undefined || existingAppChanges.length === 0) {
+          return "The inspected Vendor source did not expose a bounded application root for iteration.";
+        }
+      }
       return {
         toolCalls: [
           {
             input: {
               appId,
+              ...(existingAppChanges === undefined ? {} : { existingAppChanges }),
               expectedArtifactDigest: artifact.digest,
               expectedArtifactRevision: artifact.revision,
             },

@@ -3,14 +3,17 @@ import { includes, satisfies } from "eve/evals/expect";
 
 import { renewalReviewDesignPrompt } from "../lib/testing/prompt-driven-design";
 import { isProductFacing } from "./support/public-conversation";
-import { createSupportedRepositoryFixture } from "./support/supported-repository";
+import { observeRecordedRenewalReview } from "./support/ui-preview-browser";
 
 export default defineEval({
   description:
-    "An ambiguous product brief reaches a component-backed, assumption-aware UI review without HTML, local surrogates, planning, or backend work.",
-  tags: ["product-quality", "design-guidance"],
+    "An ambiguous product brief compiles against the supported source and passes real browser interaction before UI review; compilation runs in Vercel Sandbox.",
+  tags: ["product-quality", "design-guidance", "sandbox-integration"],
   async test(t) {
-    const repository = createSupportedRepositoryFixture();
+    const repository = process.env.REPOSITORY_LOCAL_ROOTS;
+    if (repository === undefined || repository.length === 0) {
+      throw new Error("The supported source root is missing.");
+    }
     await t.send(`Supported repository at ${repository}
 ${renewalReviewDesignPrompt}`);
 
@@ -66,6 +69,14 @@ ${renewalReviewDesignPrompt}`);
     t.notCalledTool("apply_app_creation");
     t.notCalledTool("validate_app_creation");
     t.notCalledTool("prepare_target_dependencies");
+    const browserObservation = await observeRecordedRenewalReview(t.events);
+    process.stdout.write(
+      `${JSON.stringify({
+        browserInteraction: browserObservation,
+        renderer: "current-supported-source",
+        version: 1,
+      })}\n`,
+    );
     t.check(t.reply, includes("Renewal Review"));
     t.check(t.reply, includes("existing table and review components"));
     t.check(t.reply, includes("remains open"));
@@ -79,4 +90,6 @@ ${renewalReviewDesignPrompt}`);
       ),
     );
   },
+  // Include measured cold shared toolchain preparation before workflow assertions.
+  timeoutMs: 600_000,
 });

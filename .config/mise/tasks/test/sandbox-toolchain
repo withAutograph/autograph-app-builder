@@ -1,8 +1,8 @@
 #!/bin/sh
-#MISE description="Prove the pinned sandbox toolchain through Eve"
+#MISE description="Run the shared Vercel Sandbox sandbox-toolchain integration check"
 set -eu
-
-node_bin="$(mise which node)"
-launcher="$PWD/.config/mise/scripts/trusted-node-launcher"
-exec "$launcher" "$node_bin" --import tsx scripts/run-eve-eval.mts \
-  --gate-a-profile sandbox sandbox-toolchain --strict --skip-report
+if [ "$#" -ne 1 ]; then
+  echo "usage: mise run test:sandbox-toolchain -- <arrusted-source-root>" >&2
+  exit 64
+fi
+exec mise run test:sandbox-evals -- "$1" sandbox-toolchain

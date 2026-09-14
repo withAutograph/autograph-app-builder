@@ -286,7 +286,7 @@ PY
 }
 work="$(mktemp -d /tmp/app-builder-development-toolchain.XXXXXX)"
 root='/workspace/.app-builder/toolchain'
-stage='download'
+stage='native-toolchain'
 cleanup() {
   status=$?
   if [ "$status" -ne 0 ]; then printf 'development_toolchain_failed:%s\n' "$stage" >&2; fi
@@ -294,6 +294,20 @@ cleanup() {
   exit "$status"
 }
 trap cleanup EXIT
+if ! command -v cc >/dev/null; then
+  if command -v apt-get >/dev/null; then
+    sudo apt-get update
+    sudo apt-get install -y build-essential
+  elif command -v dnf >/dev/null; then
+    sudo dnf install -y gcc
+  else
+    printf 'No supported package manager is available to install the native compiler.\n' >&2
+    exit 1
+  fi
+fi
+command -v cc >/dev/null
+cc --version >/dev/null
+stage='download'
 install -d -m 0755 "$root/bin" "$root/rust"
 curl --fail --location --silent --show-error "$mise_url" --output "$work/mise"
 printf '%s  %s\n' "$mise_sha" "$work/mise" | sha256sum --check --strict
@@ -469,6 +483,8 @@ node -e 'const fs=require("node:fs");const read=(p)=>JSON.parse(fs.readFileSync(
 node - "$work/source" <<'NODE'
 ${developmentDependencySymlinkScript}
 NODE
+stage='mise-tools'
+mise install --locked cue
 stage='rust-install'
 install -d -m 0755 "$work/cargo-closure/vendor"
 CARGO_NET_OFFLINE=false cargo vendor --locked --versioned-dirs "$work/cargo-closure/vendor" > "$work/cargo-closure/config.toml"
@@ -548,6 +564,8 @@ node -e 'const fs=require("node:fs");const read=(p)=>JSON.parse(fs.readFileSync(
 node - "$work/source" <<'NODE'
 ${developmentDependencySymlinkScript}
 NODE
+stage='mise-tools'
+mise install --locked cue
 stage='rust-install'
 install -d -m 0755 "$work/cargo-closure/vendor"
 CARGO_NET_OFFLINE=false cargo vendor --locked --versioned-dirs "$work/cargo-closure/vendor" > "$work/cargo-closure/config.toml"

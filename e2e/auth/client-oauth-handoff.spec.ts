@@ -104,13 +104,28 @@ test("web login and both emulated connections survive Cursor consent, token refr
   test.setTimeout(180_000);
   await finishOAuth(page, "GitHub");
   await page.goto("/");
-  await installProvider(page, "GitHub");
-  await installProvider(page, "Vercel");
   const browserSession = await currentSession(page);
   const ownerUserId = browserSession?.user?.id;
   const organizationId = browserSession?.session?.activeOrganizationId;
   expect(typeof ownerUserId).toBe("string");
   expect(typeof organizationId).toBe("string");
+  await installProvider(page, "GitHub");
+  await installProvider(page, "Vercel");
+  // Compare the established owner/workspace after both callbacks. Polling uses
+  // the normal no-store session endpoint; project only a boolean into failures
+  // so cookies, session tokens, and user details cannot enter test artifacts.
+  await expect
+    .poll(
+      async () => {
+        const session = await currentSession(page);
+        return (
+          session?.user?.id === ownerUserId &&
+          session?.session?.activeOrganizationId === organizationId
+        );
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   const before = await applicationCounts();
   expect(before.githubInstallations).toBeGreaterThan(0);
   expect(before.vercelInstallations).toBeGreaterThan(0);

@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { AuthLoadingShell } from "../../../ui/route-loading-shell";
 
 import { SignUp } from "@/components/auth/sign-up";
 import { AuthContinuity } from "@/components/auth/auth-continuity";
@@ -49,11 +50,14 @@ async function RedirectAuthenticatedVisitor({
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function SignUpSurface() {
+async function SignUpSurface({ searchParams }: { searchParams: Promise<AuthPageSearchParams> }) {
+  const search = serializeAuthPageSearchParams(await searchParams);
+  const origin = getPreviewOAuthDeploymentOrigin(process.env);
+  const signInRedirectTo = resolvePasskeyRedirectTo(DEFAULT_AUTH_REDIRECT_TO, search, origin);
   return (
     <main className="flex min-h-svh items-center justify-center p-6">
       <AuthContinuity action="sign-up">
-        <SignUp socialPosition="top" />
+        <SignUp socialPosition="top" signInRedirectTo={signInRedirectTo} />
       </AuthContinuity>
     </main>
   );
@@ -66,7 +70,9 @@ export default function SignUpPage({
 }) {
   return (
     <>
-      <SignUpSurface />
+      <Suspense fallback={<AuthLoadingShell title="Create your Autograph account" />}>
+        <SignUpSurface searchParams={searchParams} />
+      </Suspense>
       <Suspense fallback={null}>
         <RedirectAuthenticatedVisitor searchParams={searchParams} />
       </Suspense>

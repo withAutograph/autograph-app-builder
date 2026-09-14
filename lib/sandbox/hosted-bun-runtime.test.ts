@@ -5,9 +5,10 @@ import {
   HOSTED_BUN_RUNTIME_PREFIX,
   createHostedBunRuntimeInstaller,
 } from "./hosted-bun-runtime";
+import { HOSTED_MISE_VERSION } from "./hosted-toolchain";
 
 describe("hosted Bun runtime", () => {
-  it("installs Bun once per sandbox and exposes its binary path", async () => {
+  it("installs Bun and the pinned Mise runtime once per sandbox", async () => {
     // Eve exposes a PromiseLike command, not a native Promise with .catch().
     const run = vi.fn(() => {
       const result = Promise.resolve({ exitCode: 0, stderr: "", stdout: "" });
@@ -27,7 +28,7 @@ describe("hosted Bun runtime", () => {
 
     expect(run).toHaveBeenCalledTimes(1);
     expect(run).toHaveBeenCalledWith({
-      command: `npm install --prefix ${HOSTED_BUN_RUNTIME_PREFIX} bun`,
+      command: `npm install --prefix ${HOSTED_BUN_RUNTIME_PREFIX} bun @jdxcode/mise@${HOSTED_MISE_VERSION}`,
       env: HOSTED_BUN_RUNTIME_ENVIRONMENT,
     });
     expect(HOSTED_BUN_RUNTIME_ENVIRONMENT.PATH).toContain(

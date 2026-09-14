@@ -1,11 +1,13 @@
 import { lstatSync, realpathSync } from "node:fs";
 import nodePath from "node:path";
+import { developmentExecutionEnvironment } from "../lib/development/execution-environment.mjs";
 
 const { isAbsolute, relative, resolve, sep } = nodePath;
 
 export const gateAEvalProfileKey = "__appBuilderAuthorizedGateAEvalProfileV1";
 
 export const gateAEnvironmentFields = Object.freeze([
+  ...Object.keys(developmentExecutionEnvironment),
   "APP_BUILDER_LOCAL_PUBLICATION",
   "APP_BUILDER_BRANCH_WORKTREE_PUBLICATION",
   "APP_BUILDER_BRANCH_WORKTREE_ROOT",
@@ -14,6 +16,9 @@ export const gateAEnvironmentFields = Object.freeze([
   "APP_BUILDER_FRESH_BOOTSTRAP_ALLOWED_ROOT",
   "APP_BUILDER_FRESH_BOOTSTRAP_EVAL_FAULT",
   "APP_BUILDER_REAL_SANDBOX",
+  "APP_BUILDER_EXECUTION_MODE",
+  "APP_BUILDER_SANDBOX_PROVIDER",
+  "APP_BUILDER_EXECUTION_BUNDLE",
   "APP_BUILDER_HOSTED_ARTIFACT_PROOF",
   "APP_BUILDER_SANDBOX_IMAGE",
   "APP_BUILDER_LOCAL_ADAPTER",
@@ -277,6 +282,7 @@ export function installGateAEvalProfile(environment, value, repositoryRoot) {
     }
   } else {
     environment.APP_BUILDER_REAL_SANDBOX = "1";
+    if (profile.profile === "sandbox") Object.assign(environment, developmentExecutionEnvironment);
     environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS = "360000";
     environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS = "360000";
     if (profile.profile === "hosted-artifact") {

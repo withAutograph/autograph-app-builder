@@ -20,7 +20,7 @@ export default function RenewalReview() {
   const [filter, setFilter] = useState("Needs intervention");
   const visible = filter === "All renewals" ? renewals : renewals.filter((item) => item.health !== "Healthy");
   return <main>
-    <PageTabs items={[{ id: "renewals", label: "Renewals" }, { id: "portfolio", label: "Portfolio" }]} value="renewals" onValueChange={() => {}} />
+    <PageTabs options={[{ id: "renewals", label: "Renewals" }, { id: "portfolio", label: "Portfolio" }]} value="renewals" onChange={() => {}} />
     <PageHeader title="Renewal review" subtitle="Decide which accounts need intervention in the next 90 days." actions={<Button intent="primary">Start review</Button>} />
     <StatusPill label="2 accounts need attention" tone="warning" detail="$280,000 at risk" />
     <div role="group" aria-label="Renewal filters"><Button onClick={() => setFilter("Needs intervention")}>Needs intervention</Button><Button onClick={() => setFilter("All renewals")}>All renewals</Button></div>
