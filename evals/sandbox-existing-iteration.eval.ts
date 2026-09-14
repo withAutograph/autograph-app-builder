@@ -27,9 +27,27 @@ export default defineEval({
     t.succeeded();
     await t.send(`Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
     t.succeeded();
-    await t.send("Inspect existing Vendor application.");
-    t.succeeded();
     t.calledTool("inspect_existing_app", { count: 2 });
+    t.calledTool("accept_app_spec", {
+      count: 1,
+      input: {
+        existingAppChanges: (value) =>
+          Array.isArray(value) &&
+          value.length > 0 &&
+          value.every(
+            (change) =>
+              typeof change === "object" &&
+              change !== null &&
+              "path" in change &&
+              typeof change.path === "string" &&
+              change.path.startsWith("apps/vendor/") &&
+              "content" in change &&
+              typeof change.content === "string" &&
+              change.content.includes('data-vendor-review-status="tax-verification"') &&
+              change.content.includes("Tax verification required"),
+          ),
+      },
+    });
     await t.send("Prepare target dependencies.");
     t.succeeded();
     await t.send(
