@@ -22,6 +22,8 @@ The accepted change set included `.next/BUILD_ID`, manifests, chunks, and maps. 
 | Unassessed replica quality               | Still open                                                                                                                                                    | After working delivery, exercise persistence/reload, callbacks, cancellation/retry/recovery, child creation, paired desktop states, and framework behavior |
 | Starter cloning                          | Still open                                                                                                                                                    | Observe normal Builder remote cloning and installation in a new session; the original used an existing checkout                                            |
 
+The root instructions also told the model to compose implementation files after build approval, conflicting with the creation skill and approval-bound tool arguments. They now direct the model to prepare the complete arguments before invoking the tool, without writing the checkout before approval or adding a separate chat confirmation. This addresses an observed source of redundant prompts; elimination of duplicate prompts remains unverified.
+
 ## Validation and next acceptance
 
 Focused tests exercise the actual overlay snapshot script against nested Next build output and source files, public approval projection with the runtime tool name, and completion guidance across phases. TypeScript and Eve compilation validate the instruction integration. These checks establish repairs to shared behavior, not a successful replica.
