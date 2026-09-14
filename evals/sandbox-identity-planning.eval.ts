@@ -1,9 +1,16 @@
 import { defineEval } from "eve/evals";
 import { includes } from "eve/evals/expect";
+import { z } from "zod";
 
 import { BUILD_READY_APP_SPEC } from "./support/app-spec";
 
-const digest = (value: unknown) => typeof value === "string" && /^[a-f0-9]{64}$/u.test(value);
+const digestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
+const plannedStateSchema = z.object({
+  dependencies: z.object({ digest: digestSchema }),
+  identity: z.object({ digest: digestSchema }),
+  phase: z.literal("planned"),
+  proposal: z.object({ digest: digestSchema }),
+});
 
 export default defineEval({
   description:
@@ -39,21 +46,7 @@ export default defineEval({
           event.data.result.toolName !== "artifact_workflow_status"
         )
           return false;
-        const state = event.data.result.output as {
-          phase?: string;
-          dependencies?: { digest?: string };
-          identity?: { digest?: string };
-          proposal?: { digest?: string };
-          apply?: { digest?: string; status?: string };
-          validation?: { digest?: string; status?: string };
-          review?: { digest?: string; changeSetDigest?: string };
-        };
-        return (
-          state?.phase === "planned" &&
-          digest(state.dependencies?.digest) &&
-          digest(state.identity?.digest) &&
-          digest(state.proposal?.digest)
-        );
+        return plannedStateSchema.safeParse(event.data.result.output).success;
       }),
     );
 

@@ -1,5 +1,6 @@
 import { defineEval } from "eve/evals";
 import { includes, satisfies } from "eve/evals/expect";
+import { z } from "zod";
 
 import { BUILD_READY_APP_SPEC } from "./support/app-spec";
 import { isProductFacing } from "./support/public-conversation";
@@ -13,7 +14,16 @@ const staysProductFacing = satisfies(
   "assistant reply stays product-facing and omits internal review mechanics",
 );
 
-const digest = (value: unknown) => typeof value === "string" && /^[a-f0-9]{64}$/u.test(value);
+const digestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
+const reviewedStateSchema = z.object({
+  apply: z.object({ digest: digestSchema, status: z.literal("applied") }),
+  dependencies: z.object({ digest: digestSchema }),
+  identity: z.object({ digest: digestSchema }),
+  phase: z.literal("reviewed"),
+  proposal: z.object({ digest: digestSchema }),
+  review: z.object({ changeSetDigest: digestSchema, digest: digestSchema }),
+  validation: z.object({ digest: digestSchema, status: z.literal("passed") }),
+});
 
 export default defineEval({
   description:
@@ -75,27 +85,7 @@ export default defineEval({
             event.data.result.toolName !== "artifact_workflow_status"
           )
             return false;
-          const state = event.data.result.output as {
-            phase?: string;
-            dependencies?: { digest?: string };
-            identity?: { digest?: string };
-            proposal?: { digest?: string };
-            apply?: { digest?: string; status?: string };
-            validation?: { digest?: string; status?: string };
-            review?: { digest?: string; changeSetDigest?: string };
-          };
-          return (
-            state?.phase === "reviewed" &&
-            [state.dependencies?.digest, state.identity?.digest, state.proposal?.digest].every(
-              digest,
-            ) &&
-            state.apply?.status === "applied" &&
-            digest(state.apply.digest) &&
-            state.validation?.status === "passed" &&
-            digest(state.validation.digest) &&
-            digest(state.review?.digest) &&
-            digest(state.review?.changeSetDigest)
-          );
+          return reviewedStateSchema.safeParse(event.data.result.output).success;
         }),
     );
 

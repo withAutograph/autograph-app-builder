@@ -1,9 +1,20 @@
-export const selectVendorReviewSourcePath = (paths: readonly string[]): string | undefined =>
-  paths.find((path) => path.endsWith("/frontend/src/review/ReviewQueueServerPage.tsx")) ??
-  paths.find((path) => path.endsWith("/app/vendor/review-queue/page.tsx")) ??
-  paths.find((path) => /(?:^|\/)page[.]tsx$/u.test(path)) ??
-  paths.find((path) => /[.]tsx$/u.test(path)) ??
-  paths.at(0);
+export const selectVendorReviewSourcePath = (paths: readonly string[]): string | undefined => {
+  const reviewPage = paths.find((path) =>
+    path.endsWith("/frontend/src/review/ReviewQueueServerPage.tsx"),
+  );
+  if (reviewPage !== undefined) {
+    return reviewPage;
+  }
+  const routePage = paths.find((path) => path.endsWith("/app/vendor/review-queue/page.tsx"));
+  if (routePage !== undefined) {
+    return routePage;
+  }
+  const page = paths.find((path) => /(?:^|\/)page[.]tsx$/u.test(path));
+  if (page !== undefined) {
+    return page;
+  }
+  return paths.find((path) => /[.]tsx$/u.test(path)) ?? paths.at(0);
+};
 
 export const addVendorTaxVerificationStatus = (
   files: readonly { content: string; path: string }[],
