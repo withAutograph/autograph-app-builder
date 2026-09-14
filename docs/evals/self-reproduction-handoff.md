@@ -4,7 +4,7 @@ This handoff preserves the current self-reproduction baseline and defines the ne
 
 The supported public commands and response schemas remain authoritative in [self-reproduction.md](self-reproduction.md). Separate cross-eval regression evidence is recorded in [cross-eval-regression-2026-09-14.md](cross-eval-regression-2026-09-14.md); do not infer those results from this candidate baseline.
 
-## Immutable baseline
+## Historical baseline — 2026-09-14 04:11 UTC
 
 - Product brief generation used the normal public entrypoint at source revision `04dbe04823b95c975d5483b635c8d8ed44010908`.
 - Public session: `wrun_01M2F1SPPJ8ND6ZK7K7Z0FTBZY`.
@@ -31,9 +31,11 @@ Its exact-head CI passed at `d06042978452f388bdac3ceaadd991ce418ee623`; post-mer
 
 PR #441 merged as `32dddc257beb1cd2e10cc95ce020f4ef0f286cee` and marks validation pending before repair writes, preventing prior technical success from surviving a failed repair. Its exact-head CI passed at `6202121b5a690bda784a241f71915fecfcfc8cf0`; post-merge main CI `34808709258` passed.
 
-These repairs are framework evidence, not proof of a successful self-reproduction. No new generation was run after they landed.
+These repairs are framework evidence, not proof of a successful self-reproduction. The later 21:03 UTC baseline below ran after they landed.
 
-## Remaining gaps
+## Original gap inventory
+
+This inventory describes the earlier baseline. The latest status and evidence below supersede its capture and setup gaps; product failures remain open.
 
 | Priority | Gap                            | Required evidence or repair                                                                                                                                                                                                                                                    |
 | -------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -83,9 +85,9 @@ This is an improvement over the earlier title-only output, but **still a failed 
 - Generated CSS defines a replacement palette instead of preserving the instructed Arrusted semantic tokens. Three desktop captures render the entry page but report Next instant-validation errors and failed resources. WebSocket creation alone earns no transport-health credit.
 - The original development command failed because the shared Arrusted launcher resolved Next from app-local node_modules for development, although validation resolved it from the repository root. The Builder recovered with a different command and corrected the landing path. Shared launcher repair remains separate; the frozen candidate is untouched.
 
-Read-only observation retained a stable, complete manifest within the explicitly selected `apps/autograph-app-builder` subtree (40 entries, two observations, completed 21:30:45 UTC). This is not a whole-repository completeness claim. The separate full-repository observation completed at 22:05:04 UTC: 3,020 entries, 2,475 regular files, no unreadable files, and two matching observations within documented exclusions. All regular file hashes were verified again during owner-only archival. This establishes capture coverage, not semantic correctness or an atomic snapshot. Paired reference comparison remains pending. Authentication isolation, actual provider callbacks, server restart durability, independent child execution, and framework navigation behavior receive no success credit from the simulated UI.
+Read-only observation retained a stable, complete manifest within the explicitly selected `apps/autograph-app-builder` subtree (40 entries, two observations, completed 21:30:45 UTC). This is not a whole-repository completeness claim. The separate full-repository observation completed at 22:05:04 UTC: 3,020 entries, 2,475 regular files, no unreadable files, and two matching observations within documented exclusions. All regular file hashes were verified again during owner-only archival. This establishes capture coverage, not semantic correctness or an atomic snapshot. The later limited reference comparison below does not establish full paired coverage. Authentication isolation, actual provider callbacks, server restart durability, independent child execution, and framework navigation behavior receive no success credit from the simulated UI.
 
-Local diagnostic directories are `/private/tmp/self-reproduction-live-main-20260914`, its `-preview`, `-functional`, `-app-source`, and `-source` siblings. Private state and source bytes must not be published. Browser evidence, source findings, and sanitized recovery diagnostics must be retained in the portable report before calling the comparison complete. Observer PR #448 merged as `81601ac2b6c4fe7603551b8b96ea4e9624f68295` with passing main CI. Paired states and a fresh post-repair run remain outstanding.
+Local diagnostic directories are `/private/tmp/self-reproduction-live-main-20260914`, its `-preview`, `-functional`, `-app-source`, and `-source` siblings. Private state and source bytes must not be published. Browser evidence, source findings, and sanitized recovery diagnostics must be retained in the portable report before calling the comparison complete. Observer PR #448 merged as `81601ac2b6c4fe7603551b8b96ea4e9624f68295` with passing main CI. Full paired workflows and a fresh post-repair run remain outstanding.
 
 ## Shared repair acceptance — 2026-09-14 22:27 UTC
 
@@ -132,3 +134,52 @@ repairs that race by fetching the explicitly requested revision. Its Preview
 currently has a separate `lookup_migration_forward_only` database-state blocker
 for `business_unit`; do not bypass the guard or modify data to turn it green.
 Retain both issues separately and merge only after the final revision is green.
+
+## Landed repair and current coverage — 2026-09-14 23:15 UTC
+
+[PR #451](https://github.com/withAutograph/autograph-app-builder/pull/451)
+merged as `440257e5b1004aee5b4942593852a35da04c5bce`. Its final revision
+`206076624b2bcb2449fc12507aad7bcc5dd99705` passed all required checks in
+[CI 34905012790](https://github.com/withAutograph/autograph-app-builder/actions/runs/34905012790).
+[Post-merge CI 34905947175](https://github.com/withAutograph/autograph-app-builder/actions/runs/34905947175)
+passed all eleven jobs, including exact-main package publication. The deterministic
+inventory remained **39 cases / 553 gates**; authentication passed **80 tests**
+on both the final PR revision and main, with no retry markers in the retained logs.
+The five real Sandbox checks were not rerun for this PR; their earlier acceptance
+remains separately recorded in the cross-eval ledger.
+
+A limited retrospective comparison uses the exact synthetic brief at 1440×900:
+“Create an authenticated stock exceptions workspace to assign owners and resolve
+an exception with a note.” Reference revision `206076624` acknowledged its server
+save and restored the brief after reload. Ordinary account and documentation
+navigation also worked. Two fresh browser contexts then used normal emulated
+GitHub login and restored the same brief for the same synthetic identity, without
+new writes or injected session/database state. These observations establish bounded
+reference persistence, not candidate persistence or process-restart durability.
+
+The reference and candidate differ in revision and full-page height. The candidate
+cannot establish an equivalent authenticated identity. The paired form captures
+support advisory layout comparison only: they do not complete the functional
+matrix. The reference screenshot contains a Next issue badge; a lack of captured
+page/HTTP errors is not proof of a clean browser console.
+
+The sanitized portable bundle is retained at
+`/Volumes/Home/jasonmorganson/.config/codex/visualizations/2026/09/12/01a095af-7cdc-7171-b268-bfc3a087175b/self-reproduction-20260914/index.html`.
+It includes Markdown, JSON, screenshots, hashes, source findings, usage coverage,
+CI evidence, and comparison limitations. Raw source, capability URLs, identity
+hashes, and continuation state remain private. Machine-local supporting evidence:
+`/private/tmp/retrospective-reference-form-20260914` and
+`/private/tmp/reference-fresh-context-persistence-20260914`.
+
+| Priority | Current gap                                           | Next proof and boundary                                                                                                                                                                                                                    |
+| -------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| P0       | Independent replica still failed                      | One new normal public session after shared repairs. Keep authentication, durable data, real child orchestration, provider return, cancellation/retry/recovery, account and docs requirements; exclude anonymous entry only.                |
+| P0       | Normal source-review repair loop unassessed           | Retain ordinary structured product answers in shared session state, then observe actual review findings and subsequent implementation/review during the public run. Standalone judging and temporal adjacency alone do not prove the loop. |
+| P1       | Preview observation can miss delivery                 | Capture each newly delivered receipt while polling the public session, without extra product calls or candidate setup. Preserve observer failures separately from session outcomes.                                                        |
+| P1       | Full paired runtime and framework coverage unassessed | Match supported authenticated states, exercise remaining workflows and navigation behavior, and record missing candidate functionality as failed. Source and configuration flags cannot substitute for runtime proof.                      |
+| P1       | Arrusted #1382 Preview blocked                        | Diagnose the specific Preview database state read-only. Preserve the forward-only migration guard and existing data. Do not merge a red revision or relabel the database blocker as a template-readiness regression.                       |
+
+The original candidate and evidence remain immutable. The next run must record
+new revisions, brief and answer-sheet hashes, session identity, and normal replies.
+A missing feature is a failure even when a browser cannot exercise it. An
+infrastructure blocker or incomplete observation remains open, not success.
