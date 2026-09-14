@@ -2,6 +2,10 @@ import { defineAgent } from "eve";
 import { mockModel } from "eve/evals";
 
 import { currentReviewResults } from "@/lib/testing/current-review-results";
+import {
+  addVendorTaxVerificationStatus,
+  selectVendorReviewSourcePath,
+} from "@/lib/testing/vendor-iteration";
 
 import { renewalReviewUiPreview } from "@/lib/testing/prompt-driven-design";
 
@@ -576,10 +580,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       const candidates = result?.availablePaths?.filter((candidate) =>
         /^apps\/vendor\/.+[.](?:ts|tsx|js|jsx)$/u.test(candidate),
       );
-      const path =
-        candidates?.find((candidate) => /(?:^|\/)page[.]tsx$/u.test(candidate)) ??
-        candidates?.find((candidate) => /[.]tsx$/u.test(candidate)) ??
-        candidates?.at(0);
+      const path = selectVendorReviewSourcePath(candidates ?? []);
       if (path === undefined) {
         return "The existing Vendor application has no bounded source file suitable for iteration.";
       }
@@ -719,14 +720,8 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         .find(({ name }) => name === "inspect_existing_app")?.output as
         | { files?: readonly { path: string; content: string }[] }
         | undefined;
-      const existingAppChanges = existing?.files?.flatMap(({ path, content }) => {
-        const changed = content.replace(
-          /(?<opening>return\s*\(\s*<(?:main|div|section)\b[^>]*>)/u,
-          (opening) =>
-            `${opening}\n<p data-vendor-review-status="tax-verification">Tax verification required</p>`,
-        );
-        return changed === content ? [] : [{ content: changed, path }];
-      });
+      const existingAppChanges =
+        existing?.files === undefined ? undefined : addVendorTaxVerificationStatus(existing.files);
       return {
         toolCalls: [
           {
@@ -1732,10 +1727,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
           const candidates = latestInspection.availablePaths?.filter((candidate) =>
             /^apps\/vendor\/.+[.](?:ts|tsx|js|jsx)$/u.test(candidate),
           );
-          const path =
-            candidates?.find((candidate) => /(?:^|\/)page[.]tsx$/u.test(candidate)) ??
-            candidates?.find((candidate) => /[.]tsx$/u.test(candidate)) ??
-            candidates?.at(0);
+          const path = selectVendorReviewSourcePath(candidates ?? []);
           if (path === undefined) {
             return "The existing Vendor application has no bounded source file suitable for iteration.";
           }
@@ -1748,14 +1740,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
             ],
           };
         }
-        existingAppChanges = latestInspection.files?.flatMap(({ path, content }) => {
-          const changed = content.replace(
-            /(?<opening>return\s*\(\s*<(?:main|div|section)\b[^>]*>)/u,
-            (opening) =>
-              `${opening}\n<p data-vendor-review-status="tax-verification">Tax verification required</p>`,
-          );
-          return changed === content ? [] : [{ content: changed, path }];
-        });
+        existingAppChanges = addVendorTaxVerificationStatus(latestInspection.files ?? []);
         if (existingAppChanges === undefined || existingAppChanges.length === 0) {
           return "The inspected Vendor source did not expose a bounded application root for iteration.";
         }
