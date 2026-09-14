@@ -38,6 +38,14 @@ small public documentation area that explains the journey for a new user.
 Protect tenant data. Keep request-specific identity and data separate from any
 shared cache, and never expose credentials in client code or progress records.
 
+Also expose the same app-building journey through an authenticated Streamable
+HTTP MCP endpoint at `/mcp`, with `autograph_start`, `autograph_get`,
+`autograph_send`, `autograph_respond`, and `autograph_cancel`. These tools must
+use this independent application's own durable sessions and backend. Support
+starting and resuming a build, tenant-scoped recent sessions, progress cursors,
+ordinary messages, complete question/approval batches, safe repeated requests,
+and cooperative cancellation. Explain this interface in the documentation.
+
 Use Next.js 16.3 App Router practices: server-render the initial page wherever
 possible, keep browser islands narrow, use Server Actions or route handlers for
 writes, give dynamic routes useful loading UI and Suspense boundaries, and use

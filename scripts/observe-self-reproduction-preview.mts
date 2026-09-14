@@ -1,5 +1,5 @@
 /* oxlint-disable eslint/no-await-in-loop -- Viewport observations are intentionally sequential. */
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { chromium } from "playwright";
@@ -15,6 +15,8 @@ import type {
   PreviewObservationReport,
   PreviewViewportObservation,
 } from "../evals/support/self-reproduction-preview-observation";
+
+import { observePreviewWebSockets } from "./self-reproduction-preview-websockets";
 
 const { values } = parseArgs({
   options: {
@@ -63,6 +65,7 @@ if (finding.status === "ready") {
       const context = await browser.newContext({ viewport });
       const page = await context.newPage();
       page.setDefaultTimeout(timeoutMs);
+      const websocketEvents = observePreviewWebSockets(page);
       const consoleErrors: string[] = [];
       const pageErrors: string[] = [];
       const controls: { name: string; role: string }[] = [];
@@ -201,12 +204,33 @@ if (finding.status === "ready") {
           viewport,
         });
       } finally {
+        await mkdir(output, { mode: 0o700, recursive: true });
+        await writeFile(
+          path.join(output, `websockets-${viewport.name}.json`),
+          `${JSON.stringify(
+            {
+              events: websocketEvents,
+              note: "Transport observation only. Creation does not prove an open handshake or healthy HMR. Playwright exposes no close code. No frames or error payloads retained. No sockets observed establishes neither success nor failure. Recorded before observer cleanup.",
+              viewport,
+            },
+            null,
+            2,
+          )}\n`,
+          { mode: 0o600 },
+        );
         await context.close().catch(() => {
           // Observation receipts survive cleanup failures.
         });
       }
     }
     const rows = summarizePreviewRows(viewports, syntheticBrief !== undefined);
+    rows.push({
+      evidence: viewports.map(({ viewport }) => `websockets-${viewport.name}.json`),
+      id: "websocket-transport",
+      reason:
+        "WebSocket lifecycle observations are retained separately; these events alone do not establish healthy HMR or parity.",
+      status: "unassessed",
+    });
     const report: PreviewObservationReport = {
       generatedAt: new Date().toISOString(),
       kind: "self-reproduction-working-preview-observation/v1",
