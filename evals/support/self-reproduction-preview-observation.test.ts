@@ -5,6 +5,7 @@ import { expect, it } from "vitest";
 import {
   loadWorkingPreview,
   sanitizePreviewEvidence,
+  summarizePreviewRows,
   unavailablePreviewReport,
   writePreviewObservationReport,
 } from "./self-reproduction-preview-observation";
@@ -52,12 +53,57 @@ it("blocks an expired receipt", async () => {
 });
 it("redacts http, websocket and credential material without mutating input", () => {
   const input =
-    "https://preview.test/private?token=x wss://preview.test/socket?secret=x authorization: bearer-x";
+    "https://preview.test/private?token=x wss://preview.test/socket?secret=x Authorization: Bearer secret Bearer second";
   const result = sanitizePreviewEvidence(input);
   expect(result).not.toContain("private");
   expect(result).not.toContain("socket");
-  expect(result).not.toContain("bearer-x");
+  expect(result).not.toContain("secret");
+  expect(result).not.toContain("second");
   expect(input).toContain("token=x");
+});
+it("never passes all-blocked or mixed partial observations", () => {
+  const viewport = { height: 900, name: "desktop", width: 1440 } as const;
+  const blocked = {
+    consoleErrors: [],
+    controls: [],
+    pageErrors: [],
+    status: "blocked" as const,
+    viewport,
+  };
+  expect(summarizePreviewRows([blocked, blocked, blocked], true).map((row) => row.status)).toEqual([
+    "passed",
+    "blocked",
+    "unassessed",
+  ]);
+  expect(summarizePreviewRows([{ ...blocked, status: "passed" }], true)[1]?.status).toBe(
+    "unassessed",
+  );
+});
+it("leaves an unfamiliar semantic field unassessed and retains partial successful viewports", () => {
+  const viewport = { height: 900, name: "desktop", width: 1440 } as const;
+  const rows = summarizePreviewRows(
+    [
+      {
+        brief: { reason: "Unknown UI", status: "unassessed" },
+        consoleErrors: [],
+        controls: [],
+        pageErrors: [],
+        screenshot: "screenshots/desktop.png",
+        status: "passed",
+        viewport,
+      },
+      {
+        consoleErrors: [],
+        controls: [],
+        pageErrors: ["later failure"],
+        status: "blocked",
+        viewport: { ...viewport, height: 1080, name: "desktop-wide", width: 1920 },
+      },
+    ],
+    true,
+  );
+  expect(rows[1]).toMatchObject({ evidence: ["screenshots/desktop.png"], status: "blocked" });
+  expect(rows[2]?.status).toBe("unassessed");
 });
 it("retains partial mixed-status evidence and redacts it", async () => {
   const root = await temp();
