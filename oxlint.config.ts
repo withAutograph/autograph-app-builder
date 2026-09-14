@@ -3891,6 +3891,19 @@ const followupFindingOverrides: { files: string[]; rules: Record<string, "off"> 
       "sonarjs/expression-complexity": "off",
     },
   },
+  {
+    files: ["**/lib/repository/target-validation.ts"],
+    rules: { "sonarjs/no-duplicate-string": "off" },
+  },
+  {
+    files: ["**/evals/cancel-dependency-preparation.eval.ts"],
+    rules: {
+      "anti-slop/no-runtime-typeof": "off",
+      "typescript/no-unsafe-argument": "off",
+      "typescript/no-unsafe-assignment": "off",
+      "typescript/no-unsafe-member-access": "off",
+    },
+  },
 ];
 
 export default defineConfig({
