@@ -1,6 +1,6 @@
 # Other eval follow-ups — 2026-09-14
 
-Open follow-ups from the expanded audit of main `f65f36ebd6ff14df4d282dcf13dab8312aeba941`. These are outstanding work, not completed repairs. See [the cross-eval assessment](cross-eval-regression-2026-09-14.md) and [self-reproduction handoff](self-reproduction-handoff.md) for the related evidence and boundaries.
+Follow-ups from the expanded audit of main `f65f36ebd6ff14df4d282dcf13dab8312aeba941`. The audit below is the frozen starting point; the repair ledger records subsequent work and its evidence. See [the cross-eval assessment](cross-eval-regression-2026-09-14.md) and [self-reproduction handoff](self-reproduction-handoff.md) for the related evidence and boundaries.
 
 ## Evidence and regression baseline
 
@@ -94,3 +94,27 @@ Fix shared workflow defects in the shared implementation and fixture/driver defe
 After a focused repair, rerun its affected scenarios, then the supported `mise run test:agent` and all required exact-head CI lanes before merging. Expand routine CI only once repaired scenarios execute reliably within their intended deterministic scope; do not hide failures by deleting cases, weakening assertions, or presenting the 45-file inventory as passing coverage.
 
 The seven improved cases to preserve are `failed-journal-recovery`, `interrupted-local-publication`, `local-publication-overlap`, `pre-journal-local-publication`, `precondition-failed-publication`, `published-local-workflow-boundary`, and `succeeded-journal-recovery`. The retired internal `self-reproduction.eval.ts` was excluded; the supported public-driver self-reproduction benchmark and its outstanding product gaps remain separate.
+
+## Repair ledger — cross-eval milestone
+
+The deterministic repair is based on main `84ae04988cb7d70e352fe674ce6c7205f0abd660`.
+
+| Group | Repair | Evidence and remaining gate |
+| --- | --- | --- |
+| EVAL-01 | `e14983b1`: both snapshots use the actual shared `sourceIdentityDigest(headSha, headTree)` producer; canonical tool names restored in six scenarios. | Genuine Git/source-receipt agreement and changed-HEAD rejection regression passed. Six branch scenarios passed all 68 gates in completed focused runs. Integrated acceptance and exact-head CI are recorded below. |
+| EVAL-02 | `7847175f`: mock review results are scoped after current validation; obsolete `expectedValidationDigest` is removed from the strict `change_set_status` request. | Mock-history regressions pass; integrated `accept-app-spec` passes 108/108, including intentional stale-proposal negatives. Production review routing is unchanged. |
+| EVAL-03 | `7847175f`, `acd951e2`, `5d5450d5`: answer ordinary apply approvals, scope subsequent approval assertions, and inject an actual fixture command timeout. | Failure, interruption and partial-apply cases reach their actual states. The timeout case records `validation_failed` / `command-timeout` and recovery required; this proves honest failure and explicit retry behavior, not successful recovery from a timed-out command. |
+| EVAL-05 | `7847175f`, `acd951e2`: explicit dependency-state assertions. | Verify a recorded dependency digest, unchanged workflow state, no extra approval, and no apply/planning mutation. Incidental response wording is not the acceptance criterion. |
+| EVAL-04, EVAL-06, EVAL-07 | Separate Sandbox/coverage PR. | Remain open until real Sandbox execution, design browser interaction, and all five supported integration scenarios pass. |
+
+The original EVAL-01 eight-versus-twelve-path diagnosis was incomplete. Inspection of the actual V3 receipt producer showed that it uses the source SHA/tree identity, so the repair shares that producer rather than introducing another file-list digest.
+
+`evals/scenario-inventory.json` is the checked-in selection authority: 39 deterministic scenarios, five real-Sandbox scenarios, and one retired internal diagnostic. `test:general-evals`, `test:fresh-bootstrap-evals`, and `test:product-evals` select their cases from it with no tag exclusions. The existing required CI lanes therefore exercise the repaired deterministic cases. Real provider execution stays opt-in.
+
+Do not interpret this integration milestone as autonomous self-reproduction. The model is mocked in these contract cases; only the Sandbox execution is real in the separately identified integration group. A new live public-entrypoint self-reproduction run remains the next milestone.
+
+### Deterministic acceptance
+
+`mise run test:agent` on `45fca4b40` passed all **39 scenarios / 547 gates**, plus 11 product unit checks and two browser fixtures. All 28 formerly passing cases and all seven improvements remain passing. The subsequent explicit-state follow-up passed dependency preparation; its first interruption assertion incorrectly counted the entire run. The corrected turn-scoped interruption case passed **23/23 gates**, and the event trace proves one dispatch before the explicit user retry and one afterward. The initial failed assertion is retained as harness evidence, not a product regression.
+
+The integrated TypeScript check and five focused source-contract, mock-review, and inventory tests passed. Local artifacts: `/private/tmp/cross-eval-milestone-20260914/`, `/private/tmp/cross-eval-deterministic-acceptance.log`, `/private/tmp/cross-eval-state-assertions.log`, and `/private/tmp/cross-eval-interruption-scope.log`. Earlier concurrent branch attempts and externally interrupted processes remain recorded in `/private/tmp/cross-eval-branch-contract*.log`; a sequential integrated run passed every branch scenario. Exact-head CI and merge evidence will be linked from the repair PR. These local results do not close the five pending real-Sandbox cases.
