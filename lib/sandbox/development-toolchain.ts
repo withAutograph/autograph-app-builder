@@ -483,6 +483,8 @@ node -e 'const fs=require("node:fs");const read=(p)=>JSON.parse(fs.readFileSync(
 node - "$work/source" <<'NODE'
 ${developmentDependencySymlinkScript}
 NODE
+stage='mise-tools'
+mise install --locked cue
 stage='rust-install'
 install -d -m 0755 "$work/cargo-closure/vendor"
 CARGO_NET_OFFLINE=false cargo vendor --locked --versioned-dirs "$work/cargo-closure/vendor" > "$work/cargo-closure/config.toml"
@@ -562,6 +564,8 @@ node -e 'const fs=require("node:fs");const read=(p)=>JSON.parse(fs.readFileSync(
 node - "$work/source" <<'NODE'
 ${developmentDependencySymlinkScript}
 NODE
+stage='mise-tools'
+mise install --locked cue
 stage='rust-install'
 install -d -m 0755 "$work/cargo-closure/vendor"
 CARGO_NET_OFFLINE=false cargo vendor --locked --versioned-dirs "$work/cargo-closure/vendor" > "$work/cargo-closure/config.toml"
