@@ -8,7 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 const required = (name: string) => {
   const value = process.env[name];
-  if (!value) throw new Error(`${name} was required for the live self-reproduction run.`);
+  if (!value) {throw new Error(`${name} was required for the live self-reproduction run.`);}
   return value;
 };
 
@@ -31,7 +31,7 @@ const providerRequestTimeoutMs = Number(
 const availableLoopbackPort = async (configured: string | undefined): Promise<number> => {
   if (configured !== undefined) {
     const port = Number(configured);
-    if (Number.isInteger(port) && port > 0 && port < 65_536) return port;
+    if (Number.isInteger(port) && port > 0 && port < 65_536) {return port;}
     throw new Error("Configured self-reproduction ports must be valid TCP ports.");
   }
   const server = createServer();
@@ -42,7 +42,7 @@ const availableLoopbackPort = async (configured: string | undefined): Promise<nu
   server.close();
   await closed;
   if (address === null || typeof address === "string")
-    throw new Error("A loopback port was unavailable.");
+    {throw new Error("A loopback port was unavailable.");}
   return address.port;
 };
 
@@ -65,15 +65,15 @@ const run = async (
   timer.unref();
   child.stdout.on("data", (chunk: Buffer) => (stdout += String(chunk)));
   child.stderr.on("data", (chunk: Buffer) => (stderr += String(chunk)));
-  if (options.input) child.stdin.end(options.input);
-  else child.stdin.end();
+  if (options.input) {child.stdin.end(options.input);}
+  else {child.stdin.end();}
   const closed = once(child, "close");
   const [code] = await closed.catch((error: Error) => {
     spawnError = error;
     return [null];
   });
   clearTimeout(timer);
-  if (forceStop !== undefined) clearTimeout(forceStop);
+  if (forceStop !== undefined) {clearTimeout(forceStop);}
   return {
     code: spawnError === undefined ? (code as number | null) : null,
     stderr: spawnError === undefined ? stderr : `${stderr}${spawnError.message}`,
@@ -88,10 +88,10 @@ const waitForEveAttempt = async (
   deadline: number,
 ): Promise<void> => {
   if (Date.now() >= deadline || signal.aborted)
-    throw new Error("The local Eve agent did not become ready within two minutes.");
+    {throw new Error("The local Eve agent did not become ready within two minutes.");}
   try {
     const response = await fetch(url, { signal });
-    if (response.status < 500) return;
+    if (response.status < 500) {return;}
   } catch {
     // The development process is expected to take time while it prepares its isolated runtime.
   }
@@ -114,8 +114,8 @@ const availableDistinctLoopbackPort = async (
 
 const answerFor = (result: unknown, answers: Record<string, string>) => {
   const serialized = JSON.stringify(result).toLowerCase();
-  if (serialized.includes("approve")) return "approve";
-  for (const [key, value] of Object.entries(answers)) if (serialized.includes(key)) return value;
+  if (serialized.includes("approve")) {return "approve";}
+  for (const [key, value] of Object.entries(answers)) {if (serialized.includes(key)) {return value;}}
   return "continue with the benchmark defaults";
 };
 
@@ -127,7 +127,7 @@ const resumeInvocation = async (
   url: string,
   answers: Record<string, string>,
 ): Promise<Invocation> => {
-  if (remainingTurns === 0 || invocation.code !== 3) return invocation;
+  if (remainingTurns === 0 || invocation.code !== 3) {return invocation;}
   let result: unknown;
   try {
     result = JSON.parse(invocation.stdout);
@@ -213,8 +213,8 @@ const main = async () => {
     await appendFile(transcriptPath, `${invocation.stdout}\n${invocation.stderr}\n`);
     invocation = await resumeInvocation(invocation, 8, url, answers);
     let status = "failed";
-    if (invocation.code === 0) status = "unassessed";
-    else if (invocation.timedOut) status = "blocked";
+    if (invocation.code === 0) {status = "unassessed";}
+    else if (invocation.timedOut) {status = "blocked";}
     await writeFile(
       path.join(candidateRoot, "self-reproduction.workflow-results.json"),
       JSON.stringify(
@@ -235,10 +235,10 @@ const main = async () => {
       return;
     }
     if (invocation.code !== 0)
-      throw new Error(`Live Eve invocation exited ${invocation.code ?? "without a status"}.`);
+      {throw new Error(`Live Eve invocation exited ${invocation.code ?? "without a status"}.`);}
   } finally {
     stop();
-    if (development.exitCode === null) await developmentExited;
+    if (development.exitCode === null) {await developmentExited;}
     process.off("SIGINT", stop);
     process.off("SIGTERM", stop);
   }

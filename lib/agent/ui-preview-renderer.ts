@@ -105,10 +105,10 @@ export async function renderUiPreview(
   const bundle = uiPreviewRendererFiles(input);
   for (const file of bundle.files)
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    await sandbox.writeTextFile({
+    {await sandbox.writeTextFile({
       content: file.content,
       path: `/workspace/repository/${bundle.root}/${file.path}`,
-    });
+    });}
   // The command contains only a fixed executable and a builder-generated hex
   // directory. Submitted source is file content, never shell interpolation.
   const compile = () =>
@@ -126,16 +126,16 @@ export async function renderUiPreview(
       workingDirectory: "/workspace/repository",
     });
     if (installation.exitCode !== 0)
-      throw new Error(
+      {throw new Error(
         installation.stderr || installation.stdout || "Dependency installation failed.",
-      );
+      );}
     result = await compile();
   }
   if (result.exitCode !== 0)
-    throw new Error(result.stderr || result.stdout || "The preview compiler failed.");
+    {throw new Error(result.stderr || result.stdout || "The preview compiler failed.");}
   const html = await sandbox.readTextFile({
     path: `/workspace/repository/${bundle.root}/index.html`,
   });
-  if (html === null) throw new Error("The preview compiler did not produce a document.");
+  if (html === null) {throw new Error("The preview compiler did not produce a document.");}
   return html;
 }

@@ -15,7 +15,7 @@ type Database = PostgresJsDatabase<typeof databaseSchema>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function verify(input: { body: Uint8Array; signature: string; secret: string }) {
-  if (!/^sha256=[0-9a-f]{64}$/u.test(input.signature)) return false;
+  if (!/^sha256=[0-9a-f]{64}$/u.test(input.signature)) {return false;}
   const expected = `sha256=${createHmac("sha256", input.secret).update(input.body).digest("hex")}`;
   return timingSafeEqual(Buffer.from(expected), Buffer.from(input.signature));
 }
@@ -42,10 +42,10 @@ export function createGitHubProvisioningWebhookHandler(input: {
   const secret = z.string().min(32).max(512).parse(input.secret);
   const now = input.now ?? Date.now;
   return async (request: Request) => {
-    if (request.method !== "POST") return new Response(null, { status: 405 });
+    if (request.method !== "POST") {return new Response(null, { status: 405 });}
     const declaredLength = request.headers.get("content-length");
     if (declaredLength && (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > 1024 * 1024))
-      return new Response(null, { status: 413 });
+      {return new Response(null, { status: 413 });}
     const body = new Uint8Array(await request.arrayBuffer());
     if (
       body.byteLength > 1024 * 1024 ||
@@ -55,7 +55,7 @@ export function createGitHubProvisioningWebhookHandler(input: {
         signature: request.headers.get("x-hub-signature-256") ?? "",
       })
     )
-      return new Response(null, { status: 401 });
+      {return new Response(null, { status: 401 });}
     const event = request.headers.get("x-github-event");
     let value: unknown;
     try {
@@ -66,7 +66,7 @@ export function createGitHubProvisioningWebhookHandler(input: {
     const updatedAt = new Date(now());
     if (event === "github_app_authorization") {
       const parsed = authorizationEvent.safeParse(value);
-      if (!parsed.success) return new Response(null, { status: 202 });
+      if (!parsed.success) {return new Response(null, { status: 202 });}
       await input.database
         .update(hostedGitHubUserCredentials)
         .set({ active: false, updatedAt })
@@ -75,7 +75,7 @@ export function createGitHubProvisioningWebhookHandler(input: {
     if (event === "installation") {
       const parsed = installationEvent.safeParse(value);
       if (!parsed.success || parsed.data.action === "unsuspend")
-        return new Response(null, { status: 202 });
+        {return new Response(null, { status: 202 });}
       const installationId = String(parsed.data.installation.id);
       await input.database.transaction(async (transaction) => {
         await transaction

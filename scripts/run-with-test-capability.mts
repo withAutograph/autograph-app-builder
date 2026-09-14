@@ -24,7 +24,7 @@ if (
   // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   (repositoryRootStat.mode & BigInt(MODE_MASK)) !== BigInt(ZERO)
 )
-  throw new Error("The structural test package root was not owner-bound.");
+  {throw new Error("The structural test package root was not owner-bound.");}
 const preload = pathToFileURL(
   path.resolve(repositoryRoot, "scripts/test-capability-preload.mjs"),
 ).href;
@@ -58,7 +58,7 @@ function childEnvironment(): NodeJS.ProcessEnv {
   };
   for (const name of allowedEnvironment) {
     const value = process.env[name];
-    if (value !== undefined) environment[name] = value;
+    if (value !== undefined) {environment[name] = value;}
   }
   return environment as NodeJS.ProcessEnv;
 }
@@ -72,7 +72,7 @@ export function gateAEvalWorkflowBodyTimeout(profile: unknown): string | undefin
     Object.keys(profile).toSorted().join(",") !== "image,profile,sourceRoot,version" ||
     (profile as { version?: unknown }).version !== 1
   )
-    return undefined;
+    {return undefined;}
   const name = (profile as { profile?: unknown }).profile;
   return name === "sandbox" || name === "hosted-artifact" ? "360000" : undefined;
 }
@@ -99,9 +99,9 @@ function exactParentArguments(): readonly string[] {
   const expectedExecutable = realpathSync("/bin/sh");
   if (process.platform === "linux") {
     if (realpathSync(`/proc/${pid}/exe`) !== expectedExecutable)
-      throw new Error("The structural test launcher executable was invalid.");
+      {throw new Error("The structural test launcher executable was invalid.");}
     if (realpathSync(`/proc/${pid}/cwd`) !== realpathSync(repositoryRoot))
-      throw new Error("The structural test launcher cwd was invalid.");
+      {throw new Error("The structural test launcher cwd was invalid.");}
     const source = readFileSync(`/proc/${pid}/cmdline`);
     return source
       .toString("utf-8")
@@ -131,7 +131,7 @@ function exactParentArguments(): readonly string[] {
       }),
     ) as unknown;
     if (!Array.isArray(observed) || observed.some((entry) => typeof entry !== "string"))
-      throw new Error("The structural test launcher argv was invalid.");
+      {throw new Error("The structural test launcher argv was invalid.");}
     const cwd = execFileSync("/usr/sbin/lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], {
       encoding: "utf-8",
       env: { LC_ALL: "C", NODE_ENV: "test", PATH: "/usr/bin:/bin" },
@@ -141,7 +141,7 @@ function exactParentArguments(): readonly string[] {
       .find((line) => line.startsWith("n"))
       ?.slice(1);
     if (cwd === undefined || realpathSync(cwd) !== realpathSync(repositoryRoot))
-      throw new Error("The structural test launcher cwd was invalid.");
+      {throw new Error("The structural test launcher cwd was invalid.");}
     return observed as string[];
   }
   throw new Error("Structural test launcher inspection is unsupported.");
@@ -159,7 +159,7 @@ function verifyTrustedLauncher(profile: "eve" | "vitest") {
     (launcherStat.mode & BigInt(MODE_MASK)) !== BigInt(ZERO) ||
     createHash("sha256").update(readFileSync(launcher)).digest("hex") !== launcherDigest
   )
-    throw new Error("The structural test launcher source was invalid.");
+    {throw new Error("The structural test launcher source was invalid.");}
   const wrapper = profile === "vitest" ? "scripts/run-vitest.mts" : "scripts/run-eve-eval.mts";
   const expected = [
     "/bin/sh",
@@ -175,7 +175,7 @@ function verifyTrustedLauncher(profile: "eve" | "vitest") {
     observed.length !== expected.length ||
     observed.some((value, index) => value !== expected[index])
   )
-    throw new Error("The structural test launcher argv was invalid.");
+    {throw new Error("The structural test launcher argv was invalid.");}
 }
 
 // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
@@ -188,7 +188,7 @@ export async function runWithTestCapability(options: {
 }): Promise<number> {
   verifyTrustedLauncher(options.profile);
   if (process.env.NODE_OPTIONS !== undefined)
-    throw new Error("The trusted launcher did not clear ambient NODE_OPTIONS.");
+    {throw new Error("The trusted launcher did not clear ambient NODE_OPTIONS.");}
   const expectedEntry = path.resolve(
     repositoryRoot,
     options.profile === "vitest" ? "node_modules/vitest/vitest.mjs" : "node_modules/eve/bin/eve.js",
@@ -200,7 +200,7 @@ export async function runWithTestCapability(options: {
     (options.profile === "eve" && ![0, 1, 3].includes(options.capabilities.length)) ||
     (options.profile === "eve") !== (options.gateAEvalProfile !== undefined)
   )
-    throw new Error("The structural test wrapper profile was invalid.");
+    {throw new Error("The structural test wrapper profile was invalid.");}
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   const publicKeySource = publicKey.export({ format: "der", type: "spki" }).toString("base64");
   const privateKeySource = privateKey.export({ format: "der", type: "pkcs8" }).toString("base64");
@@ -229,7 +229,7 @@ export async function runWithTestCapability(options: {
   });
   const authorization = child.stdio[3] as Duplex | null | undefined;
   if (authorization === null || authorization === undefined)
-    throw new Error("The structural test authorization pipe was not created.");
+    {throw new Error("The structural test authorization pipe was not created.");}
   let buffered = "";
   let answered = false;
   authorization.write(`${JSON.stringify({ publicKey: publicKeySource, version: 2 })}\n`);
@@ -237,10 +237,10 @@ export async function runWithTestCapability(options: {
   timeout.unref();
   authorization.setEncoding("utf-8");
   authorization.on("data", (chunk: string) => {
-    if (answered) return;
+    if (answered) {return;}
     buffered += chunk;
     const newline = buffered.indexOf("\n");
-    if (newline === -1 && Buffer.byteLength(buffered) <= maximumFrameBytes) return;
+    if (newline === -1 && Buffer.byteLength(buffered) <= maximumFrameBytes) {return;}
     if (
       newline === -1 ||
       Buffer.byteLength(buffered.slice(0, newline + 1)) > maximumFrameBytes ||
@@ -262,7 +262,7 @@ export async function runWithTestCapability(options: {
         !/^[0-9a-f]{64}$/u.test(request.nonce) ||
         typeof request.context !== "string"
       )
-        throw new Error("Malformed authorization request.");
+        {throw new Error("Malformed authorization request.");}
       const proof: Record<string, unknown> = {
         authorization: randomBytes(32).toString("hex"),
         capabilities: options.capabilities,
@@ -286,7 +286,7 @@ export async function runWithTestCapability(options: {
   try {
     const exitCode = await waitForEveEvalChild({ authorization, child });
     if (exitCode === ZERO && evalRuntime !== undefined)
-      rmSync(evalRuntime.root, { recursive: true });
+      {rmSync(evalRuntime.root, { recursive: true });}
     return exitCode;
   } finally {
     clearTimeout(timeout);

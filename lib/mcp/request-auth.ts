@@ -98,7 +98,7 @@ const bearerTokenPattern = /^[A-Za-z0-9._~+/-]+=*$/u;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseStrictBearerAuthorization(authorization: string | null): string {
-  if (authorization === null) throw new BearerAuthorizationError();
+  if (authorization === null) {throw new BearerAuthorizationError();}
   const match = /^Bearer (?<token>[^ ]+)$/iu.exec(authorization);
   if (match === null || !bearerTokenPattern.test(match[1]) || match[1].includes(",")) {
     throw new BearerAuthorizationError();

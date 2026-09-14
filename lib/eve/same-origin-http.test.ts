@@ -211,7 +211,7 @@ describe("same-origin canonical Eve transport", () => {
     const bodies: Record<string, unknown>[] = [];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
-      if (String(url).includes("/stream?")) return stream();
+      if (String(url).includes("/stream?")) {return stream();}
       bodies.push(JSON.parse(String(init?.body)));
       return accepted();
     });
@@ -354,7 +354,7 @@ describe("same-origin canonical Eve transport", () => {
       expect(init?.redirect).toBe("manual");
       expect(headers.get("authorization")).toBe("Bearer project-oidc-token");
       expect(headers.get("x-vercel-trusted-oidc-idp-token")).toBe("project-oidc-token");
-      if (String(url).includes("/stream?")) return stream();
+      if (String(url).includes("/stream?")) {return stream();}
       const body = JSON.parse(String(init?.body));
       expect(body).toMatchObject({
         forwardedPrincipal: {
@@ -400,7 +400,7 @@ describe("same-origin canonical Eve transport", () => {
     const bodies: unknown[] = [];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
-      if (String(url).includes("/stream?")) return stream();
+      if (String(url).includes("/stream?")) {return stream();}
       bodies.push(JSON.parse(String(init?.body)));
       return accepted();
     });

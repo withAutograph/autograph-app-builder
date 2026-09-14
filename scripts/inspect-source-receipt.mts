@@ -11,8 +11,8 @@ function parseArguments(args: readonly string[]): {
     const flag = args[index];
     const value = args[index + 1];
     if (flag === undefined || value === undefined || !flag.startsWith("--"))
-      throw new Error("Arguments must be exact --name value pairs.");
-    if (values.has(flag)) throw new Error(`Duplicate argument ${flag}.`);
+      {throw new Error("Arguments must be exact --name value pairs.");}
+    if (values.has(flag)) {throw new Error(`Duplicate argument ${flag}.`);}
     values.set(flag, value);
   }
   const sourceKind = values.get("--source-kind");
@@ -20,9 +20,9 @@ function parseArguments(args: readonly string[]): {
   values.delete("--source-kind");
   values.delete("--source-path");
   if (sourceKind !== "existing-repository" && sourceKind !== "fresh-template")
-    throw new Error("--source-kind must be existing-repository or fresh-template.");
-  if (sourcePath === undefined || sourcePath === "") throw new Error("--source-path is required.");
-  if (values.size !== 0) throw new Error(`Unknown arguments: ${[...values.keys()].join(", ")}.`);
+    {throw new Error("--source-kind must be existing-repository or fresh-template.");}
+  if (sourcePath === undefined || sourcePath === "") {throw new Error("--source-path is required.");}
+  if (values.size !== 0) {throw new Error(`Unknown arguments: ${[...values.keys()].join(", ")}.`);}
   return { sourceKind, sourcePath };
 }
 

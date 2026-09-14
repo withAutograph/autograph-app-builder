@@ -25,6 +25,6 @@ export async function ensureSandboxDirectories(
       workingDirectory: "/workspace",
     });
     if (result.exitCode !== 0)
-      throw new Error("The sandbox workspace directories could not be prepared.");
+      {throw new Error("The sandbox workspace directories could not be prepared.");}
   }
 }

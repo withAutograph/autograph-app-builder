@@ -138,7 +138,7 @@ export { sha256 } from "../../scripts/portable-release";
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function sha256File(path: string) {
   const digest = createHash("sha256");
-  for await (const chunk of createReadStream(path)) digest.update(chunk);
+  for await (const chunk of createReadStream(path)) {digest.update(chunk);}
   return digest.digest("hex");
 }
 
@@ -146,11 +146,11 @@ async function sha256File(path: string) {
 export function sealPromotionReceipt(input: PromotionReceiptUnsigned): PromotionReceipt {
   const unsigned = promotionReceiptUnsignedSchema.parse(input);
   if (unsigned.endpoint !== `${releaseEndpoint(new URL(unsigned.endpoint).origin)}/mcp`)
-    throw new Error("Release promotion requires the exact deployed /mcp URL.");
+    {throw new Error("Release promotion requires the exact deployed /mcp URL.");}
   if (unsigned.image.reference !== `${IMAGE_REPOSITORY}@${unsigned.image.manifestDigest}`)
-    throw new Error("Release image reference did not bind the candidate digest.");
+    {throw new Error("Release image reference did not bind the candidate digest.");}
   if (JSON.stringify(unsigned.tools) !== JSON.stringify(TOOL_NAMES))
-    throw new Error("Release promotion must expose exactly five public tools.");
+    {throw new Error("Release promotion must expose exactly five public tools.");}
   return { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
 }
 
@@ -170,7 +170,7 @@ function git(root: string, ...args: string[]) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function exactCleanGitSource(rootInput: string, label: string) {
-  if (!nodePath.isAbsolute(rootInput)) throw new Error(`${label} root must be absolute.`);
+  if (!nodePath.isAbsolute(rootInput)) {throw new Error(`${label} root must be absolute.`);}
   const requested = nodePath.resolve(rootInput);
   const root = await realpath(requested);
   const info = await lstat(root);
@@ -183,11 +183,11 @@ export async function exactCleanGitSource(rootInput: string, label: string) {
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & 0o022) !== 0
   )
-    throw new Error(
+    {throw new Error(
       `${label} root must be canonical, current-user-owned, and not writable by another account.`,
-    );
+    );}
   if (git(root, "status", "--porcelain=v1", "--untracked-files=all") !== "")
-    throw new Error(`${label} release source must be clean.`);
+    {throw new Error(`${label} release source must be clean.`);}
   return {
     commit: git(root, "rev-parse", "HEAD"),
     root,
@@ -206,11 +206,11 @@ async function tarEntry(path: string, requested: string) {
         entry.resume();
         return;
       }
-      if (result !== undefined) throw new Error(`OCI archive repeated ${requested}.`);
+      if (result !== undefined) {throw new Error(`OCI archive repeated ${requested}.`);}
       const chunks: Buffer[] = [];
       pending.push(
         (async () => {
-          for await (const chunk of entry) chunks.push(Buffer.from(chunk));
+          for await (const chunk of entry) {chunks.push(Buffer.from(chunk));}
           result = Buffer.concat(chunks);
         })(),
       );
@@ -218,7 +218,7 @@ async function tarEntry(path: string, requested: string) {
     strict: true,
   });
   await Promise.all(pending);
-  if (result === undefined) throw new Error(`OCI archive omitted ${requested}.`);
+  if (result === undefined) {throw new Error(`OCI archive omitted ${requested}.`);}
   return result;
 }
 
@@ -230,7 +230,7 @@ export async function inspectOciCandidateArchive(path: string) {
     manifests?: unknown;
   };
   if (index.schemaVersion !== 2 || !Array.isArray(index.manifests))
-    throw new Error("Release OCI archive index was invalid.");
+    {throw new Error("Release OCI archive index was invalid.");}
   const candidates = index.manifests.filter(
     (
       entry,
@@ -255,16 +255,16 @@ export async function inspectOciCandidateArchive(path: string) {
       entry.platform.architecture === "arm64",
   );
   if (candidates.length !== 1)
-    throw new Error("Release OCI archive must contain one linux/arm64 image.");
+    {throw new Error("Release OCI archive must contain one linux/arm64 image.");}
   const [descriptor] = candidates;
   if (descriptor === undefined)
-    throw new Error("Release OCI archive must contain one linux/arm64 image.");
+    {throw new Error("Release OCI archive must contain one linux/arm64 image.");}
   const manifestBytes = await tarEntry(
     path,
     `blobs/sha256/${descriptor.digest.slice("sha256:".length)}`,
   );
   if (`sha256:${sha256(manifestBytes)}` !== descriptor.digest)
-    throw new Error("Release OCI manifest bytes did not match the index.");
+    {throw new Error("Release OCI manifest bytes did not match the index.");}
   const manifest = JSON.parse(manifestBytes.toString("utf-8")) as {
     schemaVersion?: unknown;
     config?: { digest?: unknown };
@@ -277,7 +277,7 @@ export async function inspectOciCandidateArchive(path: string) {
     !Array.isArray(manifest.layers) ||
     manifest.layers.length === 0
   )
-    throw new Error("Release OCI platform manifest was incomplete.");
+    {throw new Error("Release OCI platform manifest was incomplete.");}
   return {
     archiveSha256: await sha256File(path),
     manifestDigest: descriptor.digest,
@@ -291,10 +291,10 @@ async function treeEntries(root: string, current = root): Promise<string[]> {
   for (const entry of entries.toSorted((left, right) => left.name.localeCompare(right.name))) {
     const entryPath = nodePath.join(current, entry.name);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    if (entry.isDirectory()) paths.push(...(await treeEntries(root, entryPath)));
+    if (entry.isDirectory()) {paths.push(...(await treeEntries(root, entryPath)));}
     else if (entry.isFile() && !entry.isSymbolicLink())
-      paths.push(nodePath.relative(root, entryPath));
-    else throw new Error("Release deployment output contains a non-file entry.");
+      {paths.push(nodePath.relative(root, entryPath));}
+    else {throw new Error("Release deployment output contains a non-file entry.");}
   }
   return paths;
 }
@@ -304,7 +304,7 @@ export async function immutableTreeDigest(rootInput: string) {
   const root = await realpath(rootInput);
   const digest = createHash("sha256");
   const paths = await treeEntries(root);
-  if (paths.length === 0) throw new Error("Release output tree was empty.");
+  if (paths.length === 0) {throw new Error("Release output tree was empty.");}
   for (const path of paths) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const bytes = await readFile(nodePath.join(root, path));
@@ -331,23 +331,23 @@ function within(root: string, path: string) {
 async function exactFile(root: string, path: string, expected: string) {
   const absolute = nodePath.resolve(root, path);
   if (!within(root, absolute) || nodePath.basename(path) === "")
-    throw new Error("Release receipt path escaped its candidate root.");
+    {throw new Error("Release receipt path escaped its candidate root.");}
   let cursor = absolute;
   for (;;) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const component = await lstat(cursor);
     if (component.isSymbolicLink())
-      throw new Error(`Release candidate path contained a link: ${path}`);
-    if (cursor === root) break;
+      {throw new Error(`Release candidate path contained a link: ${path}`);}
+    if (cursor === root) {break;}
     const parent = nodePath.resolve(cursor, "..");
-    if (!within(root, parent)) throw new Error("Release candidate path escaped its root.");
+    if (!within(root, parent)) {throw new Error("Release candidate path escaped its root.");}
     cursor = parent;
   }
   const info = await lstat(absolute);
   if (!info.isFile() || info.isSymbolicLink())
-    throw new Error(`Release candidate file was unsafe: ${path}`);
+    {throw new Error(`Release candidate file was unsafe: ${path}`);}
   const bytes = await readFile(absolute);
-  if (sha256(bytes) !== expected) throw new Error(`Release candidate bytes drifted: ${path}`);
+  if (sha256(bytes) !== expected) {throw new Error(`Release candidate bytes drifted: ${path}`);}
   return bytes;
 }
 
@@ -366,9 +366,9 @@ export async function verifyPromotionCandidate(input: {
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (rootInfo.mode & 0o022) !== 0
   )
-    throw new Error(
+    {throw new Error(
       "Release candidate root must be canonical, current-user-owned, and not writable by another account.",
-    );
+    );}
   const receiptPath = input.receiptPath ?? "promotion-receipt.json";
   const receiptBytes = await exactFile(
     root,
@@ -378,7 +378,7 @@ export async function verifyPromotionCandidate(input: {
   const receipt = promotionReceiptSchema.parse(JSON.parse(receiptBytes.toString("utf-8")));
   const { digest, ...unsigned } = receipt;
   if (sealPromotionReceipt(unsigned).digest !== digest)
-    throw new Error("Release promotion receipt digest drifted.");
+    {throw new Error("Release promotion receipt digest drifted.");}
   const packageReceiptBytes = await exactFile(
     root,
     receipt.package.receipt,
@@ -393,7 +393,7 @@ export async function verifyPromotionCandidate(input: {
     packageReceipt.endpoint !== receipt.endpoint ||
     JSON.stringify(packageReceipt.tools) !== JSON.stringify(receipt.tools)
   )
-    throw new Error("Portable package binding did not match promotion.");
+    {throw new Error("Portable package binding did not match promotion.");}
   await Promise.all([
     exactFile(root, receipt.package.archive, receipt.package.archiveSha256),
     exactFile(root, receipt.package.marketplaceArchive, receipt.package.marketplaceArchiveSha256),
@@ -407,7 +407,7 @@ export async function verifyPromotionCandidate(input: {
     observedImage.manifestDigest !== receipt.image.manifestDigest ||
     observedImage.archiveSha256 !== receipt.image.archiveSha256
   )
-    throw new Error("Release image archive identity drifted.");
+    {throw new Error("Release image archive identity drifted.");}
   const deploymentRoot = nodePath.join(root, receipt.deployment.root);
   if (
     (await immutableTreeDigest(nodePath.join(deploymentRoot, ".vercel/output"))) !==
@@ -415,7 +415,7 @@ export async function verifyPromotionCandidate(input: {
     sha256(await readFile(nodePath.join(deploymentRoot, ".vercel/project.json"))) !==
       receipt.deployment.projectBindingSha256
   )
-    throw new Error("Release deployment bytes or binding drifted.");
+    {throw new Error("Release deployment bytes or binding drifted.");}
   return { packageReceipt, receipt, root } as const;
 }
 

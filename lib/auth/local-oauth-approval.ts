@@ -59,15 +59,15 @@ export function signFreshLocalOAuthApproval(
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function verifyLocalOAuthApproval(value: string, secret: string, now = Date.now()) {
   const [payload, signature, extra] = value.split(".");
-  if (!payload || !signature || extra) throw new Error("invalid-approval");
+  if (!payload || !signature || extra) {throw new Error("invalid-approval");}
   const expected = createHmac("sha256", secret).update(payload).digest();
   const provided = Buffer.from(signature, "base64url");
   if (provided.length !== expected.length || !timingSafeEqual(provided, expected))
-    throw new Error("invalid-approval");
+    {throw new Error("invalid-approval");}
   const result = approvalRelaySchema.parse(
     JSON.parse(Buffer.from(payload, "base64url").toString("utf-8")),
   );
-  if (result.expiresAt <= now) throw new Error("expired-approval");
+  if (result.expiresAt <= now) {throw new Error("expired-approval");}
   return result;
 }
 

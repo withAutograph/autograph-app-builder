@@ -33,7 +33,7 @@ function runLookup(options: LookupOptions) {
     },
   );
   return result.then(() => {
-    if (lookupError) throw lookupError;
+    if (lookupError) {throw lookupError;}
     return { address: lookupAddress as string | LookupAddress[], family: lookupFamily };
   });
 }
@@ -51,7 +51,7 @@ function requestFixture(input: { lookupOptions: LookupOptions; responseStatus?: 
       request.end = () => {
         // Node's dns.lookup contract is callback-based.
         const { lookup } = options;
-        if (!lookup) throw new Error("Expected the transport to provide a DNS lookup function.");
+        if (!lookup) {throw new Error("Expected the transport to provide a DNS lookup function.");}
         // oxlint-disable-next-line promise/prefer-await-to-callbacks
         lookup(url.hostname, input.lookupOptions, (error, address) => {
           if (error) {

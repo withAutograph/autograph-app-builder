@@ -280,7 +280,7 @@ describe("PostgreSQL hosted Eve row authority", () => {
       '"last_progress_at" timestamptz',
       '"agent_session_recent_idx"',
     ])
-      expect(migration).toContain(required);
+      {expect(migration).toContain(required);}
     expect(migration).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE)\b/iu);
   });
 
@@ -295,7 +295,7 @@ describe("PostgreSQL hosted Eve row authority", () => {
       '"builder_handoff_expiry_idx"',
       '"builder_handoff_redemption_check"',
     ])
-      expect(migration).toContain(required);
+      {expect(migration).toContain(required);}
     expect(migration).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE)\b/iu);
   });
 
@@ -311,7 +311,7 @@ describe("PostgreSQL hosted Eve row authority", () => {
       '"builder_draft_revision_check"',
       '"builder_draft_record_check"',
     ])
-      expect(migration).toContain(required);
+      {expect(migration).toContain(required);}
     expect(migration).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE)\b/iu);
   });
 });

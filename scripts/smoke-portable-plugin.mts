@@ -5,15 +5,15 @@ import { sha256, TOOL_NAMES } from "./portable-release";
 
 const argument = (name: string) => {
   const index = process.argv.indexOf(name);
-  if (index === -1) return;
+  if (index === -1) {return;}
   const value = process.argv[index + 1];
-  if (!value || value.startsWith("--")) throw new Error(`Missing value for ${name}.`);
+  if (!value || value.startsWith("--")) {throw new Error(`Missing value for ${name}.`);}
   return value;
 };
 const releaseValue = argument("--release");
 const installValue = argument("--install-root");
 if (!releaseValue || !installValue)
-  throw new Error("Usage: --release RELEASE_ROOT --install-root DIRECTORY");
+  {throw new Error("Usage: --release RELEASE_ROOT --install-root DIRECTORY");}
 const releaseRoot = path.resolve(releaseValue);
 const installRoot = path.resolve(installValue);
 const receipt = JSON.parse(await readFile(path.join(releaseRoot, "release-receipt.json"), "utf-8"));
@@ -25,21 +25,21 @@ if (
   !Array.isArray(receipt.tools) ||
   JSON.stringify(receipt.tools) !== JSON.stringify(TOOL_NAMES)
 )
-  throw new Error("Portable release receipt was invalid.");
+  {throw new Error("Portable release receipt was invalid.");}
 const archive = await readFile(path.join(releaseRoot, receipt.archive.name));
 if (sha256(archive) !== receipt.archive.sha256)
-  throw new Error("Portable archive digest did not match its receipt.");
+  {throw new Error("Portable archive digest did not match its receipt.");}
 const marketplaceArchive = await readFile(
   path.join(releaseRoot, receipt.codexMarketplaceArchive.name),
 );
 if (sha256(marketplaceArchive) !== receipt.codexMarketplaceArchive.sha256)
-  throw new Error("Codex marketplace digest did not match its receipt.");
+  {throw new Error("Codex marketplace digest did not match its receipt.");}
 const discovery = JSON.parse(
   await readFile(path.join(releaseRoot, "mock/tools-list.json"), "utf-8"),
 );
 const discovered = discovery.result?.tools?.map((tool: { name?: unknown }) => tool.name);
 if (JSON.stringify(discovered) !== JSON.stringify(TOOL_NAMES))
-  throw new Error("Offline MCP discovery did not return the exact five tools.");
+  {throw new Error("Offline MCP discovery did not return the exact five tools.");}
 
 await Promise.all(
   (["vscode", "cursor", "codex"] as const).map(async (client) => {
@@ -57,7 +57,7 @@ await Promise.all(
           const relativePath = filePath.replace(/^app-builder\//u, "");
           const bytes = await readFile(path.join(pluginRoot, relativePath));
           if (sha256(bytes) !== digest)
-            throw new Error(`${client} installed bytes drifted at ${relativePath}.`);
+            {throw new Error(`${client} installed bytes drifted at ${relativePath}.`);}
         },
       ),
       ...[".codex-plugin", ".app.json"].map(async (forbidden) => {
@@ -65,7 +65,7 @@ await Promise.all(
           await lstat(path.join(pluginRoot, forbidden));
           throw new Error(`${client} portable root contains ${forbidden}.`);
         } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") {throw error;}
         }
       }),
     ]);
@@ -87,7 +87,7 @@ await Promise.all(
       installation.client !== client ||
       installation.releaseArchive.sha256 !== receipt.archive.sha256
     )
-      throw new Error(`${client} offline harness metadata was invalid.`);
+      {throw new Error(`${client} offline harness metadata was invalid.`);}
   }),
 );
 console.log(

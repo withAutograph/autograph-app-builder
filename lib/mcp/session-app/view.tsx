@@ -29,17 +29,17 @@ export function InputControl({
   request: PublicInputRequest;
 }) {
   if (request.kind === "approval")
-    return (
+    {return (
       <ApprovalRequest
         description={request.description}
         isSubmitting={isSubmitting}
         onAnswer={onAnswer}
         title={request.title}
       />
-    );
+    );}
 
   if (request.options?.length)
-    return (
+    {return (
       <div className="choices" role="radiogroup" aria-label={request.title}>
         {request.options.map((option) => {
           const selected = answer?.kind === "answer" && answer.optionId === option.id;
@@ -70,17 +70,17 @@ export function InputControl({
           );
         })}
       </div>
-    );
+    );}
 
   if (request.allowFreeform)
-    return (
+    {return (
       <textarea
         aria-label={request.title}
         value={answer?.kind === "answer" ? answer.value : ""}
         placeholder="Enter your answer…"
         onChange={(event) => onAnswer({ kind: "answer", value: event.target.value })}
       />
-    );
+    );}
 
   return <p className="fallback">Answer this request in chat to continue.</p>;
 }
@@ -110,7 +110,7 @@ export function AuthorizationControl({
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function connect() {
-    if (!challenge?.url || !canOpen) return;
+    if (!challenge?.url || !canOpen) {return;}
     setError("");
     try {
       await onOpenLink(challenge.url);
@@ -122,7 +122,7 @@ export function AuthorizationControl({
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function refresh() {
-    if (!canRefresh || refreshing) return;
+    if (!canRefresh || refreshing) {return;}
     setRefreshing(true);
     setError("");
     try {
@@ -225,16 +225,16 @@ export function SessionAppView({
     return answer === undefined || (answer.kind === "answer" && answer.value.trim().length === 0);
   }).length;
   let continueGuidance: string | undefined;
-  if (!canCallTools) continueGuidance = "Answer in chat to continue.";
+  if (!canCallTools) {continueGuidance = "Answer in chat to continue.";}
   else if (unansweredCount > 0)
-    continueGuidance = `Answer ${unansweredCount === 1 ? "the remaining request" : `all ${unansweredCount} remaining requests`} to continue.`;
+    {continueGuidance = `Answer ${unansweredCount === 1 ? "the remaining request" : `all ${unansweredCount} remaining requests`} to continue.`;}
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function submitApproval(
     request: PublicInputRequest,
     response: Extract<SessionAnswer, { kind: "approve" | "deny" }>,
   ) {
-    if (!result || !canCallTools || state === "submitting") return;
+    if (!result || !canCallTools || state === "submitting") {return;}
     setState("submitting");
     setError("");
     try {
@@ -248,7 +248,7 @@ export function SessionAppView({
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function submit() {
-    if (!result || !complete || !canCallTools || state === "submitting") return;
+    if (!result || !complete || !canCallTools || state === "submitting") {return;}
     setState("submitting");
     setError("");
     try {
@@ -266,13 +266,13 @@ export function SessionAppView({
   }
 
   if (!result)
-    return (
+    {return (
       <main className="mcpApp shell">
         <p>Loading requested controls…</p>
       </main>
-    );
+    );}
   if (state === "submitted" || result.status !== "input_required")
-    return (
+    {return (
       <main className="mcpApp shell success" role="status">
         <span>✓</span>
         <div>
@@ -280,7 +280,7 @@ export function SessionAppView({
           <p>Autograph App Builder will continue in chat.</p>
         </div>
       </main>
-    );
+    );}
 
   const onlyApproval = requests.length === 1 && requests[0]?.kind === "approval";
 

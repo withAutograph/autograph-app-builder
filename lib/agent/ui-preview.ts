@@ -149,14 +149,14 @@ function namedImports(content: string, source: string): string[] {
     "gu",
   );
   for (const match of content.matchAll(pattern)) {
-    if (match[1]) continue;
+    if (match[1]) {continue;}
     for (const item of (match[2] ?? "").split(",")) {
-      if (/^type\s/u.test(item.trim())) continue;
+      if (/^type\s/u.test(item.trim())) {continue;}
       const name = item
         .trim()
         .split(/\s+as\s+/u)[0]
         ?.trim();
-      if (name) names.add(name);
+      if (name) {names.add(name);}
     }
   }
   return [...names].toSorted();
@@ -175,13 +175,13 @@ function manifestNames(values: readonly { name: string; source: string }[], sour
 export function validateUiPreview(input: UiPreviewInput): void {
   const parsed = uiPreviewInputSchema.parse(input);
   const paths = new Set(parsed.files.map(({ path }) => path));
-  if (paths.size !== parsed.files.length) throw new Error("UI preview paths must be unique.");
+  if (paths.size !== parsed.files.length) {throw new Error("UI preview paths must be unique.");}
   if (new Set(parsed.routes).size !== parsed.routes.length)
-    throw new Error("UI preview routes must be unique.");
+    {throw new Error("UI preview routes must be unique.");}
   if (parsed.catalogGaps.length > 0)
-    throw new Error(
+    {throw new Error(
       "Adapt the design using existing Arrusted components instead of defining a catalog-gap component.",
-    );
+    );}
   const screenRoutes = new Set(
     parsed.manifest.screens.map(({ route: screenRoute }) => screenRoute),
   );
@@ -191,7 +191,7 @@ export function validateUiPreview(input: UiPreviewInput): void {
       ({ route: value, entry }) => !parsed.routes.includes(value) || !paths.has(entry),
     )
   )
-    throw new Error("UI preview screens, routes, and entries must agree.");
+    {throw new Error("UI preview screens, routes, and entries must agree.");}
   const componentNames = manifestNames(
     parsed.manifest.productionComponents,
     "@autograph/components",
@@ -202,48 +202,52 @@ export function validateUiPreview(input: UiPreviewInput): void {
   );
   const iconNames = manifestNames(parsed.manifest.productionIcons, "@autograph/icons");
   for (const name of iconNames)
-    if (!publicPreviewIconSet.has(name))
-      throw new Error(
+    {if (!publicPreviewIconSet.has(name))
+      {throw new Error(
         `UI preview icon is not a public @autograph/icons export: ${name}. Available icons: ${publicPreviewIcons.join(", ")}`,
-      );
+      );}}
 
   for (const file of parsed.files) {
     if (/\/(?:api|schema|server)\//u.test(file.path) || /(?:^|\/)route\.ts$/u.test(file.path))
-      throw new Error("UI previews cannot contain backend, schema, or API files.");
+      {throw new Error("UI previews cannot contain backend, schema, or API files.");}
     if (/\b(?:fetch|XMLHttpRequest|WebSocket|EventSource)\b/u.test(file.content))
-      throw new Error("UI previews cannot contact a network service.");
+      {throw new Error("UI previews cannot contact a network service.");}
     if (/\b(?:use server|server action|next\/server)\b/u.test(file.content))
-      throw new Error("UI previews cannot define server behavior.");
+      {throw new Error("UI previews cannot define server behavior.");}
     if (/--[A-Za-z][A-Za-z0-9-]*\s*:/u.test(file.content))
-      throw new Error("UI previews cannot define replacement design tokens.");
+      {throw new Error("UI previews cannot define replacement design tokens.");}
     if (/\b(?:linear|radial|conic)-gradient\s*\(/u.test(file.content))
-      throw new Error("UI previews cannot invent decorative gradients.");
+      {throw new Error("UI previews cannot invent decorative gradients.");}
     if (file.path.startsWith("src/components/"))
-      throw new Error(
+      {throw new Error(
         "Compose screens from existing Arrusted components; do not define replacement components.",
-      );
+      );}
     if (/<(?:button|input|select|textarea|dialog|table)\b/u.test(file.content))
-      throw new Error("Local workflow components must compose public Arrusted primitives.");
+      {throw new Error("Local workflow components must compose public Arrusted primitives.");}
     for (const specifier of imports(file.content)) {
       if (specifier.startsWith("@autograph/") && !publicImports.has(specifier))
-        throw new Error(`UI preview import is not public: ${specifier}`);
+        {throw new Error(`UI preview import is not public: ${specifier}`);}
       if (specifier.startsWith("../") || specifier.startsWith("../../"))
-        throw new Error("UI preview imports must remain inside its source bundle.");
+        {throw new Error("UI preview imports must remain inside its source bundle.");}
     }
     for (const [source, inventory] of [
       ["@autograph/components", componentNames],
       ["@autograph/compositions", compositionNames],
       ["@autograph/icons", iconNames],
     ] as const)
-      for (const name of namedImports(file.content, source))
-        if (!inventory.has(name))
-          throw new Error(
-            `UI preview catalog import is missing from its manifest: ${source}#${name}`,
-          );
-  }
+      {for (const name of namedImports(file.content, source))
+        {
+          if (!inventory.has(name)) {
+            throw new Error(
+              `UI preview catalog import is missing from its manifest: ${source}#${name}`,
+            );
+          }
+        }
+      }
+    }
   for (const gap of parsed.catalogGaps)
-    if (!paths.has(gap.path))
-      throw new Error("A UI catalog gap refers to a missing local component.");
+    {if (!paths.has(gap.path))
+      {throw new Error("A UI catalog gap refers to a missing local component.");}}
   for (const collection of [
     parsed.manifest.fixtureFacts,
     parsed.manifest.decisions,
@@ -251,15 +255,19 @@ export function validateUiPreview(input: UiPreviewInput): void {
     parsed.manifest.openQuestions,
     parsed.manifest.implementationNotes,
   ])
-    for (const item of collection)
-      if (item.routes.some((value) => !screenRoutes.has(value)))
-        throw new Error("UI preview manifest metadata refers to an unknown route.");
+    {for (const item of collection)
+      {
+        if (item.routes.some((value) => !screenRoutes.has(value))) {
+          throw new Error("UI preview manifest metadata refers to an unknown route.");
+        }
+        }
+      }
   for (const gap of parsed.catalogGaps)
-    for (const item of gap.composes) {
+    {for (const item of gap.composes) {
       const inventory = item.source === "@autograph/components" ? componentNames : iconNames;
       if (!inventory.has(item.name))
-        throw new Error("Each catalog gap must compose inventoried public primitives.");
-    }
+        {throw new Error("Each catalog gap must compose inventoried public primitives.");}
+    }}
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

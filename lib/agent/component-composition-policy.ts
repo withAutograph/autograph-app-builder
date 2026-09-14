@@ -17,10 +17,10 @@ function sortedUnique<T extends z.ZodType<string>>(item: T) {
       new Set(values).size !== values.length ||
       values.some((value, index) => value !== sorted[index])
     )
-      context.addIssue({
+      {context.addIssue({
         code: "custom",
         message: "Values must be sorted and contain no duplicates.",
-      });
+      });}
   });
 }
 
@@ -97,22 +97,22 @@ export function bindArrustedComponentCompositionPolicy(input: {
   sourceTree: string;
 }): CompositionPolicyResolution {
   if (!gitObject.safeParse(input.sourceSha).success)
-    return {
+    {return {
       reasons: ["The selected source SHA is invalid."],
       status: "unavailable",
-    };
+    };}
   if (!gitObject.safeParse(input.sourceTree).success)
-    return {
+    {return {
       reasons: ["The selected source tree is invalid."],
       status: "unavailable",
-    };
+    };}
   if (input.content === null)
-    return {
+    {return {
       reasons: [
         `Missing ${ARRUSTED_COMPONENT_COMPOSITION_POLICY_PATH} in the selected Arrusted source.`,
       ],
       status: "unavailable",
-    };
+    };}
   let parsed: unknown;
   try {
     parsed = JSON.parse(input.content) as unknown;
@@ -124,10 +124,10 @@ export function bindArrustedComponentCompositionPolicy(input: {
   }
   const policy = arrustedComponentCompositionPolicySchema.safeParse(parsed);
   if (!policy.success)
-    return {
+    {return {
       reasons: ["The Arrusted component-composition manifest is invalid."],
       status: "unavailable",
-    };
+    };}
   return {
     binding: {
       policy: policy.data,
@@ -145,7 +145,7 @@ function importsFrom(content: string): string[] {
   const pattern = /(?:import|export)\s+(?:[^"']*?\s+from\s+)?["'](?<specifier>[^"']+)["']/gu;
   for (const match of content.matchAll(pattern)) {
     const [, specifier] = match;
-    if (specifier !== undefined) imports.add(specifier);
+    if (specifier !== undefined) {imports.add(specifier);}
   }
   return [...imports].toSorted();
 }
@@ -174,16 +174,16 @@ export function auditAppliedAppComposition(input: {
 
   for (const file of input.files) {
     const relative = appRelativePath(input.appId, file.path);
-    if (relative === undefined) continue;
+    if (relative === undefined) {continue;}
     const isStyle = /\.(?:css|scss|sass|less)$/u.test(relative);
     const isComponentSource = /\.(?:[cm]?[jt]sx?)$/u.test(relative);
 
     if (/(?:^|\/)components(?:\/|$)/u.test(relative))
-      violations.push({
+      {violations.push({
         code: "local-component-file",
         message: "Generated apps may not add local visual component files.",
         path: file.path,
-      });
+      });}
 
     if (
       isComponentSource &&
@@ -192,40 +192,40 @@ export function auditAppliedAppComposition(input: {
         file.content,
       )
     )
-      violations.push({
+      {violations.push({
         code: "local-component-definition",
         message: "Generated apps may only define visual route glue named by the Arrusted policy.",
         path: file.path,
-      });
+      });}
 
     if (isStyle && !allowedStyles.has(relative))
-      violations.push({
+      {violations.push({
         code: "unapproved-style-file",
         message: "Generated apps may not add component-local style files.",
         path: file.path,
-      });
+      });}
 
     if (isStyle && /--[A-Za-z][A-Za-z0-9-]*\s*:/u.test(file.content))
-      violations.push({
+      {violations.push({
         code: "replacement-design-token",
         message: "Generated apps may not define replacement design tokens.",
         path: file.path,
-      });
+      });}
 
     if (/style\s*=\s*\{\s*\{/u.test(file.content))
-      violations.push({
+      {violations.push({
         code: "inline-visual-style",
         message: "Generated apps may not add inline visual styling.",
         path: file.path,
-      });
+      });}
 
     for (const specifier of importsFrom(file.content)) {
       if (specifier.startsWith("@autograph/") && !allowedImports.has(specifier))
-        violations.push({
+        {violations.push({
           code: "unapproved-public-import",
           message: `The import ${specifier} is not declared by the selected Arrusted policy.`,
           path: file.path,
-        });
+        });}
     }
   }
 

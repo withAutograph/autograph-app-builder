@@ -87,7 +87,7 @@ function git(sourceRoot: string, args: readonly string[]) {
 function required(environment: Environment, name: string) {
   const value = environment[name];
   if (value === undefined || value.length === 0)
-    throw new Error(`Development Vercel Sandbox ${name} was unavailable.`);
+    {throw new Error(`Development Vercel Sandbox ${name} was unavailable.`);}
   return value;
 }
 
@@ -98,7 +98,7 @@ function exactSourceRoot(sourceRoot: string) {
     path.resolve(sourceRoot) !== sourceRoot ||
     realpathSync(sourceRoot) !== sourceRoot
   )
-    throw new Error("Development Vercel source root was not canonical.");
+    {throw new Error("Development Vercel source root was not canonical.");}
   const info = lstatSync(sourceRoot);
   if (
     !info.isDirectory() ||
@@ -107,7 +107,7 @@ function exactSourceRoot(sourceRoot: string) {
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & 0o022) !== 0
   )
-    throw new Error("Development Vercel source root was not owner-bound.");
+    {throw new Error("Development Vercel source root was not owner-bound.");}
   return sourceRoot;
 }
 
@@ -116,10 +116,10 @@ function digestFileOrAbsent(filePath: string) {
   try {
     const info = lstatSync(filePath);
     if (!info.isFile() || info.isSymbolicLink())
-      throw new Error(`Development dependency input was invalid: ${filePath}`);
+      {throw new Error(`Development dependency input was invalid: ${filePath}`);}
     return sha256(readFileSync(filePath));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "absent";
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {return "absent";}
     throw error;
   }
 }
@@ -137,7 +137,7 @@ function assertInput(input: DevelopmentVercelBootstrapInput) {
       (digest) => digest !== "absent" && !sha256Pattern.test(digest),
     )
   )
-    throw new Error("Development Vercel bootstrap identity was invalid.");
+    {throw new Error("Development Vercel bootstrap identity was invalid.");}
 }
 
 /**
@@ -356,7 +356,7 @@ export function readDevelopmentVercelBootstrapInput(
     environment.APP_BUILDER_SANDBOX_PROVIDER !== "vercel" ||
     environment.APP_BUILDER_EXECUTION_BUNDLE !== "local-development"
   )
-    throw new Error("Development Vercel Sandbox binding was not closed.");
+    {throw new Error("Development Vercel Sandbox binding was not closed.");}
   const sourceRoot = exactSourceRoot(required(environment, "REPOSITORY_LOCAL_ROOTS"));
   const result = {
     dependencyKey: required(environment, "APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY"),
@@ -376,7 +376,7 @@ export function readDevelopmentVercelBootstrapInput(
     git(sourceRoot, ["rev-parse", "HEAD^{tree}"]) !== result.sourceTree ||
     git(sourceRoot, ["status", "--porcelain=v1", "--untracked-files=all"]) !== ""
   )
-    throw new Error("Development Vercel source snapshot drifted.");
+    {throw new Error("Development Vercel source snapshot drifted.");}
   const sourceArchive = execFileSync(
     "/usr/bin/git",
     [
@@ -494,7 +494,7 @@ printf '%s\n' 'development_vercel_bootstrap_ready:${input.dependencyKey}'`;
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentVercelDependencyRepairCommand(dependencyKey: string) {
   if (!sha256Pattern.test(dependencyKey))
-    throw new Error("Development dependency key was invalid.");
+    {throw new Error("Development dependency key was invalid.");}
   return `set -euo pipefail
 test "$(uname -m)" = x86_64
 source_root='/workspace/repository'
@@ -567,7 +567,7 @@ printf '%s\n' 'development_vercel_repair_ready:${dependencyKey}'`;
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentVercelProviderTemplateKey(dependencyKey: string) {
   if (!sha256Pattern.test(dependencyKey))
-    throw new Error("Development dependency key was invalid.");
+    {throw new Error("Development dependency key was invalid.");}
   return `app-builder-development-${dependencyKey}`;
 }
 
@@ -576,7 +576,7 @@ export function developmentVercelRevalidationKey(
   input: Pick<DevelopmentVercelBootstrapInput, "dependencyKey">,
 ) {
   if (!sha256Pattern.test(input.dependencyKey))
-    throw new Error("Development dependency key was invalid.");
+    {throw new Error("Development dependency key was invalid.");}
   return `autograph-app-builder-vercel-development-v1:${sha256(
     JSON.stringify({
       contractVersion: 1,
@@ -594,11 +594,11 @@ export function developmentExecutionArtifactDigest(environment: Environment = pr
     environment.APP_BUILDER_SANDBOX_PROVIDER !== "vercel" ||
     environment.APP_BUILDER_EXECUTION_BUNDLE !== "local-development"
   )
-    throw new Error("Development execution binding was not closed.");
+    {throw new Error("Development execution binding was not closed.");}
   const sourceFingerprint = required(environment, "APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT");
   const dependencyKey = required(environment, "APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY");
   if (!sha256Pattern.test(sourceFingerprint) || !sha256Pattern.test(dependencyKey))
-    throw new Error("Development execution identity was invalid.");
+    {throw new Error("Development execution identity was invalid.");}
   return `vercel-sandbox-development@sha256:${sha256(
     JSON.stringify({ dependencyKey, sourceFingerprint, version: 1 }),
   )}`;

@@ -46,11 +46,11 @@ export function prototypePreviewRequestUrl(input: {
     environment.APP_BUILDER_SANDBOX_PROVIDER === "vercel" &&
     environment.APP_BUILDER_LOCAL_ADAPTER === "1" &&
     environment.EVE_HOSTED_ADAPTER === "0";
-  if (!exactDevelopmentAdapter) return input.requestUrl;
+  if (!exactDevelopmentAdapter) {return input.requestUrl;}
 
   const configured = environment.APP_BUILDER_DEVELOPMENT_ORIGIN;
   if (configured === undefined)
-    throw new Error("The local development preview origin is unavailable.");
+    {throw new Error("The local development preview origin is unavailable.");}
   const origin = new URL(configured);
   const port = unprivilegedPortSchema.safeParse(origin.port);
   if (
@@ -63,9 +63,9 @@ export function prototypePreviewRequestUrl(input: {
     origin.search !== "" ||
     origin.hash !== ""
   )
-    throw new Error(
+    {throw new Error(
       "The local development preview origin must be an exact unprivileged 127.0.0.1 HTTP origin.",
-    );
+    );}
   return new URL("/mcp", origin).href;
 }
 
@@ -119,7 +119,7 @@ function previewUrl(input: {
     digest: input.digest,
     sessionId: input.sessionId,
   });
-  if (!parsed.success) return undefined;
+  if (!parsed.success) {return undefined;}
   let origin: string;
   try {
     ({ origin } = new URL(input.requestUrl));
@@ -137,13 +137,13 @@ export function attachPrototypePreviewUrl(
   requestUrl: string,
 ): EveSessionResult {
   const result = eveSessionResultSchema.parse(resultInput);
-  if (result.prototype === undefined) return result;
+  if (result.prototype === undefined) {return result;}
   const url = previewUrl({
     digest: result.prototype.digest,
     requestUrl,
     sessionId: result.sessionId,
   });
-  if (url === undefined) return result;
+  if (url === undefined) {return result;}
   return eveSessionResultSchema.parse({
     ...result,
     prototype: { ...result.prototype, previewUrl: url },
@@ -167,7 +167,7 @@ export function createPrototypePreviewRequestHandler(input: {
     routeInput: { sessionId: string; digest: string },
   ): Promise<Response> => {
     const route = previewRouteInputSchema.safeParse(routeInput);
-    if (!route.success) return emptyPreviewNotFoundResponse();
+    if (!route.success) {return emptyPreviewNotFoundResponse();}
     try {
       const prototype = publicPrototypeSchema.safeParse(
         await input.resolvePrototype({
@@ -201,7 +201,7 @@ export function createServicePrototypePreviewResolver(input: {
 }): PrototypePreviewResolver {
   return async ({ request, sessionId }) => {
     const service = await input.serviceForRequest(request);
-    if (service === undefined) return;
+    if (service === undefined) {return;}
     // The public event tail can expose the preview URL just before the
     // corresponding prototype event has reached the request-scoped read. Give
     // that normal delivery race a short chance to settle so the first Browser
@@ -209,10 +209,10 @@ export function createServicePrototypePreviewResolver(input: {
     for (let attempt = 0; attempt < 5; attempt += 1) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const result = await service.get({ cursor: 0, limit: 1, sessionId });
-      if (result.prototype !== undefined) return result.prototype;
+      if (result.prototype !== undefined) {return result.prototype;}
       if (attempt < 4)
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        await delay(100);
+        {await delay(100);}
     }
   };
 }

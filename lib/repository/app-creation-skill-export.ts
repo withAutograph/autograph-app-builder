@@ -50,7 +50,7 @@ async function absent(target: string): Promise<boolean> {
     await lstat(target);
     return false;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {return true;}
     throw error;
   }
 }
@@ -64,23 +64,23 @@ async function collectSkillFiles(sourceRoot: string): Promise<ExportedSkillFile[
     for (const entry of entries.toSorted((left, right) => left.name.localeCompare(right.name))) {
       const filePath = path.join(directory, entry.name);
       if (entry.isSymbolicLink())
-        throw new Error("App-creation skill exports do not accept symbolic links.");
+        {throw new Error("App-creation skill exports do not accept symbolic links.");}
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      if (entry.isDirectory()) await visit(filePath);
+      if (entry.isDirectory()) {await visit(filePath);}
       else if (entry.isFile()) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         // oxlint-disable-next-line eslint/no-await-in-loop, eslint/no-bitwise -- Preserve sequential traversal and permission-mode bitmask.
         const stats = await lstat(filePath);
         const mode = stats.mode % 0o1000;
         if (mode !== 0o644 && mode !== 0o755)
-          throw new Error(`Unsupported app-creation skill mode: ${mode.toString(8)}`);
+          {throw new Error(`Unsupported app-creation skill mode: ${mode.toString(8)}`);}
         files.push({
           mode: mode === 0o755 ? "100755" : "100644",
           path: path.relative(sourceRoot, filePath).split("\\").join("/"),
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           sha256: sha256(await readFile(filePath)),
         });
-      } else throw new Error("App-creation skill exports accept only files and directories.");
+      } else {throw new Error("App-creation skill exports accept only files and directories.");}
     }
   }
   for (const root of APP_CREATION_SKILL_ROOTS) {
@@ -88,7 +88,7 @@ async function collectSkillFiles(sourceRoot: string): Promise<ExportedSkillFile[
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const stats = await lstat(directory);
     if (!stats.isDirectory())
-      throw new Error(`App-creation skill root is not a directory: ${root}`);
+      {throw new Error(`App-creation skill root is not a directory: ${root}`);}
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await visit(directory);
   }
@@ -103,7 +103,7 @@ export async function exportAppCreationSkills(options: {
   const repositoryRoot = await realpath(path.resolve(options.repositoryRoot));
   const outputRoot = path.resolve(options.outputRoot);
   if (!(await absent(outputRoot)))
-    throw new Error("App-creation skill export destination must be absent.");
+    {throw new Error("App-creation skill export destination must be absent.");}
   const parent = await realpath(path.resolve(outputRoot, ".."));
   const canonicalOutput = path.join(parent, path.basename(outputRoot));
   const sourceRoot = path.join(repositoryRoot, "agent", "skills");

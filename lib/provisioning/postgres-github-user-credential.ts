@@ -42,7 +42,7 @@ export function createPostgresGitHubUserCredentialStore(input: {
       workspaceId: row.workspaceId,
     });
     if (row.keyVersion !== input.config.keyVersion)
-      throw new Error("github-credential-key-version");
+      {throw new Error("github-credential-key-version");}
     return {
       active: row.active,
       providerLogin: row.providerLogin,
@@ -103,7 +103,7 @@ export function createPostgresGitHubUserCredentialStore(input: {
           ],
         })
         .returning();
-      if (!rows[0]) throw new Error("github-credential-not-durable");
+      if (!rows[0]) {throw new Error("github-credential-not-durable");}
       return parse(rows[0]);
     },
     async deactivate(value) {

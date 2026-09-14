@@ -121,7 +121,7 @@ export function createBranchWorktreePublicationProposal(input: {
   assertExactReviewedChangeSet(input.review);
   const { sourceReceipt, source, review } = input;
   if (sourceReceipt.sourceKind !== "existing-repository")
-    throw new Error("Branch-worktree publication accepts only an existing-repository source.");
+    {throw new Error("Branch-worktree publication accepts only an existing-repository source.");}
   assertRepositoryReleasePolicyAtGitSnapshot({
     sourcePath: sourceReceipt.sourcePath,
     sourceSha: sourceReceipt.sourceSha,
@@ -136,7 +136,7 @@ export function createBranchWorktreePublicationProposal(input: {
     review.sourceTree !== sourceReceipt.sourceTree ||
     review.repositoryContractDigest !== sourceReceipt.contractDigest
   )
-    throw new Error("The source checkout is not the exact reviewed existing repository.");
+    {throw new Error("The source checkout is not the exact reviewed existing repository.");}
   const overlap = source.dirty.find((entry) =>
     review.approvedPaths.some(
       (path) =>
@@ -145,7 +145,7 @@ export function createBranchWorktreePublicationProposal(input: {
     ),
   );
   if (overlap !== undefined)
-    throw new Error(`The source has dirty overlap with approved path ${overlap.path}.`);
+    {throw new Error(`The source has dirty overlap with approved path ${overlap.path}.`);}
   const publicationIdentityDigest = branchPublicationIdentity({
     reviewDigest: review.digest,
     sourceReceiptDigest: sourceReceipt.digest,
@@ -183,9 +183,9 @@ export function assertExactBranchWorktreeProposal(
   proposal: BranchWorktreePublicationProposal,
 ): void {
   if (proposal.version !== BRANCH_WORKTREE_PUBLICATION_VERSION)
-    throw new Error("A canonical V2 branch-worktree publication proposal is required.");
+    {throw new Error("A canonical V2 branch-worktree publication proposal is required.");}
   if (proposal.digest !== stableDigest(canonicalProposal(proposal)))
-    throw new Error("The branch-worktree publication digest is malformed.");
+    {throw new Error("The branch-worktree publication digest is malformed.");}
   const identity = branchPublicationIdentity({
     reviewDigest: proposal.reviewDigest,
     sourceReceiptDigest: proposal.sourceReceiptDigest,
@@ -194,12 +194,12 @@ export function assertExactBranchWorktreeProposal(
     proposal.publicationIdentityDigest !== identity ||
     proposal.branchName !== branchNameForIdentity(identity)
   )
-    throw new Error("The branch-worktree publication identity is malformed.");
+    {throw new Error("The branch-worktree publication identity is malformed.");}
   if (
     JSON.stringify(proposal.approvedPaths) !==
     JSON.stringify(proposal.changes.map(({ path }) => path))
   )
-    throw new Error("The branch-worktree publication paths are malformed.");
+    {throw new Error("The branch-worktree publication paths are malformed.");}
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -229,7 +229,7 @@ export function proposalFromBranchJournal(
     "reason",
     "failureMessage",
   ])
-    Reflect.deleteProperty(proposalOnly, key);
+    {Reflect.deleteProperty(proposalOnly, key);}
   return {
     ...(proposalOnly as Omit<BranchWorktreePublicationProposal, "digest">),
     digest: proposalDigest,
@@ -249,7 +249,7 @@ export function assertCanonicalBranchWorktreeJournal(
 ): void {
   const { digest, ...unsigned } = journal;
   if (digest !== branchJournalDigest(unsigned))
-    throw new Error("The branch-worktree publication journal is malformed.");
+    {throw new Error("The branch-worktree publication journal is malformed.");}
   assertExactBranchWorktreeProposal(proposalFromBranchJournal(journal));
 }
 

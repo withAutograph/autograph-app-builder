@@ -14,6 +14,6 @@ export function developmentInspectionPath(input: {
     environment.APP_BUILDER_DEVELOPMENT_SOURCE_ROOT === input.requestedPath &&
     environment.APP_BUILDER_DEVELOPMENT_SNAPSHOT_ROOT !== undefined
   )
-    return environment.APP_BUILDER_DEVELOPMENT_SNAPSHOT_ROOT;
+    {return environment.APP_BUILDER_DEVELOPMENT_SNAPSHOT_ROOT;}
   return input.requestedPath;
 }

@@ -41,7 +41,7 @@ describe("local Eve acceptance", () => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
-        for (const event of events) yield event;
+        for (const event of events) {yield event;}
       },
     };
     const session = {
@@ -291,7 +291,7 @@ describe("local Eve acceptance", () => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
-        for (const event of settledEvents) yield event;
+        for (const event of settledEvents) {yield event;}
       },
     };
     const session = {
@@ -443,7 +443,7 @@ describe("local Eve acceptance", () => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
-        for (const event of resumedEvents) yield event;
+        for (const event of resumedEvents) {yield event;}
       },
     };
     const session = {
@@ -592,7 +592,7 @@ describe("local Eve acceptance", () => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
-        for (const event of entries) yield event;
+        for (const event of entries) {yield event;}
       },
     });
     const session = {
@@ -1064,7 +1064,7 @@ describe("local Eve acceptance", () => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       cancel: vi.fn(async () => ({ status: "accepted" })),
       async *[Symbol.asyncIterator]() {
-        for (const event of events) yield event;
+        for (const event of events) {yield event;}
       },
     });
     const initial = stream([{ data: {}, type: "session.waiting" } as MessageStreamEvent]);

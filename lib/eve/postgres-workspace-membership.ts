@@ -18,7 +18,7 @@ export function createPostgresWorkspaceMembership(database: Database): HostedWor
   return {
     async isMember({ principal: principalInput, workspaceId }) {
       const principal = hostedPrincipalSchema.parse(principalInput);
-      if (workspaceId !== principal.workspaceId) return false;
+      if (workspaceId !== principal.workspaceId) {return false;}
       const rows = await database
         .select({ banned: user.banned, role: member.role })
         .from(member)

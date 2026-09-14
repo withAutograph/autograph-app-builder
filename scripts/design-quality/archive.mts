@@ -23,7 +23,7 @@ if (values.help) {
   process.exit(0);
 }
 if (!values["report-dir"] || !values.name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(values.name))
-  throw new Error("Supply --report-dir and a lowercase kebab-case --name");
+  {throw new Error("Supply --report-dir and a lowercase kebab-case --name");}
 const input = path.resolve(values["report-dir"]);
 const report = JSON.parse(await readFile(path.join(input, "report.json"), "utf-8"));
 const timestamp = new Date(report.createdAt).toISOString();
@@ -96,12 +96,12 @@ for (const [axis, rating] of Object.entries(report.judge.ratings ?? {})) {
   lines.push(`| ${md(axis)} | ${r.score}/4 | ${md(r.reason)} |`);
 }
 lines.push("", "## Strengths", "");
-for (const strength of report.judge.strengths ?? []) lines.push(`- ${md(strength)}`);
+for (const strength of report.judge.strengths ?? []) {lines.push(`- ${md(strength)}`);}
 lines.push("", "## Improvements", "");
 for (const finding of report.judge.findings ?? [])
-  lines.push(
+  {lines.push(
     `- **${md(finding.severity)} — ${md(finding.image)}:** ${md(finding.explanation)} ${md(finding.improvement)}`,
-  );
+  );}
 lines.push(
   "",
   "## Token evidence",
@@ -112,7 +112,7 @@ lines.push(
   "| --- | --- | --- | --- |",
 );
 for (const capture of report.captures)
-  for (const [category, summary] of Object.entries(capture.styles?.categories ?? {})) {
+  {for (const [category, summary] of Object.entries(capture.styles?.categories ?? {})) {
     const s = summary as {
       counts: Record<string, number>;
       assessed: number;
@@ -122,20 +122,20 @@ for (const capture of report.captures)
     lines.push(
       `| ${md(capture.name)} | ${md(category)} | ${capture.styles.observations?.filter((o: { category: string; provenance: string; classification: string }) => o.category === category && o.provenance === "generated" && o.classification === "semantic-token-reference").length ?? s.counts["token-reference"] ?? 0}/${s.assessed} | ${s.coveragePercent ?? "n/a"}% (${s.assessed}/${s.total}) |`,
     );
-  }
+  }}
 lines.push("", "## Latest-run screenshots", "");
 for (const capture of report.captures)
-  lines.push(
+  {lines.push(
     `### ${md(capture.name)} — ${md(capture.state)}`,
     "",
     `Interaction: ${md(capture.interaction.status)}.`,
     "",
     `![${md(capture.name)} ${md(capture.state)}](${capture.path})`,
     "",
-  );
+  );}
 lines.push("## Limitations", "");
-for (const limitation of report.judge.limitations ?? []) lines.push(`- ${md(limitation)}`);
-for (const limitation of report.evaluationNotes ?? []) lines.push(`- ${md(limitation)}`);
+for (const limitation of report.judge.limitations ?? []) {lines.push(`- ${md(limitation)}`);}
+for (const limitation of report.evaluationNotes ?? []) {lines.push(`- ${md(limitation)}`);}
 await writeFile(path.join(destination, "README.md"), `${lines.join("\n")}\n`);
 const rows: {
   path: string;
@@ -144,15 +144,15 @@ const rows: {
   score: unknown;
 }[] = [];
 for (const day of await readdir(archiveRoot, { withFileTypes: true })) {
-  if (!day.isDirectory() || !/^\d{4}-\d{2}-\d{2}$/u.test(day.name)) continue;
+  if (!day.isDirectory() || !/^\d{4}-\d{2}-\d{2}$/u.test(day.name)) {continue;}
   // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
   for (const run of await readdir(path.join(archiveRoot, day.name), {
     withFileTypes: true,
   })) {
-    if (!run.isDirectory()) continue;
+    if (!run.isDirectory()) {continue;}
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const saved = await readArchivedReport(path.join(archiveRoot, day.name, run.name));
-    if (saved === null) continue;
+    if (saved === null) {continue;}
     rows.push({
       date: saved.createdAt,
       name: saved.archive.name,
@@ -163,7 +163,7 @@ for (const day of await readdir(archiveRoot, { withFileTypes: true })) {
 }
 rows.sort((a, b) => b.date.localeCompare(a.date));
 const latest = rows.at(0);
-if (latest === undefined) throw new Error("Archived report index is unexpectedly empty");
+if (latest === undefined) {throw new Error("Archived report index is unexpectedly empty");}
 await writeFile(
   path.join(archiveRoot, "README.md"),
   [

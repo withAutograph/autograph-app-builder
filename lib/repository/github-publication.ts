@@ -447,7 +447,7 @@ function canonicalWithoutDigest<T extends { digest: string }>(value: T) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactDigest(value: { digest: string }, label: string): void {
   if (!isDigest(value.digest) || digest(canonicalWithoutDigest(value)) !== value.digest)
-    throw new Error(`${label} digest is malformed.`);
+    {throw new Error(`${label} digest is malformed.`);}
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -501,13 +501,13 @@ function canonicalPaths(paths: readonly string[]): readonly string[] {
     new Set(paths).size !== paths.length ||
     paths.some((path) => !safeSourcePath(path))
   )
-    throw new Error("GitHub publication paths are unsafe or duplicated.");
+    {throw new Error("GitHub publication paths are unsafe or duplicated.");}
   return [...paths].toSorted(compareOverlayPaths);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalPathsOrEmpty(paths: readonly string[]): readonly string[] {
-  if (paths.length === 0) return [];
+  if (paths.length === 0) {return [];}
   return canonicalPaths(paths);
 }
 
@@ -540,7 +540,7 @@ function assertCanonicalReview(review: ReviewedChangeSetReceipt): void {
     JSON.stringify(canonicalPaths(review.approvedPaths)) !== JSON.stringify(review.approvedPaths) ||
     JSON.stringify(review.approvedPaths) !== JSON.stringify(review.changes.map(({ path }) => path))
   )
-    throw new Error("The reviewed change-set receipt is non-canonical.");
+    {throw new Error("The reviewed change-set receipt is non-canonical.");}
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -556,7 +556,7 @@ function reviewForProposal(
       (proposal.changedContentDigest !== review.changedContentDigest ||
         JSON.stringify(proposal.approvedPaths) !== JSON.stringify(review.approvedPaths)))
   )
-    throw new Error("The publication content review does not match the sealed proposal.");
+    {throw new Error("The publication content review does not match the sealed proposal.");}
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -604,7 +604,7 @@ function exactContentFileState(value: unknown, includeBytes: boolean): boolean {
   const keys = includeBytes
     ? (["mode", "digest", "bytes"] as const)
     : (["mode", "digest"] as const);
-  if (!record(value) || !exactKeys(value, keys)) return false;
+  if (!record(value) || !exactKeys(value, keys)) {return false;}
   return (
     (value.mode === "644" || value.mode === "755") &&
     isDigest(value.digest) &&
@@ -615,17 +615,17 @@ function exactContentFileState(value: unknown, includeBytes: boolean): boolean {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactContentChange(change: unknown): boolean {
   if (!record(change) || typeof change.path !== "string" || !safeSourcePath(change.path))
-    return false;
+    {return false;}
   if (change.kind === "added")
-    return (
+    {return (
       exactKeys(change, ["path", "kind", "after"]) && exactContentFileState(change.after, true)
-    );
+    );}
   if (change.kind === "modified")
-    return (
+    {return (
       exactKeys(change, ["path", "kind", "before", "after"]) &&
       exactContentFileState(change.before, false) &&
       exactContentFileState(change.after, true)
-    );
+    );}
   return (
     change.kind === "deleted" &&
     exactKeys(change, ["path", "kind", "before"]) &&
@@ -661,16 +661,16 @@ function freshContentTree(
     for (const segment of segments.slice(0, -1)) {
       const existing = directory.children.get(segment);
       if (existing?.kind === "file")
-        throw new Error("The fresh repository source manifest overlaps paths.");
+        {throw new Error("The fresh repository source manifest overlaps paths.");}
       const child = existing ?? ({ children: new Map(), kind: "directory" } as const);
       directory.children.set(segment, child);
       directory = child;
     }
     const name = segments.at(-1);
     if (name === undefined)
-      throw new Error("The fresh repository source manifest is missing a path segment.");
+      {throw new Error("The fresh repository source manifest is missing a path segment.");}
     if (directory.children.has(name))
-      throw new Error("The fresh repository source manifest duplicates paths.");
+      {throw new Error("The fresh repository source manifest duplicates paths.");}
     directory.children.set(name, { file, kind: "file" });
   }
   const encodeTree = (directory: Extract<Node, { kind: "directory" }>): Buffer => {
@@ -710,7 +710,7 @@ export function assertExactGitHubFreshRepositoryContent(input: {
     !Array.isArray(content.files) ||
     content.files.length === 0
   )
-    throw new Error("The fresh repository content schema is invalid.");
+    {throw new Error("The fresh repository content schema is invalid.");}
   const algorithm = proposal.sourceTree.length === 64 ? "sha256" : "sha1";
   const paths = content.files.map((file) => file.path);
   if (
@@ -728,7 +728,7 @@ export function assertExactGitHubFreshRepositoryContent(input: {
     ) ||
     freshContentTree(content.files, algorithm) !== proposal.sourceTree
   )
-    throw new Error("The fresh repository content does not match the immutable source tree.");
+    {throw new Error("The fresh repository content does not match the immutable source tree.");}
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -750,7 +750,7 @@ export function assertExactGitHubDraftPullRequestContent(input: {
     !Array.isArray(input.content.changes) ||
     input.content.changes.some((change) => !exactContentChange(change))
   )
-    throw new Error("The publication content schema is not closed.");
+    {throw new Error("The publication content schema is not closed.");}
   const manifest = contentManifest(input.content.changes);
   if (
     input.content.version !== 1 ||
@@ -765,7 +765,7 @@ export function assertExactGitHubDraftPullRequestContent(input: {
         change.kind !== "deleted" && bytesDigest(change.after.bytes) !== change.after.digest,
     )
   )
-    throw new Error("The publication content does not match the approved reviewed overlay.");
+    {throw new Error("The publication content does not match the approved reviewed overlay.");}
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -779,7 +779,7 @@ export function assertExactGitHubPublicationContent(input: {
   if (
     JSON.stringify(contentManifest(input.content.changes)) !== JSON.stringify(input.review.changes)
   )
-    throw new Error("The publication content does not match the approved reviewed overlay.");
+    {throw new Error("The publication content does not match the approved reviewed overlay.");}
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -818,7 +818,7 @@ export async function readExactGitHubPublicationContent(input: {
   for (const change of input.review.changes) {
     if (change.kind === "deleted") {
       if (change.before === undefined)
-        throw new Error("The reviewed deletion preimage is missing.");
+        {throw new Error("The reviewed deletion preimage is missing.");}
       changes.push({
         before: change.before,
         kind: change.kind,
@@ -827,7 +827,7 @@ export async function readExactGitHubPublicationContent(input: {
       continue;
     }
     if (change.after === undefined)
-      throw new Error("The reviewed publication postimage is missing.");
+      {throw new Error("The reviewed publication postimage is missing.");}
     let observed: Awaited<ReturnType<typeof input.source.readFile>>;
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -836,14 +836,14 @@ export async function readExactGitHubPublicationContent(input: {
       throw new Error("The approved publication content source failed.");
     }
     if (observed === null)
-      throw new Error(`The approved publication postimage is missing for ${change.path}.`);
+      {throw new Error(`The approved publication postimage is missing for ${change.path}.`);}
     const bytes = new Uint8Array(observed.bytes);
     if (
       observed.mode !== change.after.mode ||
       observed.digest !== change.after.digest ||
       bytesDigest(bytes) !== change.after.digest
     )
-      throw new Error(`The approved publication postimage changed for ${change.path}.`);
+      {throw new Error(`The approved publication postimage changed for ${change.path}.`);}
     if (change.kind === "added") {
       changes.push({
         after: { ...change.after, bytes },
@@ -853,7 +853,7 @@ export async function readExactGitHubPublicationContent(input: {
       continue;
     }
     if (change.before === undefined)
-      throw new Error("The reviewed modification preimage is missing.");
+      {throw new Error("The reviewed modification preimage is missing.");}
     changes.push({
       after: { ...change.after, bytes },
       before: change.before,
@@ -893,7 +893,7 @@ function assertReviewedBinding(
     source.contractDigest !== review.repositoryContractDigest ||
     source.eligibilityDigest !== review.eligibilityDigest
   )
-    throw new Error("The reviewed change set is not bound to the exact source receipt.");
+    {throw new Error("The reviewed change set is not bound to the exact source receipt.");}
 }
 
 const installationKeys = [
@@ -934,7 +934,7 @@ export function createGitHubInstallationIdentity(
     new Set(input.selectedRepositoryIds).size !== input.selectedRepositoryIds.length ||
     input.selectedRepositoryIds.some((id) => !isDecimal(id))
   )
-    throw new Error("The GitHub installation identity is invalid.");
+    {throw new Error("The GitHub installation identity is invalid.");}
   const unsigned = {
     accountId: input.accountId,
     accountLogin: input.accountLogin,
@@ -952,7 +952,7 @@ export function createGitHubInstallationIdentity(
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertExactInstallationIdentity(identity: GitHubInstallationIdentity): void {
   if (!exactKeys(identity, installationKeys) || !exactKeys(identity.permissions, permissionKeys))
-    throw new Error("The GitHub installation identity schema is not closed.");
+    {throw new Error("The GitHub installation identity schema is not closed.");}
   const rebuilt = createGitHubInstallationIdentity({
     accountId: identity.accountId,
     accountLogin: identity.accountLogin,
@@ -963,7 +963,7 @@ export function assertExactInstallationIdentity(identity: GitHubInstallationIden
     selectedRepositoryIds: identity.selectedRepositoryIds,
   });
   if (JSON.stringify(identity) !== JSON.stringify(rebuilt))
-    throw new Error("The GitHub installation identity is non-canonical or over-privileged.");
+    {throw new Error("The GitHub installation identity is non-canonical or over-privileged.");}
 }
 
 const repositoryKeys = [
@@ -997,7 +997,7 @@ export function createRepositoryObservation(
     input.releaseGate.name !== REPOSITORY_RELEASE_GATE ||
     typeof input.releaseGate.configured !== "boolean"
   )
-    throw new Error("The repository observation is invalid.");
+    {throw new Error("The repository observation is invalid.");}
   const unsigned = { version: GITHUB_PUBLICATION_VERSION, ...input };
   return { ...unsigned, digest: digest(unsigned) };
 }
@@ -1005,7 +1005,7 @@ export function createRepositoryObservation(
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertExactRepositoryObservation(repository: GitHubRepositoryObservation): void {
   if (!exactKeys(repository, repositoryKeys))
-    throw new Error("The repository observation schema is not closed.");
+    {throw new Error("The repository observation schema is not closed.");}
   const rebuilt = createRepositoryObservation({
     defaultBranch: repository.defaultBranch,
     headSha: repository.headSha,
@@ -1018,7 +1018,7 @@ export function assertExactRepositoryObservation(repository: GitHubRepositoryObs
     visibility: repository.visibility,
   });
   if (JSON.stringify(repository) !== JSON.stringify(rebuilt))
-    throw new Error("The repository observation is non-canonical.");
+    {throw new Error("The repository observation is non-canonical.");}
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -1038,7 +1038,7 @@ export async function resolveImmutableExistingSource(input: {
     !isObjectId(input.expectedSha) ||
     !isObjectId(input.expectedTree)
   )
-    throw new Error("The immutable source request is invalid.");
+    {throw new Error("The immutable source request is invalid.");}
   const installation = await input.adapter.inspectInstallation("resolve-existing-source");
   assertExactInstallationIdentity(installation);
   if (
@@ -1046,7 +1046,7 @@ export async function resolveImmutableExistingSource(input: {
     installation.installationId !== input.expectedInstallationId ||
     !installation.selectedRepositoryIds.includes(input.repositoryId)
   )
-    throw new Error("The installation is not selected for source resolution.");
+    {throw new Error("The installation is not selected for source resolution.");}
   const repository = await input.adapter.inspectRepository({
     operation: "resolve-existing-source",
     ref: input.ref,
@@ -1059,7 +1059,7 @@ export async function resolveImmutableExistingSource(input: {
     repository.headSha !== input.expectedSha ||
     repository.headTree !== input.expectedTree
   )
-    throw new Error("The GitHub source changed or is outside the approved installation.");
+    {throw new Error("The GitHub source changed or is outside the approved installation.");}
   const unsigned = {
     installationIdentityDigest: installation.digest,
     repository,
@@ -1088,7 +1088,7 @@ export function assertExactImmutableGitHubSourceReceipt(
   sourceReceipt: ImmutableGitHubSourceReceipt,
 ): void {
   if (!exactKeys(sourceReceipt, immutableSourceReceiptKeys))
-    throw new Error("The immutable GitHub source receipt schema is not closed.");
+    {throw new Error("The immutable GitHub source receipt schema is not closed.");}
   assertExactRepositoryObservation(sourceReceipt.repository);
   exactDigest(sourceReceipt, "Immutable GitHub source receipt");
   if (
@@ -1102,7 +1102,7 @@ export function assertExactImmutableGitHubSourceReceipt(
     sourceReceipt.repository.headTree !== sourceReceipt.resolvedTree ||
     sourceReceipt.repository.installationIdentityDigest !== sourceReceipt.installationIdentityDigest
   )
-    throw new Error("The immutable GitHub source receipt is malformed.");
+    {throw new Error("The immutable GitHub source receipt is malformed.");}
 }
 
 const freshProposalKeys = [
@@ -1142,7 +1142,7 @@ export function createFreshRepositoryProposal(input: {
     input.destinationOwner !== input.installation.accountLogin ||
     !safeName(input.destinationName)
   )
-    throw new Error("Fresh repository creation is outside the approved destination.");
+    {throw new Error("Fresh repository creation is outside the approved destination.");}
   const idempotencyKey = digest({
     destinationName: input.destinationName,
     destinationOwner: input.destinationOwner,
@@ -1178,7 +1178,7 @@ export function assertExactFreshRepositoryProposal(proposal: FreshRepositoryProp
     !exactKeys(proposal, freshProposalKeys) ||
     !exactKeys(proposal.releaseGate, ["name", "configured"])
   )
-    throw new Error("The fresh repository proposal schema is not closed.");
+    {throw new Error("The fresh repository proposal schema is not closed.");}
   exactDigest(proposal, "Fresh repository proposal");
   const expectedKey = digest({
     destinationName: proposal.destinationName,
@@ -1206,7 +1206,7 @@ export function assertExactFreshRepositoryProposal(proposal: FreshRepositoryProp
     proposal.intendedOutcome !== "create-private-fresh-history-repository" ||
     proposal.idempotencyKey !== expectedKey
   )
-    throw new Error("The fresh repository proposal is malformed.");
+    {throw new Error("The fresh repository proposal is malformed.");}
 }
 
 const draftProposalKeys = [
@@ -1264,7 +1264,7 @@ export function createDraftPullRequestProposal(input: {
     input.repository.installationIdentityDigest !== input.installation.digest ||
     !safeTitle(input.title)
   )
-    throw new Error("The draft pull-request proposal is stale, overlapping, or unauthorized.");
+    {throw new Error("The draft pull-request proposal is stale, overlapping, or unauthorized.");}
   const idempotencyKey = digest({
     installationIdentityDigest: input.installation.digest,
     repositoryObservationDigest: input.repository.digest,
@@ -1301,7 +1301,7 @@ export function assertExactDraftPullRequestProposal(proposal: DraftPullRequestPr
     !exactKeys(proposal, draftProposalKeys) ||
     !exactKeys(proposal.releaseGate, ["name", "configured"])
   )
-    throw new Error("The draft pull-request proposal schema is not closed.");
+    {throw new Error("The draft pull-request proposal schema is not closed.");}
   exactDigest(proposal, "Draft pull-request proposal");
   const idempotencyKey = digest({
     installationIdentityDigest: proposal.installationIdentityDigest,
@@ -1332,7 +1332,7 @@ export function assertExactDraftPullRequestProposal(proposal: DraftPullRequestPr
     proposal.branchName !== `app-builder/review-${idempotencyKey.slice(0, 20)}` ||
     proposal.intendedOutcome !== "publish-reviewed-change-set-as-draft-pull-request"
   )
-    throw new Error("The draft pull-request proposal is malformed.");
+    {throw new Error("The draft pull-request proposal is malformed.");}
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -1346,7 +1346,7 @@ function assertFreshReadBack(
     !Array.isArray(readBack.initialCommit.parents) ||
     readBack.initialCommit.parents.length !== 0
   )
-    throw new Error("Fresh repository provider read-back schema is not closed.");
+    {throw new Error("Fresh repository provider read-back schema is not closed.");}
   exactDigest(readBack, "Fresh repository provider read-back");
   assertExactRepositoryObservation(readBack.repository);
   if (
@@ -1362,7 +1362,7 @@ function assertFreshReadBack(
     readBack.initialCommit.tree !== proposal.sourceTree ||
     !releaseGateAbsent(readBack.repository)
   )
-    throw new Error("Fresh repository provider read-back does not match the proposal.");
+    {throw new Error("Fresh repository provider read-back does not match the proposal.");}
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -1382,7 +1382,7 @@ function assertDraftReadBack(
     ]) ||
     !Array.isArray(readBack.changedPathsSinceBase)
   )
-    throw new Error("Draft publication provider read-back schema is not closed.");
+    {throw new Error("Draft publication provider read-back schema is not closed.");}
   exactDigest(readBack, "Draft publication provider read-back");
   assertExactRepositoryObservation(readBack.repository);
   if (
@@ -1400,10 +1400,10 @@ function assertDraftReadBack(
       proposal.approvedPaths.some((approved) => pathsOverlap(path, approved)),
     )
   )
-    throw new Error("Draft publication provider read-back is stale or overlapping.");
+    {throw new Error("Draft publication provider read-back is stale or overlapping.");}
   if (readBack.branch.status === "absent") {
     if (!exactKeys(readBack.branch, ["status"]))
-      throw new Error("Absent branch read-back schema is not closed.");
+      {throw new Error("Absent branch read-back schema is not closed.");}
   } else if (
     !exactKeys(readBack.branch, [
       "status",
@@ -1422,10 +1422,10 @@ function assertDraftReadBack(
     readBack.branch.changedContentDigest !== proposal.changedContentDigest ||
     readBack.branch.idempotencyKey !== proposal.idempotencyKey
   )
-    throw new Error("Branch provider read-back does not match the approved change set.");
+    {throw new Error("Branch provider read-back does not match the approved change set.");}
   if (readBack.pullRequest.status === "absent") {
     if (!exactKeys(readBack.pullRequest, ["status"]))
-      throw new Error("Absent pull-request read-back schema is not closed.");
+      {throw new Error("Absent pull-request read-back schema is not closed.");}
   } else if (
     !exactKeys(readBack.pullRequest, [
       "status",
@@ -1455,7 +1455,7 @@ function assertDraftReadBack(
     (readBack.branch.status === "present" &&
       readBack.pullRequest.headSha !== readBack.branch.branchSha)
   )
-    throw new Error("Pull-request provider read-back does not match the proposal.");
+    {throw new Error("Pull-request provider read-back does not match the proposal.");}
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -1513,7 +1513,7 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
     ];
   }
   if (!exactKeys(value, [...common, ...extra, "digest"]))
-    throw new Error("GitHub mutation receipt schema is not closed.");
+    {throw new Error("GitHub mutation receipt schema is not closed.");}
   exactDigest(value, "GitHub mutation receipt");
   if (
     value.version !== GITHUB_PUBLICATION_VERSION ||
@@ -1523,14 +1523,14 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
     value.approvedByCallId.length === 0 ||
     (value.kind !== "fresh-repository" && value.kind !== "draft-pull-request")
   )
-    throw new Error("GitHub mutation receipt bindings are invalid.");
+    {throw new Error("GitHub mutation receipt bindings are invalid.");}
   if (value.status === "failed") {
     if (
       (value.failureCode !== "provider-rejected" && value.failureCode !== "postcondition-failed") ||
       !/^[a-z][a-z0-9-]{0,63}$/u.test(value.providerCode) ||
       value.recoveryRequired !== true
     )
-      throw new Error("GitHub failure receipt is invalid.");
+      {throw new Error("GitHub failure receipt is invalid.");}
   } else if (value.status === "succeeded") {
     if (
       !isDigest(value.providerReadBackDigest) ||
@@ -1539,7 +1539,7 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
         ? value.releaseGateAbsent !== true
         : value.releaseGateUnchanged !== true)
     )
-      throw new Error("GitHub success receipt read-back binding is invalid.");
+      {throw new Error("GitHub success receipt read-back binding is invalid.");}
     if (value.kind === "fresh-repository") {
       assertExactRepositoryObservation(value.repository);
       if (
@@ -1549,7 +1549,7 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
         value.initialCommitSha !== value.repository.headSha ||
         value.initialCommitTree !== value.repository.headTree
       )
-        throw new Error("Fresh repository success receipt is invalid.");
+        {throw new Error("Fresh repository success receipt is invalid.");}
     } else if (
       !isDecimal(value.repositoryId) ||
       !safeBranch(value.branchName) ||
@@ -1566,7 +1566,7 @@ export function assertCanonicalGitHubMutationReceipt(value: GitHubMutationReceip
       JSON.stringify(canonicalPaths(value.normalizedChangedPaths)) !==
         JSON.stringify(value.normalizedChangedPaths)
     )
-      throw new Error("Draft pull-request success receipt is invalid.");
+      {throw new Error("Draft pull-request success receipt is invalid.");}
   } else if (value.status !== "pending") {
     throw new Error("GitHub mutation receipt status is invalid.");
   }
@@ -1579,14 +1579,14 @@ async function readJournal(
   kind: MutationKind,
 ): Promise<GitHubMutationReceipt | undefined> {
   const value = await store.read(proposal.digest);
-  if (value === undefined) return undefined;
+  if (value === undefined) {return undefined;}
   assertCanonicalGitHubMutationReceipt(value);
   if (
     value.kind !== kind ||
     value.proposalDigest !== proposal.digest ||
     value.idempotencyKey !== proposal.idempotencyKey
   )
-    throw new Error("The GitHub journal belongs to a different proposal.");
+    {throw new Error("The GitHub journal belongs to a different proposal.");}
   return value;
 }
 
@@ -1607,7 +1607,7 @@ async function claimPending(input: {
     version: GITHUB_PUBLICATION_VERSION,
   });
   if (!(await input.store.compareAndSet(input.proposalDigest, undefined, pending)))
-    throw new Error("The GitHub journal changed concurrently.");
+    {throw new Error("The GitHub journal changed concurrently.");}
   return pending;
 }
 
@@ -1619,7 +1619,7 @@ async function storeTerminal(
 ): Promise<void> {
   assertCanonicalGitHubMutationReceipt(terminal);
   if (!(await store.compareAndSet(pending.proposalDigest, pending.digest, terminal)))
-    throw new GitHubOutcomeUnknownError();
+    {throw new GitHubOutcomeUnknownError();}
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -1658,7 +1658,7 @@ function draftSuccess(input: {
 }): DraftPullRequestSuccessReceipt {
   assertDraftReadBack(input.readBack, input.proposal);
   if (input.readBack.branch.status !== "present" || input.readBack.pullRequest.status !== "present")
-    throw new Error("The approved branch and draft pull request are not both present.");
+    {throw new Error("The approved branch and draft pull request are not both present.");}
   return receipt({
     approvedByCallId: input.pending.approvedByCallId,
     baseBranch: input.readBack.pullRequest.baseBranch,
@@ -1718,11 +1718,11 @@ export async function createApprovedFreshRepository(input: {
   reviewForProposal(input.proposal, input.review);
   const prior = await readJournal(input.store, input.proposal, "fresh-repository");
   if (prior?.status === "succeeded") {
-    if (prior.kind !== "fresh-repository") throw new Error("Unreachable receipt kind.");
+    if (prior.kind !== "fresh-repository") {throw new Error("Unreachable receipt kind.");}
     return prior;
   }
   if (prior?.status === "failed")
-    throw new Error("The failed GitHub mutation requires explicit recovery.");
+    {throw new Error("The failed GitHub mutation requires explicit recovery.");}
   const pending =
     prior ??
     (await claimPending({
@@ -1732,7 +1732,7 @@ export async function createApprovedFreshRepository(input: {
       proposalDigest: input.proposal.digest,
       store: input.store,
     }));
-  if (pending.status !== "pending") throw new Error("Unreachable journal status.");
+  if (pending.status !== "pending") {throw new Error("Unreachable journal status.");}
   let existing: FreshRepositoryReadBack | undefined;
   try {
     existing = await input.adapter.inspectFreshRepositoryOutcome(input.proposal);
@@ -1760,7 +1760,7 @@ export async function createApprovedFreshRepository(input: {
     installation.digest !== input.proposal.installationIdentityDigest ||
     destination !== "absent"
   )
-    throw new Error("Fresh repository preconditions changed after approval.");
+    {throw new Error("Fresh repository preconditions changed after approval.");}
   const content = await readExactGitHubFreshRepositoryContent({
     proposal: input.proposal,
     source: input.contentSource,
@@ -1780,14 +1780,14 @@ export async function createApprovedFreshRepository(input: {
     throw new Error("GitHub rejected repository creation; sanitized receipt recorded.");
   }
   if (!/^[-A-Za-z0-9_]{1,128}$/u.test(acknowledgement.requestId))
-    throw new GitHubOutcomeUnknownError();
+    {throw new GitHubOutcomeUnknownError();}
   let readBack: FreshRepositoryReadBack | undefined;
   try {
     readBack = await input.adapter.inspectFreshRepositoryOutcome(input.proposal);
   } catch {
     throw new GitHubOutcomeUnknownError();
   }
-  if (readBack === undefined) throw new GitHubOutcomeUnknownError();
+  if (readBack === undefined) {throw new GitHubOutcomeUnknownError();}
   let success: FreshRepositorySuccessReceipt;
   try {
     success = freshSuccess({
@@ -1816,11 +1816,11 @@ export async function publishApprovedDraftPullRequest(input: {
   reviewForProposal(input.proposal, input.review);
   const prior = await readJournal(input.store, input.proposal, "draft-pull-request");
   if (prior?.status === "succeeded") {
-    if (prior.kind !== "draft-pull-request") throw new Error("Unreachable receipt kind.");
+    if (prior.kind !== "draft-pull-request") {throw new Error("Unreachable receipt kind.");}
     return prior;
   }
   if (prior?.status === "failed")
-    throw new Error("The failed GitHub mutation requires explicit recovery.");
+    {throw new Error("The failed GitHub mutation requires explicit recovery.");}
   const pending =
     prior ??
     (await claimPending({
@@ -1830,7 +1830,7 @@ export async function publishApprovedDraftPullRequest(input: {
       proposalDigest: input.proposal.digest,
       store: input.store,
     }));
-  if (pending.status !== "pending") throw new Error("Unreachable journal status.");
+  if (pending.status !== "pending") {throw new Error("Unreachable journal status.");}
   let observed: DraftPublicationReadBack;
   try {
     observed = await input.adapter.inspectDraftPublication(input.proposal);
@@ -1849,7 +1849,7 @@ export async function publishApprovedDraftPullRequest(input: {
     return success;
   }
   if (observed.branch.status === "present")
-    throw new Error("A branch collision exists without the approved draft pull request.");
+    {throw new Error("A branch collision exists without the approved draft pull request.");}
   const installation = await input.adapter.inspectInstallation("publish-draft-pull-request");
   assertExactInstallationIdentity(installation);
   if (
@@ -1857,7 +1857,7 @@ export async function publishApprovedDraftPullRequest(input: {
     installation.digest !== input.proposal.installationIdentityDigest ||
     !installation.selectedRepositoryIds.includes(input.proposal.repositoryId)
   )
-    throw new Error("Draft pull-request installation authority changed.");
+    {throw new Error("Draft pull-request installation authority changed.");}
   const content = await readExactGitHubPublicationContent({
     proposal: input.proposal,
     review: input.review,
@@ -1875,7 +1875,7 @@ export async function publishApprovedDraftPullRequest(input: {
     throw new Error("GitHub rejected draft pull-request publication; sanitized receipt recorded.");
   }
   if (!/^[-A-Za-z0-9_]{1,128}$/u.test(acknowledgement.requestId))
-    throw new GitHubOutcomeUnknownError();
+    {throw new GitHubOutcomeUnknownError();}
   try {
     observed = await input.adapter.inspectDraftPublication(input.proposal);
   } catch {

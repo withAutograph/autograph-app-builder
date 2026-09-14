@@ -85,12 +85,12 @@ export const supportedValidationCommands = function supportedValidationCommands(
   testShards: readonly string[] = SUPPORTED_VALIDATION_TEST_SHARDS,
 ) {
   if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u.test(appId))
-    throw new Error("The validation application id is invalid.");
+    {throw new Error("The validation application id is invalid.");}
   if (
     testShards.length === 0 ||
     testShards.some((shard) => !/^[1-9][0-9]*\/[1-9][0-9]*$/u.test(shard))
   )
-    throw new Error("The validation test shard set is invalid.");
+    {throw new Error("The validation test shard set is invalid.");}
   return [
     {
       command: `mise run app:check-build ${appId}` as const,
@@ -254,7 +254,7 @@ export const inspectSupportedTemplateDependencyClosure =
         entry,
       );
       if (match === null || match.groups?.path !== path)
-        throw new Error(`Adapter dependency is not a regular Git blob: ${path}`);
+        {throw new Error(`Adapter dependency is not a regular Git blob: ${path}`);}
       return {
         mode: match.groups.mode as DependencyFile["mode"],
         objectId: match.groups.objectId,
@@ -384,19 +384,19 @@ export const inspectRepositoryReleasePolicyAtGitSnapshot =
     const sourceSha = git(input.sourcePath, ["rev-parse", `${input.sourceSha}^{commit}`]);
     const sourceTree = git(input.sourcePath, ["rev-parse", `${sourceSha}^{tree}`]);
     if (sourceSha !== input.sourceSha || sourceTree !== input.sourceTree)
-      throw new Error(
+      {throw new Error(
         "The existing-repository release policy is not bound to the reviewed Git snapshot.",
-      );
+      );}
     const entry = git(input.sourcePath, ["ls-tree", sourceSha, "--", repositoryReleasePolicyPath]);
     const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
       entry,
     );
     if (match === null || match.groups?.path !== repositoryReleasePolicyPath)
-      return releasePolicyObservation({
+      {return releasePolicyObservation({
         sourceSha,
         sourceTree,
         workflow: { status: "absent" },
-      });
+      });}
     return releasePolicyObservation({
       sourceSha,
       sourceTree,
@@ -417,9 +417,9 @@ export const assertRepositoryReleasePolicyAtGitSnapshot =
   }): RepositoryReleasePolicyObservation {
     const observation = inspectRepositoryReleasePolicyAtGitSnapshot(input);
     if (!observation.eligible)
-      throw new Error(
+      {throw new Error(
         "The reviewed repository does not satisfy the release policy required for outward effects.",
-      );
+      );}
     return observation;
   };
 
@@ -442,7 +442,7 @@ const declaredMiseTasks = function declaredMiseTasks(source: string): Map<string
   const tasks = new Map<string, number>();
   for (const match of source.matchAll(/^\[tasks\."(?<name>[^"]+)"\]\s*$/gmu)) {
     const name = match.groups?.name;
-    if (name !== undefined) tasks.set(name, (tasks.get(name) ?? 0) + 1);
+    if (name !== undefined) {tasks.set(name, (tasks.get(name) ?? 0) + 1);}
   }
   return tasks;
 };
@@ -457,23 +457,23 @@ const inspectPlanningCompatibility = function inspectPlanningCompatibility(
   const failures: string[] = [];
   for (const path of SUPPORTED_REPOSITORY_CONTRACT.requiredPaths) {
     if (!safeSourcePath(path))
-      throw new Error("The supported repository contract contains an unsafe path.");
+      {throw new Error("The supported repository contract contains an unsafe path.");}
     if (path !== SUPPORTED_REPOSITORY_CONTRACT.topologyOwner && contents[path] === undefined)
-      failures.push(`missing required path ${path}`);
+      {failures.push(`missing required path ${path}`);}
   }
 
   const runtime = declaredNextRuntime(contents["package.json"] ?? "");
-  if (runtime === "unsupported") failures.push("repository does not declare the Next.js runtime");
+  if (runtime === "unsupported") {failures.push("repository does not declare the Next.js runtime");}
 
   const tasks = declaredMiseTasks(contents[".config/mise/config.toml"] ?? "");
   if (!hasOneTask(tasks, "repository:preflight"))
-    failures.push("repository:preflight command is missing");
+    {failures.push("repository:preflight command is missing");}
   if (
     contents[".config/mise/tasks/repository/exec"] === undefined ||
     contents[".config/mise/scripts/repository/app-identity.ts"] === undefined ||
     contents[".config/mise/scripts/repository/app-contract.ts"] === undefined
   )
-    failures.push("repository:exec command is unavailable");
+    {failures.push("repository:exec command is unavailable");}
   // Topology ownership is advisory capability information for older
   // checkouts, not source-admission authority.
 
@@ -511,35 +511,35 @@ export const inspectSupportedTemplateSnapshot = function inspectSupportedTemplat
   const planningCompatibility = inspectPlanningCompatibility(contents);
   for (const path of SUPPORTED_TEMPLATE_INPUT_PATHS) {
     if (path !== SUPPORTED_REPOSITORY_CONTRACT.topologyOwner && contents[path] === undefined)
-      failures.push(`missing required path ${path}`);
+      {failures.push(`missing required path ${path}`);}
   }
   if (contents[".config/repository-template.json"] !== undefined)
-    failures.push("V0 does not accept a repository-template manifest");
+    {failures.push("V0 does not accept a repository-template manifest");}
 
   const appContract = contents[".config/mise/scripts/repository/app-contract.ts"] ?? "";
   const adapterRuntime = /runtime:\s*"nextjs"/u.test(appContract) ? "nextjs" : "unsupported";
   if (adapterRuntime === "unsupported")
-    failures.push("app planner does not declare the Next.js runtime");
+    {failures.push("app planner does not declare the Next.js runtime");}
 
   const generator = contents[".config/turbo/generators/config.ts"] ?? "";
   const packageScope = generator.includes("autograph") ? "@autograph" : "unsupported";
-  if (packageScope === "unsupported") failures.push("workspace package scope is not @autograph");
+  if (packageScope === "unsupported") {failures.push("workspace package scope is not @autograph");}
 
   const mise = contents[".config/mise/config.toml"] ?? "";
-  if (!mise.includes('[tasks."create:app"]')) failures.push("create:app command is missing");
+  if (!mise.includes('[tasks."create:app"]')) {failures.push("create:app command is missing");}
   if (!mise.includes('[tasks."repository:preflight"]'))
-    failures.push("repository:preflight command is missing");
+    {failures.push("repository:preflight command is missing");}
   // Validation command spellings are advisory and may differ in older
   // Arrusted checkouts.
   if (
     !mise.includes('[tasks."generate:app"]') ||
     !mise.includes("turbo gen --config .config/turbo/generators/config.ts app --args")
   )
-    failures.push("generate:app command drifted");
+    {failures.push("generate:app command drifted");}
 
   const preflight = contents[".config/mise/scripts/repository/repository-preflight.ts"] ?? "";
   if (!preflight.includes('runtime: "nextjs"'))
-    failures.push("repository preflight does not declare the Next.js runtime");
+    {failures.push("repository preflight does not declare the Next.js runtime");}
   // Preflight command-list parity is advisory capability information.
 
   const cd = contents[".github/workflows/cd.yml"] ?? "";
@@ -548,7 +548,7 @@ export const inspectSupportedTemplateSnapshot = function inspectSupportedTemplat
     gate: "REPOSITORY_RELEASE_ENABLED" as const,
   };
   if (!releasePolicy.eligible)
-    failures.push("REPOSITORY_RELEASE_ENABLED gate is not the supported CD gate");
+    {failures.push("REPOSITORY_RELEASE_ENABLED gate is not the supported CD gate");}
 
   const normalized = {
     adapter: SUPPORTED_TEMPLATE_ADAPTER,
@@ -585,7 +585,7 @@ export const inspectSupportedTemplateSnapshot = function inspectSupportedTemplat
 const allowedRoots = function allowedRoots(): string[] {
   const value = process.env.REPOSITORY_LOCAL_ROOTS;
   if (value === undefined || value.trim() === "") {
-    if (hasTestCapability("simulated-target")) return [tmpdir()];
+    if (hasTestCapability("simulated-target")) {return [tmpdir()];}
     throw new Error("REPOSITORY_LOCAL_ROOTS must name at least one allowed local source root.");
   }
   return value
@@ -634,14 +634,14 @@ const inspectSupportedRepositoryAtPath = function inspectSupportedRepositoryAtPa
       .split("\0");
     for (let index = 0; index < statusRecords.length; index += 1) {
       const record = statusRecords[index];
-      if (record === undefined || record === "") continue;
+      if (record === undefined || record === "") {continue;}
       if (record.length < 4 || record[2] !== " ")
-        throw new Error("Git returned a malformed worktree status record.");
+        {throw new Error("Git returned a malformed worktree status record.");}
       dirtyPaths.push(record.slice(3));
       if (/[RC]/u.test(record.slice(0, 2))) {
         const originalPath = statusRecords[index + 1];
         if (originalPath === undefined || originalPath === "")
-          throw new Error("Git returned a malformed rename status record.");
+          {throw new Error("Git returned a malformed rename status record.");}
         dirtyPaths.push(originalPath);
         index += 1;
       }
@@ -652,7 +652,7 @@ const inspectSupportedRepositoryAtPath = function inspectSupportedRepositoryAtPa
 
   const contents = Object.fromEntries(
     [...SUPPORTED_TEMPLATE_INPUT_PATHS, ".config/repository-template.json"].map((path) => {
-      if (sourceSha === undefined) return [path, undefined];
+      if (sourceSha === undefined) {return [path, undefined];}
       const entry = git(sourcePath, ["ls-tree", sourceSha, "--", path]);
       const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
         entry,
@@ -780,7 +780,7 @@ const parsePreparedWorkspace = function parsePreparedWorkspace(
       "eligibilityDigest",
     ])
   )
-    throw new Error("The prepared workspace record is invalid.");
+    {throw new Error("The prepared workspace record is invalid.");}
   const record = input as Partial<PreparedSandboxWorkspace>;
   if (
     typeof record.workspaceId !== "string" ||
@@ -798,7 +798,7 @@ const parsePreparedWorkspace = function parsePreparedWorkspace(
     typeof record.eligibilityDigest !== "string" ||
     !/^[0-9a-f]{64}$/u.test(record.eligibilityDigest)
   )
-    throw new Error("The prepared workspace record is invalid.");
+    {throw new Error("The prepared workspace record is invalid.");}
   return record as PreparedSandboxWorkspace;
 };
 
@@ -806,7 +806,7 @@ const parsePreparedSourceFiles = function parsePreparedSourceFiles(
   input: unknown,
 ): PreparedSourceFile[] {
   if (!Array.isArray(input) || input.length === 0)
-    throw new Error("The prepared workspace manifest is invalid.");
+    {throw new Error("The prepared workspace manifest is invalid.");}
   const paths = new Set<string>();
   return input.map((candidate) => {
     if (
@@ -815,7 +815,7 @@ const parsePreparedSourceFiles = function parsePreparedSourceFiles(
       Array.isArray(candidate) ||
       !exactKeys(candidate as Record<string, unknown>, ["mode", "objectId", "path", "sha256"])
     )
-      throw new Error("The prepared workspace manifest is invalid.");
+      {throw new Error("The prepared workspace manifest is invalid.");}
     const file = candidate as Partial<PreparedSourceFile>;
     if (
       !["100644", "100755"].includes(file.mode ?? "") ||
@@ -827,7 +827,7 @@ const parsePreparedSourceFiles = function parsePreparedSourceFiles(
       typeof file.sha256 !== "string" ||
       !/^[0-9a-f]{64}$/u.test(file.sha256)
     )
-      throw new Error("The prepared workspace manifest is invalid.");
+      {throw new Error("The prepared workspace manifest is invalid.");}
     paths.add(file.path);
     return file as PreparedSourceFile;
   });
@@ -838,7 +838,7 @@ export const readPreparedSandboxWorkspaceRecord = async function readPreparedSan
   sandbox: SandboxSession,
 ): Promise<PreparedSandboxWorkspace | undefined> {
   const content = await sandbox.readTextFile({ path: sandboxRecordPath });
-  if (content === null) return undefined;
+  if (content === null) {return undefined;}
   try {
     return parsePreparedWorkspace(JSON.parse(content) as unknown);
   } catch (error) {
@@ -860,7 +860,7 @@ export const readPreparedSandboxSourceManifest = async function readPreparedSand
   const manifestContent = await sandbox.readTextFile({
     path: sandboxSourceFilesPath,
   });
-  if (manifestContent === null) throw new Error("The prepared workspace manifest is missing.");
+  if (manifestContent === null) {throw new Error("The prepared workspace manifest is missing.");}
   let files: PreparedSourceFile[];
   try {
     files = parsePreparedSourceFiles(JSON.parse(manifestContent) as unknown);
@@ -870,7 +870,7 @@ export const readPreparedSandboxSourceManifest = async function readPreparedSand
     });
   }
   if (sha256(JSON.stringify(files)) !== workspace.workspaceDigest)
-    throw new Error("The prepared workspace manifest no longer matches its receipt.");
+    {throw new Error("The prepared workspace manifest no longer matches its receipt.");}
   return files;
 };
 
@@ -883,7 +883,7 @@ const verifyPreparedSandboxWorkspace = async function verifyPreparedSandboxWorks
     path: sandboxSourceChecksumsPath,
   });
   if (checksums !== preparedSourceChecksums(files))
-    throw new Error("The prepared workspace checksum receipt drifted.");
+    {throw new Error("The prepared workspace checksum receipt drifted.");}
   if (fixtureSandboxEnabled()) {
     for (const file of files) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -891,7 +891,7 @@ const verifyPreparedSandboxWorkspace = async function verifyPreparedSandboxWorks
         path: `repository/${file.path}`,
       });
       if (content === null || sha256(content) !== file.sha256)
-        throw new Error("A prepared workspace file drifted or is missing.");
+        {throw new Error("A prepared workspace file drifted or is missing.");}
     }
     return;
   }
@@ -904,9 +904,9 @@ const verifyPreparedSandboxWorkspace = async function verifyPreparedSandboxWorks
     Buffer.byteLength(verification.stdout) > sandboxOperationOutputBytes ||
     Buffer.byteLength(verification.stderr) > sandboxOperationOutputBytes
   )
-    throw new Error("Prepared workspace verification output was too large.");
+    {throw new Error("Prepared workspace verification output was too large.");}
   if (verification.exitCode !== 0)
-    throw new Error("A prepared workspace file drifted or is missing.");
+    {throw new Error("A prepared workspace file drifted or is missing.");}
 };
 
 const developmentWorkspaceInspectionProgram = [
@@ -935,7 +935,7 @@ const verifyDevelopmentSandboxWorkspace = async function verifyDevelopmentSandbo
   record: PreparedSandboxWorkspace,
 ): Promise<void> {
   if (record.workspaceId !== sandbox.id || record.workspacePath !== "/workspace/repository")
-    throw new Error("The prepared development workspace does not belong to this session.");
+    {throw new Error("The prepared development workspace does not belong to this session.");}
   const node = fixtureSandboxEnabled() ? JSON.stringify(process.execPath) : "node";
   const inspection = await sandbox.run({
     abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
@@ -969,7 +969,7 @@ const verifyDevelopmentSandboxWorkspace = async function verifyDevelopmentSandbo
       ([key, expected]) => (observed as Record<string, unknown>)[key] !== expected,
     )
   )
-    throw new Error("The prepared development workspace escaped its sandbox boundary.");
+    {throw new Error("The prepared development workspace escaped its sandbox boundary.");}
 };
 
 export type PreparedSandboxWorkspaceStatus =
@@ -981,7 +981,7 @@ export const inspectPreparedSandboxWorkspace = async function inspectPreparedSan
   mode: "exact" | "development-live" = "exact",
 ): Promise<PreparedSandboxWorkspaceStatus> {
   const record = await readPreparedSandboxWorkspaceRecord(sandbox);
-  if (record === undefined) return { state: "absent" };
+  if (record === undefined) {return { state: "absent" };}
   await (mode === "development-live"
     ? verifyDevelopmentSandboxWorkspace(sandbox, record)
     : verifyPreparedSandboxWorkspace(sandbox, record));
@@ -993,7 +993,7 @@ export const inspectPreparedSandboxSourceFiles = async function inspectPreparedS
   sandbox: SandboxSession,
 ): Promise<PreparedSourceFile[]> {
   const prepared = await inspectPreparedSandboxWorkspace(sandbox);
-  if (prepared.state !== "prepared") throw new Error("The prepared source workspace is missing.");
+  if (prepared.state !== "prepared") {throw new Error("The prepared source workspace is missing.");}
   return await readPreparedSandboxSourceManifest(sandbox, prepared.workspace);
 };
 
@@ -1016,20 +1016,20 @@ export const inspectPreparedSandboxReleasePolicy =
       prepared.workspace.sourceTree !== input.sourceTree ||
       prepared.workspace.workspaceDigest !== input.workspaceDigest
     )
-      throw new Error("The hosted release policy is not bound to the reviewed Git snapshot.");
+      {throw new Error("The hosted release policy is not bound to the reviewed Git snapshot.");}
     const files = await inspectPreparedSandboxSourceFiles(input.sandbox);
     const entry = files.find(({ path }) => path === repositoryReleasePolicyPath);
     if (entry === undefined)
-      return releasePolicyObservation({
+      {return releasePolicyObservation({
         sourceSha: input.sourceSha,
         sourceTree: input.sourceTree,
         workflow: { status: "absent" },
-      });
+      });}
     const bytes = await input.sandbox.readBinaryFile({
       path: `repository/${repositoryReleasePolicyPath}`,
     });
     if (bytes === null || sha256(bytes) !== entry.sha256)
-      throw new Error("The hosted release-policy bytes changed after review.");
+      {throw new Error("The hosted release-policy bytes changed after review.");}
     return releasePolicyObservation({
       sourceSha: input.sourceSha,
       sourceTree: input.sourceTree,
@@ -1051,9 +1051,9 @@ export const assertPreparedSandboxReleasePolicy =
   }): Promise<RepositoryReleasePolicyObservation> {
     const observation = await inspectPreparedSandboxReleasePolicy(input);
     if (!observation.eligible)
-      throw new Error(
+      {throw new Error(
         "The reviewed repository does not satisfy the release policy required for outward effects.",
-      );
+      );}
     return observation;
   };
 
@@ -1082,7 +1082,7 @@ export const recordPreparedSandboxWorkspace = async function recordPreparedSandb
   };
   const existing = await readPreparedSandboxWorkspaceRecord(input.sandbox);
   if (existing !== undefined && existing.workspaceId !== input.sandbox.id)
-    throw new Error("This app build already owns a different workspace.");
+    {throw new Error("This app build already owns a different workspace.");}
   if (existing !== undefined) {
     // Source changes and generated files are ordinary work inside the same
     // session-owned checkout. Refresh the diagnostic metadata below.
@@ -1143,7 +1143,7 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
     );
   }
   if (eligibility.sourceSha !== expectedSha)
-    throw new Error("Source SHA changed after eligibility review.");
+    {throw new Error("Source SHA changed after eligibility review.");}
   // Compatibility metadata is diagnostic only. Repository contents are
   // expected to evolve between inspection and execution; the commands below
   // are the authority on whether the checkout can be used.
@@ -1174,7 +1174,7 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
       const match = /^(?<mode>\d+) (?<type>\w+) (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(
         entry,
       );
-      if (match === null) throw new Error("The reviewed Git tree contains an invalid entry.");
+      if (match === null) {throw new Error("The reviewed Git tree contains an invalid entry.");}
       const { mode, type, objectId, path } = match.groups ?? {};
       if (
         type !== "blob" ||
@@ -1251,7 +1251,7 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
         Buffer.byteLength(extraction.stderr) > sandboxOperationOutputBytes ||
         extraction.exitCode !== 0
       )
-        throw new Error("The reviewed source archive could not be materialized.");
+        {throw new Error("The reviewed source archive could not be materialized.");}
     } finally {
       await sandbox.removePath({ force: true, path: sandboxSourceArchivePath });
     }
@@ -1314,10 +1314,10 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
     .filter(Boolean)
     .toSorted()
     .filter((path) => {
-      if (!safeSourcePath(path)) throw new Error("The development source contains an unsafe path.");
+      if (!safeSourcePath(path)) {throw new Error("The development source contains an unsafe path.");}
       const absolutePath = nodePath.resolve(sourcePath, path);
       if (!within(sourcePath, absolutePath))
-        throw new Error("The development source escapes its root.");
+        {throw new Error("The development source escapes its root.");}
       // `git ls-files --cached` keeps a deleted tracked path until it is
       // staged. Development follows the working tree, so that path is a
       // managed deletion rather than a failed source snapshot.
@@ -1329,7 +1329,7 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
     // Tar carries symlinks, submodule directories, and other ordinary Git
     // working-tree entries. They do not need to fit the old regular-file
     // receipt shape in order for the repository to run.
-    if (!info.isFile() || info.isSymbolicLink()) return [];
+    if (!info.isFile() || info.isSymbolicLink()) {return [];}
     const content = readFileSync(absolutePath);
     return [
       {
@@ -1343,7 +1343,7 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
       },
     ];
   });
-  if (sourceFiles.length === 0) throw new Error("The development source contains no files.");
+  if (sourceFiles.length === 0) {throw new Error("The development source contains no files.");}
   const workspaceDigest = sha256(JSON.stringify(sourceFiles));
   const generation = workspaceDigest.slice(0, 40);
 
@@ -1411,7 +1411,7 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
         Buffer.byteLength(extraction.stderr) > sandboxOperationOutputBytes ||
         extraction.exitCode !== 0
       )
-        throw new Error("The development source could not be materialized.");
+        {throw new Error("The development source could not be materialized.");}
     } finally {
       await sandbox.removePath({ force: true, path: sandboxSourceArchivePath });
     }
@@ -1425,7 +1425,7 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
     );
     for (const path of deletedPaths)
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await sandbox.removePath({ force: true, path: `repository/${path}` });
+      {await sandbox.removePath({ force: true, path: `repository/${path}` });}
     for (const file of changedFiles) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await sandbox.writeBinaryFile({
@@ -1477,7 +1477,7 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
       workingDirectory: "/workspace",
     });
     if (chmod.exitCode !== 0)
-      throw new Error("The development source permissions could not be prepared.");
+      {throw new Error("The development source permissions could not be prepared.");}
   }
   await sandbox.writeTextFile({
     content: `${JSON.stringify(sourceFiles, null, 2)}\n`,

@@ -40,14 +40,14 @@ export function createDevelopmentShutdown(target: SignalTarget = process): Reado
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function waitForDevelopmentShutdown(signal: AbortSignal, exitCode: () => number) {
-  if (signal.aborted) return Promise.resolve({ code: exitCode(), kind: "stop" as const });
+  if (signal.aborted) {return Promise.resolve({ code: exitCode(), kind: "stop" as const });}
   return once(signal, "abort").then(() => ({ code: exitCode(), kind: "stop" as const }));
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function developmentChildExit(child: ChildProcess) {
-  if (child.exitCode !== null) return Promise.resolve(child.exitCode);
-  if (child.signalCode !== null) return Promise.resolve(1);
+  if (child.exitCode !== null) {return Promise.resolve(child.exitCode);}
+  if (child.signalCode !== null) {return Promise.resolve(1);}
   return once(child, "exit").then(([code, signal]) => (code as number | null) ?? (signal ? 1 : 0));
 }
 
@@ -63,7 +63,7 @@ export async function stopDevelopmentChild(
   // The wrapper can exit before Eve's local server finishes its shutdown
   // handshake. Still signal this task-owned process group on restart; Eve's
   // separately detached server receives its shutdown request from the CLI.
-  if (childExited && !options.processGroup) return;
+  if (childExited && !options.processGroup) {return;}
   const gracefulTimeoutMs = options.gracefulTimeoutMs ?? (options.processGroup ? 1100 : 5000);
   const exited = developmentChildExit(child);
   const signalProcessGroup = (value: NodeJS.Signals) => {
@@ -74,7 +74,7 @@ export async function stopDevelopmentChild(
     try {
       process.kill(-child.pid, value);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") {throw error;}
     }
   };
   if (options.processGroup && child.pid !== undefined && process.platform !== "win32") {
@@ -82,8 +82,8 @@ export async function stopDevelopmentChild(
     // to Eve. Signalling the whole group here would also hit Eve directly,
     // making the wrapper's forward a second signal that bypasses Eve's orderly
     // shutdown and can orphan its separately detached local server.
-    if (childExited) signalProcessGroup("SIGTERM");
-    else child.kill("SIGTERM");
+    if (childExited) {signalProcessGroup("SIGTERM");}
+    else {child.kill("SIGTERM");}
     // `eve dev` uses a separately detached local-server child. Its CLI sends
     // that child an IPC shutdown request and has a 900ms shutdown backstop.
     // Do not cut that handshake short: a premature group kill leaves the
@@ -92,11 +92,11 @@ export async function stopDevelopmentChild(
     // a window longer than Eve's own backstop.
     await delay(gracefulTimeoutMs);
     signalProcessGroup("SIGKILL");
-    if (!childExited) await exited;
+    if (!childExited) {await exited;}
     return;
   }
   child.kill("SIGTERM");
-  if (childExited) return;
+  if (childExited) {return;}
   const graceful = await Promise.race([
     exited.then(() => true),
     delay(gracefulTimeoutMs).then(() => false as const),
@@ -122,7 +122,7 @@ export async function waitForDevelopmentPortRelease(
       .then(() => true)
       .catch(() => false)
       .finally(() => socket.destroy());
-    if (!occupied) return;
+    if (!occupied) {return;}
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await delay(pollMs);
   }

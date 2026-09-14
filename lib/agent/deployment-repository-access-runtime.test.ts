@@ -53,7 +53,7 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
           candidate.consumedAt === undefined &&
           candidate.expiresAt > input.now,
       );
-      if (!record) return;
+      if (!record) {return;}
       record.authorizedAt ??= input.now;
       return record;
     },
@@ -71,7 +71,7 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
           candidate.consumedAt === undefined &&
           candidate.expiresAt > input.now,
       );
-      if (!record) return;
+      if (!record) {return;}
       record.consumedAt = input.now;
       return record;
     },
@@ -227,7 +227,7 @@ describe("deployment repository access authorization", () => {
       principal,
     });
     const challengeUrl = started.challenge.url;
-    if (!challengeUrl) throw new Error("Expected authorization challenge URL");
+    if (!challengeUrl) {throw new Error("Expected authorization challenge URL");}
     expect(new URL(challengeUrl).searchParams.get("returnTo")).toBe(`/handoff/${continuationId}`);
   });
 

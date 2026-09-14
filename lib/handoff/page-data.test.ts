@@ -158,15 +158,15 @@ describe("owner-only handoff browser data", () => {
     "hides %s rows with the same generic 404",
     async (scenario) => {
       if (scenario === "other-owner")
-        mocks.session.mockResolvedValue({
+        {mocks.session.mockResolvedValue({
           organization: { workspaceId: authority.workspaceId },
           user: { id: "user-two" },
-        });
+        });}
       if (scenario === "other-workspace")
-        mocks.session.mockResolvedValue({
+        {mocks.session.mockResolvedValue({
           organization: { workspaceId: "workspace-two" },
           user: { id: authority.ownerUserId },
-        });
+        });}
       let id = handoffId;
       if (scenario === "missing") {
         id = "123e4567-e89b-42d3-a456-426614174099";

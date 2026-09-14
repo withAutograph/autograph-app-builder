@@ -68,18 +68,18 @@ export const hostedProofScenarioSchema = z
   .strict()
   .superRefine((scenario, context) => {
     if (scenario.oauth.audience !== scenario.oauth.resource)
-      context.addIssue({
+      {context.addIssue({
         code: "custom",
         message: "OAuth audience must be the exact protected resource.",
         path: ["oauth", "audience"],
-      });
+      });}
     const phases = scenario.approvalReceipts.map(({ receipt }) => receipt.phase);
     if (new Set(phases).size !== 3)
-      context.addIssue({
+      {context.addIssue({
         code: "custom",
         message: "Each approval phase is required exactly once.",
         path: ["approvalReceipts"],
-      });
+      });}
     for (const expected of scenario.approvalReceipts) {
       const { receipt } = expected;
       if (
@@ -88,11 +88,11 @@ export const hostedProofScenarioSchema = z
         receipt.baseRef !== scenario.target.baseRef ||
         receipt.baseSha !== scenario.target.baseSha
       )
-        context.addIssue({
+        {context.addIssue({
           code: "custom",
           message: "Approval target binding drifted.",
           path: ["approvalReceipts"],
-        });
+        });}
       let expectedDigest: string;
       let expectedOutcome: string;
       if (receipt.phase === "appspec") {
@@ -106,11 +106,11 @@ export const hostedProofScenarioSchema = z
         expectedOutcome = "create-draft-pr";
       }
       if (receipt.subjectDigest !== expectedDigest || receipt.outcome !== expectedOutcome)
-        context.addIssue({
+        {context.addIssue({
           code: "custom",
           message: "Approval digest or outcome drifted.",
           path: ["approvalReceipts"],
-        });
+        });}
     }
   });
 
@@ -121,18 +121,18 @@ export const digest = (value: string | Uint8Array) =>
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonicalPublicResult(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalPublicResult).join(",")}]`;
+  if (Array.isArray(value)) {return `[${value.map(canonicalPublicResult).join(",")}]`;}
   if (value !== null && typeof value === "object")
-    return `{${Object.entries(value)
+    {return `{${Object.entries(value)
       .toSorted(([left], [right]) => {
-        if (left < right) return -1;
-        if (left > right) return 1;
+        if (left < right) {return -1;}
+        if (left > right) {return 1;}
         return 0;
       })
       .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalPublicResult(entry)}`)
-      .join(",")}}`;
+      .join(",")}}`;}
   const primitive = JSON.stringify(value);
-  if (primitive === undefined) throw new Error("Public tool result was not canonical JSON.");
+  if (primitive === undefined) {throw new Error("Public tool result was not canonical JSON.");}
   return primitive;
 }
 
@@ -156,7 +156,7 @@ const tokenClaimsSchema = z
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function tokenClaims(token: string) {
   const parts = token.split(".");
-  if (parts.length !== 3) throw new Error("OAuth access token must be a JWT.");
+  if (parts.length !== 3) {throw new Error("OAuth access token must be a JWT.");}
   return tokenClaimsSchema.parse(JSON.parse(Buffer.from(parts[1], "base64url").toString("utf-8")));
 }
 
@@ -187,10 +187,10 @@ export function verifyWorkspaceTokenPair(input: {
       claims.exp - claims.nbf > 300 ||
       requiredScopes.some((scope) => !scopes.has(scope))
     )
-      throw new Error("OAuth token claims did not match the exact hosted proof contract.");
+      {throw new Error("OAuth token claims did not match the exact hosted proof contract.");}
   }
   if (primary.sub === secondary.sub || primary.workspace_id === secondary.workspace_id)
-    throw new Error("Proof tokens must bind two distinct subjects to two distinct workspaces.");
+    {throw new Error("Proof tokens must bind two distinct subjects to two distinct workspaces.");}
   return {
     primaryIdentityDigest: digest(`${primary.iss}\0${primary.sub}\0${primary.workspace_id}`),
     secondaryIdentityDigest: digest(
@@ -235,7 +235,7 @@ export function verifiedDraftPrEvidence(text: string, scenario: HostedProofScena
   const marker = "AUTOGRAPH_DRAFT_PR_RECEIPT ";
   const candidates = text.split("\n").filter((line) => line.startsWith(marker));
   if (candidates.length !== 1)
-    throw new Error("Exactly one structural draft-PR receipt is required.");
+    {throw new Error("Exactly one structural draft-PR receipt is required.");}
   const receipt = draftPrReceiptSchema.parse(JSON.parse(candidates[0].slice(marker.length)));
   const url = new URL(receipt.url);
   const expectedPath = `/${receipt.repository}/pull/`;
@@ -253,7 +253,7 @@ export function verifiedDraftPrEvidence(text: string, scenario: HostedProofScena
     receipt.headSha === receipt.baseSha ||
     receipt.changeSetDigest !== scenario.target.changeSetDigest
   )
-    throw new Error("Draft-PR receipt did not match the exact approved target and change set.");
+    {throw new Error("Draft-PR receipt did not match the exact approved target and change set.");}
   return { evidenceDigest: digest(JSON.stringify(receipt)), receipt };
 }
 
@@ -311,9 +311,9 @@ export class HostedMcpProofClient {
       "mcp-protocol-version": "2025-03-26",
     });
     if (options.authenticate !== false && this.token !== undefined)
-      headers.set("authorization", `Bearer ${this.token}`);
-    if (this.sessionId !== undefined) headers.set("mcp-session-id", this.sessionId);
-    if (!options.notification) this.requestId += 1;
+      {headers.set("authorization", `Bearer ${this.token}`);}
+    if (this.sessionId !== undefined) {headers.set("mcp-session-id", this.sessionId);}
+    if (!options.notification) {this.requestId += 1;}
     const body = {
       jsonrpc: "2.0",
       ...(options.notification ? {} : { id: this.requestId }),
@@ -327,7 +327,7 @@ export class HostedMcpProofClient {
       redirect: "error",
     });
     const returnedSession = response.headers.get("mcp-session-id");
-    if (returnedSession !== null) this.sessionId = returnedSession;
+    if (returnedSession !== null) {this.sessionId = returnedSession;}
     const text = await response.text();
     this.responseBodies.push(text);
     return {
@@ -344,29 +344,29 @@ export class HostedMcpProofClient {
       protocolVersion: "2025-03-26",
     });
     if (response.status !== 200 || response.payload?.error !== undefined)
-      throw new Error(`MCP initialize failed with HTTP ${response.status}.`);
+      {throw new Error(`MCP initialize failed with HTTP ${response.status}.`);}
     const initialized = await this.post("notifications/initialized", {}, { notification: true });
     if (![200, 202, 204].includes(initialized.status))
-      throw new Error("MCP initialized notification was rejected.");
+      {throw new Error("MCP initialized notification was rejected.");}
   }
 
   async listTools() {
     const response = await this.post("tools/list", {});
     if (response.status !== 200 || response.payload?.error !== undefined)
-      throw new Error(`MCP tools/list failed with HTTP ${response.status}.`);
+      {throw new Error(`MCP tools/list failed with HTTP ${response.status}.`);}
     const listed = z
       .object({ tools: z.array(z.object({ name: z.string() }).passthrough()) })
       .passthrough()
       .parse(response.payload?.result);
     if ("nextCursor" in listed)
-      throw new Error("Hosted tools/list unexpectedly required pagination.");
+      {throw new Error("Hosted tools/list unexpectedly required pagination.");}
     return listed.tools.map(({ name }) => name);
   }
 
   async callTool(name: (typeof TOOL_NAMES)[number], args: unknown) {
     const response = await this.post("tools/call", { arguments: args, name });
     if (response.status !== 200 || response.payload?.error !== undefined)
-      throw new Error(`${name} failed with HTTP ${response.status}.`);
+      {throw new Error(`${name} failed with HTTP ${response.status}.`);}
     const result = z
       .object({
         isError: z.boolean().optional(),
@@ -386,7 +386,7 @@ export class HostedMcpProofClient {
   async callToolAndDiscardResult(name: (typeof TOOL_NAMES)[number], args: unknown) {
     const response = await this.post("tools/call", { arguments: args, name });
     if (response.status !== 200 || response.payload?.error !== undefined)
-      throw new Error(`${name} failed with HTTP ${response.status}.`);
+      {throw new Error(`${name} failed with HTTP ${response.status}.`);}
     const result = z
       .object({
         isError: z.boolean().optional(),
@@ -394,7 +394,7 @@ export class HostedMcpProofClient {
       })
       .passthrough()
       .parse(response.payload?.result);
-    if (result.isError === true) throw new Error(`${name} returned an error before result loss.`);
+    if (result.isError === true) {throw new Error(`${name} returned an error before result loss.`);}
     const publicResult = eveSessionResultSchema.parse(result.structuredContent);
     // Retain only a private canonical fingerprint. This models a caller that
     // loses the successful operation result before it can retain the public
@@ -408,14 +408,14 @@ export class HostedMcpProofClient {
   async callToolMatchingDiscardedResult(name: (typeof TOOL_NAMES)[number], args: unknown) {
     const discarded = this.discardedResult;
     if (discarded === undefined || discarded.name !== name)
-      throw new Error("No matching discarded tool result was recorded.");
+      {throw new Error("No matching discarded tool result was recorded.");}
     const result = await this.callTool(name, args);
     if (
       !result.isError &&
       result.session?.success === true &&
       publicResultFingerprint(result.session.data) !== discarded.fingerprint
     )
-      throw new Error("Lost-response retry did not match the discarded hosted session result.");
+      {throw new Error("Lost-response retry did not match the discarded hosted session result.");}
     return result;
   }
 
@@ -456,20 +456,20 @@ async function verifyProtectedResourceMetadata(input: {
   const endpoint = new URL(input.endpoint);
   const metadataUrl = new URL("/.well-known/oauth-protected-resource", endpoint);
   if (input.scenario.oauth.resource !== endpoint.href)
-    throw new Error("OAuth resource must be the exact release MCP endpoint.");
+    {throw new Error("OAuth resource must be the exact release MCP endpoint.");}
   const response = await input.fetcher(metadataUrl, {
     headers: { accept: "application/json" },
     method: "GET",
     redirect: "error",
   });
   if (response.status !== 200)
-    throw new Error("OAuth protected-resource metadata was unavailable.");
+    {throw new Error("OAuth protected-resource metadata was unavailable.");}
   const metadata = protectedResourceMetadataSchema.parse(await response.json());
   if (
     metadata.resource !== input.scenario.oauth.resource ||
     metadata.authorization_servers[0] !== input.scenario.oauth.issuer
   )
-    throw new Error("OAuth protected-resource metadata binding drifted.");
+    {throw new Error("OAuth protected-resource metadata binding drifted.");}
   return {
     digest: digest(JSON.stringify(metadata)),
     metadataUrl: metadataUrl.href,
@@ -479,7 +479,7 @@ async function verifyProtectedResourceMetadata(input: {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function toolSession(name: string, result: Awaited<ReturnType<HostedMcpProofClient["callTool"]>>) {
   if (result.isError || result.session?.success !== true)
-    throw new Error(`${name} returned a tool error or invalid public result.`);
+    {throw new Error(`${name} returned a tool error or invalid public result.`);}
   return result.session.data;
 }
 
@@ -502,7 +502,7 @@ function responseFor(
       (candidate) => candidate.requestTitle === request.title,
     );
     if (matches.length !== 1)
-      throw new Error("Question did not match exactly one title-bound response.");
+      {throw new Error("Question did not match exactly one title-bound response.");}
     const [match] = matches;
     return {
       response: {
@@ -513,7 +513,7 @@ function responseFor(
     };
   }
   if (request.kind !== "approval" || request.description === undefined)
-    throw new Error("Only closed question or approval requests can be automated.");
+    {throw new Error("Only closed question or approval requests can be automated.");}
   const parsedReceipt = approvalReceiptSchema.parse(JSON.parse(request.description));
   const matches = scenario.approvalReceipts.filter(
     (candidate) =>
@@ -521,9 +521,9 @@ function responseFor(
       JSON.stringify(candidate.receipt) === JSON.stringify(parsedReceipt),
   );
   if (matches.length !== 1)
-    throw new Error("Approval did not match one exact digest-bound receipt.");
+    {throw new Error("Approval did not match one exact digest-bound receipt.");}
   if (!permitApprovals)
-    throw new Error("Approval response requires the explicit --permit-approvals gate.");
+    {throw new Error("Approval response requires the explicit --permit-approvals gate.");}
   return {
     approvalPhase: parsedReceipt.phase,
     response: { kind: "approve" as const },
@@ -582,14 +582,14 @@ async function pollUntilSettled(input: {
       page.status === "failed" ||
       page.status === "cancelled"
     )
-      return {
+      {return {
         allText,
         approvalPhases,
         cursor,
         page,
         responseBatchCount,
         responseCount,
-      };
+      };}
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await delay(input.scenario.pollIntervalMs);
   }
@@ -658,7 +658,7 @@ export async function runHostedProof(input: {
       .get("www-authenticate")
       ?.includes(`resource_metadata="${metadata.metadataUrl}"`)
   )
-    throw new Error("Hosted endpoint did not fail closed without OAuth.");
+    {throw new Error("Hosted endpoint did not fail closed without OAuth.");}
   const invalid = new HostedMcpProofClient(input.endpoint, "invalid-hosted-proof-token", fetcher);
   const invalidResult = await invalid.rawInitialize(true);
   if (
@@ -668,13 +668,13 @@ export async function runHostedProof(input: {
       .get("www-authenticate")
       ?.includes(`resource_metadata="${metadata.metadataUrl}"`)
   )
-    throw new Error("Hosted endpoint did not reject an invalid bearer token.");
+    {throw new Error("Hosted endpoint did not reject an invalid bearer token.");}
 
   const client = new HostedMcpProofClient(input.endpoint, input.token, fetcher);
   await client.initialize();
   const discoveredTools = await client.listTools();
   if (JSON.stringify(discoveredTools) !== JSON.stringify(TOOL_NAMES))
-    throw new Error("Hosted endpoint did not expose exactly the five Autograph tools.");
+    {throw new Error("Hosted endpoint did not expose exactly the five Autograph tools.");}
 
   const proofId = digest(
     `${input.sourceSha}\0${JSON.stringify(input.scenario)}\0${randomUUID()}`,
@@ -701,9 +701,9 @@ export async function runHostedProof(input: {
     sessionId: first.sessionId,
   });
   if (created.responseCount < 1)
-    throw new Error("Hosted proof did not exercise autograph_respond.");
+    {throw new Error("Hosted proof did not exercise autograph_respond.");}
   if (created.page.status !== "waiting")
-    throw new Error("Create phase did not reach the waiting state for iteration.");
+    {throw new Error("Create phase did not reach the waiting state for iteration.");}
 
   const sent = toolSession(
     "autograph_send",
@@ -722,13 +722,13 @@ export async function runHostedProof(input: {
     sessionId: first.sessionId,
   });
   if (iterated.page.status !== "completed")
-    throw new Error("Iteration did not reach a successful completed state.");
+    {throw new Error("Iteration did not reach a successful completed state.");}
   const observedApprovalPhases = [...created.approvalPhases, ...iterated.approvalPhases].toSorted();
   if (
     JSON.stringify(observedApprovalPhases) !==
     JSON.stringify(["appspec", "change_set", "publication"])
   )
-    throw new Error("The live lifecycle did not consume all exact approval receipts.");
+    {throw new Error("The live lifecycle did not consume all exact approval receipts.");}
   const draftPr = verifiedDraftPrEvidence(iterated.allText, input.scenario);
 
   const stale = await client.callTool("autograph_get", {
@@ -736,7 +736,7 @@ export async function runHostedProof(input: {
     limit: 1,
     sessionId: `stale-${proofId}`,
   });
-  if (!stale.isError) throw new Error("Stale or unknown session access did not fail closed.");
+  if (!stale.isError) {throw new Error("Stale or unknown session access did not fail closed.");}
 
   const crossTenant = new HostedMcpProofClient(input.endpoint, input.crossTenantToken, fetcher);
   await crossTenant.initialize();
@@ -761,7 +761,7 @@ export async function runHostedProof(input: {
     !(await denied(crossTenant, first.sessionId)) ||
     !(await denied(client, cancellationStart.sessionId))
   )
-    throw new Error("The two server-accepted workspace identities were not mutually isolated.");
+    {throw new Error("The two server-accepted workspace identities were not mutually isolated.");}
   toolSession(
     "autograph_cancel",
     await crossTenant.callTool("autograph_cancel", {
@@ -777,7 +777,7 @@ export async function runHostedProof(input: {
     sessionId: cancellationStart.sessionId,
   });
   if (cancelled.page.status !== "cancelled")
-    throw new Error("Cooperative cancellation was not proven by public events.");
+    {throw new Error("Cooperative cancellation was not proven by public events.");}
   const primaryDisclosure = client.disclosureEvidence([input.token, input.crossTenantToken]);
   const secondaryDisclosure = crossTenant.disclosureEvidence([input.token, input.crossTenantToken]);
 

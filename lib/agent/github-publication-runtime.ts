@@ -155,7 +155,7 @@ export function composeGitHubPublicationRuntime(input: {
   proposals?: GitHubPublicationProposalStore;
   receipts?: GitHubPublicationReceiptStore;
 }): GitHubPublicationRuntime {
-  if (!input.enabled) return disabledRuntime();
+  if (!input.enabled) {return disabledRuntime();}
   if (
     input.adapter === undefined ||
     input.proposals === undefined ||

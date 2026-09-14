@@ -249,7 +249,7 @@ export function createGitHubAppPublicationAdapter(
     },
     async inspectDestination(input) {
       const raw = await sanitizedProviderCall(() => provider.inspectDestination(input));
-      if (raw === "absent") return "absent";
+      if (raw === "absent") {return "absent";}
       const identity = await inspectInstallation("create-fresh-repository");
       return repositoryObservation(raw, identity.digest);
     },
@@ -276,7 +276,7 @@ export function createGitHubAppPublicationAdapter(
       const raw = await sanitizedProviderCall(() =>
         provider.inspectFreshRepositoryOutcome(proposal),
       );
-      if (raw === undefined) return;
+      if (raw === undefined) {return;}
       const snapshot = parseProviderResponse(freshReadBackSchema, raw);
       if (snapshot.initialCommit.parents.length !== 0) {
         throw new Error("GitHub fresh-history read-back has commit parents.");
@@ -332,7 +332,7 @@ export function createGitHubAppSourceResolutionAdapter(
       ),
     );
     if (JSON.stringify(snapshot.grantedPermissions) !== JSON.stringify(expected))
-      throw new Error("GitHub installation permissions do not match the operation.");
+      {throw new Error("GitHub installation permissions do not match the operation.");}
     return createGitHubInstallationIdentity({
       accountId: snapshot.accountId,
       accountLogin: snapshot.accountLogin,

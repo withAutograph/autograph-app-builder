@@ -23,13 +23,13 @@ function validateState(state: string) {
     parsed === null ||
     Array.isArray(parsed)
   )
-    throw new Error("Preview emulator state is invalid.");
+    {throw new Error("Preview emulator state is invalid.");}
   return state;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function pendingVercelCodeCount(state: string | undefined) {
-  if (!state) return 0;
+  if (!state) {return 0;}
   try {
     const snapshot = JSON.parse(state) as {
       store?: { data?: Record<string, { entries?: unknown[] }> };

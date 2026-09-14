@@ -194,7 +194,7 @@ export function createVercelInstallationAuthorization(input: {
     ) {
       const authority = hostedTenantAuthoritySchema.parse(authorityInput);
       if (!(await input.membership.isActiveMember(authority)))
-        throw new Error("membership-inactive");
+        {throw new Error("membership-inactive");}
       const state = nonce();
       const issuedAt = now();
       await input.states.create({
@@ -210,7 +210,7 @@ export function createVercelInstallationAuthorization(input: {
         : new URL(`/integrations/${config.slug}/new`, "https://vercel.com");
       url.searchParams.set("state", state);
       if (input.emulation && returnState.resumeKey)
-        url.searchParams.set("resume", returnState.resumeKey);
+        {url.searchParams.set("resume", returnState.resumeKey);}
       return url.toString();
     },
 
@@ -226,7 +226,7 @@ export function createVercelInstallationAuthorization(input: {
         .parse(url.searchParams.get("configurationId"));
       const teamId = url.searchParams.get("teamId") || undefined;
       if (!(await input.membership.isActiveMember(authority)))
-        throw new Error("membership-inactive");
+        {throw new Error("membership-inactive");}
       const returnState = await input.states.consume({
         authority,
         authorityDigest: authorityDigest(authority),
@@ -234,14 +234,14 @@ export function createVercelInstallationAuthorization(input: {
         stateDigest: digest(state),
       });
       if (!returnState)
-        throw new VercelInstallationAuthorizationError(
+        {throw new VercelInstallationAuthorizationError(
           "state-invalid",
           await input.states.recover({
             authority,
             authorityDigest: authorityDigest(authority),
             stateDigest: digest(state),
           }),
-        );
+        );}
 
       const token = await (async () => {
         const tokenResponse = await request(
@@ -292,7 +292,7 @@ export function createVercelInstallationAuthorization(input: {
             signal: AbortSignal.timeout(8000),
           },
         );
-        if (!response.ok) throw new Error("scope-read-failed");
+        if (!response.ok) {throw new Error("scope-read-failed");}
         const team = teamResponseSchema.parse(await response.json());
         binding = {
           displayName: team.name,
@@ -310,7 +310,7 @@ export function createVercelInstallationAuthorization(input: {
             signal: AbortSignal.timeout(8000),
           },
         );
-        if (!response.ok) throw new Error("scope-read-failed");
+        if (!response.ok) {throw new Error("scope-read-failed");}
         const { user } = userSchema.parse(await response.json());
         binding = {
           displayName: user.name ?? user.username,
@@ -322,7 +322,7 @@ export function createVercelInstallationAuthorization(input: {
         };
       }
       if (!(await input.membership.isActiveMember(authority)))
-        throw new Error("membership-inactive");
+        {throw new Error("membership-inactive");}
       const persistedBinding = await input.installations.bind({
         authority,
         binding,
@@ -340,7 +340,7 @@ export function verifyVercelWebhook(input: {
   signature: string | null;
   secret: string;
 }) {
-  if (!input.signature || !/^[a-f0-9]{40}$/iu.test(input.signature)) return false;
+  if (!input.signature || !/^[a-f0-9]{40}$/iu.test(input.signature)) {return false;}
   const expected = createHmac("sha1", input.secret).update(input.body).digest();
   const provided = Buffer.from(input.signature, "hex");
   return provided.length === expected.length && timingSafeEqual(provided, expected);

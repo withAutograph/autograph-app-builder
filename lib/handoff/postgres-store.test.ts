@@ -71,7 +71,7 @@ function store(input: {
   } as unknown as Parameters<typeof createPostgresBuilderHandoffStore>[0];
   const handoffs = createPostgresBuilderHandoffStore(database);
   const { renewExpired } = handoffs;
-  if (!renewExpired) throw new Error("PostgreSQL handoff store must support renewal");
+  if (!renewExpired) {throw new Error("PostgreSQL handoff store must support renewal");}
   return {
     handoffs: {
       ...handoffs,
@@ -111,7 +111,7 @@ describe("PostgreSQL handoff renewal", () => {
       "handoff_id",
       "request_digest",
     ])
-      expect(query.sql).toContain(`"builder_handoff"."${column}" =`);
+      {expect(query.sql).toContain(`"builder_handoff"."${column}" =`);}
     expect(query.sql).not.toContain('"builder_handoff"."expires_at" =');
     expect(query.sql).toContain('"builder_handoff"."expires_at" <=');
     expect(query.sql).toContain('"builder_handoff"."redeemed_at" is null');

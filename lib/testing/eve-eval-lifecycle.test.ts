@@ -176,7 +176,7 @@ describe("Eve eval resource lifecycle", () => {
   });
 
   it("forces only the detached eval group after a repeated interruption", async () => {
-    if (process.platform === "win32") return;
+    if (process.platform === "win32") {return;}
     const signals = new EventEmitter();
     const child = new EventEmitter() as ChildProcess;
     Object.defineProperties(child, {
@@ -192,7 +192,7 @@ describe("Eve eval resource lifecycle", () => {
     const groupSignals: Parameters<typeof process.kill>[1][] = [];
     const kill = vi.spyOn(process, "kill").mockImplementation((_pid, signal) => {
       groupSignals.push(signal);
-      if (signal === "SIGKILL") child.emit("exit", null, "SIGKILL");
+      if (signal === "SIGKILL") {child.emit("exit", null, "SIGKILL");}
       return true;
     });
 
@@ -214,7 +214,7 @@ describe("Eve eval resource lifecycle", () => {
   });
 
   it("cleans the task-owned group after a successful Eve wrapper exit", async () => {
-    if (process.platform === "win32") return;
+    if (process.platform === "win32") {return;}
     const child = new EventEmitter() as ChildProcess;
     Object.defineProperties(child, {
       exitCode: { value: null, writable: true },

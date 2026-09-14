@@ -29,7 +29,7 @@ const environmentSchema = z.object({
 export const readProductionNavigationRuntimeConfig = function readProductionNavigationRuntimeConfig(
   environment: Record<string, string | undefined>,
 ) {
-  if (!productionNavigationArtifact) return null;
+  if (!productionNavigationArtifact) {return null;}
 
   for (const [key, value] of Object.entries(environment)) {
     if (

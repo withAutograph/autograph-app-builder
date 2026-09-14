@@ -12,9 +12,9 @@ const { values } = parseArgs({
   },
 });
 if (!values["run-dir"] || !values["source-review-dir"] || !values["output-dir"])
-  throw new Error(
+  {throw new Error(
     "Required: --run-dir PATH --source-review-dir PATH --output-dir NEW_EXTERNAL_PATH",
-  );
+  );}
 const report = await writeSupplementaryAssessment({
   candidateNavigationRunDirectory: values["candidate-navigation-run-dir"],
   outputDirectory: values["output-dir"],

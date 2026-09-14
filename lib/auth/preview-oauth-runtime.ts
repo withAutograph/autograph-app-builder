@@ -95,11 +95,11 @@ interface GitHubOAuthTokens {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readBoundedJson(response: Response, limit: number): Promise<unknown | null> {
-  if (!response.ok) return null;
+  if (!response.ok) {return null;}
   const declaredLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > limit) return null;
+  if (Number.isFinite(declaredLength) && declaredLength > limit) {return null;}
   const body = await response.text();
-  if (body.length > limit) return null;
+  if (body.length > limit) {return null;}
   try {
     return JSON.parse(body);
   } catch {
@@ -117,7 +117,7 @@ export async function fetchVerifiedGitHubUserInfo(
   tokens: GitHubOAuthTokens,
   fetchImplementation: typeof fetch = fetch,
 ) {
-  if (!tokens.accessToken) return null;
+  if (!tokens.accessToken) {return null;}
   const headers = {
     Accept: "application/vnd.github+json",
     Authorization: `Bearer ${tokens.accessToken}`,
@@ -151,13 +151,13 @@ export async function fetchVerifiedGitHubUserInfo(
   ]);
   const profile = githubProfileSchema.safeParse(profileBody);
   const emails = githubEmailsSchema.safeParse(emailsBody);
-  if (!profile.success || !emails.success) return null;
+  if (!profile.success || !emails.success) {return null;}
   const email =
     emails.data.find((candidate) => candidate.primary && candidate.verified) ??
     emails.data.find((candidate) => candidate.verified);
-  if (!email) return null;
+  if (!email) {return null;}
   const normalizedEmail = email.email.trim().toLowerCase();
-  if (!normalizedEmail) return null;
+  if (!normalizedEmail) {return null;}
 
   return {
     data: { ...profile.data, email: normalizedEmail },
@@ -200,7 +200,7 @@ async function exchangeLocalEmulatedOAuthCode(input: {
     },
     input.emulation,
   );
-  if (!response.ok) throw new Error("Emulated OAuth token exchange failed.");
+  if (!response.ok) {throw new Error("Emulated OAuth token exchange failed.");}
   const body = (await response.json()) as {
     access_token?: unknown;
     token_type?: unknown;
@@ -230,7 +230,7 @@ export async function fetchVerifiedVercelUserInfo(
   tokens: VercelOAuthTokens,
   fetchImplementation: typeof fetch = fetch,
 ) {
-  if (!tokens.accessToken || !tokens.idToken) return null;
+  if (!tokens.accessToken || !tokens.idToken) {return null;}
 
   let tokenClaims: ReturnType<typeof decodeJwt>;
   try {
@@ -254,12 +254,12 @@ export async function fetchVerifiedVercelUserInfo(
   } catch {
     return null;
   }
-  if (!response.ok) return null;
+  if (!response.ok) {return null;}
 
   const declaredLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > 16_384) return null;
+  if (Number.isFinite(declaredLength) && declaredLength > 16_384) {return null;}
   const body = await response.text();
-  if (body.length > 16_384) return null;
+  if (body.length > 16_384) {return null;}
 
   let profile: z.infer<typeof vercelUserInfoSchema>;
   try {
@@ -453,7 +453,7 @@ export function readPreviewOAuthRuntimeConfig(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): PreviewOAuthRuntimeConfig {
   const productionNavigation = readProductionNavigationRuntimeConfig(environment);
-  if (productionNavigation) return previewOAuthRuntimeConfigSchema.parse(productionNavigation);
+  if (productionNavigation) {return previewOAuthRuntimeConfigSchema.parse(productionNavigation);}
   const resolvedEnvironment = providerEmulationEnvironment(environment);
   const localEmulation = readProviderEmulation(resolvedEnvironment);
   if (localEmulation) {
@@ -590,7 +590,7 @@ export function createPreviewOAuthServer(input: {
               },
               localEmulation,
             );
-            if (!response.ok) return null;
+            if (!response.ok) {return null;}
             const profile = (await response.json()) as {
               id?: number;
               login?: string;
@@ -598,7 +598,7 @@ export function createPreviewOAuthServer(input: {
               name?: string;
               avatar_url?: string;
             };
-            if (!profile.id || !profile.email) return null;
+            if (!profile.id || !profile.email) {return null;}
             return {
               email: profile.email,
               emailVerified: true,
@@ -643,9 +643,9 @@ export function createPreviewOAuthServer(input: {
               },
               localEmulation,
             );
-            if (!response.ok) return null;
+            if (!response.ok) {return null;}
             const profile = vercelUserInfoSchema.safeParse(await response.json());
-            if (!profile.success || !profile.data.email_verified) return null;
+            if (!profile.success || !profile.data.email_verified) {return null;}
             return {
               email: profile.data.email,
               emailVerified: true,
@@ -740,8 +740,8 @@ export function createPreviewOAuthServer(input: {
               }),
             ),
             ...(() => {
-              if (localEmulation) return [genericOAuth({ config: localProviderConfigs })];
-              if (!config.vercelClientId || !config.vercelClientSecret) return [];
+              if (localEmulation) {return [genericOAuth({ config: localProviderConfigs })];}
+              if (!config.vercelClientId || !config.vercelClientSecret) {return [];}
               return [
                 genericOAuth({
                   config: [
@@ -772,8 +772,8 @@ export function createPreviewOAuthServer(input: {
       updateAge: 60 * 60,
     },
     socialProviders: (() => {
-      if (localEmulation) return {};
-      if (!config.githubClientId || !config.githubClientSecret) return {};
+      if (localEmulation) {return {};}
+      if (!config.githubClientId || !config.githubClientSecret) {return {};}
       return {
         github: {
           clientId: config.githubClientId,
@@ -781,7 +781,7 @@ export function createPreviewOAuthServer(input: {
           disableSignUp: false,
           getUserInfo: async (tokens) => {
             const result = await fetchVerifiedGitHubUserInfo(tokens);
-            if (result === null) return null;
+            if (result === null) {return null;}
             return {
               ...result,
               // GitHub's own response contains additional profile fields
@@ -797,7 +797,7 @@ export function createPreviewOAuthServer(input: {
     user: {
       validateUserInfo({ user, source }) {
         const providerId = source.oauth?.providerId;
-        if (providerId === undefined) return;
+        if (providerId === undefined) {return;}
         if (
           !new Set(["github", "vercel"]).has(providerId) ||
           user.emailVerified !== true ||

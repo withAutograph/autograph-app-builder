@@ -141,9 +141,9 @@ const runConfiguredPairedCaptures = async () => {
     (values["reference-url"] && values["candidate-url"]
       ? join(root, "evals/self-reproduction/default-capture-adapter.ts")
       : undefined);
-  if (!adapterFile) return;
+  if (!adapterFile) {return;}
   if (!values["reference-url"] || !values["candidate-url"])
-    throw new Error("--capture-adapter requires both --reference-url and --candidate-url.");
+    {throw new Error("--capture-adapter requires both --reference-url and --candidate-url.");}
   const evaluatorRoot = await realpath(join(root, "evals"));
   const resolvedAdapter = await realpath(resolve(adapterFile));
   const adapterRelative = relative(evaluatorRoot, resolvedAdapter);
@@ -153,7 +153,7 @@ const runConfiguredPairedCaptures = async () => {
     adapterRelative.startsWith(`..${nodePath.sep}`) ||
     adapterRelative.startsWith(nodePath.sep)
   )
-    throw new Error("Capture adapter must be an evaluator-owned module under evals/.");
+    {throw new Error("Capture adapter must be an evaluator-owned module under evals/.");}
   const loaded = (await import(pathToFileURL(resolvedAdapter).href)) as {
     createCaptureAdapters?: (input: {
       referenceURL: string;
@@ -161,7 +161,7 @@ const runConfiguredPairedCaptures = async () => {
     }) => Promise<Partial<Record<"reference" | "candidate", CaptureAdapter>>>;
   };
   if (typeof loaded.createCaptureAdapters !== "function")
-    throw new Error("Capture adapter must export createCaptureAdapters().");
+    {throw new Error("Capture adapter must export createCaptureAdapters().");}
   const adapters = await loaded.createCaptureAdapters({
     candidateURL: values["candidate-url"],
     referenceURL: values["reference-url"],
@@ -210,12 +210,12 @@ const runConfiguredWorkflowAdapters = async (candidateRoot: string | undefined) 
     within(output, resolvedAdapter) ||
     (candidateRoot && within(candidateRoot, resolvedAdapter))
   )
-    throw new Error("Workflow adapter module must be evaluator-owned and under evals/.");
+    {throw new Error("Workflow adapter module must be evaluator-owned and under evals/.");}
   const loaded = (await import(pathToFileURL(resolvedAdapter).href)) as {
     createWorkflowAdapters?: WorkflowAdapterFactory;
   };
   if (typeof loaded.createWorkflowAdapters !== "function")
-    throw new Error("Workflow adapter module must export createWorkflowAdapters().");
+    {throw new Error("Workflow adapter module must export createWorkflowAdapters().");}
   const referenceUrl = values["reference-url"] ?? process.env.SELF_REPRODUCTION_REFERENCE_URL;
   const candidateUrl = values["candidate-url"] ?? process.env.SELF_REPRODUCTION_CANDIDATE_URL;
   const adapters = await loaded.createWorkflowAdapters({
@@ -314,14 +314,14 @@ const readCandidateSource = async (
   const entries = await readdir(current, { withFileTypes: true });
   const nested = await Promise.all(
     entries.map(async (entry) => {
-      if ([".git", ".next", "node_modules", "coverage"].includes(entry.name)) return [];
+      if ([".git", ".next", "node_modules", "coverage"].includes(entry.name)) {return [];}
       const path = join(current, entry.name);
-      if (entry.isDirectory()) return readCandidateSource(directory, path);
+      if (entry.isDirectory()) {return readCandidateSource(directory, path);}
       if (
         !entry.isFile() ||
         !/^(?:[^.]+|.*\.(?:[cm]?[jt]sx?|css|mdx?|json|pkl|toml|ya?ml))$/u.test(entry.name)
       )
-        return [];
+        {return [];}
       return [{ content: await readFile(path, "utf-8"), path: relative(directory, path) }];
     }),
   );
@@ -338,20 +338,20 @@ const trackedWorkspaceArchive = async (directory: string): Promise<Buffer> => {
     .filter(Boolean);
   const chunks: Buffer[] = [];
   const archive = createTar({ cwd: directory, noMtime: true, portable: true }, tracked);
-  for await (const chunk of archive) chunks.push(Buffer.from(chunk));
+  for await (const chunk of archive) {chunks.push(Buffer.from(chunk));}
   return Buffer.concat(chunks);
 };
 
 const candidateAppId = (files: Awaited<ReturnType<typeof readSource>>): string => {
   const contract = files.find((file) => file.path === "app.contract.json");
   if (contract)
-    try {
+    {try {
       const parsed = JSON.parse(contract.content) as { appId?: unknown };
       if (typeof parsed.appId === "string" && /^[a-z][a-z0-9-]*$/u.test(parsed.appId))
-        return parsed.appId;
+        {return parsed.appId;}
     } catch {
       /* Runtime readiness reports malformed candidate metadata as a failure. */
-    }
+    }}
   return "/";
 };
 
@@ -377,7 +377,7 @@ const jsonFile = async (name: string, data: unknown) => {
 };
 
 const revision = (directory: string | undefined) => {
-  if (!directory) return { reason: "Source checkout not supplied.", status: "unavailable" };
+  if (!directory) {return { reason: "Source checkout not supplied.", status: "unavailable" };}
   try {
     return {
       changes: execFileSync("git", ["status", "--porcelain"], {
@@ -418,7 +418,7 @@ const reportHtml = (report: {
       const candidateCapture = report.captures
         .find((item) => item.label === "candidate diagnostic routes")
         ?.files.find((file) => file.endsWith(`/${name}/root.png`));
-      if (!reference || !candidateCapture) return "";
+      if (!reference || !candidateCapture) {return "";}
       return `<section><h3>${escape(name)} initial routes</h3><p>Diagnostic comparison; equivalent workflow states have not been established.</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><figure><figcaption>Reference</figcaption><img style="width:100%" src="${escape(reference)}" alt="Reference initial route"></figure><figure><figcaption>Candidate</figcaption><img style="width:100%" src="${escape(candidateCapture)}" alt="Candidate initial route"></figure></div></section>`;
     })
     .join("");
@@ -432,16 +432,16 @@ const reportHtml = (report: {
 };
 
 const runGenerator = async (arrustedRoot: string | undefined) => {
-  if (values["report-only"]) return { reason: "Report-only mode selected.", status: "not-run" };
+  if (values["report-only"]) {return { reason: "Report-only mode selected.", status: "not-run" };}
   if (!values.generator && !arrustedRoot)
-    return {
+    {return {
       reason:
         "Set SELF_REPRODUCTION_ARRUSTED_ROOT or --arrusted-root to the canonical Arrusted checkout.",
       status: "blocked",
-    };
+    };}
   const deadline = Number(values["generation-timeout-ms"] ?? "900000");
   if (!Number.isSafeInteger(deadline) || deadline <= 0)
-    throw new Error("Generation timeout must be a positive integer.");
+    {throw new Error("Generation timeout must be a positive integer.");}
   const args = values.generator
     ? (values["generator-arg"] ?? [])
     : [
@@ -499,7 +499,7 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
     });
     let force: ReturnType<typeof setTimeout> | undefined;
     const stop = (reason: string) => {
-      if (interrupted) return;
+      if (interrupted) {return;}
       interrupted = reason;
       // Forward termination to the native eval process group, including its broker.
       const kill = (signal: NodeJS.Signals) => {
@@ -532,7 +532,7 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
     });
     child.on("close", (exitCode, signal) => {
       clearTimeout(timer);
-      if (force) clearTimeout(force);
+      if (force) {clearTimeout(force);}
       process.removeListener("SIGINT", onInt);
       process.removeListener("SIGTERM", onTerm);
       stdout.end();
@@ -570,12 +570,12 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
     nativeResults[0]?.verdict === "passed";
   let nativeFailure: Record<string, string> = {};
   if (native === undefined)
-    nativeFailure = {
+    {nativeFailure = {
       reason: "Native result JSON unavailable; evidence is incomplete.",
       status: "failed",
-    };
+    };}
   else if (!nativePassed)
-    nativeFailure = { reason: "Native strict eval did not pass.", status: "failed" };
+    {nativeFailure = { reason: "Native strict eval did not pass.", status: "failed" };}
   return {
     ...completion,
     ...result,
@@ -587,7 +587,7 @@ const runGenerator = async (arrustedRoot: string | undefined) => {
 };
 
 const capture = async (label: string, url: string | undefined, sourceRoot: string | undefined) => {
-  if (!url) return { files: [], label, status: "unassessed: URL not supplied" };
+  if (!url) {return { files: [], label, status: "unassessed: URL not supplied" };}
   const destination = join(output, "captures", label);
   try {
     await mkdir(destination, { mode: 0o700, recursive: true });
@@ -639,12 +639,12 @@ const blockedFramework = (side: "reference" | "candidate") =>
   }));
 
 const runtimeObservations = (existingRequirementIds: ReadonlySet<string>): Observation[] => {
-  if (candidateRuntime.status === "not-run") return [];
+  if (candidateRuntime.status === "not-run") {return [];}
   if (candidateRuntime.status !== "available")
-    return candidateRuntimeFailureObservations({
+    {return candidateRuntimeFailureObservations({
       existingRequirementIds,
       receipt: candidateRuntime,
-    }) as Observation[];
+    }) as Observation[];}
   // Readiness and a guessed /docs route are diagnostics, not workflow evidence.
   // Only the evaluator adapter that activates the actual controls can assess docs.
   return workflowMatrix
@@ -698,12 +698,12 @@ const saveReport = async () => {
         (row) => row.side === "candidate" && row.requirementId === observation.requirementId,
       )
     )
-      continue;
+      {continue;}
     const [, viewportName, stateName] = observation.requirementId.split("/");
     const viewport = desktopViewports.find((item) => item.name === viewportName);
     const state = captureStates.find((item) => item === stateName);
     if (viewport && state)
-      observedCaptureReceipts.push({ side: "candidate", state, viewport, ...observation });
+      {observedCaptureReceipts.push({ side: "candidate", state, viewport, ...observation });}
   }
   const observedCandidateCaptureIds = new Set(
     observedCaptureReceipts
@@ -718,9 +718,9 @@ const saveReport = async () => {
     const viewport = desktopViewports.find((item) => item.name === viewportName);
     const state = captureStates.find((item) => item === stateName);
     if (!viewport || !state)
-      throw new Error(
+      {throw new Error(
         `Invalid candidate runtime capture requirement ${observation.requirementId}.`,
-      );
+      );}
     return { side: "candidate" as const, state, viewport, ...observation };
   });
   const captureReceipts = [...observedCaptureReceipts, ...failedRuntimeCaptureReceipts];
@@ -881,7 +881,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
   const actualOutput = await realpath(output);
   const inside = relative(await realpath(root), actualOutput);
   if (!inside || (!inside.startsWith(`..${nodePath.sep}`) && inside !== ".."))
-    throw new Error("Evidence directory must be outside the App Builder source tree.");
+    {throw new Error("Evidence directory must be outside the App Builder source tree.");}
   console.log(`Self-reproduction evidence: ${output}`);
   await writeFile(join(output, "generation-transcript.jsonl"), "", { mode: 0o600 });
   await jsonFile("native-result.json", {
@@ -964,7 +964,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       try {
         candidateFiles = await readCandidateSource(candidateRoot);
         if (!candidateFiles.length)
-          throw new Error("Candidate contains no application source files.");
+          {throw new Error("Candidate contains no application source files.");}
         // Persist the audited source bytes, never the candidate's credentials or dependency tree.
         await Promise.all(
           candidateFiles.map(async (file) => {
@@ -990,7 +990,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
           .catch((): undefined => {
             // Candidate-authored workflow evidence is optional.
           });
-        if (workflowEvidence) await jsonFile("workflow-results.json", workflowEvidence);
+        if (workflowEvidence) {await jsonFile("workflow-results.json", workflowEvidence);}
       } catch (error) {
         candidateFiles = undefined;
         candidate = {
@@ -1018,11 +1018,11 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
           status: "available",
         };
       } else
-        candidate = {
+        {candidate = {
           reason:
             "The native run did not retain a valid reviewed candidate export. Framework and workflow comparison remain blocked.",
           status: "unavailable",
-        };
+        };}
     }
     await saveReport();
     if (
@@ -1030,7 +1030,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
       (!values["report-only"] && !values.generator && !values["reference-url"])
     ) {
       if (!values["mise-executable"])
-        throw new Error("Reference startup requires the mise-owned eval entrypoint.");
+        {throw new Error("Reference startup requires the mise-owned eval entrypoint.");}
       const reference = await startSelfReproductionReferenceRuntime({
         miseExecutable: values["mise-executable"],
         runtimeRoot: join(output, "reference-runtime"),
@@ -1192,11 +1192,11 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         receipt.side !== "reference" ||
         receipt.observation.requirementId !== "instant-navigation"
       )
-        throw new Error("Expected reference instant-navigation evaluator evidence.");
+        {throw new Error("Expected reference instant-navigation evaluator evidence.");}
       referenceNavigationReceipts = [receipt];
     } else if (values["reference-navigation"] || (!values["report-only"] && !values.generator)) {
       if (!values["mise-executable"])
-        throw new Error("Reference navigation requires the mise-owned eval entrypoint.");
+        {throw new Error("Reference navigation requires the mise-owned eval entrypoint.");}
       const { runReferenceNavigationEvidence } =
         await import("../evals/support/self-reproduction-reference-navigation");
       const receipt = await runReferenceNavigationEvidence({
@@ -1220,7 +1220,7 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
   } catch (error) {
     errors.push(String(sanitizeEvidence(error instanceof Error ? error.message : String(error))));
     if (generation.status === "pending" || generation.status === "running")
-      generation = { ...generation, status: "failed" };
+      {generation = { ...generation, status: "failed" };}
   } finally {
     try {
       await saveReport();
@@ -1229,9 +1229,9 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
     }
   }
   if (!["completed", "not-run"].includes(String(generation.status)) || errors.length)
-    process.exitCode = 1;
-  if (values.json) console.log(await readFile(join(output, "report.json"), "utf-8"));
-  else console.log(`Self-reproduction report: ${join(output, "index.html")}`);
+    {process.exitCode = 1;}
+  if (values.json) {console.log(await readFile(join(output, "report.json"), "utf-8"));}
+  else {console.log(`Self-reproduction report: ${join(output, "index.html")}`);}
 };
 
 try {

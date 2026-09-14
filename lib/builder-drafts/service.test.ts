@@ -45,7 +45,7 @@ function memoryStore(): BuilderDraftStore {
         row.status !== "active" ||
         (input.expectedRevision !== undefined && row.revision !== input.expectedRevision)
       )
-        return false;
+        {return false;}
       row.status = "archived";
       row.updatedAt = input.now;
       return true;
@@ -75,7 +75,7 @@ function memoryStore(): BuilderDraftStore {
     async saveActive(input) {
       const active = findActive(input);
       if (active?.lastClientMutationId === input.clientMutationId)
-        return { concurrent: false, idempotent: true, row: active };
+        {return { concurrent: false, idempotent: true, row: active };}
       if (active) {
         const concurrent = active.revision !== input.expectedRevision;
         active.revision += 1;

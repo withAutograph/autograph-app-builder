@@ -77,9 +77,9 @@ export const inspectSourceContractDigest = (
       entry,
     );
     if (match === null || match[3] !== contractPath)
-      throw new Error(
+      {throw new Error(
         `Repository contract path is not a regular blob at ${sourceSha}: ${contractPath}`,
-      );
+      );}
     return {
       mode: match[1],
       objectId: match[2],
@@ -169,7 +169,7 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
       "sourceTree",
     ])
   )
-    throw new Error("Canonical template clone inspection is invalid.");
+    {throw new Error("Canonical template clone inspection is invalid.");}
   if (
     value.sourcePath !== "/workspace/repository" ||
     !isGitObjectId(value.sourceSha) ||
@@ -179,7 +179,7 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
     !isRecord(value.contents) ||
     !Array.isArray(value.contract)
   )
-    throw new Error("Canonical template clone inspection is invalid.");
+    {throw new Error("Canonical template clone inspection is invalid.");}
   const allowedContents = new Set([
     ...SUPPORTED_TEMPLATE_INPUT_PATHS,
     ".config/repository-template.json",
@@ -189,18 +189,18 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
       ([path, content]) => !allowedContents.has(path) || typeof content !== "string",
     )
   )
-    throw new Error("Canonical template clone inspection is invalid.");
+    {throw new Error("Canonical template clone inspection is invalid.");}
   const contents = value.contents as Partial<Record<string, string>>;
   const contract = value.contract.map((entry) => {
     if (!isRecord(entry) || !hasExactKeys(entry, ["mode", "objectId", "path", "sha256"]))
-      throw new Error("Canonical template clone inspection is invalid.");
+      {throw new Error("Canonical template clone inspection is invalid.");}
     if (
       typeof entry.path !== "string" ||
       typeof entry.mode !== "string" ||
       typeof entry.objectId !== "string" ||
       typeof entry.sha256 !== "string"
     )
-      throw new Error("Canonical template clone inspection is invalid.");
+      {throw new Error("Canonical template clone inspection is invalid.");}
     return {
       mode: entry.mode,
       objectId: entry.objectId,
@@ -211,7 +211,7 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
   for (const entry of contract) {
     const content = contents[entry.path];
     if (content !== undefined && sha256(content) !== entry.sha256)
-      throw new Error("Canonical template clone inspection is invalid.");
+      {throw new Error("Canonical template clone inspection is invalid.");}
   }
   return {
     contents,
@@ -277,7 +277,7 @@ const validProvenance = (value: unknown): value is ClonedTemplateProvenance =>
 
 export const parseSourceReceiptEvidence = (value: unknown): SourceReceiptEvidence => {
   if (!isRecord(value))
-    throw new Error("Source receipt evidence is invalid or has an unsupported schema.");
+    {throw new Error("Source receipt evidence is invalid or has an unsupported schema.");}
   const { version } = value;
   if (
     (version === LEGACY_SOURCE_RECEIPT_VERSION &&
@@ -285,7 +285,7 @@ export const parseSourceReceiptEvidence = (value: unknown): SourceReceiptEvidenc
     (version === SOURCE_RECEIPT_VERSION && !hasExactKeys(value, clonedSourceReceiptEvidenceKeys)) ||
     (version !== LEGACY_SOURCE_RECEIPT_VERSION && version !== SOURCE_RECEIPT_VERSION)
   )
-    throw new Error("Source receipt evidence is invalid or has an unsupported schema.");
+    {throw new Error("Source receipt evidence is invalid or has an unsupported schema.");}
   if (
     (value.sourceKind !== "existing-repository" && value.sourceKind !== "fresh-template") ||
     (version === SOURCE_RECEIPT_VERSION && value.sourceKind !== "fresh-template") ||
@@ -298,10 +298,10 @@ export const parseSourceReceiptEvidence = (value: unknown): SourceReceiptEvidenc
     !isDigest(value.digest) ||
     (version === SOURCE_RECEIPT_VERSION && !validProvenance(value.provenance))
   )
-    throw new Error("Source receipt evidence is invalid.");
+    {throw new Error("Source receipt evidence is invalid.");}
   const { digest, ...unsigned } = value as unknown as SourceReceiptEvidence;
   if (digest !== sourceReceiptDigest(unsigned))
-    throw new Error("Source receipt evidence digest is invalid.");
+    {throw new Error("Source receipt evidence digest is invalid.");}
   return value as unknown as SourceReceiptEvidence;
 };
 
@@ -326,9 +326,9 @@ export const parseSourceReceipt = (value: unknown): SourceReceipt => {
       !hasExactKeys(value, legacySourceReceiptKeys)) ||
     (value.version === SOURCE_RECEIPT_VERSION && !hasExactKeys(value, clonedSourceReceiptKeys))
   )
-    throw new Error("Source receipt has an unsupported schema.");
+    {throw new Error("Source receipt has an unsupported schema.");}
   if (typeof value.sourcePath !== "string" || !nodePath.isAbsolute(value.sourcePath))
-    throw new Error("Source receipt diagnostic path is invalid.");
+    {throw new Error("Source receipt diagnostic path is invalid.");}
   const { sourcePath, ...evidenceInput } = value;
   return { ...parseSourceReceiptEvidence(evidenceInput), sourcePath };
 };
@@ -368,7 +368,7 @@ export const inspectClonedTemplateSourceReceipt = async (input: {
 }): Promise<SourceReceipt> => {
   const eligibility = await inspectBuilderOwnedSupportedRepository(input.path);
   if (!eligibility.eligible || eligibility.sourceSha === undefined)
-    throw new Error(`Cloned template is not eligible: ${eligibility.failures.join("; ")}`);
+    {throw new Error(`Cloned template is not eligible: ${eligibility.failures.join("; ")}`);}
   const evidence = {
     adapter: SUPPORTED_TEMPLATE_ADAPTER as typeof SUPPORTED_TEMPLATE_ADAPTER,
     contractDigest: inspectSourceContractDigest(eligibility.sourcePath, eligibility.sourceSha),

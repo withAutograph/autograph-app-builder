@@ -18,10 +18,10 @@ const MAX_REQUEST_BYTES = 16 * 1024;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readOwnerOnlyRequest(path: string): Promise<unknown> {
-  if (!nodePath.isAbsolute(path)) throw new Error("Request path must be absolute.");
+  if (!nodePath.isAbsolute(path)) {throw new Error("Request path must be absolute.");}
   const [link, canonicalPath] = await Promise.all([lstat(path), realpath(path)]);
   if (link.isSymbolicLink() || canonicalPath !== path)
-    throw new Error("Request path must be canonical and unsymlinked.");
+    {throw new Error("Request path must be canonical and unsymlinked.");}
   const metadata = await stat(path);
   if (
     !metadata.isFile() ||
@@ -31,14 +31,14 @@ async function readOwnerOnlyRequest(path: string): Promise<unknown> {
     metadata.size === 0 ||
     metadata.size > MAX_REQUEST_BYTES
   )
-    throw new Error("Request must be an owner-only nonempty regular file.");
+    {throw new Error("Request must be an owner-only nonempty regular file.");}
   return JSON.parse(await readFile(path, "utf-8"));
 }
 
 const argv = process.argv.slice(2);
 if (argv[0] === "plan") {
   if (argv.length !== 3 || argv[1] !== "--request-file")
-    throw new Error("Plan requires --request-file PATH.");
+    {throw new Error("Plan requires --request-file PATH.");}
   const request = hostedGitHubInstallationPlanRequestSchema.parse(
     await readOwnerOnlyRequest(argv[2]),
   );
@@ -50,7 +50,7 @@ if (argv[0] === "plan") {
     argv[2] !== "0" ||
     argv[3] !== "--request-file"
   )
-    throw new Error("Apply arguments were invalid.");
+    {throw new Error("Apply arguments were invalid.");}
   const request = hostedGitHubInstallationApplyRequestSchema.parse(
     await readOwnerOnlyRequest(argv[4]),
   );

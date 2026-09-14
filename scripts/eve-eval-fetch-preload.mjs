@@ -13,7 +13,7 @@
 export function isolateAbortSignalPerFetch(fetchImplementation) {
   return function fetchWithIsolatedSignal(input, init) {
     if (init?.signal === undefined || init.signal === null)
-      return Reflect.apply(fetchImplementation, this, [input, init]);
+      {return Reflect.apply(fetchImplementation, this, [input, init]);}
     return Reflect.apply(fetchImplementation, this, [
       input,
       { ...init, signal: AbortSignal.any([init.signal]) },
@@ -23,7 +23,7 @@ export function isolateAbortSignalPerFetch(fetchImplementation) {
 
 if (process.env.APP_BUILDER_EVE_EVAL_FETCH_PRELOAD === "1") {
   if (typeof globalThis.fetch !== "function")
-    throw new Error("The Eve eval fetch implementation was unavailable.");
+    {throw new Error("The Eve eval fetch implementation was unavailable.");}
   globalThis.fetch = isolateAbortSignalPerFetch(globalThis.fetch);
   delete process.env.APP_BUILDER_EVE_EVAL_FETCH_PRELOAD;
 }

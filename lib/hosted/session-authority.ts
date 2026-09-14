@@ -87,7 +87,7 @@ export function exactForwardedSessionAuthority(sessionAuth: unknown): {
     scopes: initiator.attributes["mcp:scopes"],
   });
   if (!authorityResult.success || !currentPrincipal.success || !initiatorPrincipal.success)
-    throw new HostedSessionAuthorityError("invalid");
+    {throw new HostedSessionAuthorityError("invalid");}
   const authority = authorityResult.data;
   return { authority, principal: currentPrincipal.data };
 }
@@ -101,12 +101,12 @@ export function sourceHandoffIdForSessionAuth(sessionAuth: unknown) {
     // envelope must not silently become an unbound session.
     const current = (sessionAuth as { current?: { authenticator?: string } } | null)?.current;
     if (current?.authenticator === "mcp-oauth-jwks")
-      throw new HostedSessionAuthorityError("invalid");
+      {throw new HostedSessionAuthorityError("invalid");}
     return;
   }
   exactForwardedSessionAuthority(sessionAuth);
   const current = parsed.data.current.attributes["autograph:source-handoff-id"];
   const initiator = parsed.data.initiator.attributes["autograph:source-handoff-id"];
-  if (current !== initiator) throw new HostedSessionAuthorityError("mismatch");
+  if (current !== initiator) {throw new HostedSessionAuthorityError("mismatch");}
   return initiator;
 }

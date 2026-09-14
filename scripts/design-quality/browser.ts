@@ -31,11 +31,11 @@ export interface DesktopSize {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseAdditionalDesktopSize(value: string): DesktopSize {
   const match = /^(?<width>[1-9]\d*)x(?<height>[1-9]\d*)$/u.exec(value);
-  if (!match) throw new Error("Use WIDTHxHEIGHT with positive integer dimensions");
+  if (!match) {throw new Error("Use WIDTHxHEIGHT with positive integer dimensions");}
   const width = Number(match[1]);
   const height = Number(match[2]);
   if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height))
-    throw new Error("Desktop dimensions must be safe integers");
+    {throw new Error("Desktop dimensions must be safe integers");}
   return { height, width };
 }
 
@@ -94,15 +94,15 @@ export const properties: Record<string, Category> = {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function classifyStyle(values: string[], computed: string, tokenValues: string[]) {
   const unique = [...new Set(values)];
-  if (unique.length !== 1) return "unassessed" as const;
+  if (unique.length !== 1) {return "unassessed" as const;}
   const [value] = unique;
-  if (value === undefined) return "unassessed" as const;
-  if (/var\(--/u.test(value)) return "token-reference" as const;
+  if (value === undefined) {return "unassessed" as const;}
+  if (/var\(--/u.test(value)) {return "token-reference" as const;}
   if (
     /^(?<value>0(?:px|rem|em)?|auto|normal|none|inherit|initial|transparent)$/u.test(value) ||
     /%|\d(?:\.\d+)?fr\b/u.test(value)
   )
-    return "structural" as const;
+    {return "structural" as const;}
   return tokenValues.includes(computed)
     ? ("matching-literal" as const)
     : ("unmatched-literal" as const);
@@ -142,9 +142,9 @@ function matchedSelector(match: {
   rule: { selectorList?: { selectors?: { text?: string }[] } };
 }) {
   const selectors = match.rule.selectorList?.selectors;
-  if (!selectors?.length) return;
+  if (!selectors?.length) {return;}
   const indexes = match.matchingSelectors;
-  if (indexes?.length === 1) return selectors[indexes[0]]?.text;
+  if (indexes?.length === 1) {return selectors[indexes[0]]?.text;}
   return selectors.length === 1 ? selectors[0]?.text : undefined;
 }
 
@@ -156,20 +156,20 @@ function matchedSelector(match: {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function singleGapValue(value: string): string | undefined {
   const candidate = value.trim();
-  if (!candidate) return undefined;
+  if (!candidate) {return undefined;}
   let depth = 0;
   for (const character of candidate) {
-    if (character === "(") depth += 1;
+    if (character === "(") {depth += 1;}
     else if (character === ")") {
       depth -= 1;
-      if (depth < 0) return undefined;
-    } else if (depth === 0 && /\s/u.test(character)) return undefined;
+      if (depth < 0) {return undefined;}
+    } else if (depth === 0 && /\s/u.test(character)) {return undefined;}
   }
   return depth === 0 ? candidate : undefined;
 }
 
 export const sourcePath = (value: string | undefined) => {
-  if (!value) return;
+  if (!value) {return;}
   try {
     const url = new URL(value);
     return url.protocol === "file:" ? decodeURIComponent(url.pathname) : url.pathname;
@@ -179,7 +179,7 @@ export const sourcePath = (value: string | undefined) => {
 };
 
 export const generatedSource = (path: string | undefined, generated: string[]) => {
-  if (!path) return false;
+  if (!path) {return false;}
   const clean = path.replaceAll("\\", "/");
   return generated.some((candidate) => {
     const expected = sourcePath(candidate)?.replaceAll("\\", "/");
@@ -214,18 +214,18 @@ export function mappedSharedCssRule(input: {
   sharedCssSourceFiles: CssSourceFile[];
 }) {
   const { map, mapped, property, value, sharedCssRules, sharedCssSourceFiles } = input;
-  if (!map || !mapped || value === undefined) return;
+  if (!map || !mapped || value === undefined) {return;}
   const sourceContent = map.sourcesContent?.[mapped.sourceIndex];
-  if (typeof sourceContent !== "string") return;
+  if (typeof sourceContent !== "string") {return;}
   const files = sharedCssSourceFiles.filter(
     (file) =>
       arrustedSharedSource(file.path) &&
       generatedSource(mapped.path, [file.path]) &&
       file.content === sourceContent,
   );
-  if (files.length !== 1) return;
+  if (files.length !== 1) {return;}
   const [file] = files;
-  if (!file) return;
+  if (!file) {return;}
   const declarations = sharedCssRules.filter(
     (candidate) =>
       candidate.source.path === file.path &&
@@ -251,7 +251,7 @@ export async function settleFiniteMotion(page: Page) {
     });
     await promise;
     const finite = document.getAnimations().filter((motion) => {
-      if (motion.playState !== "running" && !motion.pending) return false;
+      if (motion.playState !== "running" && !motion.pending) {return false;}
       const timing = motion.effect?.getComputedTiming();
       const iterations = timing?.iterations ?? 1;
       return Number.isFinite(iterations) && Number.isFinite(timing?.duration);
@@ -292,13 +292,13 @@ export async function measurePage(page: Page) {
       reviewRequired: boolean;
     }[] = [];
     const scrolling = [...document.querySelectorAll("*")].flatMap((el) => {
-      if (!visible(el)) return [];
+      if (!visible(el)) {return [];}
       const style = getComputedStyle(el);
       const axes: ("x" | "y")[] = [];
       if (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/u.test(style.overflowX))
-        axes.push("x");
+        {axes.push("x");}
       if (el.scrollHeight > el.clientHeight + 2 && /auto|scroll/u.test(style.overflowY))
-        axes.push("y");
+        {axes.push("y");}
       return axes.map((axis) => ({
         axis,
         clientHeight: el.clientHeight,
@@ -309,13 +309,13 @@ export async function measurePage(page: Page) {
       }));
     });
     if (document.documentElement.scrollWidth > innerWidth + 2)
-      findings.push({
+      {findings.push({
         description:
           "Page is wider than the viewport; review whether horizontal scrolling is intended.",
         kind: "document-overflow",
         region: rect(document.documentElement),
         reviewRequired: true,
-      });
+      });}
     const controls = [
       ...document.querySelectorAll("button,input,select,textarea,a[href],[role=button]"),
     ].filter(visible);
@@ -346,40 +346,40 @@ export async function measurePage(page: Page) {
         ? [...row.querySelectorAll("td,[role=cell],[role=gridcell]")].filter(visible)
         : [];
       if (headers.length === cells.length)
-        for (const [i, h] of headers.entries()) {
+        {for (const [i, h] of headers.entries()) {
           const cell = cells[i];
           if (
             cell &&
             Math.abs(h.getBoundingClientRect().left - cell.getBoundingClientRect().left) > 4
           )
-            findings.push({
+            {findings.push({
               description: `Column ${label(h)} and its first cell have different left edges.`,
               kind: "possible-column-misalignment",
               region: rect(h),
               reviewRequired: true,
-            });
-        }
+            });}
+        }}
     }
     // Only sibling interactive targets: generic rectangle overlap is too noisy.
     for (let i = 0; i < Math.min(controls.length, 150); i += 1)
-      for (let j = i + 1; j < Math.min(controls.length, 150); j += 1) {
+      {for (let j = i + 1; j < Math.min(controls.length, 150); j += 1) {
         const a = controls[i];
         const b = controls[j];
-        if (!a || !b) continue;
-        if (a.parentElement !== b.parentElement || a.contains(b) || b.contains(a)) continue;
+        if (!a || !b) {continue;}
+        if (a.parentElement !== b.parentElement || a.contains(b) || b.contains(a)) {continue;}
         const x = a.getBoundingClientRect();
         const y = b.getBoundingClientRect();
         if (
           Math.min(x.right, y.right) - Math.max(x.left, y.left) > 4 &&
           Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top) > 4
         )
-          findings.push({
+          {findings.push({
             description: `Interactive targets overlap: ${label(a)} / ${label(b)}.`,
             kind: "possible-overlap",
             region: rect(a),
             reviewRequired: true,
-          });
-      }
+          });}
+      }}
     const result = await (
       window as unknown as {
         axe: {
@@ -468,8 +468,8 @@ export async function measureStyles(
     await session.send("CSS.enable");
     const sourceMaps = new Map<string, CssSourceMap | undefined>();
     const sourceMapFor = async (styleSheetId: string | undefined) => {
-      if (!styleSheetId) return;
-      if (sourceMaps.has(styleSheetId)) return sourceMaps.get(styleSheetId);
+      if (!styleSheetId) {return;}
+      if (sourceMaps.has(styleSheetId)) {return sourceMaps.get(styleSheetId);}
       const header = headers.get(styleSheetId);
       const css = await session
         .send("CSS.getStyleSheetText", { styleSheetId })
@@ -498,10 +498,10 @@ export async function measureStyles(
           // Source maps are diagnostic evidence, never a reason to contact an
           // unrelated origin from a preview capture.
           if (target.origin === new URL(page.url()).origin)
-            text = await page.evaluate(async (href) => {
+            {text = await page.evaluate(async (href) => {
               const response = await fetch(href);
               return response.ok ? response.text() : undefined;
-            }, target.href);
+            }, target.href);}
         } catch {
           /* Missing or malformed maps remain unassigned. */
         }
@@ -517,7 +517,7 @@ export async function measureStyles(
           (parsed.sourceRoot === undefined || typeof parsed.sourceRoot === "string") &&
           typeof parsed.mappings === "string"
         )
-          map = parsed;
+          {map = parsed;}
       } catch {
         /* Source maps are optional evidence. */
       }
@@ -546,17 +546,17 @@ export async function measureStyles(
           result[prop] = [];
           for (const [name] of Object.entries(tokenValues)) {
             let relevant: boolean;
-            if (prop.includes("color")) relevant = name.startsWith("--color-");
+            if (prop.includes("color")) {relevant = name.startsWith("--color-");}
             else if (prop.includes("font") || prop.includes("line") || prop.includes("letter"))
-              relevant = /--(?<category>font|text|leading|tracking)/u.test(name);
-            else if (prop.includes("radius")) relevant = name.includes("radius");
-            else if (prop.includes("shadow")) relevant = name.includes("shadow");
-            else relevant = /spacing|space|radius|border/u.test(name);
-            if (!relevant) continue;
+              {relevant = /--(?<category>font|text|leading|tracking)/u.test(name);}
+            else if (prop.includes("radius")) {relevant = name.includes("radius");}
+            else if (prop.includes("shadow")) {relevant = name.includes("shadow");}
+            else {relevant = /spacing|space|radius|border/u.test(name);}
+            if (!relevant) {continue;}
             el.style.removeProperty(prop);
             el.style.setProperty(prop, `var(${name})`);
             if (el.style.getPropertyValue(prop))
-              result[prop].push(getComputedStyle(el).getPropertyValue(prop));
+              {result[prop].push(getComputedStyle(el).getPropertyValue(prop));}
           }
         }
         el.remove();
@@ -577,11 +577,11 @@ export async function measureStyles(
       const { model } = await session
         .send("DOM.getBoxModel", { nodeId })
         .catch(() => ({ model: null }));
-      if (!model || model.width <= 0 || model.height <= 0) continue;
+      if (!model || model.width <= 0 || model.height <= 0) {continue;}
       const y = model.content[1] ?? 0;
       let region: "top" | "middle" | "bottom" = "bottom";
-      if (y < 300) region = "top";
-      else if (y < 1000) region = "middle";
+      if (y < 300) {region = "top";}
+      else if (y < 1000) {region = "middle";}
       candidates.push({
         interactive: interactiveNodes.has(nodeId),
         model,
@@ -600,19 +600,19 @@ export async function measureStyles(
     // region and control/non-control bucket.
     for (const interactiveBucket of buckets.filter((bucket) => bucket[0]?.interactive)) {
       const candidate = interactiveBucket.shift();
-      if (candidate) selected.push(candidate);
+      if (candidate) {selected.push(candidate);}
     }
     while (selected.length < 120) {
       let added = false;
       for (const bucket of buckets) {
-        if (selected.length >= 120) break;
+        if (selected.length >= 120) {break;}
         const candidate = bucket.shift();
         if (candidate) {
           selected.push(candidate);
           added = true;
         }
       }
-      if (!added) break;
+      if (!added) {break;}
     }
     const observations: BrowserStyleObservation[] = [];
     for (const { nodeId, model } of selected) {
@@ -635,7 +635,7 @@ export async function measureStyles(
         nodeId,
       });
       const cv = Object.fromEntries(computed.computedStyle.map((p) => [p.name, p.value]));
-      if (cv.display === "none" || cv.visibility === "hidden") continue;
+      if (cv.display === "none" || cv.visibility === "hidden") {continue;}
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const matched = await session.send("CSS.getMatchedStylesForNode", {
         nodeId,
@@ -700,9 +700,9 @@ export async function measureStyles(
               selector: matchedSelector(m),
             })),
         );
-        if (ownEvidence.length) declarationEntries = ownEvidence;
+        if (ownEvidence.length) {declarationEntries = ownEvidence;}
         if (inline.length)
-          declarationEntries = inline.map((p) => ({ p, rule: undefined, selector: undefined }));
+          {declarationEntries = inline.map((p) => ({ p, rule: undefined, selector: undefined }));}
         // Chrome can report the same matched rule twice. Collapse only entries
         // with the same owning rule location, selector, property, and value;
         // distinct cascade declarations remain deliberately ambiguous.
@@ -804,17 +804,17 @@ export async function measureStyles(
           cv[property] ?? "",
           normalized[property] ?? [],
         );
-        if (unsupportedGap) classification = "unknown";
+        if (unsupportedGap) {classification = "unknown";}
         if (
           classification === "token-reference" &&
           declarations.some((v) =>
             [...v.matchAll(/var\((?<name>--[\w-]+)/gu)].some((m) => !(m[1] in tokens)),
           )
         )
-          classification = "unassessed";
-        if (classification === "token-reference") classification = "semantic-token-reference";
+          {classification = "unassessed";}
+        if (classification === "token-reference") {classification = "semantic-token-reference";}
         if (generated && classification === "unmatched-literal")
-          classification = "generated-override";
+          {classification = "generated-override";}
         if (
           !generated &&
           (arrustedSharedSource(path) || Boolean(mappedShared)) &&
@@ -822,15 +822,15 @@ export async function measureStyles(
           classification !== "matching-literal" &&
           classification !== "structural"
         )
-          classification = "inherited-shared";
+          {classification = "inherited-shared";}
         if (classification === "unassessed" || classification === "unmatched-literal")
-          classification = "unknown";
+          {classification = "unknown";}
         // Structural layout values are not adherence evidence, so exclude them
         // entirely rather than allowing downstream global scores to count them.
-        if (classification === "structural") continue;
+        if (classification === "structural") {continue;}
         let provenance: Observation["provenance"] = "unknown";
-        if (arrustedSharedSource(path) || mappedShared) provenance = "shared";
-        if (generated) provenance = "generated";
+        if (arrustedSharedSource(path) || mappedShared) {provenance = "shared";}
+        if (generated) {provenance = "generated";}
         const quad = model.content;
         const region = {
           height: model.height,
@@ -851,33 +851,33 @@ export async function measureStyles(
               : undefined));
         let originCandidate: BrowserStyleObservation["originCandidate"];
         if (signatureGenerated && signatureOrigin.source)
-          originCandidate = {
+          {originCandidate = {
             provenance: "generated" as const,
             reason:
               "Exact rendered intrinsic tag/class signature and simple matched class selector match generated source; shared runtime assembly remains possible.",
             source: signatureOrigin.source,
-          };
+          };}
         else if (tokenOrigin.provenance !== "unknown" && tokenOrigin.source)
-          originCandidate = {
+          {originCandidate = {
             provenance: tokenOrigin.provenance,
             reason:
               "Exact escaped Tailwind utility token occurs once in static source; it is reviewer evidence only, not declaration provenance.",
             source: tokenOrigin.source,
-          };
+          };}
         const source = cssSource;
         let origin: BrowserStyleObservation["origin"] = "unknown";
-        if (inline.length) origin = "inline";
-        if (provenance === "shared") origin = "shared-rule";
-        if (provenance === "shared" && inheritedDeclaration) origin = "inherited-shared";
-        if (generated) origin = "generated-rule";
+        if (inline.length) {origin = "inline";}
+        if (provenance === "shared") {origin = "shared-rule";}
+        if (provenance === "shared" && inheritedDeclaration) {origin = "inherited-shared";}
+        if (generated) {origin = "generated-rule";}
         let verdict: BrowserStyleObservation["verdict"] = "unassessed";
         if (
           provenance === "generated" &&
           (classification === "matching-literal" || classification === "generated-override")
         )
-          verdict = "nonconforming";
+          {verdict = "nonconforming";}
         if (provenance === "generated" && classification === "semantic-token-reference")
-          verdict = "conforming";
+          {verdict = "conforming";}
         observations.push({
           category,
           classification,
@@ -1018,7 +1018,7 @@ export async function capturePreview(input: {
       // Never attach project OIDC, cookies, or provider headers to preview requests.
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await page.goto(input.url, { waitUntil: "load" });
-      if (response && !response.ok()) throw new Error(`Preview returned HTTP ${response.status()}`);
+      if (response && !response.ok()) {throw new Error(`Preview returned HTTP ${response.status()}`);}
       if (input.preparePage) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- Each disposable viewport needs its own fixture.
         await input.preparePage(page);
@@ -1034,7 +1034,7 @@ export async function capturePreview(input: {
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const refreshed = await page.reload({ waitUntil: "load" });
           if (refreshed && !refreshed.ok())
-            throw new Error(`Preview returned HTTP ${refreshed.status()}`);
+            {throw new Error(`Preview returned HTTP ${refreshed.status()}`);}
           try {
             for (const step of scenario.steps) {
               const locator = step.selector
@@ -1044,18 +1044,18 @@ export async function capturePreview(input: {
                     name: step.name,
                   });
               // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-              if (step.action === "click") await locator.click();
+              if (step.action === "click") {await locator.click();}
               // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-              else if (step.action === "fill") await locator.fill(step.value ?? "");
+              else if (step.action === "fill") {await locator.fill(step.value ?? "");}
               // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-              else await locator.selectOption({ label: step.value ?? "" });
+              else {await locator.selectOption({ label: step.value ?? "" });}
             }
             if (scenario.expect?.text)
               // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-              await page
+              {await page
                 .getByText(scenario.expect.text, { exact: false })
                 .first()
-                .waitFor({ state: "visible" });
+                .waitFor({ state: "visible" });}
             interaction = {
               expectedText: scenario.expect?.text,
               status: "passed",
@@ -1088,10 +1088,10 @@ export async function capturePreview(input: {
               )
             : undefined;
         if (styles)
-          for (const observation of styles.observations) {
+          {for (const observation of styles.observations) {
             observation.capture = name;
             observation.id = `${name}-${observation.id}`;
-          }
+          }}
         const outputPath = nodePath.join(input.output, `${name}.png`);
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await settleFiniteMotion(page);

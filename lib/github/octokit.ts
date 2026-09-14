@@ -17,9 +17,9 @@ const silentConsole = new Proxy(console, {
       property === "error" ||
       property === "log"
     )
-      return () => {
+      {return () => {
         // The mocked request has no teardown.
-      };
+      };}
     return Reflect.get(target, property, receiver) as unknown;
   },
 });
@@ -28,8 +28,8 @@ type Fetch = typeof fetch;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requestUrl(resource: RequestInfo | URL): URL {
-  if (typeof resource === "string") return new URL(resource);
-  if (resource instanceof URL) return resource;
+  if (typeof resource === "string") {return new URL(resource);}
+  if (resource instanceof URL) {return resource;}
   return new URL(resource.url);
 }
 
@@ -40,7 +40,7 @@ async function boundedResponse(response: Response): Promise<Response> {
     await response.body?.cancel();
     throw new Error("github-response-too-large");
   }
-  if (response.body === null) return response;
+  if (response.body === null) {return response;}
 
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -48,7 +48,7 @@ async function boundedResponse(response: Response): Promise<Response> {
   for (;;) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const { done, value } = await reader.read();
-    if (done) break;
+    if (done) {break;}
     length += value.byteLength;
     if (length > MAX_RESPONSE_BYTES) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -126,7 +126,7 @@ export function createGitHubOAuthApp(input: {
       url.origin === GITHUB_ORIGIN &&
       url.pathname === "/login/oauth/access_token"
     ) {
-      if (typeof init?.body !== "string") throw new Error("github-oauth-request-invalid");
+      if (typeof init?.body !== "string") {throw new Error("github-oauth-request-invalid");}
       let body: string;
       try {
         const parsed = JSON.parse(init.body) as unknown;
@@ -136,13 +136,13 @@ export function createGitHubOAuthApp(input: {
           Array.isArray(parsed) ||
           "code_verifier" in parsed
         )
-          throw new Error("invalid-body");
+          {throw new Error("invalid-body");}
         body = JSON.stringify({ ...parsed, code_verifier: input.codeVerifier });
       } catch (error) {
         if (error instanceof SyntaxError) {
           const parsed = new URLSearchParams(init.body);
           if (parsed.has("code_verifier"))
-            throw new Error("github-oauth-request-invalid", { cause: error });
+            {throw new Error("github-oauth-request-invalid", { cause: error });}
           parsed.set("code_verifier", input.codeVerifier);
           body = parsed.toString();
         } else {

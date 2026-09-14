@@ -149,10 +149,10 @@ export function createDeploymentMcpRequestHandler(input: {
               ...handoffService,
               async recheckRepositoryAccess({ principal, repository, sourceHandoffId }) {
                 if (input.recheckRepositoryAccess !== undefined)
-                  return input.recheckRepositoryAccess({
+                  {return input.recheckRepositoryAccess({
                     repository,
                     sessionAuth: forwardedSessionAuth(principal, sourceHandoffId),
-                  });
+                  });}
                 const repositoryAccessRuntime =
                   await import("../agent/deployment-repository-access-runtime");
                 const repositoryRuntime =

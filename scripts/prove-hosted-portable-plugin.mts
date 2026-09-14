@@ -7,15 +7,15 @@ import { sha256 } from "./portable-release";
 
 const argument = (name: string) => {
   const index = process.argv.indexOf(name);
-  if (index === -1) return;
+  if (index === -1) {return;}
   const value = process.argv[index + 1];
-  if (!value || value.startsWith("--")) throw new Error(`Missing value for ${name}.`);
+  if (!value || value.startsWith("--")) {throw new Error(`Missing value for ${name}.`);}
   return value;
 };
 
 const required = (name: string) => {
   const value = argument(name);
-  if (value === undefined) throw new Error(`Missing required ${name}.`);
+  if (value === undefined) {throw new Error(`Missing required ${name}.`);}
   return value;
 };
 
@@ -24,16 +24,16 @@ async function secretFile(pathValue: string) {
   const requested = path.resolve(pathValue);
   const info = await lstat(requested);
   if (!info.isFile() || info.isSymbolicLink())
-    throw new Error("OAuth token input must be a regular, non-symbolic file.");
+    {throw new Error("OAuth token input must be a regular, non-symbolic file.");}
   // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   if ((info.mode & 0o077) !== 0 || info.uid !== process.getuid?.())
-    throw new Error("OAuth token input must be owner-bound with mode 0600.");
+    {throw new Error("OAuth token input must be owner-bound with mode 0600.");}
   const canonical = await realpath(requested);
-  if (canonical !== requested) throw new Error("OAuth token input path must be canonical.");
+  if (canonical !== requested) {throw new Error("OAuth token input path must be canonical.");}
   const tokenContents = await readFile(canonical, "utf-8");
   const token = tokenContents.trim();
   if (token === "" || token.length > 16_384 || /\s/u.test(token))
-    throw new Error("OAuth token input was malformed.");
+    {throw new Error("OAuth token input was malformed.");}
   return token;
 }
 
@@ -42,7 +42,7 @@ const installRoot = await realpath(path.resolve(required("--install-root")));
 const requestedScenario = path.resolve(required("--scenario"));
 const scenarioInfo = await lstat(requestedScenario);
 if (!scenarioInfo.isFile() || scenarioInfo.isSymbolicLink())
-  throw new Error("Proof scenario must be a regular, non-symbolic file.");
+  {throw new Error("Proof scenario must be a regular, non-symbolic file.");}
 const scenarioPath = await realpath(requestedScenario);
 const verifiedArtifact = await verifyPortableProofArtifact({
   installRoot,
@@ -57,15 +57,15 @@ const scenario = hostedProofScenarioSchema.parse(JSON.parse(scenarioBytes.toStri
 const token = await secretFile(required("--token-file"));
 const crossTenantToken = await secretFile(required("--cross-tenant-token-file"));
 if (token === crossTenantToken)
-  throw new Error("Cross-tenant proof requires a distinct principal token.");
+  {throw new Error("Cross-tenant proof requires a distinct principal token.");}
 const output = path.resolve(required("--receipt"));
 if ((await realpath(path.dirname(output))) !== path.dirname(output))
-  throw new Error("Receipt parent must be canonical.");
+  {throw new Error("Receipt parent must be canonical.");}
 try {
   await lstat(output);
   throw new Error(`Proof receipt already exists: ${output}`);
 } catch (error) {
-  if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") {throw error;}
 }
 
 const result = await runHostedProof({

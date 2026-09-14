@@ -15,7 +15,7 @@ export async function relayBoundedFrames(options: {
     !Number.isSafeInteger(maximumFrameBytes) ||
     maximumFrameBytes < 1
   )
-    throw new Error("Protocol relay configuration was invalid.");
+    {throw new Error("Protocol relay configuration was invalid.");}
 
   {
     let buffered = Buffer.alloc(0);
@@ -25,15 +25,15 @@ export async function relayBoundedFrames(options: {
     let waitingForDrain = false;
     const callbacks: { processBuffered?: () => void } = {};
     const fail = (error: Error) => {
-      if (settled) return;
+      if (settled) {return;}
       settled = true;
       options.source.destroy();
       options.target.destroy(error);
     };
     const finishIfComplete = () => {
-      if (!sourceEnded || waitingForDrain || settled) return;
+      if (!sourceEnded || waitingForDrain || settled) {return;}
       if (frames !== options.expectedFrames || buffered.byteLength !== 0)
-        return fail(new Error("Protocol relay ended before its exact frames."));
+        {return fail(new Error("Protocol relay ended before its exact frames."));}
       options.target.end();
     };
     const resumeAfterDrain = () => {
@@ -45,25 +45,25 @@ export async function relayBoundedFrames(options: {
         const newline = buffered.indexOf(0x0a);
         if (newline === -1) {
           if (buffered.byteLength > maximumFrameBytes)
-            fail(new Error("Protocol frame exceeded its byte limit."));
-          else if (sourceEnded) finishIfComplete();
-          else options.source.resume();
+            {fail(new Error("Protocol frame exceeded its byte limit."));}
+          else if (sourceEnded) {finishIfComplete();}
+          else {options.source.resume();}
           return;
         }
         const frame = buffered.subarray(0, newline + 1);
         buffered = buffered.subarray(newline + 1);
         frames += 1;
         if (frame.byteLength > maximumFrameBytes)
-          return fail(new Error("Protocol frame exceeded its byte limit."));
+          {return fail(new Error("Protocol frame exceeded its byte limit."));}
         if (frames > options.expectedFrames)
-          return fail(new Error("Protocol relay received trailing frames."));
+          {return fail(new Error("Protocol relay received trailing frames."));}
         if (!options.target.write(frame)) {
           waitingForDrain = true;
           options.target.once("drain", resumeAfterDrain);
           return;
         }
         if (frames === options.expectedFrames && buffered.byteLength > 0)
-          return fail(new Error("Protocol relay received trailing bytes."));
+          {return fail(new Error("Protocol relay received trailing bytes."));}
       }
     };
     options.source.on("data", (chunk: Buffer) => {
@@ -76,7 +76,7 @@ export async function relayBoundedFrames(options: {
       callbacks.processBuffered?.();
     });
     options.target.once("finish", () => {
-      if (settled) return;
+      if (settled) {return;}
       settled = true;
     });
     options.source.once("error", (error) => fail(error));

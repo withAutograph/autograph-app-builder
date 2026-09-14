@@ -116,7 +116,7 @@ export const assertExactDependencyPreparationReceipt = (
     !/^[0-9a-f]{64}$/u.test(digest) ||
     digest !== sha256(JSON.stringify(unsigned))
   )
-    throw new Error("The dependency preparation receipt is malformed.");
+    {throw new Error("The dependency preparation receipt is malformed.");}
 };
 
 export type TargetIdentityReceipt = TargetExecutionBinding & {
@@ -343,9 +343,9 @@ export const assertUpstreamMutationAllowed = (
   operation: string,
 ): void => {
   if (isPublicationWorkflowPhase(state))
-    throw new Error(
+    {throw new Error(
       `Local publication is ${state.phase}; ${operation} is permanently disabled for this workflow.`,
-    );
+    );}
 };
 
 export const assertExactWorkflowState = (
@@ -354,7 +354,7 @@ export const assertExactWorkflowState = (
   operation: string,
 ): void => {
   if (sha256(JSON.stringify(latest)) !== sha256(JSON.stringify(expected)))
-    throw new Error(`The workflow changed concurrently before ${operation}.`);
+    {throw new Error(`The workflow changed concurrently before ${operation}.`);}
 };
 
 export const assertCurrentGitHubDraftProposal = (input: {
@@ -380,9 +380,9 @@ export const assertCurrentGitHubDraftProposal = (input: {
     proposal.name !== input.githubSource.repository.name ||
     proposal.baseBranch !== input.githubSource.repository.defaultBranch
   )
-    throw new Error(
+    {throw new Error(
       "The draft pull-request proposal is not the exact proposal sealed for this reviewed workflow.",
-    );
+    );}
   return proposal;
 };
 
@@ -397,9 +397,9 @@ export const assertPublicationJournalStatus = (
     reviewed: [undefined],
   };
   if (!allowed[phase].includes(status))
-    throw new Error(
+    {throw new Error(
       `Workflow phase ${phase} cannot be paired with local-publication journal ${status ?? "absent"}.`,
-    );
+    );}
 };
 
 export const assertFreshBootstrapJournalStatus = (
@@ -417,9 +417,9 @@ export const assertFreshBootstrapJournalStatus = (
     reviewed: [undefined, "pending", "failed"],
   };
   if (!allowed[phase].includes(status))
-    throw new Error(
+    {throw new Error(
       `Workflow phase ${phase} cannot be paired with fresh-bootstrap journal ${status ?? "absent"}.`,
-    );
+    );}
 };
 
 export const workflowWorkspace = (

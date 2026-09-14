@@ -31,7 +31,7 @@ function canonicalTrackedPath(path: string) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readTrackedTreeBlob(input: { repositoryRoot: string; tree: string; path: string }) {
   if (!objectId.test(input.tree) || !canonicalTrackedPath(input.path))
-    throw new Error("Tracked tree asset reference was not canonical.");
+    {throw new Error("Tracked tree asset reference was not canonical.");}
 
   const record = git(input.repositoryRoot, [
     "ls-tree",
@@ -48,7 +48,7 @@ export function readTrackedTreeBlob(input: { repositoryRoot: string; tree: strin
     record[record.byteLength - 1] !== 0 ||
     record.subarray(separator + 1, -1).toString("utf-8") !== input.path
   )
-    throw new Error(`Manifest asset was not one exact tracked file: ${input.path}`);
+    {throw new Error(`Manifest asset was not one exact tracked file: ${input.path}`);}
 
   const metadata = record.subarray(0, separator).toString("ascii").split(" ");
   const [mode, type, oid] = metadata;
@@ -58,7 +58,7 @@ export function readTrackedTreeBlob(input: { repositoryRoot: string; tree: strin
     type !== "blob" ||
     !objectId.test(oid)
   )
-    throw new Error(`Manifest asset was not a tracked regular blob: ${input.path}`);
+    {throw new Error(`Manifest asset was not a tracked regular blob: ${input.path}`);}
 
   return {
     bytes: git(input.repositoryRoot, ["cat-file", "blob", oid]),

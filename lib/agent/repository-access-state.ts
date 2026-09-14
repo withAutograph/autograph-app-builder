@@ -45,11 +45,11 @@ export const repositoryAccessReceiptSchema = repositoryAccessReceiptUnsignedSche
   .superRefine((value, context) => {
     const { digest: actualDigest, ...unsigned } = value;
     if (actualDigest !== receiptDigest(unsigned))
-      context.addIssue({
+      {context.addIssue({
         code: "custom",
         message: "Repository access receipt digest is invalid.",
         path: ["digest"],
-      });
+      });}
   });
 
 export type RepositoryAccessReceipt = z.infer<typeof repositoryAccessReceiptSchema>;
@@ -84,7 +84,7 @@ export function recordRepositoryAccessReceipt(input: {
   const current =
     input.current === undefined ? undefined : repositoryAccessReceiptSchema.parse(input.current);
   if (current !== undefined && current.sessionId !== input.sessionId)
-    throw new Error("Repository access state belongs to a different session.");
+    {throw new Error("Repository access state belongs to a different session.");}
   if (
     current !== undefined &&
     JSON.stringify({
@@ -95,7 +95,7 @@ export function recordRepositoryAccessReceipt(input: {
       version: current.version,
     }) === JSON.stringify(observation)
   )
-    return current;
+    {return current;}
 
   const unsigned = repositoryAccessReceiptUnsignedSchema.parse({
     ...observation,
@@ -118,7 +118,7 @@ export function assertRepositoryAccessReceiptForSource(input: {
   expectedTree: string;
 }): RepositoryAccessReceipt {
   if (input.receipt === undefined)
-    throw new Error("No confirmed repository access receipt is available.");
+    {throw new Error("No confirmed repository access receipt is available.");}
   const receipt = repositoryAccessReceiptSchema.parse(input.receipt);
   if (
     receipt.digest !== input.expectedDigest ||
@@ -128,7 +128,7 @@ export function assertRepositoryAccessReceiptForSource(input: {
     receipt.repository.headSha !== input.expectedSha ||
     receipt.repository.headTree !== input.expectedTree
   )
-    throw new Error("The repository access receipt does not match this session and source.");
+    {throw new Error("The repository access receipt does not match this session and source.");}
   return receipt;
 }
 
@@ -150,9 +150,9 @@ export function assertResolvedSourceMatchesRepositoryAccess(input: {
     input.source.resolvedSha !== access.repository.headSha ||
     input.source.resolvedTree !== access.repository.headTree
   )
-    throw new Error(
+    {throw new Error(
       "The live GitHub source does not match the confirmed repository access receipt.",
-    );
+    );}
 }
 
 export const repositoryAccessReceiptState = defineState<RepositoryAccessReceipt | undefined>(

@@ -14,9 +14,9 @@ import { readTrackedTreeBlob } from "./git-tree-blob";
 
 const argument = (name: string) => {
   const index = process.argv.indexOf(name);
-  if (index === -1) return;
+  if (index === -1) {return;}
   const value = process.argv[index + 1];
-  if (!value || value.startsWith("--")) throw new Error(`Missing value for ${name}.`);
+  if (!value || value.startsWith("--")) {throw new Error(`Missing value for ${name}.`);}
   return value;
 };
 
@@ -34,12 +34,12 @@ const git = (...args: string[]) =>
   }).trim();
 const sourceStatus = git("status", "--porcelain=v1");
 if (sourceStatus !== "")
-  throw new Error(
+  {throw new Error(
     `Portable releases require a clean source checkout. Dirty entries:\n${sourceStatus}`,
-  );
+  );}
 const sourceRepository = "https://github.com/withAutograph/autograph-app-builder";
 if (!hasCanonicalFetchRemote(git("remote", "-v"), sourceRepository))
-  throw new Error("Portable releases require the canonical source remote.");
+  {throw new Error("Portable releases require the canonical source remote.");}
 const source = {
   repository: sourceRepository,
   sha: git("rev-parse", "HEAD"),
@@ -53,7 +53,7 @@ try {
   await lstat(requestedOutput);
   throw new Error(`Release output already exists: ${requestedOutput}`);
 } catch (error) {
-  if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") {throw error;}
 }
 const requestedParent = path.resolve(requestedOutput, "..");
 await mkdir(requestedParent, { mode: 0o700, recursive: true });
@@ -67,7 +67,7 @@ await Promise.all(
     const sourceFile = path.resolve(repositoryRoot, sourcePath);
     const sourceFileStatus = await lstat(sourceFile);
     if (sourceFileStatus.isSymbolicLink())
-      throw new Error(`Portable source cannot be a symbolic link: ${sourcePath}`);
+      {throw new Error(`Portable source cannot be a symbolic link: ${sourcePath}`);}
     await cp(sourceFile, path.join(core, sourcePath), { recursive: true });
   }),
 );
@@ -129,7 +129,7 @@ async function collectFiles(root: string, directory: string): Promise<Map<string
     directoryEntries.toSorted().map(async (entry) => {
       const filePath = path.join(directory, entry);
       const fileStatus = await stat(filePath);
-      if (fileStatus.isDirectory()) return collectFiles(root, filePath);
+      if (fileStatus.isDirectory()) {return collectFiles(root, filePath);}
       return new Map([[path.relative(root, filePath), await readFile(filePath)]]);
     }),
   );
@@ -152,7 +152,7 @@ const codexManifest = JSON.parse(
   await readFile(path.resolve(".codex-plugin/plugin.json"), "utf-8"),
 );
 if (codexManifest.name !== portable.name || codexManifest.version !== portable.version)
-  throw new Error("The Codex adapter name and version must match the portable manifest.");
+  {throw new Error("The Codex adapter name and version must match the portable manifest.");}
 const codexAssetReferences = [codexManifest.interface?.composerIcon, codexManifest.interface?.logo];
 const codexMarketplaceAssetPaths = await Promise.all(
   [...new Set(codexAssetReferences)].map(async (reference) => {
@@ -165,7 +165,7 @@ const codexMarketplaceAssetPaths = await Promise.all(
         .split("/")
         .some((part: string) => part === "" || part === "." || part === "..")
     )
-      throw new Error("Codex manifest asset references must be safe relative paths.");
+      {throw new Error("Codex manifest asset references must be safe relative paths.");}
     const relativeAssetPath = reference.slice(2);
     const sourceAsset = readTrackedTreeBlob({
       path: relativeAssetPath,
@@ -252,7 +252,7 @@ const receipt = {
   codexMarketplaceAssets: Object.fromEntries(
     codexMarketplaceAssetPaths.toSorted().map((filePath) => {
       const content = marketplaceFiles.get(filePath);
-      if (!content) throw new Error(`Codex marketplace omitted referenced asset ${filePath}.`);
+      if (!content) {throw new Error(`Codex marketplace omitted referenced asset ${filePath}.`);}
       return [filePath, sha256(content)];
     }),
   ),
@@ -273,5 +273,5 @@ await writeFile(
   `${receipt.archive.sha256}  ${receipt.archive.name}\n${receipt.codexMarketplaceArchive.sha256}  ${receipt.codexMarketplaceArchive.name}\n`,
 );
 const canonicalCore = await realpath(core);
-if (canonicalCore !== core) throw new Error("Portable core path was not canonical.");
+if (canonicalCore !== core) {throw new Error("Portable core path was not canonical.");}
 console.log(`Sealed ${archiveName}: ${receipt.archive.sha256}`);

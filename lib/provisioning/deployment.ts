@@ -40,13 +40,13 @@ export function createBuilderProvisioningRouteHandler(input: {
   return async (request: Request) => {
     try {
       if (new URL(request.url).origin !== origin)
-        return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });
+        {return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });}
       const authority = await input.authorityForRequest(request);
       if (!authority)
-        return Response.json(
+        {return Response.json(
           { error: "authentication_required" },
           { headers: noStore, status: 401 },
-        );
+        );}
       if (request.method === "GET") {
         const requestId = z
           .string()
@@ -81,12 +81,12 @@ export function createBuilderProvisioningRouteHandler(input: {
         request.headers.get("origin") !== origin ||
         request.headers.get("content-type")?.split(";", 1)[0] !== "application/json"
       )
-        return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });
+        {return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });}
       if (!(await input.enabled()))
-        return Response.json({ error: "feature_disabled" }, { headers: noStore, status: 503 });
+        {return Response.json({ error: "feature_disabled" }, { headers: noStore, status: 503 });}
       const length = request.headers.get("content-length");
       if (length && (!/^\d+$/u.test(length) || Number(length) > 16_384))
-        return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });
+        {return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });}
       const body = builderProvisionRequestSchema.parse(await request.json());
       if (new URL(request.url).searchParams.get("mode") === "reserve") {
         const reserved = await input.dependencies.journal.reserve({
@@ -120,7 +120,7 @@ let handler: ((request: Request) => Promise<Response>) | undefined;
 export function getBuilderProvisioningDeploymentHandler(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
-  if (handler) return handler;
+  if (handler) {return handler;}
   const preview = readPreviewOAuthRuntimeConfig(environment);
   const database = openHostedPostgresDatabase(preview.databaseUrl);
   const vercelConfig = readVercelIntegrationEnvironment(environment);

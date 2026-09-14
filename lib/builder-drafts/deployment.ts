@@ -16,7 +16,7 @@ type Environment = NodeJS.ProcessEnv | Record<string, string | undefined>;
 function pageData(
   row: Awaited<ReturnType<ReturnType<typeof createBuilderDraftService>["readActive"]>>,
 ) {
-  if (!row) return;
+  if (!row) {return;}
   return builderDraftPageDataSchema.parse({
     draftId: row.draftId,
     record: row.record,
@@ -34,7 +34,7 @@ export async function getAuthenticatedBuilderDraftContext(input: {
     environment: input.environment,
     headers: input.headers,
   });
-  if (!session) return;
+  if (!session) {return;}
   const preview = readPreviewOAuthRuntimeConfig(input.environment);
   return {
     authority: {
@@ -56,7 +56,7 @@ export async function readAuthenticatedActiveBuilderDraft(input: {
   headers: Headers;
 }) {
   const context = await getAuthenticatedBuilderDraftContext(input);
-  if (!context) return;
+  if (!context) {return;}
   return pageData(await context.drafts.readActive(context.authority));
 }
 
@@ -67,7 +67,7 @@ export async function readAuthenticatedBuilderDraft(input: {
   draftId: string;
 }) {
   const context = await getAuthenticatedBuilderDraftContext(input);
-  if (!context) return;
+  if (!context) {return;}
   const row = await context.drafts.read(context.authority, input.draftId);
   // An opaque, tenant-authorized draft ID is used for provider-return
   // recovery. It must remain readable after the active draft has been
@@ -111,19 +111,19 @@ export function createBuilderDraftRouteHandler(input: {
         request.headers.get("origin") !== origin ||
         request.headers.get("content-type")?.split(";", 1)[0] !== "application/json"
       )
-        return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });
+        {return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });}
       const length = request.headers.get("content-length");
       if (length && (!/^\d+$/u.test(length) || Number(length) > maximumRequestBytes))
-        return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });
+        {return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });}
       const authority = await input.authorityForRequest(request);
       if (!authority)
-        return Response.json(
+        {return Response.json(
           { error: "authentication_required" },
           { headers: noStore, status: 401 },
-        );
+        );}
       const raw = await request.text();
       if (new TextEncoder().encode(raw).byteLength > maximumRequestBytes)
-        return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });
+        {return Response.json({ error: "request_invalid" }, { headers: noStore, status: 400 });}
       const saved = await input.drafts.saveActive(
         authority,
         saveActiveBuilderDraftInputSchema.parse(JSON.parse(raw)),
@@ -165,7 +165,7 @@ let handler: ((request: Request) => Promise<Response>) | undefined;
 /** Intended route import: `getBuilderDraftDeploymentHandler(process.env)`. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function getBuilderDraftDeploymentHandler(environment: Environment) {
-  if (handler) return handler;
+  if (handler) {return handler;}
   const preview = readPreviewOAuthRuntimeConfig(environment);
   const database = openHostedPostgresDatabase(preview.databaseUrl);
   handler = createBuilderDraftRouteHandler({

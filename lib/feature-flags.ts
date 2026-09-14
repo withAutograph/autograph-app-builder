@@ -24,7 +24,7 @@ function managedVercelAdapter<ValueType, EntitiesType>(): Adapter<ValueType, Ent
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function resolveAdapter() {
     const sdkKey = process.env.FLAGS;
-    if (!sdkKey) return failClosedAdapter<ValueType, EntitiesType>();
+    if (!sdkKey) {return failClosedAdapter<ValueType, EntitiesType>();}
     adapter ??= createVercelAdapter(sdkKey)<ValueType, EntitiesType>();
     return adapter;
   }

@@ -69,8 +69,8 @@ export function providerConnectionRedirect(input: {
   );
   url.searchParams.set(input.provider, input.status);
   if (input.status === "failed" && input.reason)
-    url.searchParams.set(`${input.provider}Reason`, input.reason);
-  if (input.returnState?.resumeKey) url.searchParams.set("resume", input.returnState.resumeKey);
+    {url.searchParams.set(`${input.provider}Reason`, input.reason);}
+  if (input.returnState?.resumeKey) {url.searchParams.set("resume", input.returnState.resumeKey);}
   return url.toString();
 }
 

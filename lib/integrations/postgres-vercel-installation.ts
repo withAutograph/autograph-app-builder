@@ -46,7 +46,7 @@ export async function readActiveVercelInstallationToken(input: {
     )
     .limit(1);
   const [row] = rows;
-  if (!row || row.tokenKeyVersion !== input.config.tokenKeyVersion) return;
+  if (!row || row.tokenKeyVersion !== input.config.tokenKeyVersion) {return;}
   return {
     binding: {
       active: row.active,
@@ -97,7 +97,7 @@ export function createPostgresVercelAuthorizationStateStore(
           returnTo: vercelInstallationAuthorizationStates.returnTo,
         });
       const [row] = rows;
-      if (!row || rows.length !== 1) return;
+      if (!row || rows.length !== 1) {return;}
       return parseProviderConnectionReturn({
         returnTo: row.returnTo,
         ...(row.resumeKey ? { resumeKey: row.resumeKey } : {}),
@@ -135,7 +135,7 @@ export function createPostgresVercelAuthorizationStateStore(
           ),
         )
         .limit(1);
-      if (!rows[0]) return;
+      if (!rows[0]) {return;}
       return parseProviderConnectionReturn({
         returnTo: rows[0].returnTo,
         ...(rows[0].resumeKey ? { resumeKey: rows[0].resumeKey } : {}),
@@ -192,7 +192,7 @@ export function createPostgresVercelInstallationStore(input: {
           slug: hostedVercelInstallations.slug,
           updatedAt: hostedVercelInstallations.updatedAt,
         });
-      if (rows.length !== 1) throw new Error("Vercel installation was not durable.");
+      if (rows.length !== 1) {throw new Error("Vercel installation was not durable.");}
       return rows[0] as VercelInstallationBinding;
     },
     async deactivate(installationId, now) {

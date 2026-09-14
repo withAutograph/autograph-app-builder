@@ -51,14 +51,14 @@ function record(value: unknown): value is Record<string, unknown> {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function property(value: unknown, key: string) {
-  if (!record(value) || !(key in value)) throw new Error("invalid-response");
+  if (!record(value) || !(key in value)) {throw new Error("invalid-response");}
   return value[key];
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function stringProperty(value: unknown, key: string) {
   const result = property(value, key);
-  if (typeof result !== "string") throw new Error("invalid-response");
+  if (typeof result !== "string") {throw new Error("invalid-response");}
   return result;
 }
 
@@ -97,7 +97,7 @@ export function starterSourceBinding(source: StarterSource) {
           source.provenance.contractDigest,
         ].some((value) => value === undefined)
       )
-        throw new Error("starter-source-provenance-missing");
+        {throw new Error("starter-source-provenance-missing");}
       return {
         sourceSha: objectId.parse(source.provenance.sourceSha),
         sourceTree: objectId.parse(source.provenance.sourceTree),
@@ -128,7 +128,7 @@ export function starterSourceBinding(source: StarterSource) {
     };
   }
   if (source.manifest === undefined || source.manifestSha256 === undefined)
-    throw new Error("starter-source-provenance-missing");
+    {throw new Error("starter-source-provenance-missing");}
   return {
     sourceSha: source.manifest.source.sha,
     sourceTree: source.manifest.source.tree,
@@ -189,17 +189,17 @@ export async function provisionGitHubRepository(input: {
         ...(record(args.body) ? args.body : {}),
       });
       if (!args.expected.includes(response.status))
-        throw new Error(`github-status-${response.status}`);
+        {throw new Error(`github-status-${response.status}`);}
       return { body: response.data, status: response.status };
     } catch (error) {
       const status = record(error) ? error.status : undefined;
       const response = record(error) ? error.response : undefined;
-      if (status === 401) throw new Error("credential-rejected", { cause: error });
+      if (status === 401) {throw new Error("credential-rejected", { cause: error });}
       if (typeof status === "number" && args.expected.includes(status))
-        return {
+        {return {
           body: record(response) ? response.data : undefined,
           status,
-        };
+        };}
       throw new Error("provider-unavailable", { cause: error });
     }
   }
@@ -218,7 +218,7 @@ export async function provisionGitHubRepository(input: {
     });
     const token = stringProperty(authentication, "token");
     const permissions = property(authentication, "permissions");
-    if (token.length < 20 || token.length > 512) throw new Error("invalid-response");
+    if (token.length < 20 || token.length > 512) {throw new Error("invalid-response");}
     if (
       !record(permissions) ||
       Object.keys(permissions).toSorted().join(",") !== "administration,contents,metadata" ||
@@ -226,7 +226,7 @@ export async function provisionGitHubRepository(input: {
       permissions.contents !== "write" ||
       permissions.metadata !== "read"
     )
-      throw new Error("invalid-response");
+      {throw new Error("invalid-response");}
     return token;
   }
 
@@ -244,7 +244,7 @@ export async function provisionGitHubRepository(input: {
       !["all", "selected"].includes(stringProperty(data, "repository_selection")) ||
       property(data, "suspended_at") !== null
     )
-      throw new Error("installation-inactive");
+      {throw new Error("installation-inactive");}
   }
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -255,17 +255,17 @@ export async function provisionGitHubRepository(input: {
         authority: input.authority,
         providerUserId: input.installation.accountId,
       });
-      if (!credential?.active) throw new Error("credential-unavailable");
+      if (!credential?.active) {throw new Error("credential-unavailable");}
       const expires = credential.tokens.accessTokenExpiresAt
         ? Date.parse(credential.tokens.accessTokenExpiresAt)
         : undefined;
-      if (expires === undefined || expires > now() + 60_000) return credential.tokens.accessToken;
+      if (expires === undefined || expires > now() + 60_000) {return credential.tokens.accessToken;}
       if (
         !credential.tokens.refreshToken ||
         !credential.tokens.refreshTokenExpiresAt ||
         Date.parse(credential.tokens.refreshTokenExpiresAt) <= now()
       )
-        throw new Error("credential-unavailable");
+        {throw new Error("credential-unavailable");}
       let authentication: unknown;
       try {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -292,7 +292,7 @@ export async function provisionGitHubRepository(input: {
       const accessTokenExpiresAt = stringProperty(authentication, "expiresAt");
       const refreshTokenExpiresAt = stringProperty(authentication, "refreshTokenExpiresAt");
       if (Date.parse(accessTokenExpiresAt) <= now() || Date.parse(refreshTokenExpiresAt) <= now())
-        throw new Error("invalid-response");
+        {throw new Error("invalid-response");}
       const refreshedAt = now();
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const rotated = await input.credentialStore.rotate({
@@ -307,7 +307,7 @@ export async function provisionGitHubRepository(input: {
           refreshTokenExpiresAt,
         },
       });
-      if (rotated) return rotated.tokens.accessToken;
+      if (rotated) {return rotated.tokens.accessToken;}
     }
     throw new Error("credential-contention");
   }
@@ -329,7 +329,7 @@ export async function provisionGitHubRepository(input: {
         decimalProperty(user.body, "id") !== input.installation.accountId ||
         stringProperty(user.body, "login") !== input.installation.accountLogin
       )
-        throw new Error("credential-unavailable");
+        {throw new Error("credential-unavailable");}
     }
   } catch (error) {
     if (
@@ -337,11 +337,11 @@ export async function provisionGitHubRepository(input: {
       error.message === "credential-rejected" &&
       input.installation.accountType === "User"
     )
-      await input.credentialStore.deactivate({
+      {await input.credentialStore.deactivate({
         authority: input.authority,
         now: new Date(now()),
         providerUserId: input.installation.accountId,
-      });
+      });}
     let code: "credential_unavailable" | "installation_inactive" | "provider_unavailable" =
       "provider_unavailable";
     if (error instanceof Error && error.message.includes("credential")) {
@@ -385,7 +385,7 @@ export async function provisionGitHubRepository(input: {
       const page = input.source.files.slice(offset, offset + 12);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const values = await Promise.all(page.map(writeBlob));
-      for (const [path, sha] of values) blobs.set(path, sha);
+      for (const [path, sha] of values) {blobs.set(path, sha);}
     }
     const tree = await github({
       body: {
@@ -402,7 +402,7 @@ export async function provisionGitHubRepository(input: {
       token,
     });
     const treeSha = objectId.parse(stringProperty(tree.body, "sha"));
-    if (treeSha !== source.sourceTree) throw new Error("source-tree-mismatch");
+    if (treeSha !== source.sourceTree) {throw new Error("source-tree-mismatch");}
     const commit = await github({
       body: {
         message: "Initialize repository from supported Arrusted starter",
@@ -427,9 +427,9 @@ export async function provisionGitHubRepository(input: {
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function readBack(name: string): Promise<GitHubProvisionResult> {
     const repo = await repository(name);
-    if (repo.status !== 200) throw new Error("repository-missing");
+    if (repo.status !== 200) {throw new Error("repository-missing");}
     if (stringProperty(repo.body, "description") !== marker(input.requestId))
-      throw new Error("repository-marker-mismatch");
+      {throw new Error("repository-marker-mismatch");}
     const commit = await github({
       expected: [200],
       path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/commits/main`,
@@ -438,18 +438,18 @@ export async function provisionGitHubRepository(input: {
     const commitData = property(commit.body, "commit");
     const treeData = property(commitData, "tree");
     const parents = property(commit.body, "parents");
-    if (!Array.isArray(parents) || parents.length !== 0) throw new Error("commit-not-parentless");
+    if (!Array.isArray(parents) || parents.length !== 0) {throw new Error("commit-not-parentless");}
     const headSha = objectId.parse(stringProperty(commit.body, "sha"));
     const headTree = objectId.parse(stringProperty(treeData, "sha"));
-    if (headTree !== source.sourceTree) throw new Error("source-tree-mismatch");
+    if (headTree !== source.sourceTree) {throw new Error("source-tree-mismatch");}
     const tree = await github({
       expected: [200],
       path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/git/trees/${headTree}?recursive=1`,
       token,
     });
-    if (property(tree.body, "truncated") !== false) throw new Error("tree-truncated");
+    if (property(tree.body, "truncated") !== false) {throw new Error("tree-truncated");}
     const entries = property(tree.body, "tree");
-    if (!Array.isArray(entries)) throw new Error("invalid-response");
+    if (!Array.isArray(entries)) {throw new Error("invalid-response");}
     const observed = entries
       .filter((entry) => record(entry) && entry.type === "blob")
       .map((entry) => ({
@@ -466,7 +466,7 @@ export async function provisionGitHubRepository(input: {
       }))
       .toSorted((left, right) => left.path.localeCompare(right.path));
     if (JSON.stringify(observed) !== JSON.stringify(expected))
-      throw new Error("source-files-mismatch");
+      {throw new Error("source-files-mismatch");}
     const repositoryId = decimalProperty(repo.body, "id");
     const owner = stringProperty(property(repo.body, "owner"), "login");
     const resolvedName = stringProperty(repo.body, "name");
@@ -477,7 +477,7 @@ export async function provisionGitHubRepository(input: {
       isPrivate !== input.private ||
       stringProperty(repo.body, "default_branch") !== "main"
     )
-      throw new Error("repository-postcondition");
+      {throw new Error("repository-postcondition");}
     return {
       defaultBranch: "main",
       fullName: `${owner}/${resolvedName}`,
@@ -512,7 +512,7 @@ export async function provisionGitHubRepository(input: {
               maximumLength: 100,
               suffix: (input.generateSuffix ?? suffix)(),
             });
-      if (candidates.includes(candidate)) continue;
+      if (candidates.includes(candidate)) {continue;}
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await input.persistCandidate(candidate);
       candidates.push(candidate);
@@ -521,9 +521,9 @@ export async function provisionGitHubRepository(input: {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const before = await repository(candidate);
       const wasAbsent = input.persistedAbsentCandidates.includes(candidate);
-      if (before.status === 200 && !wasAbsent) continue;
+      if (before.status === 200 && !wasAbsent) {continue;}
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      if (before.status === 404 && !wasAbsent) await input.persistAbsent(candidate);
+      if (before.status === 404 && !wasAbsent) {await input.persistAbsent(candidate);}
       if (before.status === 404) {
         const createPath =
           input.installation.accountType === "Organization"
@@ -545,10 +545,10 @@ export async function provisionGitHubRepository(input: {
         if (created.status === 422) {
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const recovered = await repository(candidate);
-          if (recovered.status !== 200) continue;
+          if (recovered.status !== 200) {continue;}
         } else {
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-          if (input.installation.accountType === "Organization") token = await installationToken();
+          if (input.installation.accountType === "Organization") {token = await installationToken();}
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await writeStarter(candidate);
         }
@@ -559,7 +559,7 @@ export async function provisionGitHubRepository(input: {
         owned.status !== 200 ||
         stringProperty(owned.body, "description") !== marker(input.requestId)
       )
-        continue;
+        {continue;}
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const main = await github({
         expected: [200, 404, 409],
@@ -567,7 +567,7 @@ export async function provisionGitHubRepository(input: {
         token,
       });
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      if (main.status !== 200) await writeStarter(candidate);
+      if (main.status !== 200) {await writeStarter(candidate);}
       try {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         return await readBack(candidate);

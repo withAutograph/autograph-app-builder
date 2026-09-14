@@ -200,7 +200,7 @@ export const gitTreeId = (files: readonly FreshBootstrapFile[]): string => {
       components.some((_, index) => paths.has(components.slice(0, index + 1).join("/"))) ||
       [...paths].some((path) => path.startsWith(`${file.path}/`))
     )
-      throw new Error("The fresh-bootstrap tree contains an unsafe entry.");
+      {throw new Error("The fresh-bootstrap tree contains an unsafe entry.");}
     paths.add(file.path);
     const segments = components;
     let node = root;
@@ -213,7 +213,7 @@ export const gitTreeId = (files: readonly FreshBootstrapFile[]): string => {
       node = next;
     }
     const leaf = segments.at(-1);
-    if (leaf === undefined) throw new Error("The fresh-bootstrap tree contains an unsafe entry.");
+    if (leaf === undefined) {throw new Error("The fresh-bootstrap tree contains an unsafe entry.");}
     node.files.push({ ...file, path: leaf });
   }
   const walk = (node: Tree): string => {
@@ -257,11 +257,11 @@ const commitActor = (identity: FreshBootstrapIdentity): string => {
     /[\0\r]/u.test(identity.commitMessage) ||
     identity.commitMessage.trim().length === 0
   )
-    throw new Error("The fresh-bootstrap Git identity is invalid.");
+    {throw new Error("The fresh-bootstrap Git identity is invalid.");}
   const milliseconds = Date.parse(identity.commitTimestamp);
   const offset = /(?<sign>[+-])(?<hours>\d{2}):(?<minutes>\d{2})$/u.exec(identity.commitTimestamp);
   if (!Number.isFinite(milliseconds) || offset === null)
-    throw new Error("The fresh-bootstrap commit timestamp is invalid.");
+    {throw new Error("The fresh-bootstrap commit timestamp is invalid.");}
   return `${identity.authorName} <${identity.authorEmail}> ${Math.floor(milliseconds / 1000)} ${offset[1]}${offset[2]}${offset[3]}`;
 };
 
@@ -286,7 +286,7 @@ const exactCapability = (
     capability.authority !== "configured-production" &&
     capability.authority !== "structural-test-injection"
   )
-    throw new Error("Fresh local bootstrap capability is not authorized.");
+    {throw new Error("Fresh local bootstrap capability is not authorized.");}
   return {
     allowedRoot: capability.allowedRoot,
     lockHelper: capability.lockHelper,
@@ -318,13 +318,13 @@ export const createFreshBootstrapProposal = (input: {
 }): FreshBootstrapProposal => {
   assertExactReviewedChangeSet(input.review);
   if (input.sourceReceipt.sourceKind !== "fresh-template")
-    throw new Error("Fresh bootstrap requires a fresh-template source.");
+    {throw new Error("Fresh bootstrap requires a fresh-template source.");}
   if (
     input.review.sourceSha !== input.sourceReceipt.sourceSha ||
     input.review.sourceTree !== input.sourceReceipt.sourceTree ||
     input.review.repositoryContractDigest !== input.sourceReceipt.contractDigest
   )
-    throw new Error("The fresh-bootstrap source and review bindings differ.");
+    {throw new Error("The fresh-bootstrap source and review bindings differ.");}
   const capability = exactCapability(input.capability);
   const destinationLockDigest = stableDigest({
     allowedRoot: capability.allowedRoot,
@@ -397,7 +397,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isPathIdentity = (value: unknown): value is PathIdentity => {
-  if (!isRecord(value) || !hasExactKeys(value, pathIdentityKeys)) return false;
+  if (!isRecord(value) || !hasExactKeys(value, pathIdentityKeys)) {return false;}
   return (
     typeof value.path === "string" &&
     value.path.startsWith("/") &&
@@ -446,7 +446,7 @@ export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapPropos
     !isExecutableIdentity(proposal.capability.lockHelperIdentity) ||
     (proposal.capability.lockStrategy !== "flock" && proposal.capability.lockStrategy !== "lockf")
   )
-    throw new Error("The fresh-bootstrap proposal is not canonical V3.");
+    {throw new Error("The fresh-bootstrap proposal is not canonical V3.");}
   if (
     !hasExactKeys(proposal, [
       "version",
@@ -544,7 +544,7 @@ export const assertExactFreshBootstrapProposal = (proposal: FreshBootstrapPropos
       }) ||
     proposal.digest !== stableDigest(canonicalProposal(proposal))
   )
-    throw new Error("The fresh-bootstrap proposal is not canonical V3.");
+    {throw new Error("The fresh-bootstrap proposal is not canonical V3.");}
 };
 
 export const freshBootstrapJournalDigest = (value: unknown) => stableDigest(value);
@@ -578,13 +578,13 @@ export const proposalFromFreshBootstrapJournal = (
     "recoveryRequired",
     "digest",
   ])
-    Reflect.deleteProperty(candidate, key);
+    {Reflect.deleteProperty(candidate, key);}
   return { ...(candidate as Omit<FreshBootstrapProposal, "digest">), digest };
 };
 
 const assertExactPathIdentity = (value: PathIdentity, label: string): void => {
   if (!isPathIdentity(value))
-    throw new Error(`The fresh-bootstrap ${label} identity is malformed.`);
+    {throw new Error(`The fresh-bootstrap ${label} identity is malformed.`);}
 };
 
 const assertExactFreshBootstrapLayout = (layout: FreshBootstrapLayout): void => {
@@ -603,7 +603,7 @@ const assertExactFreshBootstrapLayout = (layout: FreshBootstrapLayout): void => 
     keys = [];
   }
   if (!hasExactKeys(layout, keys))
-    throw new Error("The fresh-bootstrap layout receipt is malformed.");
+    {throw new Error("The fresh-bootstrap layout receipt is malformed.");}
   for (const value of [
     ...(layout.phase === "stage-owned" || layout.phase === "stage-ready"
       ? [layout.stageIdentity]
@@ -613,7 +613,7 @@ const assertExactFreshBootstrapLayout = (layout: FreshBootstrapLayout): void => 
       ? [layout.swappedOldIdentity]
       : []),
   ])
-    assertExactPathIdentity(value, "layout");
+    {assertExactPathIdentity(value, "layout");}
 };
 
 export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJournal): void => {
@@ -651,7 +651,7 @@ export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJour
         typeof journal.remoteDigest !== "string" ||
         typeof journal.worktreeDigest !== "string"))
   )
-    throw new Error("The fresh-bootstrap journal is malformed.");
+    {throw new Error("The fresh-bootstrap journal is malformed.");}
   const proposal = proposalFromFreshBootstrapJournal(journal);
   const proposalKeys = Object.keys(canonicalProposal(proposal));
   const lineageKeys = [
@@ -718,14 +718,14 @@ export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJour
     digest !== freshBootstrapJournalDigest(unsigned) ||
     journal.proposalDigest !== proposal.digest
   )
-    throw new Error("The fresh-bootstrap journal is malformed.");
+    {throw new Error("The fresh-bootstrap journal is malformed.");}
   if (journal.status === "pending" || journal.status === "failed")
-    assertExactFreshBootstrapLayout(journal.layout);
+    {assertExactFreshBootstrapLayout(journal.layout);}
   if (journal.status === "succeeded") {
     assertExactPathIdentity(journal.destinationIdentity, "destination");
     assertExactPathIdentity(journal.gitDirectoryIdentity, "Git directory");
     if (journal.swappedOldIdentity !== undefined)
-      assertExactPathIdentity(journal.swappedOldIdentity, "swapped-old");
+      {assertExactPathIdentity(journal.swappedOldIdentity, "swapped-old");}
     if (
       journal.headReference !== `refs/heads/${journal.repositoryIdentity.initialBranch}` ||
       journal.headCommit !== journal.expectedInitialCommit ||
@@ -733,7 +733,7 @@ export const assertCanonicalFreshBootstrapJournal = (journal: FreshBootstrapJour
       !/^[0-9a-f]{64}$/u.test(journal.remoteDigest) ||
       !/^[0-9a-f]{64}$/u.test(journal.worktreeDigest)
     )
-      throw new Error("The fresh-bootstrap success receipt is malformed.");
+      {throw new Error("The fresh-bootstrap success receipt is malformed.");}
   }
   assertExactFreshBootstrapProposal(proposal);
 };

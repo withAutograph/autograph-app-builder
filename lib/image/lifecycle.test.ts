@@ -93,7 +93,7 @@ const targetFiles = Object.fromEntries(
     ".config/mise/tasks/repository/exec",
   ].map((filePath, index) => {
     const digestCharacter = "3456789abcd".at(index);
-    if (digestCharacter === undefined) throw new Error("Missing target file digest character.");
+    if (digestCharacter === undefined) {throw new Error("Missing target file digest character.");}
     return [filePath, digestCharacter.repeat(64)];
   }),
 );
@@ -216,9 +216,9 @@ esac
     { mode: 0o700 },
   );
   for (const name of ["docker", "docker-buildx"] as const)
-    writeFileSync(nodePath.join(bin, name), `#!/bin/sh\nprintf '${name} fixture\\n'\n`, {
+    {writeFileSync(nodePath.join(bin, name), `#!/bin/sh\nprintf '${name} fixture\\n'\n`, {
       mode: 0o700,
-    });
+    });}
   writeFileSync(
     nodePath.join(bin, "msb"),
     `#!/usr/bin/env node
@@ -291,8 +291,8 @@ function withFakeGhEnvironment(
     return callback();
   } finally {
     for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) Reflect.deleteProperty(process.env, key);
-      else process.env[key] = value;
+      if (value === undefined) {Reflect.deleteProperty(process.env, key);}
+      else {process.env[key] = value;}
     }
   }
 }
@@ -316,8 +316,8 @@ async function withFakeGhEnvironmentAsync(
     return await callback();
   } finally {
     for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) Reflect.deleteProperty(process.env, key);
-      else process.env[key] = value;
+      if (value === undefined) {Reflect.deleteProperty(process.env, key);}
+      else {process.env[key] = value;}
     }
   }
 }
@@ -365,8 +365,8 @@ function stateArtifactText(root: string): string {
   const visit = (path: string) => {
     for (const entry of readdirSync(path, { withFileTypes: true })) {
       const absolute = nodePath.join(path, entry.name);
-      if (entry.isDirectory()) visit(absolute);
-      else if (entry.isFile()) contents.push(readFileSync(absolute, "utf-8"));
+      if (entry.isDirectory()) {visit(absolute);}
+      else if (entry.isFile()) {contents.push(readFileSync(absolute, "utf-8"));}
     }
   };
   visit(root);
@@ -463,11 +463,11 @@ function installPreloadFixture(
               loginResult,
             );
       if (variant === "stale" && login !== undefined)
-        writeFileSync(
+        {writeFileSync(
           nodePath.join(stateRoot, "ghcr-login-receipt.json"),
           `${JSON.stringify({ ...login, result: { ...loginResult, status: "stale" } }, null, 2)}\n`,
           { mode: 0o600 },
-        );
+        );}
       writeFixtureReceipt(stateRoot, "push-receipt.json", "image-push", exact, {
         ghcrLoginReceiptDigest:
           variant === "identity-mismatch" ? "8".repeat(64) : (login?.digest ?? "6".repeat(64)),
@@ -479,9 +479,9 @@ function installPreloadFixture(
         reference,
       });
       if (variant === "state-drift")
-        writeFileSync(nodePath.join(fixture.state, "gh", "device-id"), "drifted-device-id\n", {
+        {writeFileSync(nodePath.join(fixture.state, "gh", "device-id"), "drifted-device-id\n", {
           mode: 0o600,
-        });
+        });}
     },
     sentinel,
     stateRoot,
@@ -571,8 +571,8 @@ describe("image lifecycle", () => {
           });
           expect(() => ghcrCredentialEnvironment(root)).toThrow("closed schema");
         } finally {
-          if (oldHome === undefined) delete process.env.HOME;
-          else process.env.HOME = oldHome;
+          if (oldHome === undefined) {delete process.env.HOME;}
+          else {process.env.HOME = oldHome;}
         }
       });
     } finally {
@@ -921,9 +921,9 @@ wait
     try {
       for (let attempts = 0; attempts < 100 && !existsSync(descendant); attempts += 1)
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        await delay(10);
+        {await delay(10);}
       expect(existsSync(descendant)).toBe(true);
-      if (child.pid === undefined) throw new Error("Expected child process ID.");
+      if (child.pid === undefined) {throw new Error("Expected child process ID.");}
       process.kill(-child.pid, "SIGKILL");
       await once(child, "close");
       const descendantPid = Number(readFileSync(descendant, "utf-8").trim());
@@ -940,7 +940,7 @@ wait
     } finally {
       token.fill(0);
       try {
-        if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
+        if (child.pid !== undefined) {process.kill(-child.pid, "SIGKILL");}
       } catch {
         // The process may already have exited.
       }
@@ -989,7 +989,7 @@ wait
         );
       expect(invocations).toHaveLength(1);
       const invocation = invocations.at(0);
-      if (invocation === undefined) throw new Error("Expected one image-tool invocation.");
+      if (invocation === undefined) {throw new Error("Expected one image-tool invocation.");}
       expect(invocation.argv).toEqual(["pull", scenario.reference, "--materialize", "all"]);
       expect(
         Object.keys(invocation.environment)
@@ -1078,7 +1078,7 @@ wait
     for (const line of dockerfile
       .split("\n")
       .filter((dockerLine) => dockerLine.startsWith("COPY ")))
-      expect(line).toContain("--from=");
+      {expect(line).toContain("--from=");}
   });
 
   it("constructs exact standalone build, inspection, preload, and proof commands", () => {
@@ -1153,13 +1153,13 @@ wait
       'docker-cli = "29.4.0"',
       '"npm:microsandbox" = "0.5.10"',
     ])
-      expect(miseConfig).toContain(expected);
+      {expect(miseConfig).toContain(expected);}
     for (const expected of [
       '[[tools."aqua:docker/buildx"]]',
       "[[tools.docker-cli]]",
       '[[tools."npm:microsandbox"]]',
     ])
-      expect(miseLock).toContain(expected);
+      {expect(miseLock).toContain(expected);}
     const dockerfileDigest = hashArtifact(readFileSync("containers/eve-sandbox/Dockerfile"));
     expect(dockerfileDigest).toBe(
       "05e47db175d19c836d95be2e628e36cf7c7a2859dc8fbd92ac5c07573db0ad5b",
@@ -1482,8 +1482,8 @@ wait
         symlinkSync(outside, runtime);
       } else {
         mkdirSync(runtime, { mode: 0o700 });
-        if (fixture === "nested-symlink") symlinkSync(outside, nodePath.join(runtime, "current"));
-        else linkSync(outside, nodePath.join(runtime, "current"));
+        if (fixture === "nested-symlink") {symlinkSync(outside, nodePath.join(runtime, "current"));}
+        else {linkSync(outside, nodePath.join(runtime, "current"));}
       }
       expect(() => reconcileLifecycleTemps(root)).toThrow("Unsafe interrupted Buildx state");
       expect(readFileSync(outside, "utf-8")).toBe("keep");
@@ -1632,7 +1632,7 @@ wait
     ).toThrow("platform manifest");
     const [platformManifest, attestationManifest] = manifests;
     if (platformManifest === undefined || attestationManifest === undefined)
-      throw new Error("Expected platform and attestation manifests.");
+      {throw new Error("Expected platform and attestation manifests.");}
     const wrongAttestation: typeof manifests = [
       platformManifest,
       {

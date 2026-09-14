@@ -159,7 +159,7 @@ describe("GitHub starter repository provisioning", () => {
             : undefined;
         methods.push({ body, method, path });
         if (parsedUrl.origin === "https://github.com" && path === "/login/oauth/access_token")
-          return Response.json(
+          {return Response.json(
             {
               access_token: "refreshed-github-user-token",
               expires_in: 28_800,
@@ -167,9 +167,9 @@ describe("GitHub starter repository provisioning", () => {
               refresh_token_expires_in: 15_768_000,
             },
             { headers: { date: "Sun, 30 Aug 2026 12:00:00 GMT" } },
-          );
+          );}
         if (path === "/app/installations/101")
-          return Response.json({
+          {return Response.json({
             account: {
               id: accountType === "User" ? 77 : 88,
               login: owner,
@@ -178,18 +178,18 @@ describe("GitHub starter repository provisioning", () => {
             id: 101,
             repository_selection: accountType === "Organization" ? "all" : "selected",
             suspended_at: null,
-          });
-        if (path === "/user") return Response.json({ id: 77, login: "octocat" });
+          });}
+        if (path === "/user") {return Response.json({ id: 77, login: "octocat" });}
         if (path.endsWith("/access_tokens"))
-          return Response.json(
+          {return Response.json(
             {
               permissions: body.permissions,
               token: "github-installation-access-token",
             },
             { status: 201 },
-          );
+          );}
         if (path === `/repos/${owner}/vendor-portal`)
-          return created
+          {return created
             ? Response.json({
                 default_branch: "main",
                 description: `Created by Autograph App Builder request ${requestId}`,
@@ -198,26 +198,26 @@ describe("GitHub starter repository provisioning", () => {
                 owner: { login: owner },
                 private: isPrivate,
               })
-            : Response.json({}, { status: 404 });
+            : Response.json({}, { status: 404 });}
         if (path === createPath) {
           created = true;
           return Response.json({ id: 202 }, { status: 201 });
         }
-        if (path.endsWith("/git/blobs")) return Response.json({ sha: blobSha }, { status: 201 });
+        if (path.endsWith("/git/blobs")) {return Response.json({ sha: blobSha }, { status: 201 });}
         if (path.endsWith("/git/trees"))
-          return Response.json({ sha: ARRUSTED_TARGET_TREE }, { status: 201 });
+          {return Response.json({ sha: ARRUSTED_TARGET_TREE }, { status: 201 });}
         if (path.endsWith("/git/commits"))
-          return Response.json({ sha: "a".repeat(40) }, { status: 201 });
+          {return Response.json({ sha: "a".repeat(40) }, { status: 201 });}
         if (path.endsWith("/git/refs"))
-          return Response.json({ ref: "refs/heads/main" }, { status: 201 });
+          {return Response.json({ ref: "refs/heads/main" }, { status: 201 });}
         if (path.endsWith("/commits/main"))
-          return Response.json({
+          {return Response.json({
             commit: { tree: { sha: ARRUSTED_TARGET_TREE } },
             parents: [],
             sha: "a".repeat(40),
-          });
+          });}
         if (path.includes(`/git/trees/${ARRUSTED_TARGET_TREE}`))
-          return Response.json({
+          {return Response.json({
             tree: [
               {
                 mode: "100644",
@@ -227,7 +227,7 @@ describe("GitHub starter repository provisioning", () => {
               },
             ],
             truncated: false,
-          });
+          });}
         throw new Error(`Unexpected GitHub request ${method} ${path}`);
       });
       const suffixes = ["a1b2c3", "b2c3d4", "c3d4e5", "d4e5f6"];
@@ -271,7 +271,7 @@ describe("GitHub starter repository provisioning", () => {
         auto_init: false,
         private: isPrivate,
       });
-      if (accountType === "User") expect(credentials.rotate).toHaveBeenCalledTimes(1);
+      if (accountType === "User") {expect(credentials.rotate).toHaveBeenCalledTimes(1);}
     },
   );
 
@@ -285,13 +285,13 @@ describe("GitHub starter repository provisioning", () => {
       fetch: vi.fn<typeof fetch>(async (url) => {
         const path = new URL(String(url)).pathname;
         if (path === "/app/installations/101")
-          return Response.json({
+          {return Response.json({
             account: { id: 77, login: "octocat", type: "User" },
             id: 101,
             repository_selection: "selected",
             suspended_at: null,
-          });
-        if (path === "/user") return Response.json({}, { status: 401 });
+          });}
+        if (path === "/user") {return Response.json({}, { status: 401 });}
         throw new Error(`Unexpected GitHub request ${path}`);
       }),
       installation: {
@@ -331,14 +331,14 @@ describe("GitHub starter repository provisioning", () => {
     const request = vi.fn<typeof fetch>(async (url, init) => {
       const path = new URL(String(url)).pathname;
       if (path === "/app/installations/101")
-        return Response.json({
+        {return Response.json({
           account: { id: 88, login: "withAutograph", type: "Organization" },
           id: 101,
           repository_selection: "all",
           suspended_at: null,
-        });
+        });}
       if (path.endsWith("/access_tokens"))
-        return Response.json(
+        {return Response.json(
           {
             permissions: {
               administration: "write",
@@ -348,11 +348,11 @@ describe("GitHub starter repository provisioning", () => {
             token: "github-installation-access-token",
           },
           { status: 201 },
-        );
+        );}
       if (path === "/repos/withAutograph/vendor-portal")
-        return Response.json({ description: "unrelated repository" });
+        {return Response.json({ description: "unrelated repository" });}
       if (path === `/repos/withAutograph/${resolved}`)
-        return created
+        {return created
           ? Response.json({
               default_branch: "main",
               description: `Created by Autograph App Builder request ${requestId}`,
@@ -361,7 +361,7 @@ describe("GitHub starter repository provisioning", () => {
               owner: { login: "withAutograph" },
               private: true,
             })
-          : Response.json({}, { status: 404 });
+          : Response.json({}, { status: 404 });}
       if (path === "/orgs/withAutograph/repos" && init?.method === "POST") {
         created = true;
         if (loseCreateResponse) {
@@ -371,24 +371,24 @@ describe("GitHub starter repository provisioning", () => {
         return Response.json({ id: 303 }, { status: 201 });
       }
       if (path.endsWith("/commits/main"))
-        return main
+        {return main
           ? Response.json({
               commit: { tree: { sha: ARRUSTED_TARGET_TREE } },
               parents: [],
               sha: "a".repeat(40),
             })
-          : Response.json({}, { status: 404 });
-      if (path.endsWith("/git/blobs")) return Response.json({ sha: blobSha }, { status: 201 });
+          : Response.json({}, { status: 404 });}
+      if (path.endsWith("/git/blobs")) {return Response.json({ sha: blobSha }, { status: 201 });}
       if (path.endsWith("/git/trees"))
-        return Response.json({ sha: ARRUSTED_TARGET_TREE }, { status: 201 });
+        {return Response.json({ sha: ARRUSTED_TARGET_TREE }, { status: 201 });}
       if (path.endsWith("/git/commits"))
-        return Response.json({ sha: "a".repeat(40) }, { status: 201 });
+        {return Response.json({ sha: "a".repeat(40) }, { status: 201 });}
       if (path.endsWith("/git/refs")) {
         main = true;
         return Response.json({ ref: "refs/heads/main" }, { status: 201 });
       }
       if (path.includes(`/git/trees/${ARRUSTED_TARGET_TREE}`))
-        return Response.json({
+        {return Response.json({
           tree: [
             {
               mode: "100644",
@@ -398,7 +398,7 @@ describe("GitHub starter repository provisioning", () => {
             },
           ],
           truncated: false,
-        });
+        });}
       throw new Error(`Unexpected GitHub request ${path}`);
     });
     const base = {

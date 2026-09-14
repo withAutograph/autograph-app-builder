@@ -6,9 +6,9 @@ const pluginRoot = path.resolve(rootIndex === -1 ? "." : process.argv[rootIndex 
 if (rootIndex === -1 || process.argv[rootIndex + 1]) {
   // The option is absent or has a value.
 } else
-  throw new Error(
+  {throw new Error(
     "Usage: pnpm validate:plugin [--root <plugin-directory>] [--artifact] [--release]",
-  );
+  );}
 const result = await validateAgentPluginPackage({
   packageKind: process.argv.includes("--artifact") ? "generated-artifact" : "source",
   pluginRoot,

@@ -18,7 +18,7 @@ const { values } = parseArgs({
     "schema-only": { type: "boolean" },
   },
 });
-if (!values["output-dir"]) throw new Error("Supply an external --output-dir for parity artifacts.");
+if (!values["output-dir"]) {throw new Error("Supply an external --output-dir for parity artifacts.");}
 const output = path.resolve(values["output-dir"]);
 await mkdir(output, { mode: 0o700, recursive: true });
 await writeFile(
@@ -35,9 +35,9 @@ await writeFile(
 );
 if (!values["schema-only"]) {
   if (!values.evidence)
-    throw new Error(
+    {throw new Error(
       "Supply evaluator-owned --evidence; candidate workflow-results files are not trusted.",
-    );
+    );}
   const evidencePath = path.resolve(values.evidence);
   const evidenceRoot = await realpath(path.dirname(evidencePath));
   const report = await assessParity(
@@ -46,7 +46,7 @@ if (!values["schema-only"]) {
       try {
         const file = await realpath(path.resolve(evidenceRoot, candidatePath));
         const rel = path.relative(evidenceRoot, file);
-        if (path.isAbsolute(rel) || rel === ".." || rel.startsWith("../")) return false;
+        if (path.isAbsolute(rel) || rel === ".." || rel.startsWith("../")) {return false;}
         const info = await stat(file);
         return info.isFile() && info.size > 0;
       } catch {

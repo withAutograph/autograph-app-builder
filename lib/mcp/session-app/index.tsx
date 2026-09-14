@@ -19,7 +19,7 @@ const resultListeners = new Set<() => void>();
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function publishResult(result?: EveSessionResult) {
   latestResult = result;
-  for (const listener of resultListeners) listener();
+  for (const listener of resultListeners) {listener();}
 }
 
 app.ontoolresult = ({ structuredContent }) => {
@@ -46,7 +46,7 @@ function SessionAppContainer() {
       .join(":") ?? "";
 
   const refresh = useCallback(async () => {
-    if (!result || !capabilities?.serverTools) return;
+    if (!result || !capabilities?.serverTools) {return;}
     const response = await app.callServerTool({
       arguments: {
         cursor: result.cursor,
@@ -55,7 +55,7 @@ function SessionAppContainer() {
       },
       name: "autograph_get",
     });
-    if (response.structuredContent) publishResult(response.structuredContent as EveSessionResult);
+    if (response.structuredContent) {publishResult(response.structuredContent as EveSessionResult);}
   }, [capabilities?.serverTools, result]);
 
   useEffect(() => {
@@ -63,11 +63,11 @@ function SessionAppContainer() {
   }, [authorizationRequestKey]);
 
   useEffect(() => {
-    if (!authorizationRequestKey || !capabilities?.serverTools) return;
+    if (!authorizationRequestKey || !capabilities?.serverTools) {return;}
     const checkAfterReturn = () => {
-      if (document.visibilityState === "hidden") return;
+      if (document.visibilityState === "hidden") {return;}
       const now = Date.now();
-      if (!automaticRefresh.current.claim(authorizationRequestKey, now)) return;
+      if (!automaticRefresh.current.claim(authorizationRequestKey, now)) {return;}
       // Refresh is deliberately fire-and-forget from the focus handler.
       void (async () => {
         try {
@@ -87,7 +87,7 @@ function SessionAppContainer() {
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function respond(responses: SessionResponse[]) {
-    if (!result || !capabilities?.serverTools) return;
+    if (!result || !capabilities?.serverTools) {return;}
     const response = await app.callServerTool({
       arguments: {
         clientRequestId: crypto.randomUUID(),
@@ -96,8 +96,8 @@ function SessionAppContainer() {
       },
       name: "autograph_respond",
     });
-    if (response.isError) throw new Error("response rejected");
-    if (response.structuredContent) publishResult(response.structuredContent as EveSessionResult);
+    if (response.isError) {throw new Error("response rejected");}
+    if (response.structuredContent) {publishResult(response.structuredContent as EveSessionResult);}
   }
 
   return (
@@ -115,6 +115,6 @@ function SessionAppContainer() {
 }
 
 const root = document.querySelector("#root");
-if (!root) throw new Error("Missing MCP App root.");
+if (!root) {throw new Error("Missing MCP App root.");}
 createRoot(root).render(<SessionAppContainer />);
 void app.connect();

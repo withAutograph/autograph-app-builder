@@ -111,11 +111,11 @@ const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
     })
     .superRefine((proposal, context) => {
       if (sha256(JSON.stringify(proposal.iteration.changes)) !== proposal.iteration.digest)
-        context.addIssue({
+        {context.addIssue({
           code: z.ZodIssueCode.custom,
           message: "The iteration digest does not bind its changes.",
           path: ["iteration", "digest"],
-        });
+        });}
     });
 
 export const targetIterationProposalSchema =
@@ -127,7 +127,7 @@ export const targetProposalSchema = z.union([
 ]);
 
 const targetProposalSchemaForTopology = (topologyOwner: string) => {
-  if (topologyOwner === "microfrontends.json") return targetProposalSchema;
+  if (topologyOwner === "microfrontends.json") {return targetProposalSchema;}
   return z.union([
     targetCreationProposalSchemaForTopology(topologyOwner),
     targetIterationProposalSchemaForTopology(topologyOwner),
@@ -167,7 +167,7 @@ export type TargetCommandExecutor = (input: {
 
 const planningMarker = (marker: string, phase: "start" | "finish") => {
   if (process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development")
-    console.info(`[app-builder planning] ${marker} ${phase}`);
+    {console.info(`[app-builder planning] ${marker} ${phase}`);}
 };
 
 const parseOutput = <T>(result: TargetCommandResult, schema: z.ZodType<T>, label: string): T => {
@@ -188,7 +188,7 @@ const parseOutput = <T>(result: TargetCommandResult, schema: z.ZodType<T>, label
     throw new Error(`${label} returned invalid JSON.`);
   }
   const validated = schema.safeParse(parsed);
-  if (!validated.success) throw new Error(`${label} returned an invalid shape.`);
+  if (!validated.success) {throw new Error(`${label} returned an invalid shape.`);}
   return validated.data;
 };
 
@@ -197,18 +197,18 @@ export const targetExecutionBinding = (
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ) => {
   if (hasTestCapability("simulated-target", environment))
-    return {
+    {return {
       dependencyCacheDigest: cache === undefined ? "checkout" : dependencyCacheReceiptDigest(cache),
       fixture: true,
       imageDigest: `fixture@sha256:${"1".repeat(64)}`,
-    } as const;
+    } as const;}
   const imageDigest = configuredToolchainImage(environment);
   if (cache === undefined)
-    return {
+    {return {
       dependencyCacheDigest: "checkout",
       fixture: false,
       imageDigest: imageDigest ?? "vercel-sandbox",
-    } as const;
+    } as const;}
   if (imageDigest === undefined) {
     const backend = sandboxBackendPlan({
       environment,
@@ -216,17 +216,17 @@ export const targetExecutionBinding = (
       localImageConfigured: false,
     });
     if (backend.kind === "vercel-development" && backend.blockers.length === 0)
-      return {
+      {return {
         dependencyCacheDigest: dependencyCacheReceiptDigest(cache),
         fixture: false,
         imageDigest: developmentExecutionArtifactDigest(environment),
-      } as const;
+      } as const;}
     if (isHostedVercelSandboxBackend(backend.kind) && backend.blockers.length === 0)
-      return {
+      {return {
         dependencyCacheDigest: dependencyCacheReceiptDigest(cache),
         fixture: false,
         imageDigest: hostedExecutionArtifactDigest(),
-      } as const;
+      } as const;}
     throw new Error(
       "The immutable sandbox image and offline dependency cache are not ready for target commands.",
     );
@@ -321,7 +321,7 @@ export const sandboxTargetCommandExecutor =
         `${result.stdout}\n${result.stderr}`,
       )
     )
-      return result;
+      {return result;}
 
     await sandbox.setNetworkPolicy("allow-all");
     const setup = await sandbox.run({
@@ -329,7 +329,7 @@ export const sandboxTargetCommandExecutor =
       command: "bun install --ignore-scripts --filter @autograph/platform-microfrontends",
       workingDirectory: planningRoot,
     });
-    if (setup.exitCode !== 0) return setup;
+    if (setup.exitCode !== 0) {return setup;}
     return sandbox.run({ ...request, abortSignal });
   };
 
@@ -348,7 +348,7 @@ export const fixtureTargetCommandExecutor =
       workspacePath: `apps/${requestedAppId}`,
     };
     if (command === "identity")
-      return { exitCode: 0, stderr: "", stdout: JSON.stringify(identity) };
+      {return { exitCode: 0, stderr: "", stdout: JSON.stringify(identity) };}
     const proposal = {
       blockers: [],
       contract: {
@@ -416,7 +416,7 @@ export const executeTargetIdentityAndPlanning = async (input: {
     workspacePath: `apps/${input.appId}`,
   };
   if (JSON.stringify(identity) !== JSON.stringify(expectedIdentity))
-    throw new Error("Target identity did not match the accepted AppSpec.");
+    {throw new Error("Target identity did not match the accepted AppSpec.");}
   // Discover the actual prepared checkout. Authored changes may describe a
   // new app, and existing apps do not need a package manifest to be iterable.
   const existingApplicationResult = await input.sandbox.run({
@@ -424,7 +424,7 @@ export const executeTargetIdentityAndPlanning = async (input: {
   });
   const existingApplication = existingApplicationResult.exitCode === 0;
   if (existingApplication && input.existingAppChanges === undefined)
-    throw new ExistingApplicationChangesRequiredError();
+    {throw new ExistingApplicationChangesRequiredError();}
   if (existingApplication && input.existingAppChanges !== undefined) {
     const seen = new Set<string>();
     const changes: TargetIterationChange[] = [];
@@ -435,7 +435,7 @@ export const executeTargetIdentityAndPlanning = async (input: {
         requested.path === identity.contractPath ||
         seen.has(requested.path)
       )
-        throw new Error("An existing-app change path is not allowed.");
+        {throw new Error("An existing-app change path is not allowed.");}
       seen.add(requested.path);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const before = await input.sandbox.readBinaryFile({
@@ -469,7 +469,7 @@ export const executeTargetIdentityAndPlanning = async (input: {
         path: requested.path,
       });
     }
-    if (changes.length === 0) throw new Error("At least one existing-app change is required.");
+    if (changes.length === 0) {throw new Error("At least one existing-app change is required.");}
     const contract = {
       appId: input.appId,
       appSpec: {
@@ -532,7 +532,7 @@ export const executeTargetIdentityAndPlanning = async (input: {
     proposal.plan.topology.projectName !== identity.projectName ||
     proposal.plan.topology.packageName !== identity.packageName
   )
-    throw new Error("Target proposal did not match the resolved identity.");
+    {throw new Error("Target proposal did not match the resolved identity.");}
   const result = { identity, proposal, ...overlay };
   planningMarker("target-identity-and-planning", "finish");
   return result;

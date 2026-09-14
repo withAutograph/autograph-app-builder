@@ -44,7 +44,7 @@ describe("durable session discovery contracts", () => {
         prompt: "Build",
       },
     ])
-      expect(eveStartInputSchema.safeParse(candidate).success).toBe(false);
+      {expect(eveStartInputSchema.safeParse(candidate).success).toBe(false);}
   });
 });
 
@@ -61,24 +61,24 @@ describe("publicInputRequestSchema", () => {
       "https://github.com/login/oauth/authorize?state=opaque",
       "http://127.0.0.1:4000/callback",
     ])
-      expect(
+      {expect(
         publicInputRequestSchema.safeParse({
           ...authorization,
           authorization: { displayName: "GitHub", url },
         }).success,
-      ).toBe(true);
+      ).toBe(true);}
 
     for (const url of [
       "http://github.example/authorize",
       "https://user:secret@github.example/authorize",
       ["java", "script:alert(1)"].join(""),
     ])
-      expect(
+      {expect(
         publicInputRequestSchema.safeParse({
           ...authorization,
           authorization: { url },
         }).success,
-      ).toBe(false);
+      ).toBe(false);}
   });
 
   it("accepts closed GitHub repository-access presentation metadata", () => {
@@ -179,12 +179,12 @@ describe("eveRespondInputSchema", () => {
     });
     expect(duplicate.success).toBe(false);
     if (!duplicate.success)
-      expect(duplicate.error.issues).toContainEqual(
+      {expect(duplicate.error.issues).toContainEqual(
         expect.objectContaining({
           message: "Each requestId must appear exactly once.",
           path: ["responses", 1, "requestId"],
         }),
-      );
+      );}
   });
 });
 

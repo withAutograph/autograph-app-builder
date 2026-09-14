@@ -48,29 +48,29 @@ const isWithin = (root: string, candidate: string) => {
 const assertRegularFile = async (root: string, target: string) => {
   const stat = await lstat(target);
   if (!stat.isFile() || stat.isSymbolicLink())
-    throw new Error(`${path.relative(root, target)} must be a regular file.`);
+    {throw new Error(`${path.relative(root, target)} must be a regular file.`);}
   if (!isWithin(root, await realpath(target)))
-    throw new Error(`${path.relative(root, target)} escapes the plugin root.`);
+    {throw new Error(`${path.relative(root, target)} escapes the plugin root.`);}
 };
 
 const assertDirectory = async (root: string, target: string) => {
   const stat = await lstat(target);
   if (!stat.isDirectory() || stat.isSymbolicLink())
-    throw new Error(`${path.relative(root, target)} must be a directory.`);
+    {throw new Error(`${path.relative(root, target)} must be a directory.`);}
   if (!isWithin(root, await realpath(target)))
-    throw new Error(`${path.relative(root, target)} escapes the plugin root.`);
+    {throw new Error(`${path.relative(root, target)} escapes the plugin root.`);}
 };
 
 const assertTreeContainsNoLinks = async (root: string, target: string) => {
   const stat = await lstat(target);
   if (stat.isSymbolicLink())
-    throw new Error(`${path.relative(root, target)} must not be a symbolic link.`);
-  if (stat.isFile()) return;
+    {throw new Error(`${path.relative(root, target)} must not be a symbolic link.`);}
+  if (stat.isFile()) {return;}
   if (!stat.isDirectory())
-    throw new Error(`${path.relative(root, target)} must be a regular file or directory.`);
+    {throw new Error(`${path.relative(root, target)} must be a regular file or directory.`);}
   for (const entry of await readdir(target))
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    await assertTreeContainsNoLinks(root, path.resolve(target, entry));
+    {await assertTreeContainsNoLinks(root, path.resolve(target, entry));}
 };
 
 const prepareSafeOutputParent = async (root: string, output: string) => {
@@ -81,31 +81,31 @@ const prepareSafeOutputParent = async (root: string, output: string) => {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const stat = await lstat(current);
       if (!stat.isDirectory() || stat.isSymbolicLink())
-        throw new Error(`${path.relative(root, current)} must be a real directory.`);
+        {throw new Error(`${path.relative(root, current)} must be a real directory.`);}
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {throw error;}
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await mkdir(current);
     }
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     if (!isWithin(root, await realpath(current)))
-      throw new Error(`${path.relative(root, current)} escapes the repository root.`);
+      {throw new Error(`${path.relative(root, current)} escapes the repository root.`);}
   }
   try {
     await assertTreeContainsNoLinks(root, output);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {throw error;}
   }
 };
 
 const schemaVersion = (schema: unknown) => {
-  if (typeof schema !== "string") return;
+  if (typeof schema !== "string") {return;}
   return schema.match(/\/schemas\/(?<version>[^/]+)\/(?:plugin|mcp)\.schema\.json$/u)?.[1];
 };
 
 export const assertAutographMcpEndpoint = (value: unknown, { release }: { release: boolean }) => {
   if (typeof value !== "string")
-    throw new Error(`${AUTOGRAPH_MCP_SERVER_NAME} must use an absolute MCP URL.`);
+    {throw new Error(`${AUTOGRAPH_MCP_SERVER_NAME} must use an absolute MCP URL.`);}
   let url: URL;
   try {
     url = new URL(value);
@@ -113,27 +113,27 @@ export const assertAutographMcpEndpoint = (value: unknown, { release }: { releas
     throw new Error(`${AUTOGRAPH_MCP_SERVER_NAME} must use an absolute MCP URL.`);
   }
   if (url.username || url.password || value.includes("?") || value.includes("#"))
-    throw new Error(
+    {throw new Error(
       `${AUTOGRAPH_MCP_SERVER_NAME} URL must not contain credentials, a query, or a fragment.`,
-    );
+    );}
   if (url.pathname !== "/mcp")
-    throw new Error(`${AUTOGRAPH_MCP_SERVER_NAME} URL pathname must be exactly /mcp.`);
+    {throw new Error(`${AUTOGRAPH_MCP_SERVER_NAME} URL pathname must be exactly /mcp.`);}
   if (url.hostname.endsWith("."))
-    throw new Error(`${AUTOGRAPH_MCP_SERVER_NAME} URL hostname must not end with a DNS root dot.`);
+    {throw new Error(`${AUTOGRAPH_MCP_SERVER_NAME} URL hostname must not end with a DNS root dot.`);}
   if (release) {
     if (url.protocol !== "https:" || isReservedPublicReleaseHostname(url.hostname))
-      throw new Error(
+      {throw new Error(
         `${AUTOGRAPH_MCP_SERVER_NAME} must use a deployed HTTPS endpoint for release.`,
-      );
+      );}
   } else if (url.protocol !== "https:" && value !== AUTOGRAPH_DEVELOPMENT_MCP_ENDPOINT) {
     throw new Error(
       `${AUTOGRAPH_MCP_SERVER_NAME} must use credential-free HTTPS or the fixed development endpoint.`,
     );
   }
   if (value !== `${url.origin}/mcp`)
-    throw new Error(
+    {throw new Error(
       `${AUTOGRAPH_MCP_SERVER_NAME} URL must use the exact canonical ${url.origin}/mcp form.`,
-    );
+    );}
   return url;
 };
 
@@ -153,11 +153,11 @@ const requireString = ({
   max?: number;
 }) => {
   if (typeof value !== "string" || value.length < min || (max !== undefined && value.length > max))
-    throw new Error(
+    {throw new Error(
       `${path.relative(pluginRoot, skillPath)} field ${field} must be a string${
         min > 0 ? ` with at least ${min} character${min === 1 ? "" : "s"}` : ""
       }${max === undefined ? "" : ` and at most ${max} characters`}.`,
-    );
+    );}
   return value;
 };
 
@@ -166,25 +166,25 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
   await assertRegularFile(pluginRoot, skillPath);
   const contents = await readFile(skillPath, "utf-8");
   const match = contents.match(/^---[\t ]*\r?\n(?<frontmatter>[\s\S]*?)\r?\n---[\t ]*(?:\r?\n|$)/u);
-  if (!match) throw new Error(`${path.relative(pluginRoot, skillPath)} has invalid frontmatter.`);
+  if (!match) {throw new Error(`${path.relative(pluginRoot, skillPath)} has invalid frontmatter.`);}
   const document = parseDocument(match[1], {
     prettyErrors: false,
     uniqueKeys: true,
   });
   if (document.errors.length > 0 || !isMap(document.contents))
-    throw new Error(
+    {throw new Error(
       `${path.relative(pluginRoot, skillPath)} frontmatter must be a valid YAML mapping: ${document.errors
         .map((error) => error.message)
         .join("; ")}`,
-    );
+    );}
   const frontmatter = document.toJS({ maxAliasCount: 0 }) as Record<string, unknown>;
   const unknownFields = Object.keys(frontmatter).filter(
     (field) => !SKILL_FRONTMATTER_FIELDS.has(field),
   );
   if (unknownFields.length > 0)
-    throw new Error(
+    {throw new Error(
       `${path.relative(pluginRoot, skillPath)} has unsupported frontmatter fields: ${unknownFields.join(", ")}.`,
-    );
+    );}
   const name = requireString({
     field: "name",
     max: 64,
@@ -194,9 +194,9 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
     value: frontmatter.name,
   });
   if (!/^(?!.*--)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u.test(name))
-    throw new Error(`${path.relative(pluginRoot, skillPath)} has an invalid skill name.`);
+    {throw new Error(`${path.relative(pluginRoot, skillPath)} has an invalid skill name.`);}
   if (name !== path.basename(skillDirectory))
-    throw new Error(`${path.relative(pluginRoot, skillPath)} name must match its directory.`);
+    {throw new Error(`${path.relative(pluginRoot, skillPath)} name must match its directory.`);}
   requireString({
     field: "description",
     max: 1024,
@@ -206,30 +206,30 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
     value: frontmatter.description,
   });
   if ("license" in frontmatter)
-    requireString({
+    {requireString({
       field: "license",
       min: 1,
       pluginRoot,
       skillPath,
       value: frontmatter.license,
-    });
+    });}
   if ("compatibility" in frontmatter)
-    requireString({
+    {requireString({
       field: "compatibility",
       max: 500,
       min: 1,
       pluginRoot,
       skillPath,
       value: frontmatter.compatibility,
-    });
+    });}
   if ("allowed-tools" in frontmatter)
-    requireString({
+    {requireString({
       field: "allowed-tools",
       min: 1,
       pluginRoot,
       skillPath,
       value: frontmatter["allowed-tools"],
-    });
+    });}
   if ("metadata" in frontmatter) {
     const { metadata } = frontmatter;
     if (
@@ -241,9 +241,9 @@ const validateSkill = async (pluginRoot: string, skillDirectory: string) => {
         ([key, value]) => typeof key !== "string" || typeof value !== "string",
       )
     )
-      throw new Error(
+      {throw new Error(
         `${path.relative(pluginRoot, skillPath)} field metadata must map string keys to string values.`,
-      );
+      );}
   }
 };
 
@@ -251,17 +251,17 @@ const validateHeaders = (serverName: string, headers: Record<string, string>) =>
   const normalizedNames = new Set<string>();
   for (const [name, value] of Object.entries(headers)) {
     if (!HTTP_FIELD_NAME.test(name))
-      throw new Error(`${serverName} has an invalid HTTP header name: ${name}.`);
+      {throw new Error(`${serverName} has an invalid HTTP header name: ${name}.`);}
     const normalized = name.toLowerCase();
     if (normalizedNames.has(normalized))
-      throw new Error(`${serverName} repeats HTTP header ${name} with different casing.`);
+      {throw new Error(`${serverName} repeats HTTP header ${name} with different casing.`);}
     normalizedNames.add(normalized);
     if (!HTTP_FIELD_VALUE.test(value))
-      throw new Error(`${serverName} header ${name} has an invalid value.`);
+      {throw new Error(`${serverName} header ${name} has an invalid value.`);}
     if (CREDENTIAL_HEADER.test(name) || SECRET_LIKE_HEADER_VALUE.test(value))
-      throw new Error(
+      {throw new Error(
         `${serverName} header ${name} is not demonstrably public declarative package data.`,
-      );
+      );}
   }
 };
 
@@ -270,13 +270,13 @@ const assertCleanGeneratedArtifact = async (pluginRoot: string) => {
   const unexpected = entries.filter((entry) => !PORTABLE_ENTRY_SET.has(entry));
   const missing = PORTABLE_ENTRIES.filter((entry) => !entries.includes(entry));
   if (unexpected.length > 0 || missing.length > 0)
-    throw new Error(
+    {throw new Error(
       `Generated Agent Plugin artifact must contain exactly ${PORTABLE_ENTRIES.join(
         ", ",
       )}; unexpected: ${unexpected.join(", ") || "none"}; missing: ${
         missing.join(", ") || "none"
       }.`,
-    );
+    );}
 };
 
 export const validateAgentPluginPackage = async ({
@@ -293,10 +293,10 @@ export const validateAgentPluginPackage = async ({
   const requestedPluginRoot = path.resolve(pluginRoot);
   const rootStat = await lstat(requestedPluginRoot);
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink())
-    throw new Error("The plugin root must be a real directory.");
+    {throw new Error("The plugin root must be a real directory.");}
   const resolvedPluginRoot = await realpath(requestedPluginRoot);
   await assertDirectory(resolvedPluginRoot, resolvedPluginRoot);
-  if (packageKind === "generated-artifact") await assertCleanGeneratedArtifact(resolvedPluginRoot);
+  if (packageKind === "generated-artifact") {await assertCleanGeneratedArtifact(resolvedPluginRoot);}
   await assertRegularFile(resolvedPluginRoot, path.resolve(resolvedPluginRoot, "plugin.json"));
   await assertRegularFile(resolvedPluginRoot, path.resolve(resolvedPluginRoot, "mcp.json"));
 
@@ -307,7 +307,7 @@ export const validateAgentPluginPackage = async ({
     const bytes = await readFile(path.resolve(schemaRoot, name));
     const actual = createHash("sha256").update(bytes).digest("hex");
     if (actual !== digest)
-      throw new Error(`${name} does not match the pinned Agent Plugins ${SPEC_VERSION} schema.`);
+      {throw new Error(`${name} does not match the pinned Agent Plugins ${SPEC_VERSION} schema.`);}
     schemaDocuments[name] = JSON.parse(bytes.toString("utf-8")) as JsonObject;
   }
 
@@ -319,22 +319,22 @@ export const validateAgentPluginPackage = async ({
     ["mcp.json", mcp, schemaDocuments["mcp.schema.json"]],
   ] as const) {
     const validate = ajv.compile(schema);
-    if (!validate(value)) throw new Error(`${name} is invalid: ${ajv.errorsText(validate.errors)}`);
+    if (!validate(value)) {throw new Error(`${name} is invalid: ${ajv.errorsText(validate.errors)}`);}
   }
   if (plugin.$schema !== PLUGIN_SCHEMA || mcp.$schema !== MCP_SCHEMA)
-    throw new Error(`Portable manifests must target Agent Plugins ${SPEC_VERSION}.`);
+    {throw new Error(`Portable manifests must target Agent Plugins ${SPEC_VERSION}.`);}
   if (schemaVersion(plugin.$schema) !== schemaVersion(mcp.$schema))
-    throw new Error("plugin.json and mcp.json must target the same Agent Plugins version.");
+    {throw new Error("plugin.json and mcp.json must target the same Agent Plugins version.");}
 
   if (plugin.version !== AUTOGRAPH_PACKAGE_VERSION)
-    throw new Error(`plugin.json version must be exactly ${AUTOGRAPH_PACKAGE_VERSION}.`);
+    {throw new Error(`plugin.json version must be exactly ${AUTOGRAPH_PACKAGE_VERSION}.`);}
 
   const servers = mcp.mcpServers as Record<string, JsonObject>;
   if (Object.keys(servers).length !== 1 || !Object.hasOwn(servers, AUTOGRAPH_MCP_SERVER_NAME))
-    throw new Error(`mcp.json must declare exactly one ${AUTOGRAPH_MCP_SERVER_NAME} MCP server.`);
+    {throw new Error(`mcp.json must declare exactly one ${AUTOGRAPH_MCP_SERVER_NAME} MCP server.`);}
   const server = servers[AUTOGRAPH_MCP_SERVER_NAME];
   if (server.type !== "streamable-http")
-    throw new Error(`${AUTOGRAPH_MCP_SERVER_NAME} must use the streamable-http transport.`);
+    {throw new Error(`${AUTOGRAPH_MCP_SERVER_NAME} must use the streamable-http transport.`);}
   assertAutographMcpEndpoint(server.url, { release });
   const headers = (server.headers ?? {}) as Record<string, string>;
   validateHeaders(AUTOGRAPH_MCP_SERVER_NAME, headers);
@@ -342,13 +342,13 @@ export const validateAgentPluginPackage = async ({
   const skillsRoot = path.resolve(resolvedPluginRoot, "skills");
   await assertDirectory(resolvedPluginRoot, skillsRoot);
   for (const entry of await readdir(skillsRoot, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
+    if (!entry.isDirectory()) {continue;}
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await validateSkill(resolvedPluginRoot, path.resolve(skillsRoot, entry.name));
   }
   for (const entry of PORTABLE_ENTRIES)
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    await assertTreeContainsNoLinks(resolvedPluginRoot, path.resolve(resolvedPluginRoot, entry));
+    {await assertTreeContainsNoLinks(resolvedPluginRoot, path.resolve(resolvedPluginRoot, entry));}
   return {
     name: plugin.name as string,
     packageKind,
@@ -367,29 +367,29 @@ export const buildAgentPluginPackage = async ({
   const requestedSource = path.resolve(repositoryRoot);
   const sourceStat = await lstat(requestedSource);
   if (!sourceStat.isDirectory() || sourceStat.isSymbolicLink())
-    throw new Error("The repository root must be a real directory.");
+    {throw new Error("The repository root must be a real directory.");}
   const source = await realpath(requestedSource);
   const requestedOutput = path.resolve(outputRoot);
   if (!isWithin(requestedSource, requestedOutput))
-    throw new Error("Agent Plugin output must remain inside the repository root.");
+    {throw new Error("Agent Plugin output must remain inside the repository root.");}
   const output = path.resolve(source, path.relative(requestedSource, requestedOutput));
   const artifactRoot = path.resolve(source, ".artifacts", "agent-plugin");
   if (!isWithin(artifactRoot, output) || output === artifactRoot)
-    throw new Error(
+    {throw new Error(
       "Agent Plugin output must be a named directory under .artifacts/agent-plugin/.",
-    );
+    );}
   for (const entry of PORTABLE_ENTRIES)
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    await assertTreeContainsNoLinks(source, path.resolve(source, entry));
+    {await assertTreeContainsNoLinks(source, path.resolve(source, entry));}
   await prepareSafeOutputParent(source, output);
   await rm(output, { force: true, recursive: true });
   await mkdir(output, { recursive: true });
   for (const entry of PORTABLE_ENTRIES)
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    await cp(path.resolve(source, entry), path.resolve(output, entry), {
+    {await cp(path.resolve(source, entry), path.resolve(output, entry), {
       errorOnExist: true,
       force: false,
       recursive: true,
-    });
+    });}
   return output;
 };

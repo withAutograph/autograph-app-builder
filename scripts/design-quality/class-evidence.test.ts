@@ -82,7 +82,7 @@ describe("intrinsic class evidence", () => {
       ".token[data-x],.other",
       ".token[data-x",
     ])
-      expect(escapedTailwindClassToken(invalid)).toBeUndefined();
+      {expect(escapedTailwindClassToken(invalid)).toBeUndefined();}
     expect(classTokenAttribution([], shared, selector)).toMatchObject({
       provenance: "shared",
       source: { path: "packages/design-systems/RecordList.tsx" },

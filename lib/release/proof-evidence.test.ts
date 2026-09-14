@@ -32,8 +32,8 @@ describe("release proof evidence", () => {
       receipt({ publicationAttempted: true }),
       "no structural receipt",
     ])
-      expect(() => parseReviewedProof(invalid, "sandbox-reviewed-change-set")).toThrow(
+      {expect(() => parseReviewedProof(invalid, "sandbox-reviewed-change-set")).toThrow(
         "reviewed proof receipt",
-      );
+      );}
   });
 });

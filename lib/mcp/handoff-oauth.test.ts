@@ -45,8 +45,8 @@ function handoffStore(): BuilderHandoffStore {
     async bindSession(input) {
       const record = await read(input);
       if (!record || record.requestDigest !== input.requestDigest || input.now >= record.expiresAt)
-        return;
-      if (record.sessionId) return record;
+        {return;}
+      if (record.sessionId) {return record;}
       const bound = {
         ...record,
         redeemedAt: input.now,
@@ -63,7 +63,7 @@ function handoffStore(): BuilderHandoffStore {
           candidate.creationRequestId === record.creationRequestId &&
           candidate.requestDigest === record.requestDigest,
       );
-      if (existing) return { disposition: "existing", record: existing };
+      if (existing) {return { disposition: "existing", record: existing };}
       records.set(record.handoffId, record);
       return { disposition: "created", record };
     },
@@ -120,7 +120,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
         headers: browser,
       });
       expect(browserSession).not.toBeNull();
-      if (!browserSession) throw new Error("Expected authenticated browser session");
+      if (!browserSession) {throw new Error("Expected authenticated browser session");}
       const authority = {
         audience: resource,
         issuer,
@@ -149,7 +149,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
               ([key, expected]) => value.authority[key as keyof typeof authority] !== expected,
             )
           )
-            return;
+            {return;}
           return structuredClone(journalRow);
         },
       );
@@ -158,9 +158,9 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
           const session = await auth.auth.api.getSession({
             headers: request.headers,
           });
-          if (!session) return;
+          if (!session) {return;}
           const workspaces = auth.membershipState.activeWorkspaces;
-          if (workspaces.length !== 1) return;
+          if (workspaces.length !== 1) {return;}
           return {
             audience: resource,
             issuer,
@@ -261,7 +261,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
             recheckRepositoryAccess: async ({ principal, repository, sourceHandoffId }) => {
               expect(repository).toBe("acme/prepared-vendor-review");
               expect(sourceHandoffId).toBe(handoffId);
-              if (sourceHandoffId === undefined) throw new Error("Expected source handoff ID");
+              if (sourceHandoffId === undefined) {throw new Error("Expected source handoff ID");}
               const prepared = await readPrepared(sessionEnvelope(principal, sourceHandoffId));
               return prepared.status === "prepared" && prepared.access.github.status === "ready"
                 ? { status: "ready" as const }
@@ -382,7 +382,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
       });
       const persisted = await store.getSession(principal, result.structuredContent.sessionId);
       if (!persisted || persisted.version !== 2 || !persisted.sourceHandoffId)
-        throw new Error("Durable prepared session missing.");
+        {throw new Error("Durable prepared session missing.");}
       const restartedAuth = sessionEnvelope(persisted.principal, persisted.sourceHandoffId);
       providers.rotateCredentials();
       const credentialReadsBeforeRestart = providers.credentialRead.mock.calls.length;

@@ -35,7 +35,7 @@ function readerFetch(input?: {
     const url = String(request);
     calls.push({ init, url });
     if (url.endsWith("/app/installations/456/access_tokens"))
-      return json(
+      {return json(
         {
           expires_at: "2026-08-31T18:00:00Z",
           permissions: input?.permissions ?? {
@@ -50,9 +50,9 @@ function readerFetch(input?: {
           token: "ghs_reader_token_that_is_only_for_this_acquisition",
         },
         input?.status ?? 201,
-      );
+      );}
     if (url.includes("/installation/repositories?"))
-      return json({
+      {return json({
         repositories: [
           input?.repository ?? {
             full_name: "withAutograph/arrusted-development",
@@ -61,7 +61,7 @@ function readerFetch(input?: {
           },
         ],
         total_count: input?.totalCount ?? 1,
-      });
+      });}
     throw new Error(`Unexpected GitHub request: ${url}`);
   };
   return { calls, implementation };

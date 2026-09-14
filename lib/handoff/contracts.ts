@@ -61,27 +61,27 @@ export const builderHandoffIntentSchema = z
       (intent.provisioningRequestId === undefined) !==
       (intent.provisioningRequestDigest === undefined)
     )
-      context.addIssue({
+      {context.addIssue({
         code: "custom",
         message: "A provisioning request ID and digest must be recorded together.",
         path: ["provisioningRequestId"],
-      });
+      });}
     if (
       intent.provisioning !== undefined &&
       (intent.provisioning.requestId !== intent.provisioningRequestId ||
         intent.provisioning.requestDigest !== intent.provisioningRequestDigest)
     )
-      context.addIssue({
+      {context.addIssue({
         code: "custom",
         message: "A provisioning outcome must match its exact server-owned request.",
         path: ["provisioning"],
-      });
+      });}
     if (intent.provisioning === undefined && intent.provisioningRequestId !== undefined)
-      context.addIssue({
+      {context.addIssue({
         code: "custom",
         message: "A referenced provisioning request requires its readback.",
         path: ["provisioning"],
-      });
+      });}
   });
 
 export type BuilderHandoffIntent = z.infer<typeof builderHandoffIntentSchema>;
@@ -102,39 +102,39 @@ export const builderHandoffRecordSchema = z
   .strict()
   .superRefine((record, context) => {
     if (record.expiresAt <= record.createdAt)
-      context.addIssue({
+      {context.addIssue({
         code: "custom",
         message: "A handoff must expire after it is created.",
         path: ["expiresAt"],
-      });
+      });}
     if ((record.redeemedAt === undefined) !== (record.sessionId === undefined))
-      context.addIssue({
+      {context.addIssue({
         code: "custom",
         message: "A redeemed handoff must bind exactly one session.",
         path: ["sessionId"],
-      });
+      });}
     if (
       record.redeemedAt !== undefined &&
       (record.redeemedAt < record.createdAt || record.redeemedAt > record.expiresAt)
     )
-      context.addIssue({
+      {context.addIssue({
         code: "custom",
         message: "A handoff must be redeemed during its initial lifetime.",
         path: ["redeemedAt"],
-      });
+      });}
   });
 
 export type BuilderHandoffRecord = z.infer<typeof builderHandoffRecordSchema>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (value instanceof Date) return JSON.stringify(value.toISOString());
+  if (Array.isArray(value)) {return `[${value.map(canonical).join(",")}]`;}
+  if (value instanceof Date) {return JSON.stringify(value.toISOString());}
   if (value !== null && typeof value === "object")
-    return `{${Object.entries(value)
+    {return `{${Object.entries(value)
       .toSorted(([left], [right]) => left.localeCompare(right))
       .map(([key, entry]) => `${JSON.stringify(key)}:${canonical(entry)}`)
-      .join(",")}}`;
+      .join(",")}}`;}
   return JSON.stringify(value);
 }
 

@@ -70,7 +70,7 @@ export function archiveFiles(archive: Uint8Array) {
     const header = tar.subarray(offset, offset + 512);
     if (header.every((byte) => byte === 0)) {
       if (!tar.subarray(offset).every((byte) => byte === 0))
-        throw new Error("Archive contained bytes after its zero terminator.");
+        {throw new Error("Archive contained bytes after its zero terminator.");}
       break;
     }
     const name = header.subarray(0, 100).toString("utf-8").replace(/\0.*$/u, "");
@@ -78,19 +78,19 @@ export function archiveFiles(archive: Uint8Array) {
     const size = Number.parseInt(sizeText, 8);
     const [type] = header.slice(156);
     if (!safeRelative(name) || !Number.isSafeInteger(size) || size < 0)
-      throw new Error("Archive entry name or size was invalid.");
+      {throw new Error("Archive entry name or size was invalid.");}
     if (![0, "0".codePointAt(0)].includes(type) || files.has(name))
-      throw new Error("Archive must contain unique regular files only.");
+      {throw new Error("Archive must contain unique regular files only.");}
     const contentStart = offset + 512;
     const contentEnd = contentStart + size;
     if (contentEnd > tar.byteLength)
-      throw new Error("Archive entry exceeded the archive boundary.");
+      {throw new Error("Archive entry exceeded the archive boundary.");}
     files.set(name, tar.subarray(contentStart, contentEnd));
     offset = contentStart + Math.ceil(size / 512) * 512;
   }
-  if (files.size === 0) throw new Error("Archive contained no files.");
+  if (files.size === 0) {throw new Error("Archive contained no files.");}
   if (!Buffer.from(deterministicGzip(deterministicTar(files))).equals(archive))
-    throw new Error("Archive headers or ordering were not deterministic.");
+    {throw new Error("Archive headers or ordering were not deterministic.");}
   return files;
 }
 
@@ -98,7 +98,7 @@ export function archiveFiles(archive: Uint8Array) {
 async function regularFile(filePath: string) {
   const info = await lstat(filePath);
   if (!info.isFile() || info.isSymbolicLink())
-    throw new Error(`Expected a regular non-symbolic file: ${nodePath.basename(filePath)}`);
+    {throw new Error(`Expected a regular non-symbolic file: ${nodePath.basename(filePath)}`);}
   return readFile(filePath);
 }
 
@@ -120,7 +120,7 @@ function git(repositoryRoot: string, ...args: string[]) {
 function exactKeys(actual: Record<string, string>, expected: string[]) {
   const keys = Object.keys(actual).toSorted();
   if (JSON.stringify(keys) !== JSON.stringify([...expected].toSorted()))
-    throw new Error("Receipt file inventory was not exact.");
+    {throw new Error("Receipt file inventory was not exact.");}
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -137,61 +137,61 @@ export async function verifyPortableProofArtifact(input: {
   const receipt = portableReleaseReceiptSchema.parse(JSON.parse(receiptBytes.toString("utf-8")));
   const origin = releaseEndpoint(new URL(receipt.endpoint).origin);
   if (receipt.endpoint !== `${origin}/mcp`)
-    throw new Error("Release endpoint must bind the exact /mcp resource.");
+    {throw new Error("Release endpoint must bind the exact /mcp resource.");}
   if (
     receipt.source.sha !== git(repositoryRoot, "rev-parse", "HEAD") ||
     receipt.source.tree !== git(repositoryRoot, "rev-parse", "HEAD^{tree}")
   )
-    throw new Error("Release source SHA/tree did not match the proof checkout.");
+    {throw new Error("Release source SHA/tree did not match the proof checkout.");}
   if (!hasCanonicalFetchRemote(git(repositoryRoot, "remote", "-v"), receipt.source.repository))
-    throw new Error("Release source repository was not a configured fetch remote.");
+    {throw new Error("Release source repository was not a configured fetch remote.");}
   const archiveName = `${receipt.name}-${receipt.version}.tar.gz`;
   if (
     receipt.archive.name !== archiveName ||
     nodePath.basename(receipt.archive.name) !== receipt.archive.name
   )
-    throw new Error("Release archive basename was invalid.");
+    {throw new Error("Release archive basename was invalid.");}
   const archive = await regularFile(nodePath.join(releaseRoot, receipt.archive.name));
   if (sha256(archive) !== receipt.archive.sha256)
-    throw new Error("Release archive digest did not match its receipt.");
+    {throw new Error("Release archive digest did not match its receipt.");}
   const archived = archiveFiles(archive);
   exactKeys(receipt.coreFiles, [...archived.keys()]);
   for (const [path, bytes] of archived) {
     if (receipt.coreFiles[path] !== sha256(bytes))
-      throw new Error(`Archive core digest drifted at ${path}.`);
+      {throw new Error(`Archive core digest drifted at ${path}.`);}
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const loose = await regularFile(nodePath.join(releaseRoot, path));
     if (sha256(loose) !== receipt.coreFiles[path])
-      throw new Error(`Loose core file drifted at ${path}.`);
+      {throw new Error(`Loose core file drifted at ${path}.`);}
   }
   const marketplaceArchiveName = `${receipt.name}-codex-marketplace-${receipt.version}.tar.gz`;
   if (
     receipt.codexMarketplaceArchive.name !== marketplaceArchiveName ||
     nodePath.basename(receipt.codexMarketplaceArchive.name) !== receipt.codexMarketplaceArchive.name
   )
-    throw new Error("Codex marketplace archive basename was invalid.");
+    {throw new Error("Codex marketplace archive basename was invalid.");}
   const marketplaceArchive = await regularFile(
     nodePath.join(releaseRoot, receipt.codexMarketplaceArchive.name),
   );
   if (sha256(marketplaceArchive) !== receipt.codexMarketplaceArchive.sha256)
-    throw new Error("Codex marketplace archive digest did not match its receipt.");
+    {throw new Error("Codex marketplace archive digest did not match its receipt.");}
   const marketplaceFiles = archiveFiles(marketplaceArchive);
   const marketplacePrefix = `plugins/${receipt.name}/`;
   for (const path of archived.keys()) {
     const relativePath = nodePath.relative(receipt.name, path);
     if (!marketplaceFiles.has(`${marketplacePrefix}${relativePath}`))
-      throw new Error(`Codex marketplace omitted portable core file ${relativePath}.`);
+      {throw new Error(`Codex marketplace omitted portable core file ${relativePath}.`);}
   }
   for (const required of [
     ".agents/plugins/marketplace.json",
     `${marketplacePrefix}.codex-plugin/plugin.json`,
     `${marketplacePrefix}.mcp.json`,
   ])
-    if (!marketplaceFiles.has(required)) throw new Error(`Codex marketplace omitted ${required}.`);
+    {if (!marketplaceFiles.has(required)) {throw new Error(`Codex marketplace omitted ${required}.`);}}
   const marketplaceAdapterPath = `${marketplacePrefix}.mcp.json`;
   const marketplaceAdapterBytes = marketplaceFiles.get(marketplaceAdapterPath);
   if (!marketplaceAdapterBytes)
-    throw new Error(`Codex marketplace omitted ${marketplaceAdapterPath}.`);
+    {throw new Error(`Codex marketplace omitted ${marketplaceAdapterPath}.`);}
   const marketplaceAdapter = JSON.parse(Buffer.from(marketplaceAdapterBytes).toString("utf-8"));
   if (
     JSON.stringify(marketplaceAdapter) !==
@@ -205,19 +205,19 @@ export async function verifyPortableProofArtifact(input: {
       },
     })
   )
-    throw new Error("Codex marketplace adapter must declare exactly one /mcp server.");
+    {throw new Error("Codex marketplace adapter must declare exactly one /mcp server.");}
   const codexManifestPath = `${marketplacePrefix}.codex-plugin/plugin.json`;
   const codexManifestBytes = marketplaceFiles.get(codexManifestPath);
-  if (!codexManifestBytes) throw new Error(`Codex marketplace omitted ${codexManifestPath}.`);
+  if (!codexManifestBytes) {throw new Error(`Codex marketplace omitted ${codexManifestPath}.`);}
   const codexManifest = JSON.parse(Buffer.from(codexManifestBytes).toString("utf-8"));
   if (
     codexManifest.name !== receipt.name ||
     codexManifest.version !== "0.2.12" ||
     codexManifest.mcpServers !== "./.mcp.json"
   )
-    throw new Error(
+    {throw new Error(
       "Codex marketplace manifest was not bound to package 0.2.12 and its sole MCP adapter.",
-    );
+    );}
   const codexMarketplaceAssetPaths: string[] = [];
   for (const reference of new Set([
     codexManifest.interface?.composerIcon,
@@ -228,10 +228,10 @@ export async function verifyPortableProofArtifact(input: {
       !reference.startsWith("./") ||
       !safeRelative(reference.slice(2))
     )
-      throw new Error("Codex marketplace manifest asset reference was not a safe relative path.");
+      {throw new Error("Codex marketplace manifest asset reference was not a safe relative path.");}
     const path = `${marketplacePrefix}${reference.slice(2)}`;
     const content = marketplaceFiles.get(path);
-    if (!content) throw new Error(`Codex marketplace omitted referenced asset ${reference}.`);
+    if (!content) {throw new Error(`Codex marketplace omitted referenced asset ${reference}.`);}
     codexMarketplaceAssetPaths.push(path);
     const sourceDigest = sha256(
       readTrackedTreeBlob({
@@ -241,9 +241,9 @@ export async function verifyPortableProofArtifact(input: {
       }).bytes,
     );
     if (receipt.codexMarketplaceAssets[path] !== sourceDigest || sha256(content) !== sourceDigest)
-      throw new Error(
+      {throw new Error(
         `Codex marketplace referenced asset did not match immutable source bytes at ${reference}.`,
-      );
+      );}
   }
   exactKeys(receipt.codexMarketplaceAssets, codexMarketplaceAssetPaths);
   const auxiliaryPaths = [
@@ -257,7 +257,7 @@ export async function verifyPortableProofArtifact(input: {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const bytes = await regularFile(nodePath.join(releaseRoot, path));
     if (receipt.auxiliaryFiles[path] !== sha256(bytes))
-      throw new Error(`Auxiliary file drifted at ${path}.`);
+      {throw new Error(`Auxiliary file drifted at ${path}.`);}
   }
   const coreRoot = nodePath.join(releaseRoot, receipt.name);
   await validateAgentPluginPackage({
@@ -279,10 +279,10 @@ export async function verifyPortableProofArtifact(input: {
     for (const [path, expectedDigest] of Object.entries(receipt.coreFiles)) {
       const relativePath = nodePath.relative(receipt.name, path);
       if (relativePath.startsWith(`..${nodePath.sep}`) || relativePath === "..")
-        throw new Error("Core receipt path escaped the plugin root.");
+        {throw new Error("Core receipt path escaped the plugin root.");}
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       if (sha256(await regularFile(nodePath.join(installedRoot, relativePath))) !== expectedDigest)
-        throw new Error(`${client} installed core drifted at ${relativePath}.`);
+        {throw new Error(`${client} installed core drifted at ${relativePath}.`);}
     }
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const clientHarnessBytes = await regularFile(nodePath.join(clientRoot, "client-harness.json"));
@@ -306,7 +306,7 @@ export async function verifyPortableProofArtifact(input: {
       })
       .strict()
       .parse(JSON.parse(clientHarnessBytes.toString("utf-8")));
-    if (harness.client !== client) throw new Error("Client adapter drifted.");
+    if (harness.client !== client) {throw new Error("Client adapter drifted.");}
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const installationReceiptBytes = await regularFile(
       nodePath.join(clientRoot, "installation-receipt.json"),
@@ -325,9 +325,9 @@ export async function verifyPortableProofArtifact(input: {
       })
       .strict()
       .parse(JSON.parse(installationReceiptBytes.toString("utf-8")));
-    if (installation.client !== client) throw new Error("Installed client receipt drifted.");
+    if (installation.client !== client) {throw new Error("Installed client receipt drifted.");}
   }
   if (JSON.stringify(receipt.tools) !== JSON.stringify(TOOL_NAMES))
-    throw new Error("Release did not bind the exact five Autograph tools.");
+    {throw new Error("Release did not bind the exact five Autograph tools.");}
   return { receipt, receiptSha256: sha256(receiptBytes) };
 }

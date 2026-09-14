@@ -196,10 +196,10 @@ async function postMutation(input: {
         parsed.success ? parsed.data.code : "eve_request_rejected",
       );
     }
-    if (response.status !== 202) throw new Error("Unexpected response status.");
+    if (response.status !== 202) {throw new Error("Unexpected response status.");}
     return acceptedTurnSchema.parse(body);
   } catch (error) {
-    if (error instanceof SubmissionRejectedBeforeDispatchError) throw error;
+    if (error instanceof SubmissionRejectedBeforeDispatchError) {throw error;}
     throw new SubmissionOutcomeUnknownError();
   }
 }
@@ -236,7 +236,7 @@ async function readInstalledSnapshot(input: {
   if (response.status >= 300 && response.status < 400) {
     throw new Error("Canonical Eve redirects are not allowed.");
   }
-  if (response.status === 404) throw new HostedAdapterSessionUnavailableError();
+  if (response.status === 404) {throw new HostedAdapterSessionUnavailableError();}
   if (response.status !== 200 || response.body === null) {
     throw new Error("Canonical Eve stream was unavailable.");
   }
@@ -347,14 +347,14 @@ function activeTurnId(events: readonly MessageStreamEvent[]): string | undefined
       turnId !== undefined &&
       !["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type)
     )
-      active = turnId;
+      {active = turnId;}
     if (
       ["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type) &&
       (turnId === undefined || turnId === active)
     )
-      active = undefined;
+      {active = undefined;}
     if (["session.waiting", "session.completed", "session.failed"].includes(event.type))
-      active = undefined;
+      {active = undefined;}
   }
   return active;
 }
@@ -380,10 +380,10 @@ function outstandingRequestIds(events: readonly MessageStreamEvent[]): ReadonlyS
   const outstanding = new Set<string>();
   for (const event of events) {
     if (event.type === "input.requested")
-      for (const request of event.data.requests) outstanding.add(request.requestId);
+      {for (const request of event.data.requests) {outstanding.add(request.requestId);}}
     if (event.type === "input.resolved")
-      for (const resolution of event.data.resolutions) outstanding.delete(resolution.requestId);
-    if (event.type === "approval.settled") outstanding.delete(event.data.requestId);
+      {for (const resolution of event.data.resolutions) {outstanding.delete(resolution.requestId);}}
+    if (event.type === "approval.settled") {outstanding.delete(event.data.requestId);}
   }
   return outstanding;
 }
@@ -404,7 +404,7 @@ async function readRespondSettlement(input: {
       observed.snapshot.status !== "input_required" ||
       input.requestIds.every((requestId) => !outstanding.has(requestId))
     )
-      return observed.snapshot;
+      {return observed.snapshot;}
   }
   throw new SubmissionOutcomeUnknownError();
 }
@@ -458,8 +458,8 @@ export function createSameOriginEveTransport(input: {
       if (cancelled.status === "accepted" && cancelled.sessionId !== request.adapterSessionId) {
         throw new Error("Canonical Eve cancellation changed the session.");
       }
-      if (cancelled.status === "no_active_turn") return before.snapshot;
-      if (guardedTurnId === undefined) throw new HostedCancellationUnsettledError();
+      if (cancelled.status === "no_active_turn") {return before.snapshot;}
+      if (guardedTurnId === undefined) {throw new HostedCancellationUnsettledError();}
       for (let attempt = 0; attempt < 8; attempt += 1) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const observed = await readInstalledSnapshot({
@@ -467,10 +467,10 @@ export function createSameOriginEveTransport(input: {
           sessionId: request.adapterSessionId,
         });
         if (cancellationSettled(observed.installed, before.installed.length, guardedTurnId))
-          return observed.snapshot;
+          {return observed.snapshot;}
         const newerTurn = activeTurnId(observed.installed);
         if (newerTurn !== undefined && newerTurn !== guardedTurnId)
-          throw new SubmissionRejectedBeforeDispatchError("turn_changed");
+          {throw new SubmissionRejectedBeforeDispatchError("turn_changed");}
       }
       throw new HostedCancellationUnsettledError();
     },
@@ -480,9 +480,9 @@ export function createSameOriginEveTransport(input: {
         ...common,
         body: {
           inputResponses: request.responses.map(({ requestId, response }) => {
-            if (response.kind === "approve") return { optionId: "approve", requestId };
-            if (response.kind === "deny") return { optionId: "cancel", requestId };
-            if (response.optionId === undefined) return { requestId, text: response.value };
+            if (response.kind === "approve") {return { optionId: "approve", requestId };}
+            if (response.kind === "deny") {return { optionId: "cancel", requestId };}
+            if (response.optionId === undefined) {return { requestId, text: response.value };}
             return { optionId: response.optionId, requestId };
           }),
         },

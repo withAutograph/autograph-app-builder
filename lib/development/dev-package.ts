@@ -27,9 +27,9 @@ const packageInputDigest = async (directoryPath: string): Promise<string> => {
       .toSorted((left, right) => left.name.localeCompare(right.name))
       .map(async (entry) => {
         const entryPath = path.join(directoryPath, entry.name);
-        if (entry.isDirectory()) return [entry.name, await packageInputDigest(entryPath)] as const;
+        if (entry.isDirectory()) {return [entry.name, await packageInputDigest(entryPath)] as const;}
         if (!entry.isFile())
-          throw new Error(`Development package input was not a regular file: ${entryPath}`);
+          {throw new Error(`Development package input was not a regular file: ${entryPath}`);}
         return [entry.name, sha256(await readFile(entryPath))] as const;
       }),
   );
@@ -292,9 +292,9 @@ export const registerDevelopmentPackage = async (input: {
     installed.marketplaceSource?.sourceType !== "local" ||
     installed.marketplaceSource.source !== marketplaceRoot
   )
-    throw new Error(
+    {throw new Error(
       `Codex did not report the exact project-scoped ${DEVELOPMENT_PLUGIN_SELECTOR} installation.`,
-    );
+    );}
   return { marketplaceRoot, selector: DEVELOPMENT_PLUGIN_SELECTOR };
 };
 
