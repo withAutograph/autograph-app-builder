@@ -9,16 +9,23 @@
  * warnings. Remove it when Eve no longer retains listeners on the shared
  * evaluation signal.
  */
+/**
+ * @param {(this: unknown, input: RequestInfo | URL, init?: RequestInit) => Promise<Response>} fetchImplementation - The fetch implementation to wrap.
+ */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function isolateAbortSignalPerFetch(fetchImplementation) {
-  return function fetchWithIsolatedSignal(input, init) {
+  /**
+   * @param {RequestInfo | URL} input - The request input.
+   * @param {RequestInit} [init] - The request options.
+   */
+  return async function fetchWithIsolatedSignal(input, init) {
     if (init?.signal === undefined || init.signal === null) {
-      return Reflect.apply(fetchImplementation, this, [input, init]);
+      return await fetchImplementation.call(this, input, init);
     }
-    return Reflect.apply(fetchImplementation, this, [
-      input,
-      { ...init, signal: AbortSignal.any([init.signal]) },
-    ]);
+    return await fetchImplementation.call(this, input, {
+      ...init,
+      signal: AbortSignal.any([init.signal]),
+    });
   };
 }
 
