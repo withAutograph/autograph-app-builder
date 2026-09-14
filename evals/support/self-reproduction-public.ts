@@ -253,6 +253,7 @@ interface SessionOptions {
   timeoutMs: number;
   pollMs: number;
   sleep?: (ms: number) => Promise<void>;
+  onObservation?: (state: PublicState) => void;
 }
 
 type AcceptSession = (raw: unknown) => void;
@@ -356,6 +357,7 @@ export const runPublicSession = async (options: SessionOptions) => {
     state.outcome = state.session.status;
     delete state.error;
     save();
+    options.onObservation?.(state);
   };
   const respond = async () => {
     const pending = state.pendingResponse;

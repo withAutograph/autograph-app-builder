@@ -248,3 +248,19 @@ checks do not replace that comparison.
 ## Resume and cross-eval coverage
 
 See [the handoff](self-reproduction-handoff.md) for the frozen baseline, landed repairs, and ordered remaining work. The [cross-eval assessment](cross-eval-regression-2026-09-14.md) records exact-revision CI evidence, additional executions, and coverage limits across other products. Shared repairs must preserve those capability families; self-reproduction results do not replace their checks.
+
+### Capture delivered previews during public polling
+
+The public driver starts the existing preview observer as soon as each validated
+working-preview receipt arrives. Polling and ordinary product questions continue;
+observer processes are awaited before the driver exits. Use
+`--no-preview-observation` to explicitly disable automatic capture.
+
+Evidence lives under the external run directory's `preview-observations/`.
+`ledger.json` records receipt hashes and capture states without capability URLs.
+Each receipt has an owner-private `private/state.json` and separate `capture/`
+output. Do not share private snapshots. A finished observer process is not a
+functional pass: inspect its assessment and coverage. Expired receipts, failed
+captures, and interrupted captures remain recorded; resume does not silently
+rerun them. Capture failures do not alter public session outcomes, supply replies,
+or grant approvals. The observer neither launches nor repairs the candidate.

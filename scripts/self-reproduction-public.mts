@@ -1,3 +1,4 @@
+import { createAutomaticPreviewObserver } from "../evals/support/self-reproduction-auto-preview";
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import {
@@ -27,6 +28,7 @@ const { values } = parseArgs({
     endpoint: { type: "string" },
     help: { type: "boolean" },
     "message-file": { type: "string" },
+    "no-preview-observation": { default: false, type: "boolean" },
     "output-dir": { type: "string" },
     "poll-ms": { default: "2000", type: "string" },
     "responses-file": { type: "string" },
@@ -37,7 +39,7 @@ const { values } = parseArgs({
 });
 if (values.help) {
   console.log(
-    "Submit the fixed product brief through public MCP. --endpoint URL --output-dir PATH [--resume] [--responses-file PATH | --message-file PATH] [--timeout-ms 120000] [--poll-ms 2000]. Responses file is an array of exact {requestId,response} entries. No approvals are inferred. Resume uses the same session and idempotency keys. Comparison remains separate.",
+    "Submit the fixed product brief through public MCP. --endpoint URL --output-dir PATH [--resume] [--responses-file PATH | --message-file PATH] [--timeout-ms 120000] [--poll-ms 2000]. Responses file is an array of exact {requestId,response} entries. No approvals are inferred. Resume uses the same session and idempotency keys. Comparison remains separate. Preview capture starts automatically; --no-preview-observation disables it.",
   );
   process.exit(0);
 }
@@ -104,6 +106,9 @@ if (!state.sourceRevision) {
 if (state.endpoint !== values.endpoint) {
   throw new Error("Resume must use the original endpoint");
 }
+const observer = values["no-preview-observation"]
+  ? undefined
+  : createAutomaticPreviewObserver({ outputDir: output, repositoryRoot: repo });
 const save = () => {
   // Private continuation state preserves exact request IDs and pending replies; public reports are sanitized.
   writeFileSync(`${path}.tmp`, JSON.stringify(state, null, 2), { mode: 0o600 });
@@ -136,7 +141,16 @@ try {
   const message = values["message-file"]
     ? readFileSync(values["message-file"], "utf-8")
     : undefined;
-  await runPublicSession({ message, pollMs, responses, save, state, timeoutMs, transport });
+  await runPublicSession({
+    message,
+    onObservation: observer?.observe,
+    pollMs,
+    responses,
+    save,
+    state,
+    timeoutMs,
+    transport,
+  });
 } catch (error) {
   state.outcome = "blocked_transport_or_contract";
   state.error = String(sanitizePublicObservation(String(error)));
@@ -144,5 +158,7 @@ try {
   recordPublicObservation(output, { error: String(error) });
   console.error(sanitizePublicObservation(String(error)));
   process.exitCode = 1;
+} finally {
+  await observer?.finish();
 }
 console.log(`Public eval ${state.outcome}; report: ${resolve(output, "index.html")}`);
