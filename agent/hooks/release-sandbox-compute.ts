@@ -1,6 +1,10 @@
 import { defineHook } from "eve/hooks";
 import type { HookContext } from "eve/hooks";
-import { hasLiveWorkingPreview, workingPreviewState } from "../../lib/agent/working-preview-state";
+import {
+  hasLiveWorkingPreview,
+  workingPreviewState,
+  workingPreviewAttemptState,
+} from "../../lib/agent/working-preview-state";
 import { getVercelPreviewProvider } from "../../lib/sandbox/vercel-preview-provider";
 
 import {
@@ -22,7 +26,8 @@ async function release(
   const environment = process.env;
   const hosted = isHostedSandboxExecutionEnabled(environment);
   const preview = workingPreviewState.get();
-  if (!hosted && preview === null) return;
+  const pending = workingPreviewAttemptState.get();
+  if (!hosted && preview === null && pending === null) return;
   try {
     const sandbox = await ctx.getSandbox();
     if (
@@ -46,6 +51,7 @@ async function release(
     if (!hosted) {
       // Local development uses the same cancellation and failure lifecycle.
       await sandbox.stop();
+      workingPreviewAttemptState.update(() => null);
       return;
     }
     await releaseHostedSandboxExecutionLease({

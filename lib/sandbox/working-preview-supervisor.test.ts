@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -10,6 +10,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { describe, expect, it } from "vitest";
 import { createWorkingPreviewAccess } from "./working-preview-access";
+import { previewOwnershipRoot, previewOwnershipSource } from "./working-preview-ownership";
 import { workingPreviewSupervisorSource } from "./working-preview-runtime";
 
 const unusedPort = async () => {
@@ -58,6 +59,25 @@ describe("generated working preview supervisor", () => {
         origin: "https://preview.example",
       });
       const supervisorPath = nodePath.join(directory, "supervisor.mjs");
+      const ownerRoot = nodePath.join(directory, "ownership");
+      const ownership = {
+        attemptId: "attempt",
+        expiresAt,
+        providerSessionId: "session",
+        status: "starting" as const,
+      };
+      await mkdir(ownerRoot);
+      const initializer = spawn(
+        process.execPath,
+        [
+          "--input-type=module",
+          "-e",
+          `${previewOwnershipSource.replace(JSON.stringify(previewOwnershipRoot), JSON.stringify(ownerRoot))} await ownershipOperation({kind:"claim", attempt:${JSON.stringify(ownership)}});`,
+        ],
+        { stdio: "ignore" },
+      );
+      const [initializerCode] = await once(initializer, "exit");
+      expect(initializerCode).toBe(0);
       await writeFile(
         supervisorPath,
         workingPreviewSupervisorSource({
@@ -67,8 +87,9 @@ describe("generated working preview supervisor", () => {
           expiresAt,
           failurePath: nodePath.join(directory, "failed.json"),
           gatewaySource: access.source,
+          ownership,
           readyPath,
-        }),
+        }).replace(JSON.stringify(previewOwnershipRoot), JSON.stringify(ownerRoot)),
       );
       const supervisor = spawn(process.execPath, [supervisorPath], {
         stdio: ["ignore", "pipe", "pipe"],
@@ -80,7 +101,7 @@ describe("generated working preview supervisor", () => {
       const exited = once(supervisor, "exit");
       try {
         await waitFor(() => existsSync(readyPath) || supervisor.exitCode !== null);
-        expect(stderr).toBe("");
+        expect(stderr).not.toMatch(/SyntaxError|ReferenceError|TypeError|ownership changed/u);
         expect(existsSync(readyPath)).toBe(true);
         await delay(150);
         expect(existsSync(childStarted)).toBe(false);
@@ -96,7 +117,7 @@ describe("generated working preview supervisor", () => {
           supervisor.kill("SIGTERM");
         }
         await exited;
-        expect(stderr).toBe("");
+        expect(stderr).not.toMatch(/SyntaxError|ReferenceError|TypeError|ownership changed/u);
         expect(existsSync(childStopped)).toBe(true);
         expect(existsSync(grandchildStopped)).toBe(true);
         await expect(

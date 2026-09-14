@@ -6,7 +6,7 @@ import {
   resolvePreviewWorkingDirectory,
 } from "@/lib/agent/preview-working-directory";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
-import { workingPreviewState } from "@/lib/agent/working-preview-state";
+import { workingPreviewState, workingPreviewAttemptState } from "@/lib/agent/working-preview-state";
 import { assertHostedSandboxCommandAuthority } from "@/lib/sandbox/deployment-execution-lease";
 import { getVercelPreviewProvider } from "@/lib/sandbox/vercel-preview-provider";
 import { startWorkingPreview } from "@/lib/sandbox/working-preview-runtime";
@@ -30,10 +30,20 @@ export default defineTool({
     const provider = await getVercelPreviewProvider(sandbox.id, ctx.abortSignal);
     const previous = workingPreviewState.get();
     workingPreviewState.update(() => null);
+    let ownedAttemptId: string | undefined;
     const preview = await startWorkingPreview({
       ...input,
       appId: current.appSpec.appId,
       cwd,
+      onAttempt: (attempt) => {
+        workingPreviewAttemptState.update((currentAttempt) => {
+          if (attempt === null) {
+            return currentAttempt?.attemptId === ownedAttemptId ? null : currentAttempt;
+          }
+          ownedAttemptId = attempt.attemptId;
+          return attempt;
+        });
+      },
       previous,
       provider,
       sandboxId: sandbox.id,

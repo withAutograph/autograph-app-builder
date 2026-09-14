@@ -1,334 +1,168 @@
 # Self-reproduction evidence
 
-## Current status and acceptance contract
+## Acceptance contract
 
-The existing staged native Eve runs and comparison reports provide diagnostic
-findings about generated output, template setup, and infrastructure. They do
-**not** establish that an ordinary user can ask App Builder to reproduce itself
-out of the box. Preserve those artifacts and their original source revisions,
-prompts, stage inputs, and candidate bytes; do not relabel them as product-level
-baseline evidence. A passing infrastructure probe or internal stage is not a
-passing product workflow.
+This eval asks the ordinary App Builder product to create an independent replica
+of App Builder from the checked-in
+[product brief](../../evals/self-reproduction/brief.md). A qualifying baseline
+uses the supported web application or the
+[five public MCP tools](../public-mcp-contract.md). The evaluator may automate
+those public interactions, but it must not call internal Eve stages, prepare a
+candidate workspace, edit generated output, or give implementation advice from
+the reference application or an evaluator.
 
-A qualifying self-reproduction run starts with one checked-in product brief
-submitted through the supported web App Builder or the
-[five public MCP tools](../public-mcp-contract.md). Subsequent input is limited
-to ordinary product questions answered from the fixed answer sheet and normal
-approval replies. A test client may perform these public interactions
-programmatically for expedience and reproducibility; manually clicking or opening
-a fresh Codex task is not an acceptance requirement. This permission does not
-extend to internal workflow APIs or stage control. Record each response. Do not
-provide reference source,
-screenshots, evaluator findings, manual implementation assistance, or internal
-stage instructions to the generator.
+After the initial brief, input is limited to ordinary product questions answered
+from the [fixed answer sheet](../../evals/self-reproduction/answers.json) and
+explicit approval replies. Record every response. Connection and authorization
+cards use their normal product flow; a chat message cannot stand in for a
+provider connection. Resume the same session after a question or recoverable
+failure instead of selecting a better reroll.
 
-The brief requests a complete independent working replica. The ordinary shared
-Builder workflow must clone the canonical Arrusted repository, install and set
-up its dependencies, plan, implement, recover from errors, and validate the
-result. The evaluator must not replace those responsibilities by preparing a
-candidate workspace or driving internal Eve planning and implementation stages.
-If a necessary step is missing, repair the shared product workflow and test it
-through the same supported entrypoint. Do not add an eval-only implementation
-path, hosting service, or orchestration layer to bypass the missing behavior.
+The shared Builder workflow owns repository acquisition, dependency setup,
+planning, implementation, recovery, validation, and delivery of a working
+preview. The replica must have its own persistence and orchestration and must
+create one small independent app through its own backend. Persistence may use a
+repository-supported relational path or an application-owned durable local
+store such as a file or SQLite database. Credit requires observable writes and
+readback across the required lifecycle; a success-shaped response or source
+claim is insufficient.
 
 The evaluator may prepare isolated synthetic users and provider emulators,
-observe the normal workflow, retain evidence, and independently start the
-exported output for comparison. These comparison fixtures must remain outside
-generator input. They must not repair the output or earn credit for generated
-functionality: an independently launched candidate and an evaluator-created
-Sandbox prove only their recorded infrastructure assertions.
+observe the product workflow, and inspect unchanged exported output
+afterward. Reference source, screenshots, evaluator findings, and comparison
+fixtures remain outside generator input. The current acceptance run does not
+create evaluator-owned hosting for the candidate.
 
-Completion requires evidence from that product-level run and an assessment of
-the full requested replica, including its own persistence and orchestration and
-its creation of one small independent app through its own backend. Report each
-requirement as passed, failed, blocked, or unassessed. Missing functionality is a
-failure; unavailable infrastructure is a blocker. Neither infrastructure success
-nor internal-stage success substitutes for product behavior. Keep visual scores
-advisory, preserve partial results, and report remaining evidence gaps explicitly.
-Anonymous entry is excluded from the current repair scope. Hosted publication
-and provisioning remain unverified unless separately authorized and exercised.
+Report every requirement as **passed**, **failed**, **blocked**, or
+**unassessed**. Missing generated functionality is a failure. Unavailable
+infrastructure is a blocker. A model claim, successful request submission, HTTP
+readiness probe, build, or screenshot cannot substitute for the relevant user
+behavior. Preserve partial results and explain missing evidence. Visual scores
+remain advisory. Hosted publication and provisioning remain unverified unless
+separately authorized and exercised.
+Anonymous entry is excluded from the current repair and acceptance scope.
 
-## Public entrypoint driver and retained diagnostics
+## Supported public driver
 
-The old staged native Eve driver and its self-hosted GitHub workflow are retired.
-The public driver, `scripts/self-reproduction-public.mts`, submits
-[the product brief](../../evals/self-reproduction/brief.md) through the supported
-Streamable HTTP MCP endpoint. It behaves as an ordinary user client: start one
-request with `autograph_start`, observe with `autograph_get`, and use
-`autograph_respond` for structured product questions and approvals, or
-`autograph_send` for an ordinary chat reply to a public product question. It does not
-call internal Eve stages, prepare the candidate, or repair generated code.
+Use `mise run eval:self-reproduction` with `--endpoint` to run the checked-in
+brief through the public Streamable HTTP MCP endpoint. The driver calls only
+`autograph_start`, `autograph_get`, `autograph_respond`, and `autograph_send` as
+needed by the conversation. It does not invoke internal workflow stages or
+create an eval-specific candidate runtime.
 
-Use the existing supported App Builder service and its ordinary authentication.
-For local development, keep the normal `mise run dev` stack running. The public
-driver does not create an eval-specific hosting service or substitute an internal
-agent runner when the public connection is unavailable.
+For local development, start the normal stack with `mise run dev`, then run:
 
 ```sh
 mise run eval:self-reproduction -- \
-  --endpoint http://127.0.0.1:3000/mcp \
+  --endpoint http://127.0.0.1:64613/mcp \
   --output-dir /absolute/external/evidence/public-baseline
 ```
 
-Supply the actual supported MCP URL for the running service. The example port is
-illustrative, not a separate eval listener. Generated files, runtime state, and
-evidence must remain outside the reference source tree.
+Supply the actual MCP URL for the service under test. The same driver can target
+a reachable GitHub acceptance environment; it does not depend on a local
+candidate checkout. Keep its output directory outside the reference source
+tree. A new baseline requires a new directory.
 
-When the product asks a question, answer from the
-[fixed answer sheet](../../evals/self-reproduction/answers.json), preserving the
-actual `requestId` values and the complete request batch in `--responses-file`.
-Only approve effects within the benchmark's existing authorization. Connection
-or authorization cards must use the normal product flow; a text reply cannot
-pretend a provider was connected. Do not append internal implementation advice,
-stage prompts, reference material, or evaluator feedback to an answer.
+When the product returns structured `inputRequests`, create a JSON response file
+containing an array with one entry for each exact request ID. Approval requests
+use `{ "kind": "approve" }` or `{ "kind": "deny" }`; question responses use
+`{ "kind": "answer", "value": "..." }` and may include an `optionId` from the
+request. For example:
+
+```json
+[
+  {
+    "requestId": "request-from-inputRequests",
+    "response": { "kind": "approve" }
+  }
+]
+```
+
+Then resume the same run:
 
 ```sh
 mise run eval:self-reproduction -- \
-  --endpoint http://127.0.0.1:3000/mcp \
+  --endpoint http://127.0.0.1:64613/mcp \
   --output-dir /absolute/external/evidence/public-baseline \
   --resume \
   --responses-file /absolute/external/evidence/product-responses.json
 ```
 
-If the Builder asks an ordinary question in chat without an `inputRequests` card,
-resume with `--message-file /absolute/path/to/reply.txt` instead. The file contains
-only the ordinary user reply, such as approval of a local build. This is not a
-channel for evaluator findings, repair instructions, or workflow-stage prompts.
-The driver records the reply and preserves its idempotency key before sending.
-
-Resume the saved public session and cursor rather than creating a better reroll.
-Keep the prompt, public transcript, requests and replies, outcome, and errors as
-original generation evidence. Missing authentication, an unavailable endpoint,
-or an unanswered product request must retain partial evidence and an explicit
-blocked outcome. Successful submission is not successful self-reproduction:
-only the returned product behavior and unchanged candidate can establish that.
-
-After the public run, `mise run eval:self-reproduction -- --report-only` compares
-the exported output. This comparison command does not start internal generation.
-
-Historical native transcripts, source revisions, reports and setup probes remain
-useful diagnostics. They are not relabeled as product-level baseline evidence.
-A new public-flow result must identify its actual entrypoint, initial brief,
-ordinary replies, product outcome and any missing evidence. No such qualifying
-run has yet been established by the existing staged reports.
-
-Comparison output belongs outside the Builder source tree. Use
-`--output-dir /absolute/external/evidence/run-name` to choose its location.
-`--report-only --candidate-runtime` may acquire canonical Arrusted to start an
-unchanged exported candidate for independent inspection. This is observer setup
-and earns no credit for Builder cloning, installation, or generated behavior.
-
-To rebuild and start an independently exported candidate in a fresh,
-evaluator-owned Vercel Sandbox, using the same tracked Arrusted workspace and
-project-scoped Development OIDC boundary:
+If the Builder asks an ordinary chat question without an `inputRequests` card,
+put only the user reply in a text file and resume with `--message-file` instead.
+Do not include evaluator feedback, internal stage prompts, reference material,
+or code repair instructions.
 
 ```sh
-mise run eval:self-reproduction -- --report-only \
-  --candidate-root /absolute/path/to/exported-candidate \
-  --arrusted-root /absolute/path/to/arrusted-development \
-  --candidate-runtime \
-  --output-dir /absolute/external/evidence/comparison
+mise run eval:self-reproduction -- \
+  --endpoint http://127.0.0.1:64613/mcp \
+  --output-dir /absolute/external/evidence/public-baseline \
+  --resume \
+  --message-file /absolute/external/evidence/recovery-reply.txt
 ```
 
-The runtime phase uses allow-all networking for toolchain and dependency setup,
-runs the repository-owned application build, starts the production candidate,
-and probes its declared base path and documentation route from inside the
-sandbox. It records bounded command output in `candidate-runtime.json`. Runtime
-startup is a prerequisite, not workflow credit. Deeper workflows remain
-unassessed until trusted browser adapters exercise them.
+The public driver also accepts positive integer `--timeout-ms` and `--poll-ms`
+values. It preserves private continuation state in `state.json` and writes
+sanitized `report.json`, `report.md`, `index.html`, and public transcript
+records. Do not publish private continuation state, bearer URLs, credentials, or
+unsanitized transport data. A completed public session still needs independent
+assessment of the delivered app.
 
-While the candidate Sandbox remains alive, the evaluator also runs the supported
-candidate workflow and desktop interaction fixtures. Unknown generated layouts
-remain unassessed until an evaluator adapter is supplied. Documentation uses the
-actual visible navigation control; a guessed `/docs` response is diagnostic only.
+## Comparison and supplementary assessment
 
-To retain the reference's isolated production-navigation JSON evidence, opt in with
-`--reference-navigation`, or reuse an existing evaluator output directory with
-`--reference-navigation-evidence /absolute/path/to/reference-navigation`.
-Reused evidence retains its original source snapshot, revision, and timestamps;
-it is not represented as a new production test run.
+Comparison is observation after generation. It must use the unchanged result
+from the public session and equivalent synthetic states for the reference and
+candidate. Functional receipts require evaluator-owned browser actions and
+server readback where appropriate. Missing controls or effects fail; unavailable
+fixtures block; states that were never exercised remain unassessed. Paired
+captures may compare hierarchy, layout, typography, controls, spacing, desktop
+resizing, keyboard interaction, and loading, empty, and error states without
+turning visual similarity into functional credit.
 
-For already-running reference and candidate URLs, add `--reference-url` and
-`--candidate-url`. This retains generic design captures and executes the
-authoritative paired state matrix with the checked-in semantic adapter. An
-evaluator-owned custom adapter remains available for specialized fixture hooks:
-
-```sh
-mise run eval:self-reproduction -- --report-only \
-  --candidate-root /absolute/path/to/exported-candidate \
-  --reference-url http://127.0.0.1:3000 \
-  --candidate-url http://127.0.0.1:3001 \
-  --capture-adapter evals/self-reproduction/capture-adapter.ts \
-  --output-dir /absolute/external/evidence/comparison
-```
-
-The adapter must live under `evals/` and export
-`createCaptureAdapters({ referenceURL, candidateURL })`. Each side implements
-the `CaptureAdapter` contract from
-`evals/support/self-reproduction-captures.ts`. Generated output cannot supply
-this module. The runner ingests the resulting evaluator-owned observations into
-`parity-evidence.json` and writes an advisory side-by-side manifest at
-`parity/captures/manifest.json`.
-The default adapter treats absent required semantic controls as missing
-functionality. It leaves loading, empty, and error states unassessed when the
-URL does not expose an evaluator-owned fixture for that state; visiting a
-landing page is not evidence that those product states are missing.
-
-For functional workflow parity, the runner automatically loads the checked-in
-`evals/self-reproduction/workflow-adapter.ts`. With the reference development
-stack and a candidate runtime already running, use:
-
-```sh
-mise run eval:self-reproduction -- --report-only \
-  --candidate-root /absolute/path/to/exported-candidate \
-  --reference-url https://localhost:3001 \
-  --candidate-url http://127.0.0.1:4173 \
-  --output-dir /absolute/external/evidence/comparison
-```
-
-The reference binding uses the existing emulated OAuth/provider fixtures and
-PostgreSQL readbacks for authentication, durable drafts, provider return, and
-documentation. The candidate binding navigates its real URL and looks for
-required controls by accessible role and name. Missing candidate controls are
-failures; browser-only state cannot earn durable server-write credit. Reference
-workflows that do not yet have a bounded evaluator fixture remain unassessed.
-
-A specialized adapter can be selected with
-`--workflow-adapter-module evals/path/to/workflow-adapters.mts`. The path must
-remain under this repository's `evals/` directory. It exports
-`createWorkflowAdapters({ referenceUrl, candidateUrl, outputRoot })` and returns
-reference/candidate implementations of `TrustedBrowserWorkflowAdapter`. Each
-adapter seeds through that side's real fixture boundary, drives the rendered
-application, and performs evaluator-owned server readback. The runner writes
-one receipt per side and workflow under `parity/workflows/` plus
-`trusted-workflow-receipts.json`; receipts already written remain available
-when a later adapter or report step fails. Missing product behavior fails,
-unavailable fixture/browser infrastructure blocks, and omitted adapters remain
-unassessed.
-
-For an observation run, `SELF_REPRODUCTION_REFERENCE_URL` and
-`SELF_REPRODUCTION_CANDIDATE_URL` can identify existing applications.
-`--workflow-adapter-module` selects an evaluator module under `evals/`.
-Only explicitly requested `--reference-runtime` and `--candidate-runtime`
-comparisons start observer-owned runtimes. The reference runtime uses the
-mise-owned entrypoint and its local database prerequisites. Runtime startup
-errors remain visible in the retained report. The retired self-hosted workflow
-is not an alternate route for generating the replica.
-
-The report labels an operator-supplied candidate separately from the live
-generation that produced it. Credentials and dependencies are never copied.
-Runtime workflow claims require evaluator-owned receipts; candidate-authored
-workflow summaries, static source matches, configuration flags, and generic
-screenshots do not prove them.
-
-The authoritative paired capture matrix requires both reachable URLs and
-installed Playwright Chromium. The candidate Sandbox stays alive while its
-in-Sandbox callback captures diagnostic root/documentation screens at the
-existing desktop viewports; this loopback URL is not exposed to the host browser.
-Supported candidate controls receive the shared synthetic draft before capture.
-The isolated reference signs in through its emulator and confirms that same
-draft through an owner-scoped PostgreSQL readback at each viewport. Its fixture
-receipt is retained; authentication failure never falls back to an anonymous
-screenshot. Matching visible inputs do not establish candidate authentication
-or durable persistence. Unfamiliar candidate controls remain diagnostic.
-Use a reachable candidate URL and equivalent evaluator-owned fixtures for the
-host-side paired matrix. Partial screenshots survive later failures. Missing
-fixtures and unavailable runtimes remain unassessed or blocked in all report
-formats. Native live acceptance and captures are separate from the focused
-deterministic checks below:
-
-```sh
-mise run test:unit -- evals/support/self-reproduction.test.ts \
-  evals/support/self-reproduction-evidence.test.ts \
-  scripts/eval-self-reproduction.test.ts
-```
-
-### Reference instant-navigation evidence
-
-The bounded `runReferenceNavigationEvidence` collector uses the existing
-`mise run test:production-navigation -- --json-report /absolute/path/report.json`
-lifecycle. The coordinator supplies its absolute mise executable so stripped
-application environments do not depend on finding mise on PATH. Its JSON
-report and source snapshot identify the exact sign-in direct-load and prefetched
-Sign In Link cases, including resolved controls after `instant()` releases
-dynamic work. It emits only the reference `instant-navigation` receipt; it does
-not award cache isolation, draft continuity, or other framework credit.
-
-The collector retains Git revision, dirty status, source digest, timestamps, and
-command errors under `reference-navigation/`. Missing or skipped exact tests
-remain unassessed; actual assertion failures remain failures. An older text log
-with an aggregate passing count is diagnostic evidence and cannot substitute
-for the exact JSON test results. Collection is opt-in through the eval's
-coordinator; do not repeat a production build solely to refresh an unchanged
-report.
-
-### Supplementary offline assessment
-
-Combine a retained run with an evaluator-owned source review without running
-generation or either application again:
+The retained offline combiner consumes the legacy parity-report schema; it does
+not accept a public driver's `report.json` directly. Once evaluator observation
+has produced a retained run directory containing valid `parity-evidence.json`,
+`report.json`, and `revisions.json`, combine it with a source-review directory
+containing the `self-reproduction-source-review/v1` `observations.json` and its
+referenced evidence without rerunning generation or either application:
 
 ```sh
 mise run eval:self-reproduction-report -- \
   --run-dir /absolute/path/to/retained-run \
   --source-review-dir /absolute/path/to/evaluator-source-review \
-  --reference-captures-dir /absolute/path/to/evaluator-reference-captures \
   --output-dir /absolute/external/new-supplementary-report
 ```
 
-The optional reference captures must include `capture-provenance.json` naming
-the retained screenshots. Original run metadata and evaluator review provenance
-are copied alongside referenced artifacts. No runtime trees or environment files
-are copied. Conflicting failed assertions remain failed; source-only findings
-cannot provide browser credit. Missing referenced evidence remains unassessed.
-The JSON, Markdown, and HTML outputs explicitly identify themselves as a
-supplementary assessment. Initial screenshot pairs are diagnostic; their state
-and authentication differences remain visible in the capture qualification.
+`--reference-captures-dir`, `--reference-run-dir`, and
+`--candidate-navigation-run-dir` may add separately retained evaluator evidence.
+Reference captures must include `capture-provenance.json`. The combiner copies
+provenance and referenced artifacts, retains conflicting failures, and cannot
+award browser credit from source findings. Its JSON, Markdown, and HTML outputs
+identify themselves as supplementary assessments.
 
-### Candidate runtime access and infrastructure proof
+## Historical diagnostic tooling
 
-The evaluator uses the linked project's short-lived Development OIDC for the
-outer Sandbox and supplies only `VERCEL_OIDC_TOKEN`, `VERCEL_TEAM_ID`, and
-`VERCEL_PROJECT_ID` to its candidate environment through the structured Sandbox
-API. It never forwards the host environment or writes credentials into command
-strings, source, or evidence. Raw credentials are redacted from retained runtime
-and comparison diagnostics. Expiration and project validation remain owned by
-the existing local OIDC entrypoint.
+`scripts/eval-self-reproduction.mts`, its candidate/reference runtime launchers,
+capability probes, capture adapters, workflow adapters, and the former
+self-hosted generation workflow are retained for historical diagnostic evidence
+and comparison implementation support. They are not the supported
+self-reproduction acceptance driver and must not be used to generate or repair
+a qualifying baseline. In particular, `--report-only`, `--candidate-runtime`,
+`--reference-runtime`, URL injection, and adapter-selection flags belong to that
+legacy harness rather than the public-user run above.
 
-Native live runs also test infrastructure access with a small model request and
-a child Sandbox sentinel command. A comparison-only replay can opt in:
+Historical transcripts, reports, probes, screenshots, and source revisions
+remain useful when labeled with their original provenance. Do not relabel a
+staged internal run, evaluator-hosted candidate, infrastructure probe, or
+candidate-authored validation claim as out-of-box product evidence. They may
+explain a failure or support a later comparison, while the public transcript and
+delivered working preview remain the generation record.
 
-```sh
-mise run eval:self-reproduction -- --report-only \
-  --candidate-root /absolute/path/to/preserved-candidate \
-  --candidate-runtime --candidate-capability-probe --reference-runtime \
-  --output-dir /absolute/external/new-comparison
-```
-
-`candidate-capability-proof.json` reports model access, child execution, and
-child cleanup separately. Sandbox SDK tooling lives in evaluator scratch space;
-the candidate implementation and dependencies are not patched. A successful
-probe establishes infrastructure access, never independent app creation by the
-candidate. Configured credentials alone remain unverified. Local file or SQLite
-persistence is application-owned; no external database is implied or required.
-A database-dependent implementation still needs a real isolated database setup.
-
-Each browser or capability probe has its own artifact directory. A failed probe
-cannot inherit a previous probe's JSON or screenshots. Empty-state checks clear
-and refill real controls; loading credit requires an explicitly bound creation
-request held in flight. Static progress labels and unsupported error fixtures
-remain unassessed.
-
-A repaired reference fixture can be rerun independently and combined with the
-retained candidate assessment by adding
-`--reference-run-dir /absolute/path/to/reference-only-run` to the supplementary
-report command. Its reference observations and captures retain a separate
-artifact namespace and source revision. It cannot replace candidate outcomes
-or turn blocked reference evidence into passing assertions. The normal run's
-authenticated capture receipts now supply screenshot pairing automatically;
-external capture provenance remains supported for earlier runs.
-
-Reference setup holds its local port reservations through installation and
-checks both provider emulators as well as the authentication page before
-reporting readiness. Evaluator callback errors are retained separately from
-successful candidate startup, so a report-writing failure is not blamed on
-the generated application.
+Technical maintainers can find the retained paired-capture implementation in
+`evals/support/self-reproduction-captures.ts`, the default semantic bindings in
+`evals/self-reproduction/default-capture-adapter.ts`, and trusted workflow
+bindings in `evals/self-reproduction/workflow-adapter.ts`. Reference
+instant-navigation collection lives in
+`evals/support/self-reproduction-reference-navigation.ts` and delegates to the
+repository's focused production-navigation task. These components can preserve
+historical comparison evidence; they are not alternate public generation paths.
