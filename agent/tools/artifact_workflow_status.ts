@@ -38,14 +38,16 @@ export default defineTool({
     "Return session-bound artifact workflow receipt metadata without artifact content or mutation.",
   execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
-    if (state.phase === "empty")
-      {return {
+    if (state.phase === "empty") {
+      return {
         phase: state.phase,
         sessionId: ctx.session.id,
         version: state.version,
-      };}
-    if (state.artifacts.some(({ sessionId }) => sessionId !== ctx.session.id))
-      {throw new Error("Prototype artifact state belongs to a different session.");}
+      };
+    }
+    if (state.artifacts.some(({ sessionId }) => sessionId !== ctx.session.id)) {
+      throw new Error("Prototype artifact state belongs to a different session.");
+    }
     let publication = {};
     if (state.phase === "publication_pending") {
       publication = {

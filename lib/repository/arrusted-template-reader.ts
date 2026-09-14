@@ -35,7 +35,9 @@ function record(value: unknown): value is Record<string, unknown> {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function privateTemplateRepository(value: unknown) {
-  if (!record(value)) {return false;}
+  if (!record(value)) {
+    return false;
+  }
   return (
     typeof value.id === "number" &&
     Number.isSafeInteger(value.id) &&
@@ -47,13 +49,16 @@ function privateTemplateRepository(value: unknown) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function readOnlyReaderPermissions(value: unknown) {
-  if (!record(value)) {return false;}
+  if (!record(value)) {
+    return false;
+  }
   if (
     value.contents !== "read" ||
     value.checks !== "read" ||
     (value.metadata !== undefined && value.metadata !== "read")
-  )
-    {return false;}
+  ) {
+    return false;
+  }
   return Object.values(value).every((permission) => permission === "read");
 }
 
@@ -71,13 +76,14 @@ type TemplateReaderFailureStage =
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function unavailable(stage?: TemplateReaderFailureStage): never {
-  if (stage !== undefined)
-    {console.warn(
+  if (stage !== undefined) {
+    console.warn(
       JSON.stringify({
         event: "autograph.template-reader.failed",
         stage,
       }),
-    );}
+    );
+  }
   throw new Error("The Arrusted template reader is unavailable.");
 }
 
@@ -101,7 +107,9 @@ export function readDeploymentArrustedTemplateReaderConfig(
   const installation = installationIdSchema.safeParse(
     environment.APP_BUILDER_TEMPLATE_READER_INSTALLATION_ID,
   );
-  if (!installation.success) {unavailable("configuration");}
+  if (!installation.success) {
+    unavailable("configuration");
+  }
   return { ...credentials, installationId: installation.data };
 }
 
@@ -111,7 +119,9 @@ export function createArrustedTemplateReader(input: {
   fetch?: typeof fetch;
 }): ArrustedTemplateReader {
   const installation = installationIdSchema.safeParse(input.config.installationId);
-  if (!installation.success) {unavailable();}
+  if (!installation.success) {
+    unavailable();
+  }
   const credentials = parseGitHubAppHttpProviderCredentials({
     appId: input.config.appId,
     privateKey: input.config.privateKey,
@@ -147,8 +157,9 @@ export function createArrustedTemplateReader(input: {
           authentication.repositorySelection !== "selected") ||
         !exactTemplateRepositoryIds(authentication.repositoryIds) ||
         !readOnlyReaderPermissions(authentication.permissions)
-      )
-        {unavailable("token_shape");}
+      ) {
+        unavailable("token_shape");
+      }
       const token = parsedToken.data;
 
       let inventory;
@@ -170,8 +181,9 @@ export function createArrustedTemplateReader(input: {
         !Array.isArray(data.repositories) ||
         data.repositories.length !== 1 ||
         !privateTemplateRepository(data.repositories[0])
-      )
-        {unavailable("repository_shape");}
+      ) {
+        unavailable("repository_shape");
+      }
       return { token };
     },
   };

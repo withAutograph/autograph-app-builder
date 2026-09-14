@@ -5,7 +5,9 @@ import styles from "./app-builder.module.css";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ProviderNotices({ notices }: { notices: ProviderConnectionNotice[] }) {
-  if (!notices.length) {return null;}
+  if (!notices.length) {
+    return null;
+  }
   return (
     <div className={styles.providerNotices} aria-live="polite">
       {notices.map((notice) => {

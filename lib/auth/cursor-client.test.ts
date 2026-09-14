@@ -30,7 +30,9 @@ function storage() {
   ]);
   const rowsFor = (table: unknown) => {
     const tableRows = rows.get(table);
-    if (!tableRows) {throw new Error("Unknown table");}
+    if (!tableRows) {
+      throw new Error("Unknown table");
+    }
     return tableRows;
   };
   const database = {
@@ -39,7 +41,9 @@ function storage() {
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         onConflictDoNothing: async () => {
           const tableRows = rowsFor(table);
-          if (!tableRows.length) {tableRows.push(row);}
+          if (!tableRows.length) {
+            tableRows.push(row);
+          }
         },
       }),
     })),
@@ -56,7 +60,9 @@ function storage() {
       try {
         return await operation(database);
       } catch (error) {
-        for (const [i, key] of [...rows.keys()].entries()) {rows.set(key, before[i]);}
+        for (const [i, key] of [...rows.keys()].entries()) {
+          rows.set(key, before[i]);
+        }
         throw error;
       }
     },

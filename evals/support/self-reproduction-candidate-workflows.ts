@@ -32,8 +32,9 @@ export const exerciseCandidateBrowserWorkflows = async (
     page.setDefaultTimeout(5000);
     const writes: string[] = [];
     page.on("request", (request) => {
-      if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method()))
-        {writes.push(new URL(request.url()).pathname);}
+      if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method())) {
+        writes.push(new URL(request.url()).pathname);
+      }
     });
     const assertions: CandidateWorkflowOutcome["assertions"] = [];
     const check = (id: string, passed: boolean | null, detail: string) =>
@@ -51,14 +52,16 @@ export const exerciseCandidateBrowserWorkflows = async (
     let runtimeReady = false;
     const runDocumentation = async () => {
       let docs = button(/^docs$|documentation/iu);
-      if (!(await exists(docs)))
-        {docs = page.getByRole("link", { name: /^docs$|documentation/iu }).first();}
-      if (!(await exists(docs)))
-        {return check(
+      if (!(await exists(docs))) {
+        docs = page.getByRole("link", { name: /^docs$|documentation/iu }).first();
+      }
+      if (!(await exists(docs))) {
+        return check(
           "docs-readable",
           knownShape ? false : null,
           "No documentation fixture is bound for this layout.",
-        );}
+        );
+      }
       const before = await text();
       const initialURL = page.url();
       const originalEditor = page.getByRole("textbox", { name: /app name/iu }).first();
@@ -74,15 +77,20 @@ export const exerciseCandidateBrowserWorkflows = async (
         "Activated the actual Docs control and checked distinct readable content.",
       );
       const back = button(/return to builder|back to builder|back/iu);
-      if (await exists(back)) {await back.click();}
-      else {await page.goBack();}
+      if (await exists(back)) {
+        await back.click();
+      } else {
+        await page.goBack();
+      }
       let returnNavigationPassed: boolean | null;
-      if (knownShape)
-        {returnNavigationPassed =
-          (await exists(originalEditor)) && (await originalEditor.inputValue()) === originalValue;}
-      else if (navigated)
-        {returnNavigationPassed = page.url() === initialURL && (await exists(docs));}
-      else {returnNavigationPassed = null;}
+      if (knownShape) {
+        returnNavigationPassed =
+          (await exists(originalEditor)) && (await originalEditor.inputValue()) === originalValue;
+      } else if (navigated) {
+        returnNavigationPassed = page.url() === initialURL && (await exists(docs));
+      } else {
+        returnNavigationPassed = null;
+      }
       check(
         "return-navigation-works",
         returnNavigationPassed,
@@ -92,12 +100,13 @@ export const exerciseCandidateBrowserWorkflows = async (
     const runDurableDraft = async () => {
       const name = page.getByRole("textbox", { name: /app name/iu }).first();
       const brief = page.getByRole("textbox", { name: /what.*build|brief|describe/iu }).first();
-      if (!(await exists(name)) || !(await exists(brief)))
-        {return check(
+      if (!(await exists(name)) || !(await exists(brief))) {
+        return check(
           "draft-editable",
           false,
           "Required draft editors are absent from the candidate entry state.",
-        );}
+        );
+      }
       await name.fill("Evaluator persistence sentinel");
       await brief.fill("Create one independent issue tracker with durable server persistence.");
       await brief.blur();
@@ -114,10 +123,13 @@ export const exerciseCandidateBrowserWorkflows = async (
       if (
         nameValue === "Evaluator persistence sentinel" &&
         briefValue.includes("independent issue tracker")
-      )
-        {draftDurability = true;}
-      else if (writes.length > 0 || !acknowledged) {draftDurability = null;}
-      else {draftDurability = false;}
+      ) {
+        draftDurability = true;
+      } else if (writes.length > 0 || !acknowledged) {
+        draftDurability = null;
+      } else {
+        draftDurability = false;
+      }
       check(
         "draft-survives-reload",
         draftDurability,
@@ -133,8 +145,9 @@ export const exerciseCandidateBrowserWorkflows = async (
     };
     const runProviderReturn = async () => {
       const connect = button(/connect github/iu);
-      if (!(await exists(connect)))
-        {return check("connection-control", false, "No GitHub connection control exists.");}
+      if (!(await exists(connect))) {
+        return check("connection-control", false, "No GitHub connection control exists.");
+      }
       const beforeURL = page.url();
       await connect.click();
       await page.waitForTimeout(500);
@@ -153,12 +166,13 @@ export const exerciseCandidateBrowserWorkflows = async (
     };
     const runCancellation = async () => {
       const cancel = button(/cancel creation|cancel|stop/iu);
-      if (!(await exists(cancel)))
-        {return check(
+      if (!(await exists(cancel))) {
+        return check(
           "cancel-acknowledged",
           false,
           "No cancellation control is available while creating.",
-        );}
+        );
+      }
       await cancel.click();
       const acknowledged = /cancelled|canceled/iu.test((await text()) ?? "");
       check(
@@ -199,32 +213,43 @@ export const exerciseCandidateBrowserWorkflows = async (
     };
     const runChildArtifact = async () => {
       const finish = button(/finish preview/iu);
-      if (await exists(finish)) {await finish.click();}
+      if (await exists(finish)) {
+        await finish.click();
+      }
       await page.waitForTimeout(500);
       const links = page.getByRole("link", {
         name: /preview|open app|view app|download/iu,
       });
       const count = await links.count();
       let linkedStatus: boolean | null;
-      if (count > 0) {linkedStatus = true;}
-      else if (writes.length > 0) {linkedStatus = null;}
-      else {linkedStatus = false;}
+      if (count > 0) {
+        linkedStatus = true;
+      } else if (writes.length > 0) {
+        linkedStatus = null;
+      } else {
+        linkedStatus = false;
+      }
       let linkedReason: string;
-      if (count > 0)
-        {linkedReason =
-          "Creation exposed a navigable artifact link; its contents still require verification.";}
-      else if (writes.length > 0)
-        {linkedReason =
-          "A server request was observed but no child artifact is available yet; completion needs a durable job fixture.";}
-      else
-        {linkedReason =
-          "No server operation or navigable child artifact exists after the visible creation flow.";}
+      if (count > 0) {
+        linkedReason =
+          "Creation exposed a navigable artifact link; its contents still require verification.";
+      } else if (writes.length > 0) {
+        linkedReason =
+          "A server request was observed but no child artifact is available yet; completion needs a durable job fixture.";
+      } else {
+        linkedReason =
+          "No server operation or navigable child artifact exists after the visible creation flow.";
+      }
       check("child-artifact-linked", linkedStatus, linkedReason);
       if (count > 0) {
         const href = await links.first().getAttribute("href");
-        if (!href || href.startsWith("#") || !/^https?:/u.test(new URL(href, page.url()).protocol))
-          {check("child-artifact-readable", false, "The reported child artifact link is inert.");}
-        else {
+        if (
+          !href ||
+          href.startsWith("#") ||
+          !/^https?:/u.test(new URL(href, page.url()).protocol)
+        ) {
+          check("child-artifact-readable", false, "The reported child artifact link is inert.");
+        } else {
           const target = new URL(href, page.url());
           const artifact = await page.request.get(target.href);
           const artifactText = await artifact.text();
@@ -243,15 +268,22 @@ export const exerciseCandidateBrowserWorkflows = async (
     };
     const runCreation = async () => {
       const review = button(/continue to review/iu);
-      if (await exists(review)) {await review.click();}
+      if (await exists(review)) {
+        await review.click();
+      }
       const create = button(/approve and create|create app|build app/iu);
-      if (!(await exists(create)))
-        {return check("creation-control", false, "No executable creation control is available.");}
+      if (!(await exists(create))) {
+        return check("creation-control", false, "No executable creation control is available.");
+      }
       await create.click();
       await page.waitForTimeout(500);
-      if (requirementId === "cancellation") {await runCancellation();}
-      else if (requirementId === "session-recovery") {await runSessionRecovery();}
-      else {await runChildArtifact();}
+      if (requirementId === "cancellation") {
+        await runCancellation();
+      } else if (requirementId === "session-recovery") {
+        await runSessionRecovery();
+      } else {
+        await runChildArtifact();
+      }
     };
     const runWorkflow =
       (
@@ -285,10 +317,13 @@ export const exerciseCandidateBrowserWorkflows = async (
       } else {
         await runWorkflow();
         let status: CandidateWorkflowOutcome["status"];
-        if (assertions.some((item) => item.passed === false)) {status = "failed";}
-        else if (assertions.length === 0 || assertions.some((item) => item.passed === null))
-          {status = "unassessed";}
-        else {status = "passed";}
+        if (assertions.some((item) => item.passed === false)) {
+          status = "failed";
+        } else if (assertions.length === 0 || assertions.some((item) => item.passed === null)) {
+          status = "unassessed";
+        } else {
+          status = "passed";
+        }
         outcome = {
           assertions,
           reason:
@@ -361,14 +396,21 @@ export const candidateWorkflowReceipts = (
             detail: sanitizeEvidence(item.detail),
           })),
         disposition: (() => {
-          if (outcome.assertions.some((item) => item.passed === false)) {return "observed";}
-          if (outcome.status === "blocked") {return "infrastructure-unavailable";}
-          if (outcome.status === "unassessed") {return "not-run";}
+          if (outcome.assertions.some((item) => item.passed === false)) {
+            return "observed";
+          }
+          if (outcome.status === "blocked") {
+            return "infrastructure-unavailable";
+          }
+          if (outcome.status === "unassessed") {
+            return "not-run";
+          }
           if (
             outcome.status === "failed" &&
             !outcome.assertions.some((item) => item.passed === false)
-          )
-            {return "missing-functionality";}
+          ) {
+            return "missing-functionality";
+          }
           return "observed";
         })(),
         method: "browser",

@@ -12,8 +12,9 @@
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function isolateAbortSignalPerFetch(fetchImplementation) {
   return function fetchWithIsolatedSignal(input, init) {
-    if (init?.signal === undefined || init.signal === null)
-      {return Reflect.apply(fetchImplementation, this, [input, init]);}
+    if (init?.signal === undefined || init.signal === null) {
+      return Reflect.apply(fetchImplementation, this, [input, init]);
+    }
     return Reflect.apply(fetchImplementation, this, [
       input,
       { ...init, signal: AbortSignal.any([init.signal]) },
@@ -22,8 +23,9 @@ export function isolateAbortSignalPerFetch(fetchImplementation) {
 }
 
 if (process.env.APP_BUILDER_EVE_EVAL_FETCH_PRELOAD === "1") {
-  if (typeof globalThis.fetch !== "function")
-    {throw new TypeError("The Eve eval fetch implementation was unavailable.");}
+  if (typeof globalThis.fetch !== "function") {
+    throw new TypeError("The Eve eval fetch implementation was unavailable.");
+  }
   globalThis.fetch = isolateAbortSignalPerFetch(globalThis.fetch);
   delete process.env.APP_BUILDER_EVE_EVAL_FETCH_PRELOAD;
 }

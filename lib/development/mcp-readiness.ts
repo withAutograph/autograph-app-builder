@@ -43,7 +43,9 @@ async function mcpRequest(input: {
     method: "POST",
     signal,
   });
-  if (!response.ok) {throw new Error(`Development MCP returned HTTP ${response.status}.`);}
+  if (!response.ok) {
+    throw new Error(`Development MCP returned HTTP ${response.status}.`);
+  }
   const text = await response.text();
   const sessionId = response.headers.get("mcp-session-id") ?? input.sessionId;
   return { body: text ? jsonRpcBody(text) : undefined, sessionId };
@@ -74,8 +76,9 @@ export async function developmentMcpToolNames(input: {
     fetcher,
     signal: input.signal,
   });
-  if (initialized.body?.error)
-    {throw new Error(initialized.body.error.message ?? "Development MCP initialization failed.");}
+  if (initialized.body?.error) {
+    throw new Error(initialized.body.error.message ?? "Development MCP initialization failed.");
+  }
   await mcpRequest({
     body: { jsonrpc: "2.0", method: "notifications/initialized" },
     endpoint: input.endpoint,
@@ -90,8 +93,9 @@ export async function developmentMcpToolNames(input: {
     sessionId: initialized.sessionId,
     signal: input.signal,
   });
-  if (listed.body?.error)
-    {throw new Error(listed.body.error.message ?? "Development MCP tools/list failed.");}
+  if (listed.body?.error) {
+    throw new Error(listed.body.error.message ?? "Development MCP tools/list failed.");
+  }
   return (listed.body?.result?.tools ?? []).map((tool) => tool.name ?? "");
 }
 
@@ -108,27 +112,34 @@ export async function waitForDevelopmentMcp(input: {
   const started = Date.now();
   let lastError: unknown;
   while (Date.now() - started < timeoutMs) {
-    if (input.signal?.aborted) {throw abortReason(input.signal);}
+    if (input.signal?.aborted) {
+      throw abortReason(input.signal);
+    }
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const names = await developmentMcpToolNames(input);
       if (
         names.length !== TOOL_NAMES.length ||
         names.some((name, index) => name !== TOOL_NAMES[index])
-      )
-        {throw new UnexpectedDevelopmentToolsError(
+      ) {
+        throw new UnexpectedDevelopmentToolsError(
           `Development MCP must expose exactly ${TOOL_NAMES.join(", ")} in order; received ${names.join(", ") || "no tools"}.`,
-        );}
+        );
+      }
       return names;
     } catch (error) {
-      if (error instanceof UnexpectedDevelopmentToolsError) {throw error;}
+      if (error instanceof UnexpectedDevelopmentToolsError) {
+        throw error;
+      }
       lastError = error;
     }
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await delay(intervalMs, undefined, { signal: input.signal });
     } catch {
-      if (input.signal?.aborted) {throw abortReason(input.signal);}
+      if (input.signal?.aborted) {
+        throw abortReason(input.signal);
+      }
       throw new Error("Development MCP readiness wait failed.");
     }
   }

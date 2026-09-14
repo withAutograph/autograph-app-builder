@@ -43,10 +43,12 @@ function route(input: { authenticated?: boolean } = {}) {
           !record ||
           JSON.stringify(record.authority) !== JSON.stringify(renewalInput.authority) ||
           record.requestDigest !== renewalInput.requestDigest
-        )
-          {return;}
-        if (record.sessionId !== undefined || record.expiresAt > renewalInput.now)
-          {return { disposition: "existing", record };}
+        ) {
+          return;
+        }
+        if (record.sessionId !== undefined || record.expiresAt > renewalInput.now) {
+          return { disposition: "existing", record };
+        }
         const updated = { ...record, expiresAt: renewalInput.expiresAt };
         rows.set(record.handoffId, updated);
         return { disposition: "renewed", record: updated };
@@ -56,7 +58,9 @@ function route(input: { authenticated?: boolean } = {}) {
         const existing = [...rows.values()].find(
           (candidate) => candidate.creationRequestId === record.creationRequestId,
         );
-        if (existing) {return { disposition: "existing", record: existing };}
+        if (existing) {
+          return { disposition: "existing", record: existing };
+        }
         rows.set(record.handoffId, record);
         return { disposition: "created", record };
       },
@@ -186,7 +190,9 @@ describe("builder handoff deployment", () => {
     const { handler, renew, rows, clock, journal } = route();
     await handler(request({ ...validBody, destination: "cursor" }));
     const original = rows.get(handoffId);
-    if (!original) {throw new Error("Expected handoff to be created");}
+    if (!original) {
+      throw new Error("Expected handoff to be created");
+    }
     clock.now = original.expiresAt;
     const renewal = request({ creationRequestId: randomUUID() });
     const first = await renew(renewal, handoffId);
@@ -218,7 +224,9 @@ describe("builder handoff deployment", () => {
     const { handler, renew, rows } = route();
     await handler(request(validBody));
     const foreignHandoff = rows.get(handoffId);
-    if (!foreignHandoff) {throw new Error("Expected handoff to be created");}
+    if (!foreignHandoff) {
+      throw new Error("Expected handoff to be created");
+    }
     foreignHandoff.authority = { ...authority, ownerUserId: "user-two" };
     await Promise.all(
       [handoffId, randomUUID(), "not-a-uuid"].map(async (id) => {

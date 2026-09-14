@@ -25,8 +25,9 @@ async function LocalConnectionBridgeContent({ params, searchParams }: Props) {
   } catch {
     notFound();
   }
-  if (!emulation || !["vercel", "github"].includes(provider) || typeof query.state !== "string")
-    {notFound();}
+  if (!emulation || !["vercel", "github"].includes(provider) || typeof query.state !== "string") {
+    notFound();
+  }
   const typedProvider = provider as EmulatedProvider;
   const resumeKey = parseProviderResumeKey(query.resume);
   const authorizing = provider === "github" && query.phase === "authorize";

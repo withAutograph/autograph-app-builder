@@ -57,8 +57,12 @@ function defaultProcessAlive(pid: number) {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    if (isErrno(error, "ESRCH")) {return false;}
-    if (isErrno(error, "EPERM")) {return true;}
+    if (isErrno(error, "ESRCH")) {
+      return false;
+    }
+    if (isErrno(error, "EPERM")) {
+      return true;
+    }
     throw error;
   }
 }
@@ -78,24 +82,27 @@ function contained(root: string, path: string) {
 async function readLockOwner(lock: string) {
   const ownerPath = nodePath.join(lock, "owner.json");
   const info = await lstat(ownerPath);
-  if (!info.isFile() || !ownerBound(info))
-    {throw new Error("owner.json was not an owner-bound regular file");}
+  if (!info.isFile() || !ownerBound(info)) {
+    throw new Error("owner.json was not an owner-bound regular file");
+  }
   const source = await readFile(ownerPath, "utf-8");
   const value = JSON.parse(source) as unknown;
   if (
     typeof value !== "object" ||
     value === null ||
     Object.keys(value).toSorted().join(",") !== "createdAt,pid"
-  )
-    {throw new Error("owner.json did not match Eve's lock schema");}
+  ) {
+    throw new Error("owner.json did not match Eve's lock schema");
+  }
   const owner = value as { createdAt?: unknown; pid?: unknown };
   if (
     typeof owner.createdAt !== "string" ||
     !Number.isFinite(Date.parse(owner.createdAt)) ||
     !Number.isSafeInteger(owner.pid) ||
     Number(owner.pid) <= 0
-  )
-    {throw new Error("owner.json contained an invalid owner");}
+  ) {
+    throw new Error("owner.json contained an invalid owner");
+  }
   return { info, pid: Number(owner.pid), source };
 }
 
@@ -116,23 +123,30 @@ export async function reconcileDeadEveEvalPrewarmLocks(
     nodePath.resolve(appRoot) !== canonicalRoot ||
     !rootInfo.isDirectory() ||
     !ownerBound(rootInfo)
-  )
-    {throw new Error("The Eve eval application root was not owner-bound.");}
+  ) {
+    throw new Error("The Eve eval application root was not owner-bound.");
+  }
   const locksRoot = nodePath.join(canonicalRoot, ".eve", "sandbox-cache", "template-locks");
   let backends;
   try {
     backends = await readdir(locksRoot, { withFileTypes: true });
   } catch (error) {
-    if (isErrno(error, "ENOENT")) {return [];}
+    if (isErrno(error, "ENOENT")) {
+      return [];
+    }
     throw error;
   }
   const receipts: EveEvalPrewarmLockReceipt[] = [];
   for (const backend of backends.toSorted((left, right) => left.name.localeCompare(right.name))) {
     const backendPath = nodePath.join(locksRoot, backend.name);
-    if (!backend.isDirectory() || backend.isSymbolicLink()) {continue;}
+    if (!backend.isDirectory() || backend.isSymbolicLink()) {
+      continue;
+    }
     const entries = await readdir(backendPath, { withFileTypes: true });
     for (const entry of entries.toSorted((left, right) => left.name.localeCompare(right.name))) {
-      if (!entry.name.endsWith(".lock")) {continue;}
+      if (!entry.name.endsWith(".lock")) {
+        continue;
+      }
       const lock = nodePath.join(backendPath, entry.name);
       const display = nodePath.relative(canonicalRoot, lock);
       if (!entry.isDirectory() || entry.isSymbolicLink() || !contained(locksRoot, lock)) {
@@ -146,7 +160,9 @@ export async function reconcileDeadEveEvalPrewarmLocks(
       let owner;
       try {
         const lockInfo = await lstat(lock);
-        if (!ownerBound(lockInfo)) {throw new Error("lock directory was not owner-bound");}
+        if (!ownerBound(lockInfo)) {
+          throw new Error("lock directory was not owner-bound");
+        }
         owner = await readLockOwner(lock);
       } catch (error) {
         receipts.push({
@@ -190,7 +206,9 @@ export async function reconcileDeadEveEvalPrewarmLocks(
         await rm(quarantine, { recursive: true });
         receipts.push({ lock: display, pid: owner.pid, status: "removed" });
       } catch (error) {
-        if (isErrno(error, "ENOENT")) {continue;}
+        if (isErrno(error, "ENOENT")) {
+          continue;
+        }
         receipts.push({
           lock: display,
           pid: owner.pid,
@@ -222,16 +240,21 @@ export function createEveEvalRuntimeDirectories(
       info.uid !== process.getuid?.() ||
       // oxlint-disable-next-line eslint/no-bitwise -- File permission mask check.
       (info.mode & 0o077) !== 0
-    )
-      {throw new Error("The Eve eval runtime directory was not owner-only.");}
+    ) {
+      throw new Error("The Eve eval runtime directory was not owner-only.");
+    }
   }
   return { home, root, workflowData };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function signalExitCode(signal: NodeJS.Signals | null) {
-  if (signal === "SIGINT") {return 130;}
-  if (signal === "SIGTERM") {return 143;}
+  if (signal === "SIGINT") {
+    return 130;
+  }
+  if (signal === "SIGTERM") {
+    return 143;
+  }
   return 128;
 }
 
@@ -264,7 +287,9 @@ export function waitForEveEvalChild(
       try {
         process.kill(-input.child.pid, "SIGKILL");
       } catch (error) {
-        if (!isErrno(error, "ESRCH")) {throw error;}
+        if (!isErrno(error, "ESRCH")) {
+          throw error;
+        }
       }
     };
     const handlers = {} as {
@@ -274,7 +299,9 @@ export function waitForEveEvalChild(
       exited: (code: number | null, signal: NodeJS.Signals | null) => void;
     };
     const cleanup = () => {
-      if (forceTimer !== undefined) {clearTimeout(forceTimer);}
+      if (forceTimer !== undefined) {
+        clearTimeout(forceTimer);
+      }
       signalTarget.off("SIGINT", handlers.interrupt);
       signalTarget.off("SIGTERM", handlers.terminate);
       input.child.off("error", handlers.failed);
@@ -294,13 +321,17 @@ export function waitForEveEvalChild(
     const interrupt = () => requestStop("SIGINT");
     const terminate = () => requestStop("SIGTERM");
     const failed = (error: Error) => {
-      if (settled) {return;}
+      if (settled) {
+        return;
+      }
       settled = true;
       cleanup();
       reject(error);
     };
     const exited = (code: number | null, signal: NodeJS.Signals | null) => {
-      if (settled) {return;}
+      if (settled) {
+        return;
+      }
       settled = true;
       // A successful Eve CLI exit can still outpace a forked local host. The
       // detached group is scoped to this one eval, so completion and failure

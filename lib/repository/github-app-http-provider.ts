@@ -40,10 +40,14 @@ export const parseGitHubAppHttpProviderCredentials = (
   input: unknown,
 ): GitHubAppHttpProviderCredentials => {
   const parsed = credentialsSchema.safeParse(input);
-  if (!parsed.success) {throw new Error("GitHub App provider configuration is invalid.");}
+  if (!parsed.success) {
+    throw new Error("GitHub App provider configuration is invalid.");
+  }
   try {
     const key = createPrivateKey(parsed.data.privateKey);
-    if (key.asymmetricKeyType !== "rsa") {throw new Error("not-rsa");}
+    if (key.asymmetricKeyType !== "rsa") {
+      throw new Error("not-rsa");
+    }
   } catch {
     throw new Error("GitHub App provider configuration is invalid.");
   }
@@ -52,7 +56,9 @@ export const parseGitHubAppHttpProviderCredentials = (
 
 export const parseGitHubAppHttpProviderConfig = (input: unknown): GitHubAppHttpProviderConfig => {
   const parsed = configSchema.safeParse(input);
-  if (!parsed.success) {throw new Error("GitHub App provider configuration is invalid.");}
+  if (!parsed.success) {
+    throw new Error("GitHub App provider configuration is invalid.");
+  }
   const credentials = parseGitHubAppHttpProviderCredentials({
     appId: parsed.data.appId,
     privateKey: parsed.data.privateKey,
@@ -89,13 +95,17 @@ const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const property = (value: unknown, key: string): unknown => {
-  if (!record(value) || !(key in value)) {throw new TypeError("invalid-response");}
+  if (!record(value) || !(key in value)) {
+    throw new TypeError("invalid-response");
+  }
   return value[key];
 };
 
 const stringProperty = (value: unknown, key: string): string => {
   const result = property(value, key);
-  if (typeof result !== "string") {throw new TypeError("invalid-response");}
+  if (typeof result !== "string") {
+    throw new TypeError("invalid-response");
+  }
   return result;
 };
 
@@ -104,27 +114,33 @@ const decimalProperty = (value: unknown, key: string): string => {
   if (
     (typeof result !== "number" || !Number.isSafeInteger(result) || result < 1) &&
     (typeof result !== "string" || !decimal.safeParse(result).success)
-  )
-    {throw new TypeError("invalid-response");}
+  ) {
+    throw new TypeError("invalid-response");
+  }
   return String(result);
 };
 
 const safeRepositoryIdNumber = (value: string): number => {
   const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1 || String(parsed) !== value)
-    {throw new TypeError("invalid-response");}
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || String(parsed) !== value) {
+    throw new TypeError("invalid-response");
+  }
   return parsed;
 };
 
 const booleanProperty = (value: unknown, key: string): boolean => {
   const result = property(value, key);
-  if (typeof result !== "boolean") {throw new TypeError("invalid-response");}
+  if (typeof result !== "boolean") {
+    throw new TypeError("invalid-response");
+  }
   return result;
 };
 
 const arrayProperty = (value: unknown, key: string): unknown[] => {
   const result = property(value, key);
-  if (!Array.isArray(result)) {throw new TypeError("invalid-response");}
+  if (!Array.isArray(result)) {
+    throw new TypeError("invalid-response");
+  }
   return result;
 };
 
@@ -136,14 +152,17 @@ const validateFile = (file: GitHubPublicationFile): void => {
     (file.mode !== "100644" && file.mode !== "100755") ||
     !(file.content instanceof Uint8Array) ||
     file.content.byteLength > MAX_FILE_BYTES
-  )
-    {throw new Error("invalid-material");}
+  ) {
+    throw new Error("invalid-material");
+  }
 };
 
 const canonicalFiles = (
   input: readonly GitHubPublicationFile[],
 ): readonly GitHubPublicationFile[] => {
-  if (input.length === 0 || input.length > MAX_FILES) {throw new Error("invalid-material");}
+  if (input.length === 0 || input.length > MAX_FILES) {
+    throw new Error("invalid-material");
+  }
   const paths = new Set<string>();
   let totalBytes = 0;
   for (const file of input) {
@@ -154,11 +173,14 @@ const canonicalFiles = (
       [...paths].some(
         (path) => path.startsWith(`${file.path}/`) || file.path.startsWith(`${path}/`),
       )
-    )
-      {throw new Error("invalid-material");}
+    ) {
+      throw new Error("invalid-material");
+    }
     paths.add(file.path);
   }
-  if (totalBytes > MAX_TOTAL_MATERIAL_BYTES) {throw new Error("invalid-material");}
+  if (totalBytes > MAX_TOTAL_MATERIAL_BYTES) {
+    throw new Error("invalid-material");
+  }
   return [...input].toSorted((left, right) => compareOverlayPaths(left.path, right.path));
 };
 
@@ -172,7 +194,9 @@ const permissionRequest = (permission: PermissionSnapshot) => ({
 });
 
 const normalizedPermissions = (value: unknown): PermissionSnapshot => {
-  if (!record(value)) {throw new Error("invalid-response");}
+  if (!record(value)) {
+    throw new Error("invalid-response");
+  }
   const allowed = new Set([
     "metadata",
     "contents",
@@ -181,7 +205,9 @@ const normalizedPermissions = (value: unknown): PermissionSnapshot => {
     "administration",
     "actions_variables",
   ]);
-  if (Object.keys(value).some((key) => !allowed.has(key))) {throw new Error("invalid-response");}
+  if (Object.keys(value).some((key) => !allowed.has(key))) {
+    throw new Error("invalid-response");
+  }
   const { metadata } = value;
   const { contents } = value;
   const workflows = value.workflows ?? "none";
@@ -195,8 +221,9 @@ const normalizedPermissions = (value: unknown): PermissionSnapshot => {
     (pullRequests !== "none" && pullRequests !== "write") ||
     (administration !== "none" && administration !== "write") ||
     variables !== "read"
-  )
-    {throw new Error("invalid-response");}
+  ) {
+    throw new Error("invalid-response");
+  }
   return {
     administration,
     contents,
@@ -239,8 +266,9 @@ export const createGitHubAppHttpProvider = (input: {
       }).request(`${requestInput.method ?? "GET"} ${requestInput.path}`, {
         ...(record(requestInput.body) ? requestInput.body : {}),
       });
-      if (!requestInput.expected.includes(response.status))
-        {throw new Error(`github-status-${response.status}`);}
+      if (!requestInput.expected.includes(response.status)) {
+        throw new Error(`github-status-${response.status}`);
+      }
       return {
         body: response.data,
         requestId: requestId(String(response.headers["x-github-request-id"] ?? "github")),
@@ -249,8 +277,8 @@ export const createGitHubAppHttpProvider = (input: {
     } catch (error) {
       const status = record(error) ? error.status : undefined;
       const response = record(error) ? error.response : undefined;
-      if (typeof status === "number" && requestInput.expected.includes(status))
-        {return {
+      if (typeof status === "number" && requestInput.expected.includes(status)) {
+        return {
           body: record(response) ? response.data : undefined,
           requestId: requestId(
             record(response) && record(response.headers)
@@ -258,7 +286,8 @@ export const createGitHubAppHttpProvider = (input: {
               : "github",
           ),
           status,
-        };}
+        };
+      }
       throw new Error("github-request-failed", { cause: error });
     }
   };
@@ -274,8 +303,9 @@ export const createGitHubAppHttpProvider = (input: {
       decimalProperty(data, "id") !== config.installationId ||
       (selection !== "all" && selection !== "selected") ||
       (accountType !== "Organization" && accountType !== "User")
-    )
-      {throw new Error("invalid-response");}
+    ) {
+      throw new Error("invalid-response");
+    }
     return {
       accountId: decimalProperty(account, "id"),
       accountLogin: stringProperty(account, "login"),
@@ -296,10 +326,13 @@ export const createGitHubAppHttpProvider = (input: {
       type: "installation",
     });
     const value = stringProperty(authentication, "token");
-    if (value.length < 20 || value.length > 512) {throw new Error("invalid-response");}
+    if (value.length < 20 || value.length > 512) {
+      throw new Error("invalid-response");
+    }
     const granted = normalizedPermissions(property(authentication, "permissions"));
-    if (JSON.stringify(granted) !== JSON.stringify(permissions))
-      {throw new Error("invalid-response");}
+    if (JSON.stringify(granted) !== JSON.stringify(permissions)) {
+      throw new Error("invalid-response");
+    }
     return value;
   };
 
@@ -313,15 +346,18 @@ export const createGitHubAppHttpProvider = (input: {
       type: "installation",
     });
     const value = stringProperty(authentication, "token");
-    if (value.length < 20 || value.length > 512) {throw new Error("invalid-response");}
+    if (value.length < 20 || value.length > 512) {
+      throw new Error("invalid-response");
+    }
     const permissions = property(authentication, "permissions");
     if (
       !record(permissions) ||
       permissions.contents !== "read" ||
       (permissions.metadata !== undefined && permissions.metadata !== "read") ||
       Object.keys(permissions).some((key) => key !== "contents" && key !== "metadata")
-    )
-      {throw new Error("invalid-response");}
+    ) {
+      throw new Error("invalid-response");
+    }
     return value;
   };
 
@@ -339,8 +375,12 @@ export const createGitHubAppHttpProvider = (input: {
       });
       const repositories = arrayProperty(response.body, "repositories");
       ids.push(...repositories.map((repository) => decimalProperty(repository, "id")));
-      if (ids.length > MAX_INSTALLATION_REPOSITORIES) {throw new Error("installation-too-large");}
-      if (repositories.length < 100) {break;}
+      if (ids.length > MAX_INSTALLATION_REPOSITORIES) {
+        throw new Error("installation-too-large");
+      }
+      if (repositories.length < 100) {
+        break;
+      }
     }
     return [...new Set(ids)].toSorted();
   };
@@ -360,8 +400,9 @@ export const createGitHubAppHttpProvider = (input: {
     const owner = property(repositoryResponse.body, "owner");
     const repositoryOwner = stringProperty(owner, "login");
     const repositoryName = stringProperty(repositoryResponse.body, "name");
-    if (!name.safeParse(repositoryOwner).success || !name.safeParse(repositoryName).success)
-      {throw new Error("invalid-response");}
+    if (!name.safeParse(repositoryOwner).success || !name.safeParse(repositoryName).success) {
+      throw new Error("invalid-response");
+    }
     const commit = await github({
       authorization: accessToken,
       expected: [200],
@@ -379,10 +420,16 @@ export const createGitHubAppHttpProvider = (input: {
       });
       const pageVariables = arrayProperty(variables.body, "variables");
       variableNames.push(...pageVariables.map((value) => stringProperty(value, "name")));
-      if (pageVariables.length < 100) {break;}
-      if (page === 10) {throw new Error("repository-variables-too-large");}
+      if (pageVariables.length < 100) {
+        break;
+      }
+      if (page === 10) {
+        throw new Error("repository-variables-too-large");
+      }
     }
-    if (!booleanProperty(repositoryResponse.body, "private")) {throw new Error("invalid-response");}
+    if (!booleanProperty(repositoryResponse.body, "private")) {
+      throw new Error("invalid-response");
+    }
     return {
       accessToken,
       defaultBranch: stringProperty(repositoryResponse.body, "default_branch"),
@@ -401,8 +448,9 @@ export const createGitHubAppHttpProvider = (input: {
     repositoryName: string,
     permissions: PermissionSnapshot,
   ) => {
-    if (!name.safeParse(owner).success || !name.safeParse(repositoryName).success)
-      {throw new Error("invalid-destination");}
+    if (!name.safeParse(owner).success || !name.safeParse(repositoryName).success) {
+      throw new Error("invalid-destination");
+    }
     const accessToken = await token(permissions);
     let response;
     try {
@@ -414,7 +462,9 @@ export const createGitHubAppHttpProvider = (input: {
     } catch {
       throw new Error("github-request-failed");
     }
-    if (response.status === 404) {return;}
+    if (response.status === 404) {
+      return;
+    }
     const repositoryId = decimalProperty(response.body, "id");
     return repositoryById(
       repositoryId,
@@ -526,8 +576,9 @@ export const createGitHubAppHttpProvider = (input: {
     async createPrivateFreshHistoryRepository(proposal, content) {
       assertExactFreshRepositoryProposal(proposal);
       const identity = await installation();
-      if (identity.accountLogin !== proposal.destinationOwner)
-        {return { code: "destination-owner", status: "rejected" };}
+      if (identity.accountLogin !== proposal.destinationOwner) {
+        return { code: "destination-owner", status: "rejected" };
+      }
       let files: readonly GitHubPublicationFile[];
       try {
         assertExactGitHubFreshRepositoryContent({ content, proposal });
@@ -576,7 +627,9 @@ export const createGitHubAppHttpProvider = (input: {
         owner: proposal.destinationOwner,
         repositoryName: proposal.destinationName,
       });
-      if (tree !== proposal.sourceTree) {throw new Error("source-tree-mismatch");}
+      if (tree !== proposal.sourceTree) {
+        throw new Error("source-tree-mismatch");
+      }
       const commit = await github({
         authorization: repositoryToken,
         body: {
@@ -608,7 +661,9 @@ export const createGitHubAppHttpProvider = (input: {
         workflows: "write",
       };
       const snapshot = await repositoryByName(owner, repositoryName, permissions);
-      if (snapshot === undefined) {return "absent";}
+      if (snapshot === undefined) {
+        return "absent";
+      }
       return publicRepositorySnapshot(snapshot);
     },
     async inspectDraftPublication(proposal) {
@@ -677,9 +732,13 @@ export const createGitHubAppHttpProvider = (input: {
         expected: [200],
         path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/pulls?state=open&head=${encodeURIComponent(`${proposal.owner}:${proposal.branchName}`)}&base=${encodeURIComponent(proposal.baseBranch)}&per_page=2`,
       });
-      if (!Array.isArray(pulls.body)) {throw new TypeError("invalid-response");}
+      if (!Array.isArray(pulls.body)) {
+        throw new TypeError("invalid-response");
+      }
       const candidates = pulls.body;
-      if (candidates.length > 1) {throw new Error("invalid-response");}
+      if (candidates.length > 1) {
+        throw new Error("invalid-response");
+      }
       const [pull] = candidates;
       const exactPull =
         pull !== undefined &&
@@ -726,7 +785,9 @@ export const createGitHubAppHttpProvider = (input: {
         proposal.destinationName,
         permissions,
       );
-      if (snapshot === undefined) {return;}
+      if (snapshot === undefined) {
+        return;
+      }
       const commit = await github({
         authorization: snapshot.accessToken,
         expected: [200],
@@ -739,8 +800,9 @@ export const createGitHubAppHttpProvider = (input: {
         !stringProperty(property(commit.body, "commit"), "message").includes(
           `App-Builder-Idempotency: ${proposal.idempotencyKey}`,
         )
-      )
-        {throw new Error("fresh-repository-marker-mismatch");}
+      ) {
+        throw new Error("fresh-repository-marker-mismatch");
+      }
       const repository = publicRepositorySnapshot(snapshot);
       return {
         idempotencyKey: proposal.idempotencyKey,
@@ -783,7 +845,9 @@ export const createGitHubAppHttpProvider = (input: {
         workflows: "none",
       };
       const snapshot = await repositoryByName(owner, repositoryName, permissions);
-      if (snapshot === undefined) {return;}
+      if (snapshot === undefined) {
+        return;
+      }
       const response = await github({
         authorization: snapshot.accessToken,
         expected: [200],
@@ -822,11 +886,13 @@ export const createGitHubAppHttpProvider = (input: {
           changes.length === 0 ||
           changes.length > MAX_FILES ||
           changes.some((change) => !safeSourcePath(change.path))
-        )
-          {throw new Error("invalid-material");}
+        ) {
+          throw new Error("invalid-material");
+        }
         const paths = changes.map(({ path }) => path).toSorted(compareOverlayPaths);
-        if (JSON.stringify(paths) !== JSON.stringify(proposal.approvedPaths))
-          {throw new Error("invalid-material");}
+        if (JSON.stringify(paths) !== JSON.stringify(proposal.approvedPaths)) {
+          throw new Error("invalid-material");
+        }
         let totalBytes = 0;
         const receiptChanges: {
           path: string;
@@ -835,10 +901,13 @@ export const createGitHubAppHttpProvider = (input: {
           after?: { mode: string; digest: string };
         }[] = changes
           .map((change) => {
-            if (change.after !== undefined) {validateFile(change.after);}
+            if (change.after !== undefined) {
+              validateFile(change.after);
+            }
             totalBytes += change.after?.content.byteLength ?? 0;
-            if (change.after !== undefined && change.after.path !== change.path)
-              {throw new Error("invalid-material");}
+            if (change.after !== undefined && change.after.path !== change.path) {
+              throw new Error("invalid-material");
+            }
             const after =
               change.after === undefined
                 ? undefined
@@ -850,8 +919,9 @@ export const createGitHubAppHttpProvider = (input: {
               (change.kind === "added" && (change.before !== undefined || after === undefined)) ||
               (change.kind === "deleted" && (change.before === undefined || after !== undefined)) ||
               (change.kind === "modified" && (change.before === undefined || after === undefined))
-            )
-              {throw new Error("invalid-material");}
+            ) {
+              throw new Error("invalid-material");
+            }
             return Object.fromEntries([
               ["path", change.path],
               ["kind", change.kind],
@@ -860,7 +930,9 @@ export const createGitHubAppHttpProvider = (input: {
             ]) as (typeof receiptChanges)[number];
           })
           .toSorted((left, right) => compareOverlayPaths(left.path, right.path));
-        if (totalBytes > MAX_TOTAL_MATERIAL_BYTES) {throw new Error("invalid-material");}
+        if (totalBytes > MAX_TOTAL_MATERIAL_BYTES) {
+          throw new Error("invalid-material");
+        }
         if (sha256(JSON.stringify(receiptChanges)) !== proposal.changedContentDigest) {
           throw new Error("invalid-material");
         }
@@ -879,8 +951,9 @@ export const createGitHubAppHttpProvider = (input: {
         workflows: "write",
       };
       const { snapshot, accessToken } = await repositorySnapshotForProposal(proposal, permissions);
-      if (snapshot.headSha !== proposal.baseSha || snapshot.headTree !== proposal.baseTree)
-        {return { code: "stale-base", status: "rejected" };}
+      if (snapshot.headSha !== proposal.baseSha || snapshot.headTree !== proposal.baseTree) {
+        return { code: "stale-base", status: "rejected" };
+      }
       const files = changes.flatMap((change) => (change.after === undefined ? [] : [change.after]));
       const deletions = changes.flatMap((change) =>
         change.kind === "deleted" ? [change.path] : [],

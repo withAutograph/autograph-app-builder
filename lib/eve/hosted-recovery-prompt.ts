@@ -3,7 +3,9 @@ import type { DurableHostedSessionRecord } from "./hosted-store";
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function recoveryPromptForSession(record: DurableHostedSessionRecord): string | undefined {
   const { checkpoint } = record;
-  if (checkpoint === undefined) {return;}
+  if (checkpoint === undefined) {
+    return;
+  }
   const messages = checkpoint.events
     .filter(
       (event): event is Extract<typeof event, { type: "assistant_message" }> =>

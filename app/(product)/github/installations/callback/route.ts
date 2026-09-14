@@ -10,7 +10,8 @@ const handler = createGitHubAppInstallationDeploymentHandler("callback", process
 export async function GET(request: Request) {
   const fixture = applyLocalGitHubCallbackFixture(request, process.env);
   const response = await handler(fixture.request);
-  if (fixture.applied)
-    {response.headers.append("set-cookie", clearLocalGitHubCallbackFixtureCookie());}
+  if (fixture.applied) {
+    response.headers.append("set-cookie", clearLocalGitHubCallbackFixtureCookie());
+  }
   return response;
 }

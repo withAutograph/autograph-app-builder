@@ -121,7 +121,9 @@ describe("paired capture orchestration", () => {
       exercise: async (_page, state, capture) => {
         await capture();
         const requirement = requirements.find((row) => row.id === `capture/desktop/${state}`);
-        if (!requirement) {throw new Error(`Unknown capture state: ${state}`);}
+        if (!requirement) {
+          throw new Error(`Unknown capture state: ${state}`);
+        }
         return requirement.assertions.map((id) => ({ detail: "Observed.", id, passed: true }));
       },
       prepare: () => Promise.resolve({ ready: true }),
@@ -166,7 +168,9 @@ describe("paired capture orchestration", () => {
         reference: { disposition: "infrastructure-unavailable" },
       });
       const [firstRow] = manifest.rows;
-      if (!firstRow) {throw new Error("Expected a capture manifest row.");}
+      if (!firstRow) {
+        throw new Error("Expected a capture manifest row.");
+      }
       expect(firstRow.reference).not.toHaveProperty("png");
       expect(firstRow.reference).not.toHaveProperty("receipt");
     } finally {

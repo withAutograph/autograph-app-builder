@@ -14,7 +14,9 @@ export const mergeSupplementaryObservation = (
   runtime: Observation | undefined,
   review: Observation,
 ): Observation => {
-  if (!runtime) {return review;}
+  if (!runtime) {
+    return review;
+  }
   const assertions = new Map(runtime.assertions.map((item) => [item.id, item]));
   for (const item of review.assertions) {
     const prior = assertions.get(item.id);
@@ -54,8 +56,9 @@ const safeRelative = (pathValue: string) => {
     nodePath.isAbsolute(pathValue) ||
     pathValue.split(/[\\/]/u).some((part) => !part || part === ".." || part.startsWith(".env")) ||
     /(?:^|\/)(?:node_modules|runtime-source|reference-runtime)(?:\/|$)/u.test(pathValue)
-  )
-    {throw new Error(`Unsupported evidence artifact path: ${pathValue}`);}
+  ) {
+    throw new Error(`Unsupported evidence artifact path: ${pathValue}`);
+  }
   return pathValue;
 };
 
@@ -72,23 +75,30 @@ export const writeSupplementaryAssessment = async (input: {
     nodePath.basename(input.outputDirectory),
   );
   const builderRoot = await realpath(nodePath.resolve(import.meta.dirname, "../.."));
-  if (output === builderRoot || output.startsWith(`${builderRoot}${nodePath.sep}`))
-    {throw new Error("Supplementary output must be outside the App Builder source tree.");}
+  if (output === builderRoot || output.startsWith(`${builderRoot}${nodePath.sep}`)) {
+    throw new Error("Supplementary output must be outside the App Builder source tree.");
+  }
   const roots = await Promise.all(
     [input.runDirectory, input.sourceReviewDirectory].map((rootPath) => realpath(rootPath)),
   );
   const [parityRoot, reviewRoot] = roots;
-  if (!parityRoot || !reviewRoot) {throw new Error("Supplementary evidence roots are incomplete.");}
-  for (const root of roots)
-    {if (output === root || output.startsWith(`${root}${nodePath.sep}`))
-      {throw new Error("Supplementary output must be separate from the original evidence.");}}
+  if (!parityRoot || !reviewRoot) {
+    throw new Error("Supplementary evidence roots are incomplete.");
+  }
+  for (const root of roots) {
+    if (output === root || output.startsWith(`${root}${nodePath.sep}`)) {
+      throw new Error("Supplementary output must be separate from the original evidence.");
+    }
+  }
   await mkdir(output, { recursive: false });
   const missing: string[] = [];
   const copied = new Set<string>();
   const copy = async (root: string, artifact: string, prefix: string) => {
     safeRelative(artifact);
     const target = `${prefix}/${artifact}`;
-    if (copied.has(target)) {return target;}
+    if (copied.has(target)) {
+      return target;
+    }
     try {
       const source = await realpath(nodePath.join(root, artifact));
       const metadata = await stat(source);
@@ -96,8 +106,9 @@ export const writeSupplementaryAssessment = async (input: {
         nodePath.relative(root, source).startsWith("..") ||
         !metadata.isFile() ||
         metadata.size === 0
-      )
-        {throw new Error("Artifact is not a nonempty contained regular file.");}
+      ) {
+        throw new Error("Artifact is not a nonempty contained regular file.");
+      }
       await mkdir(nodePath.dirname(nodePath.join(output, target)), { recursive: true });
       await copyFile(source, nodePath.join(output, target));
       copied.add(target);
@@ -115,14 +126,16 @@ export const writeSupplementaryAssessment = async (input: {
     schemaVersion?: string;
     observations?: Record<string, unknown[]>;
   };
-  if (review.schemaVersion !== "self-reproduction-source-review/v1")
-    {throw new Error("Expected evaluator-owned source review schema.");}
+  if (review.schemaVersion !== "self-reproduction-source-review/v1") {
+    throw new Error("Expected evaluator-owned source review schema.");
+  }
   try {
     const workflowReview = JSON.parse(
       await readFile(nodePath.join(reviewRoot, "workflow-observations.json"), "utf-8"),
     ) as typeof review;
-    if (workflowReview.schemaVersion !== "self-reproduction-source-review/v1")
-      {throw new Error("Expected evaluator-owned workflow source review schema.");}
+    if (workflowReview.schemaVersion !== "self-reproduction-source-review/v1") {
+      throw new Error("Expected evaluator-owned workflow source review schema.");
+    }
     for (const side of sides) {
       review.observations ??= {};
       review.observations[side] = [
@@ -132,13 +145,17 @@ export const writeSupplementaryAssessment = async (input: {
     }
     await copy(reviewRoot, "workflow-observations.json", "source-review");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {throw error;}
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
   }
   // Retain the original metadata and source review unchanged as provenance snapshots.
-  for (const path of ["report.json", "parity-evidence.json", "revisions.json"])
-    {await copy(parityRoot, path, "original");}
-  for (const path of ["observations.json", "source-evidence.json", "report.md"])
-    {await copy(reviewRoot, path, "source-review");}
+  for (const path of ["report.json", "parity-evidence.json", "revisions.json"]) {
+    await copy(parityRoot, path, "original");
+  }
+  for (const path of ["observations.json", "source-evidence.json", "report.md"]) {
+    await copy(reviewRoot, path, "source-review");
+  }
   const originalReport = JSON.parse(
     await readFile(nodePath.join(parityRoot, "report.json"), "utf-8"),
   );
@@ -182,8 +199,11 @@ export const writeSupplementaryAssessment = async (input: {
         (entry) => entry.requirementId === source.requirementId,
       );
       const merged = mergeSupplementaryObservation(evidence[side].observations[index], source);
-      if (index === -1) {evidence[side].observations.push(merged);}
-      else {evidence[side].observations[index] = merged;}
+      if (index === -1) {
+        evidence[side].observations.push(merged);
+      } else {
+        evidence[side].observations[index] = merged;
+      }
     }
   }
   const screenshotPairs: {
@@ -205,8 +225,8 @@ export const writeSupplementaryAssessment = async (input: {
         capture.viewport?.name ?? capture.name ?? nodePath.basename(artifact, ".png"),
       ).replace(/-0$/u, "");
       const candidate = `original/candidate-browser/${viewport}/root.png`;
-      if (copied.has(candidate) && copied.has(reference))
-        {screenshotPairs.push({
+      if (copied.has(candidate) && copied.has(reference)) {
+        screenshotPairs.push({
           candidate,
           qualification:
             typeof captureMetadata.comparisonQualification === "string"
@@ -214,17 +234,19 @@ export const writeSupplementaryAssessment = async (input: {
               : "Anonymous reference entry versus candidate default screen; these are not equivalent authenticated or workflow states.",
           reference,
           viewport,
-        });}
+        });
+      }
     }
   }
   const assessment = await assessParity(evidence, (path) => Promise.resolve(copied.has(path)));
   // Source failures still need their retained source evidence to count as assessed.
-  for (const row of assessment.rows)
-    {if (row.artifacts.some((path) => !copied.has(path))) {
+  for (const row of assessment.rows) {
+    if (row.artifacts.some((path) => !copied.has(path))) {
       row.status = "unassessed";
       row.reasonCode = "evidence-incomplete";
       row.reason = "Referenced evidence was unavailable in the supplementary bundle.";
-    }}
+    }
+  }
   const report = {
     anonymousEntryPriority: "excluded",
     assessment,

@@ -23,12 +23,14 @@ export default defineTool({
   async execute({ path, mediaType, content }, ctx) {
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "prototype artifact recording");
-    if (current.phase === "empty")
-      {throw new Error("Prepare a workspace before recording prototype artifacts.");}
-    if (current.phase === "validation_pending")
-      {throw new Error(
+    if (current.phase === "empty") {
+      throw new Error("Prepare a workspace before recording prototype artifacts.");
+    }
+    if (current.phase === "validation_pending") {
+      throw new Error(
         `Target validation attempt ${current.validationAttempt.digest} is pending; artifact mutation is disabled until it is recovered.`,
-      );}
+      );
+    }
     const recorded = recordPrototypeArtifactRevision({
       artifacts: current.artifacts,
       callId: ctx.callId,
@@ -49,13 +51,14 @@ export default defineTool({
       path,
       sessionId: ctx.session.id,
     });
-    if (!recorded.reused)
-      {updateExactWorkflow({
+    if (!recorded.reused) {
+      updateExactWorkflow({
         expected: current,
         operation: "prototype artifact recording",
         transition: () => {
-          if (current.phase === "ui_previewed" || current.phase === "ui_accepted")
-            {return { ...current, artifacts: recorded.artifacts };}
+          if (current.phase === "ui_previewed" || current.phase === "ui_accepted") {
+            return { ...current, artifacts: recorded.artifacts };
+          }
           return {
             artifacts: recorded.artifacts,
             phase: "prepared",
@@ -66,7 +69,8 @@ export default defineTool({
             workspace: current.workspace,
           };
         },
-      });}
+      });
+    }
     const buildReadyAppSpec = completeBuildReadyPrototypeAppSpec({
       appId: recorded.artifact.appId,
       artifacts: recorded.artifacts,

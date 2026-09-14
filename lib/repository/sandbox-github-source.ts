@@ -43,8 +43,9 @@ export const cloneGitHubSource = async function cloneGitHubSource(input: {
     },
     workingDirectory: "/workspace",
   });
-  if (result.exitCode !== 0)
-    {throw new Error(result.stderr.trim() || "The GitHub checkout is not available.");}
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr.trim() || "The GitHub checkout is not available.");
+  }
 };
 
 const parseRemote = function parseRemote(input: string) {
@@ -66,14 +67,16 @@ const parseRemote = function parseRemote(input: string) {
     match === null ||
     !REPOSITORY.test(match[1] ?? "") ||
     !REPOSITORY.test(match[2] ?? "")
-  )
-    {throw new Error("The GitHub source remote is invalid.");}
+  ) {
+    throw new Error("The GitHub source remote is invalid.");
+  }
   return remote.toString();
 };
 
 const parseBranch = function parseBranch(input: string) {
-  if (!BRANCH.test(input) || input.split("/").some((part) => part.startsWith(".")))
-    {throw new Error("The GitHub source branch is invalid.");}
+  if (!BRANCH.test(input) || input.split("/").some((part) => part.startsWith("."))) {
+    throw new Error("The GitHub source branch is invalid.");
+  }
   return input;
 };
 
@@ -323,16 +326,18 @@ export const readSandboxGitHubSourceSnapshot = async function readSandboxGitHubS
       "git -C /workspace/repository rev-parse HEAD && git -C /workspace/repository rev-parse HEAD^{tree}",
     workingDirectory: "/workspace",
   });
-  if (result.exitCode !== 0)
-    {throw new Error(result.stderr.trim() || "The GitHub checkout is not available.");}
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr.trim() || "The GitHub checkout is not available.");
+  }
   const [sourceSha, sourceTree] = result.stdout.trim().split(/\s+/u);
   if (
     sourceSha === undefined ||
     sourceTree === undefined ||
     !SHA.test(sourceSha) ||
     !SHA.test(sourceTree)
-  )
-    {throw new Error("GitHub did not return a repository revision.");}
+  ) {
+    throw new Error("GitHub did not return a repository revision.");
+  }
   return {
     contents: {},
     contract: [],
@@ -357,14 +362,16 @@ const reinspectGitHubSourceWorkspace = async function reinspectGitHubSourceWorks
   workspace: PreparedSandboxWorkspace;
 }> {
   const prepared = await inspectPreparedSandboxWorkspace(input.sandbox);
-  if (prepared.state !== "prepared")
-    {throw new Error("The prepared GitHub source workspace is missing.");}
+  if (prepared.state !== "prepared") {
+    throw new Error("The prepared GitHub source workspace is missing.");
+  }
   const storedSnapshot = await readSandboxGitHubSourceSnapshot(input.sandbox);
   if (
     storedSnapshot.sourceSha !== input.expectedSha ||
     storedSnapshot.sourceTree !== input.expectedTree
-  )
-    {throw new Error("The stored GitHub source inspection drifted.");}
+  ) {
+    throw new Error("The stored GitHub source inspection drifted.");
+  }
   const result = await input.sandbox.run({
     abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
     command: sandboxGitHubSourceReinspectionCommand(input),
@@ -374,8 +381,9 @@ const reinspectGitHubSourceWorkspace = async function reinspectGitHubSourceWorks
     Buffer.byteLength(result.stdout) > SANDBOX_INSPECTION_BYTES ||
     Buffer.byteLength(result.stderr) > SANDBOX_OPERATION_OUTPUT_BYTES ||
     result.exitCode !== 0
-  )
-    {throw new Error("The GitHub source workspace could not be verified.");}
+  ) {
+    throw new Error("The GitHub source workspace could not be verified.");
+  }
   const inspection = JSON.parse(result.stdout) as {
     remote?: unknown;
     resolvedRef?: unknown;
@@ -402,8 +410,9 @@ const reinspectGitHubSourceWorkspace = async function reinspectGitHubSourceWorks
     snapshot.sourceTree !== input.expectedTree ||
     snapshot.dirtyPaths.length !== 0 ||
     JSON.stringify(snapshot) !== JSON.stringify(storedSnapshot)
-  )
-    {throw new Error("The GitHub source workspace drifted.");}
+  ) {
+    throw new Error("The GitHub source workspace drifted.");
+  }
   return { snapshot, workspace: prepared.workspace };
 };
 

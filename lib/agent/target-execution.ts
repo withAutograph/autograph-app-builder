@@ -42,12 +42,14 @@ export function plannedProposalForExecution(
     state.phase !== "validation_failed" &&
     state.phase !== "validated" &&
     state.phase !== "reviewed"
-  )
-    {throw new Error(
+  ) {
+    throw new Error(
       "Derive a canonical AppSpec-bound proposal before checking target command readiness.",
-    );}
-  if (state.proposal.digest !== expectedProposalDigest)
-    {throw new Error("The canonical proposal changed before execution readiness.");}
+    );
+  }
+  if (state.proposal.digest !== expectedProposalDigest) {
+    throw new Error("The canonical proposal changed before execution readiness.");
+  }
   return state.proposal;
 }
 
@@ -55,10 +57,12 @@ export function plannedProposalForExecution(
 export function assertProposalExecutionBindings(state: ProposalWorkflowState): void {
   assertExactDependencyPreparationReceipt(state.dependencyReceipt);
   const target = targetProposalSchema.safeParse(state.proposal.target);
-  if (!target.success)
-    {throw new Error("The planned proposal no longer matches its durable execution bindings.");}
-  if (target.data.blockers.length !== 0)
-    {throw new Error("The planned proposal still contains blockers and cannot be applied.");}
+  if (!target.success) {
+    throw new Error("The planned proposal no longer matches its durable execution bindings.");
+  }
+  if (target.data.blockers.length !== 0) {
+    throw new Error("The planned proposal still contains blockers and cannot be applied.");
+  }
   const expected = {
     appSpecDigest: state.appSpec.digest,
     appSpecPath: state.appSpec.artifactPath,
@@ -89,8 +93,9 @@ export function assertProposalExecutionBindings(state: ProposalWorkflowState): v
     target.data.contract.appId !== state.appSpec.appId ||
     target.data.contract.appSpec.path !== state.appSpec.artifactPath ||
     target.data.contract.appSpec.sha256 !== state.appSpec.digest
-  )
-    {throw new Error("The planned proposal no longer matches its durable execution bindings.");}
+  ) {
+    throw new Error("The planned proposal no longer matches its durable execution bindings.");
+  }
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -100,9 +105,12 @@ export function targetExecutionBlockers(input: {
   capabilityBlockers?: readonly string[];
 }): string[] {
   const blockers: string[] = [...(input.capabilityBlockers ?? [])];
-  if (!input.imageConfigured) {blockers.push("No immutable sandbox image is configured.");}
-  if (!input.toolchainReady)
-    {blockers.push("The sandbox execution environment or a required command is unavailable.");}
+  if (!input.imageConfigured) {
+    blockers.push("No immutable sandbox image is configured.");
+  }
+  if (!input.toolchainReady) {
+    blockers.push("The sandbox execution environment or a required command is unavailable.");
+  }
   return blockers;
 }
 
@@ -165,7 +173,9 @@ export async function inspectTargetExecutionReadiness(input: {
           const location = await input.sandbox.run({
             command: `command -v ${command}`,
           });
-          if (location.exitCode !== 0) {return { available: false as const, command, version: "" };}
+          if (location.exitCode !== 0) {
+            return { available: false as const, command, version: "" };
+          }
           const version = await input.sandbox.run({
             command: `${command} --version`,
           });

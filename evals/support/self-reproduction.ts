@@ -27,10 +27,16 @@ export async function readSource(root: string, current = root): Promise<SourceFi
   const entries = await readdir(current, { withFileTypes: true });
   const sourceFiles = await Promise.all(
     entries.map(async (entry): Promise<SourceFile[]> => {
-      if (ignored.has(entry.name) || entry.name.startsWith(".")) {return [];}
+      if (ignored.has(entry.name) || entry.name.startsWith(".")) {
+        return [];
+      }
       const filePath = path.join(current, entry.name);
-      if (entry.isDirectory()) {return readSource(root, filePath);}
-      if (!entry.isFile() || !/\.(?:[cm]?tsx?|css|mdx?)$/u.test(entry.name)) {return [];}
+      if (entry.isDirectory()) {
+        return readSource(root, filePath);
+      }
+      if (!entry.isFile() || !/\.(?:[cm]?tsx?|css|mdx?)$/u.test(entry.name)) {
+        return [];
+      }
       return [{ content: await readFile(filePath, "utf-8"), path: path.relative(root, filePath) }];
     }),
   );
@@ -63,15 +69,20 @@ const codeExtensions = [
 function clientImportGraph(files: SourceFile[]) {
   const byPath = new Map(files.map((file) => [file.path.replaceAll("\\", "/"), file]));
   const resolveImport = (from: string, specifier: string) => {
-    if (!specifier.startsWith(".") && !specifier.startsWith("@/")) {return;}
+    if (!specifier.startsWith(".") && !specifier.startsWith("@/")) {
+      return;
+    }
     const base = specifier.startsWith("@/")
       ? specifier.slice(2)
       : path.normalize(path.join(path.dirname(from), specifier)).replaceAll("\\", "/");
-    for (const prefix of specifier.startsWith("@/") ? [base, `src/${base}`] : [base])
-      {for (const extension of codeExtensions) {
+    for (const prefix of specifier.startsWith("@/") ? [base, `src/${base}`] : [base]) {
+      for (const extension of codeExtensions) {
         const candidate = `${prefix}${extension}`;
-        if (byPath.has(candidate)) {return candidate;}
-      }}
+        if (byPath.has(candidate)) {
+          return candidate;
+        }
+      }
+    }
   };
   const dependencies = new Map<string, string[]>();
   for (const file of files) {
@@ -96,13 +107,17 @@ function clientImportGraph(files: SourceFile[]) {
   for (const root of routeRoots) {
     const visited = new Set<string>();
     const visit = (filePath: string) => {
-      if (visited.has(filePath)) {return;}
+      if (visited.has(filePath)) {
+        return;
+      }
       visited.add(filePath);
       if (/^\s*["']use client["']/mu.test(byPath.get(filePath)?.content ?? "")) {
         boundaries.add(filePath);
         return;
       }
-      for (const dependency of dependencies.get(filePath) ?? []) {visit(dependency);}
+      for (const dependency of dependencies.get(filePath) ?? []) {
+        visit(dependency);
+      }
     };
     visit(root);
   }

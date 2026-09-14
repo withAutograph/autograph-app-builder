@@ -27,7 +27,9 @@ export const sandboxBackendPlan = (input: {
   localImageConfigured: boolean;
 }): SandboxBackendPlan => {
   const environment = input.environment ?? process.env;
-  if (input.fixture) {return { blockers: [], kind: "fixture-just-bash" };}
+  if (input.fixture) {
+    return { blockers: [], kind: "fixture-just-bash" };
+  }
   if (isHostedVercelRuntime(environment)) {
     let deploymentEnvironment: HostedDeploymentEnvironment;
     try {
@@ -54,14 +56,18 @@ export const sandboxBackendPlan = (input: {
     developmentBinding[0] === "development" &&
     developmentBinding[1] === "vercel" &&
     developmentBinding[2] === "local-development"
-  )
-    {return { blockers: [], kind: "vercel-development" };}
-  if (developmentBinding.some((value) => value !== undefined && value !== ""))
-    {return {
+  ) {
+    return { blockers: [], kind: "vercel-development" };
+  }
+  if (developmentBinding.some((value) => value !== undefined && value !== "")) {
+    return {
       blockers: ["Development execution requires the exact local Vercel Sandbox binding."],
       kind: "unsupported-development",
-    };}
-  if (input.localImageConfigured) {return { blockers: [], kind: "local-microsandbox" };}
+    };
+  }
+  if (input.localImageConfigured) {
+    return { blockers: [], kind: "local-microsandbox" };
+  }
   return {
     blockers: ["No immutable local sandbox image is configured."],
     kind: "local-just-bash",
@@ -82,10 +88,15 @@ export const selectSandboxDefinition = <Hosted, Local, NonExecuting>(
     vercelHosted: () => Hosted;
   },
 ): Hosted | Local | NonExecuting => {
-  if (kind === "unsupported-development" || kind === "unsupported-vercel")
-    {throw new Error("The App Builder sandbox environment binding is unsupported.");}
-  if (isVercelSandboxBackend(kind)) {return factories.vercelHosted();}
-  if (kind === "local-microsandbox") {return factories.localMicrosandbox();}
+  if (kind === "unsupported-development" || kind === "unsupported-vercel") {
+    throw new Error("The App Builder sandbox environment binding is unsupported.");
+  }
+  if (isVercelSandboxBackend(kind)) {
+    return factories.vercelHosted();
+  }
+  if (kind === "local-microsandbox") {
+    return factories.localMicrosandbox();
+  }
   return factories.nonExecuting();
 };
 

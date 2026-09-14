@@ -186,9 +186,11 @@ export function createRepositoryAccessRuntime(input: {
               const rateLimited =
                 headers?.["retry-after"] !== undefined ||
                 headers?.["x-ratelimit-remaining"] === "0";
-              if (!rateLimited && (failure?.status === 403 || failure?.status === 404))
-                {deniedInstallations.add(request.installation.installationId);}
-              else {unavailable = true;}
+              if (!rateLimited && (failure?.status === 403 || failure?.status === 404)) {
+                deniedInstallations.add(request.installation.installationId);
+              } else {
+                unavailable = true;
+              }
               throw error;
             }
           },
@@ -203,13 +205,14 @@ export function createRepositoryAccessRuntime(input: {
         };
       },
     });
-    if (result.status === "provider-unavailable" && deniedInstallations.size > 0 && !unavailable)
-      {return {
+    if (result.status === "provider-unavailable" && deniedInstallations.size > 0 && !unavailable) {
+      return {
         action: "update",
         repository: result.repository,
         scopes: [],
         status: "authorization-required",
-      };}
+      };
+    }
     return result;
   };
 
@@ -260,7 +263,9 @@ export function createRepositoryAccessRuntime(input: {
         async getToken({ principal }) {
           exactPrincipal(principal, input.authority);
           const access = await classify(value);
-          if (access.status === "ready") {return { token: access.accessDigest };}
+          if (access.status === "ready") {
+            return { token: access.accessDigest };
+          }
           if (access.status === "provider-unavailable") {
             throw failed(
               "provider_unavailable",
@@ -344,14 +349,16 @@ export function createRepositoryAccessRuntime(input: {
           candidate.accountLogin === value.access.scope.accountLogin &&
           candidate.accountType === value.access.scope.accountType,
       );
-      if (binding === undefined)
-        {throw new Error("The selected GitHub installation is no longer active.");}
+      if (binding === undefined) {
+        throw new Error("The selected GitHub installation is no longer active.");
+      }
       const provider = await input.providerFactory({
         authority: input.authority,
         installation: binding,
       });
-      if (!repositorySourceProvider(provider))
-        {throw new Error("GitHub source preparation is unavailable.");}
+      if (!repositorySourceProvider(provider)) {
+        throw new Error("GitHub source preparation is unavailable.");
+      }
 
       const ref = `refs/heads/${value.access.repository.defaultBranch}`;
       const observedGitHubSource = await resolveImmutableExistingSource({
@@ -432,7 +439,9 @@ export function createRepositoryAccessRuntime(input: {
               }
             : {}),
         });
-        if (access.status !== "ready") {continue;}
+        if (access.status !== "ready") {
+          continue;
+        }
         const callback = new URL(candidate.callbackUrl);
         callback.searchParams.set("provider", "github");
         callback.searchParams.set("status", "connected");
@@ -442,7 +451,9 @@ export function createRepositoryAccessRuntime(input: {
           method: "GET",
           redirect: "manual",
         });
-        if (response.status >= 200 && response.status < 400) {resumed += 1;}
+        if (response.status >= 200 && response.status < 400) {
+          resumed += 1;
+        }
       }
       return resumed;
     },

@@ -12,7 +12,9 @@ export async function completeAuthorization(
   try {
     const { provider } = await context.params;
     const emulation = readProviderEmulation(process.env);
-    if (!emulation) {throw new Error("Local authentication emulation is unavailable.");}
+    if (!emulation) {
+      throw new Error("Local authentication emulation is unavailable.");
+    }
     const appOrigin = emulation.canonicalOrigin;
     const parsed = parseLocalOAuthAuthorization({
       appOrigin,
@@ -51,8 +53,9 @@ export async function completeAuthorization(
       emulation,
     );
     const location = response.headers.get("location");
-    if (!location || response.status < 300 || response.status >= 400)
-      {throw new Error("Emulated OAuth approval failed.");}
+    if (!location || response.status < 300 || response.status >= 400) {
+      throw new Error("Emulated OAuth approval failed.");
+    }
     const destination = new URL(location);
     const callbackValidation = {
       codeCount: destination.searchParams.getAll("code").length,

@@ -33,7 +33,9 @@ export const exerciseReferenceLifecycle = async (input: {
     },
     get: ({ adapterSessionId }) => {
       const value = snapshots.get(adapterSessionId);
-      if (!value) {throw new Error(`Missing snapshot for ${adapterSessionId}.`);}
+      if (!value) {
+        throw new Error(`Missing snapshot for ${adapterSessionId}.`);
+      }
       return Promise.resolve(value);
     },
     respond: () => Promise.reject(new Error("This fixture does not support approval responses.")),
@@ -63,7 +65,9 @@ export const exerciseReferenceLifecycle = async (input: {
     limit: 100,
     sessionId: cancellation.sessionId,
   });
-  if (!persistedCancel) {throw new Error("Cancellation session was not persisted.");}
+  if (!persistedCancel) {
+    throw new Error("Cancellation session was not persisted.");
+  }
   const cancelledAdapter = persistedCancel.adapterSessionId;
   snapshots.set(cancelledAdapter, snapshot("completed"));
   const lateResult = await service().get({

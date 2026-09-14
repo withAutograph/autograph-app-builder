@@ -53,9 +53,13 @@ const PROVIDER_RETRY_DELAY_MS = 250;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function retryableProviderFailure(error: unknown): boolean {
-  if (!(error instanceof Error)) {return false;}
+  if (!(error instanceof Error)) {
+    return false;
+  }
   const { status } = error as Error & { status?: unknown };
-  if (typeof status === "number" && (status === 429 || status >= 500)) {return true;}
+  if (typeof status === "number" && (status === 429 || status >= 500)) {
+    return true;
+  }
   return /fetch failed|network|timed? ?out|econnreset|eai_again|socket/iu.test(
     `${error.message} ${(error as Error & { cause?: unknown }).cause instanceof Error ? (error as Error & { cause: Error }).cause.message : ""}`,
   );
@@ -63,7 +67,9 @@ function retryableProviderFailure(error: unknown): boolean {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function providerDiagnostic(error: unknown): string {
-  if (!(error instanceof Error)) {return "unknown";}
+  if (!(error instanceof Error)) {
+    return "unknown";
+  }
   const { cause } = error as Error & { cause?: unknown };
   const code =
     cause && typeof cause === "object" && "code" in cause && typeof cause.code === "string"
@@ -152,8 +158,9 @@ function createRuntimeRecoveringBackend<BO, SO>(input: {
           providerCreateInput.templateKey === null ||
           !SandboxTemplateNotProvisionedError.is(error) ||
           error.templateKey !== providerCreateInput.templateKey
-        )
-          {throw error;}
+        ) {
+          throw error;
+        }
 
         // Templates are an optional startup optimization. When the provider
         // has no matching template, create a fresh Vercel Sandbox directly
@@ -220,9 +227,13 @@ function createProcessSessionReusingBackend<BO, SO>(
         .then((handle) => {
           let closed = false;
           const close = async (kind: "stop" | "shutdown") => {
-            if (closed) {return;}
+            if (closed) {
+              return;
+            }
             closed = true;
-            if (sessions.get(key) === pending) {sessions.delete(key);}
+            if (sessions.get(key) === pending) {
+              sessions.delete(key);
+            }
             await handle[kind]();
           };
           return {
@@ -237,7 +248,9 @@ function createProcessSessionReusingBackend<BO, SO>(
         // oxlint-disable-next-line promise/prefer-await-to-callbacks
         // oxlint-disable-next-line promise/prefer-await-to-then
         .catch((error: unknown) => {
-          if (sessions.get(key) === pending) {sessions.delete(key);}
+          if (sessions.get(key) === pending) {
+            sessions.delete(key);
+          }
           throw error;
         });
       // oxlint-enable promise/prefer-await-to-callbacks

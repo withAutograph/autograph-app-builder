@@ -28,11 +28,12 @@ export const publicAuthorizationUrlSchema = z
       url.username ||
       url.password ||
       (url.protocol !== "https:" && !(url.protocol === "http:" && isLoopbackHostname(url.hostname)))
-    )
-      {context.addIssue({
+    ) {
+      context.addIssue({
         code: "custom",
         message: "Authorization requires credential-free HTTPS or loopback URL.",
-      });}
+      });
+    }
   });
 
 export const inputPresentationSchema = z
@@ -66,12 +67,13 @@ export const publicInputRequestSchema = z
   })
   .strict()
   .superRefine((request, context) => {
-    if (request.kind !== "authorization" && request.authorization)
-      {context.addIssue({
+    if (request.kind !== "authorization" && request.authorization) {
+      context.addIssue({
         code: "custom",
         message: "Only authorization requests may include a challenge.",
         path: ["authorization"],
-      });}
+      });
+    }
   });
 
 export type PublicInputRequest = z.infer<typeof publicInputRequestSchema>;
@@ -276,11 +278,12 @@ export const eveStartInputSchema = z
   })
   .strict()
   .superRefine(({ prompt, handoffId, resumeSessionId }, context) => {
-    if ([prompt, handoffId, resumeSessionId].filter((value) => value !== undefined).length !== 1)
-      {context.addIssue({
+    if ([prompt, handoffId, resumeSessionId].filter((value) => value !== undefined).length !== 1) {
+      context.addIssue({
         code: "custom",
         message: "Provide exactly one of prompt, handoffId, or resumeSessionId.",
-      });}
+      });
+    }
   });
 export const eveGetInputSchema = z
   .object({
@@ -322,12 +325,13 @@ export const eveRespondInputSchema = z
   .superRefine(({ responses }, context) => {
     const seen = new Set<string>();
     for (const [index, { requestId }] of responses.entries()) {
-      if (seen.has(requestId))
-        {context.addIssue({
+      if (seen.has(requestId)) {
+        context.addIssue({
           code: "custom",
           message: "Each requestId must appear exactly once.",
           path: ["responses", index, "requestId"],
-        });}
+        });
+      }
       seen.add(requestId);
     }
   });

@@ -33,13 +33,18 @@ export const redactCandidateEvidence = <T>(value: T, secrets: readonly string[])
     if (typeof item === "string") {
       let text = item;
       for (const secret of secrets) {
-        if (secret) {text = text.replaceAll(secret, "[REDACTED]");}
+        if (secret) {
+          text = text.replaceAll(secret, "[REDACTED]");
+        }
       }
       return text;
     }
-    if (Array.isArray(item)) {return item.map(redact);}
-    if (item && typeof item === "object")
-      {return Object.fromEntries(Object.entries(item).map(([key, entry]) => [key, redact(entry)]));}
+    if (Array.isArray(item)) {
+      return item.map(redact);
+    }
+    if (item && typeof item === "object") {
+      return Object.fromEntries(Object.entries(item).map(([key, entry]) => [key, redact(entry)]));
+    }
     return item;
   };
   return sanitizeEvidence(redact(value)) as T;

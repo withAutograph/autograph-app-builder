@@ -29,10 +29,11 @@ export default defineTool({
       state.phase === "prepared" ||
       state.phase === "ui_previewed" ||
       state.phase === "ui_accepted"
-    )
-      {throw new Error(
+    ) {
+      throw new Error(
         "Finalize the UI and accept a build-ready AppSpec before running target planning.",
-      );}
+      );
+    }
     const prepared = await prepareOrReuseDependencies({
       callId: ctx.callId,
       current: state,
@@ -49,12 +50,13 @@ export default defineTool({
       current.phase === "validation_failed" ||
       current.phase === "validated" ||
       current.phase === "reviewed"
-    )
-      {return {
+    ) {
+      return {
         ...current.proposal,
         productAcceptance: productAcceptanceObligations(current.appSpec),
         reused: true,
-      };}
+      };
+    }
 
     const binding = {
       appSpecDigest: current.appSpec.digest,
@@ -81,7 +83,9 @@ export default defineTool({
         : sandboxTargetCommandExecutor(sandbox),
       existingAppChanges,
       onIdentity(identity) {
-        if (identityReceipt !== undefined) {return;}
+        if (identityReceipt !== undefined) {
+          return;
+        }
         const unsigned = {
           version: 1 as const,
           ...binding,
@@ -115,7 +119,9 @@ export default defineTool({
       sandbox,
       sourceReceipt: current.sourceReceipt,
     });
-    if (identityReceipt === undefined) {throw new Error("Target identity receipt was not recorded.");}
+    if (identityReceipt === undefined) {
+      throw new Error("Target identity receipt was not recorded.");
+    }
     const recordedIdentity = identityReceipt;
     const unsigned = {
       version: 1 as const,

@@ -65,8 +65,9 @@ describe("Vercel integration security", () => {
         },
         // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
         fetch: (async (url) => {
-          if (String(url).endsWith("/v2/oauth/access_token"))
-            {return Response.json({ access_token: "provider-token-sentinel" });}
+          if (String(url).endsWith("/v2/oauth/access_token")) {
+            return Response.json({ access_token: "provider-token-sentinel" });
+          }
           return Response.json({
             billing: { plan: "pro" },
             id: "team_1",
@@ -100,7 +101,9 @@ describe("Vercel integration security", () => {
         states: {
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
           async consume() {
-            if (consumed) {return;}
+            if (consumed) {
+              return;
+            }
             consumed = true;
             return recoveredReturnState;
           },
@@ -114,7 +117,9 @@ describe("Vercel integration security", () => {
       const redirect = await authorization.begin(authority);
       const state = new URL(redirect).searchParams.get("state");
       expect(state).not.toBeNull();
-      if (state === null) {throw new Error("Expected authorization redirect state");}
+      if (state === null) {
+        throw new Error("Expected authorization redirect state");
+      }
       const callback = new URL("https://builder.example/vercel/installations/callback");
       callback.searchParams.set("code", "one-time-code");
       callback.searchParams.set("state", state);

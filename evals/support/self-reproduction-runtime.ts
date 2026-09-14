@@ -45,7 +45,9 @@ const runtimeFailureObservations = (input: {
   artifact?: string;
   kind: "capture" | "runtime";
 }) => {
-  if (input.receipt.status === "available" || input.receipt.status === "not-run") {return [];}
+  if (input.receipt.status === "available" || input.receipt.status === "not-run") {
+    return [];
+  }
   const disposition =
     input.receipt.status === "infrastructure-unavailable"
       ? "infrastructure-unavailable"
@@ -121,13 +123,16 @@ console.log(JSON.stringify(probes));
 
 const candidatePackageName = (files: readonly SandboxSeedFile[], appId: string) => {
   const manifest = files.find((file) => file.path === "package.json");
-  if (manifest)
-    {try {
+  if (manifest) {
+    try {
       const parsed = JSON.parse(String(manifest.content)) as { name?: unknown };
-      if (typeof parsed.name === "string" && parsed.name.length > 0) {return parsed.name;}
+      if (typeof parsed.name === "string" && parsed.name.length > 0) {
+        return parsed.name;
+      }
     } catch {
       /* Candidate build reports malformed package metadata. */
-    }}
+    }
+  }
   return `@autograph/${appId}`;
 };
 
@@ -214,17 +219,20 @@ export const evaluateCandidateRuntime = async (input: {
       controller.signal,
     );
     commands.push(unpack);
-    if (unpack.exitCode !== 0)
-      {return {
+    if (unpack.exitCode !== 0) {
+      return {
         commands,
         probes: [],
         producer: "evaluator",
         reason: "Reference workspace reconstruction failed.",
         sandboxId: handle.session.id,
         status: "failed",
-      };}
+      };
+    }
     const activeHandle = handle;
-    if (!activeHandle) {throw new Error("Candidate runtime handle was lost during reconstruction.");}
+    if (!activeHandle) {
+      throw new Error("Candidate runtime handle was lost during reconstruction.");
+    }
     await Promise.all([
       ...input.files.map((file) =>
         activeHandle.session.writeTextFile({
@@ -250,60 +258,64 @@ export const evaluateCandidateRuntime = async (input: {
     ]);
     const runtime = await command(handle, developmentPinnedToolchainCommand(), controller.signal);
     commands.push(runtime);
-    if (runtime.exitCode !== 0)
-      {return {
+    if (runtime.exitCode !== 0) {
+      return {
         commands,
         probes: [],
         producer: "evaluator",
         reason: "Candidate runtime toolchain installation failed.",
         sandboxId: handle.session.id,
         status: "infrastructure-unavailable",
-      };}
+      };
+    }
     const runtimeEnvironment = Object.entries(DEVELOPMENT_SANDBOX_ENVIRONMENT)
       .map(([name, value]) => `${name}=${value}`)
       .join(" ");
     const bun = `${runtimeEnvironment} bun`;
     const install = await command(handle, `${bun} install`, controller.signal);
     commands.push(install);
-    if (install.exitCode !== 0)
-      {return {
+    if (install.exitCode !== 0) {
+      return {
         commands,
         probes: [],
         producer: "evaluator",
         reason: "Candidate dependency installation failed.",
         sandboxId: handle.session.id,
         status: "failed",
-      };}
+      };
+    }
     const microfrontends = await command(
       handle,
       `${bun} .config/mise/scripts/repository/generate-microfrontends.ts`,
       controller.signal,
     );
     commands.push(microfrontends);
-    if (microfrontends.exitCode !== 0)
-      {return {
+    if (microfrontends.exitCode !== 0) {
+      return {
         commands,
         probes: [],
         producer: "evaluator",
         reason: "Candidate microfrontend configuration failed.",
         sandboxId: handle.session.id,
         status: "failed",
-      };}
+      };
+    }
     const registration = await command(
       handle,
       `${runtimeEnvironment} node .self-reproduction-register.mjs`,
       controller.signal,
     );
     commands.push(registration);
-    if (registration.exitCode !== 0)
-      {return {
+    if (registration.exitCode !== 0) {
+      return {
         commands,
         probes: [],
         producer: "evaluator",
         reason: "Candidate microfrontend registration failed.",
         sandboxId: handle.session.id,
         status: "failed",
-      };}
+      };
+    }
     const build = await command(
       handle,
       `VC_MICROFRONTENDS_CONFIG=/workspace/.scratch/microfrontends/microfrontends.json ${bun} run --cwd apps/${input.candidateAppId} build`,
@@ -336,7 +348,9 @@ export const evaluateCandidateRuntime = async (input: {
         path: `apps/${input.candidateAppId}/.next/routes-manifest.json`,
       });
       const routes = JSON.parse(manifest ?? "{}");
-      if (typeof routes.basePath === "string") {runtimeBasePath = routes.basePath;}
+      if (typeof routes.basePath === "string") {
+        runtimeBasePath = routes.basePath;
+      }
     } catch {
       // Custom output layouts retain the caller's explicit runtime path.
     }
@@ -409,9 +423,11 @@ export const evaluateCandidateRuntime = async (input: {
       commands.push(browser);
       if (browser.exitCode === 0) {
         const browserProbes = JSON.parse(browser.stdout.trim());
-        if (Array.isArray(browserProbes)) {probes.push(...browserProbes);}
-      } else
-        {probes.push({
+        if (Array.isArray(browserProbes)) {
+          probes.push(...browserProbes);
+        }
+      } else {
+        probes.push({
           detail: `Evaluator browser was unavailable: ${browser.stderr || browser.stdout}`,
           disposition: "infrastructure-unavailable",
           id: "documentation",
@@ -419,7 +435,8 @@ export const evaluateCandidateRuntime = async (input: {
           passed: false,
           status: null,
           url: `http://127.0.0.1:3000${runtimeBasePath}/docs`,
-        });}
+        });
+      }
     }
     return {
       commands,

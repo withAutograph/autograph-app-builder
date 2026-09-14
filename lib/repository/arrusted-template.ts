@@ -81,11 +81,15 @@ function shellQuote(value: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function classifySandboxCloneFailure(stderr: string) {
-  if (/authentication failed|could not read username|repository not found/u.test(stderr))
-    {return "github-auth" as const;}
-  if (/could not resolve host|failed to connect|network is unreachable/u.test(stderr))
-    {return "network" as const;}
-  if (/timed? out|operation timeout/u.test(stderr)) {return "timeout" as const;}
+  if (/authentication failed|could not read username|repository not found/u.test(stderr)) {
+    return "github-auth" as const;
+  }
+  if (/could not resolve host|failed to connect|network is unreachable/u.test(stderr)) {
+    return "network" as const;
+  }
+  if (/timed? out|operation timeout/u.test(stderr)) {
+    return "timeout" as const;
+  }
   return "git-command" as const;
 }
 
@@ -104,12 +108,16 @@ export function sanitizeSandboxCloneError(stderr: string, token: string) {
     .replaceAll(/[\r\n]+/gu, " ")
     .replaceAll(/[^\u0020-\u007E]/gu, "?")
     .trim();
-  if (sanitized.length <= 512) {return sanitized;}
+  if (sanitized.length <= 512) {
+    return sanitized;
+  }
 
   // Clone stage logs are deliberately detailed. Preserve a terminal inspector
   // error too, otherwise the successful stages can consume the full bound.
   const inspectorError = sanitized.lastIndexOf("AUTOGRAPH_CLONE_INSPECT_ERROR=");
-  if (inspectorError === -1) {return sanitized.slice(0, 512);}
+  if (inspectorError === -1) {
+    return sanitized.slice(0, 512);
+  }
   const suffix = sanitized.slice(inspectorError);
   const prefixLength = Math.max(0, 512 - suffix.length - 4);
   return `${sanitized.slice(0, prefixLength)} ...${suffix}`;
@@ -262,8 +270,9 @@ function sandboxCloneCommand() {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readCanonicalTemplateSnapshot(sandbox: SandboxSession) {
   const raw = await sandbox.readTextFile({ path: SANDBOX_CLONE_INSPECTION });
-  if (raw === null || Buffer.byteLength(raw) > SANDBOX_INSPECTION_BYTES)
-    {throw new Error("The canonical Arrusted workspace inspection is missing.");}
+  if (raw === null || Buffer.byteLength(raw) > SANDBOX_INSPECTION_BYTES) {
+    throw new Error("The canonical Arrusted workspace inspection is missing.");
+  }
   try {
     return parseCanonicalTemplateSnapshot(JSON.parse(raw) as unknown);
   } catch (error) {
@@ -279,8 +288,9 @@ async function readCanonicalTemplateSnapshot(sandbox: SandboxSession) {
 async function cloneCanonicalArrustedWorkspace(input: { sandbox: SandboxSession; token: string }) {
   const existing = await inspectPreparedSandboxWorkspace(input.sandbox);
   if (existing.state === "prepared") {
-    if (existing.workspace.sourcePath !== SANDBOX_WORKSPACE)
-      {throw new Error("This app build already owns a different workspace.");}
+    if (existing.workspace.sourcePath !== SANDBOX_WORKSPACE) {
+      throw new Error("This app build already owns a different workspace.");
+    }
     return {
       snapshot: await readCanonicalTemplateSnapshot(input.sandbox),
       workspaceDigest: existing.workspace.workspaceDigest,
@@ -342,8 +352,12 @@ async function cloneCanonicalArrustedWorkspace(input: { sandbox: SandboxSession;
     [SANDBOX_CLONE_INSPECTOR].map((path) => input.sandbox.removePath({ force: true, path })),
   );
   const failures = cleanup.filter((cleanupResult) => cleanupResult.status === "rejected");
-  if (failures.length > 0) {throw new AggregateError(failures, "Sandbox clone cleanup failed.");}
-  if (cloneError !== undefined) {throw cloneError;}
+  if (failures.length > 0) {
+    throw new AggregateError(failures, "Sandbox clone cleanup failed.");
+  }
+  if (cloneError !== undefined) {
+    throw cloneError;
+  }
   let observation: {
     sourceSha?: unknown;
     sourceTree?: unknown;
@@ -355,8 +369,9 @@ async function cloneCanonicalArrustedWorkspace(input: { sandbox: SandboxSession;
       workspaceDigest?: unknown;
     };
   } catch {
-    if (result.exitCode !== 0)
-      {throw new Error("The canonical Arrusted workspace clone could not be prepared.");}
+    if (result.exitCode !== 0) {
+      throw new Error("The canonical Arrusted workspace clone could not be prepared.");
+    }
     throw new Error("The canonical Arrusted workspace clone receipt is invalid.");
   }
   const { workspaceDigest } = observation;
@@ -367,15 +382,17 @@ async function cloneCanonicalArrustedWorkspace(input: { sandbox: SandboxSession;
     !SHA.test(observation.sourceTree) ||
     typeof workspaceDigest !== "string" ||
     !DIGEST.test(workspaceDigest)
-  )
-    {throw new Error("The canonical Arrusted workspace clone drifted.");}
+  ) {
+    throw new Error("The canonical Arrusted workspace clone drifted.");
+  }
   const snapshot = await readCanonicalTemplateSnapshot(input.sandbox);
   if (
     snapshot.sourceSha !== observation.sourceSha ||
     snapshot.sourceTree !== observation.sourceTree ||
     snapshot.dirtyPaths.length !== 0
-  )
-    {throw new Error("The canonical Arrusted workspace clone drifted.");}
+  ) {
+    throw new Error("The canonical Arrusted workspace clone drifted.");
+  }
   return { snapshot, workspaceDigest };
 }
 
@@ -394,7 +411,9 @@ export async function acquireCanonicalArrustedTemplate(input: {
   const reader = input.reader ?? deploymentArrustedTemplateReader();
   const access = await acquisitionStage("reader", () => reader.acquire());
   if (typeof input.sandbox === "function") {
-    if (input.sessionId === undefined) {throw new Error("The App Builder session is unavailable.");}
+    if (input.sessionId === undefined) {
+      throw new Error("The App Builder session is unavailable.");
+    }
     configureVercelSessionGitSource({
       sessionId: input.sessionId,
       source: { token: access.token, url: ARRUSTED_TEMPLATE_REPOSITORY },
@@ -440,7 +459,9 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
   let receipt: ClonedTemplateReceipt;
   try {
     const parsed = parseSourceReceipt(input.receipt);
-    if (parsed.version !== 4) {throw new Error("not a cloned receipt");}
+    if (parsed.version !== 4) {
+      throw new Error("not a cloned receipt");
+    }
     receipt = parsed;
   } catch (error) {
     throw new Error("Canonical Arrusted clone receipt is invalid.", {
@@ -455,18 +476,22 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
     !SHA.test(receipt.sourceTree) ||
     !DIGEST.test(receipt.eligibilityDigest) ||
     !DIGEST.test(receipt.provenance.readinessDigest)
-  )
-    {throw new Error("Canonical Arrusted clone receipt is invalid.");}
+  ) {
+    throw new Error("Canonical Arrusted clone receipt is invalid.");
+  }
   const observed = await readPreparedSandboxWorkspaceRecord(input.sandbox);
-  if (observed === undefined) {throw new Error("The canonical Arrusted workspace is missing.");}
+  if (observed === undefined) {
+    throw new Error("The canonical Arrusted workspace is missing.");
+  }
   if (
     observed.workspaceId !== input.sandbox.id ||
     observed.sourcePath !== SANDBOX_WORKSPACE ||
     observed.sourceSha !== receipt.sourceSha ||
     observed.sourceTree !== receipt.sourceTree ||
     observed.eligibilityDigest !== receipt.eligibilityDigest
-  )
-    {throw new Error("The canonical Arrusted workspace drifted.");}
+  ) {
+    throw new Error("The canonical Arrusted workspace drifted.");
+  }
   return observed;
 }
 
@@ -484,11 +509,13 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
 }): Promise<PreparedSandboxWorkspace> {
   if (canAutoSelectDevelopmentSource()) {
     const status = await inspectPreparedSandboxWorkspace(input.sandbox, "development-live");
-    if (status.state !== "prepared")
-      {throw new Error("The prepared development workspace is missing.");}
+    if (status.state !== "prepared") {
+      throw new Error("The prepared development workspace is missing.");
+    }
     const observed = status.workspace;
-    if (observed.workspaceId !== input.sandbox.id)
-      {throw new Error("The prepared development workspace does not match the active workflow.");}
+    if (observed.workspaceId !== input.sandbox.id) {
+      throw new Error("The prepared development workspace does not match the active workflow.");
+    }
     return observed;
   }
   const receipt = parseSourceReceipt(input.receipt);
@@ -509,7 +536,9 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
     });
   } else {
     const status = await inspectPreparedSandboxWorkspace(input.sandbox);
-    if (status.state !== "prepared") {throw new Error("The prepared source workspace is missing.");}
+    if (status.state !== "prepared") {
+      throw new Error("The prepared source workspace is missing.");
+    }
     observed = status.workspace;
   }
   if (
@@ -520,8 +549,9 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
     observed.eligibilityDigest !== receipt.eligibilityDigest ||
     (input.expectedWorkspace !== undefined &&
       JSON.stringify(observed) !== JSON.stringify(input.expectedWorkspace))
-  )
-    {throw new Error("The prepared workspace no longer matches its durable source receipt.");}
+  ) {
+    throw new Error("The prepared workspace no longer matches its durable source receipt.");
+  }
   return observed;
 }
 
@@ -552,8 +582,9 @@ export async function templateReadinessAttestationDigest(input: {
     typeof body !== "object" ||
     body === null ||
     !Array.isArray((body as { check_runs?: unknown }).check_runs)
-  )
-    {throw new Error("Template-readiness evidence is invalid.");}
+  ) {
+    throw new Error("Template-readiness evidence is invalid.");
+  }
   const checks = (body as { check_runs: unknown[] }).check_runs;
   const [readiness] = checks
     .filter(
@@ -574,8 +605,9 @@ export async function templateReadinessAttestationDigest(input: {
     readiness.id <= 0 ||
     typeof readiness.completed_at !== "string" ||
     !Number.isFinite(Date.parse(readiness.completed_at))
-  )
-    {throw new Error("The resolved Arrusted commit has no successful template-readiness evidence.");}
+  ) {
+    throw new Error("The resolved Arrusted commit has no successful template-readiness evidence.");
+  }
   return receiptReadinessDigest({
     check: {
       completedAt: readiness.completed_at,

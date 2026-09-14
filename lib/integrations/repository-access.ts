@@ -47,7 +47,9 @@ export type RepositoryReference = z.output<typeof repositoryReferenceSchema>;
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseRepositoryReference(value: string): RepositoryReference {
   const segments = value.trim().split("/");
-  if (segments.length !== 2) {throw new Error("repository-reference-invalid");}
+  if (segments.length !== 2) {
+    throw new Error("repository-reference-invalid");
+  }
   return repositoryReferenceSchema.parse({
     name: segments[1],
     owner: segments[0],
@@ -247,7 +249,9 @@ export async function classifyGitHubRepositoryAccess(input: {
       }
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const candidate = await provider.inspectRepositoryByName(repository);
-      if (candidate === undefined) {continue;}
+      if (candidate === undefined) {
+        continue;
+      }
       const snapshot = repositoryAccessSnapshotSchema.parse(candidate);
       if (
         snapshot.owner.toLowerCase() !== repository.owner.toLowerCase() ||

@@ -16,7 +16,9 @@ describe("canonical Arrusted source preparation", () => {
         sourceTree: "b".repeat(40),
       },
     });
-    if (receipt.version !== 4) {throw new Error("Expected cloned source fixture");}
+    if (receipt.version !== 4) {
+      throw new Error("Expected cloned source fixture");
+    }
     const workspace = {
       adapter: "arrusted-development-v0",
       eligibilityDigest: receipt.eligibilityDigest,

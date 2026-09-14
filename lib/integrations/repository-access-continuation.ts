@@ -91,8 +91,9 @@ export function createRepositoryAccessContinuationService(input: {
   const now = input.now ?? (() => new Date());
   const createId = input.createId ?? randomUUID;
   const lifetimeMs = input.lifetimeMs ?? 10 * 60 * 1000;
-  if (!Number.isSafeInteger(lifetimeMs) || lifetimeMs < 60_000)
-    {throw new Error("repository-access-continuation-lifetime-invalid");}
+  if (!Number.isSafeInteger(lifetimeMs) || lifetimeMs < 60_000) {
+    throw new Error("repository-access-continuation-lifetime-invalid");
+  }
 
   return {
     async authorize(value: {
@@ -105,7 +106,9 @@ export function createRepositoryAccessContinuationService(input: {
         continuationDigest: continuationDigest(continuationId),
         now: now(),
       });
-      if (!record) {return;}
+      if (!record) {
+        return;
+      }
       const callback = new URL(record.callbackUrl);
       callback.searchParams.set("provider", "github");
       callback.searchParams.set("status", "connected");

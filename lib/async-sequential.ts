@@ -19,9 +19,9 @@ export const runSequentiallyUntil = <T, R>(
 ): Promise<R | undefined> => {
   const entries = [...values];
   const run = async (index: number): Promise<R | undefined> => {
-      if (index >= entries.length) {
-        return;
-      }
+    if (index >= entries.length) {
+      return;
+    }
     const result = await operation(entries[index]);
     return result ?? run(index + 1);
   };

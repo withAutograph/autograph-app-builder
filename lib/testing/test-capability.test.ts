@@ -11,8 +11,8 @@ const injected = Object.freeze({
 
 describe("testCapabilityEnabled", () => {
   it("rejects environment flags without structural injection", () => {
-    for (const capability of TEST_CAPABILITIES)
-      {expect(
+    for (const capability of TEST_CAPABILITIES) {
+      expect(
         testCapabilityEnabled(
           capability,
           {
@@ -21,7 +21,8 @@ describe("testCapabilityEnabled", () => {
           },
           null,
         ),
-      ).toBe(false);}
+      ).toBe(false);
+    }
   });
 
   it("requires the exact task-owned nonce and a closed V1 capability", () => {

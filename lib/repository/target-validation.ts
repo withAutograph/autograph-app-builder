@@ -148,7 +148,9 @@ export const validationOutputExcerpt = (
       .filter((line) => repairLinePattern.test(line))
       .join("\n")
       .trim();
-    if (cleaned.length <= VALIDATION_OUTPUT_LIMIT) {return cleaned;}
+    if (cleaned.length <= VALIDATION_OUTPUT_LIMIT) {
+      return cleaned;
+    }
     truncated = true;
     return `${cleaned.slice(0, VALIDATION_OUTPUT_LIMIT)}\n[output truncated]`;
   };
@@ -174,19 +176,24 @@ const safeDiagnosticPath = (value: string): string | undefined => {
     path.startsWith("/") ||
     path.split("/").some((segment) => segment === "" || segment === "." || segment === "..") ||
     !/^[A-Za-z0-9._@/-]+$/u.test(path)
-  )
-    {return undefined;}
+  ) {
+    return undefined;
+  }
   return path;
 };
 
 const diagnosticMessage = (code: TargetValidationDiagnostic["code"]): string => {
   // Command text may contain source literals or credentials. Keep the actual
   // compiler code and location, but generate the explanation ourselves.
-  if (code === "VITEST") {return "Test assertion failed at this location.";}
-  if (code === "TS2304" || code === "TS2593")
-    {return "A referenced name is missing; inspect its declaration or import.";}
-  if (code === "TS2532" || code === "TS18048")
-    {return "A value may be undefined; handle the empty case.";}
+  if (code === "VITEST") {
+    return "Test assertion failed at this location.";
+  }
+  if (code === "TS2304" || code === "TS2593") {
+    return "A referenced name is missing; inspect its declaration or import.";
+  }
+  if (code === "TS2532" || code === "TS18048") {
+    return "A value may be undefined; handle the empty case.";
+  }
   return "Compiler error at this location; inspect the reported code and file.";
 };
 
@@ -204,8 +211,9 @@ export const compilerDiagnostics = (output: string): TargetValidationDiagnostic[
     const path = safeDiagnosticPath(pathValue);
     const line = Number(lineValue);
     const column = Number(columnValue);
-    if (path === undefined || !Number.isSafeInteger(line) || !Number.isSafeInteger(column))
-      {return false;}
+    if (path === undefined || !Number.isSafeInteger(line) || !Number.isSafeInteger(column)) {
+      return false;
+    }
     const diagnostic = {
       code,
       column,
@@ -214,7 +222,9 @@ export const compilerDiagnostics = (output: string): TargetValidationDiagnostic[
       path,
     };
     const key = JSON.stringify(diagnostic);
-    if (!seen.has(key) && diagnostics.length < 50) {diagnostics.push(diagnostic);}
+    if (!seen.has(key) && diagnostics.length < 50) {
+      diagnostics.push(diagnostic);
+    }
     seen.add(key);
     return true;
   };
@@ -242,14 +252,19 @@ export const compilerDiagnostics = (output: string): TargetValidationDiagnostic[
     const vitestLocation = vitestLocationPattern.exec(sourceLine);
     if (vitestLocation !== null && pendingVitestMessage) {
       const recorded = append("VITEST", vitestLocation[1], vitestLocation[2], vitestLocation[3]);
-      if (recorded) {pendingVitestMessage = false;}
+      if (recorded) {
+        pendingVitestMessage = false;
+      }
       continue;
     }
     for (const pattern of compilerDiagnosticPatterns) {
       const match = pattern.exec(sourceLine);
-      if (match === null) {continue;}
-      if (/^TS\d+$/u.test(match[4]))
-        {append(match[4] as `TS${number}`, match[1], match[2], match[3]);}
+      if (match === null) {
+        continue;
+      }
+      if (/^TS\d+$/u.test(match[4])) {
+        append(match[4] as `TS${number}`, match[1], match[2], match[3]);
+      }
       break;
     }
   }
@@ -341,10 +356,14 @@ export const sandboxValidationCommandExecutor =
         /Formatting issues found/u.test(`${checked.stderr}\n${checked.stdout}`)
       ) {
         const formatted = await run("check", " -- --fix");
-        if (formatted.exitCode !== 0) {return formatted;}
+        if (formatted.exitCode !== 0) {
+          return formatted;
+        }
         checked = await run("check");
       }
-      if (checked.exitCode !== 0) {return checked;}
+      if (checked.exitCode !== 0) {
+        return checked;
+      }
       const built = await run("build");
       return {
         exitCode: built.exitCode,
@@ -448,8 +467,8 @@ export const executeProposalBoundValidation = (input: {
       stdoutDigest: sha256(result.stdout),
     };
     commands.push(commandReceipt);
-    if (result.exitCode !== 0)
-      {return {
+    if (result.exitCode !== 0) {
+      return {
         ok: false,
         receipt: failureReceipt(
           input.attempt,
@@ -467,7 +486,8 @@ export const executeProposalBoundValidation = (input: {
           compilerDiagnostics(`${result.stderr}\n${result.stdout}`),
           validationOutputExcerpt(result.stdout, result.stderr),
         ),
-      };}
+      };
+    }
     return execute(index + 1);
   };
   return execute(0);

@@ -59,7 +59,9 @@ export function readPasskeyOnboardingConfig(
   environment: Readonly<Record<string, string | undefined>>,
   options: PasskeyOnboardingReadOptions = {},
 ): PasskeyOnboardingConfig | null {
-  if (environment.PASSKEY_ONBOARDING !== ENABLED_VALUE) {return null;}
+  if (environment.PASSKEY_ONBOARDING !== ENABLED_VALUE) {
+    return null;
+  }
 
   const secret = environment.BETTER_AUTH_SECRET?.trim();
   if (!secret || secret.length < 32 || /[\0\r\n]/u.test(secret)) {
@@ -204,9 +206,13 @@ export function verifyPasskeyOnboardingToken(
   config: PasskeyOnboardingConfig,
   now = new Date(),
 ) {
-  if (!token || token.length > 4096) {return null;}
+  if (!token || token.length > 4096) {
+    return null;
+  }
   const [encodedPayload, signature, extra] = token.split(".");
-  if (!encodedPayload || !signature || extra !== undefined) {return null;}
+  if (!encodedPayload || !signature || extra !== undefined) {
+    return null;
+  }
   const expected = Buffer.from(sign(encodedPayload, config.secret));
   const actual = Buffer.from(signature);
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
@@ -300,8 +306,12 @@ export function authenticatedPasskeyRegistration(
   userId: string | null | undefined,
   context: string | null | undefined,
 ) {
-  if (!userId) {return null;}
-  if (context) {throw onboardingAlreadyAuthenticated();}
+  if (!userId) {
+    return null;
+  }
+  if (context) {
+    throw onboardingAlreadyAuthenticated();
+  }
   return { name: "Additional passkey", userId };
 }
 
@@ -323,12 +333,16 @@ export function createPasskeyOnboardingPlugin(input: {
         },
         async (ctx) => {
           const { config } = input;
-          if (!config) {throw onboardingUnavailable();}
+          if (!config) {
+            throw onboardingUnavailable();
+          }
           if (ctx.headers?.get("origin") !== config.origin) {
             throw invalidOnboardingAuthority();
           }
           const existingSession = await getSessionFromCtx(ctx);
-          if (existingSession?.user.id) {throw onboardingAlreadyAuthenticated();}
+          if (existingSession?.user.id) {
+            throw onboardingAlreadyAuthenticated();
+          }
           const requestedAt = now();
           const issued = await issuePasskeyOnboardingContext(
             ctx.context.adapter,
@@ -346,16 +360,22 @@ export function createPasskeyOnboardingPlugin(input: {
             // Better Auth keeps registration context in its challenge record;
             // createSession is the parsed verification-body marker that
             // distinguishes first-account onboarding from Settings enrollment.
-            if (ctx.body?.createSession !== true) {return;}
+            if (ctx.body?.createSession !== true) {
+              return;
+            }
             const session = await getSessionFromCtx(ctx);
-            if (session?.user.id) {throw onboardingAlreadyAuthenticated();}
+            if (session?.user.id) {
+              throw onboardingAlreadyAuthenticated();
+            }
           }),
           matcher: (ctx) => ctx.path === "/passkey/verify-registration",
         },
         {
           handler: createAuthMiddleware(async (ctx) => {
             const session = await getSessionFromCtx(ctx);
-            if (!session?.user.id) {return;}
+            if (!session?.user.id) {
+              return;
+            }
             const count = await ctx.context.adapter.count({
               model: "passkey",
               where: [{ field: "userId", value: session.user.id }],
@@ -382,7 +402,9 @@ export function createPasskeyOnboardingPlugin(input: {
                   session: Record<string, unknown> & { userId: string },
                   ctx: { path?: string; context: { adapter: unknown } } | null,
                 ) {
-                  if (ctx?.path !== "/passkey/verify-registration") {return;}
+                  if (ctx?.path !== "/passkey/verify-registration") {
+                    return;
+                  }
                   const adapter = await getCurrentAdapter(
                     ctx.context.adapter as Parameters<typeof getCurrentAdapter>[0],
                   );
@@ -450,11 +472,17 @@ export function createPasskeyPlugin(input: {
           existingSession?.user.id,
           context,
         );
-        if (authenticatedRegistration) {return authenticatedRegistration;}
+        if (authenticatedRegistration) {
+          return authenticatedRegistration;
+        }
         const { config } = input;
-        if (!config) {throw onboardingUnavailable();}
+        if (!config) {
+          throw onboardingUnavailable();
+        }
         const verified = verifyPasskeyOnboardingToken(context, config, now());
-        if (!verified) {throw invalidOnboardingAuthority();}
+        if (!verified) {
+          throw invalidOnboardingAuthority();
+        }
         const adapter = await getCurrentAdapter(ctx.context.adapter);
         const consumed = await adapter.consumeOne<{
           userHandle: string;
@@ -510,9 +538,13 @@ export function createPasskeyPlugin(input: {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
       async resolveUser({ context }) {
         const { config } = input;
-        if (!config) {throw onboardingUnavailable();}
+        if (!config) {
+          throw onboardingUnavailable();
+        }
         const verified = verifyPasskeyOnboardingToken(context, config, now());
-        if (!verified) {throw invalidOnboardingAuthority();}
+        if (!verified) {
+          throw invalidOnboardingAuthority();
+        }
         return {
           displayName: "Autograph user",
           id: verified.payload.userHandle,

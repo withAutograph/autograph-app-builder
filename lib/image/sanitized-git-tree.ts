@@ -44,21 +44,27 @@ const git = (root: string, args: readonly string[]) =>
 function ensureNoLinkPath(path: string, label: string): void {
   const canonical = nodePath.resolve(path);
   assertCanonicalRoot(canonical, realpathSync(canonical), label);
-  if (nodePath.resolve(canonical, "/") === canonical)
-    {throw new Error(`${label} cannot be the filesystem root.`);}
+  if (nodePath.resolve(canonical, "/") === canonical) {
+    throw new Error(`${label} cannot be the filesystem root.`);
+  }
   let cursor = canonical;
   for (;;) {
-    if (lstatSync(cursor).isSymbolicLink()) {throw new Error(`${label} contains a symbolic link.`);}
+    if (lstatSync(cursor).isSymbolicLink()) {
+      throw new Error(`${label} contains a symbolic link.`);
+    }
     const parent = nodePath.dirname(cursor);
-    if (parent === cursor) {break;}
+    if (parent === cursor) {
+      break;
+    }
     cursor = parent;
   }
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function assertAbsoluteInput(path: string, label: string): void {
-  if (!nodePath.isAbsolute(path) || nodePath.resolve(path) !== path)
-    {throw new Error(`${label} must be an absolute normalized path.`);}
+  if (!nodePath.isAbsolute(path) || nodePath.resolve(path) !== path) {
+    throw new Error(`${label} must be an absolute normalized path.`);
+  }
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -77,8 +83,9 @@ function writeExactFile(path: string, bytes: Buffer, mode: number): void {
   );
   try {
     let offset = 0;
-    while (offset < bytes.length)
-      {offset += writeSync(descriptor, bytes, offset, bytes.length - offset);}
+    while (offset < bytes.length) {
+      offset += writeSync(descriptor, bytes, offset, bytes.length - offset);
+    }
     fsyncSync(descriptor);
   } finally {
     closeSync(descriptor);
@@ -96,14 +103,17 @@ export function materializeSanitizedGitTree(
   assertAbsoluteInput(sourceRoot, "Sanitized tree source");
   assertAbsoluteInput(destinationRoot, "Sanitized tree destination");
   ensureNoLinkPath(sourceRoot, "Sanitized tree source");
-  if (existsSync(destinationRoot))
-    {throw new Error("Sanitized build context destination already exists.");}
+  if (existsSync(destinationRoot)) {
+    throw new Error("Sanitized build context destination already exists.");
+  }
   const destinationParent = nodePath.dirname(destinationRoot);
   ensureNoLinkPath(destinationParent, "Sanitized tree destination parent");
-  if (git(sourceRoot, ["rev-parse", "HEAD"]) !== expectedCommit)
-    {throw new Error("Sanitized context source commit changed.");}
-  if (git(sourceRoot, ["rev-parse", "HEAD^{tree}"]) !== expectedTree)
-    {throw new Error("Sanitized context source tree changed.");}
+  if (git(sourceRoot, ["rev-parse", "HEAD"]) !== expectedCommit) {
+    throw new Error("Sanitized context source commit changed.");
+  }
+  if (git(sourceRoot, ["rev-parse", "HEAD^{tree}"]) !== expectedTree) {
+    throw new Error("Sanitized context source tree changed.");
+  }
   const listing = execFileSync(
     fixedGit,
     ["-C", sourceRoot, "ls-tree", "-rz", "-r", "--full-tree", expectedTree],
@@ -117,7 +127,9 @@ export function materializeSanitizedGitTree(
         /^(?<mode>[0-9]{6}) (?<type>blob|commit) (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(
           row,
         );
-      if (match === null) {throw new Error("Sanitized context contains an unsupported Git entry.");}
+      if (match === null) {
+        throw new Error("Sanitized context contains an unsupported Git entry.");
+      }
       const [, mode, type, objectId, path] = match;
       if (
         type !== "blob" ||
@@ -128,13 +140,16 @@ export function materializeSanitizedGitTree(
         path === ".git" ||
         path.startsWith(".git/") ||
         path === ".app-builder-source-manifest.json"
-      )
-        {throw new Error("Sanitized context contains an unsafe Git path.");}
-      if (mode !== "100644" && mode !== "100755" && mode !== "120000")
-        {throw new Error("Sanitized context contains an unsupported Git mode.");}
+      ) {
+        throw new Error("Sanitized context contains an unsafe Git path.");
+      }
+      if (mode !== "100644" && mode !== "100755" && mode !== "120000") {
+        throw new Error("Sanitized context contains an unsupported Git mode.");
+      }
       const absolute = nodePath.resolve(destinationRoot, path);
-      if (!containsPath(destinationRoot, absolute))
-        {throw new Error("Sanitized context path escapes its root.");}
+      if (!containsPath(destinationRoot, absolute)) {
+        throw new Error("Sanitized context path escapes its root.");
+      }
       const parent = nodePath.dirname(absolute);
       mkdirSync(parent, { mode: 0o700, recursive: true });
       ensureNoLinkPath(parent, `Sanitized context parent for ${path}`);
@@ -150,8 +165,9 @@ export function materializeSanitizedGitTree(
           target.includes("\uFFFD") ||
           nodePath.isAbsolute(target) ||
           !containsPath(destinationRoot, nodePath.resolve(parent, target))
-        )
-          {throw new Error(`Sanitized context symlink ${path} is unsafe.`);}
+        ) {
+          throw new Error(`Sanitized context symlink ${path} is unsafe.`);
+        }
         symlinkSync(target, absolute);
       } else {
         writeExactFile(absolute, bytes, mode === "100755" ? 0o755 : 0o644);
@@ -174,8 +190,9 @@ export function materializeSanitizedGitTree(
     if (
       git(sourceRoot, ["rev-parse", "HEAD"]) !== expectedCommit ||
       git(sourceRoot, ["rev-parse", "HEAD^{tree}"]) !== expectedTree
-    )
-      {throw new Error("Sanitized context source changed during materialization.");}
+    ) {
+      throw new Error("Sanitized context source changed during materialization.");
+    }
     return { entriesDigest, entryCount: records.length, root: destinationRoot };
   } catch (error) {
     rmSync(destinationRoot, { force: true, recursive: true });

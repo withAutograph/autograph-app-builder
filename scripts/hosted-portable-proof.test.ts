@@ -134,8 +134,8 @@ function hostedFixture(
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   return async (urlInput: string | URL | Request, init?: RequestInit) => {
     const url = String(urlInput);
-    if (url.endsWith("/.well-known/oauth-protected-resource"))
-      {return Response.json({
+    if (url.endsWith("/.well-known/oauth-protected-resource")) {
+      return Response.json({
         authorization_servers: [scenario.oauth.issuer],
         bearer_methods_supported: ["header"],
         resource: options.metadataResource ?? scenario.oauth.resource,
@@ -147,61 +147,80 @@ function hostedFixture(
           "autograph:respond",
           "autograph:cancel",
         ],
-      });}
+      });
+    }
     const headers = new Headers(init?.headers);
     const authorization = headers.get("authorization");
-    if (authorization === null || authorization === "Bearer invalid-hosted-proof-token")
-      {return new Response("", {
+    if (authorization === null || authorization === "Bearer invalid-hosted-proof-token") {
+      return new Response("", {
         headers: {
           "www-authenticate":
             'Bearer error="invalid_token", resource_metadata="https://preview.autograph.dev/.well-known/oauth-protected-resource"',
         },
         status: 401,
-      });}
+      });
+    }
     const secondary = authorization === `Bearer ${secondaryToken}`;
     const body = JSON.parse(String(init?.body));
-    if (body.method === "initialize")
-      {return rpc(body.id, {
+    if (body.method === "initialize") {
+      return rpc(body.id, {
         capabilities: {},
         protocolVersion: "2025-03-26",
         serverInfo: { name: "fixture", version: "1" },
-      });}
-    if (body.method === "notifications/initialized")
-      {return new Response(undefined, { status: 202 });}
-    if (body.method === "tools/list")
-      {return rpc(body.id, { tools: TOOL_NAMES.map((name) => ({ name })) });}
-    if (body.method !== "tools/call") {return new Response("", { status: 400 });}
+      });
+    }
+    if (body.method === "notifications/initialized") {
+      return new Response(undefined, { status: 202 });
+    }
+    if (body.method === "tools/list") {
+      return rpc(body.id, { tools: TOOL_NAMES.map((name) => ({ name })) });
+    }
+    if (body.method !== "tools/call") {
+      return new Response("", { status: 400 });
+    }
     const name = body.params.name as string;
     const args = body.params.arguments as Record<string, unknown>;
     const tool = (structuredContent: unknown, isError = false) =>
       rpc(body.id, { isError, structuredContent });
     const denialFailure = (direction: "primary-reads-secondary" | "secondary-reads-primary") => {
-      if (options.denialFailure?.direction !== direction) {return;}
-      if (options.denialFailure.kind === "transport") {throw new Error("fixture transport failure");}
-      if (options.denialFailure.kind === "http500") {return new Response("", { status: 500 });}
+      if (options.denialFailure?.direction !== direction) {
+        return;
+      }
+      if (options.denialFailure.kind === "transport") {
+        throw new Error("fixture transport failure");
+      }
+      if (options.denialFailure.kind === "http500") {
+        return new Response("", { status: 500 });
+      }
       return rpc(body.id, {
         isError: "not-a-boolean",
         structuredContent: session(String(args.sessionId), "working", 0),
       });
     };
     if (name === "autograph_start") {
-      if (!secondary) {primaryStartCount += 1;}
+      if (!secondary) {
+        primaryStartCount += 1;
+      }
       let sessionId = "primary-session";
-      if (secondary) {sessionId = "secondary-session";}
-      else if (options.discardedStartRetryDrift && primaryStartCount === 1)
-        {sessionId = "discarded-session-a";}
+      if (secondary) {
+        sessionId = "secondary-session";
+      } else if (options.discardedStartRetryDrift && primaryStartCount === 1) {
+        sessionId = "discarded-session-a";
+      }
       return tool(session(sessionId, "working", 0));
     }
     if (name === "autograph_respond") {
-      if (!Array.isArray(args.responses) || args.responses.length === 0)
-        {return tool(session("primary-session", "working", 0), true);}
+      if (!Array.isArray(args.responses) || args.responses.length === 0) {
+        return tool(session("primary-session", "working", 0), true);
+      }
       for (const response of args.responses) {
         if (
           response === null ||
           typeof response !== "object" ||
           typeof (response as { requestId?: unknown }).requestId !== "string"
-        )
-          {return tool(session("primary-session", "working", 0), true);}
+        ) {
+          return tool(session("primary-session", "working", 0), true);
+        }
         approved.add((response as { requestId: string }).requestId);
       }
       return tool(session("primary-session", "working", 0));
@@ -214,12 +233,15 @@ function hostedFixture(
       cancelRequested = true;
       return tool(session("secondary-session", "working", 0));
     }
-    if (name === "autograph_get" && String(args.sessionId).startsWith("stale-"))
-      {return tool(session(String(args.sessionId), "working", 0), true);}
+    if (name === "autograph_get" && String(args.sessionId).startsWith("stale-")) {
+      return tool(session(String(args.sessionId), "working", 0), true);
+    }
     if (name === "autograph_get" && args.sessionId === "secondary-session") {
       if (!secondary) {
         const failure = denialFailure("primary-reads-secondary");
-        if (failure !== undefined) {return failure;}
+        if (failure !== undefined) {
+          return failure;
+        }
         return options.mutualDenial === false
           ? tool(session("secondary-session", "working", 0))
           : tool(session("secondary-session", "working", 0), true);
@@ -236,7 +258,9 @@ function hostedFixture(
     if (name === "autograph_get" && args.sessionId === "primary-session") {
       if (secondary) {
         const failure = denialFailure("secondary-reads-primary");
-        if (failure !== undefined) {return failure;}
+        if (failure !== undefined) {
+          return failure;
+        }
         return options.mutualDenial === false
           ? tool(session("primary-session", "working", 0))
           : tool(session("primary-session", "working", 0), true);
@@ -273,12 +297,13 @@ function hostedFixture(
           ),
         );
       }
-      if (!createIterated)
-        {return tool(
+      if (!createIterated) {
+        return tool(
           session("primary-session", "waiting", 3, [
             { index: 2, status: "waiting", type: "status" },
           ]),
-        );}
+        );
+      }
       const draft = {
         baseRef: target.baseRef,
         baseSha: target.baseSha,

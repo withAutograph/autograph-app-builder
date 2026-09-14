@@ -94,7 +94,9 @@ describe("target validation", () => {
       sandbox,
     });
     expect(result.ok).toBe(false);
-    if (result.ok) {throw new Error("Expected a command failure");}
+    if (result.ok) {
+      throw new Error("Expected a command failure");
+    }
     expect(result.receipt.commandFailure).toMatchObject({
       exitCode: 1,
       hint: "The requested package script is missing. Inspect the app package and finish its runnable setup before retrying.",

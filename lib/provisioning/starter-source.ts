@@ -175,10 +175,13 @@ function sha256(bytes: Uint8Array) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function boundedBytes(response: Response, maximum: number) {
   const declared = response.headers.get("content-length");
-  if (declared !== null && (!/^\d+$/u.test(declared) || Number(declared) > maximum))
-    {throw new Error("starter-response-too-large");}
+  if (declared !== null && (!/^\d+$/u.test(declared) || Number(declared) > maximum)) {
+    throw new Error("starter-response-too-large");
+  }
   const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength > maximum) {throw new Error("starter-response-too-large");}
+  if (bytes.byteLength > maximum) {
+    throw new Error("starter-response-too-large");
+  }
   return bytes;
 }
 
@@ -189,7 +192,9 @@ function tarFiles(archive: Uint8Array) {
   let offset = 0;
   while (offset + 512 <= tar.byteLength) {
     const header = tar.subarray(offset, offset + 512);
-    if (header.every((byte) => byte === 0)) {break;}
+    if (header.every((byte) => byte === 0)) {
+      break;
+    }
     const name = header.subarray(0, 100).toString("utf-8").replace(/\0.*$/u, "");
     const prefix = header.subarray(345, 500).toString("utf-8").replace(/\0.*$/u, "");
     const path = prefix ? `${prefix}/${name}` : name;
@@ -208,11 +213,14 @@ function tarFiles(archive: Uint8Array) {
       size < 0 ||
       ![0, 48].includes(type) ||
       files.has(path)
-    )
-      {throw new Error("starter-archive-invalid");}
+    ) {
+      throw new Error("starter-archive-invalid");
+    }
     const start = offset + 512;
     const end = start + size;
-    if (end > tar.byteLength) {throw new Error("starter-archive-invalid");}
+    if (end > tar.byteLength) {
+      throw new Error("starter-archive-invalid");
+    }
     files.set(path, {
       bytes: new Uint8Array(tar.subarray(start, end)),
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
@@ -220,7 +228,9 @@ function tarFiles(archive: Uint8Array) {
     });
     offset = start + Math.ceil(size / 512) * 512;
   }
-  if (!files.size) {throw new Error("starter-archive-invalid");}
+  if (!files.size) {
+    throw new Error("starter-archive-invalid");
+  }
   return files;
 }
 
@@ -241,9 +251,13 @@ export async function loadStarterSource(input: {
     redirect: "error",
     signal: AbortSignal.timeout(15_000),
   });
-  if (!manifestResponse.ok) {throw new Error("starter-manifest-unavailable");}
+  if (!manifestResponse.ok) {
+    throw new Error("starter-manifest-unavailable");
+  }
   const manifestBytes = await boundedBytes(manifestResponse, 5 * 1024 * 1024);
-  if (sha256(manifestBytes) !== config.manifestSha256) {throw new Error("starter-manifest-mismatch");}
+  if (sha256(manifestBytes) !== config.manifestSha256) {
+    throw new Error("starter-manifest-mismatch");
+  }
   let manifest: StarterSourceManifest;
   try {
     manifest = starterSourceManifestSchema.parse(
@@ -256,21 +270,29 @@ export async function loadStarterSource(input: {
     manifest.source.sha !== ARRUSTED_TARGET_SHA ||
     manifest.source.tree !== ARRUSTED_TARGET_TREE ||
     !new URL(manifest.archive.url).pathname.includes(manifest.archive.sha256)
-  )
-    {throw new Error("starter-source-mismatch");}
+  ) {
+    throw new Error("starter-source-mismatch");
+  }
   const archiveResponse = await request(manifest.archive.url, {
     redirect: "error",
     signal: AbortSignal.timeout(30_000),
   });
-  if (!archiveResponse.ok) {throw new Error("starter-archive-unavailable");}
+  if (!archiveResponse.ok) {
+    throw new Error("starter-archive-unavailable");
+  }
   const archive = await boundedBytes(archiveResponse, manifest.archive.bytes);
-  if (archive.byteLength !== manifest.archive.bytes || sha256(archive) !== manifest.archive.sha256)
-    {throw new Error("starter-archive-mismatch");}
+  if (
+    archive.byteLength !== manifest.archive.bytes ||
+    sha256(archive) !== manifest.archive.sha256
+  ) {
+    throw new Error("starter-archive-mismatch");
+  }
   const files = tarFiles(archive);
   const expectedPaths = new Set<string>();
   const result = manifest.files.map((entry) => {
-    if (!safeSourcePath(entry.path) || expectedPaths.has(entry.path))
-      {throw new Error("starter-manifest-invalid");}
+    if (!safeSourcePath(entry.path) || expectedPaths.has(entry.path)) {
+      throw new Error("starter-manifest-invalid");
+    }
     expectedPaths.add(entry.path);
     const file = files.get(entry.path);
     if (
@@ -278,11 +300,14 @@ export async function loadStarterSource(input: {
       file.mode !== entry.mode ||
       file.bytes.byteLength !== entry.bytes ||
       sha256(file.bytes) !== entry.sha256
-    )
-      {throw new Error("starter-file-mismatch");}
+    ) {
+      throw new Error("starter-file-mismatch");
+    }
     return { bytes: file.bytes, mode: entry.mode, path: entry.path };
   });
-  if (files.size !== result.length) {throw new Error("starter-tree-mismatch");}
+  if (files.size !== result.length) {
+    throw new Error("starter-tree-mismatch");
+  }
   return {
     files: result,
     manifest,
@@ -340,12 +365,14 @@ export async function cloneStarterSource(input?: {
       60_000,
       { askpassFile, credentialFile },
     );
-    if (clone.stderr.length > 2 * 1024 * 1024)
-      {throw new Error("starter-source-clone-output-invalid");}
+    if (clone.stderr.length > 2 * 1024 * 1024) {
+      throw new Error("starter-source-clone-output-invalid");
+    }
     await Promise.all([rm(credentialFile, { force: true }), rm(askpassFile, { force: true })]);
     const origin = await restrictedGit(["-C", checkout, "config", "--get", "remote.origin.url"]);
-    if (origin.stdout.trim() !== ARRUSTED_TEMPLATE_REPOSITORY)
-      {throw new Error("starter-source-origin-drifted");}
+    if (origin.stdout.trim() !== ARRUSTED_TEMPLATE_REPOSITORY) {
+      throw new Error("starter-source-origin-drifted");
+    }
     const shaResult = await restrictedGit([
       "-C",
       checkout,
@@ -353,11 +380,15 @@ export async function cloneStarterSource(input?: {
       "refs/remotes/origin/main",
     ]);
     const sha = shaResult.stdout.trim();
-    if (!/^[0-9a-f]{40}$/u.test(sha)) {throw new Error("starter-source-ref-invalid");}
+    if (!/^[0-9a-f]{40}$/u.test(sha)) {
+      throw new Error("starter-source-ref-invalid");
+    }
     await restrictedGit(["-C", checkout, "checkout", "--detach", "--quiet", sha]);
     const treeResult = await restrictedGit(["-C", checkout, "rev-parse", `${sha}^{tree}`]);
     const tree = treeResult.stdout.trim();
-    if (!/^[0-9a-f]{40}$/u.test(tree)) {throw new Error("starter-source-tree-invalid");}
+    if (!/^[0-9a-f]{40}$/u.test(tree)) {
+      throw new Error("starter-source-tree-invalid");
+    }
     const readinessDigest = await templateReadinessAttestationDigest({
       sha,
       token: access.token,
@@ -371,19 +402,24 @@ export async function cloneStarterSource(input?: {
       sourceReceipt.version !== 4 ||
       sourceReceipt.sourceSha !== sha ||
       sourceReceipt.sourceTree !== tree
-    )
-      {throw new Error("starter-source-receipt-mismatch");}
+    ) {
+      throw new Error("starter-source-receipt-mismatch");
+    }
     const listing = await restrictedGit(["-C", checkout, "ls-files", "-z"]);
     const paths = listing.stdout.split("\0").filter(Boolean);
-    if (paths.length === 0 || paths.length > MAX_STARTER_FILES)
-      {throw new Error("starter-source-file-count-invalid");}
+    if (paths.length === 0 || paths.length > MAX_STARTER_FILES) {
+      throw new Error("starter-source-file-count-invalid");
+    }
     const files = await Promise.all(
       paths.map(async (path): Promise<StarterSourceFile> => {
-        if (!safeSourcePath(path)) {throw new Error("starter-source-path-invalid");}
+        if (!safeSourcePath(path)) {
+          throw new Error("starter-source-path-invalid");
+        }
         const filePath = nodePath.join(checkout, path);
         const stat = await lstat(filePath);
-        if (!stat.isFile() || stat.size > MAX_STARTER_FILE_BYTES)
-          {throw new Error("starter-source-file-invalid");}
+        if (!stat.isFile() || stat.size > MAX_STARTER_FILE_BYTES) {
+          throw new Error("starter-source-file-invalid");
+        }
         return {
           bytes: await readFile(filePath),
           // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.

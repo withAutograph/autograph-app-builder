@@ -90,7 +90,9 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         });
         return redirect("failed", reason, returnState);
       };
-      if (request.method !== "GET") {return fail("request-invalid");}
+      if (request.method !== "GET") {
+        return fail("request-invalid");
+      }
 
       let authority: Authority | undefined;
       try {
@@ -104,14 +106,15 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           status: 303,
         });
       }
-      if (authority === undefined)
-        {return new Response(null, {
+      if (authority === undefined) {
+        return new Response(null, {
           headers: {
             ...noStoreHeaders,
             Location: signInForWorkspaceRedirect(origin),
           },
           status: 303,
-        });}
+        });
+      }
 
       try {
         const result = await input.authorization.complete(request.url, authority);
@@ -179,14 +182,15 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           status: 303,
         });
       }
-      if (authority === undefined)
-        {return new Response(null, {
+      if (authority === undefined) {
+        return new Response(null, {
           headers: {
             ...noStoreHeaders,
             Location: signInForWorkspaceRedirect(origin),
           },
           status: 303,
-        });}
+        });
+      }
 
       try {
         const returnState = providerConnectionReturnFromFormData(await request.formData());
@@ -211,7 +215,9 @@ let deploymentHandlers: ReturnType<typeof createGitHubAppInstallationRouteHandle
 export function getGitHubAppInstallationDeploymentHandlers(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
-  if (deploymentHandlers !== undefined) {return deploymentHandlers;}
+  if (deploymentHandlers !== undefined) {
+    return deploymentHandlers;
+  }
   const resolvedEnvironment = providerEmulationEnvironment(environment);
   const config = readGitHubAppInstallationEnvironment(resolvedEnvironment);
   const previewConfig = readPreviewOAuthRuntimeConfig(resolvedEnvironment);
@@ -252,7 +258,9 @@ export function getGitHubAppInstallationDeploymentHandlers(
         environment: resolvedEnvironment,
         headers: request.headers,
       });
-      if (session === undefined) {return;}
+      if (session === undefined) {
+        return;
+      }
       return {
         audience: config.resource,
         issuer: config.issuer,
@@ -263,7 +271,9 @@ export function getGitHubAppInstallationDeploymentHandlers(
     authorization,
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async onConnected({ authority, returnState }) {
-      if (!returnState.resumeKey) {return;}
+      if (!returnState.resumeKey) {
+        return;
+      }
       return repositoryAccessContinuations.authorize({
         authority,
         continuationId: returnState.resumeKey,

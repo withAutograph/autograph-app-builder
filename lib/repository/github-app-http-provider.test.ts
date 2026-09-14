@@ -201,9 +201,13 @@ function providerFetch(input?: {
   const implementation: typeof fetch = async (request, init = {}) => {
     const url = String(request);
     let body;
-    if (typeof init.body === "string") {body = JSON.parse(init.body) as unknown;}
+    if (typeof init.body === "string") {
+      body = JSON.parse(init.body) as unknown;
+    }
     calls.push({ body, init, url });
-    if (input?.fail) {return json({ message: "private-key-material" }, 500);}
+    if (input?.fail) {
+      return json({ message: "private-key-material" }, 500);
+    }
     if (url.endsWith("/app/installations/456")) {
       return json({
         account: { id: 789, login: "withAutograph", type: "Organization" },

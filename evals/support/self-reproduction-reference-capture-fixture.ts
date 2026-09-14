@@ -40,22 +40,27 @@ export const prepareReferenceCaptureFixture = async (
     // Import after the isolated runtime environment is installed by the eval entrypoint.
     const { appOrigin, currentSession, databaseUrl, finishOAuth, waitForBuilderReady } =
       await import("../../e2e/support/harness");
-    if (new URL(input.referenceUrl).origin !== appOrigin)
-      {throw new Error("Reference capture origin does not match the isolated emulator fixture.");}
+    if (new URL(input.referenceUrl).origin !== appOrigin) {
+      throw new Error("Reference capture origin does not match the isolated emulator fixture.");
+    }
     receipt.stage = "authentication";
     await finishOAuth(page, "GitHub");
     receipt.stage = "builder-readiness";
     await waitForBuilderReady(page);
     const session = await currentSession(page);
     const ownerId = session?.user?.id;
-    if (typeof ownerId !== "string") {throw new TypeError("Emulated OAuth did not establish an owner.");}
+    if (typeof ownerId !== "string") {
+      throw new TypeError("Emulated OAuth did not establish an owner.");
+    }
     receipt.stage = "draft-inputs";
     const appName = page.getByLabel("App Name");
     const brief = page.getByLabel("App Brief", { exact: true });
-    if ((await appName.inputValue()) !== selfReproductionDraft.appName)
-      {await appName.fill(selfReproductionDraft.appName);}
-    if ((await brief.inputValue()) !== selfReproductionDraft.brief)
-      {await brief.fill(selfReproductionDraft.brief);}
+    if ((await appName.inputValue()) !== selfReproductionDraft.appName) {
+      await appName.fill(selfReproductionDraft.appName);
+    }
+    if ((await brief.inputValue()) !== selfReproductionDraft.brief) {
+      await brief.fill(selfReproductionDraft.brief);
+    }
     // Restored unchanged drafts need no new write acknowledgement. Read both UI and server state.
     receipt.stage = "durable-readback";
     const sql = postgres(databaseUrl, { max: 1 });

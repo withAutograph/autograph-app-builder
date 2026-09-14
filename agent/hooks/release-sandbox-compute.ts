@@ -86,7 +86,9 @@ export default defineHook({
     },
     async "turn.started"(_event, ctx) {
       const environment = process.env;
-      if (!isHostedSandboxExecutionEnabled(environment)) {return;}
+      if (!isHostedSandboxExecutionEnabled(environment)) {
+        return;
+      }
       await acquireHostedSandboxExecutionLease({
         environment,
         sandbox: await ctx.getSandbox(),

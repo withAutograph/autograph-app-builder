@@ -26,7 +26,9 @@ export default defineTool({
         const location = await sandbox.run({
           command: `command -v ${command}`,
         });
-        if (location.exitCode !== 0) {return { available: false as const, command };}
+        if (location.exitCode !== 0) {
+          return { available: false as const, command };
+        }
         const version = await sandbox.run({ command: `${command} --version` });
         return {
           available: true as const,

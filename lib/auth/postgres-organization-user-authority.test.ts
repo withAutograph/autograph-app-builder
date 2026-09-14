@@ -24,7 +24,9 @@ const organization = {
 function createDatabase(results: unknown[]) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const execute = vi.fn(async () => {
-    if (results.length === 0) {throw new Error("Unexpected database query.");}
+    if (results.length === 0) {
+      throw new Error("Unexpected database query.");
+    }
     return results.shift();
   });
   // Drizzle's transaction fixture intentionally models its callback API.

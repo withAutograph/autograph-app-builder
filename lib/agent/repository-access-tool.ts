@@ -31,13 +31,16 @@ export async function resolveRepositoryAccessForTool(
     }
 > {
   const access = await runtime.classify(input);
-  if (access.status === "scope-selection-required") {return { access, kind: "selection" };}
-  if (access.status === "provider-unavailable")
-    {throw new ConnectionAuthorizationFailedError("github-repository-access", {
+  if (access.status === "scope-selection-required") {
+    return { access, kind: "selection" };
+  }
+  if (access.status === "provider-unavailable") {
+    throw new ConnectionAuthorizationFailedError("github-repository-access", {
       message: "GitHub could not confirm repository access. Try again shortly.",
       reason: "provider_unavailable",
       retryable: true,
-    });}
+    });
+  }
   let confirmed: RepositoryAccessResult = access;
   if (access.status !== "ready") {
     const provider = runtime.authorization({
@@ -58,12 +61,13 @@ export async function resolveRepositoryAccessForTool(
       ctx.requireAuth(provider, authOptions);
     }
   }
-  if (confirmed.status === "provider-unavailable")
-    {throw new ConnectionAuthorizationFailedError("github-repository-access", {
+  if (confirmed.status === "provider-unavailable") {
+    throw new ConnectionAuthorizationFailedError("github-repository-access", {
       message: "GitHub could not confirm repository access. Try again shortly.",
       reason: "provider_unavailable",
       retryable: true,
-    });}
+    });
+  }
   if (confirmed.status !== "ready") {
     throw new Error(
       confirmed.status === "scope-selection-required"
@@ -82,6 +86,8 @@ export async function resolveRepositoryAccessForTool(
     });
     return recorded;
   });
-  if (recorded === undefined) {throw new Error("Confirmed repository access was not recorded.");}
+  if (recorded === undefined) {
+    throw new Error("Confirmed repository access was not recorded.");
+  }
   return { access: confirmed, kind: "ready", receipt: recorded };
 }

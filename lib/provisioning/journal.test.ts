@@ -40,7 +40,9 @@ function memoryStore(): BuilderProvisionJournalStore {
     async compareAndSet(input) {
       const id = key(input.authority, input.requestId);
       const current = rows.get(id);
-      if (!current || current.revision !== input.expectedRevision) {return;}
+      if (!current || current.revision !== input.expectedRevision) {
+        return;
+      }
       const next = {
         ...current,
         record: structuredClone(input.record),
@@ -62,7 +64,9 @@ function memoryStore(): BuilderProvisionJournalStore {
       const digest = builderProvisionRequestDigest(input.request);
       const existing = rows.get(id);
       if (existing) {
-        if (existing.requestDigest !== digest) {throw new Error("provision-request-id-reused");}
+        if (existing.requestDigest !== digest) {
+          throw new Error("provision-request-id-reused");
+        }
         return structuredClone(existing);
       }
       const row: BuilderProvisionJournalRow = {

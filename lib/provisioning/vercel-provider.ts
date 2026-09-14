@@ -126,92 +126,92 @@ export async function provisionVercelProject(input: {
       await input.persistCandidate(candidate);
       candidates.push(candidate);
     }
-    const result = await runSequentiallyUntil<typeof candidates[number], VercelProvisionResult>(
+    const result = await runSequentiallyUntil<(typeof candidates)[number], VercelProvisionResult>(
       candidates.slice(0, 5),
       async (candidate) => {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const before = await inspect(candidate);
-      const wasAbsent = input.persistedAbsentCandidates.includes(candidate);
-      if (before.status === 200 && !wasAbsent) {
-        return;
-      }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      if (before.status === 404 && !wasAbsent) {
-        await input.persistAbsent(candidate);
-      }
-      if (before.status === 404) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        const created = await vercel({
-          body: {
-            framework: "nextjs",
-            name: candidate,
-            rootDirectory: `apps/${input.appId}`,
-            ...(linkedRepository
-              ? {
-                  gitRepository: {
-                    repo: linkedRepository,
-                    type: "github",
-                  },
-                }
-              : {}),
-          },
-          expected: [200, 201, 400, 403, 409],
-          method: "POST",
-          path: "/v11/projects",
-        });
-        if (created.status === 400 || created.status === 403) {
+        const before = await inspect(candidate);
+        const wasAbsent = input.persistedAbsentCandidates.includes(candidate);
+        if (before.status === 200 && !wasAbsent) {
+          return;
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        if (before.status === 404 && !wasAbsent) {
+          await input.persistAbsent(candidate);
+        }
+        if (before.status === 404) {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+          const created = await vercel({
+            body: {
+              framework: "nextjs",
+              name: candidate,
+              rootDirectory: `apps/${input.appId}`,
+              ...(linkedRepository
+                ? {
+                    gitRepository: {
+                      repo: linkedRepository,
+                      type: "github",
+                    },
+                  }
+                : {}),
+            },
+            expected: [200, 201, 400, 403, 409],
+            method: "POST",
+            path: "/v11/projects",
+          });
+          if (created.status === 400 || created.status === 403) {
+            return {
+              code: "provider_rejected",
+              retryable: true,
+              status: "failed",
+            };
+          }
+          if (created.status === 409) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+            const recovered = await inspect(candidate);
+            if (recovered.status !== 200) {
+              return;
+            }
+          }
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+        const observed = await inspect(candidate);
+        if (observed.status !== 200) {
           return {
-            code: "provider_rejected",
-            retryable: true,
+            code: "postcondition_failed",
+            retryable: false,
             status: "failed",
           };
         }
-        if (created.status === 409) {
-          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-          const recovered = await inspect(candidate);
-          if (recovered.status !== 200) {
-            return;
-          }
+        const project = projectSchema.parse(observed.body);
+        if (
+          project.name !== candidate ||
+          project.rootDirectory !== `apps/${input.appId}` ||
+          (linkedRepository !== undefined &&
+            `${project.link?.org}/${project.link?.repo}` !== linkedRepository) ||
+          (linkedRepository === undefined && project.link !== undefined)
+        ) {
+          return {
+            code: "postcondition_failed",
+            retryable: false,
+            status: "failed",
+          };
         }
-      }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const observed = await inspect(candidate);
-      if (observed.status !== 200) {
         return {
-          code: "postcondition_failed",
-          retryable: false,
-          status: "failed",
+          dashboardUrl: `https://vercel.com/${input.installation.slug}/${project.name}`,
+          framework: "nextjs",
+          installationId: input.installation.installationId,
+          name: project.name,
+          projectId: project.id,
+          rootDirectory: project.rootDirectory,
+          scope: {
+            id: input.installation.scopeId,
+            slug: input.installation.slug,
+            type: input.installation.scopeType,
+          },
+          status: "succeeded",
+          ...(linkedRepository ? { linkedGitHubRepository: linkedRepository } : {}),
         };
-      }
-      const project = projectSchema.parse(observed.body);
-      if (
-        project.name !== candidate ||
-        project.rootDirectory !== `apps/${input.appId}` ||
-        (linkedRepository !== undefined &&
-          `${project.link?.org}/${project.link?.repo}` !== linkedRepository) ||
-        (linkedRepository === undefined && project.link !== undefined)
-      ) {
-        return {
-          code: "postcondition_failed",
-          retryable: false,
-          status: "failed",
-        };
-      }
-      return {
-        dashboardUrl: `https://vercel.com/${input.installation.slug}/${project.name}`,
-        framework: "nextjs",
-        installationId: input.installation.installationId,
-        name: project.name,
-        projectId: project.id,
-        rootDirectory: project.rootDirectory,
-        scope: {
-          id: input.installation.scopeId,
-          slug: input.installation.slug,
-          type: input.installation.scopeType,
-        },
-        status: "succeeded",
-        ...(linkedRepository ? { linkedGitHubRepository: linkedRepository } : {}),
-      };
       },
     );
     return result ?? { code: "name_conflict", retryable: true, status: "failed" };

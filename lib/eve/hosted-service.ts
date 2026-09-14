@@ -133,12 +133,24 @@ function titleFromPrompt(prompt: string): string {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function stageForResult(result: EveSessionResult): z.infer<typeof publicSessionStageSchema> {
-  if (result.status === "completed") {return "complete";}
-  if (["failed", "cancelled"].includes(result.status)) {return "needs_attention";}
-  if (result.implementationPlan !== undefined) {return "ready";}
-  if (result.prototype !== undefined) {return "prototype";}
-  if (result.status === "input_required") {return "needs_attention";}
-  if (result.status === "working") {return "designing";}
+  if (result.status === "completed") {
+    return "complete";
+  }
+  if (["failed", "cancelled"].includes(result.status)) {
+    return "needs_attention";
+  }
+  if (result.implementationPlan !== undefined) {
+    return "ready";
+  }
+  if (result.prototype !== undefined) {
+    return "prototype";
+  }
+  if (result.status === "input_required") {
+    return "needs_attention";
+  }
+  if (result.status === "working") {
+    return "designing";
+  }
   return "planning";
 }
 
@@ -180,15 +192,22 @@ const checkpointInputProfiles: readonly CheckpointInputProfile[] = [
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function truncateUtf8(value: string, maximumBytes: number): string {
-  if (maximumBytes === 0) {return "";}
+  if (maximumBytes === 0) {
+    return "";
+  }
   const encoder = new TextEncoder();
-  if (encoder.encode(value).byteLength <= maximumBytes) {return value;}
+  if (encoder.encode(value).byteLength <= maximumBytes) {
+    return value;
+  }
   let lower = 0;
   let upper = value.length;
   while (lower < upper) {
     const midpoint = Math.ceil((lower + upper) / 2);
-    if (encoder.encode(value.slice(0, midpoint)).byteLength <= maximumBytes) {lower = midpoint;}
-    else {upper = midpoint - 1;}
+    if (encoder.encode(value.slice(0, midpoint)).byteLength <= maximumBytes) {
+      lower = midpoint;
+    } else {
+      upper = midpoint - 1;
+    }
   }
   const end = lower > 0 && /[\uD800-\uDBFF]/u.test(value.charAt(lower - 1)) ? lower - 1 : lower;
   return value.slice(0, end);
@@ -256,11 +275,12 @@ function checkpointEvent(
   event: z.infer<typeof publicEveEventSchema>,
   profile: CheckpointInputProfile,
 ): z.infer<typeof publicEveEventSchema> {
-  if (event.type === "input_required")
-    {return {
+  if (event.type === "input_required") {
+    return {
       ...event,
       request: checkpointInputRequest(event.request, profile),
-    };}
+    };
+  }
   return event;
 }
 
@@ -273,14 +293,20 @@ function checkpointForSnapshot(
   const ring = Array.from<z.infer<typeof publicEveEventSchema>>({ length: 512 });
   let publicEventCount = 0;
   for (const candidate of snapshot.events) {
-    if (candidate === null || typeof candidate !== "object") {continue;}
+    if (candidate === null || typeof candidate !== "object") {
+      continue;
+    }
     const projected = toPublicEvent(candidate as InternalEveEvent);
-    if (projected === null) {continue;}
+    if (projected === null) {
+      continue;
+    }
     const parsed = publicEveEventSchema.safeParse({
       ...projected,
       index: publicEventCount,
     });
-    if (!parsed.success) {continue;}
+    if (!parsed.success) {
+      continue;
+    }
     const event = parsed.data;
     let boundedEvent = event;
     if (event.type === "assistant_message") {
@@ -301,7 +327,9 @@ function checkpointForSnapshot(
   const events = Array.from({ length: retainedCount }, (_, index) => {
     const absoluteIndex = publicEventCount - retainedCount + index;
     const event = ring[absoluteIndex % ring.length];
-    if (event === undefined) {throw new HostedSessionRecoveryUnavailableError();}
+    if (event === undefined) {
+      throw new HostedSessionRecoveryUnavailableError();
+    }
     return event;
   });
   const outstandingRequests = outstandingInternalEveRequests(
@@ -328,7 +356,9 @@ function checkpointForSnapshot(
       const retainedEvents = candidateCount === 0 ? [] : boundedEvents.slice(-candidateCount);
       let truncatedBeforeIndex: number | undefined;
       if (retainedEvents[0] === undefined) {
-        if (publicEventCount !== 0) {truncatedBeforeIndex = publicEventCount;}
+        if (publicEventCount !== 0) {
+          truncatedBeforeIndex = publicEventCount;
+        }
       } else if (retainedEvents[0].index !== 0) {
         truncatedBeforeIndex = retainedEvents[0].index;
       }
@@ -365,11 +395,15 @@ function checkpointForSnapshot(
       includePrototype: true,
       profile,
     });
-    if (checkpoint !== undefined) {return checkpoint;}
+    if (checkpoint !== undefined) {
+      return checkpoint;
+    }
   }
 
   const minimalProfile = checkpointInputProfiles.at(-1);
-  if (minimalProfile === undefined) {throw new HostedSessionRecoveryUnavailableError();}
+  if (minimalProfile === undefined) {
+    throw new HostedSessionRecoveryUnavailableError();
+  }
   for (const artifactSelection of [
     { includeImplementationPlan: true, includePrototype: false },
     { includeImplementationPlan: false, includePrototype: true },
@@ -379,7 +413,9 @@ function checkpointForSnapshot(
       profile: minimalProfile,
       ...artifactSelection,
     });
-    if (checkpoint !== undefined) {return checkpoint;}
+    if (checkpoint !== undefined) {
+      return checkpoint;
+    }
   }
 
   // A structurally valid fallback prevents an oversized transport snapshot
@@ -396,7 +432,9 @@ function checkpointForSnapshot(
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function recoveryPrompt(record: z.infer<typeof durableHostedSessionRecordSchema>): string {
   const prompt = recoveryPromptForSession(record);
-  if (prompt === undefined) {throw new HostedSessionRecoveryUnavailableError();}
+  if (prompt === undefined) {
+    throw new HostedSessionRecoveryUnavailableError();
+  }
   return prompt;
 }
 
@@ -454,7 +492,9 @@ export function createHostedEveSessionService(input: {
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function requireSession(sessionId: string) {
     const session = await input.store.getSession(principal, sessionId);
-    if (session === null) {throw new HostedSessionNotFoundError();}
+    if (session === null) {
+      throw new HostedSessionNotFoundError();
+    }
     const parsed = hostedSessionRecordSchema.parse(session);
     if (
       parsed.sessionId !== sessionId ||
@@ -634,8 +674,12 @@ export function createHostedEveSessionService(input: {
         // `reserved` remains non-replayable; a committed terminal record is
         // interpreted from the store on a later exact retry.
       }
-      if (!settlementVerified) {throw new HostedSubmissionUnknownError();}
-      if (rejected) {throw new HostedRejectedOperationError(error.code);}
+      if (!settlementVerified) {
+        throw new HostedSubmissionUnknownError();
+      }
+      if (rejected) {
+        throw new HostedRejectedOperationError(error.code);
+      }
       throw new HostedSubmissionUnknownError();
     }
 
@@ -730,8 +774,9 @@ export function createHostedEveSessionService(input: {
     });
     if (observed?.status === "cancelled") {
       const durable = toDurableHostedSessionRecord(observed);
-      if (durable.checkpoint)
-        {return resultFromHostedCheckpoint(sessionId, durable.checkpoint, 0, 100);}
+      if (durable.checkpoint) {
+        return resultFromHostedCheckpoint(sessionId, durable.checkpoint, 0, 100);
+      }
     }
     return completeResult;
   }
@@ -775,13 +820,18 @@ export function createHostedEveSessionService(input: {
       const observed = await observeSnapshot(sessionId, snapshot);
       if (observed.status === "cancelled") {
         const durable = toDurableHostedSessionRecord(await requireSession(sessionId));
-        if (durable.checkpoint)
-          {return resultFromHostedCheckpoint(sessionId, durable.checkpoint, cursor, limit);}
+        if (durable.checkpoint) {
+          return resultFromHostedCheckpoint(sessionId, durable.checkpoint, cursor, limit);
+        }
       }
       return projectSnapshot(sessionId, snapshot, cursor, limit);
     } catch (error) {
-      if (!(error instanceof HostedAdapterSessionUnavailableError)) {throw error;}
-      if (session.checkpoint === undefined) {throw new HostedSessionRecoveryUnavailableError();}
+      if (!(error instanceof HostedAdapterSessionUnavailableError)) {
+        throw error;
+      }
+      if (session.checkpoint === undefined) {
+        throw new HostedSessionRecoveryUnavailableError();
+      }
       const observed = await input.store.observeSession?.({
         ...(session.appId === undefined ? {} : { appId: session.appId }),
         checkpoint: session.checkpoint,
@@ -808,8 +858,9 @@ export function createHostedEveSessionService(input: {
           ...(turnId === undefined ? {} : { turnId }),
         });
       } catch (error) {
-        if (error instanceof SubmissionRejectedBeforeDispatchError)
-          {throw new HostedRejectedOperationError(error.code);}
+        if (error instanceof SubmissionRejectedBeforeDispatchError) {
+          throw new HostedRejectedOperationError(error.code);
+        }
         throw error;
       }
       return observeSnapshot(sessionId, snapshot);
@@ -851,8 +902,9 @@ export function createHostedEveSessionService(input: {
           ).map(({ requestId }) => requestId);
           if (
             expected.some((requestId, index) => request.responses[index]?.requestId !== requestId)
-          )
-            {throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");}
+          ) {
+            throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
+          }
           const snapshot = await input.transport.respond({
             adapterSessionId: session.adapterSessionId,
             operationId,
@@ -906,13 +958,17 @@ export function createHostedEveSessionService(input: {
             await observeSnapshot(stored.sessionId, snapshot);
             existing = toDurableHostedSessionRecord(await requireSession(stored.sessionId));
           } catch (error) {
-            if (!(error instanceof HostedAdapterSessionUnavailableError)) {throw error;}
+            if (!(error instanceof HostedAdapterSessionUnavailableError)) {
+              throw error;
+            }
           }
         }
         const terminal = ["completed", "failed", "cancelled"].includes(existing.status);
         const interrupted = existing.status === "working" && existing.resumability === "checkpoint";
         if (terminal || interrupted) {
-          if (existing.checkpoint === undefined) {throw new HostedSessionRecoveryUnavailableError();}
+          if (existing.checkpoint === undefined) {
+            throw new HostedSessionRecoveryUnavailableError();
+          }
           return mutate({
             async dispatch(operationId) {
               const response = await input.transport.start({
@@ -976,17 +1032,22 @@ export function createHostedEveSessionService(input: {
             });
             return await observeSnapshot(existing.sessionId, snapshot);
           } catch (error) {
-            if (!(error instanceof HostedAdapterSessionUnavailableError)) {throw error;}
+            if (!(error instanceof HostedAdapterSessionUnavailableError)) {
+              throw error;
+            }
           }
         }
         if (
           existing.checkpoint === undefined ||
           existing.checkpointDigest === undefined ||
           input.store.replaceSessionAdapter === undefined
-        )
-          {throw new HostedSessionRecoveryUnavailableError();}
+        ) {
+          throw new HostedSessionRecoveryUnavailableError();
+        }
         const { replaceSessionAdapter } = input.store;
-        if (replaceSessionAdapter === undefined) {throw new HostedSessionRecoveryUnavailableError();}
+        if (replaceSessionAdapter === undefined) {
+          throw new HostedSessionRecoveryUnavailableError();
+        }
         return mutate({
           async dispatch(operationId) {
             const response = await input.transport.start({
@@ -1025,8 +1086,9 @@ export function createHostedEveSessionService(input: {
               durable.adapterSessionId !== response.adapterSessionId ||
               durable.adapterGeneration !== existing.adapterGeneration + 1 ||
               durable.checkpointDigest !== hostedSessionCheckpointDigest(checkpoint)
-            )
-              {throw new HostedSubmissionUnknownError();}
+            ) {
+              throw new HostedSubmissionUnknownError();
+            }
             return { result };
           },
           kind: "resume",
@@ -1034,8 +1096,9 @@ export function createHostedEveSessionService(input: {
           sessionId: existing.sessionId,
         });
       }
-      if (request.prompt === undefined)
-        {throw new SubmissionRejectedBeforeDispatchError("prompt_required");}
+      if (request.prompt === undefined) {
+        throw new SubmissionRejectedBeforeDispatchError("prompt_required");
+      }
       const { prompt } = request;
       return mutate({
         async dispatch(operationId) {

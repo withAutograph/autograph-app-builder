@@ -23,18 +23,23 @@ it.each(["history", "local-state", "inert", "unknown", "unavailable"])(
       inputValue: async () => values.get(name),
       isVisible: async () => (name === "back" ? view === "docs" : view === "editor"),
       press: async () => {
-        if (mode !== "inert") {view = "docs";}
+        if (mode !== "inert") {
+          view = "docs";
+        }
       },
       waitFor: async () => {
-        if (mode === "unknown" || (mode === "inert" && name === "back"))
-          {throw new Error("Unavailable control");}
+        if (mode === "unknown" || (mode === "inert" && name === "back")) {
+          throw new Error("Unavailable control");
+        }
       },
     });
     const page = {
       getByRole: (_role: string, options: { name: string | RegExp }) =>
         control(typeof options.name === "string" ? options.name : "back"),
       goBack: async () => {
-        if (mode === "history") {view = "editor";}
+        if (mode === "history") {
+          view = "editor";
+        }
       },
       goForward: async () => {
         view = "docs";
@@ -72,14 +77,20 @@ it.each(["history", "local-state", "inert", "unknown", "unavailable"])(
         unknown: "not-run",
       }[mode],
     );
-    if (mode === "history") {expect(result.assertions.every(({ passed }) => passed)).toBe(true);}
-    if (mode === "local-state")
-      {expect(
+    if (mode === "history") {
+      expect(result.assertions.every(({ passed }) => passed)).toBe(true);
+    }
+    if (mode === "local-state") {
+      expect(
         result.assertions.find(({ id }) => id === "back-forward-preserves-draft")?.passed,
-      ).toBe(false);}
+      ).toBe(false);
+    }
     let expectedCaptureCount = 0;
-    if (mode === "inert") {expectedCaptureCount = 1;}
-    else if (["history", "local-state"].includes(mode)) {expectedCaptureCount = 3;}
+    if (mode === "inert") {
+      expectedCaptureCount = 1;
+    } else if (["history", "local-state"].includes(mode)) {
+      expectedCaptureCount = 3;
+    }
     expect(capture).toHaveBeenCalledTimes(expectedCaptureCount);
   },
 );

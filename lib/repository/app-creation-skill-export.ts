@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { chmod, lstat, mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { runSequentially } from "../async-sequential";
+
 export const APP_CREATION_SKILL_ROOTS = [
   "arrusted-next-app-like-experience",
   "create-app",
@@ -50,7 +52,9 @@ async function absent(target: string): Promise<boolean> {
     await lstat(target);
     return false;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {return true;}
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return true;
+    }
     throw error;
   }
 }
@@ -61,37 +65,40 @@ async function collectSkillFiles(sourceRoot: string): Promise<ExportedSkillFile[
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function visit(directory: string): Promise<void> {
     const entries = await readdir(directory, { withFileTypes: true });
-    for (const entry of entries.toSorted((left, right) => left.name.localeCompare(right.name))) {
-      const filePath = path.join(directory, entry.name);
-      if (entry.isSymbolicLink())
-        {throw new Error("App-creation skill exports do not accept symbolic links.");}
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      if (entry.isDirectory()) {await visit(filePath);}
-      else if (entry.isFile()) {
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        // oxlint-disable-next-line eslint/no-await-in-loop, eslint/no-bitwise -- Preserve sequential traversal and permission-mode bitmask.
-        const stats = await lstat(filePath);
-        const mode = stats.mode % 0o1000;
-        if (mode !== 0o644 && mode !== 0o755)
-          {throw new Error(`Unsupported app-creation skill mode: ${mode.toString(8)}`);}
-        files.push({
-          mode: mode === 0o755 ? "100755" : "100644",
-          path: path.relative(sourceRoot, filePath).split("\\").join("/"),
-          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-          sha256: sha256(await readFile(filePath)),
-        });
-      } else {throw new Error("App-creation skill exports accept only files and directories.");}
-    }
+    await runSequentially(
+      entries.toSorted((left, right) => left.name.localeCompare(right.name)),
+      async (entry) => {
+        const filePath = path.join(directory, entry.name);
+        if (entry.isSymbolicLink()) {
+          throw new Error("App-creation skill exports do not accept symbolic links.");
+        }
+        if (entry.isDirectory()) {
+          await visit(filePath);
+        } else if (entry.isFile()) {
+          const stats = await lstat(filePath);
+          const mode = stats.mode % 0o1000;
+          if (mode !== 0o644 && mode !== 0o755) {
+            throw new Error(`Unsupported app-creation skill mode: ${mode.toString(8)}`);
+          }
+          files.push({
+            mode: mode === 0o755 ? "100755" : "100644",
+            path: path.relative(sourceRoot, filePath).split("\\").join("/"),
+            sha256: sha256(await readFile(filePath)),
+          });
+        } else {
+          throw new Error("App-creation skill exports accept only files and directories.");
+        }
+      },
+    );
   }
-  for (const root of APP_CREATION_SKILL_ROOTS) {
+  await runSequentially(APP_CREATION_SKILL_ROOTS, async (root) => {
     const directory = path.join(sourceRoot, root);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const stats = await lstat(directory);
-    if (!stats.isDirectory())
-      {throw new Error(`App-creation skill root is not a directory: ${root}`);}
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+    if (!stats.isDirectory()) {
+      throw new Error(`App-creation skill root is not a directory: ${root}`);
+    }
     await visit(directory);
-  }
+  });
   return files.toSorted((left, right) => left.path.localeCompare(right.path));
 }
 
@@ -102,25 +109,23 @@ export async function exportAppCreationSkills(options: {
 }): Promise<AppCreationSkillExportManifest> {
   const repositoryRoot = await realpath(path.resolve(options.repositoryRoot));
   const outputRoot = path.resolve(options.outputRoot);
-  if (!(await absent(outputRoot)))
-    {throw new Error("App-creation skill export destination must be absent.");}
+  if (!(await absent(outputRoot))) {
+    throw new Error("App-creation skill export destination must be absent.");
+  }
   const parent = await realpath(path.resolve(outputRoot, ".."));
   const canonicalOutput = path.join(parent, path.basename(outputRoot));
   const sourceRoot = path.join(repositoryRoot, "agent", "skills");
   const files = await collectSkillFiles(sourceRoot);
   await mkdir(canonicalOutput, { mode: 0o700 });
-  for (const file of files) {
+  await runSequentially(files, async (file) => {
     const source = path.join(sourceRoot, file.path);
     const destination = path.join(canonicalOutput, file.path);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await mkdir(path.resolve(destination, ".."), { mode: 0o755, recursive: true });
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await writeFile(destination, await readFile(source), {
       mode: file.mode === "100755" ? 0o755 : 0o644,
     });
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await chmod(destination, file.mode === "100755" ? 0o755 : 0o644);
-  }
+  });
   const unsigned = {
     fileCount: files.length,
     files,

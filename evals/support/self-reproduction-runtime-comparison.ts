@@ -26,9 +26,11 @@ export const runSandboxRuntimeComparison = async (input: {
     .join(" ");
   const directory = `.self-reproduction-comparison/${randomUUID()}`;
   const artifactPaths = input.artifactPaths ?? [];
-  for (const path of artifactPaths)
-    {if (path.startsWith("/") || path.split(/[\\/]/u).some((part) => part === ".." || part === ""))
-      {throw new Error(`Comparison artifact must be a relative child path: ${path}`);}}
+  for (const path of artifactPaths) {
+    if (path.startsWith("/") || path.split(/[\\/]/u).some((part) => part === ".." || part === "")) {
+      throw new Error(`Comparison artifact must be a relative child path: ${path}`);
+    }
+  }
   const result: RuntimeComparisonResult = {
     artifacts: [],
     command: { exitCode: null, stderr: "", stdout: "" },
@@ -48,32 +50,38 @@ export const runSandboxRuntimeComparison = async (input: {
       command: `${runtimeEnvironment} node ${directory}/runner.mjs ${directory}/input.json ${directory}/output.json`,
     });
     result.command = { exitCode: command.exitCode, stderr: command.stderr, stdout: command.stdout };
-    if (command.exitCode !== 0)
-      {result.errors.push(`Evaluator exited with code ${command.exitCode}.`);}
+    if (command.exitCode !== 0) {
+      result.errors.push(`Evaluator exited with code ${command.exitCode}.`);
+    }
   } catch (error) {
     result.errors.push(error instanceof Error ? error.message : String(error));
   }
   // Recover partial output even after an evaluator exception or nonzero exit.
   try {
     const output = await input.session.readTextFile({ path: `${directory}/output.json` });
-    if (output === null) {throw new Error("Evaluator output file is missing.");}
+    if (output === null) {
+      throw new Error("Evaluator output file is missing.");
+    }
     result.output = JSON.parse(output);
   } catch (error) {
     result.errors.push(
       `Comparison output: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  for (const path of artifactPaths)
-    {try {
+  for (const path of artifactPaths) {
+    try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve partial artifacts individually
       const content = await input.session.readBinaryFile({ path: `${directory}/${path}` });
-      if (content === null) {throw new Error("Evaluator artifact file is missing.");}
+      if (content === null) {
+        throw new Error("Evaluator artifact file is missing.");
+      }
       result.artifacts.push({ content, path });
     } catch (error) {
       result.errors.push(
         `Artifact ${path}: ${error instanceof Error ? error.message : String(error)}`,
       );
-    }}
+    }
+  }
   result.status = result.errors.length === 0 ? "completed" : "failed";
   result.reason =
     result.status === "completed"

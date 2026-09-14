@@ -51,7 +51,9 @@ let cancelled = false;
 const upgradedSockets = new Set<Duplex>();
 
 const assertRunning = () => {
-  if (cancelled) {throw new Error("Production navigation was cancelled.");}
+  if (cancelled) {
+    throw new Error("Production navigation was cancelled.");
+  }
 };
 
 const runDocker = async (args: string[]) => {
@@ -60,7 +62,9 @@ const runDocker = async (args: string[]) => {
 };
 
 const stopChild = async (child: ChildProcess) => {
-  if (child.exitCode !== null || child.signalCode !== null) {return;}
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return;
+  }
   const closed = once(child, "close");
   child.kill("SIGTERM");
   const force = setTimeout(() => child.kill("SIGKILL"), 5000);
@@ -79,10 +83,14 @@ const run = async (command: string, args: string[], input?: string) => {
     stdio: [input === undefined ? "ignore" : "pipe", "inherit", "inherit"],
   });
   children.add(child);
-  if (input !== undefined) {child.stdin?.end(input);}
+  if (input !== undefined) {
+    child.stdin?.end(input);
+  }
   try {
     const [code, signal] = await once(child, "close");
-    if (code !== 0) {throw new Error(`${command} exited with ${code ?? signal}`);}
+    if (code !== 0) {
+      throw new Error(`${command} exited with ${code ?? signal}`);
+    }
   } finally {
     children.delete(child);
   }
@@ -93,7 +101,9 @@ const freePort = async () => {
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = server.address();
-  if (!address || typeof address === "string") {throw new Error("Missing loopback port.");}
+  if (!address || typeof address === "string") {
+    throw new Error("Missing loopback port.");
+  }
   server.close();
   await once(server, "close");
   return address.port;
@@ -130,16 +140,22 @@ try {
     files.map(async (file) => {
       // Git also lists submodule directory entries; they are not app sources.
       const info = await lstat(path.join(source, file)).catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") {return null;}
+        if (error.code === "ENOENT") {
+          return null;
+        }
         throw error;
       });
-      if (!info || info.isDirectory()) {return;}
+      if (!info || info.isDirectory()) {
+        return;
+      }
       await mkdir(path.dirname(path.join(snapshot, file)), { recursive: true });
       await cp(path.join(source, file), path.join(snapshot, file), { dereference: false });
     }),
   );
   const failedCopy = copies.find((copy) => copy.status === "rejected");
-  if (failedCopy?.status === "rejected") {throw failedCopy.reason;}
+  if (failedCopy?.status === "rejected") {
+    throw failedCopy.reason;
+  }
   assertRunning();
   await symlink(path.join(source, "node_modules"), path.join(snapshot, "node_modules"), "dir");
   // This marker is never written to the checkout or a deployable artifact.
@@ -218,7 +234,9 @@ try {
   tls.listen(0, "127.0.0.1");
   await once(tls, "listening");
   const address = tls.address();
-  if (!address || typeof address === "string") {throw new Error("Missing TLS port.");}
+  if (!address || typeof address === "string") {
+    throw new Error("Missing TLS port.");
+  }
   const origin = `https://localhost:${address.port}`;
   databaseStarted = true;
   await runDocker([
@@ -253,7 +271,9 @@ try {
       ]);
       break;
     } catch (error) {
-      if (Date.now() >= deadline) {throw error;}
+      if (Date.now() >= deadline) {
+        throw error;
+      }
       // oxlint-disable-next-line eslint/no-await-in-loop -- bounded readiness polling
       await delay(500);
     }
@@ -261,7 +281,9 @@ try {
   const dockerPort = await runDocker(["port", container, "5432/tcp"]);
   const mapping = dockerPort.stdout.trim();
   const databasePort = Number(mapping.split(":").at(-1));
-  if (!Number.isInteger(databasePort)) {throw new TypeError("Missing database port.");}
+  if (!Number.isInteger(databasePort)) {
+    throw new TypeError("Missing database port.");
+  }
   const databaseUrl = `postgresql://postgres@127.0.0.1:${databasePort}/${databaseName}`;
   const secret = randomBytes(32).toString("hex");
   const flagsSecret = randomBytes(32).toString("base64url");
@@ -309,17 +331,23 @@ try {
   const readyDeadline = Date.now() + 60_000;
   while (true) {
     assertRunning();
-    if (server.exitCode !== null) {throw new Error("Production server exited before readiness.");}
+    if (server.exitCode !== null) {
+      throw new Error("Production server exited before readiness.");
+    }
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- wait for the production server before browser assertions
       const response = await fetch(`http://127.0.0.1:${appPort}/github/installations`, {
         signal: AbortSignal.timeout(2000),
       });
-      if (response.ok) {break;}
+      if (response.ok) {
+        break;
+      }
     } catch {
       /* readiness is bounded below */
     }
-    if (Date.now() >= readyDeadline) {throw new Error("Production server readiness timed out.");}
+    if (Date.now() >= readyDeadline) {
+      throw new Error("Production server readiness timed out.");
+    }
     // oxlint-disable-next-line eslint/no-await-in-loop -- bounded readiness polling
     await delay(250);
   }
@@ -331,11 +359,15 @@ try {
   ]);
 } finally {
   await Promise.all([...children].map(stopChild));
-  for (const socket of upgradedSockets) {socket.destroy();}
+  for (const socket of upgradedSockets) {
+    socket.destroy();
+  }
   tls.closeAllConnections();
   tls.close();
   try {
-    if (databaseStarted) {await execute(docker, ["--host", dockerHost, "rm", "-f", container]);}
+    if (databaseStarted) {
+      await execute(docker, ["--host", dockerHost, "rm", "-f", container]);
+    }
     await mkdir(artifactDirectory, { recursive: true });
     try {
       await cp(path.join(snapshot, "test-results/production-navigation"), artifactDirectory, {

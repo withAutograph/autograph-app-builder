@@ -30,13 +30,18 @@ export default defineTool({
       const missingPaths: string[] = [];
       const readRequestedPath = async (index: number): Promise<void> => {
         const requestedPath = paths[index];
-        if (requestedPath === undefined) {return;}
+        if (requestedPath === undefined) {
+          return;
+        }
         const relativePath = requestedPath.replace(/^\/workspace\/repository\//u, "");
         const content = await sandbox.readTextFile({
           path: `/workspace/repository/${relativePath}`,
         });
-        if (content === null) {missingPaths.push(requestedPath);}
-        else {files.push({ content, path: requestedPath });}
+        if (content === null) {
+          missingPaths.push(requestedPath);
+        } else {
+          files.push({ content, path: requestedPath });
+        }
         await readRequestedPath(index + 1);
       };
       await readRequestedPath(0);
@@ -50,8 +55,9 @@ export default defineTool({
     // other path special treatment.
     if (path === developmentWorkspacePath && canAutoSelectDevelopmentSource()) {
       const receipt = await developmentSourceReceipt("existing-repository");
-      if (receipt === undefined)
-        {throw new Error("The configured development source was unavailable.");}
+      if (receipt === undefined) {
+        throw new Error("The configured development source was unavailable.");
+      }
       const workflow = appBuilderWorkflowState.get();
       if (workflow.phase === "empty") {
         assertUpstreamMutationAllowed(workflow, "development workspace setup");
@@ -81,19 +87,26 @@ export default defineTool({
       }
       return inspectSupportedRepository(receipt.sourcePath);
     }
-    if (canAutoSelectDevelopmentSource()) {return inspectSupportedRepository(path);}
+    if (canAutoSelectDevelopmentSource()) {
+      return inspectSupportedRepository(path);
+    }
 
     const sandbox = await ctx.getSandbox();
     const availablePaths: string[] = [];
     const missingPaths: string[] = [];
     const readOverviewPath = async (index: number): Promise<void> => {
       const overviewPath = sandboxOverviewPaths[index];
-      if (overviewPath === undefined) {return;}
+      if (overviewPath === undefined) {
+        return;
+      }
       const content = await sandbox.readTextFile({
         path: `repository/${overviewPath}`,
       });
-      if (content === null) {missingPaths.push(overviewPath);}
-      else {availablePaths.push(overviewPath);}
+      if (content === null) {
+        missingPaths.push(overviewPath);
+      } else {
+        availablePaths.push(overviewPath);
+      }
       await readOverviewPath(index + 1);
     };
     await readOverviewPath(0);

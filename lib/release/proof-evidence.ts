@@ -4,8 +4,9 @@ export type ReleaseEvaluation = "sandbox-reviewed-change-set" | "sandbox-existin
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertExactToolDiscovery(tools: readonly string[]) {
-  if (JSON.stringify(tools) !== JSON.stringify(TOOL_NAMES))
-    {throw new Error("Fresh portable clients did not discover five public tools.");}
+  if (JSON.stringify(tools) !== JSON.stringify(TOOL_NAMES)) {
+    throw new Error("Fresh portable clients did not discover five public tools.");
+  }
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -27,8 +28,9 @@ export function parseReviewedProof<const Evaluation extends ReleaseEvaluation>(
         value.publicationAttempted === false &&
         value.browserPreview === true,
     );
-  if (terminal === undefined)
-    {throw new Error(`${evaluation} did not produce the reviewed proof receipt.`);}
+  if (terminal === undefined) {
+    throw new Error(`${evaluation} did not produce the reviewed proof receipt.`);
+  }
   return {
     browserPreview: true,
     eval: evaluation,

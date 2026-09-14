@@ -25,8 +25,9 @@ describe("conservative design measurements", () => {
     expect(classifyStyle([], "rgb(41, 41, 41)", [])).toBe("unassessed");
   });
   it("does not punish structural layout choices", () => {
-    for (const v of ["0px", "auto", "50%", "1fr 2fr"])
-      {expect(classifyStyle([v], v, [])).toBe("structural");}
+    for (const v of ["0px", "auto", "50%", "1fr 2fr"]) {
+      expect(classifyStyle([v], v, [])).toBe("structural");
+    }
   });
   it("parses only declared fixture actions", () => {
     expect(
@@ -40,8 +41,9 @@ describe("conservative design measurements", () => {
       height: 700,
       width: 960,
     });
-    for (const value of ["960", "960X700", "0x700", "960x0", "960x700px"])
-      {expect(() => parseAdditionalDesktopSize(value)).toThrow();}
+    for (const value of ["960", "960X700", "0x700", "960x0", "960x700px"]) {
+      expect(() => parseAdditionalDesktopSize(value)).toThrow();
+    }
     expect(captureViewports().map((viewport) => viewport.name)).toEqual([
       "desktop",
       "desktop-wide",

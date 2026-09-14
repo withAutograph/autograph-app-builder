@@ -143,13 +143,17 @@ export function deriveSpendPreview(fixture: SpendFixture, mapping: SpendMapping)
 export function reduceSpendState(state: SpendState, action: SpendAction): SpendState {
   if (action.type === "mapping-changed") {
     const mapping = { ...state.mapping };
-    for (const [source, target] of Object.entries(mapping))
-      {if (source !== action.source && target === action.target && target !== "ignore")
-        {mapping[source] = "ignore";}}
+    for (const [source, target] of Object.entries(mapping)) {
+      if (source !== action.source && target === action.target && target !== "ignore") {
+        mapping[source] = "ignore";
+      }
+    }
     mapping[action.source] = action.target;
     return { mapping, stage: "mapping" };
   }
-  if (action.type === "preview-requested") {return { ...state, saved: undefined, stage: "preview" };}
+  if (action.type === "preview-requested") {
+    return { ...state, saved: undefined, stage: "preview" };
+  }
   if (action.type === "save-requested") {
     const preview = deriveSpendPreview(action.fixture, state.mapping);
     const saved = {
@@ -160,12 +164,17 @@ export function reduceSpendState(state: SpendState, action: SpendAction): SpendS
     };
     return { ...state, saved, stage: "saved" };
   }
-  if (action.type === "review-requested") {return { ...state, stage: "review" };}
-  if (action.type === "match-selected")
-    {return { ...state, decision: undefined, selectedMatchId: action.id };}
-  if (action.type === "decision-deferred") {return { ...state, decision: "deferred" };}
-  if (action.type === "decision-applied" && state.selectedMatchId)
-    {return {
+  if (action.type === "review-requested") {
+    return { ...state, stage: "review" };
+  }
+  if (action.type === "match-selected") {
+    return { ...state, decision: undefined, selectedMatchId: action.id };
+  }
+  if (action.type === "decision-deferred") {
+    return { ...state, decision: "deferred" };
+  }
+  if (action.type === "decision-applied" && state.selectedMatchId) {
+    return {
       ...state,
       decision: "resolved",
       saved: state.saved
@@ -176,7 +185,8 @@ export function reduceSpendState(state: SpendState, action: SpendAction): SpendS
             reviewQueue: Math.max(0, state.saved.reviewQueue - 1),
           }
         : undefined,
-    };}
+    };
+  }
   return state;
 }
 

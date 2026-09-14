@@ -35,8 +35,9 @@ function fixture() {
     runtimeHome,
     workflowData,
     destinationRoot,
-  ])
-    {mkdirSync(directoryPath, { mode: 0o700, recursive: true });}
+  ]) {
+    mkdirSync(directoryPath, { mode: 0o700, recursive: true });
+  }
   mkdirSync(sourceRoot, { mode: 0o500 });
   const environment: Record<string, string> = {
     APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
@@ -83,7 +84,9 @@ describe("closed local Eve launch", () => {
       signalCode: { value: null, writable: true },
     });
     child.kill = ((signal?: NodeJS.Signals | number) => {
-      if (typeof signal === "string") {forwarded.push(signal);}
+      if (typeof signal === "string") {
+        forwarded.push(signal);
+      }
       return true;
     }) as ChildProcess["kill"];
 

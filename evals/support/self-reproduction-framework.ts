@@ -76,8 +76,8 @@ export const runTrustedFrameworkEvidence = async (input: {
   const observations: TrustedFrameworkRun["observations"] = { candidate: [], reference: [] };
   const receipts: unknown[] = [];
   const runInstant = input.runInstant ?? assertParityNavigation;
-  for (const side of sides)
-    {for (const requirement of frameworkMatrix) {
+  for (const side of sides) {
+    for (const requirement of frameworkMatrix) {
       const receiptPath = `parity/framework/${requirement.id}/${side}.json`;
       const adapter = input.adapters[side];
       let observation!: Observation;
@@ -144,7 +144,9 @@ export const runTrustedFrameworkEvidence = async (input: {
                     "Direct and client navigations exposed useful instant UI and resolved content.",
                 };
               }
-            } else {browserResult = await adapter.exerciseBrowser(page, requirement.id);}
+            } else {
+              browserResult = await adapter.exerciseBrowser(page, requirement.id);
+            }
             if (browserResult) {
               const artifacts = [receiptPath, ...source.artifacts, ...browserResult.artifacts];
               observation = {
@@ -219,6 +221,7 @@ export const runTrustedFrameworkEvidence = async (input: {
       );
       observations[side].push(observation);
       receipts.push(receipt);
-    }}
+    }
+  }
   return { observations, receipts };
 };

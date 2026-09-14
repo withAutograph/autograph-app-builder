@@ -33,8 +33,9 @@ export default defineTool({
       current.phase !== "planned" &&
       current.phase !== "apply_failed" &&
       current.phase !== "applied"
-    )
-      {throw new Error("Derive an exact canonical proposal before requesting target apply.");}
+    ) {
+      throw new Error("Derive an exact canonical proposal before requesting target apply.");
+    }
     assertImplementationArchitecture(
       input.implementationFiles,
       current.proposal.target.plan.source.schema.kind,

@@ -19,12 +19,13 @@ export function developmentLockInvocation(input: {
   command: string;
   args: readonly string[];
 }): DevelopmentLockInvocation {
-  if (input.platform === "darwin")
-    {return {
+  if (input.platform === "darwin") {
+    return {
       args: ["-t", "0", input.lockPath, input.command, ...input.args],
       busyExitCode: 75,
       command: "/usr/bin/lockf",
-    };}
+    };
+  }
   return {
     args: ["-E", "73", "-n", input.lockPath, input.command, ...input.args],
     busyExitCode: 73,
@@ -35,7 +36,9 @@ export function developmentLockInvocation(input: {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function supportedPlatform(): SupportedPlatform {
   const platform = hostPlatform();
-  if (platform === "darwin" || platform === "linux") {return platform;}
+  if (platform === "darwin" || platform === "linux") {
+    return platform;
+  }
   throw new Error("Development mode supports macOS and Linux hosts only.");
 }
 
@@ -71,10 +74,13 @@ export async function runWithDevelopmentLock(input: {
   });
   try {
     const code = await developmentChildExit(child);
-    if (code === invocation.busyExitCode)
-      {throw new Error("Another `mise run dev` proof already owns this App Builder state root.");}
+    if (code === invocation.busyExitCode) {
+      throw new Error("Another `mise run dev` proof already owns this App Builder state root.");
+    }
     return code;
   } finally {
-    for (const { signal, handler } of handlers) {process.removeListener(signal, handler);}
+    for (const { signal, handler } of handlers) {
+      process.removeListener(signal, handler);
+    }
   }
 }

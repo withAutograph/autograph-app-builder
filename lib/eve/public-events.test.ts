@@ -289,13 +289,16 @@ describe("installed Eve 0.43 projection", () => {
       request.data.actions[0]?.kind !== "tool-call" ||
       typeof request.data.actions[0].input !== "object" ||
       request.data.actions[0].input === null
-    )
-      {throw new Error("expected a plan request fixture");}
+    ) {
+      throw new Error("expected a plan request fixture");
+    }
     const input = request.data.actions[0].input as {
       existingAppChanges: { content: string }[];
     };
     const [existingAppChange] = input.existingAppChanges;
-    if (!existingAppChange) {throw new Error("expected an existing app change fixture");}
+    if (!existingAppChange) {
+      throw new Error("expected an existing app change fixture");
+    }
     existingAppChange.content = "different\n";
 
     expect(latestInstalledImplementationPlan(events)).toBeUndefined();
@@ -310,7 +313,9 @@ describe("installed Eve 0.43 projection", () => {
   it("rejects unbound, failed, stale, blocked, fixture, and invalidated plans", () => {
     const valid = recordedPlanEvents();
     const [, result] = valid;
-    if (!result) {throw new Error("expected a plan result fixture");}
+    if (!result) {
+      throw new Error("expected a plan result fixture");
+    }
     expect(latestInstalledImplementationPlan([result])).toBeUndefined();
     expect(
       latestInstalledImplementationPlan(recordedPlanEvents({ resultStatus: "failed" })),
@@ -380,7 +385,9 @@ describe("installed Eve 0.43 projection", () => {
   it("rejects unmatched, failed, wrong-tool, and digest-mismatched prototypes", () => {
     const valid = recordedPrototypeEvents();
     const [, result] = valid;
-    if (!result) {throw new Error("expected a prototype result fixture");}
+    if (!result) {
+      throw new Error("expected a prototype result fixture");
+    }
     expect(latestInstalledPrototype([result])).toBeUndefined();
     expect(
       latestInstalledPrototype(recordedPrototypeEvents({ resultStatus: "rejected" })),

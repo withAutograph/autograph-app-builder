@@ -152,14 +152,15 @@ export function createVercelInstallationDeploymentHandler(
         status: 303,
       });
     }
-    if (!authority)
-      {return new Response(null, {
+    if (!authority) {
+      return new Response(null, {
         headers: {
           ...noStoreHeaders,
           Location: signInForWorkspaceRedirect(origin),
         },
         status: 303,
-      });}
+      });
+    }
 
     try {
       if (kind === "start") {
@@ -229,12 +230,15 @@ export function createVercelWebhookDeploymentHandler(
           secret: runtime.config.clientSecret,
           signature: request.headers.get("x-vercel-signature"),
         })
-      )
-        {return new Response("Invalid signature", { status: 401 });}
+      ) {
+        return new Response("Invalid signature", { status: 401 });
+      }
       const event = webhookSchema.parse(JSON.parse(body));
       if (event.type === "integration-configuration.removed") {
         const id = event.payload.configuration?.id ?? event.payload.configurationId;
-        if (!id) {return new Response("Invalid event", { status: 400 });}
+        if (!id) {
+          return new Response("Invalid event", { status: 400 });
+        }
         await runtime.installations.deactivate(id, new Date());
       }
       return new Response(null, { status: 204 });

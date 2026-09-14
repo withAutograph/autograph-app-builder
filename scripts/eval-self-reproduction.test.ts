@@ -9,7 +9,9 @@ import { evidencePrefix } from "../evals/support/self-reproduction-evidence";
 
 const outputs: string[] = [];
 afterEach(() => {
-  for (const output of outputs.splice(0)) {rmSync(output, { force: true, recursive: true });}
+  for (const output of outputs.splice(0)) {
+    rmSync(output, { force: true, recursive: true });
+  }
 });
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -56,12 +58,14 @@ function run(script: string) {
     "generation-transcript.jsonl",
     "parity-evidence.json",
     "parity-assessment.json",
-  ])
-    {expect(() => readFileSync(nodePath.join(output, path))).not.toThrow();}
-  for (const path of ["brief.md", "answers.json"])
-    {expect(readFileSync(nodePath.join(output, "generator-input", path), "utf-8")).toBe(
+  ]) {
+    expect(() => readFileSync(nodePath.join(output, path))).not.toThrow();
+  }
+  for (const path of ["brief.md", "answers.json"]) {
+    expect(readFileSync(nodePath.join(output, "generator-input", path), "utf-8")).toBe(
       readFileSync(nodePath.resolve("evals/self-reproduction", path), "utf-8"),
-    );}
+    );
+  }
   expect(existsSync(nodePath.join(output, "runtime-source"))).toBe(false);
   expect(
     JSON.parse(readFileSync(nodePath.join(output, "revisions.json"), "utf-8")).arrusted.status,

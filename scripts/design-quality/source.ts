@@ -63,7 +63,9 @@ export function parseTokens(css: string): Record<string, string> {
   const resolving = new Set<string>();
   const resolve = (name: string): string => {
     const value = declared[name];
-    if (!value || resolving.has(name)) {return value ?? `var(${name})`;}
+    if (!value || resolving.has(name)) {
+      return value ?? `var(${name})`;
+    }
     resolving.add(name);
     const result = value.replace(varReference, (reference, target: string) =>
       Object.hasOwn(declared, target) ? resolve(target) : reference,
@@ -84,50 +86,76 @@ function isSemanticToken(name: string): boolean {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function collectVarReferences(text: string, destination: string[]) {
-  for (const match of text.matchAll(varReference)) {destination.push(match[1]);}
+  for (const match of text.matchAll(varReference)) {
+    destination.push(match[1]);
+  }
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function collectCssLiterals(text: string, destination: string[]) {
   const candidate = text.trim();
-  if (structuralLiteral.test(candidate)) {return;}
+  if (structuralLiteral.test(candidate)) {
+    return;
+  }
   for (const match of text.matchAll(cssLiteral)) {
-    if (!structuralLiteral.test(match[0])) {destination.push(match[0]);}
+    if (!structuralLiteral.test(match[0])) {
+      destination.push(match[0]);
+    }
   }
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function jsxAttributeText(attribute: ts.JsxAttribute): string | undefined {
-  if (!attribute.initializer) {return undefined;}
-  if (ts.isStringLiteral(attribute.initializer)) {return attribute.initializer.text;}
-  if (!ts.isJsxExpression(attribute.initializer) || !attribute.initializer.expression)
-    {return undefined;}
+  if (!attribute.initializer) {
+    return undefined;
+  }
+  if (ts.isStringLiteral(attribute.initializer)) {
+    return attribute.initializer.text;
+  }
+  if (!ts.isJsxExpression(attribute.initializer) || !attribute.initializer.expression) {
+    return undefined;
+  }
   const { expression } = attribute.initializer;
-  if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression))
-    {return expression.text;}
-  if (ts.isNumericLiteral(expression)) {return expression.text;}
+  if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) {
+    return expression.text;
+  }
+  if (ts.isNumericLiteral(expression)) {
+    return expression.text;
+  }
   return undefined;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function collectStyleExpression(expression: ts.Expression, destination: string[]) {
-  if (!ts.isObjectLiteralExpression(expression)) {return;}
+  if (!ts.isObjectLiteralExpression(expression)) {
+    return;
+  }
   for (const property of expression.properties) {
-    if (!ts.isPropertyAssignment(property)) {continue;}
+    if (!ts.isPropertyAssignment(property)) {
+      continue;
+    }
     const value = property.initializer;
-    if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value))
-      {collectCssLiterals(value.text, destination);}
-    else if (ts.isNumericLiteral(value)) {collectCssLiterals(value.text, destination);}
+    if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)) {
+      collectCssLiterals(value.text, destination);
+    } else if (ts.isNumericLiteral(value)) {
+      collectCssLiterals(value.text, destination);
+    }
   }
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function jsxRootIdentifier(tag: ts.JsxTagNameExpression): string | undefined {
-  if (ts.isIdentifier(tag)) {return tag.text;}
+  if (ts.isIdentifier(tag)) {
+    return tag.text;
+  }
   // TypeScript represents `<Icons.Check />` as a PropertyAccessExpression.
-  if (!ts.isPropertyAccessExpression(tag)) {return undefined;}
+  if (!ts.isPropertyAccessExpression(tag)) {
+    return undefined;
+  }
   let { expression } = tag;
-  while (ts.isPropertyAccessExpression(expression)) {({ expression } = expression);}
+  while (ts.isPropertyAccessExpression(expression)) {
+    ({ expression } = expression);
+  }
   return ts.isIdentifier(expression) ? expression.text : undefined;
 }
 
@@ -156,19 +184,28 @@ function staticLiteral(attribute: ts.JsxAttribute): string | undefined {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function literalKind(attribute: ts.JsxAttribute): "string" | "number" | "boolean" | undefined {
-  if (!attribute.initializer) {return "boolean";}
-  if (ts.isStringLiteral(attribute.initializer)) {return "string";}
-  if (!ts.isJsxExpression(attribute.initializer) || !attribute.initializer.expression)
-    {return undefined;}
+  if (!attribute.initializer) {
+    return "boolean";
+  }
+  if (ts.isStringLiteral(attribute.initializer)) {
+    return "string";
+  }
+  if (!ts.isJsxExpression(attribute.initializer) || !attribute.initializer.expression) {
+    return undefined;
+  }
   const { expression } = attribute.initializer;
-  if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression))
-    {return "string";}
-  if (ts.isNumericLiteral(expression)) {return "number";}
+  if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) {
+    return "string";
+  }
+  if (ts.isNumericLiteral(expression)) {
+    return "number";
+  }
   if (
     expression.kind === ts.SyntaxKind.TrueKeyword ||
     expression.kind === ts.SyntaxKind.FalseKeyword
-  )
-    {return "boolean";}
+  ) {
+    return "boolean";
+  }
   return undefined;
 }
 
@@ -180,7 +217,9 @@ function containsJsx(node: ts.Node): boolean {
       found = true;
       return;
     }
-    if (!found) {ts.forEachChild(child, inspect);}
+    if (!found) {
+      ts.forEachChild(child, inspect);
+    }
   };
   inspect(node);
   return found;
@@ -206,10 +245,15 @@ function exportedEntries(source: ts.SourceFile): ts.Node[] {
     if (
       ts.isFunctionDeclaration(statement) &&
       (exported || statement.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword))
-    )
-      {entries.push(statement);}
-    if (ts.isVariableStatement(statement) && exported) {entries.push(statement);}
-    if (ts.isExportAssignment(statement)) {entries.push(statement.expression);}
+    ) {
+      entries.push(statement);
+    }
+    if (ts.isVariableStatement(statement) && exported) {
+      entries.push(statement);
+    }
+    if (ts.isExportAssignment(statement)) {
+      entries.push(statement.expression);
+    }
   }
   return entries;
 }
@@ -257,8 +301,9 @@ function containsNativeControl(node: ts.Node): boolean {
     (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
     ts.isIdentifier(node.tagName) &&
     /^(?<element>button|input|select|textarea)$/u.test(node.tagName.text)
-  )
-    {return true;}
+  ) {
+    return true;
+  }
   return ts.forEachChild(node, containsNativeControl) ?? false;
 }
 
@@ -285,7 +330,9 @@ export function analyzeSource({
   const typedJsx = reference?.arrustedRoot
     ? checkJsxAttributes({ arrustedRoot: reference.arrustedRoot, files })
     : undefined;
-  if (typedJsx) {limitations.push(...typedJsx.limitations);}
+  if (typedJsx) {
+    limitations.push(...typedJsx.limitations);
+  }
   const typedAttributes = new Map(
     typedJsx?.attributes.map((attribute) => [`${attribute.path}:${attribute.start}`, attribute]),
   );
@@ -307,26 +354,29 @@ export function analyzeSource({
       true,
       ts.ScriptKind.TSX,
     );
-    if (!exportedEntries(source).length) {continue;}
-    for (const match of file.content.matchAll(/className\s*=\s*["'](?<className>[^"']+)["']/gu))
-      {for (const name of match[1].split(/\s+/u))
-        {
-          if (name && !name.includes("[")) {
-            referencedClasses.add(name);
-          }
+    if (!exportedEntries(source).length) {
+      continue;
+    }
+    for (const match of file.content.matchAll(/className\s*=\s*["'](?<className>[^"']+)["']/gu)) {
+      for (const name of match[1].split(/\s+/u)) {
+        if (name && !name.includes("[")) {
+          referencedClasses.add(name);
         }
       }
-    for (const statement of source.statements)
-      {if (
+    }
+    for (const statement of source.statements) {
+      if (
         ts.isImportDeclaration(statement) &&
         ts.isStringLiteral(statement.moduleSpecifier) &&
         /\.css$/iu.test(statement.moduleSpecifier.text)
-      )
-        {reachableCss.add(
+      ) {
+        reachableCss.add(
           path.posix.normalize(
             path.posix.join(path.posix.dirname(file.path), statement.moduleSpecifier.text),
           ),
-        );}}
+        );
+      }
+    }
   }
 
   for (const file of files) {
@@ -367,8 +417,8 @@ export function analyzeSource({
         }
         const refs: string[] = [];
         collectVarReferences(declaration.value, refs);
-        for (const ref of refs)
-          {observations.push(
+        for (const ref of refs) {
+          observations.push(
             observation(
               `styling:var:${file.path}:${declaration.source?.start?.line ?? 0}:${ref}`,
               "styling",
@@ -381,11 +431,14 @@ export function analyzeSource({
               source,
               "token-reference",
             ),
-          );}
+          );
+        }
         const declarationLiterals: string[] = [];
         collectCssLiterals(declaration.value, declarationLiterals);
         for (const literal of declarationLiterals) {
-          if (isStructuralProperty(declaration.prop)) {continue;}
+          if (isStructuralProperty(declaration.prop)) {
+            continue;
+          }
           observations.push(
             observation(
               `styling:literal:${file.path}:${declaration.source?.start?.line ?? 0}:${literal}`,
@@ -416,45 +469,60 @@ export function analyzeSource({
     const usedInJsx = new Set<string>();
 
     for (const statement of source.statements) {
-      if (!ts.isImportDeclaration(statement) || !statement.importClause) {continue;}
-      if (!ts.isStringLiteral(statement.moduleSpecifier)) {continue;}
+      if (!ts.isImportDeclaration(statement) || !statement.importClause) {
+        continue;
+      }
+      if (!ts.isStringLiteral(statement.moduleSpecifier)) {
+        continue;
+      }
       const moduleSource = statement.moduleSpecifier.text;
       const bindings = statement.importClause.namedBindings;
       const isAutograph = autographUiImport.test(moduleSource);
-      if (statement.importClause.name)
-        {if (isAutograph)
-          {imported.set(statement.importClause.name.text, {
+      if (statement.importClause.name) {
+        if (isAutograph) {
+          imported.set(statement.importClause.name.text, {
             name: "default",
             source: moduleSource,
-          });}
-        else {unresolvedImports.add(statement.importClause.name.text);}}
-      if (bindings && ts.isNamespaceImport(bindings))
-        {if (isAutograph) {imported.set(bindings.name.text, { name: "*", source: moduleSource });}
-        else {unresolvedImports.add(bindings.name.text);}}
-      if (bindings && ts.isNamedImports(bindings))
-        {for (const item of bindings.elements)
-          {
-            if (isAutograph) {
-              imported.set(item.name.text, {
-                name: item.propertyName?.text ?? item.name.text,
-                source: moduleSource,
-              });
-            } else {
-              unresolvedImports.add(item.name.text);
-            }
+          });
+        } else {
+          unresolvedImports.add(statement.importClause.name.text);
+        }
+      }
+      if (bindings && ts.isNamespaceImport(bindings)) {
+        if (isAutograph) {
+          imported.set(bindings.name.text, { name: "*", source: moduleSource });
+        } else {
+          unresolvedImports.add(bindings.name.text);
+        }
+      }
+      if (bindings && ts.isNamedImports(bindings)) {
+        for (const item of bindings.elements) {
+          if (isAutograph) {
+            imported.set(item.name.text, {
+              name: item.propertyName?.text ?? item.name.text,
+              source: moduleSource,
+            });
+          } else {
+            unresolvedImports.add(item.name.text);
           }
         }
+      }
     }
     for (const statement of source.statements) {
-      if (ts.isFunctionDeclaration(statement) && statement.name && containsNativeControl(statement))
-        {localDeclarations.add(statement.name.text);}
-      if (ts.isClassDeclaration(statement) && statement.name && containsNativeControl(statement))
-        {localDeclarations.add(statement.name.text);}
-      if (ts.isVariableStatement(statement))
-        {for (const declaration of statement.declarationList.declarations)
-          {
-            if (ts.isIdentifier(declaration.name) && containsNativeControl(declaration)) {
-              localDeclarations.add(declaration.name.text);
+      if (
+        ts.isFunctionDeclaration(statement) &&
+        statement.name &&
+        containsNativeControl(statement)
+      ) {
+        localDeclarations.add(statement.name.text);
+      }
+      if (ts.isClassDeclaration(statement) && statement.name && containsNativeControl(statement)) {
+        localDeclarations.add(statement.name.text);
+      }
+      if (ts.isVariableStatement(statement)) {
+        for (const declaration of statement.declarationList.declarations) {
+          if (ts.isIdentifier(declaration.name) && containsNativeControl(declaration)) {
+            localDeclarations.add(declaration.name.text);
           }
         }
       }
@@ -468,16 +536,22 @@ export function analyzeSource({
       continue;
     }
     const visit = (node: ts.Node, entry?: ts.Node): void => {
-      if (entry && node !== entry && ts.isFunctionLike(node)) {return;}
+      if (entry && node !== entry && ts.isFunctionLike(node)) {
+        return;
+      }
       if (ts.isBlock(node)) {
         for (const statement of node.statements) {
           visit(statement, entry);
-          if (ts.isReturnStatement(statement)) {return;}
+          if (ts.isReturnStatement(statement)) {
+            return;
+          }
         }
         return;
       }
       if (ts.isIfStatement(node) && isStaticallyFalse(node.expression)) {
-        if (node.elseStatement) {visit(node.elseStatement);}
+        if (node.elseStatement) {
+          visit(node.elseStatement);
+        }
         return;
       }
       if (ts.isConditionalExpression(node) && isStaticallyFalse(node.condition)) {
@@ -488,8 +562,9 @@ export function analyzeSource({
         ts.isBinaryExpression(node) &&
         node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken &&
         isStaticallyFalse(node.left)
-      )
-        {return;}
+      ) {
+        return;
+      }
       if (
         ts.isConditionalExpression(node) &&
         !isStaticallyFalse(node.condition) &&
@@ -510,11 +585,13 @@ export function analyzeSource({
         const tag = node.tagName;
         const root = jsxRootIdentifier(tag);
         const item = publicImport(imported, tag);
-        if (root) {usedInJsx.add(root);}
+        if (root) {
+          usedInJsx.add(root);
+        }
         for (const attribute of node.attributes.properties) {
           if (ts.isJsxSpreadAttribute(attribute)) {
-            if (item)
-              {observations.push(
+            if (item) {
+              observations.push(
                 observation(
                   `api:spread:${file.path}:${attribute.getStart(source)}`,
                   "api",
@@ -523,7 +600,8 @@ export function analyzeSource({
                   position(source, attribute),
                   "spread-props",
                 ),
-              );}
+              );
+            }
             continue;
           }
           const name = attribute.name.getText(source);
@@ -531,7 +609,9 @@ export function analyzeSource({
           if (name === "className" && text) {
             for (const bracketed of text.matchAll(/\[(?<content>[^\]]+)\]/gu)) {
               const prefix = text.slice(0, bracketed.index).split(/\s/u).at(-1) ?? "";
-              if (/(?:^|:)(?:(?:min-|max-)?[wh]|grid-cols|grid-rows)-$/u.test(prefix)) {continue;}
+              if (/(?:^|:)(?:(?:min-|max-)?[wh]|grid-cols|grid-rows)-$/u.test(prefix)) {
+                continue;
+              }
               collectCssLiterals(bracketed[1], literals);
               const refs: string[] = [];
               collectVarReferences(bracketed[1], refs);
@@ -561,8 +641,8 @@ export function analyzeSource({
               }
               const classLiterals: string[] = [];
               collectCssLiterals(bracketed[1], classLiterals);
-              for (const literal of classLiterals)
-                {observations.push(
+              for (const literal of classLiterals) {
+                observations.push(
                   observation(
                     `styling:class-literal:${file.path}:${attribute.getStart(source)}:${literal}`,
                     "styling",
@@ -571,7 +651,8 @@ export function analyzeSource({
                     position(source, attribute),
                     "raw-literal",
                   ),
-                );}
+                );
+              }
             }
           }
           if (
@@ -579,17 +660,20 @@ export function analyzeSource({
             attribute.initializer &&
             ts.isJsxExpression(attribute.initializer) &&
             attribute.initializer.expression
-          )
-            {collectStyleExpression(attribute.initializer.expression, literals);}
+          ) {
+            collectStyleExpression(attribute.initializer.expression, literals);
+          }
           if (
             name === "style" &&
             attribute.initializer &&
             ts.isJsxExpression(attribute.initializer) &&
             attribute.initializer.expression &&
             ts.isObjectLiteralExpression(attribute.initializer.expression)
-          )
-            {for (const property of attribute.initializer.expression.properties) {
-              if (!ts.isPropertyAssignment(property)) {continue;}
+          ) {
+            for (const property of attribute.initializer.expression.properties) {
+              if (!ts.isPropertyAssignment(property)) {
+                continue;
+              }
               const value = property.initializer;
               if (
                 !ts.isStringLiteral(value) &&
@@ -637,7 +721,9 @@ export function analyzeSource({
               const styleLiterals: string[] = [];
               collectCssLiterals(value.text, styleLiterals);
               for (const literal of styleLiterals) {
-                if (isStructuralProperty(property.name.getText(source))) {continue;}
+                if (isStructuralProperty(property.name.getText(source))) {
+                  continue;
+                }
                 observations.push(
                   observation(
                     `styling:style-literal:${file.path}:${property.getStart(source)}:${literal}`,
@@ -649,7 +735,8 @@ export function analyzeSource({
                   ),
                 );
               }
-            }}
+            }
+          }
           if (item && reference) {
             const declaration = reference.modules[item.source]?.exports[item.name];
             if (!declaration) {
@@ -713,7 +800,9 @@ export function analyzeSource({
                   summary = `${item.name}.${name} accepts static ${kind} values.`;
                 } else {
                   summary = `${item.name}.${name}'s primitive type cannot be resolved.`;
-                  if (acceptedPrimitives) {verdict = "nonconforming";}
+                  if (acceptedPrimitives) {
+                    verdict = "nonconforming";
+                  }
                 }
               }
               observations.push(
@@ -729,8 +818,8 @@ export function analyzeSource({
             }
           }
         }
-        if (item)
-          {observations.push(
+        if (item) {
+          observations.push(
             observation(
               `component:public:${file.path}:${node.getStart(source)}`,
               "component",
@@ -741,13 +830,13 @@ export function analyzeSource({
               position(source, node),
               "public-component",
             ),
-          );}
-        else if (
+          );
+        } else if (
           ts.isIdentifier(tag) &&
           /^[A-Z]/u.test(tag.text) &&
           localDeclarations.has(tag.text)
-        )
-          {observations.push(
+        ) {
+          observations.push(
             observation(
               `component:local:${file.path}:${node.getStart(source)}`,
               "component",
@@ -756,13 +845,13 @@ export function analyzeSource({
               position(source, node),
               "local-control",
             ),
-          );}
-        else if (
+          );
+        } else if (
           ts.isIdentifier(tag) &&
           /^[A-Z]/u.test(tag.text) &&
           unresolvedImports.has(tag.text)
-        )
-          {observations.push(
+        ) {
+          observations.push(
             observation(
               `component:unresolved:${file.path}:${node.getStart(source)}`,
               "component",
@@ -771,9 +860,9 @@ export function analyzeSource({
               position(source, node),
               "unresolved-component",
             ),
-          );}
-        else if (ts.isIdentifier(tag) && /^[A-Z]/u.test(tag.text))
-          {observations.push(
+          );
+        } else if (ts.isIdentifier(tag) && /^[A-Z]/u.test(tag.text)) {
+          observations.push(
             observation(
               `component:unknown:${file.path}:${node.getStart(source)}`,
               "component",
@@ -782,12 +871,12 @@ export function analyzeSource({
               position(source, node),
               "unresolved-component",
             ),
-          );}
-        else if (
+          );
+        } else if (
           ts.isIdentifier(tag) &&
           /^(?<element>button|input|select|textarea)$/u.test(tag.text)
-        )
-          {observations.push(
+        ) {
+          observations.push(
             observation(
               `component:native:${file.path}:${node.getStart(source)}`,
               "component",
@@ -796,16 +885,22 @@ export function analyzeSource({
               position(source, node),
               "local-control",
             ),
-          );}
+          );
+        }
       }
-      if (ts.isJsxExpression(node) && node.expression && ts.isIdentifier(node.expression))
-        {usedInJsx.add(node.expression.text);}
+      if (ts.isJsxExpression(node) && node.expression && ts.isIdentifier(node.expression)) {
+        usedInJsx.add(node.expression.text);
+      }
       ts.forEachChild(node, visit);
     };
-    for (const entry of seenEntries) {visit(entry, entry);}
+    for (const entry of seenEntries) {
+      visit(entry, entry);
+    }
     for (const localName of unique([...usedInJsx].filter((name) => imported.has(name)))) {
       const item = imported.get(localName);
-      if (item) {imports.push({ localName, path: file.path, ...item });}
+      if (item) {
+        imports.push({ localName, path: file.path, ...item });
+      }
     }
   }
 

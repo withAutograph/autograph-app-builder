@@ -33,7 +33,9 @@ export function selfServiceSignupAuthority(
 function getPreviewOAuthDeploymentRuntime(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): PreviewOAuthDeploymentRuntime {
-  if (deploymentRuntime !== undefined) {return deploymentRuntime;}
+  if (deploymentRuntime !== undefined) {
+    return deploymentRuntime;
+  }
   let providerEmulation: ReturnType<typeof readProviderEmulation>;
   try {
     providerEmulation = readProviderEmulation(environment);
@@ -170,7 +172,9 @@ export async function ensurePreviewSessionOrganization(input: {
   headers: Headers;
 }) {
   const current = await input.auth.api.getSession({ headers: input.headers });
-  if (!current?.user) {return;}
+  if (!current?.user) {
+    return;
+  }
 
   const ensured = await input.authority.ensureOrganizationForVerifiedUser({
     userId: current.user.id,

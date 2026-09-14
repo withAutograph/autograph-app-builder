@@ -18,21 +18,24 @@ async function privateRoot(root: string) {
     info.uid !== process.getuid?.() ||
     // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
     (info.mode & 0o077) !== 0
-  )
-    {throw new Error(`Development root must be canonical, owner-only, and mode 0700: ${root}`);}
+  ) {
+    throw new Error(`Development root must be canonical, owner-only, and mode 0700: ${root}`);
+  }
   return canonical;
 }
 
-if (process.env.VERCEL_TOKEN !== undefined || process.env.AI_GATEWAY_API_KEY !== undefined)
-  {throw new Error("Development mode rejects static Vercel and AI Gateway credentials.");}
+if (process.env.VERCEL_TOKEN !== undefined || process.env.AI_GATEWAY_API_KEY !== undefined) {
+  throw new Error("Development mode rejects static Vercel and AI Gateway credentials.");
+}
 
 const args = parseDevelopmentArguments(process.argv.slice(2));
 const artifactRoot = await privateRoot(
   args.stateRoot ?? path.join(repositoryRoot, ".artifacts/development"),
 );
 const node = process.env.APP_BUILDER_DEV_NODE_BIN;
-if (node === undefined || !node.startsWith("/"))
-  {throw new Error("mise must supply the absolute development Node executable.");}
+if (node === undefined || !node.startsWith("/")) {
+  throw new Error("mise must supply the absolute development Node executable.");
+}
 
 const code = await runWithDevelopmentLock({
   args: [

@@ -22,7 +22,9 @@ const hostedForwarderConfigSchema = z
 export function readHostedForwarderSubject(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): string | undefined {
-  if (environment.EVE_HOSTED_ADAPTER !== "1") {return;}
+  if (environment.EVE_HOSTED_ADAPTER !== "1") {
+    return;
+  }
   const deploymentEnvironment = readHostedDeploymentEnvironment(environment);
   const config = hostedForwarderConfigSchema.parse({
     projectName: environment.EVE_HOSTED_VERCEL_PROJECT_NAME,

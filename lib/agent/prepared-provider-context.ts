@@ -50,9 +50,13 @@ export function withPreparedGitHubSelection(
   input: RepositoryAccessToolInput,
   intent: PreparedIntent | undefined,
 ): RepositoryAccessToolInput {
-  if (!intent || input.selectedInstallationId !== undefined) {return input;}
+  if (!intent || input.selectedInstallationId !== undefined) {
+    return input;
+  }
   const preparedRepository = preparedGitHubRepository(intent);
-  if (preparedRepository?.toLowerCase() !== input.repository.toLowerCase()) {return input;}
+  if (preparedRepository?.toLowerCase() !== input.repository.toLowerCase()) {
+    return input;
+  }
   const selectedInstallationId =
     intent.providers?.githubInstallationId ??
     (intent.provisioning?.github.status === "succeeded"
@@ -100,13 +104,17 @@ const reconnect = (): PreparedVercelAccess => ({
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function boundedJson(response: Response): Promise<unknown> {
   const reader = response.body?.getReader();
-  if (!reader) {throw new Error("invalid-response");}
+  if (!reader) {
+    throw new Error("invalid-response");
+  }
   const chunks: Uint8Array[] = [];
   let length = 0;
   for (;;) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const { done, value } = await reader.read();
-    if (done) {break;}
+    if (done) {
+      break;
+    }
     length += value.byteLength;
     if (length > 2 * 1024 * 1024) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -141,28 +149,39 @@ export async function readPreparedVercelAccess(input: {
       ? input.intent.provisioning.vercel
       : undefined;
   const installationId = input.intent.providers?.vercelInstallationId ?? project?.installationId;
-  if (!installationId) {return { status: "not-selected" };}
+  if (!installationId) {
+    return { status: "not-selected" };
+  }
   try {
     const credential = await input.readCredential({
       authority: input.authority,
       installationId,
     });
-    if (!credential || !credential.binding.active) {return reconnect();}
-    if (credential.binding.installationId !== installationId) {return unavailable();}
+    if (!credential || !credential.binding.active) {
+      return reconnect();
+    }
+    if (credential.binding.installationId !== installationId) {
+      return unavailable();
+    }
     const { binding, token } = credential;
     if (
       project &&
       (project.installationId !== installationId ||
         project.scope.id !== binding.scopeId ||
         project.scope.type !== binding.scopeType)
-    )
-      {return { action: "review-selection", status: "resource-unavailable" };}
+    ) {
+      return { action: "review-selection", status: "resource-unavailable" };
+    }
     let path = "/v2/user";
-    if (project) {path = `/v9/projects/${encodeURIComponent(project.projectId)}`;}
-    else if (binding.scopeType === "team")
-      {path = `/v2/teams/${encodeURIComponent(binding.scopeId)}`;}
+    if (project) {
+      path = `/v9/projects/${encodeURIComponent(project.projectId)}`;
+    } else if (binding.scopeType === "team") {
+      path = `/v2/teams/${encodeURIComponent(binding.scopeId)}`;
+    }
     const url = new URL(`${input.apiOrigin ?? "https://api.vercel.com"}${path}`);
-    if (project && binding.scopeType === "team") {url.searchParams.set("teamId", binding.scopeId);}
+    if (project && binding.scopeType === "team") {
+      url.searchParams.set("teamId", binding.scopeId);
+    }
     const response = await (input.fetch ?? fetch)(url, {
       cache: "no-store",
       headers: {
@@ -210,8 +229,9 @@ export async function readPreparedVercelAccess(input: {
       if (
         observed.id !== project.projectId ||
         (observed.accountId !== undefined && observed.accountId !== binding.scopeId)
-      )
-        {return unavailable();}
+      ) {
+        return unavailable();
+      }
       return {
         project: { id: observed.id, name: observed.name },
         scope,
@@ -222,7 +242,9 @@ export async function readPreparedVercelAccess(input: {
       binding.scopeType === "team"
         ? z.object({ id: z.string() }).parse(body)
         : z.object({ user: z.object({ id: z.string() }) }).parse(body).user;
-    if (observed.id !== binding.scopeId) {return unavailable();}
+    if (observed.id !== binding.scopeId) {
+      return unavailable();
+    }
     return { scope, status: "ready" };
   } catch {
     return unavailable();
@@ -241,7 +263,9 @@ export function createPreparedAppContextReader(input: {
   return async (sessionAuth: unknown) => {
     // The trusted reader establishes tenant ownership before any provider work.
     const intent = await input.readHandoff(sessionAuth);
-    if (!intent) {return { status: "not-prepared" as const };}
+    if (!intent) {
+      return { status: "not-prepared" as const };
+    }
     const repository = preparedGitHubRepository(intent);
     const [github, vercel] = await Promise.all([
       repository
@@ -376,18 +400,21 @@ export async function readPreparedAppContext(sessionAuth: unknown) {
         async readCredential(value) {
           const environment = providerEmulationEnvironment(process.env);
           const config = readVercelIntegrationEnvironment(environment);
-          if (config.issuer !== authority.issuer || config.resource !== authority.audience)
-            {throw new Error("Provider authority is unavailable.");}
-          if (providerDatabase === undefined)
-            {providerDatabase = openHostedPostgresDatabase(environment.DATABASE_URL ?? "");}
+          if (config.issuer !== authority.issuer || config.resource !== authority.audience) {
+            throw new Error("Provider authority is unavailable.");
+          }
+          if (providerDatabase === undefined) {
+            providerDatabase = openHostedPostgresDatabase(environment.DATABASE_URL ?? "");
+          }
           const database = providerDatabase;
           if (
             !(await createPostgresWorkspaceMembership(database).isMember({
               principal,
               workspaceId: authority.workspaceId,
             }))
-          )
-            {throw new Error("Provider authority is unavailable.");}
+          ) {
+            throw new Error("Provider authority is unavailable.");
+          }
           return readActiveVercelInstallationToken({
             ...value,
             config,

@@ -28,8 +28,11 @@ const originalEnvironment = {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function restoreEnvironment() {
   for (const [key, value] of Object.entries(originalEnvironment)) {
-    if (value === undefined) {Reflect.deleteProperty(process.env, key);}
-    else {process.env[key] = value;}
+    if (value === undefined) {
+      Reflect.deleteProperty(process.env, key);
+    } else {
+      process.env[key] = value;
+    }
   }
 }
 
