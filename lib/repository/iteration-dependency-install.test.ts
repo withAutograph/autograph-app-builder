@@ -7,11 +7,12 @@ import { targetIterationProposalSchema } from "./target-planning";
 const digest = (content: string) => createHash("sha256").update(content).digest("hex");
 const before = '{"dependencies":{}}';
 const after = '{"dependencies":{"path-to-regexp":"8.4.2"}}';
-const fixture = (options: { stale?: boolean; installFails?: boolean } = {}) => {
+const fixture = (options: { stale?: boolean; installFails?: boolean; cueFails?: boolean } = {}) => {
   const events: string[] = [];
   const policies: Parameters<SandboxSession["setNetworkPolicy"]>[0][] = [];
   let manifest = options.stale === true ? "changed by another writer" : before;
   const failure = { exitCode: 1, stderr: "package not found", stdout: "" };
+  const cueFailure = { exitCode: 1, stderr: "cue source activation failed", stdout: "cue output" };
   const sandbox = {
     id: "fixture",
     readBinaryFile: vi.fn<SandboxSession["readBinaryFile"]>(async ({ path }) => {
@@ -41,7 +42,7 @@ const fixture = (options: { stale?: boolean; installFails?: boolean } = {}) => {
       expect(command).toContain('cue_bin="$(mise which cue)"');
       expect(command).toContain('ln -sfn "$cue_bin" "$toolchain_bin/cue"');
       events.push("cue");
-      return { exitCode: 0, stderr: "", stdout: "" };
+      return options.cueFails === true ? cueFailure : { exitCode: 0, stderr: "", stdout: "" };
     }),
     setNetworkPolicy: vi.fn<SandboxSession["setNetworkPolicy"]>(async (policy) => {
       await Promise.resolve();
@@ -114,7 +115,7 @@ const fixture = (options: { stale?: boolean; installFails?: boolean } = {}) => {
       proposalPath: "/workspace/proposal.json",
       sandbox,
     });
-  return { events, execute, failure, policies, sandbox };
+  return { cueFailure, events, execute, failure, policies, sandbox };
 };
 
 describe("existing-app dependency installation", () => {
@@ -153,5 +154,17 @@ describe("existing-app dependency installation", () => {
     expect(await state.execute()).toEqual(state.failure);
     expect(state.sandbox.writeTextFile).toHaveBeenCalledOnce();
     expect(state.sandbox.run).toHaveBeenCalledOnce();
+  });
+  it("returns CUE activation failure after writes without an applied receipt or generator dispatch", async () => {
+    const state = fixture({ cueFails: true });
+    expect(await state.execute()).toEqual(state.cueFailure);
+    expect(state.sandbox.writeTextFile).toHaveBeenCalledOnce();
+    expect(state.events).toEqual([
+      "read:repository/apps/vendor/package.json",
+      "write",
+      "install",
+      "cue",
+    ]);
+    expect(state.sandbox.run).toHaveBeenCalledTimes(2);
   });
 });
