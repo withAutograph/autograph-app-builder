@@ -46,6 +46,7 @@ describe("accepted product obligations", () => {
 it("retains source failures separately from technical or partial runtime evidence", () => {
   const sourceAssessment = {
     basis: "source-review" as const,
+    bindingDigest: "binding",
     evidenceDigest: "review",
     evidenceNote: "Source review only",
     findings: [],

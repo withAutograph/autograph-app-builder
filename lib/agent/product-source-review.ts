@@ -39,6 +39,7 @@ export type SourceJudgment = z.infer<typeof judgmentSchema>;
 export interface ProductSourceAssessment {
   basis: "source-review";
   evidenceDigest: string;
+  bindingDigest: string;
   evidenceNote: string;
   modelId: string;
   status: "failed" | "unassessed" | "blocked";
@@ -58,12 +59,30 @@ export interface ProductSourceAssessment {
 export const sourceReviewEvidenceDigest = (input: ProductSourceReviewInput): string =>
   createHash("sha256").update(JSON.stringify(input)).digest("hex");
 
+export const sourceReviewBindingDigest = (
+  input: Pick<
+    ProductSourceReviewInput,
+    "sourceDigest" | "appSpecDigest" | "originalRequest" | "clarifications"
+  >,
+): string =>
+  createHash("sha256")
+    .update(
+      JSON.stringify([
+        input.sourceDigest,
+        input.appSpecDigest,
+        input.originalRequest,
+        input.clarifications,
+      ]),
+    )
+    .digest("hex");
+
 export const unavailableSourceAssessment = (
   input: ProductSourceReviewInput,
   reason: string,
   status: "unassessed" | "blocked" = "unassessed",
 ): ProductSourceAssessment => ({
   basis: "source-review",
+  bindingDigest: sourceReviewBindingDigest(input),
   evidenceDigest: sourceReviewEvidenceDigest(input),
   evidenceNote:
     "Source citations are mechanically checked; conclusions are independent model assessments, not executed runtime observations.",

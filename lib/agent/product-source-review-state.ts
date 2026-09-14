@@ -2,6 +2,7 @@ import { defineState } from "eve/context";
 import {
   assessProductSource,
   sourceReviewEvidenceDigest,
+  sourceReviewBindingDigest,
   unavailableSourceAssessment,
 } from "./product-source-review";
 import type { ProductSourceAssessment, ProductSourceReviewInput } from "./product-source-review";
@@ -23,13 +24,16 @@ export const retainProductRequest = (
   current: RetainedProductRequest,
   message: string,
   sequence: string,
+  initialTurn = false,
 ): RetainedProductRequest => {
   if (current.sequences.includes(sequence)) {
     return current;
   }
   return {
-    clarifications: current.original === null ? [] : [...current.clarifications, message],
-    original: current.original ?? message,
+    ...current,
+    clarifications:
+      current.original === null && initialTurn ? [] : [...current.clarifications, message],
+    original: current.original ?? (initialTurn ? message : null),
     sequences: [...current.sequences, sequence],
   };
 };
@@ -65,4 +69,16 @@ export const reviewCurrentProductSource = async (
     store.set(assessment);
   }
   return assessment;
+};
+
+/** Return retained findings only when all current requirements and observed source still match. */
+export const currentProductSourceAssessment = (
+  input: Pick<
+    ProductSourceReviewInput,
+    "sourceDigest" | "appSpecDigest" | "originalRequest" | "clarifications"
+  >,
+  store: SourceAssessmentStore = sessionAssessmentStore,
+): ProductSourceAssessment | undefined => {
+  const current = store.get();
+  return current?.bindingDigest === sourceReviewBindingDigest(input) ? current : undefined;
 };

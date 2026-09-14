@@ -15,7 +15,7 @@ export const readProductReviewSource = async (input: {
 }): Promise<Pick<ProductSourceReviewInput, "files" | "omissions">> => {
   const files: ProductSourceReviewInput["files"] = [];
   const omissions = [
-    "Uninspected shared/dependency implementations cannot establish absence of functionality.",
+    "Source selection covers app files, changed files and root manifests; imports into unchanged shared/dependency implementations are not traversed and cannot establish absence of functionality.",
     "Only original request text and textual clarifications are retained; attached assets are not reviewed.",
   ];
   let bytes = 0;
@@ -48,11 +48,12 @@ export const readProductReviewSource = async (input: {
         omissions.push(`${file.path}: changed during observation`);
         continue;
       }
-      bytes += Buffer.byteLength(content);
-      if (bytes > 400_000) {
+      const fileBytes = Buffer.byteLength(content);
+      if (bytes + fileBytes > 400_000) {
         omissions.push(`${file.path}: model context omitted`);
         continue;
       }
+      bytes += fileBytes;
       files.push({ content, path: file.path });
     } catch {
       omissions.push(`${file.path}: unreadable`);
