@@ -26,7 +26,7 @@ const sanitize = (value: string): string =>
     .replaceAll(/\bBearer\s+[^\s"',;]+/giu, "Bearer [REDACTED]")
     .replaceAll(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu, "[JWT REDACTED]")
     .replaceAll(
-      /\b(?:[A-Z_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|AUTHORIZATION|COOKIE)[A-Z_]*)["']?\s*[:=]\s*(?:"[^"\n]*"|'[^'\n]*'|[^\s,;]+)/giu,
+      /\b(?:[A-Z_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[-_]?KEY|AUTHORIZATION|COOKIE)[A-Z_]*)["']?\s*[:=]\s*(?:"[^"\n]*"|'[^'\n]*'|[^\s,;]+)/giu,
       "[CREDENTIAL REDACTED]",
     );
 

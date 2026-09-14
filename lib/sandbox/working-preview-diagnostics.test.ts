@@ -60,3 +60,15 @@ describe("working preview diagnostics", () => {
     }
   });
 });
+
+it("redacts camel-case, hyphenated and underscored API keys and passwd", () => {
+  const excerpt = workingPreviewDiagnosticExcerpt(
+    JSON.stringify({
+      stderr: "Error: connection failed apiKey=alpha api-key=beta api_key=gamma passwd=delta",
+    }),
+  );
+  expect(excerpt).toContain("Error: connection failed");
+  for (const secret of ["alpha", "beta", "gamma", "delta"]) {
+    expect(excerpt).not.toContain(secret);
+  }
+});
