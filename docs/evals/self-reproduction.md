@@ -28,10 +28,10 @@ readback across the required lifecycle; a success-shaped response or source
 claim is insufficient.
 
 The evaluator may prepare isolated synthetic users and provider emulators,
-observe the product workflow, and inspect or start unchanged exported output
+observe the product workflow, and inspect unchanged exported output
 afterward. Reference source, screenshots, evaluator findings, and comparison
-fixtures remain outside generator input. Evaluator-owned hosting can support
-observation, but it does not prove that App Builder delivered a working result.
+fixtures remain outside generator input. The current acceptance run does not
+create evaluator-owned hosting for the candidate.
 
 Report every requirement as **passed**, **failed**, **blocked**, or
 **unassessed**. Missing generated functionality is a failure. Unavailable
@@ -40,6 +40,7 @@ readiness probe, build, or screenshot cannot substitute for the relevant user
 behavior. Preserve partial results and explain missing evidence. Visual scores
 remain advisory. Hosted publication and provisioning remain unverified unless
 separately authorized and exercised.
+Anonymous entry is excluded from the current repair and acceptance scope.
 
 ## Supported public driver
 
@@ -63,8 +64,21 @@ candidate checkout. Keep its output directory outside the reference source
 tree. A new baseline requires a new directory.
 
 When the product returns structured `inputRequests`, create a JSON response file
-containing an array of exact `{ "requestId": "...", "response": "..." }`
-entries and resume the same run:
+containing an array with one entry for each exact request ID. Approval requests
+use `{ "kind": "approve" }` or `{ "kind": "deny" }`; question responses use
+`{ "kind": "answer", "value": "..." }` and may include an `optionId` from the
+request. For example:
+
+```json
+[
+  {
+    "requestId": "request-from-inputRequests",
+    "response": { "kind": "approve" }
+  }
+]
+```
+
+Then resume the same run:
 
 ```sh
 mise run eval:self-reproduction -- \
@@ -105,8 +119,12 @@ captures may compare hierarchy, layout, typography, controls, spacing, desktop
 resizing, keyboard interaction, and loading, empty, and error states without
 turning visual similarity into functional credit.
 
-To combine retained public-run evidence with an evaluator-owned source review,
-without rerunning generation or either application, use:
+The retained offline combiner consumes the legacy parity-report schema; it does
+not accept a public driver's `report.json` directly. Once evaluator observation
+has produced a retained run directory containing valid `parity-evidence.json`,
+`report.json`, and `revisions.json`, combine it with a source-review directory
+containing the `self-reproduction-source-review/v1` `observations.json` and its
+referenced evidence without rerunning generation or either application:
 
 ```sh
 mise run eval:self-reproduction-report -- \
@@ -139,3 +157,12 @@ staged internal run, evaluator-hosted candidate, infrastructure probe, or
 candidate-authored validation claim as out-of-box product evidence. They may
 explain a failure or support a later comparison, while the public transcript and
 delivered working preview remain the generation record.
+
+Technical maintainers can find the retained paired-capture implementation in
+`evals/support/self-reproduction-captures.ts`, the default semantic bindings in
+`evals/self-reproduction/default-capture-adapter.ts`, and trusted workflow
+bindings in `evals/self-reproduction/workflow-adapter.ts`. Reference
+instant-navigation collection lives in
+`evals/support/self-reproduction-reference-navigation.ts` and delegates to the
+repository's focused production-navigation task. These components can preserve
+historical comparison evidence; they are not alternate public generation paths.
