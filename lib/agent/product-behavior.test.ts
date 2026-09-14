@@ -2,7 +2,10 @@ import http from "node:http";
 import { describe, expect, it } from "vitest";
 import { executeProductReadback } from "./product-behavior";
 
-const run = async (mode: "stored" | "fake" | "wrong" | "redirect" | "invalid", expired = false) => {
+const run = async (
+  mode: "stored" | "fake" | "wrong" | "redirect" | "invalid" | "auth",
+  expired = false,
+) => {
   let stored: unknown;
   const requests: { path: string; cookie?: string; body: string }[] = [];
   const server = http.createServer(async (request, response) => {
@@ -14,7 +17,9 @@ const run = async (mode: "stored" | "fake" | "wrong" | "redirect" | "invalid", e
     if (request.url?.startsWith("/__autograph_preview_launch")) {
       response.writeHead(303, { location: "/", "set-cookie": "preview=private; HttpOnly; Path=/" });
     } else if (request.method === "POST") {
-      if (mode === "redirect") {
+      if (mode === "auth") {
+        response.writeHead(401);
+      } else if (mode === "redirect") {
         response.writeHead(307, { location: "https://outside.test/leak" });
       } else {
         if (mode === "stored") {
@@ -191,4 +196,11 @@ it("bounds untrusted read response and omits its contents", async () => {
   });
   expect(result.status).toBe("failed");
   expect(JSON.stringify(result)).not.toContain("sensitive");
+});
+
+it("blocks application login requirements without calling persistence broken", async () => {
+  const { requests, result } = await run("auth");
+  expect(result.status).toBe("blocked");
+  expect(result.reason).toContain("authentication context");
+  expect(requests).toHaveLength(2);
 });

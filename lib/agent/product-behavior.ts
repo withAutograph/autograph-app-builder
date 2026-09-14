@@ -87,6 +87,18 @@ const validScenario = (scenario: ProductReadbackScenario): boolean =>
   scenario.markerField.length <= 128 &&
   scenario.readPointer.length <= 1024;
 
+const needsApplicationAuth = (response: Response): boolean => [401, 403].includes(response.status);
+const validExchange = (
+  response: Response,
+  location: string | null,
+  origin: string,
+  cookies: string[],
+): boolean =>
+  response.status === 303 &&
+  location !== null &&
+  new URL(location, origin).origin === origin &&
+  cookies.length > 0;
+
 /** Only action/readback evidence: never proof of restart durability, authentication or child generation. */
 export const executeProductReadback = async (input: {
   authority: { launchUrl: string; expiresAt: number };
@@ -132,12 +144,7 @@ export const executeProductReadback = async (input: {
     const location = access.headers.get("location");
     const cookies = access.headers.getSetCookie().map((header) => header.split(";")[0]);
     await access.body?.cancel();
-    if (
-      access.status !== 303 ||
-      !location ||
-      new URL(location, launch).origin !== launch.origin ||
-      cookies.length === 0
-    ) {
+    if (!validExchange(access, location, launch.origin, cookies)) {
       return result("blocked", "Preview access exchange failed.");
     }
     const headers = { cookie: cookies.join("; ") };
@@ -147,12 +154,21 @@ export const executeProductReadback = async (input: {
       method: "POST",
     });
     await write.body?.cancel();
+    if (needsApplicationAuth(write)) {
+      return result("blocked", "Application authentication context is unavailable for this write.");
+    }
     if (!write.ok) {
       return result("failed", "Application write did not succeed; redirects are not followed.");
     }
     const read = await request(readUrl, { headers, method: "GET" });
     if (!read.ok) {
       await read.body?.cancel();
+      if (needsApplicationAuth(read)) {
+        return result(
+          "blocked",
+          "Application authentication context is unavailable for this read.",
+        );
+      }
       return result("failed", "Independent read did not succeed; redirects are not followed.");
     }
     const observed = atPointer(await readBoundedJson(read), input.scenario.readPointer);
