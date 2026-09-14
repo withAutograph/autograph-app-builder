@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import nodePath from "node:path";
 import { createServer, request } from "node:http";
 import type { IncomingHttpHeaders, Server } from "node:http";
-import type { AddressInfo } from "node:net";
+import { connect } from "node:net";
+import type { AddressInfo, Socket } from "node:net";
 
 import { describe, expect, it } from "vitest";
 
@@ -52,6 +53,8 @@ const call = (port: number, path: string, headers: IncomingHttpHeaders = {}, met
 
 const withGateway = async (
   run: (fixture: {
+    app: Server;
+    shutdown: () => void;
     appPort: number;
     port: number;
     launch: string;
@@ -94,14 +97,23 @@ const withGateway = async (
     [
       "--input-type=module",
       "-e",
-      `${access.source}\nserver.on("listening", () => process.stdout.write("ready"));`,
+      `${access.source}\nserver.on("listening", () => process.stdout.write("ready")); process.stdin.on("data", () => server.close());`,
     ],
-    { stdio: ["ignore", "pipe", "pipe"] },
+    { stdio: ["pipe", "pipe", "pipe"] },
   );
   try {
     await once(child.stdout, "data", { signal: AbortSignal.timeout(5000) });
     const launch = new URL(access.launchUrl);
-    await run({ appPort, launch: launch.pathname + launch.search, observed, port });
+    await run({
+      app,
+      appPort,
+      launch: launch.pathname + launch.search,
+      observed,
+      port,
+      shutdown: () => {
+        child.stdin.write("close");
+      },
+    });
   } finally {
     child.kill();
     await once(child, "exit");
@@ -260,4 +272,116 @@ describe("working preview access", () => {
     expect(first.launchUrl).not.toBe(createWorkingPreviewAccess(input).launchUrl);
     expect(first.source).not.toContain(new URL(first.launchUrl).searchParams.get("token"));
   });
+});
+
+const openUpgrade = async (port: number, headers: Record<string, string>, head = "") => {
+  const socket = connect(port, "127.0.0.1");
+  await once(socket, "connect");
+  socket.write(
+    `GET /_next/webpack-hmr HTTP/1.1\r\nHost: preview.example\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n${Object.entries(
+      headers,
+    )
+      .map(([name, value]) => `${name}: ${value}\r\n`)
+      .join("")}\r\n${head}`,
+  );
+  return socket;
+};
+const untilText = async (socket: Socket, expected: string) => {
+  let text = "";
+  while (!text.includes(expected)) {
+    // oxlint-disable-next-line no-await-in-loop -- Read consecutive chunks from one socket.
+    const [chunk] = await once(socket, "data", { signal: AbortSignal.timeout(3000) });
+    text += chunk.toString();
+  }
+  return text;
+};
+describe("working preview WebSocket upgrade", () => {
+  it("rejects missing credentials and cross-origin upgrades before reaching the app", async () => {
+    await withGateway(async ({ app, port, launch }) => {
+      let upgrades = 0;
+      app.on("upgrade", (_request, socket) => {
+        upgrades += 1;
+        socket.destroy();
+      });
+      const entry = await call(port, launch);
+      const [cookie] = (entry.headers["set-cookie"]?.[0] ?? "").split(";");
+      const attempts: Record<string, string>[] = [
+        { origin: "https://preview.example" },
+        { cookie, origin: "https://attacker.example" },
+        { cookie },
+      ];
+      for (const headers of attempts) {
+        // oxlint-disable-next-line no-await-in-loop -- Exercise isolated rejected handshakes sequentially.
+        const socket = await openUpgrade(port, headers);
+        try {
+          // oxlint-disable-next-line no-await-in-loop -- Read the current rejected handshake.
+          expect(await untilText(socket, "403")).toContain("403");
+        } finally {
+          socket.destroy();
+        }
+      }
+      expect(upgrades).toBe(0);
+    });
+  });
+  it.each(["expiry", "shutdown"])(
+    "forwards authenticated duplex bytes and closes both peers on %s",
+    async (boundary) => {
+      await withGateway(
+        async ({ app, port, launch, shutdown }) => {
+          let observed: IncomingHttpHeaders | undefined;
+          const peerClosed = Promise.withResolvers<null>();
+          app.on("upgrade", (incoming, socket, head) => {
+            observed = incoming.headers;
+            socket.on("close", () => peerClosed.resolve(null));
+            socket.on("end", () => socket.destroy());
+            socket.on("error", () => {});
+            socket.write(
+              "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSet-Cookie: __Host-autograph-preview=forged\r\n\r\nupstream-head",
+            );
+            if (head.length) {
+              socket.write(head);
+            }
+            socket.on("data", (chunk) => socket.write(chunk));
+          });
+          const entry = await call(port, launch);
+          const [cookie] = (entry.headers["set-cookie"]?.[0] ?? "").split(";");
+          const socket = await openUpgrade(
+            port,
+            {
+              authorization: "Bearer application-token",
+              cookie: `${cookie}; app-session=abc`,
+              origin: "https://preview.example",
+              referer: `https://preview.example${launch}`,
+              "x-vercel-oidc-token": "secret",
+            },
+            "client-head",
+          );
+          try {
+            const response = await untilText(socket, "client-head");
+            expect(response).toContain("101 Switching Protocols");
+            expect(response).toContain("upstream-head");
+            expect(response).not.toContain("forged");
+            socket.write("duplex-message");
+            expect(await untilText(socket, "duplex-message")).toContain("duplex-message");
+            expect(observed).toMatchObject({
+              authorization: "Bearer application-token",
+              cookie: "app-session=abc",
+              host: "preview.example",
+            });
+            expect(observed?.referer).toBeUndefined();
+            expect(observed?.["x-vercel-oidc-token"]).toBeUndefined();
+            const closed = once(socket, "close", { signal: AbortSignal.timeout(4000) });
+            if (boundary === "shutdown") {
+              shutdown();
+            }
+            await closed;
+            await peerClosed.promise;
+          } finally {
+            socket.destroy();
+          }
+        },
+        Date.now() + (boundary === "expiry" ? 1800 : 60_000),
+      );
+    },
+  );
 });

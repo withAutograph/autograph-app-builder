@@ -40,6 +40,14 @@ releases its identity; it does not close a newer attempt's ingress.
 
 ## Limitations and acceptance
 
-The gateway is not an isolation boundary against malicious generated code running under its own OS user in the same Sandbox. Cross-user isolation belongs to the authenticated Builder session and Sandbox boundary. Cross-origin unsafe requests are denied; generated apps must not mutate state through GET requests. WebSocket upgrades are currently unavailable.
+The gateway is not an isolation boundary against malicious generated code running under its own OS user in the same Sandbox. Cross-user isolation belongs to the authenticated Builder session and Sandbox boundary. Cross-origin unsafe requests are denied; generated apps must not mutate state through GET requests. WebSocket upgrades use the same preview capability and require an exact host and origin match. Application authentication is preserved; gateway and provider credentials are stripped. Upgraded connections close at expiry and supervisor shutdown.
 
 Focused tests cover actual gateway HTTP traffic, delayed activation, application authentication forwarding, real supervisor process-group shutdown, provider identity binding, cancellation, startup failures, and public receipt recovery. The 2026-09-14 public-entrypoint acceptance failed startup and recovery; see `docs/reports/self-reproduction/2026-09-14-working-preview-acceptance.md` and `docs/reports/self-reproduction/2026-09-14-recovery-acceptance.md`. Startup timeouts now distinguish listener startup from application HTTP readiness and report only safe status observations. A new live acceptance is still required to establish that App Builder starts a real generated app and hands its working URL to the user. Do not count a direct infrastructure probe as self-reproduction evidence.
+
+The later public browser acceptance returned an HTTP-ready page after ordinary
+recovery but found inert controls and simulated backend behavior; see
+`docs/reports/self-reproduction/2026-09-14-browser-acceptance.md`. That run also
+confirmed failed HMR WebSocket handshakes. Authenticated upgrade forwarding
+repairs that transport gap, but is not evidence that the frozen candidate's
+hydration or product behavior is fixed. A separately recorded normal browser
+acceptance is required for that claim.
