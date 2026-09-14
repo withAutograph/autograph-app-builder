@@ -146,3 +146,39 @@ it("retains partial mixed-status evidence and redacts it", async () => {
   expect(output).toContain('"blocked"');
   expect(output).not.toContain("token=x");
 });
+it("retains invalid state as incomplete evidence instead of throwing", async () => {
+  const root = await temp();
+  const state = path.join(root, "state.json");
+  await writeFile(state, "null");
+  const finding = await loadWorkingPreview(state);
+  expect(finding.status).toBe("invalid");
+  expect(unavailablePreviewReport(state, finding).rows[1]?.status).toBe("unassessed");
+});
+it("binds browser evidence to the public session and source without copying its capability", async () => {
+  const root = await temp();
+  const state = path.join(root, "state.json");
+  const receipt = {
+    expiresAt: "2026-01-02T00:00:00.000Z",
+    url: "https://preview.test/private?token=capability",
+    verifiedAt: "2026-01-01T00:00:00.000Z",
+  };
+  await writeFile(
+    state,
+    JSON.stringify({
+      session: { sessionId: "session-1", workingPreview: receipt },
+      sourceRevision: "revision-1",
+    }),
+  );
+  const finding = await loadWorkingPreview(state, Date.parse("2026-01-01T01:00:00.000Z"));
+  expect(finding.status).toBe("ready");
+  if (finding.status !== "ready") {
+    throw new Error("Expected a ready receipt.");
+  }
+  expect(finding.provenance).toEqual({
+    expiresAt: receipt.expiresAt,
+    sessionId: "session-1",
+    sourceRevision: "revision-1",
+    verifiedAt: receipt.verifiedAt,
+  });
+  expect(JSON.stringify(finding.provenance)).not.toContain("capability");
+});

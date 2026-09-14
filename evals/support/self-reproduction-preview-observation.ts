@@ -17,7 +17,14 @@ export interface PreviewViewportObservation {
   status: ObservationStatus;
   viewport: (typeof desktopViewports)[number];
 }
+export interface PreviewSourceProvenance {
+  expiresAt: string;
+  sessionId: string | null;
+  sourceRevision: string | null;
+  verifiedAt: string;
+}
 export interface PreviewObservationReport {
+  provenance?: PreviewSourceProvenance;
   generatedAt: string;
   kind: "self-reproduction-working-preview-observation/v1";
   note: string;
@@ -57,11 +64,34 @@ const sanitizeValue = (value: unknown): unknown => {
   return value;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const previewProvenance = (
+  sourceRevision: unknown,
+  sessionId: unknown,
+  receipt: PreviewReceipt,
+): PreviewSourceProvenance => ({
+  expiresAt: receipt.expiresAt,
+  sessionId: typeof sessionId === "string" ? sessionId : null,
+  sourceRevision: typeof sourceRevision === "string" ? sourceRevision : null,
+  verifiedAt: receipt.verifiedAt,
+});
+
+const isSafePreviewUrl = (value: string): boolean => {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+};
+
 export const loadWorkingPreview = async (
   statePath: string,
   nowMs = Date.now(),
 ): Promise<
-  | { receipt: PreviewReceipt; status: "ready" }
+  | { provenance: PreviewSourceProvenance; receipt: PreviewReceipt; status: "ready" }
   | { reason: string; status: "expired" | "missing" | "missing-final" | "invalid" }
 > => {
   let state: unknown;
@@ -70,9 +100,13 @@ export const loadWorkingPreview = async (
   } catch {
     return { reason: "The owner-only state file was missing or invalid JSON.", status: "invalid" };
   }
+  if (!isRecord(state)) {
+    return { reason: "The public eval state must be a JSON object.", status: "invalid" };
+  }
   const publicState = state as {
     outcome?: string;
-    session?: { status?: string; workingPreview?: unknown };
+    sourceRevision?: unknown;
+    session?: { sessionId?: unknown; status?: string; workingPreview?: unknown };
   };
   const receipt = publicState?.session?.workingPreview;
   if (!receipt || typeof receipt !== "object") {
@@ -93,12 +127,7 @@ export const loadWorkingPreview = async (
   ) {
     return { reason: "The delivered working-preview receipt is incomplete.", status: "invalid" };
   }
-  try {
-    const url = new URL(candidate.url);
-    if (url.protocol !== "https:" || url.username || url.password) {
-      throw new Error("unsafe");
-    }
-  } catch {
+  if (!isSafePreviewUrl(candidate.url)) {
     return { reason: "The delivered working-preview URL is invalid or unsafe.", status: "invalid" };
   }
   const expiration = Date.parse(candidate.expiresAt);
@@ -108,7 +137,15 @@ export const loadWorkingPreview = async (
   if (expiration <= nowMs) {
     return { reason: "The delivered working-preview receipt has expired.", status: "expired" };
   }
-  return { receipt: candidate as PreviewReceipt, status: "ready" };
+  return {
+    provenance: previewProvenance(
+      publicState.sourceRevision,
+      publicState.session?.sessionId,
+      candidate as PreviewReceipt,
+    ),
+    receipt: candidate as PreviewReceipt,
+    status: "ready",
+  };
 };
 
 const escapeHtml = (value: string) =>
