@@ -64,3 +64,7 @@ Actual hosted publication and provisioning remain unassessed. Reference-app shor
 10. Publish no external effects. Review the sanitized evidence bundle, prioritize gaps by user impact and responsible layer, and keep confirmed causes separate from hypotheses.
 
 The acceptance is informative when it can show exactly what ran and what did not. A reachable preview, a successful build command, or a model claim never substitutes for observed product behavior.
+
+## Additional open eval gaps
+
+See [other eval follow-ups](other-eval-followups.md) for the 12 remaining runner failures, toolchain blocker, unassessed image/source cases, evidence, and closure criteria from the expanded audit.
