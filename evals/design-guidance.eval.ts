@@ -7,7 +7,7 @@ import { observeRecordedRenewalReview } from "./support/ui-preview-browser";
 
 export default defineEval({
   description:
-    "An ambiguous product brief compiles against the supported source and passes real browser interaction in Vercel Sandbox before UI review.",
+    "An ambiguous product brief compiles against the supported source and passes real browser interaction before UI review; compilation runs in Vercel Sandbox.",
   tags: ["product-quality", "design-guidance", "sandbox-integration"],
   async test(t) {
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
