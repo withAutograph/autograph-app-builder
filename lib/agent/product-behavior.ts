@@ -25,10 +25,14 @@ const appUrl = (path: string, origin: string): string => {
   return url.href;
 };
 
+class InvalidApplicationReadError extends Error {
+  override name = "InvalidApplicationReadError";
+}
+
 const readBoundedJson = async (response: Response): Promise<unknown> => {
   const reader = response.body?.getReader();
   if (!reader) {
-    throw new Error("Missing response");
+    throw new InvalidApplicationReadError("Missing response");
   }
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -41,11 +45,15 @@ const readBoundedJson = async (response: Response): Promise<unknown> => {
       }
       size += chunk.value.byteLength;
       if (size > 65_536) {
-        throw new Error("Response exceeds limit");
+        throw new InvalidApplicationReadError("Response exceeds limit");
       }
       chunks.push(chunk.value);
     }
-    return JSON.parse(Buffer.concat(chunks).toString("utf-8")) as unknown;
+    try {
+      return JSON.parse(Buffer.concat(chunks).toString("utf-8")) as unknown;
+    } catch {
+      throw new InvalidApplicationReadError("Invalid JSON response");
+    }
   } finally {
     await reader.cancel();
   }
@@ -74,6 +82,11 @@ const validAuthority = (launch: URL, expiresAt: number): boolean =>
   Number.isFinite(expiresAt) &&
   expiresAt > Date.now();
 
+const validScenario = (scenario: ProductReadbackScenario): boolean =>
+  Boolean(scenario.markerField) &&
+  scenario.markerField.length <= 128 &&
+  scenario.readPointer.length <= 1024;
+
 /** Only action/readback evidence: never proof of restart durability, authentication or child generation. */
 export const executeProductReadback = async (input: {
   authority: { launchUrl: string; expiresAt: number };
@@ -100,11 +113,7 @@ export const executeProductReadback = async (input: {
     }
     const writeUrl = appUrl(input.scenario.writePath, launch.origin);
     const readUrl = appUrl(input.scenario.readPath, launch.origin);
-    if (
-      !input.scenario.markerField ||
-      input.scenario.markerField.length > 128 ||
-      input.scenario.readPointer.length > 1024
-    ) {
+    if (!validScenario(input.scenario)) {
       return result("blocked", "Invalid readback scenario.");
     }
     const marker = randomUUID();
@@ -150,10 +159,15 @@ export const executeProductReadback = async (input: {
     return observed === marker
       ? result("passed", "Independent application read returned the verifier-written value.")
       : result("failed", "Independent application read did not return the verifier-written value.");
-  } catch {
+  } catch (error) {
+    if (error instanceof InvalidApplicationReadError) {
+      return result("failed", "Independent application read returned an incompatible response.");
+    }
     return result(
       "blocked",
       signal.aborted ? "Observation aborted or timed out." : "Observation could not complete.",
     );
   }
 };
+
+export type ProductReadbackResult = Awaited<ReturnType<typeof executeProductReadback>>;

@@ -2,7 +2,7 @@ import http from "node:http";
 import { describe, expect, it } from "vitest";
 import { executeProductReadback } from "./product-behavior";
 
-const run = async (mode: "stored" | "fake" | "wrong" | "redirect", expired = false) => {
+const run = async (mode: "stored" | "fake" | "wrong" | "redirect" | "invalid", expired = false) => {
   let stored: unknown;
   const requests: { path: string; cookie?: string; body: string }[] = [];
   const server = http.createServer(async (request, response) => {
@@ -24,6 +24,10 @@ const run = async (mode: "stored" | "fake" | "wrong" | "redirect", expired = fal
       }
     } else {
       response.writeHead(200, { "content-type": "application/json" });
+    }
+    if (mode === "invalid" && request.method === "GET" && request.url === "/record") {
+      response.end("<html>Not JSON</html>");
+      return;
     }
     response.end(
       JSON.stringify(
@@ -81,10 +85,13 @@ const run = async (mode: "stored" | "fake" | "wrong" | "redirect", expired = fal
 };
 
 describe("independent product action/readback", () => {
-  it.each(["fake", "wrong"] as const)("fails %s success without stored marker", async (mode) => {
-    const { result } = await run(mode);
-    expect(result.status).toBe("failed");
-  });
+  it.each(["fake", "wrong", "invalid"] as const)(
+    "fails %s success without stored marker",
+    async (mode) => {
+      const { result } = await run(mode);
+      expect(result.status).toBe("failed");
+    },
+  );
   it("reads actual stored value without sending marker in read", async () => {
     const { requests, result } = await run("stored");
     expect(result.status).toBe("passed");
@@ -182,6 +189,6 @@ it("bounds untrusted read response and omits its contents", async () => {
       writePath: "/record",
     },
   });
-  expect(result.status).toBe("blocked");
+  expect(result.status).toBe("failed");
   expect(JSON.stringify(result)).not.toContain("sensitive");
 });
