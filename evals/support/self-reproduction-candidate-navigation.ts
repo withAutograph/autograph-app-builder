@@ -98,13 +98,13 @@ export const exerciseCandidateNavigation = async (
         artifacts: [],
         detail: `Browser Back restored draft=${valuesRestored}; Forward restored Docs=${forwarded}. No custom Back control was used.`,
         id: "back-forward-preserves-draft",
-        passed: Boolean(valuesRestored && forwarded),
+        passed: valuesRestored && forwarded,
       },
       {
         artifacts: [],
         detail: "Browser Back must restore focus to the activated Docs control.",
         id: "focus-restored",
-        passed: Boolean(focusRestored),
+        passed: focusRestored,
       },
     ];
     observation.disposition = observation.assertions.some((assertion) => !assertion.passed)
