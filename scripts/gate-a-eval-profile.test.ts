@@ -1,3 +1,4 @@
+import { developmentSourceReceipt } from "../lib/repository/development-source";
 import { developmentExecutionEnvironment } from "../lib/development/execution-environment.mjs";
 import { mkdirSync, mkdtempSync, realpathSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -139,7 +140,7 @@ describe("closed Gate A eval profile", () => {
       ).toThrow(/sandbox image/u);
   });
 
-  it("installs the hosted artifact marker only from its closed sandbox profile", () => {
+  it("preserves the hosted artifact source reader without a development binding", async () => {
     const roots = freshRoots();
     const image = `ghcr.io/example/toolchain@sha256:${"c".repeat(64)}`;
     const profile = createGateAEvalProfile(
@@ -153,17 +154,16 @@ describe("closed Gate A eval profile", () => {
     const environment = hostileEnvironment();
     installGateAEvalProfile(environment, profile, repositoryRoot);
     expect(environment).toEqual({
-      ...developmentExecutionEnvironment,
-      APP_BUILDER_EXECUTION_BUNDLE: "local-development",
-      APP_BUILDER_EXECUTION_MODE: "development",
       APP_BUILDER_HOSTED_ARTIFACT_PROOF: "1",
       APP_BUILDER_REAL_SANDBOX: "1",
       APP_BUILDER_SANDBOX_IMAGE: image,
-      APP_BUILDER_SANDBOX_PROVIDER: "vercel",
       REPOSITORY_LOCAL_ROOTS: roots.allowedRoot,
       WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
       WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
     });
+    await expect(
+      developmentSourceReceipt("fresh-template", roots.allowedRoot, environment),
+    ).resolves.toBeUndefined();
     expect(validateGateAEvalProfile(profile, repositoryRoot)).toEqual(profile);
 
     const ordinaryEnvironment = hostileEnvironment();
