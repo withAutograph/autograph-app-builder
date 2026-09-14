@@ -25,9 +25,10 @@ const browserFixture = (
       "Unchanged visible candidate content long enough to look like documentation",
     waitFor: async () => {},
   };
+  const hasMissingDocs = missingDocs ?? false;
   const page = {
     getByRole: (_role: string, options?: { name?: RegExp }) => {
-      if (missingDocs && options?.name?.source.includes("docs")) {
+      if (hasMissingDocs && options?.name?.source.includes("docs") === true) {
         const absent = { ...locator, first: () => absent, isVisible: async () => false };
         return absent;
       }
