@@ -57,10 +57,6 @@ export default defineTool({
       });
       await writeImplementationFiles(index + 1);
     };
-    if (input.implementationFiles.length > 0) {
-      clearProductBehaviorEvidence();
-      await writeImplementationFiles(0);
-    }
     const fixture = hasTestCapability("simulated-target");
     const attempt = createTargetValidationAttempt(current.applyReceipt, ctx.callId);
     const base = {
@@ -81,6 +77,10 @@ export default defineTool({
       phase: "validation_pending",
       validationAttempt: attempt,
     }));
+    if (input.implementationFiles.length > 0) {
+      clearProductBehaviorEvidence();
+      await writeImplementationFiles(0);
+    }
     const result = await executeProposalBoundValidation({
       appId: current.appSpec.appId,
       apply: current.applyReceipt,
