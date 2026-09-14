@@ -3,9 +3,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadEveEvalOidc } from "./eve-eval-oidc";
+import * as lifecycle from "../lib/development/local-oidc-startup";
 
 const roots: string[] = [];
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0)) {
     rmSync(root, { force: true, recursive: true });
   }
@@ -63,6 +65,26 @@ describe("Eve eval managed OIDC", () => {
       });
     },
   );
+  it("uses mise-resolved executables despite the trusted launcher's restricted PATH", () => {
+    const { root } = fixture();
+    const ensure = vi
+      .spyOn(lifecycle, "ensureLocalDevelopmentOidc")
+      .mockReturnValue({ refreshed: false });
+    const environment = { PATH: "/usr/bin:/bin" };
+    loadEveEvalOidc({
+      environment,
+      miseExecutable: "/managed/mise",
+      realSandbox: true,
+      repositoryRoot: root,
+      vercelExecutable: "/managed/vercel",
+    });
+    expect(ensure).toHaveBeenCalledWith({
+      environment,
+      miseExecutable: "/managed/mise",
+      repositoryRoot: root,
+      vercelExecutable: "/managed/vercel",
+    });
+  });
   it("rejects a different project and provides an actionable setup error", () => {
     const { root } = fixture("prj_other");
     const environment = {};

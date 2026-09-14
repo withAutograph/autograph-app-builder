@@ -29,6 +29,8 @@ const allowedRoot = option("--gate-a-allowed-root");
 const fault = option("--gate-a-fault");
 const image = option("--gate-a-image");
 const sourceRoot = option("--gate-a-source-root");
+const miseExecutable = option("--gate-a-mise-executable");
+const vercelExecutable = option("--gate-a-vercel-executable");
 let gateAEvalProfile;
 if (profileName === "general-enabled" || profileName === "general-disabled") {
   gateAEvalProfile = createGateAEvalProfile(
@@ -138,7 +140,7 @@ if (realSandbox) {
 }
 if (liveModel && (gateAEvalProfile.profile !== "sandbox" || args[0] !== "self-reproduction"))
   throw new Error("The live model is restricted to the self-reproduction sandbox evaluation.");
-loadEveEvalOidc({ realSandbox, repositoryRoot });
+loadEveEvalOidc({ miseExecutable, realSandbox, repositoryRoot, vercelExecutable });
 
 let capabilities: string[];
 if (liveModel) {

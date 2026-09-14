@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { inspectSandboxCommand } from "./inspect_sandbox_toolchain";
+import { inspectSandboxCommand } from "../../agent/tools/inspect_sandbox_toolchain";
 
 describe("sandbox command inspection", () => {
   it("does not report an executable as available when its version command fails", async () => {

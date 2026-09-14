@@ -1,3 +1,4 @@
+import { developmentExecutionEnvironment } from "../lib/development/execution-environment.mjs";
 import { mkdirSync, mkdtempSync, realpathSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -82,6 +83,7 @@ describe("closed Gate A eval profile", () => {
     const environment = hostileEnvironment();
     installGateAEvalProfile(environment, profile, repositoryRoot);
     expect(environment).toEqual({
+      ...developmentExecutionEnvironment,
       APP_BUILDER_EXECUTION_BUNDLE: "local-development",
       APP_BUILDER_EXECUTION_MODE: "development",
       APP_BUILDER_REAL_SANDBOX: "1",
@@ -151,6 +153,7 @@ describe("closed Gate A eval profile", () => {
     const environment = hostileEnvironment();
     installGateAEvalProfile(environment, profile, repositoryRoot);
     expect(environment).toEqual({
+      ...developmentExecutionEnvironment,
       APP_BUILDER_EXECUTION_BUNDLE: "local-development",
       APP_BUILDER_EXECUTION_MODE: "development",
       APP_BUILDER_HOSTED_ARTIFACT_PROOF: "1",
@@ -172,7 +175,7 @@ describe("closed Gate A eval profile", () => {
       ),
       repositoryRoot,
     );
-    expect(ordinaryEnvironment.APP_BUILDER_HOSTED_ARTIFACT_PROOF).toBeUndefined();
+    expect(ordinaryEnvironment.APP_BUILDER_HOSTED_ARTIFACT_PROOF).toBe("0");
   });
 
   it("binds and reobserves an explicit read-only sandbox source root", () => {
@@ -185,6 +188,7 @@ describe("closed Gate A eval profile", () => {
     const environment = hostileEnvironment();
     installGateAEvalProfile(environment, profile, repositoryRoot);
     expect(environment).toEqual({
+      ...developmentExecutionEnvironment,
       APP_BUILDER_EXECUTION_BUNDLE: "local-development",
       APP_BUILDER_EXECUTION_MODE: "development",
       APP_BUILDER_REAL_SANDBOX: "1",

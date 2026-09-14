@@ -22,6 +22,8 @@ for scenario in "$@"; do
   esac
   "$launcher" "$node_bin" --import tsx scripts/run-eve-eval.mts \
     --gate-a-profile sandbox --gate-a-source-root "$source_root" \
+    --gate-a-mise-executable "$(command -v mise)" \
+    --gate-a-vercel-executable "$(mise which vercel)" \
     "$scenario" --strict --skip-report || result=1
 done
 exit "$result"

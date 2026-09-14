@@ -19,6 +19,8 @@ mise run hosted:artifact-prove -- \
 exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
   "$(mise which node)" --import tsx scripts/run-eve-eval.mts \
   --gate-a-profile hosted-artifact \
+  --gate-a-mise-executable "$(command -v mise)" \
+  --gate-a-vercel-executable "$(mise which vercel)" \
   --gate-a-image "$image" \
   --gate-a-source-root "$source_root" \
   sandbox-identity-planning --strict --skip-report

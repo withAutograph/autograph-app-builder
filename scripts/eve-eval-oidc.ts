@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import path from "node:path";
 
 import { ensureLocalDevelopmentOidc } from "../lib/development/local-oidc-startup";
@@ -12,6 +11,8 @@ import {
 export const loadEveEvalOidc = (input: {
   realSandbox: boolean;
   repositoryRoot: string;
+  miseExecutable?: string;
+  vercelExecutable?: string;
   environment?: NodeJS.ProcessEnv;
   ensure?: (repositoryRoot: string) => void;
 }): void => {
@@ -25,12 +26,10 @@ export const loadEveEvalOidc = (input: {
   const ensure =
     input.ensure ??
     ((repositoryRoot: string) => {
-      const miseExecutable = environment.MISE_BIN_PATH ?? "mise";
-      const vercelExecutable = execFileSync(miseExecutable, ["which", "vercel"], {
-        cwd: repositoryRoot,
-        encoding: "utf-8",
-        env: environment,
-      }).trim();
+      const { miseExecutable, vercelExecutable } = input;
+      if (miseExecutable === undefined || vercelExecutable === undefined) {
+        throw new Error("Use the supported mise Sandbox task to resolve managed executables.");
+      }
       ensureLocalDevelopmentOidc({ environment, miseExecutable, repositoryRoot, vercelExecutable });
     });
   try {
