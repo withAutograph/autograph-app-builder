@@ -183,3 +183,9 @@ The original candidate and evidence remain immutable. The next run must record
 new revisions, brief and answer-sheet hashes, session identity, and normal replies.
 A missing feature is a failure even when a browser cannot exercise it. An
 infrastructure blocker or incomplete observation remains open, not success.
+
+The future-run brief now explicitly excludes anonymous creation and anonymous-draft
+carryover while retaining working sign-in, sign-up, authenticated creation, and
+tenant isolation. This implements the requested scope exclusion and prevents the
+shared source judge from treating it as a missing requirement. The frozen baseline
+brief and its recorded hash are unchanged; record a new hash for the next run.

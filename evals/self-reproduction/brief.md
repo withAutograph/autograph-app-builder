@@ -10,11 +10,11 @@ own its authentication, durable data, orchestration, previews, retries, and
 recovery. Ordinary open-source dependencies and local development services are
 allowed.
 
-The initial anonymous screen is a calm, focused "New App" page. It has a small
-Autograph mark, Docs, Sign in, Sign up, one clear prompt asking what to build,
+Provide working Sign in and Sign up flows leading to a calm, focused "New App"
+page. It has a small Autograph mark, Docs, one clear prompt asking what to build,
 a multiline brief, useful example prompts, and a disabled-until-valid Continue
-button. Carry an anonymous brief safely into sign-in and into the authenticated
-workspace.
+button. Anonymous app creation and anonymous-draft carryover are outside this
+request; authenticated creation and tenant isolation are required.
 
 Authenticated users work in an app-creation canvas with a compact header,
 back navigation, account controls, a clear product brief, generated name and
