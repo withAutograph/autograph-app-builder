@@ -9,8 +9,8 @@ const register = async (id: string) => {
   const captureState = vi
     .fn()
     .mockResolvedValue({ metadata: { sandboxName: "backend-owned-name" } });
-  const stop = vi.fn().mockResolvedValue();
-  const shutdown = vi.fn().mockResolvedValue();
+  const stop = vi.fn().mockResolvedValue(undefined);
+  const shutdown = vi.fn().mockResolvedValue(undefined);
   const backend = {
     create: vi.fn().mockResolvedValue({ captureState, session: { id }, shutdown, stop }),
   };

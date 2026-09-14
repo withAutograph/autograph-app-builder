@@ -43,18 +43,15 @@ mise run local:ensure-oidc
 
 export APP_BUILDER_DEV_NODE_BIN="$(mise which node)"
 export APP_BUILDER_DEV_CODEX_BIN="$(mise which codex)"
-if [ -z "${CODEX_HOME:-}" ]; then
-  echo "dev: CODEX_HOME must identify the active Codex profile" >&2
-  exit 78
-fi
-case "$CODEX_HOME" in
+app_builder_codex_home="${CODEX_HOME:-$HOME/.codex}"
+case "$app_builder_codex_home" in
   /*) ;;
   *)
     echo "dev: CODEX_HOME must be absolute" >&2
     exit 78
     ;;
 esac
-export APP_BUILDER_DEV_CODEX_HOME="$CODEX_HOME"
+export APP_BUILDER_DEV_CODEX_HOME="$app_builder_codex_home"
 
 exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
   "$APP_BUILDER_DEV_NODE_BIN" --import tsx scripts/development-entry.mts "$@"

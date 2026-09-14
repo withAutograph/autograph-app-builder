@@ -79,6 +79,12 @@ checkout. Applied files are not validated files. Successful repository commands
 establish technical validation, not proof that the accepted product behaviors
 work. Exercise those outcomes against the actual implementation and preserve
 honest distinctions between verified behavior and behavior still unassessed.
+After technical validation, use `start_app_preview` with the repository's actual
+development command and the implemented app's route. It returns a private,
+expiring browser URL only after the running app answers an HTTP readiness check.
+Give that URL to the user, including its expiry. Reopen it with the same supported
+tool when asked after expiry or a runtime restart. A reachable page is delivery
+evidence, not proof of persistence, authentication, or independent orchestration.
 Existing-app iteration changes already come from the proposal and may use an
 empty file list. Do not mistake scaffolding for an implemented product. When an
 actual validation command returns structured compiler diagnostics, repair those

@@ -6,6 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { assertHostedSandboxCommandAuthority } from "./deployment-execution-lease";
 import { createAuthorizedSandboxBackend } from "./sandbox-command-adapter";
 import { readVercelSessionGitSource } from "./vercel-session-source";
+import { withVercelPreviewProvider } from "./vercel-preview-provider";
 
 export interface HostedVercelBackendOptions {
   readonly fetch?: ProviderFetch;
@@ -293,7 +294,7 @@ export function createHostedVercelBackend(
   });
   const authorized = createAuthorizedSandboxBackend({
     authorizeSessionCommand: (sessionId) => assertHostedSandboxCommandAuthority({ sessionId }),
-    backend,
+    backend: withVercelPreviewProvider(backend),
   });
   const templateOptional = createRuntimeRecoveringBackend({
     backend: authorized,
