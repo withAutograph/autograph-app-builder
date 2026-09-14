@@ -2,6 +2,8 @@
 #MISE description="Apply the checked-in PostgreSQL migrations"
 set -eu
 
+mise_bin=${APP_BUILDER_DEV_MISE_BIN:-mise}
+
 if [ "${DATABASE_URL+x}" != x ] || [ -z "$DATABASE_URL" ]; then
   echo "database:migrate requires DATABASE_URL" >&2
   exit 64
@@ -15,6 +17,6 @@ unset DATABASE_URL
 printf '%s' "$database_url" | (
   unset database_url
   exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
-    "$(mise which node)" --import tsx lib/db/migrate.mts \
+    "$("$mise_bin" which node)" --import tsx lib/db/migrate.mts \
     --database-url-fd 0
 )

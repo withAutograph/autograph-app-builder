@@ -3,6 +3,8 @@
 #MISE description="Run Next with local Vercel and GitHub Emulate connections"
 set -eu
 
+mise_bin=${APP_BUILDER_DEV_MISE_BIN:-mise}
+
 app_port=${APP_BUILDER_LOCAL_PORT:-3001}
 emulate_base_port=${EMULATE_BASE_PORT:-4000}
 github_emulate_port=$((emulate_base_port + 1))
@@ -11,7 +13,7 @@ app_protocol=https
 app_origin=$app_protocol://localhost:$app_port
 state_dir=${APP_BUILDER_EMULATED_STATE_ROOT:-$PWD/.emulate}
 pid_file="$state_dir/dev-emulated.pids"
-"$(mise which pnpm)" exec tsx scripts/prepare-emulate-config.mts "$app_origin"
+"$("$mise_bin" which pnpm)" exec tsx scripts/prepare-emulate-config.mts "$app_origin"
 emulate_pid=
 app_pid=
 database_owned=0
@@ -42,12 +44,12 @@ if [ "${APP_BUILDER_EMULATED_SERVICES_ONLY:-0}" = 1 ]; then
   done
 fi
 if ! lsof -nP -iTCP:"$emulate_base_port" -sTCP:LISTEN >/dev/null 2>&1; then
-  "$(mise which node)" node_modules/emulate/dist/index.js \
+  "$("$mise_bin" which node)" node_modules/emulate/dist/index.js \
     start --port "$emulate_base_port" --service vercel,github \
     --seed "$state_dir/config.yaml" &
   emulate_pid=$!
 fi
-docker=$(mise which docker)
+docker=$("$mise_bin" which docker)
 worktree_id=$(basename "$(dirname "$(pwd -P)")")
 database_container=${APP_BUILDER_DATABASE_CONTAINER:-autograph-app-builder-web-product-e2e-postgres-$worktree_id}
 external_database=${APP_BUILDER_EXTERNAL_DATABASE:-0}
@@ -81,10 +83,10 @@ fi
 migration_url="postgresql://postgres@127.0.0.1:$database_port/autograph_app_builder?connect_timeout=2"
 if [ "$external_database" = 1 ]; then
   printf '%s' "$migration_url" | \
-    "$(mise which node)" --import tsx lib/db/migrate.mts --database-url-fd 0
+    "$("$mise_bin" which node)" --import tsx lib/db/migrate.mts --database-url-fd 0
 else
   attempt=0
-  until DATABASE_URL="$migration_url" mise run database:migrate; do
+  until DATABASE_URL="$migration_url" "$mise_bin" run database:migrate; do
     attempt=$((attempt + 1))
     if [ "$attempt" -ge 30 ]; then
       echo "local emulated PostgreSQL migrations did not become ready" >&2
@@ -126,13 +128,13 @@ export EMULATE_GITHUB_INSTALLATION_ID=1001
 export EMULATE_GITHUB_REPOSITORY=autograph-local/demo-app
 export EMULATE_LOCAL_RELAY_SECRET="$(tr -d '\n' < "$state_dir/relay-secret")"
 if [ "${APP_BUILDER_EMULATED_SERVICES_ONLY:-0}" = 1 ]; then
-  APP_BUILDER_EMULATED_PROVIDER_PID="$emulate_pid" "$(mise which node)" --import tsx scripts/emulated-web-service-receipt.mts &
+  APP_BUILDER_EMULATED_PROVIDER_PID="$emulate_pid" "$("$mise_bin" which node)" --import tsx scripts/emulated-web-service-receipt.mts &
   app_pid=$!
   wait "$app_pid"
   exit $?
 fi
 .config/mise/scripts/trusted-node-launcher \
-  "$(mise which node)" node_modules/next/dist/bin/next dev \
+  "$("$mise_bin" which node)" node_modules/next/dist/bin/next dev \
   --experimental-https --hostname 0.0.0.0 --port "$app_port" "$@" &
 app_pid=$!
 printf 'app_pid=%s\nemulate_pid=%s\n' "$app_pid" "$emulate_pid" >"$pid_file"
