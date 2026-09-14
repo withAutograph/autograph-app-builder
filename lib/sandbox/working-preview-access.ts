@@ -83,6 +83,20 @@ const cleanHeaders = headers => {
   const excluded = new Set([...hop, ...(headers.connection ?? "").toLowerCase().split(",").map(value => value.trim())]);
   return Object.fromEntries(Object.entries(headers).filter(([name]) => !excluded.has(name)));
 };
+const forwardedHeaders = (request, config, cookies) => {
+  const headers = cleanHeaders(request.headers);
+  delete headers["x-vercel-oidc-token"];
+  delete headers["x-vercel-protection-bypass"];
+  delete headers["x-vercel-set-bypass-cookie"];
+  delete headers.referer;
+  delete headers["forwarded"];
+  for (const name of Object.keys(headers)) if (name.startsWith("x-forwarded-")) delete headers[name];
+  headers.cookie = cookies.filter(value => !value.startsWith(cookieName + "=")).join("; ");
+  headers.host = config.host;
+  headers["x-forwarded-host"] = config.host;
+  headers["x-forwarded-proto"] = "https";
+  return headers;
+};
 const deny = (response, status = 403) => { response.writeHead(status, { "cache-control": "private, no-store", "referrer-policy": "no-referrer" }); response.end(); };
 const server = http.createServer((request, response) => {
   const config = loadConfiguration();
@@ -107,17 +121,7 @@ const server = http.createServer((request, response) => {
   const access = cookies.filter(value => value.startsWith(cookieName + "="));
   if (access.length !== 1 || !equal(access[0].slice(cookieName.length + 1), accessCookie)) return deny(response);
   if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && request.headers.origin !== config.origin) return deny(response);
-  const headers = cleanHeaders(request.headers);
-  delete headers["x-vercel-oidc-token"];
-  delete headers["x-vercel-protection-bypass"];
-  delete headers["x-vercel-set-bypass-cookie"];
-  delete headers.referer;
-  delete headers["forwarded"];
-  for (const name of Object.keys(headers)) if (name.startsWith("x-forwarded-")) delete headers[name];
-  headers.cookie = cookies.filter(value => !value.startsWith(cookieName + "=")).join("; ");
-  headers.host = config.host;
-  headers["x-forwarded-host"] = config.host;
-  headers["x-forwarded-proto"] = "https";
+  const headers = forwardedHeaders(request, config, cookies);
   const upstream = http.request({ hostname: "127.0.0.1", port: config.appPort, path: url.pathname + url.search, method: request.method, headers }, result => {
     const outgoing = cleanHeaders(result.headers);
     outgoing["cache-control"] = "private, no-store";
@@ -131,7 +135,64 @@ const server = http.createServer((request, response) => {
   response.on("close", () => upstream.destroy());
   request.pipe(upstream);
 });
-server.on("upgrade", (_request, socket) => socket.destroy());
+const upgradedConnections = new Set();
+const closeUpgrades = () => { for (const close of upgradedConnections) close(); };
+// Node's server.close does not close upgraded sockets on its own.
+const closeHttpServer = server.close.bind(server);
+server.close = (...args) => { closeUpgrades(); return closeHttpServer(...args); };
+server.on("upgrade", (request, socket, head) => {
+  socket.on("error", () => socket.destroy());
+  const reject = (status = 403) => socket.end("HTTP/1.1 " + status + " Rejected\\r\\nConnection: close\\r\\nContent-Length: 0\\r\\n\\r\\n");
+  const config = loadConfiguration();
+  if (config === null || request.method !== "GET" || request.headers.host !== config.host || request.headers.origin !== config.origin || Date.now() >= config.expiresAt || request.headers.upgrade?.toLowerCase() !== "websocket") return reject();
+  let url;
+  try { url = new URL(request.url, config.origin); } catch { return reject(400); }
+  if (url.origin !== config.origin || url.pathname === "/__autograph_preview_launch") return reject();
+  const cookies = (request.headers.cookie ?? "").split(";").map(value => value.trim());
+  const access = cookies.filter(value => value.startsWith(cookieName + "="));
+  const accessCookie = digest(session + config.launchDigest).toString("base64url");
+  if (access.length !== 1 || !equal(access[0].slice(cookieName.length + 1), accessCookie)) return reject();
+  const headers = forwardedHeaders(request, config, cookies);
+  headers.connection = "Upgrade";
+  headers.upgrade = "websocket";
+  socket.pause();
+  let peer;
+  let closed = false;
+  const upstream = http.request({ hostname: "127.0.0.1", port: config.appPort, path: url.pathname + url.search, method: "GET", headers });
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    clearTimeout(expiry);
+    upgradedConnections.delete(close);
+    upstream.destroy();
+    peer?.destroy();
+    socket.destroy();
+  };
+  const expiry = setTimeout(close, Math.max(0, config.expiresAt - Date.now()));
+  upgradedConnections.add(close);
+  upstream.on("upgrade", (result, upstreamSocket, upstreamHead) => {
+    peer = upstreamSocket;
+    if (closed) return upstreamSocket.destroy();
+    if (Date.now() >= config.expiresAt || result.statusCode !== 101 || result.headers.upgrade?.toLowerCase() !== "websocket") return close();
+    const outgoing = cleanHeaders(result.headers);
+    outgoing.connection = "Upgrade";
+    outgoing.upgrade = "websocket";
+    if (outgoing["set-cookie"]) outgoing["set-cookie"] = outgoing["set-cookie"].filter(value => !value.trim().startsWith(cookieName + "="));
+    socket.write("HTTP/1.1 101 Switching Protocols\\r\\n" + Object.entries(outgoing).flatMap(([name, value]) => (Array.isArray(value) ? value : [value]).map(item => name + ": " + item + "\\r\\n")).join("") + "\\r\\n");
+    if (upstreamHead.length) socket.write(upstreamHead);
+    if (head.length) peer.write(head);
+    peer.on("error", close);
+    peer.on("close", close);
+    socket.pipe(peer);
+    peer.pipe(socket);
+    socket.resume();
+  });
+  upstream.on("response", (response) => { response.resume(); close(); });
+  upstream.on("error", close);
+  socket.on("error", close);
+  socket.on("close", close);
+  upstream.end();
+});
 server.on("connect", (_request, socket) => socket.destroy());
 server.listen(bootstrap.gatewayPort, "0.0.0.0");
 `,
