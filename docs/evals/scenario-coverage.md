@@ -16,6 +16,8 @@ Append one or more inventory names to run a focused repair, for example `sandbox
 
 The shared development environment binding, source preparation, toolchain setup, installation, planning, and application workflow perform the actual work. Networking remains allow-all. The five cases are toolchain inspection, design preview, identity/planning, reviewed changes, and existing-app iteration. They use synthetic data and no publication.
 
+The shared Sandbox setup installs the native compiler needed by Arrusted’s Rust schema validation before preparing dependencies. It selects the available package manager (`apt-get` with `build-essential`, or `dnf` with `gcc`) and verifies `cc`; an installation failure remains a setup failure. This belongs to ordinary Builder setup, not an eval-specific preflight. Vercel’s [current image guidance](https://vercel.com/changelog/run-docker-containers-inside-vercel-sandbox) distinguishes the Ubuntu default from older Amazon Linux runtimes.
+
 Design observation uses the completed `record_ui_preview` HTML produced by the real Sandbox compiler. An installed Playwright browser observes that output and checks a specific interaction outcome. Browser executable resolution happens before Eve isolates HOME. Use the existing `mise run storybook:install-browser` task if the browser is not installed.
 
 ## Evidence and comparisons
