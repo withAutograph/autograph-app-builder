@@ -83,6 +83,46 @@ This is an improvement over the earlier title-only output, but **still a failed 
 - Generated CSS defines a replacement palette instead of preserving the instructed Arrusted semantic tokens. Three desktop captures render the entry page but report Next instant-validation errors and failed resources. WebSocket creation alone earns no transport-health credit.
 - The original development command failed because the shared Arrusted launcher resolved Next from app-local node_modules for development, although validation resolved it from the repository root. The Builder recovered with a different command and corrected the landing path. Shared launcher repair remains separate; the frozen candidate is untouched.
 
-Read-only observation retained a stable, complete manifest within the explicitly selected `apps/autograph-app-builder` subtree (40 entries, two observations, completed 21:30:45 UTC). This is not a whole-repository completeness claim. The separate full-repository observation and paired reference comparison remain pending. Authentication isolation, actual provider callbacks, server restart durability, independent child execution, and framework navigation behavior receive no success credit from the simulated UI.
+Read-only observation retained a stable, complete manifest within the explicitly selected `apps/autograph-app-builder` subtree (40 entries, two observations, completed 21:30:45 UTC). This is not a whole-repository completeness claim. The separate full-repository observation completed at 22:05:04 UTC: 3,020 entries, 2,475 regular files, no unreadable files, and two matching observations within documented exclusions. All regular file hashes were verified again during owner-only archival. This establishes capture coverage, not semantic correctness or an atomic snapshot. Paired reference comparison remains pending. Authentication isolation, actual provider callbacks, server restart durability, independent child execution, and framework navigation behavior receive no success credit from the simulated UI.
 
-Local diagnostic directories are `/private/tmp/self-reproduction-live-main-20260914`, its `-preview`, `-functional`, `-app-source`, and `-source` siblings. Private state and source bytes must not be published. Browser evidence, source findings, and sanitized recovery diagnostics must be retained in the portable report before calling the comparison complete. The observer PR is #448; complete source capture, paired states, and a fresh post-repair run remain outstanding.
+Local diagnostic directories are `/private/tmp/self-reproduction-live-main-20260914`, its `-preview`, `-functional`, `-app-source`, and `-source` siblings. Private state and source bytes must not be published. Browser evidence, source findings, and sanitized recovery diagnostics must be retained in the portable report before calling the comparison complete. Observer PR #448 merged as `81601ac2b6c4fe7603551b8b96ea4e9624f68295` with passing main CI. Paired states and a fresh post-repair run remain outstanding.
+
+## Shared repair acceptance — 2026-09-14 22:27 UTC
+
+The ordinary `mise run dev` entrypoint now has an explicit synthetic web mode,
+using the existing emulated authentication/provider preparation, independent
+local dependencies, external runtime state, trusted localhost TLS, and the local
+Eve adapter with project OIDC. See [local development lifecycle](../local-development-lifecycle.md).
+This is shared development setup, not eval-specific hosting or a generation driver.
+
+At shared setup revision `97690943`, against Arrusted `c3ff29dad22e80c0f7f9a429b04d33b2ca4a858f`,
+ordinary emulated GitHub signup, authenticated workspace rendering, and account
+navigation passed in a browser with strict TLS and no browser errors. The normal
+auth endpoint returned HTTP 200. No session or database state was injected.
+Passkeys remained unassessed because the optional feature flag was disabled.
+Two observer attempts are retained: one incorrectly assumed that flag was enabled;
+the other used an exact button name that omitted the accessible icon label.
+The third used the actual visible GitHub control. These were observation retries,
+not generation rerolls. Evidence: `/private/tmp/shared-reference-web-acceptance-20260914-attempt3`.
+
+This closes the local reference-authentication configuration blocker for the repaired
+setup. It does not retroactively complete the frozen baseline comparison: the
+reference revision changed, and equivalent candidate states still need paired
+observation. Draft durability, tenant isolation, provider connections, independent
+child creation, cancellation/recovery, and instant-navigation behavior remain
+separate runtime requirements.
+
+Shared product review now retains the original request through normal session
+events and independently examines implemented source during change-set acceptance.
+Cited contradictions return to the normal repair loop; compiler success does not
+mean product success. Missing original requests in legacy sessions, unavailable
+review, omitted dependencies, and changed source remain explicit. Source review
+never awards a runtime pass. Live model acceptance of this new review path is still
+outstanding; focused tests are not a substitute.
+
+Arrusted launcher PR #1379 merged as `c3ff29da`. Its exact PR checks passed; the
+first main run failed because main advanced during template readiness. PR #1382
+repairs that race by fetching the explicitly requested revision. Its Preview
+currently has a separate `lookup_migration_forward_only` database-state blocker
+for `business_unit`; do not bypass the guard or modify data to turn it green.
+Retain both issues separately and merge only after the final revision is green.
