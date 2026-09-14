@@ -39,6 +39,8 @@ Optional `--supplemental` accepts `{ "scenarios": [{ "id": "...", "status": "blo
 
 These are integration checks, not autonomous self-reproduction. The next live self-reproduction milestone must submit the product brief through the supported public entrypoint and answer only ordinary product questions and approvals. Do not drive its internal stages or use probes as generation evidence.
 
+Trace the active production caller before repairing setup and test that caller. Unused helper tests and infrastructure probes do not establish that the normal workflow performs the operation. Metadata-only planning preparation must remain metadata-only; approved apply owns its dependency installation.
+
 Keep evaluator code observational. Repair missing product automation in the shared Builder workflow. Never manually repair generated output or add eval-only success behavior to product rendering. Assert durable effects and state, not incidental sentences or a list of internal stages that normal automation may combine. Eve assertions on `t` inspect the complete run; use returned turn assertions when testing approval or dispatch behavior for one request.
 
 Keep retired image/cache diagnostics distinct from actual command execution. Missing functionality fails, unavailable infrastructure blocks, and unexecuted behavior remains unassessed. Advisory visual scores do not authorize palette changes or an aggregate passing threshold. See [the repair ledger](other-eval-followups.md) for milestone closure evidence.
