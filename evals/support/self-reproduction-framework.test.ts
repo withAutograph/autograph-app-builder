@@ -22,7 +22,9 @@ const browser = () => {
 const adapter = {
   exerciseBrowser: (_page: unknown, id: string) => {
     const requirement = frameworkMatrix.find((row) => row.id === id);
-    if (!requirement) throw new Error(`Unknown framework requirement: ${id}`);
+    if (!requirement) {
+      throw new Error(`Unknown framework requirement: ${id}`);
+    }
     return Promise.resolve({
       artifacts: [],
       assertions: requirement.assertions.map((assertion) => ({

@@ -12,7 +12,9 @@ import { HOSTED_MANAGED_SKILL_CONTENTS } from "./hosted-managed-seeds.generated"
 const temporaryRoots: string[] = [];
 
 afterEach(() => {
-  for (const root of temporaryRoots.splice(0)) rmSync(root, { force: true, recursive: true });
+  for (const root of temporaryRoots.splice(0)) {
+    rmSync(root, { force: true, recursive: true });
+  }
 });
 
 describe("hosted runtime asset bundle", () => {

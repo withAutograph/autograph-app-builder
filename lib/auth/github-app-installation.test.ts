@@ -108,7 +108,9 @@ function authorizationCallbackUrl(state: string) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function requiredSearchParam(url: URL, key: string) {
   const value = url.searchParams.get(key);
-  if (value === null) throw new Error(`expected ${key}`);
+  if (value === null) {
+    throw new Error(`expected ${key}`);
+  }
   return value;
 }
 
@@ -122,7 +124,9 @@ async function prepareAuthorization(
   const begun = await authorization.begin(authority, returnState);
   const installState = requiredSearchParam(new URL(begun.redirectUrl), "state");
   const authorize = await authorization.complete(setupCallbackUrl(installState), authority);
-  if (authorize.status !== "redirect") throw new Error("expected redirect");
+  if (authorize.status !== "redirect") {
+    throw new Error("expected redirect");
+  }
   const authorizeUrl = new URL(authorize.redirectUrl);
   expect(authorizeUrl.origin + authorizeUrl.pathname).toBe(
     "https://github.com/login/oauth/authorize",
@@ -223,7 +227,9 @@ describe("public GitHub App installation authorization", () => {
 
     const authorize = await authorization.complete(setupCallbackUrl(state), authority);
     expect(authorize.status).toBe("redirect");
-    if (authorize.status !== "redirect") throw new Error("expected redirect");
+    if (authorize.status !== "redirect") {
+      throw new Error("expected redirect");
+    }
     const authorizeUrl = new URL(authorize.redirectUrl);
     expect(authorizeUrl.searchParams.get("code_challenge_method")).toBe("S256");
     const receipt = await authorization.complete(
@@ -285,13 +291,16 @@ describe("public GitHub App installation authorization", () => {
     const request = vi.fn<typeof fetch>(async (resource) => {
       const url = String(resource);
       requests.push(url);
-      if (url.endsWith("/login/oauth/access_token"))
+      if (url.endsWith("/login/oauth/access_token")) {
         return Response.json({
           access_token: "github-user-token-sentinel-value",
           scope: "",
           token_type: "bearer",
         });
-      if (url.endsWith("/user")) return Response.json({ id: 321, login: "installer" });
+      }
+      if (url.endsWith("/user")) {
+        return Response.json({ id: 321, login: "installer" });
+      }
       return Response.json({
         account: {
           id: 149_546_148,
@@ -314,7 +323,9 @@ describe("public GitHub App installation authorization", () => {
     expect(new URL(begun.redirectUrl).pathname).toBe("/local-connections/github");
     const installState = requiredSearchParam(new URL(begun.redirectUrl), "state");
     const authorize = await authorization.complete(setupCallbackUrl(installState), authority);
-    if (authorize.status !== "redirect") throw new Error("expected redirect");
+    if (authorize.status !== "redirect") {
+      throw new Error("expected redirect");
+    }
     const authorizeUrl = new URL(authorize.redirectUrl);
     expect(authorizeUrl.origin + authorizeUrl.pathname).toBe(
       "https://builder.example/local-connections/github",
@@ -340,7 +351,9 @@ describe("public GitHub App installation authorization", () => {
     const begun = await authorization.begin(authority, { returnTo: "/" });
     const installState = requiredSearchParam(new URL(begun.redirectUrl), "state");
     const authorize = await authorization.complete(setupCallbackUrl(installState), authority);
-    if (authorize.status !== "redirect") throw new Error("expected redirect");
+    if (authorize.status !== "redirect") {
+      throw new Error("expected redirect");
+    }
     const state = requiredSearchParam(new URL(authorize.redirectUrl), "state");
     await expect(
       authorization.complete(
@@ -418,7 +431,9 @@ describe("public GitHub App installation authorization", () => {
       setupCallbackUrl(installState, "update"),
       authority,
     );
-    if (authorize.status !== "redirect") throw new Error("expected redirect");
+    if (authorize.status !== "redirect") {
+      throw new Error("expected redirect");
+    }
 
     await expect(
       authorization.complete(
@@ -440,7 +455,9 @@ describe("public GitHub App installation authorization", () => {
       setupCallbackUrl(installState, "update"),
       authority,
     );
-    if (authorize.status !== "redirect") throw new Error("expected redirect");
+    if (authorize.status !== "redirect") {
+      throw new Error("expected redirect");
+    }
     const callback = new URL(
       authorizationCallbackUrl(requiredSearchParam(new URL(authorize.redirectUrl), "state")),
     );
@@ -767,13 +784,16 @@ describe("public GitHub App installation authorization", () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const request = vi.fn<typeof fetch>(async (resource) => {
       const url = String(resource);
-      if (url.includes("access_token"))
+      if (url.includes("access_token")) {
         return Response.json({
           access_token: "github-user-token-sentinel-value",
           scope: "",
           token_type: "bearer",
         });
-      if (url.endsWith("/user")) return Response.json({ id: 321, login: "installer" });
+      }
+      if (url.endsWith("/user")) {
+        return Response.json({ id: 321, login: "installer" });
+      }
       return Response.json({
         installations: [
           {

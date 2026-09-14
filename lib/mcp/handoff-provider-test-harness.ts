@@ -139,9 +139,10 @@ export function preparedProviderFixture(input: {
     }
     expect(init?.method ?? "GET").toBe("GET");
     expect(headers.get("authorization")).toBe(`token ${githubToken()}`);
-    if (url.pathname === "/installation/repositories")
+    if (url.pathname === "/installation/repositories") {
       return Response.json({ repositories: [{ id: 100 }] });
-    if (["/repositories/100", "/repos/acme/prepared-vendor-review"].includes(url.pathname))
+    }
+    if (["/repositories/100", "/repos/acme/prepared-vendor-review"].includes(url.pathname)) {
       return Response.json({
         archived: false,
         default_branch: "main",
@@ -150,13 +151,16 @@ export function preparedProviderFixture(input: {
         owner: { login: "acme" },
         private: true,
       });
-    if (url.pathname === "/repos/acme/prepared-vendor-review/commits/main")
+    }
+    if (url.pathname === "/repos/acme/prepared-vendor-review/commits/main") {
       return Response.json({
         commit: { tree: { sha: "b".repeat(40) } },
         sha: "a".repeat(40),
       });
-    if (url.pathname === "/repos/acme/prepared-vendor-review/actions/variables")
+    }
+    if (url.pathname === "/repos/acme/prepared-vendor-review/actions/variables") {
       return Response.json({ variables: [] });
+    }
     throw new Error("Unexpected mocked GitHub request.");
   });
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract

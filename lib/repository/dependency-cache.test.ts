@@ -192,10 +192,16 @@ function liveTemplateCacheFixture() {
     });
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const run = vi.fn(async ({ command }: { command: string }) => {
-    if (command.includes("uname -s")) return { exitCode: 0, stderr: "", stdout: "linux/x86_64\n" };
-    if (command.includes("bun install")) return { exitCode: 0, stderr: "", stdout: observation() };
+    if (command.includes("uname -s")) {
+      return { exitCode: 0, stderr: "", stdout: "linux/x86_64\n" };
+    }
+    if (command.includes("bun install")) {
+      return { exitCode: 0, stderr: "", stdout: observation() };
+    }
     if (command.includes("function digestTree(root, allowTrackedWorkspaceLinks)")) {
-      if (closureState === "missing") return { exitCode: 1, stderr: "missing closure", stdout: "" };
+      if (closureState === "missing") {
+        return { exitCode: 1, stderr: "missing closure", stdout: "" };
+      }
       let tamperedCache: "cargo" | "node" | undefined;
       if (closureState === "node-tampered") {
         tamperedCache = "node";
@@ -552,8 +558,9 @@ describe("offline dependency cache", () => {
       "turbo",
       "vite-plus",
       "vitest",
-    ])
+    ]) {
       expect(producer).toContain(`"${packageName}"`);
+    }
     expect(producer).toContain('process.platform !== "linux" || process.arch !== "x64"');
     expect(producer).toContain('["vp", "../vite-plus/bin/vp"]');
     expect(producer).toContain('["turbo", "../turbo/bin/turbo"]');
@@ -836,8 +843,9 @@ describe("offline dependency cache", () => {
     if (
       first.manifest.scope !== "live-template-execution" ||
       changedManifest.manifest.scope !== "live-template-execution"
-    )
+    ) {
       throw new Error("expected live template manifests");
+    }
     expect(changedManifest.manifest.dependencyKey).not.toBe(first.manifest.dependencyKey);
     expect(changedManifest.manifest.dependencyInputs).toEqual(fixture.source().dependencyInputs);
     expect(fixture.setNetworkPolicy).toHaveBeenCalledTimes(2);
@@ -962,7 +970,9 @@ describe("offline dependency cache", () => {
       .map(([request]) => request.command as string)
       .find((command) => command.includes("test -x") && command.includes(".bin/vp"));
     expect(linkCommand).toBeDefined();
-    if (linkCommand === undefined) throw new Error("missing closure check");
+    if (linkCommand === undefined) {
+      throw new Error("missing closure check");
+    }
     expect(linkCommand).not.toContain(
       "test -d /workspace/repository && test ! -L /workspace/repository",
     );
@@ -984,10 +994,11 @@ describe("offline dependency cache", () => {
       "turbo/package.json",
       "vite-plus/package.json",
       "vitest/package.json",
-    ])
+    ]) {
       expect(linkCommand).toContain(
         `/opt/app-builder/dependencies/${archiveDigest}/node_modules/${required}`,
       );
+    }
     expect(linkCommand).toContain(
       `test -x /opt/app-builder/dependencies/${archiveDigest}/node_modules/.bin/vp`,
     );
@@ -1014,7 +1025,9 @@ describe("offline dependency cache", () => {
       .map(([request]) => request.command as string)
       .find((command) => command.includes('const {match}=require("path-to-regexp")'));
     expect(resolutionCommand).toBeDefined();
-    if (resolutionCommand === undefined) throw new Error("missing topology check");
+    if (resolutionCommand === undefined) {
+      throw new Error("missing topology check");
+    }
     expect(resolutionCommand).toContain(ARRUSTED_PATH_TO_REGEXP_VERSION);
     expect(resolutionCommand).toContain(ARRUSTED_MICROFRONTENDS_VERSION);
     expect(resolutionCommand).toContain(ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION);
@@ -1046,7 +1059,9 @@ describe("offline dependency cache", () => {
       .map(([request]) => request.command as string)
       .find((command) => command.includes("test -x") && command.includes(".bin/vp"));
     expect(developmentLinkCommand).toBeDefined();
-    if (developmentLinkCommand === undefined) throw new Error("missing development closure check");
+    if (developmentLinkCommand === undefined) {
+      throw new Error("missing development closure check");
+    }
     expect(developmentLinkCommand).toContain("test ! -e /workspace/repository/node_modules");
     expect(developmentLinkCommand).toContain(
       `test "$(realpath ${DEVELOPMENT_DEPENDENCY_CACHE_ROOT})" = "${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}"`,

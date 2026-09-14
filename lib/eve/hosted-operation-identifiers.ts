@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (Array.isArray(value)) {
+    return `[${value.map(canonical).join(",")}]`;
+  }
   if (value !== null && typeof value === "object") {
     return `{${Object.entries(value)
       .toSorted(([left], [right]) => left.localeCompare(right))

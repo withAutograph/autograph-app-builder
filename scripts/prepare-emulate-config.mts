@@ -13,7 +13,9 @@ const authSecretPath = path.join(stateDirectory, "better-auth-secret");
 const flagsSecretPath = path.join(stateDirectory, "flags-secret");
 
 const { 2: origin } = process.argv;
-if (!origin) throw new Error("Expected the local application origin.");
+if (!origin) {
+  throw new Error("Expected the local application origin.");
+}
 const appOrigin = new URL(origin);
 const ciLoopback = process.env.CI === "true" && appOrigin.protocol === "http:";
 if (appOrigin.hostname !== "localhost" || (appOrigin.protocol !== "https:" && !ciLoopback)) {

@@ -19,7 +19,9 @@ const runtimeReceipt = (
   passed = true,
 ) => {
   const row = requirements.find((item) => item.id === requirementId);
-  if (!row) throw new Error(`Unknown parity requirement: ${requirementId}`);
+  if (!row) {
+    throw new Error(`Unknown parity requirement: ${requirementId}`);
+  }
   return {
     observation: {
       artifacts: ["parity/runtime/result.json"],
@@ -103,7 +105,9 @@ describe("parity receipt ingestion", () => {
     const [viewport] = desktopViewports;
     const requirementId = `capture/${viewport.name}/keyboard`;
     const row = requirements.find((item) => item.id === requirementId);
-    if (!row) throw new Error(`Unknown parity requirement: ${requirementId}`);
+    if (!row) {
+      throw new Error(`Unknown parity requirement: ${requirementId}`);
+    }
     const receipt = {
       artifacts: ["parity/captures/keyboard.png", "parity/captures/keyboard.json"],
       assertions: row.assertions.map((id) => ({

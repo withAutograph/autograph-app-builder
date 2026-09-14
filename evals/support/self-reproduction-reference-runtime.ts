@@ -25,8 +25,9 @@ export const assertExternalReferenceRoot = (sourceRoot: string, runtimeRoot: str
   if (
     relativePath === "" ||
     (relativePath !== ".." && !relativePath.startsWith("../") && !path.isAbsolute(relativePath))
-  )
+  ) {
     throw new Error("Reference runtime must be outside reference source.");
+  }
 };
 
 /** Copy tracked live bytes only; credentials, runtime state and dependencies stay out. */
@@ -55,11 +56,15 @@ export const snapshotReferenceSource = async (
       // Materialize trusted tracked symlink targets as ordinary fixture files.
       const target = await realpath(source);
       const targetStat = await stat(target);
-      if (!targetStat.isFile()) continue;
+      if (!targetStat.isFile()) {
+        continue;
+      }
       await mkdir(path.dirname(path.join(fixtureRoot, file)), { recursive: true });
       await copyFile(target, path.join(fixtureRoot, file));
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
     }
   }
 };
@@ -202,8 +207,9 @@ export const startSelfReproductionReferenceRuntime = async (input: {
     server.on("close", () => output.end());
     const deadline = Date.now() + (input.startupTimeoutMs ?? 300_000);
     while (Date.now() < deadline) {
-      if (startupError || server.exitCode !== null)
+      if (startupError || server.exitCode !== null) {
         throw new Error("Reference server exited during startup.");
+      }
       if (await probe(`${receipt.referenceUrl}/auth/sign-in`)) {
         receipt.status = "available";
         receipt.reason = "Isolated emulated reference authentication server is ready.";
@@ -211,7 +217,9 @@ export const startSelfReproductionReferenceRuntime = async (input: {
       }
       await delay(500);
     }
-    if (receipt.status !== "available") throw new Error("Reference server readiness timed out.");
+    if (receipt.status !== "available") {
+      throw new Error("Reference server readiness timed out.");
+    }
   } catch (error) {
     receipt.reason = error instanceof Error ? error.message : "Reference setup failed.";
     await stop();

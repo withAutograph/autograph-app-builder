@@ -28,7 +28,7 @@ export function InputControl({
   onAnswer: (answer: SessionAnswer) => void;
   request: PublicInputRequest;
 }) {
-  if (request.kind === "approval")
+  if (request.kind === "approval") {
     return (
       <ApprovalRequest
         description={request.description}
@@ -37,8 +37,9 @@ export function InputControl({
         title={request.title}
       />
     );
+  }
 
-  if (request.options?.length)
+  if (request.options?.length) {
     return (
       <div className="choices" role="radiogroup" aria-label={request.title}>
         {request.options.map((option) => {
@@ -71,8 +72,9 @@ export function InputControl({
         })}
       </div>
     );
+  }
 
-  if (request.allowFreeform)
+  if (request.allowFreeform) {
     return (
       <textarea
         aria-label={request.title}
@@ -81,6 +83,7 @@ export function InputControl({
         onChange={(event) => onAnswer({ kind: "answer", value: event.target.value })}
       />
     );
+  }
 
   return <p className="fallback">Answer this request in chat to continue.</p>;
 }
@@ -110,7 +113,9 @@ export function AuthorizationControl({
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function connect() {
-    if (!challenge?.url || !canOpen) return;
+    if (!challenge?.url || !canOpen) {
+      return;
+    }
     setError("");
     try {
       await onOpenLink(challenge.url);
@@ -122,7 +127,9 @@ export function AuthorizationControl({
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function refresh() {
-    if (!canRefresh || refreshing) return;
+    if (!canRefresh || refreshing) {
+      return;
+    }
     setRefreshing(true);
     setError("");
     try {
@@ -225,16 +232,20 @@ export function SessionAppView({
     return answer === undefined || (answer.kind === "answer" && answer.value.trim().length === 0);
   }).length;
   let continueGuidance: string | undefined;
-  if (!canCallTools) continueGuidance = "Answer in chat to continue.";
-  else if (unansweredCount > 0)
+  if (!canCallTools) {
+    continueGuidance = "Answer in chat to continue.";
+  } else if (unansweredCount > 0) {
     continueGuidance = `Answer ${unansweredCount === 1 ? "the remaining request" : `all ${unansweredCount} remaining requests`} to continue.`;
+  }
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function submitApproval(
     request: PublicInputRequest,
     response: Extract<SessionAnswer, { kind: "approve" | "deny" }>,
   ) {
-    if (!result || !canCallTools || state === "submitting") return;
+    if (!result || !canCallTools || state === "submitting") {
+      return;
+    }
     setState("submitting");
     setError("");
     try {
@@ -248,7 +259,9 @@ export function SessionAppView({
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function submit() {
-    if (!result || !complete || !canCallTools || state === "submitting") return;
+    if (!result || !complete || !canCallTools || state === "submitting") {
+      return;
+    }
     setState("submitting");
     setError("");
     try {
@@ -265,13 +278,14 @@ export function SessionAppView({
     }
   }
 
-  if (!result)
+  if (!result) {
     return (
       <main className="mcpApp shell">
         <p>Loading requested controls…</p>
       </main>
     );
-  if (state === "submitted" || result.status !== "input_required")
+  }
+  if (state === "submitted" || result.status !== "input_required") {
     return (
       <main className="mcpApp shell success" role="status">
         <span>✓</span>
@@ -281,6 +295,7 @@ export function SessionAppView({
         </div>
       </main>
     );
+  }
 
   const onlyApproval = requests.length === 1 && requests[0]?.kind === "approval";
 

@@ -18,7 +18,9 @@ const roots: string[] = [];
 
 afterEach(() => {
   inspectSourceReceipt.mockReset();
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true });
+  for (const root of roots.splice(0)) {
+    rmSync(root, { recursive: true });
+  }
 });
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

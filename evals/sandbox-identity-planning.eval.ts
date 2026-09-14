@@ -9,8 +9,9 @@ export default defineEval({
   tags: ["sandbox-image-proof"],
   async test(t) {
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
-    if (repository === undefined || repository.length === 0)
+    if (repository === undefined || repository.length === 0) {
       throw new Error("The signed sandbox proof source root is missing.");
+    }
 
     await t.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
@@ -47,8 +48,9 @@ export default defineEval({
       "prepare_fresh_template",
       "bash",
       "write_file",
-    ])
+    ]) {
       t.notCalledTool(tool);
+    }
 
     process.stdout.write(
       `${JSON.stringify({

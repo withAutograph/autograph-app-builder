@@ -14,7 +14,9 @@ export function readPrivateDatabaseUrl(fd: number): string {
   try {
     while (length < frame.length) {
       const count = readSync(fd, frame, length, frame.length - length, null);
-      if (count === 0) break;
+      if (count === 0) {
+        break;
+      }
       length += count;
     }
   } finally {

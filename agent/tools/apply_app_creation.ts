@@ -33,8 +33,9 @@ export default defineTool({
       current.phase !== "planned" &&
       current.phase !== "apply_failed" &&
       current.phase !== "applied"
-    )
+    ) {
       throw new Error("Derive an exact canonical proposal before requesting target apply.");
+    }
     if (current.phase === "applied") {
       return {
         appId: current.proposal.target.contract.appId,
@@ -56,7 +57,6 @@ export default defineTool({
     );
     const sandbox = await ctx.getSandbox();
     const fixture = hasTestCapability("simulated-target");
-
     const binding = {
       appSpecDigest: current.appSpec.digest,
       appSpecPath: current.appSpec.artifactPath,

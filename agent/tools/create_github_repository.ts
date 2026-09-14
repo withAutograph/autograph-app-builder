@@ -12,8 +12,9 @@ export default defineTool({
     "After approval of the exact sealed proposal digest, create one private fresh-history repository through the selected GitHub App installation. The release gate must remain absent. This tool cannot publish a branch or PR.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
-    if (state.phase !== "reviewed")
+    if (state.phase !== "reviewed") {
       throw new Error("An exact reviewed change set is required before repository creation.");
+    }
     const sandbox = await ctx.getSandbox();
     const contentSource = await publicationContentSourceForReviewedWorkflow({
       sandbox,

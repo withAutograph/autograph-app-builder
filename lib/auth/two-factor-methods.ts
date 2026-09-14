@@ -38,7 +38,9 @@ export function isTwoFactorRedirect(data: unknown): data is TwoFactorRedirect {
 /** Narrow arbitrary method names to the challenge views this UI supports. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseTwoFactorMethods(methods?: unknown): TwoFactorMethod[] {
-  if (!Array.isArray(methods)) return [];
+  if (!Array.isArray(methods)) {
+    return [];
+  }
 
   return TWO_FACTOR_METHODS.filter((method) => methods.includes(method));
 }
@@ -46,7 +48,9 @@ export function parseTwoFactorMethods(methods?: unknown): TwoFactorMethod[] {
 /** Persist the enabled method names without blocking sign-in on storage errors. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function storeTwoFactorMethods(methods?: unknown) {
-  if (typeof sessionStorage === "undefined") return;
+  if (typeof sessionStorage === "undefined") {
+    return;
+  }
 
   try {
     sessionStorage.setItem(
@@ -61,11 +65,15 @@ export function storeTwoFactorMethods(methods?: unknown) {
 /** Read the stored methods, falling back to every supported challenge. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readTwoFactorMethods(): TwoFactorMethod[] {
-  if (typeof sessionStorage === "undefined") return TWO_FACTOR_METHODS;
+  if (typeof sessionStorage === "undefined") {
+    return TWO_FACTOR_METHODS;
+  }
 
   try {
     const stored = sessionStorage.getItem(TWO_FACTOR_METHODS_STORAGE_KEY);
-    if (!stored) return TWO_FACTOR_METHODS;
+    if (!stored) {
+      return TWO_FACTOR_METHODS;
+    }
 
     const methods = parseTwoFactorMethods(JSON.parse(stored));
     return methods.length ? methods : TWO_FACTOR_METHODS;
@@ -77,7 +85,9 @@ export function readTwoFactorMethods(): TwoFactorMethod[] {
 /** Clear stored method hints after the challenge finishes or is abandoned. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function clearTwoFactorMethods() {
-  if (typeof sessionStorage === "undefined") return;
+  if (typeof sessionStorage === "undefined") {
+    return;
+  }
 
   try {
     sessionStorage.removeItem(TWO_FACTOR_METHODS_STORAGE_KEY);

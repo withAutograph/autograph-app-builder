@@ -14,19 +14,26 @@ export function createPreparedHandoffReader(input: {
 }) {
   return async (sessionAuth: unknown) => {
     const handoffId = sourceHandoffIdForSessionAuth(sessionAuth);
-    if (handoffId === undefined) return;
+    if (handoffId === undefined) {
+      return;
+    }
     const { authority } = exactForwardedSessionAuthority(sessionAuth);
-    if (!(await input.isActiveMember(authority))) throw new BuilderHandoffUnavailableError();
+    if (!(await input.isActiveMember(authority))) {
+      throw new BuilderHandoffUnavailableError();
+    }
     const stored = await input.read({ authority, handoffId });
-    if (!stored) throw new BuilderHandoffUnavailableError();
+    if (!stored) {
+      throw new BuilderHandoffUnavailableError();
+    }
     const record = builderHandoffRecordSchema.parse(stored);
     if (
       record.handoffId !== handoffId ||
       Object.entries(authority).some(
         ([key, value]) => record.authority[key as keyof HostedSessionTenantAuthority] !== value,
       )
-    )
+    ) {
       throw new BuilderHandoffUnavailableError();
+    }
     // Initial redemption checks expiry. A trusted session retains its prepared
     // context afterwards, including when its engine is restarted or recovered.
     return record.intent;
@@ -59,8 +66,9 @@ async function createDeploymentPreparedHandoffReader() {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   return async (sessionAuth: unknown) => {
     const { authority } = exactForwardedSessionAuthority(sessionAuth);
-    if (authority.issuer !== config.issuer || authority.audience !== config.resource)
+    if (authority.issuer !== config.issuer || authority.audience !== config.resource) {
       throw new BuilderHandoffUnavailableError();
+    }
     return read(sessionAuth);
   };
 }
@@ -71,7 +79,9 @@ let deploymentReader: ReturnType<typeof createDeploymentPreparedHandoffReader> |
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readPreparedHandoffContext(sessionAuth: unknown) {
-  if (sourceHandoffIdForSessionAuth(sessionAuth) === undefined) return;
+  if (sourceHandoffIdForSessionAuth(sessionAuth) === undefined) {
+    return;
+  }
   // Preserve the shared lazy promise while clearing it after a failed creation.
   // oxlint-disable promise/prefer-await-to-callbacks
   // oxlint-disable-next-line promise/prefer-await-to-callbacks

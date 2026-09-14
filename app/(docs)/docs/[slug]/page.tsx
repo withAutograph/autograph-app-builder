@@ -21,7 +21,9 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const document = getDocument(slug);
-  if (!document || document.slug === "overview") return {};
+  if (!document || document.slug === "overview") {
+    return {};
+  }
   return {
     description: document.description,
     title: document.title,
@@ -32,7 +34,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 async function DocumentContent({ params }: PageProps) {
   const { slug } = await params;
   const document = getDocument(slug);
-  if (!document || document.slug === "overview") notFound();
+  if (!document || document.slug === "overview") {
+    notFound();
+  }
   return (
     <DocsShell document={document}>
       <DocsContent slug={document.slug} />

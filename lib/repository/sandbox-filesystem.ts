@@ -24,7 +24,8 @@ export async function ensureSandboxDirectories(
       command: `mkdir -p ${batch.map(quoteSandboxArgument).join(" ")}`,
       workingDirectory: "/workspace",
     });
-    if (result.exitCode !== 0)
+    if (result.exitCode !== 0) {
       throw new Error("The sandbox workspace directories could not be prepared.");
+    }
   }
 }

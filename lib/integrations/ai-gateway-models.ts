@@ -36,7 +36,9 @@ export async function loadGatewayModels(input?: {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(8000),
     });
-    if (!response.ok) throw new Error("gateway-models-unavailable");
+    if (!response.ok) {
+      throw new Error("gateway-models-unavailable");
+    }
     const parsed = responseSchema.parse(await response.json());
     const entries = parsed.data
       .filter((model) => model.type === "language" && model.owned_by === "openai")
@@ -50,7 +52,9 @@ export async function loadGatewayModels(input?: {
         }),
       )
       .toSorted((left, right) => left.name.localeCompare(right.name));
-    if (entries.length === 0) throw new Error("gateway-models-empty");
+    if (entries.length === 0) {
+      throw new Error("gateway-models-empty");
+    }
     const defaultModelId = entries.some((entry) => entry.id === activeBuilderModelId)
       ? activeBuilderModelId
       : undefined;
@@ -63,7 +67,9 @@ export async function loadGatewayModels(input?: {
     lastKnownGood = value;
     return value;
   } catch {
-    if (lastKnownGood) return { ...lastKnownGood, cached: true };
+    if (lastKnownGood) {
+      return { ...lastKnownGood, cached: true };
+    }
     return { cached: false, entries: [], status: "unavailable" };
   }
 }

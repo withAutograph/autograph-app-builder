@@ -49,8 +49,9 @@ export function validateJudgment(value: unknown, images: ImageEvidence[]) {
   for (const finding of judgment.findings) {
     const image = images.find((i) => i.name === finding.image);
     const r = finding.region;
-    if (!image || r.x + r.width > image.width || r.y + r.height > image.height)
+    if (!image || r.x + r.width > image.width || r.y + r.height > image.height) {
       throw new Error("Unknown screenshot or out-of-bounds region");
+    }
   }
   return {
     ...judgment,
@@ -80,8 +81,9 @@ export async function judgeDesign(
   };
   let token: string;
   try {
-    if (hooks) token = await hooks.getToken();
-    else {
+    if (hooks) {
+      token = await hooks.getToken();
+    } else {
       // Official SDK refreshes project OIDC; no static-key fallback is selected.
       const project = JSON.parse(await readFile(".vercel/project.json", "utf-8")) as {
         projectId: string;
@@ -92,7 +94,9 @@ export async function judgeDesign(
         team: project.orgId,
       });
     }
-    if (!token) throw new Error("No OIDC");
+    if (!token) {
+      throw new Error("No OIDC");
+    }
   } catch {
     return {
       ...base,
@@ -103,8 +107,9 @@ export async function judgeDesign(
   try {
     let output: unknown;
     let usage: unknown;
-    if (hooks) output = await hooks.generate();
-    else {
+    if (hooks) {
+      output = await hooks.generate();
+    } else {
       const gateway = createGateway({ apiKey: token });
       const imageContent = await Promise.all(
         input.images.map(async (image) => [

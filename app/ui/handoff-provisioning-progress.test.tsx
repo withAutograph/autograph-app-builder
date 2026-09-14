@@ -65,18 +65,24 @@ class TestEventSource {
 
   emit(name: "snapshot" | "end" | "open" | "error", value?: unknown) {
     const event = new MessageEvent("message", { data: JSON.stringify(value) });
-    for (const listener of this.listeners.get(name) ?? []) listener(event);
+    for (const listener of this.listeners.get(name) ?? []) {
+      listener(event);
+    }
   }
 
   malformed(name: "snapshot" | "end") {
     const event = new MessageEvent("message", { data: "not-json" });
-    for (const listener of this.listeners.get(name) ?? []) listener(event);
+    for (const listener of this.listeners.get(name) ?? []) {
+      listener(event);
+    }
   }
 }
 
 const streamAt = (index: number): TestEventSource => {
   const stream = TestEventSource.instances[index];
-  if (!stream) throw new Error(`Expected EventSource instance at index ${index}`);
+  if (!stream) {
+    throw new Error(`Expected EventSource instance at index ${index}`);
+  }
   return stream;
 };
 
@@ -98,8 +104,12 @@ async function render(initial = projection(1)) {
 }
 
 afterEach(async () => {
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
-  if (root) await act(async () => root?.unmount());
+  if (root) {
+    await act(async () => {
+      root?.unmount();
+      await Promise.resolve();
+    });
+  }
   container?.remove();
   root = undefined;
   container = undefined;

@@ -129,7 +129,9 @@ describe("Browser prototype preview", () => {
         const handler = createPrototypePreviewRequestHandler({
           // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
           resolvePrototype: async () => {
-            if (candidate.prototype instanceof Error) throw candidate.prototype;
+            if (candidate.prototype instanceof Error) {
+              throw candidate.prototype;
+            }
             return candidate.prototype;
           },
         });

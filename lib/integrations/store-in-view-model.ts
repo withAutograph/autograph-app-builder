@@ -26,12 +26,13 @@ export const githubRepositoryAccessSchema = z
       })
       .strict()
       .superRefine((repository, context) => {
-        if (repository.fullName !== `${repository.owner}/${repository.name}`)
+        if (repository.fullName !== `${repository.owner}/${repository.name}`) {
           context.addIssue({
             code: "custom",
             message: "Repository fullName must match owner and name.",
             path: ["fullName"],
           });
+        }
       })
       .optional(),
     scopes: z
@@ -101,7 +102,9 @@ export function githubStoreInViewModel(input: {
     scopes,
     title: actionLabel,
   };
-  if (desiredRepository !== undefined) viewModel.desiredRepository = desiredRepository;
+  if (desiredRepository !== undefined) {
+    viewModel.desiredRepository = desiredRepository;
+  }
   return viewModel;
 }
 

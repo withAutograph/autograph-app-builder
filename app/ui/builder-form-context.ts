@@ -10,6 +10,8 @@ export const BuilderControllerContext = createContext<ReturnType<
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function useBuilderControllerContext() {
   const controller = useContext(BuilderControllerContext);
-  if (!controller) throw new Error("Builder fields require the builder controller.");
+  if (!controller) {
+    throw new Error("Builder fields require the builder controller.");
+  }
   return controller;
 }

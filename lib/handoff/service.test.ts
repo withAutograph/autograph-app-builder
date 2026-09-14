@@ -35,9 +35,16 @@ function memoryStore(): BuilderHandoffStore {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async bindSession(input) {
       const record = readOwned(input);
-      if (!record || record.requestDigest !== input.requestDigest || input.now >= record.expiresAt)
+      if (
+        !record ||
+        record.requestDigest !== input.requestDigest ||
+        input.now >= record.expiresAt
+      ) {
         return;
-      if (record.sessionId !== undefined) return record;
+      }
+      if (record.sessionId !== undefined) {
+        return record;
+      }
       const updated = {
         ...record,
         redeemedAt: input.now,
@@ -54,9 +61,12 @@ function memoryStore(): BuilderHandoffStore {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async renewExpired(input) {
       const record = readOwned(input);
-      if (!record || record.requestDigest !== input.requestDigest) return;
-      if (record.sessionId !== undefined || record.expiresAt > input.now)
+      if (!record || record.requestDigest !== input.requestDigest) {
+        return;
+      }
+      if (record.sessionId !== undefined || record.expiresAt > input.now) {
         return { disposition: "existing", record };
+      }
       const updated = { ...record, expiresAt: input.expiresAt };
       byId.set(record.handoffId, updated);
       byRequest.set(JSON.stringify([record.authority, record.creationRequestId]), updated);
@@ -66,7 +76,9 @@ function memoryStore(): BuilderHandoffStore {
     async reserve(record) {
       const key = JSON.stringify([record.authority, record.creationRequestId]);
       const existing = byRequest.get(key);
-      if (existing) return { disposition: "existing", record: existing };
+      if (existing) {
+        return { disposition: "existing", record: existing };
+      }
       byId.set(record.handoffId, record);
       byRequest.set(key, record);
       return { disposition: "created", record };
@@ -224,12 +236,16 @@ describe("opaque App Builder handoffs", () => {
     const lookup = { authority, handoffId: created.handoffId };
     time = new Date(created.expiresAt.getTime() - 1);
     const before = await service.resolve(lookup);
-    if (before.status !== "unredeemed") throw new Error("unexpected state");
+    if (before.status !== "unredeemed") {
+      throw new Error("unexpected state");
+    }
     // Models a durable engine start, deduplicated by the supplied client key.
     const starts = new Map<string, string>();
     const start = (key: string) => {
       const existing = starts.get(key);
-      if (existing !== undefined) return existing;
+      if (existing !== undefined) {
+        return existing;
+      }
       const session = randomUUID();
       starts.set(key, session);
       return session;
@@ -248,7 +264,9 @@ describe("opaque App Builder handoffs", () => {
     await service.renew({ ...lookup, creationRequestId: randomUUID() });
     const restarted = createBuilderHandoffService(options);
     const after = await restarted.resolve(lookup);
-    if (after.status !== "unredeemed") throw new Error("unexpected state");
+    if (after.status !== "unredeemed") {
+      throw new Error("unexpected state");
+    }
     expect(after.deterministicClientRequestId).toBe(before.deterministicClientRequestId);
     expect(after.prompt).toBe(before.prompt);
     expect(after.record.handoffId).toBe(before.record.handoffId);
@@ -342,8 +360,12 @@ describe("opaque App Builder handoffs", () => {
         forged = { ...record, handoffId: randomUUID() };
       } else {
         let replacement = "other";
-        if (field === "issuer") replacement = "https://builder.example:443/api/auth";
-        if (field === "audience") replacement = "https://builder.example:443/mcp";
+        if (field === "issuer") {
+          replacement = "https://builder.example:443/api/auth";
+        }
+        if (field === "audience") {
+          replacement = "https://builder.example:443/mcp";
+        }
         forged = {
           ...record,
           authority: { ...authority, [field]: replacement },
@@ -528,7 +550,9 @@ describe("opaque App Builder handoffs", () => {
       handoffId: created.handoffId,
     });
     expect(resolved.status).toBe("unredeemed");
-    if (resolved.status !== "unredeemed") throw new Error("unexpected state");
+    if (resolved.status !== "unredeemed") {
+      throw new Error("unexpected state");
+    }
     expect(resolved.prompt).not.toMatch(/installation(?: id)?|repository id|head sha|head tree/iu);
 
     await service.bindSession({
