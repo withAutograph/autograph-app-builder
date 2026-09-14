@@ -54,13 +54,19 @@ async function render(props: Parameters<typeof Harness>[0], strict = false) {
       ),
     ),
   );
-  if (!autosave) {throw new Error("autosave-harness-not-ready");}
+  if (!autosave) {
+    throw new Error("autosave-harness-not-ready");
+  }
   return autosave;
 }
 
 afterEach(async () => {
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  if (root) {await act(async () => root?.unmount());}
+  if (root) {
+    await act(async () => {
+      root?.unmount();
+      await Promise.resolve();
+    });
+  }
   container?.remove();
   root = undefined;
   container = undefined;
@@ -84,8 +90,9 @@ describe("useBuilderDraftAutosave", () => {
     }));
     const value = await render({
       onAcknowledged: ({ revision }) => {
-        if (revision === 1)
-          {queueMicrotask(() => autosave?.schedule({ brief: "completion-window" }));}
+        if (revision === 1) {
+          queueMicrotask(() => autosave?.schedule({ brief: "completion-window" }));
+        }
       },
       outbox,
       save,
@@ -141,7 +148,9 @@ describe("useBuilderDraftAutosave", () => {
       write: vi.fn(),
     };
     const save = vi.fn(async ({ mutationId, snapshot }) => {
-      if (snapshot.brief === "older") {await firstSave;}
+      if (snapshot.brief === "older") {
+        await firstSave;
+      }
       return {
         mutationId,
         revision: snapshot.brief === "older" ? 1 : 2,
@@ -178,13 +187,17 @@ describe("useBuilderDraftAutosave", () => {
       clear: vi.fn(),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       clearIfAcknowledged: vi.fn(async (acknowledgement) => {
-        if (entry?.mutationId !== acknowledgement.mutationId) {return false;}
+        if (entry?.mutationId !== acknowledgement.mutationId) {
+          return false;
+        }
         entry = undefined;
         return true;
       }),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       clearIfMutationId: vi.fn(async (mutationId) => {
-        if (entry?.mutationId !== mutationId) {return false;}
+        if (entry?.mutationId !== mutationId) {
+          return false;
+        }
         entry = undefined;
         return true;
       }),
@@ -197,7 +210,9 @@ describe("useBuilderDraftAutosave", () => {
     };
     const { promise: first, resolve: releaseFirst } = Promise.withResolvers<null>();
     const save = vi.fn(async ({ mutationId, snapshot }) => {
-      if (snapshot.brief === "first") {await first;}
+      if (snapshot.brief === "first") {
+        await first;
+      }
       return { mutationId, revision: snapshot.brief === "first" ? 1 : 2 };
     });
     const value = await render({ outbox, save });
@@ -220,7 +235,9 @@ describe("useBuilderDraftAutosave", () => {
       clear: vi.fn(),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       clearIfMutationId: vi.fn(async (mutationId) => {
-        if (entry?.mutationId !== mutationId) {return false;}
+        if (entry?.mutationId !== mutationId) {
+          return false;
+        }
         entry = undefined;
         return true;
       }),

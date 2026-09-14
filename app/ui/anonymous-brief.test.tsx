@@ -14,7 +14,9 @@ const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
 
 const requireElement = (element: Element | null | undefined): HTMLElement => {
-  if (!(element instanceof HTMLElement)) {throw new Error("Expected interactive element to exist");}
+  if (!(element instanceof HTMLElement)) {
+    throw new Error("Expected interactive element to exist");
+  }
   return element;
 };
 
@@ -23,8 +25,12 @@ const requireElement = (element: Element | null | undefined): HTMLElement => {
 let root: Root | undefined;
 let container: HTMLDivElement;
 afterEach(async () => {
-  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning React act callback
-  if (root) {await act(async () => root?.unmount());}
+  if (root) {
+    await act(async () => {
+      root?.unmount();
+      await Promise.resolve();
+    });
+  }
   root = undefined;
   container?.remove();
   sessionStorage.clear();
