@@ -1,7 +1,7 @@
 # Self-reproduction working-preview acceptance, 2026-09-14
 
 This record covers the frozen public acceptance run for PR 437. It preserves the
-earlier baselines and uses only the sanitized public evidence at
+earlier baselines. The acceptance observations use the sanitized public evidence at
 `/private/tmp/self-reproduction-working-preview-20260914`.
 
 ## Run identity
@@ -29,17 +29,16 @@ working preview. Its final public response said that the private build workspace
 was no longer available and that a fresh private rebuild was required. No
 repository, provider, deployment, or external resource mutation was claimed.
 
-The public receipt reports these requirement-level states:
+The evaluator records these requirement-level states:
 
-| Requirement | Status | Evidence |
-| --- | --- | --- |
-| Fixture UI | present, `fixtures-only` | Public receipt |
-| Visual prototype | present, `visual-prototype` | Public receipt |
-| Working app availability | unavailable | Public session invalidated its working-app preview; cause not established by the receipt alone |
-| Browser interaction | unassessed | No working preview was available |
-| Backend correctness | unassessed | No independent backend verification ran |
-| Independent child creation | unassessed | No child-app proof ran |
-| Product comparison | unassessed | A runnable candidate was unavailable |
+| Requirement                | Status     | Evidence                                                                    |
+| -------------------------- | ---------- | --------------------------------------------------------------------------- |
+| Working app delivery       | failed     | Public session ended without a working preview and reported startup failure |
+| Session recovery           | failed     | Ordinary recovery and two approvals ended with the workspace unavailable    |
+| Browser interaction        | unassessed | No working preview was available                                            |
+| Backend correctness        | unassessed | No independent backend verification ran                                     |
+| Independent child creation | unassessed | No child-app proof ran                                                      |
+| Product comparison         | unassessed | A runnable candidate was unavailable                                        |
 
 This run therefore does not prove that App Builder reproduced itself. A visual
 prototype and a completed Builder turn do not establish a working independent
@@ -61,3 +60,24 @@ The next acceptance run must retain or reconstruct the private workspace,
 return an HTTP-ready working preview, and then execute the trusted browser,
 backend, persistence, recovery, and child-generation checks. Until those checks
 run, their status remains unassessed rather than passed.
+
+## Post-session diagnosis (not generation evidence)
+
+Read-only inspection of the retained Eve stream after the session stopped found
+32 applied files, normal self-correction of an unresolved component CSS import
+and a failed assertion, then two passing technical commands. Three preview
+commands failed: a missing root `dev` script, a process that exited immediately,
+and a generic readiness timeout. The timeout did not identify whether listener
+startup or authenticated HTTP readiness failed; that cause remains unassessed.
+
+Source inspection confirmed two shared recovery defects in
+`lib/repository/supported-template.ts`. The development workspace check compared
+JSON strings with different property orders and incorrectly reported a boundary
+escape. The ensuing preparation unconditionally treated the transfer as new,
+removed `repository`, and copied the original source over the applied app. The
+subsequent app inspection found its files missing. This explains workspace loss
+without attributing it to a provider stop/resume defect.
+
+Repairs belong to the shared workspace and preview workflow. Keep this failed
+session frozen; run a separate public acceptance after those repairs. No
+internal operation was used to continue generation or repair its candidate.
