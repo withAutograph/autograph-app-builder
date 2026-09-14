@@ -1653,8 +1653,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ? "AppSpec mutation was denied by the terminal publication workflow."
       : "AppSpec mutation unexpectedly succeeded.";
   }
+  const vendorTaxIterationRequest =
+    "Update the Vendor review so operations can see when tax verification is required.\n";
   const appSpecMatch =
-    /^accept build-ready appspec for (?<appId>[a-z0-9-]+):\n(?<appSpec>[\s\S]+)$/iu.exec(
+    /^(?:Update the Vendor review so operations can see when tax verification is required\.\n)?accept build-ready appspec for (?<appId>[a-z0-9-]+):\n(?<appSpec>[\s\S]+)$/iu.exec(
       lastUserMessage ?? "",
     );
   if (appSpecMatch !== null) {
@@ -1708,7 +1710,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
         return "A verified prepared workspace is required before AppSpec acceptance.";
       }
       let existingAppChanges: { content: string; path: string }[] | undefined;
-      if (appId === "vendor") {
+      if (appId === "vendor" && lastUserMessage?.startsWith(vendorTaxIterationRequest)) {
         const inspections = toolResults.filter(({ name }) => name === "inspect_existing_app");
         const latestInspection = inspections.at(-1)?.output as
           | {

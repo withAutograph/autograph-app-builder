@@ -25,7 +25,8 @@ export default defineEval({
 
     await t.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
-    await t.send(`Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
+    await t.send(`Update the Vendor review so operations can see when tax verification is required.
+Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
     t.succeeded();
     t.calledTool("inspect_existing_app", { count: 2 });
     t.calledTool("accept_app_spec", {
@@ -49,10 +50,6 @@ export default defineEval({
       },
     });
     await t.send("Prepare target dependencies.");
-    t.succeeded();
-    await t.send(
-      "Update the Vendor review so operations can see when tax verification is required.",
-    );
     t.succeeded();
     await t.send("Run target identity and planning.");
     t.succeeded();
