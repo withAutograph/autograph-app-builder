@@ -47,6 +47,9 @@ const implementationFiles = [{ content: "updated", path: "apps/app/page.tsx" }];
 describe("behavior evidence invalidation during validation repair", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.state.update.mockImplementation((change) => {
+      mocks.state.current = change(mocks.state.current);
+    });
     mocks.execute.mockResolvedValue({ ok: true, receipt: { commands: [] } });
   });
 
@@ -78,4 +81,38 @@ describe("behavior evidence invalidation during validation repair", () => {
     expect(mocks.clear).toHaveBeenCalledBefore(writeTextFile);
     expect(mocks.execute).not.toHaveBeenCalled();
   });
+  it.each(["validated", "reviewed"] as const)(
+    "keeps failed partial repair pending from %s and reruns validation",
+    async (phase) => {
+      mocks.state.current = workflow(phase);
+      const writeTextFile = vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockRejectedValueOnce(new Error("second write failed"));
+      const context = {
+        callId: "repair",
+        getSandbox: () => Promise.resolve({ writeTextFile }),
+      } as never;
+      await expect(
+        validateAppCreation.execute(
+          {
+            implementationFiles: [
+              { content: "changed", path: "apps/app/page.tsx" },
+              { content: "next", path: "apps/app/actions.ts" },
+            ],
+          },
+          context,
+        ),
+      ).rejects.toThrow("second write failed");
+      expect(mocks.state.current.phase).toBe("validation_pending");
+      expect(mocks.state.current).not.toHaveProperty("validationReceipt");
+      expect(mocks.state.current).not.toHaveProperty("validationFailure");
+      expect(mocks.state.update).toHaveBeenCalledBefore(writeTextFile);
+      expect(mocks.clear).toHaveBeenCalledBefore(writeTextFile);
+      expect(mocks.execute).not.toHaveBeenCalled();
+      const result = await validateAppCreation.execute({ implementationFiles: [] }, context);
+      expect(mocks.execute).toHaveBeenCalledOnce();
+      expect(result).toMatchObject({ reused: false, status: "validated" });
+    },
+  );
 });
