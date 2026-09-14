@@ -27,8 +27,7 @@ export default defineTool({
     const development = canAutoSelectDevelopmentSource();
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "workspace preparation");
-    if (sourceWorkflowState.get().phase === "empty")
-      await sourceStatus.execute({}, ctx);
+    if (sourceWorkflowState.get().phase === "empty") await sourceStatus.execute({}, ctx);
     const source = sourceWorkflowState.get();
     if (source.phase === "empty") throw new Error("No source was reviewed.");
     if (!development && source.githubSource !== undefined) {
