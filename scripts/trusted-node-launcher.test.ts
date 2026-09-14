@@ -41,7 +41,8 @@ describe("trusted Node launcher", () => {
       pathModule.join(repositoryRoot, "scripts/run-with-test-capability.mts"),
       "utf-8",
     );
-    const pinnedDigest = /const launcherDigest = "(?<digest>[a-f0-9]{64})";/u.exec(broker)?.groups?.digest;
+    const pinnedDigest = /const launcherDigest = "(?<digest>[a-f0-9]{64})";/u.exec(broker)?.groups
+      ?.digest;
     expect(pinnedDigest).toBeDefined();
     expect(createHash("sha256").update(readFileSync(launcher)).digest("hex")).toBe(pinnedDigest);
     expect(

@@ -97,7 +97,7 @@ This is shared development setup, not eval-specific hosting or a generation driv
 
 At shared setup revision `97690943`, against Arrusted `c3ff29dad22e80c0f7f9a429b04d33b2ca4a858f`,
 ordinary emulated GitHub signup, authenticated workspace rendering, and account
-navigation passed in a browser with strict TLS and no browser errors. The normal
+navigation passed in a browser with strict TLS and no captured page or HTTP errors. The normal
 auth endpoint returned HTTP 200. No session or database state was injected.
 Passkeys remained unassessed because the optional feature flag was disabled.
 Two observer attempts are retained: one incorrectly assumed that flag was enabled;
@@ -117,8 +117,14 @@ events and independently examines implemented source during change-set acceptanc
 Cited contradictions return to the normal repair loop; compiler success does not
 mean product success. Missing original requests in legacy sessions, unavailable
 review, omitted dependencies, and changed source remain explicit. Source review
-never awards a runtime pass. Live model acceptance of this new review path is still
-outstanding; focused tests are not a substitute.
+never awards a runtime pass. A separate live invocation of the shared source judge against the preserved
+candidate completed with seven mechanically cited contradictions (10,183 input
+and 5,582 output tokens). Evidence: `/private/tmp/source-judge-baseline-acceptance`.
+This proves the judge invocation and cited findings, not integration through a
+normal `accept_change_set` turn or repaired product behavior. The raw judge also
+mentions anonymous entry from the frozen brief; that subclaim remains excluded
+from the current repair scope. Normal end-to-end repair-loop acceptance is still
+outstanding.
 
 Arrusted launcher PR #1379 merged as `c3ff29da`. Its exact PR checks passed; the
 first main run failed because main advanced during template readiness. PR #1382
