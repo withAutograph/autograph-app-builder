@@ -6,7 +6,11 @@ import { mkdtemp, readFile, rm, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it } from "vitest";
-import { localCaFetch, prepareDevelopmentEmulatedWeb } from "./emulated-web";
+import {
+  cachedCertificateAuthority,
+  localCaFetch,
+  prepareDevelopmentEmulatedWeb,
+} from "./emulated-web";
 
 // oxlint-disable-next-line typescript/strict-void-return -- Adapt Node overloaded callback API with promisify.
 const execute = promisify(execFile);
@@ -137,4 +141,19 @@ it("retains external state and stops only its owned preparation process", async 
       stateRoot,
     }),
   ).rejects.toThrow("preparation failed");
+});
+
+it("uses an existing CA with multiple cached mkcert versions", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "cached-ca-"));
+  roots.push(root);
+  await writeFile(path.join(root, "rootCA.pem"), "fixture public CA");
+  await writeFile(
+    path.join(root, `mkcert-v1-${process.platform}`),
+    `#!/bin/sh\nprintf '%s' '${root}'\n`,
+    { mode: 0o700 },
+  );
+  await writeFile(path.join(root, `mkcert-v2-${process.platform}`), "#!/bin/sh\nexit 1\n", {
+    mode: 0o700,
+  });
+  expect(await cachedCertificateAuthority(root)).toBe(path.join(root, "rootCA.pem"));
 });

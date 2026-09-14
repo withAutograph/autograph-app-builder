@@ -14,6 +14,7 @@ import { developmentChildExit, stopDevelopmentChild } from "./process-supervisor
 
 // oxlint-disable-next-line typescript/strict-void-return -- Adapt Node overloaded callback API with promisify.
 const execFileAsync = promisify(execFile);
+const caName = "rootCA.pem";
 
 export const emulatedWebEnvironmentKeys = [
   "APP_BUILDER_LOCAL_PROVIDER_EMULATION",
@@ -104,26 +105,32 @@ export const localCaFetch =
     });
   };
 
+export const cachedCertificateAuthority = async (cache: string) => {
+  const entries = await readdir(cache);
+  const binaries = entries
+    .toSorted((left, right) => right.localeCompare(left, undefined, { numeric: true }))
+    .filter((name) => name.startsWith("mkcert-") && name.includes(process.platform));
+  for (const binary of binaries) {
+    try {
+      const result = await execFileAsync(path.join(cache, binary), ["-CAROOT"]);
+      const ca = path.join(result.stdout.trim(), caName);
+      await readFile(ca);
+      return ca;
+    } catch {
+      // An old or incompatible cached executable does not prevent using another installed one.
+    }
+  }
+  throw new Error("No installed cached mkcert could identify an existing local CA.");
+};
+
 const existingCertificateAuthority = async (override?: string) => {
-  const caName = "rootCA.pem";
   let caSource =
     override ??
     (process.env.CAROOT === undefined ? undefined : path.join(process.env.CAROOT, caName));
   if (caSource === undefined) {
     try {
       const cache = getCacheDirectory("mkcert");
-      const entries = await readdir(cache);
-      const binaries = entries.filter(
-        (name) =>
-          name.startsWith("mkcert-") &&
-          name.includes(process.platform === "darwin" ? "darwin" : process.platform),
-      );
-      const [binary] = binaries;
-      if (binaries.length !== 1 || binary === undefined) {
-        throw new Error("Cached mkcert executable is unavailable or ambiguous.");
-      }
-      const result = await execFileAsync(path.join(cache, binary), ["-CAROOT"]);
-      caSource = path.join(result.stdout.trim(), caName);
+      caSource = await cachedCertificateAuthority(cache);
     } catch {
       throw new Error(
         "Existing trusted local CA unavailable. Supply --web-ca and existing --web-certificate/--web-key; no system trust installation is performed.",
@@ -145,7 +152,6 @@ export const prepareDevelopmentEmulatedWeb = async (input: {
     args.webCertificate ?? path.join(input.repositoryRoot, "certificates/localhost.pem");
   const keySource =
     args.webKey ?? path.join(input.repositoryRoot, "certificates/localhost-key.pem");
-  const caName = "rootCA.pem";
   const caSource = await existingCertificateAuthority(args.webCa);
   const root = path.join(input.stateRoot, "emulated-web");
   await mkdir(root, { mode: 0o700, recursive: true });

@@ -33,9 +33,13 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-if [ "${APP_BUILDER_EMULATED_SERVICES_ONLY:-0}" = 1 ] && lsof -nP -iTCP:"$emulate_base_port" -sTCP:LISTEN >/dev/null 2>&1; then
-  echo "Emulated web provider port is already in use. Configure EMULATE_BASE_PORT through mise or stop the owning local stack; this command will not reuse or stop an unrelated emulator." >&2
-  exit 78
+if [ "${APP_BUILDER_EMULATED_SERVICES_ONLY:-0}" = 1 ]; then
+  for provider_port in "$emulate_base_port" "$github_emulate_port"; do
+    if lsof -nP -iTCP:"$provider_port" -sTCP:LISTEN >/dev/null 2>&1; then
+      echo "Emulated web provider port $provider_port is already in use. Configure EMULATE_BASE_PORT through mise or stop the owning local stack; unrelated listeners are never reused or stopped." >&2
+      exit 78
+    fi
+  done
 fi
 if ! lsof -nP -iTCP:"$emulate_base_port" -sTCP:LISTEN >/dev/null 2>&1; then
   "$(mise which node)" node_modules/emulate/dist/index.js \
@@ -122,7 +126,7 @@ export EMULATE_GITHUB_INSTALLATION_ID=1001
 export EMULATE_GITHUB_REPOSITORY=autograph-local/demo-app
 export EMULATE_LOCAL_RELAY_SECRET="$(tr -d '\n' < "$state_dir/relay-secret")"
 if [ "${APP_BUILDER_EMULATED_SERVICES_ONLY:-0}" = 1 ]; then
-  "$(mise which node)" --import tsx scripts/emulated-web-service-receipt.mts &
+  APP_BUILDER_EMULATED_PROVIDER_PID="$emulate_pid" "$(mise which node)" --import tsx scripts/emulated-web-service-receipt.mts &
   app_pid=$!
   wait "$app_pid"
   exit $?

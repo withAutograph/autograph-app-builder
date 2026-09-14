@@ -1,3 +1,8 @@
+import { setTimeout as delay } from "node:timers/promises";
+import {
+  waitForOwnedProviders,
+  assertOwnedProviders,
+} from "../lib/development/emulated-provider-lifecycle";
 import { writeFile, rename } from "node:fs/promises";
 import path from "node:path";
 import { emulatedWebEnvironmentKeys } from "../lib/development/emulated-web";
@@ -15,11 +20,23 @@ const environment = Object.fromEntries(
     return [key, value];
   }),
 );
+const pid = Number(process.env.APP_BUILDER_EMULATED_PROVIDER_PID);
+const ports = [
+  Number(new URL(environment.VERCEL_EMULATOR_URL).port),
+  Number(new URL(environment.GITHUB_EMULATOR_URL).port),
+];
+if (!Number.isSafeInteger(pid) || pid <= 0) {
+  throw new Error("Owned emulator process is unavailable.");
+}
+await waitForOwnedProviders({ pid, ports });
 await writeFile(path.join(root, "environment.pending"), JSON.stringify(environment), {
   mode: 0o600,
 });
 await rename(path.join(root, "environment.pending"), path.join(root, "environment.json"));
-// Owned by the existing task's signal/cleanup lifecycle.
-setInterval(() => {
-  // Keep owned services alive until the supervisor stops this process.
-}, 60_000);
+// The task waits on this child. A lost provider stops the shared supervisor too.
+while (true) {
+  // oxlint-disable-next-line eslint/no-await-in-loop -- Observe the same owned services over time.
+  await delay(1000);
+  // oxlint-disable-next-line eslint/no-await-in-loop -- Observe the same owned services over time.
+  await assertOwnedProviders(pid, ports);
+}
