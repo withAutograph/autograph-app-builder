@@ -1,0 +1,228 @@
+[
+  {
+    "id": "accept-app-spec",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "branch-worktree-publication-lost-response",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "branch-worktree-publication-negative",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "branch-worktree-publication-recovery",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "branch-worktree-publication-stale",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "branch-worktree-publication",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "cancel-dependency-preparation",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "cancel-fresh-template",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "cancel-prepare-workspace",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "cancel-prototype-artifact",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "cancel-target-planning",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "capabilities",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "design-guidance",
+    "execution": "sandbox",
+    "group": "sandbox"
+  },
+  {
+    "id": "failed-journal-recovery",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "failed-target-validation",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "fresh-bootstrap-capabilities",
+    "execution": "deterministic",
+    "group": "fresh"
+  },
+  {
+    "id": "fresh-bootstrap-empty-publication",
+    "execution": "deterministic",
+    "group": "fresh"
+  },
+  {
+    "id": "fresh-bootstrap-negative",
+    "execution": "deterministic",
+    "group": "fresh"
+  },
+  {
+    "id": "fresh-bootstrap-publication",
+    "execution": "deterministic",
+    "group": "fresh"
+  },
+  {
+    "id": "fresh-bootstrap-recovery",
+    "execution": "deterministic",
+    "group": "fresh"
+  },
+  {
+    "id": "fresh-bootstrap-wrong-source",
+    "execution": "deterministic",
+    "group": "fresh"
+  },
+  {
+    "id": "fresh-template",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "github-publication-disabled",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "interrupted-local-publication",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "interrupted-target-validation",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "local-publication-disabled",
+    "execution": "deterministic",
+    "group": "general-disabled"
+  },
+  {
+    "id": "local-publication-overlap",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "parallel-prototype-artifacts",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "partial-target-apply",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "pre-journal-branch-worktree-publication",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "pre-journal-local-publication",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "precondition-failed-publication",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "prepare-workspace",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "product-quality",
+    "execution": "deterministic",
+    "group": "product"
+  },
+  {
+    "id": "published-local-workflow-boundary",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "sandbox-existing-iteration",
+    "execution": "sandbox",
+    "group": "sandbox"
+  },
+  {
+    "id": "sandbox-identity-planning",
+    "execution": "sandbox",
+    "group": "sandbox"
+  },
+  {
+    "id": "sandbox-reviewed-change-set",
+    "execution": "sandbox",
+    "group": "sandbox"
+  },
+  {
+    "id": "sandbox-toolchain",
+    "execution": "sandbox",
+    "group": "sandbox"
+  },
+  {
+    "id": "self-reproduction",
+    "execution": "retired",
+    "group": "retired",
+    "reason": "Internal-stage diagnostic; public-entrypoint self-reproduction is the supported autonomous benchmark."
+  },
+  {
+    "id": "stale-fresh-template",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "succeeded-journal-recovery",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "unavailable-product-alternative",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "uncertain-product-brief",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  },
+  {
+    "id": "vendor-onboarding-inference",
+    "execution": "deterministic",
+    "group": "general-enabled"
+  }
+]

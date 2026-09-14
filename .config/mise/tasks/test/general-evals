@@ -6,22 +6,11 @@ node_bin="$(mise which node)"
 launcher="$PWD/.config/mise/scripts/trusted-node-launcher"
 eval_runner="scripts/run-eve-eval.mts"
 
-"$launcher" "$node_bin" --import tsx "$eval_runner" \
-  --gate-a-profile general-enabled \
-  capabilities \
-  design-guidance \
-  parallel-prototype-artifacts \
-  prepare-workspace \
-  unavailable-product-alternative \
-  uncertain-product-brief \
-  vendor-onboarding-inference \
-  --exclude-tag disabled-local-publication \
-  --exclude-tag product-quality \
-  --exclude-tag fresh-bootstrap-publication \
-  --exclude-tag sandbox-toolchain \
-  --exclude-tag sandbox-image-proof \
-  --strict --skip-report
-
-exec "$launcher" "$node_bin" --import tsx "$eval_runner" \
-  --gate-a-profile general-disabled \
-  --tag disabled-local-publication --strict --skip-report
+for profile in general-enabled general-disabled; do
+  scenarios="$("$node_bin" --import tsx scripts/eval-scenario-selection.mts "$profile")"
+  # Inventory identifiers are fixed repository-owned whitespace-free names.
+  # No tag filters: every selected scenario must execute.
+  # shellcheck disable=SC2086
+  "$launcher" "$node_bin" --import tsx "$eval_runner" \
+    --gate-a-profile "$profile" $scenarios --strict --skip-report
+done
