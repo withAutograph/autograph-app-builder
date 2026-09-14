@@ -111,3 +111,44 @@ it("retains incomplete summary coverage without dropping other completed attempt
   expect(result.coverage.observed).toBe(1);
   expect(result.coverage.missing).toBe(2);
 });
+
+it("retains declared per-attempt revisions and renders sanitized command provenance", () => {
+  const result = buildCrossEvalReport({
+    baseline: {},
+    inventory,
+    revision: "fallback",
+    summaries: [
+      {
+        command: "mise run eval https://private?token=x",
+        evals: [
+          { assertions: [{ passed: true, severity: "gate" }], id: "missing", verdict: "passed" },
+        ],
+        evidencePath: "summary.json",
+        sourceRevision: "revised",
+      },
+    ],
+  });
+  expect(result.rows[1]?.runner?.provenance.sourceRevision).toBe("revised");
+  expect(result.rows[1]?.runner?.provenance.revisionBasis).toContain("not inferred");
+  for (const rendered of Object.values(renderCrossEvalReport(result))) {
+    expect(rendered).toContain("summary.json");
+    expect(rendered).toContain("mise run eval");
+    expect(rendered).not.toContain("https://private");
+  }
+});
+
+it("rejects supplemental success overriding failed runner evidence", () => {
+  expect(() =>
+    buildCrossEvalReport({
+      baseline: {},
+      inventory,
+      revision: "abc",
+      summaries: [{ evals: [{ id: "missing", verdict: "failed" }] }],
+      supplemental: {
+        scenarios: [
+          { evidence: ["receipt.json"], id: "missing", reason: "works", status: "passed" },
+        ],
+      },
+    }),
+  ).toThrow("cannot pass failed runner");
+});

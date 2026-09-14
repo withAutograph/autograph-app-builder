@@ -72,6 +72,15 @@ export function buildCrossEvalReport(input: {
               passed: gates.filter((assertion) => assertion.passed === true).length,
               total: gates.length,
             },
+            provenance: {
+              command: clean(record(summary).command),
+              evidencePath: clean(record(summary).evidencePath),
+              revisionBasis:
+                typeof record(summary).sourceRevision === "string"
+                  ? "declared on supplied summary; not inferred"
+                  : "declared report fallback; not inferred",
+              sourceRevision: clean(record(summary).sourceRevision ?? input.revision),
+            },
             summaryIndex,
             verdict: ["passed", "failed", "errored", "skipped", "scored"].includes(
               String(row.verdict),
@@ -112,6 +121,14 @@ export function buildCrossEvalReport(input: {
           `Supplemental assessment for ${item.id} requires status, reason, and evidence.`,
         );
       }
+      if (
+        supplement.status === "passed" &&
+        (runner?.verdict === "failed" || (runner?.assertions.failed ?? 0) > 0)
+      ) {
+        throw new Error(
+          `Supplemental assessment cannot pass failed runner evidence for ${item.id}.`,
+        );
+      }
       status = String(supplement.status);
       reason = clean(supplement.reason);
     }
@@ -149,7 +166,7 @@ export function buildCrossEvalReport(input: {
       unknownSummaryIds: unknownIds,
     },
     evidenceScope:
-      "Summary inputs are explicitly supplied for this revision; no source revision is inferred from Eve summaries. Counts are runner evidence, not aggregate product-quality proof. Last supplied attempt selected; all attempts retained. Sanitization is bounded best effort; transcripts and target URLs are omitted.",
+      "Source revisions are caller declarations on each annotated summary or the report fallback; none are inferred or verified from Eve execution. Counts are runner evidence, not aggregate product-quality proof. Last supplied attempt selected; all attempts retained. Sanitization is bounded best effort; transcripts and target URLs are omitted.",
     improvements: improvements.map((id) => {
       const row = rows.find((item) => item.id === id);
       let preservation = "unassessed";
@@ -203,11 +220,18 @@ export function renderCrossEvalReport(report: ReturnType<typeof buildCrossEvalRe
         `| ${row.id} | ${row.runner?.verdict ?? "missing"} | ${row.runner === null ? "unassessed" : `${row.runner.gates.passed}/${row.runner.gates.total}`} | ${row.assessment.status} | ${cell(row.transition)} | ${cell(row.assessment.reason)} |`,
     ),
     "",
+    "## Attempt provenance",
+    ...report.rows.flatMap((row) =>
+      row.attempts.map(
+        (attempt) =>
+          `- ${row.id}, summary ${attempt.summaryIndex}, ${attempt.verdict}: ${cell(attempt.provenance.sourceRevision)} (${attempt.provenance.revisionBasis}); command: ${cell(attempt.provenance.command || "not supplied")}; evidence: ${cell(attempt.provenance.evidencePath || "not supplied")}`,
+      ),
+    ),
     "## Seven improvements",
     ...report.improvements.map((row) => `- ${row.id}: ${row.preservation}`),
   ].join("\n");
   return {
-    html: `<!doctype html><html lang="en"><meta charset="utf-8"><title>Cross-eval assessment</title><style>body{font:15px system-ui;margin:32px;max-width:1400px}pre{white-space:pre-wrap;overflow-wrap:anywhere}table{border-collapse:collapse}td,th{text-align:left;vertical-align:top;padding:8px;border:1px solid #ddd}</style><h1>Cross-eval assessment</h1><p>${escape(report.evidenceScope)}</p><p>Source: ${escape(report.sourceRevision)}. Observed ${report.coverage.observed}/${report.coverage.total} scenarios.</p><table><thead><tr><th>Scenario</th><th>Runner</th><th>Assessment</th><th>Baseline change</th><th>Reason</th></tr></thead><tbody>${report.rows.map((row) => `<tr><td>${escape(row.id)}</td><td>${escape(row.runner?.verdict ?? "missing")}</td><td>${escape(row.assessment.status)}</td><td>${escape(row.transition)}</td><td>${escape(row.assessment.reason)}</td></tr>`).join("")}</tbody></table><h2>Seven improvements</h2><ul>${report.improvements.map((row) => `<li>${escape(row.id)}: ${escape(row.preservation)}</li>`).join("")}</ul><pre>${escape(JSON.stringify(report.inputIssues))}</pre></html>`,
+    html: `<!doctype html><html lang="en"><meta charset="utf-8"><title>Cross-eval assessment</title><style>body{font:15px system-ui;margin:32px;max-width:1400px}pre{white-space:pre-wrap;overflow-wrap:anywhere}table{border-collapse:collapse}td,th{text-align:left;vertical-align:top;padding:8px;border:1px solid #ddd}</style><h1>Cross-eval assessment</h1><p>${escape(report.evidenceScope)}</p><p>Source: ${escape(report.sourceRevision)}. Observed ${report.coverage.observed}/${report.coverage.total} scenarios.</p><table><thead><tr><th>Scenario</th><th>Runner</th><th>Assessment</th><th>Baseline change</th><th>Reason</th></tr></thead><tbody>${report.rows.map((row) => `<tr><td>${escape(row.id)}</td><td>${escape(row.runner?.verdict ?? "missing")}</td><td>${escape(row.assessment.status)}</td><td>${escape(row.transition)}</td><td>${escape(row.assessment.reason)}</td></tr>`).join("")}</tbody></table><h2>Attempt provenance</h2><ul>${report.rows.flatMap((row) => row.attempts.map((attempt) => `<li>${escape(row.id)}: ${escape(attempt.verdict)}; ${escape(attempt.provenance.sourceRevision)} (${escape(attempt.provenance.revisionBasis)}); command: ${escape(attempt.provenance.command || "not supplied")}; evidence: ${escape(attempt.provenance.evidencePath || "not supplied")}</li>`)).join("")}</ul><h2>Seven improvements</h2><ul>${report.improvements.map((row) => `<li>${escape(row.id)}: ${escape(row.preservation)}</li>`).join("")}</ul><pre>${escape(JSON.stringify(report.inputIssues))}</pre></html>`,
     markdown,
   };
 }
