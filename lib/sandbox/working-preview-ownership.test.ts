@@ -8,6 +8,13 @@ import { workingPreviewSupervisorSource } from "./working-preview-runtime";
 import { previewOwnershipRoot, previewOwnershipSource } from "./working-preview-ownership";
 
 const execute = promisify(execFile);
+interface OwnershipOperation {
+  attempt?: { attemptId?: string; expiresAt?: number; providerSessionId?: string; status?: string };
+  attemptId?: string;
+  kind: string;
+  patch?: { status: string };
+  providerSessionId?: string;
+}
 describe("sandbox preview ownership journal", () => {
   it("claims exclusively across processes and fences stale attempts", async () => {
     const directory = await mkdtemp(nodePath.join(tmpdir(), "preview-owner-"));
@@ -15,7 +22,7 @@ describe("sandbox preview ownership journal", () => {
       JSON.stringify(previewOwnershipRoot),
       JSON.stringify(directory),
     );
-    const run = async (operation: object) => {
+    const run = async (operation: OwnershipOperation) => {
       const result = await execute(process.execPath, [
         "--input-type=module",
         "-e",
