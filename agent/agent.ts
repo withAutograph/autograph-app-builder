@@ -1,7 +1,7 @@
 import { defineAgent } from "eve";
 import { mockModel } from "eve/evals";
 
-import { currentReviewResults } from "@/lib/testing/current-review-results";
+import { currentReviewResults, unavailableReviewReply } from "@/lib/testing/current-review-results";
 import {
   addVendorTaxVerificationStatus,
   selectVendorReviewSourcePath,
@@ -948,15 +948,16 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (stale) {
       requiredAccepts = 3;
     }
-    const status = [...toolResults].toReversed().find(({ name }) => name === "workspace_status");
+    const status = [...reviewResults].toReversed().find(({ name }) => name === "workspace_status");
     const latestStatus = status?.output as
       | { phase?: string; validation?: { digest?: string } }
       | undefined;
-    if (
-      status === undefined ||
-      (latestStatus?.phase !== "validated" && latestStatus?.phase !== "reviewed")
-    ) {
+    if (status === undefined) {
       return { toolCalls: [{ input: {}, name: "workspace_status" }] };
+    }
+    const unavailableReply = unavailableReviewReply(latestStatus?.phase);
+    if (unavailableReply !== undefined) {
+      return unavailableReply;
     }
     const proposal = [...reviewResults]
       .toReversed()

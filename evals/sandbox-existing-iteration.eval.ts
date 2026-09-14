@@ -63,7 +63,20 @@ Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
     const validation = await t.send("Validate the applied creation.");
     validation.notEvent("input.requested");
     t.succeeded();
-    t.check(t.reply, includes("quality checks"));
+    t.check(t.reply, includes("passed its local quality checks"));
+    const validationCall = validation.requireToolCall("validate_app_creation");
+    await t.require(
+      validationCall,
+      satisfies(
+        (call) =>
+          call.status === "completed" &&
+          typeof call.output === "object" &&
+          call.output !== null &&
+          "status" in call.output &&
+          call.output.status === "validated",
+        "current validation receipt passed",
+      ),
+    );
     await t.send("Inspect the validated change set.");
     t.succeeded();
     const review = await t.send("Accept the displayed change set.");
@@ -167,6 +180,5 @@ Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
     ])
       t.notCalledTool(tool);
   },
-  // Source preparation plus existing-app validation exceeds the shorter planning-only budget.
-  timeoutMs: 600_000,
+  timeoutMs: 360_000,
 });
