@@ -11,6 +11,10 @@ import {
   sandboxValidationCommandExecutor,
 } from "@/lib/repository/target-validation";
 import { hasTestCapability } from "@/lib/testing/test-capability";
+import {
+  clearProductBehaviorEvidence,
+  currentProductBehaviorEvidence,
+} from "@/lib/agent/product-behavior-state";
 
 export default defineTool({
   description:
@@ -21,13 +25,22 @@ export default defineTool({
       current.phase !== "applied" &&
       current.phase !== "validation_pending" &&
       current.phase !== "validation_failed" &&
-      current.phase !== "validated"
+      current.phase !== "validated" &&
+      current.phase !== "reviewed"
     )
       throw new Error("Apply the requested changes before running the repository checks.");
-    if (current.phase === "validated") {
+    if (
+      (current.phase === "validated" || current.phase === "reviewed") &&
+      input.implementationFiles.length === 0
+    ) {
+      const evidence = currentProductBehaviorEvidence(
+        current.appSpec.digest,
+        current.applyReceipt.digest,
+      );
       return {
         commandCount: current.validationReceipt.commands.length,
-        productAcceptance: productAcceptanceObligations(current.appSpec),
+        productAcceptance: productAcceptanceObligations(current.appSpec, evidence),
+        productBehaviorEvidence: evidence,
         reused: true,
         status: "validated" as const,
         technicalStatus: "passed" as const,
@@ -44,7 +57,10 @@ export default defineTool({
       });
       await writeImplementationFiles(index + 1);
     };
-    await writeImplementationFiles(0);
+    if (input.implementationFiles.length > 0) {
+      clearProductBehaviorEvidence();
+      await writeImplementationFiles(0);
+    }
     const fixture = hasTestCapability("simulated-target");
     const attempt = createTargetValidationAttempt(current.applyReceipt, ctx.callId);
     const base = {
@@ -93,9 +109,14 @@ export default defineTool({
       phase: "validated",
       validationReceipt: result.receipt,
     }));
+    const evidence = currentProductBehaviorEvidence(
+      current.appSpec.digest,
+      current.applyReceipt.digest,
+    );
     return {
       commandCount: result.receipt.commands.length,
-      productAcceptance: productAcceptanceObligations(current.appSpec),
+      productAcceptance: productAcceptanceObligations(current.appSpec, evidence),
+      productBehaviorEvidence: evidence,
       reused: false,
       status: "validated" as const,
       technicalStatus: "passed" as const,

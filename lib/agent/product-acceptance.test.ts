@@ -18,6 +18,15 @@ describe("accepted product obligations", () => {
       productStatus: "unassessed",
     });
   });
+  it("retains partial readback evidence without promoting overall product acceptance", () => {
+    const evidence = [{ coverage: "action-readback-only", status: "passed" }];
+    const result = productAcceptanceObligations(
+      { content: "## Acceptance walkthrough\nSave and reload", digest: "spec" },
+      evidence,
+    );
+    expect(result.evidence).toEqual(evidence);
+    expect(result.productStatus).toBe("unassessed");
+  });
   it("does not invent obligations when the section is absent", () => {
     expect(
       productAcceptanceObligations({ content: "# Static prototype", digest: "spec" }),

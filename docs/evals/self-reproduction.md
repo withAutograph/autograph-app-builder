@@ -193,3 +193,20 @@ instant-navigation collection lives in
 `evals/support/self-reproduction-reference-navigation.ts` and delegates to the
 repository's focused production-navigation task. These components can preserve
 historical comparison evidence; they are not alternate public generation paths.
+
+## Shared product readback evidence
+
+The normal Builder can use `verify_app_behavior` for an implemented app-owned
+JSON write/read workflow. This is a shared product capability, not an eval
+control surface: the public eval must not invoke it or supply its scenarios.
+Builder chooses the actual routes from its implementation and binds the check
+to an accepted walkthrough outcome. The verifier supplies a synthetic value,
+executes a write, and compares a separate read with that value.
+
+This evidence covers only action and readback. It does not establish persistence
+across a process restart, authentication, tenant isolation, independent child
+generation, or browser usability. An overall product assessment remains
+unassessed until its required behaviors have independent evidence. A failed
+readback remains a failure even when the write returned success. Evaluator-owned
+observations must still exercise the delivered app as a user; Builder's partial
+checks do not replace that comparison.

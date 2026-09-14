@@ -9,6 +9,7 @@ import { connect } from "node:net";
 import type { AddressInfo, Socket } from "node:net";
 
 import { describe, expect, it } from "vitest";
+import { blockCrossSiteDEV } from "next/dist/server/lib/router-utils/block-cross-site-dev";
 
 import { createWorkingPreviewAccess } from "./working-preview-access";
 
@@ -274,11 +275,16 @@ describe("working preview access", () => {
   });
 });
 
-const openUpgrade = async (port: number, headers: Record<string, string>, head = "") => {
+const openUpgrade = async (
+  port: number,
+  headers: Record<string, string>,
+  head = "",
+  path = "/_next/webpack-hmr",
+) => {
   const socket = connect(port, "127.0.0.1");
   await once(socket, "connect");
   socket.write(
-    `GET /_next/webpack-hmr HTTP/1.1\r\nHost: preview.example\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n${Object.entries(
+    `GET ${path} HTTP/1.1\r\nHost: preview.example\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n${Object.entries(
       headers,
     )
       .map(([name, value]) => `${name}: ${value}\r\n`)
@@ -385,3 +391,82 @@ describe("working preview WebSocket upgrade", () => {
     },
   );
 });
+
+it.each(["/_next/hmr", "/apps/builder/_next/hmr"])(
+  "authenticates then translates only Next HMR origin at %s",
+  async (hmrPath) => {
+    await withGateway(async ({ app, appPort, port, launch, observed }) => {
+      const origins: (string | undefined)[] = [];
+      app.on("upgrade", (incoming, socket) => {
+        origins.push(incoming.headers.origin);
+        socket.on("error", () => {});
+        socket.on("end", () => socket.destroy());
+        if (blockCrossSiteDEV(incoming, socket, undefined, "0.0.0.0")) {
+          return;
+        }
+        socket.end(
+          "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\naccepted",
+        );
+      });
+      const direct = await openUpgrade(appPort, { origin: "https://preview.example" }, "", hmrPath);
+      try {
+        expect(await untilText(direct, "Unauthorized")).toContain("Unauthorized");
+      } finally {
+        direct.destroy();
+      }
+      const entry = await call(port, launch);
+      const [cookie] = (entry.headers["set-cookie"]?.[0] ?? "").split(";");
+      const rejected = await openUpgrade(
+        port,
+        { cookie, origin: "https://foreign.example" },
+        "",
+        hmrPath,
+      );
+      try {
+        expect(await untilText(rejected, "403")).toContain("403");
+      } finally {
+        rejected.destroy();
+      }
+      const stale = await openUpgrade(
+        port,
+        { cookie: "__Host-autograph-preview=stale", origin: "https://preview.example" },
+        "",
+        hmrPath,
+      );
+      try {
+        expect(await untilText(stale, "403")).toContain("403");
+      } finally {
+        stale.destroy();
+      }
+      const allowed = await openUpgrade(
+        port,
+        { cookie, origin: "https://preview.example" },
+        "",
+        hmrPath,
+      );
+      try {
+        expect(await untilText(allowed, "accepted")).toContain("101 Switching Protocols");
+      } finally {
+        allowed.destroy();
+      }
+      const application = await openUpgrade(
+        port,
+        { cookie, origin: "https://preview.example" },
+        "",
+        "/app/socket",
+      );
+      try {
+        expect(await untilText(application, "accepted")).toContain("101 Switching Protocols");
+      } finally {
+        application.destroy();
+      }
+      expect(origins).toEqual([
+        "https://preview.example",
+        `http://localhost:${appPort}`,
+        "https://preview.example",
+      ]);
+      await call(port, "/api/data", { cookie, origin: "https://preview.example" });
+      expect(observed[0].headers.origin).toBe("https://preview.example");
+    });
+  },
+);

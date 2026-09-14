@@ -1,3 +1,7 @@
+import {
+  bindProductBehaviorPreview,
+  currentProductBehaviorGeneration,
+} from "@/lib/agent/product-behavior-state";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
@@ -25,6 +29,7 @@ export default defineTool({
       current.applyReceipt.applyRoot,
       input.workingDirectory,
     );
+    const evidenceGeneration = currentProductBehaviorGeneration();
     const sandbox = await ctx.getSandbox();
     await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
     const provider = await getVercelPreviewProvider(sandbox.id, ctx.abortSignal);
@@ -50,6 +55,7 @@ export default defineTool({
       signal: ctx.abortSignal,
     });
     workingPreviewState.update(() => preview);
+    bindProductBehaviorPreview(preview.commandId, evidenceGeneration);
     return { workingPreview: preview.receipt };
   },
   inputSchema: z.object({

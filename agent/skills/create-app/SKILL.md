@@ -5,7 +5,7 @@ description: Guide complete creation of a route-owned Next.js app in a supported
 
 # Create App
 
-Create one validated local app without crossing provider or deployment authority.
+Create one working private app without crossing provider or deployment authority.
 Keep product acceptance separate from approval to mutate source and topology.
 
 For optional React 19.3 UI and security capabilities, follow
@@ -111,7 +111,11 @@ app-owned files and reuse the same component-backed preview flow.
    recovery use server-owned storage and Server Actions or route handlers;
    provider returns use real callback routes and the repository's emulator or
    provider boundary; creation, cancellation, retry, and preview access use the
-   app's real orchestration path. Browser storage, timers, and local state may
+   app's real orchestration path. The generated app must own its backend and
+   orchestration; do not delegate its product behavior to App Builder itself.
+   SQLite or server-owned files are valid persistence choices when appropriate
+   to the product and available runtime; a hosted database is not a prerequisite
+   for an independent private implementation. Browser storage, timers, and local state may
    support transient presentation, but never stand in for those outcomes.
    Keep route pages and layouts as Server Components and put `"use client"`
    only on the smallest interactive leaves. A single client component that
@@ -127,29 +131,69 @@ app-owned files and reuse the same component-backed preview flow.
    drafting, or planning. Never invoke the target command through generic shell
    access.
 
-7. Treat approval of **Build this app?** as permission to edit and validate only
-   the private App Builder checkout. It is not permission to create or modify a
-   repository, push a branch, open a pull request, deploy, provision resources,
-   publish a package, or release anything. Use only the discovered
-   `apply_app_creation` tool. It must rerun readiness,
-   bind the exact proposal and earlier receipts, and write only its fresh
-   builder-owned overlay. If an actual technical command failure has a safe
-   repair, make that repair internally and retry the supported flow; otherwise
-   stop in recovery-required state.
-8. After the app changes are prepared, run the fixed local checks automatically.
-   The validation tool must persist its pending receipt
-   before execution, run only the fixed check and test commands in independent
-   copies of the exact applied tree, and stop on pending or failed state without
-   automatic redispatch.
-9. After checks pass, use `change_set_status` and `accept_change_set` internally
-   to recompute the exact proposal and record the durable reviewed receipt.
-   Show the complete ordered product/code changes in plain language and offer
-   one concrete repository or draft-pull-request next step. Stop unless the
-   user chooses to continue. Only then request a separate effect-based approval
-   before applying the reviewed paths to a named existing checkout or
-   publishing them. One approval never authorizes another outcome.
-   Keep internal execution mechanics and no-authority boilerplate out of the
-   public conversation.
+7. Treat approval of **Build this app?** as permission to edit, validate, and
+   run the implementation in the private App Builder checkout. It is not
+   permission to push a branch, open a pull request, deploy, provision app
+   resources, publish a package, or change the user's external repository.
+   Use `apply_app_creation` for the approved implementation. The prepared
+   checkout remains the live working source; do not assume apply creates a
+   fresh overlay or that normal source edits require a new workspace.
+   When apply rejects a submission, send corrected files as an incremental
+   retry: omitted files from the same approved proposal remain staged, and
+   supplied paths replace their earlier contents. A new proposal starts a new
+   staged implementation.
+   Preserve unrelated changes. Repair actual reported technical failures
+   through the supported tools when safe, without requesting the same approval
+   again. If recovery is unavailable, explain the incomplete product outcome.
+8. After apply succeeds, continue with `validate_app_creation`. It runs the
+   repository's normal commands against the current applied app. When it
+   reports a repairable failure, provide corrected `implementationFiles` to
+   `validate_app_creation` and retry in the same approved checkout. Use the
+   returned diagnostics and status; do not invent extra validation capabilities
+   or treat a pending attempt as passed. Successful commands establish
+   technical validation, not product acceptance. Use `change_set_status` and
+   `accept_change_set` after validation to record the current reviewed changes;
+   review is neither publication nor proof of working user interactions.
+9. Continue to the implemented app's private preview with `start_app_preview`.
+   Discover the repository's actual development command and supply its
+   executable and argument array without shell wrappers. For a nested app
+   package, set `workingDirectory` relative to the applied repository root;
+   `landingPath` is the browser route, not the package directory. Configure the
+   command to listen on the supplied port. Repair actual startup diagnostics
+   through available supported capabilities; do not guess executable paths,
+   reset the source, or start competing listeners to work around unresolved
+   startup ownership.
+
+   Use only the actual working URL returned by the tool. Never invent a
+   localhost link or substitute the component-backed prototype. A reachable
+   page alone does not prove hydration, working controls, persistence, or a
+   backend. Exercise the accepted walkthrough against the implementation using
+   available supported observation capabilities and focused behavioral tests:
+   verify visible interaction outcomes and independent server readbacks for
+   durable writes, reload/recovery, and the app's real orchestration where
+   applicable. For an app-owned JSON write/read workflow, use
+   `verify_app_behavior` with the exact accepted walkthrough outcome and the
+   implemented app-relative routes. It supplies its own synthetic marker,
+   performs the write, and checks a separate read. Report its result only as
+   action/readback evidence: it does not test restart durability, authentication,
+   tenant isolation, or child generation. Do not add a fake verification route
+   or weaken the product to satisfy this check. Apps using other interaction
+   contracts still need appropriate behavioral evidence; do not rewrite them
+   merely to fit this tool.
+   Fixture interactions and command exit codes cannot substitute
+   for this evidence. If an observation capability or external dependency is
+   unavailable, identify the affected outcome as unverified rather than
+   inventing a tool or claiming success.
+
+   Deliver the actual private preview with a concise account of what works,
+   what was checked, and any remaining incomplete or unverified outcomes.
+   Publication is optional and separately authorized; do not make a repository
+   or pull-request offer a required completion step. The configured output
+   directory is a publication destination, so an empty destination does not
+   mean the private implementation is missing. If the user requests publication,
+   obtain the separate effect-based approval for the named destination and
+   action. One approval never authorizes another outcome. Keep internal
+   execution mechanics out of the public conversation.
 
 ## Boundaries
 
