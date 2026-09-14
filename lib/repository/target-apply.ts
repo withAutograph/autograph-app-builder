@@ -586,16 +586,16 @@ function observedTargetReceipt(proposal: TargetProposal): TargetApplyCommandRece
 function sourceDeclaredCueActivationCommand() {
   return String.raw`set -euo pipefail
 config_file="$PWD/.config/mise/config.toml"
-toolchain_bin='/workspace/.app-builder/toolchain/bin'
+runtime_bin="$(dirname "$(command -v bun)")"
 test -f "$config_file"
+test -x "$runtime_bin/bun"
 export MISE_CONFIG_FILE="$config_file"
 mise trust --yes "$config_file"
 mise install --locked cue
 cue_bin="$(mise which cue)"
 test -x "$cue_bin"
-install -d -m 0755 "$toolchain_bin"
-ln -sfn "$cue_bin" "$toolchain_bin/cue"
-"$toolchain_bin/cue" version >/dev/null`;
+ln -sfn "$cue_bin" "$runtime_bin/cue"
+"$runtime_bin/cue" version >/dev/null`;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

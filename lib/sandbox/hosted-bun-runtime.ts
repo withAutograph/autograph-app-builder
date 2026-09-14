@@ -1,4 +1,5 @@
 import type { SandboxSession } from "eve/sandbox";
+import { HOSTED_MISE_VERSION } from "./hosted-toolchain";
 
 export const HOSTED_BUN_RUNTIME_PREFIX = "/workspace/.app-builder/runtime";
 
@@ -7,7 +8,7 @@ export const HOSTED_BUN_RUNTIME_ENVIRONMENT = {
 } as const;
 
 const hostedBunRuntimeInstallRequest = {
-  command: `npm install --prefix ${HOSTED_BUN_RUNTIME_PREFIX} bun`,
+  command: `npm install --prefix ${HOSTED_BUN_RUNTIME_PREFIX} bun @jdxcode/mise@${HOSTED_MISE_VERSION}`,
   env: HOSTED_BUN_RUNTIME_ENVIRONMENT,
 } as const;
 

@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import nodePath from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
 import { sandboxApplyCommandExecutor, targetApplyCommandReceiptSchema } from "./target-apply";
@@ -10,6 +14,7 @@ const after = '{"dependencies":{"path-to-regexp":"8.4.2"}}';
 const fixture = (options: { stale?: boolean; installFails?: boolean; cueFails?: boolean } = {}) => {
   const events: string[] = [];
   const policies: Parameters<SandboxSession["setNetworkPolicy"]>[0][] = [];
+  let cueCommand: string | undefined;
   let manifest = options.stale === true ? "changed by another writer" : before;
   const failure = { exitCode: 1, stderr: "package not found", stdout: "" };
   const cueFailure = { exitCode: 1, stderr: "cue source activation failed", stdout: "cue output" };
@@ -40,8 +45,10 @@ const fixture = (options: { stale?: boolean; installFails?: boolean; cueFails?: 
         return options.installFails === true ? failure : { exitCode: 0, stderr: "", stdout: "" };
       }
       expect(command).toContain('cue_bin="$(mise which cue)"');
-      expect(command).toContain('ln -sfn "$cue_bin" "$toolchain_bin/cue"');
+      expect(command).toContain('runtime_bin="$(dirname "$(command -v bun)")"');
+      expect(command).toContain('ln -sfn "$cue_bin" "$runtime_bin/cue"');
       events.push("cue");
+      cueCommand = command;
       return options.cueFails === true ? cueFailure : { exitCode: 0, stderr: "", stdout: "" };
     }),
     setNetworkPolicy: vi.fn<SandboxSession["setNetworkPolicy"]>(async (policy) => {
@@ -115,7 +122,53 @@ const fixture = (options: { stale?: boolean; installFails?: boolean; cueFails?: 
       proposalPath: "/workspace/proposal.json",
       sandbox,
     });
-  return { cueFailure, events, execute, failure, policies, sandbox };
+  return { cueCommand: () => cueCommand, cueFailure, events, execute, failure, policies, sandbox };
+};
+
+const executeCueActivation = async function executeCueActivation(
+  command: string,
+  runtimeRelativePath: string,
+) {
+  const root = await mkdtemp(nodePath.join(tmpdir(), "app-builder-cue-runtime-"));
+  try {
+    const runtimeBin = nodePath.join(root, runtimeRelativePath);
+    const sourceCue = nodePath.join(root, "source-cue");
+    const miseBin = nodePath.join(root, "mise-bin", "mise");
+    await Promise.all([
+      mkdir(nodePath.dirname(nodePath.join(root, ".config", "mise", "config.toml")), {
+        recursive: true,
+      }),
+      mkdir(nodePath.dirname(miseBin), { recursive: true }),
+      mkdir(runtimeBin, { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(nodePath.join(root, ".config", "mise", "config.toml"), '[tools]\ncue = "0.16.1"\n'),
+      writeFile(sourceCue, "#!/bin/sh\nprintf '%s\\n' source-cue\n"),
+      writeFile(
+        miseBin,
+        '#!/bin/sh\nif [ "$1" = which ]; then printf \'%s\\n\' "$CUE_SOURCE"; fi\n',
+      ),
+      writeFile(nodePath.join(runtimeBin, "bun"), "#!/bin/sh\nexit 0\n"),
+    ]);
+    await Promise.all([
+      chmod(sourceCue, 0o755),
+      chmod(miseBin, 0o755),
+      chmod(nodePath.join(runtimeBin, "bun"), 0o755),
+    ]);
+    execFileSync("/bin/sh", ["-c", command], {
+      cwd: root,
+      env: {
+        ...process.env,
+        CUE_SOURCE: sourceCue,
+        PATH: `${nodePath.dirname(miseBin)}:${runtimeBin}:${process.env.PATH}`,
+      },
+    });
+    expect(execFileSync(nodePath.join(runtimeBin, "cue"), [], { encoding: "utf-8" })).toBe(
+      "source-cue\n",
+    );
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
 };
 
 describe("existing-app dependency installation", () => {
@@ -166,5 +219,15 @@ describe("existing-app dependency installation", () => {
       "cue",
     ]);
     expect(state.sandbox.run).toHaveBeenCalledTimes(2);
+  });
+  it("activates CUE beside Bun for development and hosted runtime paths", async () => {
+    const state = fixture();
+    await state.execute();
+    const command = state.cueCommand();
+    if (command === undefined) {
+      throw new Error("CUE activation command was not dispatched.");
+    }
+    await executeCueActivation(command, "development/bin");
+    await executeCueActivation(command, "hosted/node_modules/.bin");
   });
 });
