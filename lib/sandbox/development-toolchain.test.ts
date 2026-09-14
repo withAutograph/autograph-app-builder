@@ -200,6 +200,8 @@ describe("Development Vercel Sandbox dependency template", () => {
     expect(command).toContain("stage='native-toolchain'");
     expect(command).toContain("command -v cc >/dev/null");
     expect(command).toContain("cc --version >/dev/null");
+    expect(command).toContain("sudo apt-get update");
+    expect(command).toContain("sudo apt-get install -y build-essential");
     expect(command).toContain("root='/workspace/.app-builder/toolchain'");
     expect(command).toContain("command -v python3 >/dev/null");
     expect(command).toContain("extract_verified_archive() {");

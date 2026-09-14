@@ -295,7 +295,15 @@ cleanup() {
 }
 trap cleanup EXIT
 if ! command -v cc >/dev/null; then
-  sudo dnf install -y gcc
+  if command -v apt-get >/dev/null; then
+    sudo apt-get update
+    sudo apt-get install -y build-essential
+  elif command -v dnf >/dev/null; then
+    sudo dnf install -y gcc
+  else
+    printf 'No supported package manager is available to install the native compiler.\n' >&2
+    exit 1
+  fi
 fi
 command -v cc >/dev/null
 cc --version >/dev/null
