@@ -364,7 +364,7 @@ const inputRequest = (request: {
   };
 }): PublicInputRequest | undefined => {
   const approvalTitles = {
-    "apply-app-creation": "Build this app?",
+    apply_app_creation: "Build this app?",
     "publish-github-draft-pr": "Approve draft PR publication",
   } as const;
   const toolName = request.action?.toolName;
@@ -379,7 +379,7 @@ const inputRequest = (request: {
       ? approvalTitles[toolName as keyof typeof approvalTitles]
       : request.prompt;
   let description: string | undefined;
-  if (request.kind === "tool-approval" && toolName === "apply-app-creation") {
+  if (request.kind === "tool-approval" && toolName === "apply_app_creation") {
     description =
       z
         .object({ productSummary: z.string().trim().min(1).max(600) })
@@ -396,7 +396,7 @@ const inputRequest = (request: {
     request.kind === "tool-approval" &&
     toolName !== undefined &&
     toolName in approvalTitles &&
-    toolName !== "apply-app-creation" &&
+    toolName !== "apply_app_creation" &&
     description === undefined
   )
     return undefined;
