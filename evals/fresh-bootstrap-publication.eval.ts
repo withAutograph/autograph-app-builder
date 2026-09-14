@@ -20,11 +20,11 @@ export default defineEval({
     const fixture = await createFreshBootstrapEvalCapability();
     try {
       const destination = path.join(fixture.allowedRoot, "absent");
-      await withFreshBootstrapTestCapability(fixture.capability, () =>
+      const publication = await withFreshBootstrapTestCapability(fixture.capability, () =>
         t.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
       t.requireInputRequest({ toolName: "publish_fresh_repository" });
-      t.event("input.requested", { count: 1 });
+      publication.event("input.requested", { count: 1 });
       await withFreshBootstrapTestCapability(fixture.capability, () => t.respondAll("approve"));
       t.succeeded();
       t.check(t.reply, includes("one parentless SHA-1 local repository"));
@@ -33,7 +33,7 @@ export default defineEval({
       t.notCalledTool("bash");
       t.notCalledTool("write_file");
       t.notCalledTool("publish_reviewed_change_set");
-      t.notCalledTool("publish-reviewed-change-set_to_branch_worktree");
+      t.notCalledTool("publish_reviewed_change_set_to_branch_worktree");
     } finally {
       await fixture.cleanup();
     }

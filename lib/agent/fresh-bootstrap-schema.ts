@@ -10,8 +10,15 @@ const pathIdentity = z.strictObject({
   path: z.string().startsWith("/"),
   uid: z.string().regex(/^\d+$/u),
 });
-const executableIdentity = pathIdentity.extend({
+// Preserve the producer's canonical field order through tool argument parsing.
+const executableIdentity = z.strictObject({
+  device: pathIdentity.shape.device,
+  inode: pathIdentity.shape.inode,
+  mode: pathIdentity.shape.mode,
+  nlink: pathIdentity.shape.nlink,
+  path: pathIdentity.shape.path,
   sha256: freshBootstrapDigest,
+  uid: pathIdentity.shape.uid,
 });
 const capability = z.strictObject({
   allowedRoot: pathIdentity,

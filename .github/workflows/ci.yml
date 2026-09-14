@@ -51,6 +51,22 @@ jobs:
       - run: mise run dependencies:install
       - run: mise run ci-eve-general
 
+  eve-fresh-bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          version: ${{ env.CI_MISE_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: mise run dependencies:install
+      - run: mise run ci-eve-fresh-bootstrap
+
   product-quality:
     runs-on: ubuntu-latest
     steps:
@@ -213,6 +229,7 @@ jobs:
     needs:
       - repository
       - eve-general
+      - eve-fresh-bootstrap
       - product-quality
       - sandbox-toolchain
       - package-build
@@ -225,6 +242,7 @@ jobs:
         run: |
           test "${{ needs.repository.result }}" = success
           test "${{ needs.eve-general.result }}" = success
+          test "${{ needs.eve-fresh-bootstrap.result }}" = success
           test "${{ needs.product-quality.result }}" = success
           test "${{ needs.sandbox-toolchain.result }}" = success
           test "${{ needs.package-build.result }}" = success

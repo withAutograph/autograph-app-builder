@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { compareOverlayPaths } from "./target-apply";
 import type { OverlayChange } from "./target-apply";
+import { createReviewedChangeSetReceipt } from "./reviewed-change-set";
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
 import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
@@ -243,13 +244,11 @@ export const assertExactReviewedChangeSet = (review: ReviewedChangeSetReceipt): 
   const changeSetDigest = stableDigest(changeSetUnsigned);
   if (review.changeSetDigest !== changeSetDigest)
     throw new Error("The reviewed change-set digest is malformed.");
-  const outerUnsigned = {
-    ...changeSetUnsigned,
-    changeSetDigest,
-    digest: changeSetDigest,
-    reviewedByCallId: review.reviewedByCallId,
-  };
-  if (review.digest !== stableDigest(outerUnsigned))
+  const expectedReview = createReviewedChangeSetReceipt(
+    { ...changeSetUnsigned, digest: changeSetDigest },
+    review.reviewedByCallId,
+  );
+  if (review.digest !== expectedReview.digest)
     throw new Error("The outer reviewed change-set receipt digest is malformed.");
 };
 
