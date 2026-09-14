@@ -31,11 +31,17 @@ const fixture = (options: { stale?: boolean; installFails?: boolean } = {}) => {
       await Promise.resolve();
     }),
     resolvePath: (path) => path,
-    run: vi.fn<SandboxSession["run"]>(async () => {
+    run: vi.fn<SandboxSession["run"]>(async ({ command }) => {
       await Promise.resolve();
-      events.push("install");
-      expect(manifest).toBe(after);
-      return options.installFails === true ? failure : { exitCode: 0, stderr: "", stdout: "" };
+      if (command === "bun install") {
+        events.push("install");
+        expect(manifest).toBe(after);
+        return options.installFails === true ? failure : { exitCode: 0, stderr: "", stdout: "" };
+      }
+      expect(command).toContain('cue_bin="$(mise which cue)"');
+      expect(command).toContain('ln -sfn "$cue_bin" "$toolchain_bin/cue"');
+      events.push("cue");
+      return { exitCode: 0, stderr: "", stdout: "" };
     }),
     setNetworkPolicy: vi.fn<SandboxSession["setNetworkPolicy"]>(async (policy) => {
       await Promise.resolve();
@@ -118,12 +124,21 @@ describe("existing-app dependency installation", () => {
     expect(result.exitCode).toBe(0);
     const receipt = targetApplyCommandReceiptSchema.parse(JSON.parse(result.stdout));
     expect(receipt.appId).toBe("vendor");
-    expect(state.events).toEqual(["read:repository/apps/vendor/package.json", "write", "install"]);
+    expect(state.events).toEqual([
+      "read:repository/apps/vendor/package.json",
+      "write",
+      "install",
+      "cue",
+    ]);
     expect(state.policies).toEqual(["allow-all"]);
-    expect(state.sandbox.run).toHaveBeenCalledExactlyOnceWith({
+    expect(state.sandbox.run).toHaveBeenNthCalledWith(1, {
       command: "bun install",
       workingDirectory: "/workspace/repository",
     });
+    expect(state.sandbox.run).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ workingDirectory: "/workspace/repository" }),
+    );
   });
   it("rejects stale preimages before any writes or installation", async () => {
     const state = fixture({ stale: true });

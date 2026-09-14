@@ -583,6 +583,22 @@ function observedTargetReceipt(proposal: TargetProposal): TargetApplyCommandRece
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function sourceDeclaredCueActivationCommand() {
+  return String.raw`set -euo pipefail
+config_file="$PWD/.config/mise/config.toml"
+toolchain_bin='/workspace/.app-builder/toolchain/bin'
+test -f "$config_file"
+export MISE_CONFIG_FILE="$config_file"
+mise trust --yes "$config_file"
+mise install --locked cue
+cue_bin="$(mise which cue)"
+test -x "$cue_bin"
+install -d -m 0755 "$toolchain_bin"
+ln -sfn "$cue_bin" "$toolchain_bin/cue"
+"$toolchain_bin/cue" version >/dev/null`;
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
   return async ({ sandbox, applyRoot, proposalPath, proposal }) => {
     if ("operation" in proposal) {
@@ -644,6 +660,13 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
         reason,
       });
       return install;
+    }
+    const cue = await sandbox.run({
+      command: sourceDeclaredCueActivationCommand(),
+      workingDirectory: applyRoot,
+    });
+    if (cue.exitCode !== 0) {
+      return cue;
     }
     if ("operation" in proposal) {
       const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);

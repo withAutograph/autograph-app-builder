@@ -430,30 +430,6 @@ export function developmentVercelDependencyCommand(input: DevelopmentVercelBoots
 test "$(uname -m)" = x86_64
 source_archive='/workspace/${DEVELOPMENT_SOURCE_ARCHIVE_PATH}'
 printf '%s  %s\n' '${input.sourceArchiveSha256}' "$source_archive" | sha256sum --check --strict
-install_source_declared_cue() {
-  source_root="$1"
-  config_file="$source_root/.config/mise/config.toml"
-  toolchain_bin='/workspace/.app-builder/toolchain/bin'
-  test -f "$config_file"
-  (
-    cd "$source_root"
-    export MISE_CONFIG_FILE="$config_file"
-    mise trust --yes "$config_file"
-    mise install --locked cue
-    cue_bin="$(mise which cue)"
-    test -x "$cue_bin"
-    install -d -m 0755 "$toolchain_bin"
-    ln -sfn "$cue_bin" "$toolchain_bin/cue"
-    "$toolchain_bin/cue" version >/dev/null
-  )
-}
-tool_source="$(mktemp -d /tmp/app-builder-development-mise.XXXXXX)"
-cleanup_tool_source() { find "$tool_source" -depth -delete 2>/dev/null || true; }
-trap cleanup_tool_source EXIT
-tar --extract --gzip --file "$source_archive" --directory "$tool_source" --no-same-owner --no-same-permissions .config/mise/config.toml .config/mise/mise.lock
-install_source_declared_cue "$tool_source"
-trap - EXIT
-cleanup_tool_source
 cache_root='${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}'
 cache_dependencies="$cache_root/dependencies/${input.dependencyKey}"
 if node - "$cache_root/manifest.json" "$cache_dependencies" "$cache_root" <<'NODE'
@@ -507,6 +483,8 @@ node -e 'const fs=require("node:fs");const read=(p)=>JSON.parse(fs.readFileSync(
 node - "$work/source" <<'NODE'
 ${developmentDependencySymlinkScript}
 NODE
+stage='mise-tools'
+mise install --locked cue
 stage='rust-install'
 install -d -m 0755 "$work/cargo-closure/vendor"
 CARGO_NET_OFFLINE=false cargo vendor --locked --versioned-dirs "$work/cargo-closure/vendor" > "$work/cargo-closure/config.toml"
@@ -547,23 +525,6 @@ export function developmentVercelDependencyRepairCommand(dependencyKey: string) 
 test "$(uname -m)" = x86_64
 source_root='/workspace/repository'
 test -d "$source_root"
-install_source_declared_cue() {
-  config_file="$1/.config/mise/config.toml"
-  toolchain_bin='/workspace/.app-builder/toolchain/bin'
-  test -f "$config_file"
-  (
-    cd "$1"
-    export MISE_CONFIG_FILE="$config_file"
-    mise trust --yes "$config_file"
-    mise install --locked cue
-    cue_bin="$(mise which cue)"
-    test -x "$cue_bin"
-    install -d -m 0755 "$toolchain_bin"
-    ln -sfn "$cue_bin" "$toolchain_bin/cue"
-    "$toolchain_bin/cue" version >/dev/null
-  )
-}
-install_source_declared_cue "$source_root"
 lockfiles="$(node - "$source_root" '${dependencyKey}' <<'NODE'
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -603,6 +564,8 @@ node -e 'const fs=require("node:fs");const read=(p)=>JSON.parse(fs.readFileSync(
 node - "$work/source" <<'NODE'
 ${developmentDependencySymlinkScript}
 NODE
+stage='mise-tools'
+mise install --locked cue
 stage='rust-install'
 install -d -m 0755 "$work/cargo-closure/vendor"
 CARGO_NET_OFFLINE=false cargo vendor --locked --versioned-dirs "$work/cargo-closure/vendor" > "$work/cargo-closure/config.toml"

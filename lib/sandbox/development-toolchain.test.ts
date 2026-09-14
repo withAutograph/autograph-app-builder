@@ -68,11 +68,8 @@ describe("Development Vercel Sandbox dependency template", () => {
     );
     expect(command).toContain("/workspace/.app-builder/dependency-cache/cargo/config.toml");
     expect(command).toContain("bun install --frozen-lockfile --ignore-scripts --linker=hoisted");
-    expect(command).toContain('mise trust --yes "$config_file"');
+    expect(command).toContain("stage='mise-tools'");
     expect(command).toContain("mise install --locked cue");
-    expect(command).toContain('cue_bin="$(mise which cue)"');
-    expect(command).toContain('ln -sfn "$cue_bin" "$toolchain_bin/cue"');
-    expect(command).toContain('"$toolchain_bin/cue" version >/dev/null');
     expect(command).toContain('node - "$work/source"');
     expect(command).not.toContain('readlink -f -- "$link"');
     expect(command).toContain(
@@ -99,13 +96,9 @@ describe("Development Vercel Sandbox dependency template", () => {
     const install = command.indexOf(
       "bun install --frozen-lockfile --ignore-scripts --linker=hoisted --silent",
     );
-    const cue = command.indexOf('install_source_declared_cue "$tool_source"');
-
     expect(cacheHit).toBeGreaterThan(-1);
     expect(cacheHit).toBeLessThan(staging);
     expect(cacheHit).toBeLessThan(install);
-    expect(cue).toBeGreaterThan(-1);
-    expect(cue).toBeLessThan(cacheHit);
     expect(command).toContain('"scope":"development-execution"');
     expect(command).toContain(`"dependencyKey":"${input().dependencyKey}`);
     expect(command).toContain("node_modules/path-to-regexp/package.json");
@@ -122,7 +115,7 @@ describe("Development Vercel Sandbox dependency template", () => {
     expect(command).toContain('find "$cache_root" \\( -type f -o -type d \\) -perm /022');
     expect(command).not.toContain('find "$cache_root" -perm /022');
     expect(command).toContain(developmentDependencySymlinkScript);
-    expect(command).toContain('install_source_declared_cue "$source_root"');
+    expect(command).toContain("stage='mise-tools'");
     expect(command).toContain("mise install --locked cue");
   });
 
