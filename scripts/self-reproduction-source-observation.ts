@@ -97,7 +97,7 @@ export const observeSource = async (
     exclusions: [...runtimeDirectories],
     first,
     scope:
-      "All regular source bytes and link metadata under the applied repository root, excluding explicitly inventoried runtime directories. Links are not followed. Two matching observations do not prove an atomic snapshot.",
+      "All regular source bytes and link metadata under the explicitly selected source root, excluding explicitly inventoried runtime directories. Links are not followed. Two matching observations do not prove an atomic snapshot.",
     second,
     stable,
   };
