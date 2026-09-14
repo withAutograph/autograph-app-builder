@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { AuthLoadingShell } from "../../../ui/route-loading-shell";
 
 import { SignUp } from "@/components/auth/sign-up";
 import { AuthContinuity } from "@/components/auth/auth-continuity";
@@ -67,7 +68,7 @@ export default function SignUpPage({
 }) {
   return (
     <>
-      <Suspense fallback={<p role="status">Loading sign up…</p>}>
+      <Suspense fallback={<AuthLoadingShell title="Create your Autograph account" />}>
         <SignUpSurface searchParams={searchParams} />
       </Suspense>
       <Suspense fallback={null}>

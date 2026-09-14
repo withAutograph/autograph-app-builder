@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { AuthLoadingShell } from "../../../ui/route-loading-shell";
 
 import { SignIn } from "@/components/auth/sign-in";
 import { AuthContinuity } from "@/components/auth/auth-continuity";
@@ -15,7 +16,13 @@ async function SignInSurface({ searchParams }: { searchParams: Promise<AuthPageS
   const search = serializeAuthPageSearchParams(await searchParams);
   const origin = getPreviewOAuthDeploymentOrigin(process.env);
   const signUpRedirectTo = resolvePasskeyRedirectTo(DEFAULT_AUTH_REDIRECT_TO, search, origin);
-  return <SignIn socialPosition="top" signUpRedirectTo={signUpRedirectTo} />;
+  return (
+    <main className="flex min-h-svh items-center justify-center p-6">
+      <AuthContinuity>
+        <SignIn socialPosition="top" signUpRedirectTo={signUpRedirectTo} />
+      </AuthContinuity>
+    </main>
+  );
 }
 
 export default function PreviewSignInPage({
@@ -24,12 +31,8 @@ export default function PreviewSignInPage({
   searchParams: Promise<AuthPageSearchParams>;
 }) {
   return (
-    <main className="flex min-h-svh items-center justify-center p-6">
-      <AuthContinuity>
-        <Suspense fallback={<p role="status">Loading sign in…</p>}>
-          <SignInSurface searchParams={searchParams} />
-        </Suspense>
-      </AuthContinuity>
-    </main>
+    <Suspense fallback={<AuthLoadingShell title="Sign in to Autograph" />}>
+      <SignInSurface searchParams={searchParams} />
+    </Suspense>
   );
 }
