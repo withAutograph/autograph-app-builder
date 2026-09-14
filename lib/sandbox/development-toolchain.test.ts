@@ -189,8 +189,17 @@ describe("Development Vercel Sandbox dependency template", () => {
     }
   });
 
-  it("installs pinned tools only inside the disposable Vercel workspace", () => {
+  it("installs the complete development toolchain in the disposable Vercel Sandbox", () => {
     const command = developmentPinnedToolchainCommand();
+    const nativeToolchain = command.indexOf("sudo dnf install -y gcc");
+    const rustInstallation = command.indexOf(
+      '"$work/$rustc_directory/install.sh" --prefix="$root/rust" --disable-ldconfig',
+    );
+    expect(nativeToolchain).toBeGreaterThan(-1);
+    expect(nativeToolchain).toBeLessThan(rustInstallation);
+    expect(command).toContain("stage='native-toolchain'");
+    expect(command).toContain("command -v cc >/dev/null");
+    expect(command).toContain("cc --version >/dev/null");
     expect(command).toContain("root='/workspace/.app-builder/toolchain'");
     expect(command).toContain("command -v python3 >/dev/null");
     expect(command).toContain("extract_verified_archive() {");
@@ -202,7 +211,6 @@ describe("Development Vercel Sandbox dependency template", () => {
     expect(command).toContain("bun --version");
     expect(command).toContain("cargo --version");
     expect(command).not.toContain("/usr/local");
-    expect(command).not.toContain("sudo");
     expect(command).not.toContain("hosted-seed");
   });
 });
