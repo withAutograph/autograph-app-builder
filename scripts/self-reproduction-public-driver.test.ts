@@ -1,7 +1,16 @@
 /* eslint-disable eslint/no-await-in-loop -- Sequential batch cases preserve isolated fake state. */
 /* eslint-disable eslint/require-await -- Async transport fakes implement the network interface. */
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { makePublicTransport, runPublicSession } from "../evals/support/self-reproduction-public";
+import {
+  makePublicTransport,
+  publicObservationReport,
+  sanitizePublicObservation,
+  recordPublicObservation,
+  runPublicSession,
+} from "../evals/support/self-reproduction-public";
 import type { PublicState } from "../evals/support/self-reproduction-public";
 
 const session = (
@@ -284,5 +293,102 @@ describe("public self-reproduction driver", () => {
     expect(calls).toEqual(["autograph_get"]);
     expect(current.error).toBeUndefined();
     expect(current.outcome).toBe("waiting");
+  });
+});
+
+describe("public self-reproduction preview reporting", () => {
+  const now = Date.parse("2026-09-13T17:30:00.000Z");
+  const receipt = {
+    appId: "replica",
+    expiresAt: "2026-09-13T18:00:00.000Z",
+    status: "ready" as const,
+    url: "https://preview.example.test/private/opaque-path-token?access=opaque-query-token",
+    verifiedAt: "2026-09-13T17:00:00.000Z",
+  };
+  it("distinguishes runtime receipt from fixtures without awarding correctness", () => {
+    const current = state();
+    current.session = {
+      ...session("waiting"),
+      inputRequests: [],
+      uiPreview: {
+        appId: "replica",
+        fidelity: "arrusted-component-catalog",
+        functionality: "fixtures-only",
+        revision: "a".repeat(64),
+        routes: ["/"],
+      },
+      workingPreview: receipt,
+    };
+    expect(publicObservationReport(current, now)).toMatchObject({
+      comparison: "unassessed",
+      outOfBoxProof: false,
+      previewObservation: {
+        backendCorrectness: "unassessed",
+        browserInteraction: "unassessed",
+        fixtureUi: { functionality: "fixtures-only", present: true },
+        independentChildCreation: "unassessed",
+        workingApp: { availability: "reported_ready" },
+      },
+    });
+    expect(current.session.workingPreview?.url).toBe(receipt.url);
+  });
+  it("reports missing, expired, invalidated, and failed preview evidence honestly", () => {
+    const current = state();
+    expect(publicObservationReport(current, now)).toMatchObject({
+      previewObservation: { workingApp: { availability: "unassessed" } },
+    });
+    current.session = {
+      ...session("waiting"),
+      inputRequests: [],
+      workingPreview: { ...receipt, expiresAt: new Date(now).toISOString() },
+    };
+    expect(publicObservationReport(current, now)).toMatchObject({
+      previewObservation: { workingApp: { availability: "expired" } },
+    });
+    current.session.workingPreview = null;
+    expect(publicObservationReport(current, now)).toMatchObject({
+      previewObservation: { workingApp: { availability: "unavailable" } },
+    });
+    current.session.workingPreview = receipt;
+    current.session.status = "failed";
+    expect(publicObservationReport(current, now)).toMatchObject({
+      previewObservation: { workingApp: { availability: "unavailable" } },
+    });
+  });
+  it("redacts capability URLs from structured receipts and assistant text without mutating private state", () => {
+    const original = {
+      content: [{ text: JSON.stringify({ workingPreview: receipt }), type: "text" }],
+      text: `Open ${receipt.url} in your browser.`,
+      workingPreview: receipt,
+    };
+    const sanitized = JSON.stringify(sanitizePublicObservation(original));
+    expect(sanitized).not.toContain("opaque-path-token");
+    expect(sanitized).not.toContain("opaque-query-token");
+    expect(sanitized).toContain("https://preview.example.test/[REDACTED URL]");
+    expect(original.workingPreview.url).toBe(receipt.url);
+    expect(sanitized).toContain("[REDACTED URL]");
+  });
+  it("preserves original paginated responses in an owner-only private transcript", () => {
+    const output = mkdtempSync(path.join(tmpdir(), "public-observation-"));
+    try {
+      const privatePath = path.join(output, "transcript.private.jsonl");
+      writeFileSync(privatePath, "", { mode: 0o644 });
+      recordPublicObservation(output, { page: 1, receipt });
+      recordPublicObservation(output, { page: 2, text: `Open ${receipt.url}` });
+      expect(statSync(privatePath).mode % 0o1000).toBe(0o600);
+      const raw = readFileSync(privatePath, "utf-8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+      expect(raw).toEqual([
+        { page: 1, receipt },
+        { page: 2, text: `Open ${receipt.url}` },
+      ]);
+      const shared = readFileSync(path.join(output, "transcript.jsonl"), "utf-8");
+      expect(shared).not.toContain("opaque-path-token");
+      expect(shared).not.toContain("opaque-query-token");
+    } finally {
+      rmSync(output, { force: true, recursive: true });
+    }
   });
 });
