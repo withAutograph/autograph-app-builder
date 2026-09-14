@@ -72,3 +72,14 @@ it("redacts camel-case, hyphenated and underscored API keys and passwd", () => {
     expect(excerpt).not.toContain(secret);
   }
 });
+
+it("retains a sanitized message-only listener error", () => {
+  const result = workingPreviewDiagnosticExcerpt(
+    JSON.stringify({
+      message: "Error: listen EADDRINUSE 0.0.0.0:3001 https://preview.example/?token=secret-value",
+      stderr: "",
+    }),
+  );
+  expect(result).toContain("EADDRINUSE 0.0.0.0:3001");
+  expect(result).not.toContain("secret-value");
+});

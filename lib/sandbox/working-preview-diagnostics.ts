@@ -45,7 +45,7 @@ export const workingPreviewDiagnosticExcerpt = (content: string | null): string 
     return "";
   }
   const fields = parsed as Record<string, unknown>;
-  const output = [fields.stderr, fields.stdout]
+  const output = [fields.message, fields.stderr, fields.stdout]
     .filter((value): value is string => typeof value === "string")
     .map((value) => sanitize(value.slice(-8192)))
     .join("\n");
