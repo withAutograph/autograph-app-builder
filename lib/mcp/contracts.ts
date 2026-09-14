@@ -216,7 +216,7 @@ export const eveSessionResultSchema = z
     sessionId: z.string(),
     status: sessionStatusSchema,
     uiPreview: publicUiPreviewSchema.optional(),
-    workingPreview: publicWorkingPreviewSchema.optional(),
+    workingPreview: publicWorkingPreviewSchema.nullable().optional(),
   })
   .strict();
 

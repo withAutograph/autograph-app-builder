@@ -531,7 +531,7 @@ describe("local Eve acceptance", () => {
       .digest("hex");
     const workingPreview = {
       appId: "vendor-onboarding",
-      expiresAt: "2026-09-13T18:00:00.000Z",
+      expiresAt: "2099-09-13T18:00:00.000Z",
       status: "ready" as const,
       url: "https://preview.example.test/app?access=opaque-signed-value",
       verifiedAt: "2026-09-13T17:00:00.000Z",

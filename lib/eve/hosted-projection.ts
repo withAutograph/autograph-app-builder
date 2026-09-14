@@ -10,7 +10,11 @@ import {
   sessionStatusSchema,
 } from "../mcp/contracts";
 import type { EveSessionResult } from "../mcp/contracts";
-import { outstandingInternalEveRequests, toPublicEvent } from "./public-events";
+import {
+  currentWorkingPreview,
+  outstandingInternalEveRequests,
+  toPublicEvent,
+} from "./public-events";
 import type { InternalEveEvent } from "./public-events";
 
 const hostedSnapshotSchema = z
@@ -20,7 +24,7 @@ const hostedSnapshotSchema = z
     prototype: publicPrototypeSchema.optional(),
     status: sessionStatusSchema,
     uiPreview: publicUiPreviewSchema.optional(),
-    workingPreview: publicWorkingPreviewSchema.optional(),
+    workingPreview: publicWorkingPreviewSchema.nullable().optional(),
   })
   .strict();
 
@@ -57,7 +61,14 @@ export function projectHostedSnapshot(
     ...(inputRequests.length === 0 ? {} : { inputRequests }),
     ...(snapshot.prototype === undefined ? {} : { prototype: snapshot.prototype }),
     ...(snapshot.uiPreview === undefined ? {} : { uiPreview: snapshot.uiPreview }),
-    ...(snapshot.workingPreview === undefined ? {} : { workingPreview: snapshot.workingPreview }),
+    ...(snapshot.workingPreview === undefined
+      ? {}
+      : {
+          workingPreview:
+            snapshot.status === "cancelled" || snapshot.status === "failed"
+              ? null
+              : currentWorkingPreview(snapshot.workingPreview),
+        }),
     ...(snapshot.implementationPlan === undefined
       ? {}
       : { implementationPlan: snapshot.implementationPlan }),

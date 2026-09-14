@@ -1,3 +1,4 @@
+import { currentWorkingPreview } from "./public-events";
 import { eveSessionResultSchema } from "../mcp/contracts";
 import type { EveSessionResult } from "../mcp/contracts";
 import type { HostedSessionCheckpoint } from "./hosted-store";
@@ -23,7 +24,12 @@ export function resultFromHostedCheckpoint(
     ...(checkpoint.uiPreview === undefined ? {} : { uiPreview: checkpoint.uiPreview }),
     ...(checkpoint.workingPreview === undefined
       ? {}
-      : { workingPreview: checkpoint.workingPreview }),
+      : {
+          workingPreview:
+            checkpoint.status === "cancelled" || checkpoint.status === "failed"
+              ? null
+              : currentWorkingPreview(checkpoint.workingPreview),
+        }),
     ...(checkpoint.implementationPlan === undefined
       ? {}
       : { implementationPlan: checkpoint.implementationPlan }),
