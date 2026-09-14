@@ -394,7 +394,8 @@ export class HostedMcpProofClient {
       })
       .passthrough()
       .parse(response.payload?.result);
-    if (result.isError === true) {throw new Error(`${name} returned an error before result loss.`);}
+    const resultRejected = result.isError === true;
+    if (resultRejected) {throw new Error(`${name} returned an error before result loss.`);}
     const publicResult = eveSessionResultSchema.parse(result.structuredContent);
     // Retain only a private canonical fingerprint. This models a caller that
     // loses the successful operation result before it can retain the public
@@ -736,7 +737,8 @@ export async function runHostedProof(input: {
     limit: 1,
     sessionId: `stale-${proofId}`,
   });
-  if (!stale.isError) {throw new Error("Stale or unknown session access did not fail closed.");}
+  const staleSessionAccepted = !stale.isError;
+  if (staleSessionAccepted) {throw new Error("Stale or unknown session access did not fail closed.");}
 
   const crossTenant = new HostedMcpProofClient(input.endpoint, input.crossTenantToken, fetcher);
   await crossTenant.initialize();

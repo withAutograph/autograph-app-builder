@@ -220,7 +220,7 @@ const decimalProperty = (value: unknown, key: string): string => {
 
 const stringProperty = (value: unknown, key: string): string => {
   const candidate = property(value, key);
-  if (typeof candidate !== "string") {throw new Error("invalid-response");}
+  if (typeof candidate !== "string") {throw new TypeError("invalid-response");}
   return candidate;
 };
 

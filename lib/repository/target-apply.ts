@@ -406,7 +406,7 @@ export async function inspectFixtureApplyOverlay(
   });
   if (sourceManifest === null) {throw new Error("The prepared workspace manifest is missing.");}
   const parsed = JSON.parse(sourceManifest) as unknown;
-  if (!Array.isArray(parsed)) {throw new Error("The prepared workspace manifest is invalid.");}
+  if (!Array.isArray(parsed)) {throw new TypeError("The prepared workspace manifest is invalid.");}
   const sourceFiles = parsed.map((candidate) => {
     if (
       typeof candidate !== "object" ||

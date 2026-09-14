@@ -89,13 +89,13 @@ const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const property = (value: unknown, key: string): unknown => {
-  if (!record(value) || !(key in value)) {throw new Error("invalid-response");}
+  if (!record(value) || !(key in value)) {throw new TypeError("invalid-response");}
   return value[key];
 };
 
 const stringProperty = (value: unknown, key: string): string => {
   const result = property(value, key);
-  if (typeof result !== "string") {throw new Error("invalid-response");}
+  if (typeof result !== "string") {throw new TypeError("invalid-response");}
   return result;
 };
 
@@ -105,26 +105,26 @@ const decimalProperty = (value: unknown, key: string): string => {
     (typeof result !== "number" || !Number.isSafeInteger(result) || result < 1) &&
     (typeof result !== "string" || !decimal.safeParse(result).success)
   )
-    {throw new Error("invalid-response");}
+    {throw new TypeError("invalid-response");}
   return String(result);
 };
 
 const safeRepositoryIdNumber = (value: string): number => {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < 1 || String(parsed) !== value)
-    {throw new Error("invalid-response");}
+    {throw new TypeError("invalid-response");}
   return parsed;
 };
 
 const booleanProperty = (value: unknown, key: string): boolean => {
   const result = property(value, key);
-  if (typeof result !== "boolean") {throw new Error("invalid-response");}
+  if (typeof result !== "boolean") {throw new TypeError("invalid-response");}
   return result;
 };
 
 const arrayProperty = (value: unknown, key: string): unknown[] => {
   const result = property(value, key);
-  if (!Array.isArray(result)) {throw new Error("invalid-response");}
+  if (!Array.isArray(result)) {throw new TypeError("invalid-response");}
   return result;
 };
 
@@ -677,7 +677,7 @@ export const createGitHubAppHttpProvider = (input: {
         expected: [200],
         path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/pulls?state=open&head=${encodeURIComponent(`${proposal.owner}:${proposal.branchName}`)}&base=${encodeURIComponent(proposal.baseBranch)}&per_page=2`,
       });
-      if (!Array.isArray(pulls.body)) {throw new Error("invalid-response");}
+      if (!Array.isArray(pulls.body)) {throw new TypeError("invalid-response");}
       const candidates = pulls.body;
       if (candidates.length > 1) {throw new Error("invalid-response");}
       const [pull] = candidates;

@@ -160,9 +160,10 @@ const runConfiguredPairedCaptures = async () => {
       candidateURL: string;
     }) => Promise<Partial<Record<"reference" | "candidate", CaptureAdapter>>>;
   };
-  if (typeof loaded.createCaptureAdapters !== "function")
-    {throw new Error("Capture adapter must export createCaptureAdapters().");}
-  const adapters = await loaded.createCaptureAdapters({
+  const { createCaptureAdapters } = loaded;
+  if (typeof createCaptureAdapters !== "function")
+    {throw new TypeError("Capture adapter must export createCaptureAdapters().");}
+  const adapters = await createCaptureAdapters({
     candidateURL: values["candidate-url"],
     referenceURL: values["reference-url"],
   });
@@ -214,11 +215,12 @@ const runConfiguredWorkflowAdapters = async (candidateRoot: string | undefined) 
   const loaded = (await import(pathToFileURL(resolvedAdapter).href)) as {
     createWorkflowAdapters?: WorkflowAdapterFactory;
   };
-  if (typeof loaded.createWorkflowAdapters !== "function")
-    {throw new Error("Workflow adapter module must export createWorkflowAdapters().");}
+  const { createWorkflowAdapters } = loaded;
+  if (typeof createWorkflowAdapters !== "function")
+    {throw new TypeError("Workflow adapter module must export createWorkflowAdapters().");}
   const referenceUrl = values["reference-url"] ?? process.env.SELF_REPRODUCTION_REFERENCE_URL;
   const candidateUrl = values["candidate-url"] ?? process.env.SELF_REPRODUCTION_CANDIDATE_URL;
-  const adapters = await loaded.createWorkflowAdapters({
+  const adapters = await createWorkflowAdapters({
     ...(referenceUrl ? { referenceUrl } : {}),
     ...(referenceFixtureRoot ? { referenceFixtureRoot } : {}),
     ...(candidateUrl ? { candidateUrl } : {}),

@@ -96,7 +96,8 @@ function SessionAppContainer() {
       },
       name: "autograph_respond",
     });
-    if (response.isError) {throw new Error("response rejected");}
+    const responseRejected = response.isError === true;
+    if (responseRejected) {throw new Error("response rejected");}
     if (response.structuredContent) {publishResult(response.structuredContent as EveSessionResult);}
   }
 

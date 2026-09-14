@@ -51,14 +51,14 @@ function record(value: unknown): value is Record<string, unknown> {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function property(value: unknown, key: string) {
-  if (!record(value) || !(key in value)) {throw new Error("invalid-response");}
+  if (!record(value) || !(key in value)) {throw new TypeError("invalid-response");}
   return value[key];
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function stringProperty(value: unknown, key: string) {
   const result = property(value, key);
-  if (typeof result !== "string") {throw new Error("invalid-response");}
+  if (typeof result !== "string") {throw new TypeError("invalid-response");}
   return result;
 }
 
@@ -449,7 +449,7 @@ export async function provisionGitHubRepository(input: {
     });
     if (property(tree.body, "truncated") !== false) {throw new Error("tree-truncated");}
     const entries = property(tree.body, "tree");
-    if (!Array.isArray(entries)) {throw new Error("invalid-response");}
+    if (!Array.isArray(entries)) {throw new TypeError("invalid-response");}
     const observed = entries
       .filter((entry) => record(entry) && entry.type === "blob")
       .map((entry) => ({

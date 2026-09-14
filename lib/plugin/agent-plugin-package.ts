@@ -105,7 +105,7 @@ const schemaVersion = (schema: unknown) => {
 
 export const assertAutographMcpEndpoint = (value: unknown, { release }: { release: boolean }) => {
   if (typeof value !== "string")
-    {throw new Error(`${AUTOGRAPH_MCP_SERVER_NAME} must use an absolute MCP URL.`);}
+    {throw new TypeError(`${AUTOGRAPH_MCP_SERVER_NAME} must use an absolute MCP URL.`);}
   let url: URL;
   try {
     url = new URL(value);

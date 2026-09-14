@@ -23,7 +23,7 @@ export function isolateAbortSignalPerFetch(fetchImplementation) {
 
 if (process.env.APP_BUILDER_EVE_EVAL_FETCH_PRELOAD === "1") {
   if (typeof globalThis.fetch !== "function")
-    {throw new Error("The Eve eval fetch implementation was unavailable.");}
+    {throw new TypeError("The Eve eval fetch implementation was unavailable.");}
   globalThis.fetch = isolateAbortSignalPerFetch(globalThis.fetch);
   delete process.env.APP_BUILDER_EVE_EVAL_FETCH_PRELOAD;
 }

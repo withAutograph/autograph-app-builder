@@ -68,11 +68,12 @@ export async function bindHostedGitHubInstallation(input: {
   const request = hostedGitHubInstallationApplyRequestSchema.parse(input.request);
   const { confirmationDigest, ...planRequest } = request;
   const plan = planHostedGitHubInstallation(planRequest);
-  if (confirmationDigest !== plan.requiredConfirmationDigest)
+  const confirmationMatches = confirmationDigest === plan.requiredConfirmationDigest;
+  if (!confirmationMatches)
     {throw new Error("Hosted GitHub installation confirmation is invalid.");}
   const now = (input.now ?? (() => new Date()))();
   if (!Number.isFinite(now.getTime()))
-    {throw new Error("Hosted GitHub installation timestamp is invalid.");}
+    {throw new TypeError("Hosted GitHub installation timestamp is invalid.");}
   const binding = await input.store.bind({
     authority: request.authority,
     binding: request.installation,

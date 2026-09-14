@@ -126,7 +126,7 @@ export function createGitHubOAuthApp(input: {
       url.origin === GITHUB_ORIGIN &&
       url.pathname === "/login/oauth/access_token"
     ) {
-      if (typeof init?.body !== "string") {throw new Error("github-oauth-request-invalid");}
+      if (typeof init?.body !== "string") {throw new TypeError("github-oauth-request-invalid");}
       let body: string;
       try {
         const parsed = JSON.parse(init.body) as unknown;

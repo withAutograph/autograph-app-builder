@@ -193,14 +193,14 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
   const contents = value.contents as Partial<Record<string, string>>;
   const contract = value.contract.map((entry) => {
     if (!isRecord(entry) || !hasExactKeys(entry, ["mode", "objectId", "path", "sha256"]))
-      {throw new Error("Canonical template clone inspection is invalid.");}
+      {throw new TypeError("Canonical template clone inspection is invalid.");}
     if (
       typeof entry.path !== "string" ||
       typeof entry.mode !== "string" ||
       typeof entry.objectId !== "string" ||
       typeof entry.sha256 !== "string"
     )
-      {throw new Error("Canonical template clone inspection is invalid.");}
+      {throw new TypeError("Canonical template clone inspection is invalid.");}
     return {
       mode: entry.mode,
       objectId: entry.objectId,

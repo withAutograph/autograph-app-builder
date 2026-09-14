@@ -31,11 +31,11 @@ export interface DesktopSize {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseAdditionalDesktopSize(value: string): DesktopSize {
   const match = /^(?<width>[1-9]\d*)x(?<height>[1-9]\d*)$/u.exec(value);
-  if (!match) {throw new Error("Use WIDTHxHEIGHT with positive integer dimensions");}
+  if (!match) {throw new TypeError("Use WIDTHxHEIGHT with positive integer dimensions");}
   const width = Number(match[1]);
   const height = Number(match[2]);
   if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height))
-    {throw new Error("Desktop dimensions must be safe integers");}
+    {throw new TypeError("Desktop dimensions must be safe integers");}
   return { height, width };
 }
 

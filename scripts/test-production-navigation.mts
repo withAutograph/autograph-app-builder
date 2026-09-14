@@ -261,7 +261,7 @@ try {
   const dockerPort = await runDocker(["port", container, "5432/tcp"]);
   const mapping = dockerPort.stdout.trim();
   const databasePort = Number(mapping.split(":").at(-1));
-  if (!Number.isInteger(databasePort)) {throw new Error("Missing database port.");}
+  if (!Number.isInteger(databasePort)) {throw new TypeError("Missing database port.");}
   const databaseUrl = `postgresql://postgres@127.0.0.1:${databasePort}/${databaseName}`;
   const secret = randomBytes(32).toString("hex");
   const flagsSecret = randomBytes(32).toString("base64url");
