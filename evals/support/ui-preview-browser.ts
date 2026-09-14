@@ -65,6 +65,9 @@ const observeRenewalReviewHtml: ObserveHtml = async (html) => {
     });
     page.on("pageerror", (error) => failures.push(error.message));
     await page.setContent(html, { waitUntil: "networkidle" });
+    if (failures.length > 0) {
+      throw new Error(`The rendered preview reported browser errors: ${failures.join("; ")}`);
+    }
     const expected = page.getByText("Mercury Labs", { exact: true });
     if (await expected.isVisible().catch(() => false)) {
       throw new Error("Mercury Labs was visible before the All renewals action.");

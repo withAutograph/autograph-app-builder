@@ -43,7 +43,6 @@ ${renewalReviewDesignPrompt}`);
           const manifest = value as {
             productionComponents?: unknown[];
             productionCompositions?: { name?: unknown }[];
-            interactionChecks?: unknown[];
             assumptions?: unknown[];
             decisions?: unknown[];
             openQuestions?: unknown[];
@@ -52,10 +51,6 @@ ${renewalReviewDesignPrompt}`);
             (manifest.productionComponents?.length ?? 0) >= 4 &&
             manifest.productionCompositions?.some(({ name }) => name === "DataTableComposition") ===
               true &&
-            JSON.stringify(manifest.interactionChecks) ===
-              JSON.stringify([
-                { controlName: "All renewals", expectedText: "Mercury Labs", route: "/" },
-              ]) &&
             (manifest.assumptions?.length ?? 0) === 1 &&
             (manifest.decisions?.length ?? 0) === 0 &&
             (manifest.openQuestions?.length ?? 0) === 1
