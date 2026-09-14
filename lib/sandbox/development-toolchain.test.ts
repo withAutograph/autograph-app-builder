@@ -68,10 +68,11 @@ describe("Development Vercel Sandbox dependency template", () => {
     );
     expect(command).toContain("/workspace/.app-builder/dependency-cache/cargo/config.toml");
     expect(command).toContain("bun install --frozen-lockfile --ignore-scripts --linker=hoisted");
-    expect(command).toContain("stage='mise-tools'");
     expect(command).toContain('mise trust --yes "$config_file"');
     expect(command).toContain("mise install --locked cue");
-    expect(command).toContain("mise exec --locked -- cue version >/dev/null");
+    expect(command).toContain('cue_bin="$(mise which cue)"');
+    expect(command).toContain('ln -sfn "$cue_bin" "$toolchain_bin/cue"');
+    expect(command).toContain('"$toolchain_bin/cue" version >/dev/null');
     expect(command).toContain('node - "$work/source"');
     expect(command).not.toContain('readlink -f -- "$link"');
     expect(command).toContain(
@@ -121,7 +122,6 @@ describe("Development Vercel Sandbox dependency template", () => {
     expect(command).toContain('find "$cache_root" \\( -type f -o -type d \\) -perm /022');
     expect(command).not.toContain('find "$cache_root" -perm /022');
     expect(command).toContain(developmentDependencySymlinkScript);
-    expect(command).toContain("stage='mise-tools'");
     expect(command).toContain('install_source_declared_cue "$source_root"');
     expect(command).toContain("mise install --locked cue");
   });
