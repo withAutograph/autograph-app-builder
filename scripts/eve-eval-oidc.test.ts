@@ -42,20 +42,21 @@ describe("Eve eval managed OIDC", () => {
   it("does not read credentials or invoke setup for deterministic execution", () => {
     const ensure = vi.fn();
     const environment = {
+      NODE_ENV: "test" as const,
       VERCEL_OIDC_TOKEN: "ambient-token",
       VERCEL_PROJECT_ID: "ambient-project",
       VERCEL_TEAM_ID: "ambient-team",
     };
     loadEveEvalOidc({ ensure, environment, realSandbox: false, repositoryRoot: "/absent" });
     expect(ensure).not.toHaveBeenCalled();
-    expect(environment).toEqual({});
+    expect(environment).toEqual({ NODE_ENV: "test" });
   });
   it.each(["sandbox", "hosted-artifact"])(
     "loads scoped credentials for %s without requiring live model mode",
     () => {
       const { root, token } = fixture();
       const ensure = vi.fn();
-      const environment: NodeJS.ProcessEnv = {};
+      const environment: NodeJS.ProcessEnv = { NODE_ENV: "test" };
       loadEveEvalOidc({ ensure, environment, realSandbox: true, repositoryRoot: root });
       expect(ensure).toHaveBeenCalledWith(root);
       expect(environment).toMatchObject({
@@ -70,7 +71,7 @@ describe("Eve eval managed OIDC", () => {
     const ensure = vi
       .spyOn(lifecycle, "ensureLocalDevelopmentOidc")
       .mockReturnValue({ refreshed: false });
-    const environment = { PATH: "/usr/bin:/bin" };
+    const environment = { NODE_ENV: "test" as const, PATH: "/usr/bin:/bin" };
     loadEveEvalOidc({
       environment,
       miseExecutable: "/managed/mise",
@@ -87,10 +88,10 @@ describe("Eve eval managed OIDC", () => {
   });
   it("rejects a different project and provides an actionable setup error", () => {
     const { root } = fixture("prj_other");
-    const environment = {};
+    const environment = { NODE_ENV: "test" as const };
     expect(() =>
       loadEveEvalOidc({ ensure: vi.fn(), environment, realSandbox: true, repositoryRoot: root }),
     ).toThrow("mise run local:ensure-oidc");
-    expect(environment).toEqual({});
+    expect(environment).toEqual({ NODE_ENV: "test" });
   });
 });
