@@ -3832,10 +3832,6 @@ const existingFindingOverrides: { files: string[]; rules: Record<string, "off"> 
 
 const followupFindingOverrides: { files: string[]; rules: Record<string, "off"> }[] = [
   {
-    files: ["**/evals/support/self-reproduction-candidate-workflows.test.ts"],
-    rules: { "typescript/strict-boolean-expressions": "off" },
-  },
-  {
     files: ["**/evals/support/self-reproduction-candidate-workflows.ts"],
     rules: { "typescript/no-unsafe-type-assertion": "off" },
   },
