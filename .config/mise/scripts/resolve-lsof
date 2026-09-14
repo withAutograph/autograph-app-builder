@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+# Sanitized Node children omit /usr/sbin on macOS. Resolve the installed
+# system utility explicitly; never change PATH or treat a missing tool as a free port.
+for candidate in /usr/sbin/lsof /usr/bin/lsof /sbin/lsof /bin/lsof; do
+  if [ -x "$candidate" ]; then
+    printf '%s' "$candidate"
+    exit 0
+  fi
+done
+echo "Local provider readiness requires the system lsof utility; install it before starting emulated web." >&2
+exit 78

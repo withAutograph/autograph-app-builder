@@ -10,7 +10,8 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
 import type { DevelopmentArguments } from "./local-mode";
-import { developmentChildExit, stopDevelopmentChild } from "./process-supervisor";
+import { stopEmulatedWebServices } from "./emulated-web-stop";
+import { developmentChildExit } from "./process-supervisor";
 
 // oxlint-disable-next-line typescript/strict-void-return -- Adapt Node overloaded callback API with promisify.
 const execFileAsync = promisify(execFile);
@@ -200,7 +201,7 @@ export const prepareDevelopmentEmulatedWeb = async (input: {
     startupError = error;
   });
   const stop = async () => {
-    await stopDevelopmentChild(service, { processGroup: true });
+    await stopEmulatedWebServices(service);
     await rm(receipt, { force: true });
   };
   try {

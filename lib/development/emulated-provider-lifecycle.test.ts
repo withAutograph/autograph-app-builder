@@ -1,3 +1,6 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import path from "node:path";
 import { createServer } from "node:net";
 import { afterEach, expect, it } from "vitest";
 import {
@@ -43,4 +46,18 @@ it("requires both real listeners to belong to the owned emulator PID", async () 
   await expect(assertOwnedProviders(process.pid, [first.port, second.port])).rejects.toThrow(
     "stopped",
   );
+});
+
+it("resolves the installed listener utility with a sanitized PATH", async () => {
+  // oxlint-disable-next-line typescript/strict-void-return -- Adapt Node callback API.
+  const execute = promisify(execFile);
+  const result = await execute(path.resolve(".config/mise/scripts/resolve-lsof"), [], {
+    env: { PATH: "/usr/bin:/bin" },
+  });
+  expect(result.stdout.trim().startsWith("/")).toBe(true);
+  const first = await listener();
+  const code = `import {ownsProviderListener} from ${JSON.stringify(path.resolve("lib/development/emulated-provider-lifecycle.ts"))};if(!await ownsProviderListener(${process.pid},${first.port}))process.exit(2);`;
+  await execute(process.execPath, ["--import", "tsx", "--input-type=module", "-e", code], {
+    env: { PATH: "/usr/bin:/bin" },
+  });
 });

@@ -4,6 +4,7 @@
 set -eu
 
 mise_bin=${APP_BUILDER_DEV_MISE_BIN:-mise}
+lsof_bin=$("$PWD/.config/mise/scripts/resolve-lsof")
 
 app_port=${APP_BUILDER_LOCAL_PORT:-3001}
 emulate_base_port=${EMULATE_BASE_PORT:-4000}
@@ -37,13 +38,13 @@ trap cleanup EXIT INT TERM
 
 if [ "${APP_BUILDER_EMULATED_SERVICES_ONLY:-0}" = 1 ]; then
   for provider_port in "$emulate_base_port" "$github_emulate_port"; do
-    if lsof -nP -iTCP:"$provider_port" -sTCP:LISTEN >/dev/null 2>&1; then
+    if "$lsof_bin" -nP -iTCP:"$provider_port" -sTCP:LISTEN >/dev/null 2>&1; then
       echo "Emulated web provider port $provider_port is already in use. Configure EMULATE_BASE_PORT through mise or stop the owning local stack; unrelated listeners are never reused or stopped." >&2
       exit 78
     fi
   done
 fi
-if ! lsof -nP -iTCP:"$emulate_base_port" -sTCP:LISTEN >/dev/null 2>&1; then
+if ! "$lsof_bin" -nP -iTCP:"$emulate_base_port" -sTCP:LISTEN >/dev/null 2>&1; then
   "$("$mise_bin" which node)" node_modules/emulate/dist/index.js \
     start --port "$emulate_base_port" --service vercel,github \
     --seed "$state_dir/config.yaml" &

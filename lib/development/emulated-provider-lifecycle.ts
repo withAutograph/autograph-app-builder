@@ -1,13 +1,19 @@
 /* oxlint-disable eslint/no-await-in-loop -- Probe both owned provider listeners before publishing readiness and monitor their lifecycle. */
+import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 
 // oxlint-disable-next-line typescript/strict-void-return -- Adapt Node's overloaded callback API.
 const execute = promisify(execFile);
+const resolver = fileURLToPath(new URL("../../.config/mise/scripts/resolve-lsof", import.meta.url));
+const resolveLsof = async () => {
+  const result = await execute(resolver);
+  return result.stdout.trim();
+};
 export const ownsProviderListener = async (pid: number, port: number) => {
   try {
-    const result = await execute("lsof", [
+    const result = await execute(await resolveLsof(), [
       "-t",
       "-nP",
       "-a",

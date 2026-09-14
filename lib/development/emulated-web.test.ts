@@ -98,7 +98,7 @@ it("retains external state and stops only its owned preparation process", async 
   await writeFile(miseBinary, '#!/bin/sh\nshift 2\nexec "$@"\n', { mode: 0o700 });
   await writeFile(
     entry,
-    `#!${process.execPath}\nconst fs=require('node:fs');const path=require('node:path');fs.writeFileSync(path.join(process.env.APP_BUILDER_EMULATED_STATE_ROOT,'environment.json'),JSON.stringify({BETTER_AUTH_URL:'https://localhost:3000/api/auth'}));fs.writeFileSync(path.join(process.env.APP_BUILDER_EMULATED_STATE_ROOT,'pid'),String(process.pid));setInterval(()=>{},1000);`,
+    `#!${process.execPath}\nconst fs=require('node:fs');const path=require('node:path');fs.writeFileSync(path.join(process.env.APP_BUILDER_EMULATED_STATE_ROOT,'environment.json'),JSON.stringify({BETTER_AUTH_URL:'https://localhost:3000/api/auth'}));fs.writeFileSync(path.join(process.env.APP_BUILDER_EMULATED_STATE_ROOT,'pid'),String(process.pid));process.on('SIGTERM',()=>{setTimeout(()=>{fs.writeFileSync(path.join(process.env.APP_BUILDER_EMULATED_STATE_ROOT,'cleaned'),'done');process.exit(0);},1250);});setInterval(()=>{},1000);`,
     { mode: 0o700 },
   );
   const prepared = await prepareDevelopmentEmulatedWeb({
@@ -121,6 +121,7 @@ it("retains external state and stops only its owned preparation process", async 
   expect(prepared.nextArgs).toContain(path.join(stateRoot, "emulated-web/localhost-key.pem"));
   expect(prepared.environment).not.toHaveProperty("EVE_HOSTED_ADAPTER");
   await prepared.stop();
+  expect(await readFile(path.join(stateRoot, "emulated-web/cleaned"), "utf-8")).toBe("done");
   expect(() => process.kill(pid, 0)).toThrow();
   await expect(readFile(path.join(stateRoot, "emulated-web/environment.json"))).rejects.toThrow();
   await writeFile(entry, "#!/bin/sh\nexit 3\n", { mode: 0o700 });
