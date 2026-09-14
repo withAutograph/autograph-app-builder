@@ -12,13 +12,9 @@ launcher="$PWD/.config/mise/scripts/trusted-node-launcher"
 eval_runner="scripts/run-eve-eval.mts"
 
 if [ "$#" -eq 0 ]; then
-  set -- \
-    fresh-bootstrap-publication \
-    fresh-bootstrap-empty-publication \
-    fresh-bootstrap-negative \
-    fresh-bootstrap-recovery \
-    fresh-bootstrap-wrong-source \
-    fresh-bootstrap-capabilities
+  scenarios="$("$node_bin" --import tsx scripts/eval-scenario-selection.mts fresh)"
+  # shellcheck disable=SC2086
+  set -- $scenarios
 fi
 
 for evaluation in "$@"; do

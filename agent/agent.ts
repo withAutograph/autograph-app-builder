@@ -1,6 +1,8 @@
 import { defineAgent } from "eve";
 import { mockModel } from "eve/evals";
 
+import { currentReviewResults } from "@/lib/testing/current-review-results";
+
 import { renewalReviewUiPreview } from "@/lib/testing/prompt-driven-design";
 
 import { sha256 } from "@/lib/agent/workflow-state";
@@ -632,7 +634,10 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       ? "The lost-response retry reused the exact durable target-planning receipt without rerunning either target command."
       : "The target-planning retry did not reuse its durable receipt.";
   }
-  if (message.includes("prepare offline target dependencies")) {
+  if (
+    message.includes("prepare offline target dependencies") ||
+    message.includes("prepare target dependencies")
+  ) {
     const lostResponse = message.includes("lost response");
     const statusResult = [...toolResults]
       .toReversed()
@@ -907,7 +912,11 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
       };
     }
     const result = validations.at(-1);
-    if (result?.isError) {
+    if (
+      result?.isError ||
+      status.phase === "validation_failed" ||
+      status.phase === "validation_pending"
+    ) {
       if (stale) {
         return "The app changed before checks could start, so I stopped safely.";
       }
@@ -932,7 +941,9 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
   ) {
     const stale = message.includes("stale change set");
     const retry = message.includes("retry change-set acceptance");
-    const accepted = toolResults.filter(({ name }) => name === "accept_change_set");
+    // Earlier negative probes belong to the pre-validation state, not this review.
+    const reviewResults = currentReviewResults(toolResults);
+    const accepted = reviewResults.filter(({ name }) => name === "accept_change_set");
     let requiredAccepts = 1;
     if (retry) {
       requiredAccepts = 2;
@@ -950,14 +961,14 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     ) {
       return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     }
-    const proposal = [...toolResults].toReversed().find(({ name }) => name === "change_set_status");
+    const proposal = [...reviewResults]
+      .toReversed()
+      .find(({ name }) => name === "change_set_status");
     if (proposal === undefined) {
       return {
         toolCalls: [
           {
-            input: {
-              expectedValidationDigest: latestStatus.validation?.digest,
-            },
+            input: {},
             name: "change_set_status",
           },
         ],

@@ -14,7 +14,7 @@ export default defineEval({
     await prepareReviewedWorkflow(t, repository, "branch-publication-cancel");
     await t.send("Publish reviewed change set to a new branch worktree.");
     t.requireInputRequest({
-      toolName: "publish-reviewed-change-set_to_branch_worktree",
+      toolName: "publish_reviewed_change_set_to_branch_worktree",
     });
     await t.respondAll("cancel");
     t.succeeded();

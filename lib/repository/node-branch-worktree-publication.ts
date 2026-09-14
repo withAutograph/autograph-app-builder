@@ -46,11 +46,11 @@ import { hasTestCapability } from "../testing/test-capability";
 import { contentDigest, stableDigest } from "./local-publication";
 import type { DestinationSnapshot } from "./local-publication";
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
-import { inspectSourceContractDigest } from "./source-receipt";
+import { sourceIdentityDigest } from "./source-receipt";
 import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
-import { resolveAllowedRepository, SUPPORTED_REPOSITORY_CONTRACT } from "./supported-template";
+import { resolveAllowedRepository } from "./supported-template";
 
 const { dirname, isAbsolute, relative, resolve: pathResolve, sep } = nodePath;
 
@@ -1085,11 +1085,7 @@ const inspectBranchPublicationSource = async (input: {
   const dirtyDigest = stableDigest(statusEntries);
   const stable = {
     canonicalPath,
-    contractDigest: inspectSourceContractDigest(
-      canonicalPath,
-      headSha,
-      SUPPORTED_REPOSITORY_CONTRACT.requiredPaths,
-    ),
+    contractDigest: sourceIdentityDigest(headSha, headTree),
     dirty: [] as const,
     dirtyDigest,
     gitDirectoryIdentity: {
@@ -1249,10 +1245,9 @@ const worktreeSnapshot = async (proposal: BranchWorktreePublicationProposal) => 
   ]).trim();
   const statusEntries = await worktreeFileStates(proposal);
   return {
-    contractDigest: inspectSourceContractDigest(
-      root,
-      proposal.baseSha,
-      SUPPORTED_REPOSITORY_CONTRACT.requiredPaths,
+    contractDigest: sourceIdentityDigest(
+      git(root, ["rev-parse", "HEAD"]).trim(),
+      git(root, ["rev-parse", "HEAD^{tree}"]).trim(),
     ),
     gitDirectoryIdentity: {
       device: gitDirectoryStat.dev.toString(),
