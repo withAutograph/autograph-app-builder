@@ -3,6 +3,7 @@ import { includes, satisfies } from "eve/evals/expect";
 
 import { renewalReviewDesignPrompt } from "../lib/testing/prompt-driven-design";
 import { isProductFacing } from "./support/public-conversation";
+import { observeRecordedRenewalReview } from "./support/ui-preview-browser";
 
 export default defineEval({
   description:
@@ -70,9 +71,10 @@ ${renewalReviewDesignPrompt}`);
     t.notCalledTool("apply_app_creation");
     t.notCalledTool("validate_app_creation");
     t.notCalledTool("prepare_target_dependencies");
+    const browserObservation = await observeRecordedRenewalReview(t.events);
     process.stdout.write(
       `${JSON.stringify({
-        browserInteraction: "required-by-record-ui-preview",
+        browserInteraction: browserObservation,
         renderer: "current-supported-source",
         version: 1,
       })}\n`,

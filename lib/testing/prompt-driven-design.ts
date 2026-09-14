@@ -58,13 +58,6 @@ export default function RenewalReview() {
         visibleElement: "Open account review",
       },
     ],
-    interactionChecks: [
-      {
-        controlName: "All renewals",
-        expectedText: "Mercury Labs",
-        route: "/",
-      },
-    ],
     openQuestions: [
       {
         id: "intervention-owner",

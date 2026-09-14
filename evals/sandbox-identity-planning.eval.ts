@@ -20,7 +20,22 @@ export default defineEval({
 
     await t.send("Prepare target dependencies.");
     t.succeeded();
-    t.check(t.reply, includes("target-bound dependency closure"));
+    t.eventsSatisfy("dependency preparation records the checkout-backed receipt", (events) =>
+      events.some((event) => {
+        if (event.type !== "action.result" || event.data.result.kind !== "tool-result")
+          return false;
+        if (event.data.result.toolName !== "prepare_target_dependencies") return false;
+        const { output } = event.data.result;
+        return (
+          typeof output === "object" &&
+          output !== null &&
+          "dependencyCacheDigest" in output &&
+          output.dependencyCacheDigest === "checkout" &&
+          "version" in output &&
+          output.version === 2
+        );
+      }),
+    );
 
     await t.send("Run target identity and planning.");
     t.succeeded();

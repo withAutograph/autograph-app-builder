@@ -87,44 +87,11 @@ const themeStyle = css.css.replace(/<\\/style/gi, "<\\\\/style");
 const bundledStyle = bundledCss.join("\\n").replace(/<\\/style/gi, "<\\\\/style");
 const script = js.replace(/<\\/script/gi, "<\\\\/script");
 await writeFile(path.join(root, "index.html"), '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${input.appId}</title><style>' + themeStyle + '</style><style>' + bundledStyle + '</style></head><body><div id="root"></div><script>' + script + '</script></body></html>');`;
-  const interactionChecks = input.manifest.interactionChecks ?? [];
-  const browserCheck = `import { readFile } from "node:fs/promises";
-import { chromium } from "playwright";
-const html = await readFile(new URL("./index.html", import.meta.url), "utf-8");
-const checks = ${JSON.stringify(interactionChecks)};
-const browser = await chromium.launch({ headless: true });
-try {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-  const failures = [];
-  page.on("console", message => {
-    if (message.type() === "error") failures.push(message.text());
-  });
-  page.on("pageerror", error => failures.push(error.message));
-  await page.setContent(html, { waitUntil: "networkidle" });
-  for (const check of checks) {
-    await page.evaluate(route => { location.hash = route; }, check.route);
-    await page.waitForTimeout(50);
-    const control = page.getByRole("button", { exact: true, name: check.controlName });
-    if (await page.getByText(check.expectedText, { exact: true }).isVisible().catch(() => false))
-      throw new Error("Expected interaction outcome was already visible before the action: " + check.expectedText);
-    if (!(await control.isVisible()) || !(await control.isEnabled()))
-      throw new Error("Expected interactive control is unavailable: " + check.controlName);
-    await control.click();
-    await page.waitForTimeout(50);
-    if (!(await page.getByText(check.expectedText, { exact: true }).isVisible()))
-      throw new Error("Expected interaction outcome did not become visible: " + check.expectedText);
-  }
-  if (failures.length > 0) throw new Error("Rendered preview reported browser errors: " + failures.join("; "));
-  process.stdout.write(JSON.stringify({ interactionChecks: checks.length, viewport: "1440x900" }) + "\\n");
-} finally {
-  await browser.close();
-}`;
   return {
     files: [
       ...input.files,
       { content: entry, path: "entry.tsx" },
       { content: renderer, path: "render.mts" },
-      { content: browserCheck, path: "browser-check.mjs" },
     ],
     root,
   };
@@ -170,21 +137,5 @@ export async function renderUiPreview(
     path: `/workspace/repository/${bundle.root}/index.html`,
   });
   if (html === null) throw new Error("The preview compiler did not produce a document.");
-  if ((input.manifest.interactionChecks?.length ?? 0) > 0) {
-    const installation = await sandbox.run({
-      command: "bun node_modules/playwright/cli.js install --with-deps chromium",
-      workingDirectory: "/workspace/repository",
-    });
-    if (installation.exitCode !== 0)
-      throw new Error(installation.stderr || installation.stdout || "Browser installation failed.");
-    const interaction = await sandbox.run({
-      command: `bun ${bundle.root}/browser-check.mjs`,
-      workingDirectory: "/workspace/repository",
-    });
-    if (interaction.exitCode !== 0)
-      throw new Error(
-        interaction.stderr || interaction.stdout || "Browser interaction verification failed.",
-      );
-  }
   return html;
 }

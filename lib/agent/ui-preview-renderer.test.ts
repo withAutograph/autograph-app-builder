@@ -3,28 +3,7 @@ import postcss from "postcss";
 import { describe, expect, it, vi } from "vitest";
 
 import type { UiPreviewInput } from "./ui-preview";
-import { renderUiPreview, uiPreviewRendererFiles } from "./ui-preview-renderer";
-
-const previewInput = {
-  appId: "browser-review",
-  catalogGaps: [],
-  files: [{ content: "export default () => null", path: "page.tsx" }],
-  manifest: {
-    productionCompositions: [],
-    screens: [{ entry: "page.tsx", route: "/" }],
-  },
-  routes: ["/"],
-} as unknown as UiPreviewInput;
-
-const interactivePreviewInput = {
-  ...previewInput,
-  manifest: {
-    ...previewInput.manifest,
-    interactionChecks: [
-      { controlName: "Show details", expectedText: "Visible detail", route: "/" },
-    ],
-  },
-} as UiPreviewInput;
+import { uiPreviewRendererFiles } from "./ui-preview-renderer";
 
 describe("preview runtime initialization", () => {
   it.each([true, false])("initializes charts only when used (%s)", (usesCharts) => {
@@ -148,68 +127,5 @@ describe("preview stylesheet provenance", () => {
     expect(renderer).toContain("const themeStyle = css.css.replace");
     expect(renderer).toContain("const bundledStyle = bundledCss.join");
     expect(renderer).toContain("</style><style>' + bundledStyle");
-  });
-});
-
-describe("real sandbox browser verification", () => {
-  it("installs the fixed browser and requires an interaction after compilation", async () => {
-    const run = vi
-      .fn()
-      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
-      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stderr: "",
-        stdout: '{"interacted":true,"viewport":"1440x900"}',
-      });
-    const sandbox = {
-      readTextFile: vi.fn().mockResolvedValue("<html>preview</html>"),
-      run,
-      writeTextFile: vi.fn().mockResolvedValue(null),
-    } as never;
-
-    await expect(renderUiPreview(interactivePreviewInput, sandbox)).resolves.toBe(
-      "<html>preview</html>",
-    );
-    expect(run).toHaveBeenNthCalledWith(2, {
-      command: "bun node_modules/playwright/cli.js install --with-deps chromium",
-      workingDirectory: "/workspace/repository",
-    });
-    expect(run).toHaveBeenNthCalledWith(3, {
-      command: expect.stringMatching(/^bun \.builder-preview\/[a-f\d]+\/browser-check\.mjs$/u),
-      workingDirectory: "/workspace/repository",
-    });
-  });
-
-  it("rejects a preview whose real browser interaction fails", async () => {
-    const sandbox = {
-      readTextFile: vi.fn().mockResolvedValue("<html>preview</html>"),
-      run: vi
-        .fn()
-        .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
-        .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
-        .mockResolvedValueOnce({
-          exitCode: 1,
-          stderr: "Expected interaction outcome did not become visible: Visible detail",
-          stdout: "",
-        }),
-      writeTextFile: vi.fn().mockResolvedValue(null),
-    } as never;
-
-    await expect(renderUiPreview(interactivePreviewInput, sandbox)).rejects.toThrow(
-      "Expected interaction outcome did not become visible: Visible detail",
-    );
-  });
-
-  it("does not install or run a browser when the preview declares no interaction checks", async () => {
-    const run = vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
-    const sandbox = {
-      readTextFile: vi.fn().mockResolvedValue("<html>preview</html>"),
-      run,
-      writeTextFile: vi.fn().mockResolvedValue(null),
-    } as never;
-
-    await expect(renderUiPreview(previewInput, sandbox)).resolves.toBe("<html>preview</html>");
-    expect(run).toHaveBeenCalledOnce();
   });
 });
