@@ -187,5 +187,6 @@ Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
       t.notCalledTool(tool);
     }
   },
-  timeoutMs: 360_000,
+  // Cold shared toolchain setup took 223s; real inspection/apply/validation still follow.
+  timeoutMs: 600_000,
 });
