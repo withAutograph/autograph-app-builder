@@ -264,12 +264,6 @@ const existingFindingOverrides: { files: string[]; rules: Record<string, "off"> 
     },
   },
   {
-    files: ["**/lib/eve/public-events.ts", "**/lib/github/octokit.ts"],
-    rules: {
-      "anti-slop/no-reflect-get": "off",
-    },
-  },
-  {
     files: [
       "**/.config/mise/scripts/repository/build-hosted-arrusted-artifact.mts",
       "**/.config/mise/scripts/repository/prove-hosted-starter-clone.mts",
