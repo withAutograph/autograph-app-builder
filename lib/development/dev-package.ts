@@ -1,3 +1,4 @@
+import { developmentExecutionEnvironment } from "./execution-environment.mjs";
 import { execFile } from "node:child_process";
 import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -310,27 +311,16 @@ export const developmentLaunchEnvironment = (input: {
   dependencyKey: string;
   evePort: number;
 }): Readonly<Record<string, string>> => ({
-  APP_BUILDER_BRANCH_WORKTREE_PUBLICATION: "0",
+  ...developmentExecutionEnvironment,
   APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: input.dependencyKey,
   APP_BUILDER_DEVELOPMENT_SNAPSHOT_ROOT: input.snapshotRoot,
   APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: input.fingerprint,
   APP_BUILDER_DEVELOPMENT_SOURCE_ROOT: input.sourceRoot,
   APP_BUILDER_DEVELOPMENT_SOURCE_SHA: input.sourceSha,
   APP_BUILDER_DEVELOPMENT_SOURCE_TREE: input.sourceTree,
-  APP_BUILDER_EXECUTION_BUNDLE: "local-development",
-  APP_BUILDER_EXECUTION_MODE: "development",
-  APP_BUILDER_FRESH_BOOTSTRAP_ENABLED: "0",
-  APP_BUILDER_GITHUB_PUBLICATION_ENABLED: "0",
-  APP_BUILDER_LOCAL_ADAPTER: "1",
-  APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
-  APP_BUILDER_LOCAL_PROVIDER_EMULATION: "0",
-  APP_BUILDER_LOCAL_PUBLICATION: "0",
-  APP_BUILDER_SANDBOX_PROVIDER: "vercel",
   EVE_AGENT_HOST: `http://127.0.0.1:${input.evePort}`,
-  EVE_HOSTED_ADAPTER: "0",
   REPOSITORY_LOCAL_ROOTS: input.snapshotRoot,
   REPOSITORY_WORKSPACE_ROOT: input.destinationRoot,
   WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "360000",
   WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "360000",
-  WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS: "0",
 });

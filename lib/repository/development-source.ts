@@ -1,3 +1,4 @@
+import { developmentExecutionEnvironment } from "../development/execution-environment.mjs";
 import { lstatSync, realpathSync } from "node:fs";
 import nodePath from "node:path";
 
@@ -8,19 +9,9 @@ import type { SourceKind, SourceReceipt } from "./source-receipt";
 type Environment = Readonly<Record<string, string | undefined>>;
 
 const closedDevelopmentBinding = (environment: Environment) =>
-  environment.APP_BUILDER_EXECUTION_MODE === "development" &&
-  environment.APP_BUILDER_EXECUTION_BUNDLE === "local-development" &&
-  environment.APP_BUILDER_SANDBOX_PROVIDER === "vercel" &&
-  environment.APP_BUILDER_LOCAL_ADAPTER === "1" &&
-  environment.APP_BUILDER_LOCAL_PUBLICATION === "0" &&
-  environment.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION === "0" &&
-  environment.APP_BUILDER_GITHUB_PUBLICATION_ENABLED === "0" &&
-  environment.APP_BUILDER_FRESH_BOOTSTRAP_ENABLED === "0" &&
-  environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION === "0" &&
-  environment.APP_BUILDER_LOCAL_AUTH_EMULATION === "0" &&
-  environment.APP_BUILDER_HOSTED_ARTIFACT_PROOF === "0" &&
-  environment.EVE_HOSTED_ADAPTER === "0" &&
-  environment.WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS === "0";
+  Object.entries(developmentExecutionEnvironment).every(
+    ([name, value]) => environment[name] === value,
+  );
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function canAutoSelectDevelopmentSource(environment: Environment = process.env) {
