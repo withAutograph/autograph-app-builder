@@ -87,7 +87,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       mocks.state.current = workflow(phase);
       const writeTextFile = vi
         .fn()
-        .mockResolvedValueOnce()
+        .mockResolvedValueOnce(null)
         .mockRejectedValueOnce(new Error("second write failed"));
       const context = {
         callId: "repair",
