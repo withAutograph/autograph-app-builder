@@ -17,8 +17,30 @@ export const productBehaviorEvidenceState = defineState<ProductBehaviorEvidence[
   () => [],
 );
 
+const productBehaviorGeneration = defineState<number>(
+  "autograph-app-builder.product-behavior-generation.v1",
+  () => 0,
+);
+const productBehaviorPreview = defineState<{ commandId: string; generation: number } | null>(
+  "autograph-app-builder.product-behavior-preview.v1",
+  () => null,
+);
+export const currentProductBehaviorGeneration = () => productBehaviorGeneration.get();
+export const bindProductBehaviorPreview = (commandId: string, generation: number) => {
+  productBehaviorPreview.update(() => ({ commandId, generation }));
+};
+export const hasCurrentProductBehaviorPreview = (commandId: string): boolean => {
+  const binding = productBehaviorPreview.get();
+  return (
+    binding !== null &&
+    binding.commandId === commandId &&
+    binding.generation === productBehaviorGeneration.get()
+  );
+};
+
 export const clearProductBehaviorEvidence = () => {
   productBehaviorEvidenceState.update(() => []);
+  productBehaviorGeneration.update((generation) => generation + 1);
 };
 
 export const recordProductBehaviorEvidence = (evidence: ProductBehaviorEvidence) => {

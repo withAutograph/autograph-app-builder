@@ -2,7 +2,10 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 
 import { executeProductReadback } from "@/lib/agent/product-behavior";
-import { recordProductBehaviorEvidence } from "@/lib/agent/product-behavior-state";
+import {
+  recordProductBehaviorEvidence,
+  hasCurrentProductBehaviorPreview,
+} from "@/lib/agent/product-behavior-state";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { hasLiveWorkingPreview, workingPreviewState } from "@/lib/agent/working-preview-state";
@@ -44,6 +47,11 @@ export default defineTool({
     if (!hasLiveWorkingPreview(preview, sandbox.id) || preview === null) {
       throw new Error("A current working preview in this session's Sandbox is required.");
     }
+    if (!hasCurrentProductBehaviorPreview(preview.commandId)) {
+      throw new Error(
+        "Reopen the working preview after implementation changes before verifying behavior.",
+      );
+    }
     const result = await executeProductReadback({
       authority: {
         expiresAt: Date.parse(preview.receipt.expiresAt),
@@ -52,6 +60,11 @@ export default defineTool({
       scenario: input.scenario,
       signal: ctx.abortSignal,
     });
+    if (!hasCurrentProductBehaviorPreview(preview.commandId)) {
+      throw new Error(
+        "Implementation changed during observation; reopen preview and verify again.",
+      );
+    }
     recordProductBehaviorEvidence({
       acceptedOutcomeText: input.acceptedOutcomeText,
       appSpecDigest: current.appSpec.digest,
