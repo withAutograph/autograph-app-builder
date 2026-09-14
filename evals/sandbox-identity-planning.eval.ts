@@ -3,6 +3,8 @@ import { includes } from "eve/evals/expect";
 
 import { BUILD_READY_APP_SPEC } from "./support/app-spec";
 
+const digest = (value: unknown) => typeof value === "string" && /^[a-f0-9]{64}$/u.test(value);
+
 export default defineEval({
   description:
     "The current Vercel Sandbox prepares supported source and reaches only the typed planned phase.",
@@ -20,75 +22,58 @@ export default defineEval({
 
     await t.send("Prepare target dependencies.");
     t.succeeded();
-    t.eventsSatisfy("dependency preparation records the checkout-backed receipt", (events) =>
-      events.some((event) => {
-        if (event.type !== "action.result" || event.data.result.kind !== "tool-result")
-          return false;
-        if (event.data.result.toolName !== "prepare_target_dependencies") return false;
-        const { output } = event.data.result;
-        return (
-          typeof output === "object" &&
-          output !== null &&
-          "dependencyCacheDigest" in output &&
-          output.dependencyCacheDigest === "checkout" &&
-          "version" in output &&
-          output.version === 2
-        );
-      }),
-    );
 
     await t.send("Run target identity and planning.");
     t.succeeded();
-    t.check(t.reply, includes("target identity and planning commands"));
-    t.check(t.reply, includes("no apply, validation, or target mutation"));
 
     await t.send("Report artifact workflow status.");
     t.succeeded();
     t.calledTool("artifact_workflow_status", { count: 1 });
     t.check(t.reply, includes('"phase":"planned"'));
 
+    t.eventsSatisfy("persisted workflow contains actual planning receipts", (events) =>
+      events.some((event) => {
+        if (
+          event.type !== "action.result" ||
+          event.data.result.kind !== "tool-result" ||
+          event.data.result.toolName !== "artifact_workflow_status"
+        )
+          return false;
+        const state = event.data.result.output as {
+          phase?: string;
+          dependencies?: { digest?: string };
+          identity?: { digest?: string };
+          proposal?: { digest?: string };
+          apply?: { digest?: string; status?: string };
+          validation?: { digest?: string; status?: string };
+          review?: { digest?: string; changeSetDigest?: string };
+        };
+        return (
+          state?.phase === "planned" &&
+          digest(state.dependencies?.digest) &&
+          digest(state.identity?.digest) &&
+          digest(state.proposal?.digest)
+        );
+      }),
+    );
+
     t.calledTool("inspect_source", { count: 1 });
     t.calledTool("prepare_workspace", { count: 1 });
     t.calledTool("record_prototype_artifact", { count: 1 });
     t.calledTool("accept_app_spec", { count: 1 });
-    t.calledTool("prepare_target_dependencies", { count: 1 });
-    t.calledTool("plan_app_creation", { count: 1 });
+    t.notEvent("input.requested");
     for (const tool of [
       "apply_app_creation",
       "validate_app_creation",
       "accept_change_set",
       "publish_reviewed_change_set",
       "publish_reviewed_change_set_to_branch_worktree",
-      "prepare_fresh_template",
+      "publish_fresh_repository",
+      "publish_github_draft_pr",
+      "create_github_repository",
       "bash",
       "write_file",
     ])
       t.notCalledTool(tool);
-
-    process.stdout.write(
-      `${JSON.stringify({
-        calledTools: [
-          "inspect_source",
-          "prepare_workspace",
-          "record_prototype_artifact",
-          "accept_app_spec",
-          "prepare_target_dependencies",
-          "plan_app_creation",
-          "artifact_workflow_status",
-        ],
-        forbiddenTools: [
-          "apply_app_creation",
-          "validate_app_creation",
-          "accept_change_set",
-          "publish_reviewed_change_set",
-          "publish_reviewed_change_set_to_branch_worktree",
-          "prepare_fresh_template",
-          "bash",
-          "write_file",
-        ],
-        terminalPhase: "planned",
-        version: 1,
-      })}\n`,
-    );
   },
 });

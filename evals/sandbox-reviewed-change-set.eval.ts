@@ -13,6 +13,8 @@ const staysProductFacing = satisfies(
   "assistant reply stays product-facing and omits internal review mechanics",
 );
 
+const digest = (value: unknown) => typeof value === "string" && /^[a-f0-9]{64}$/u.test(value);
+
 export default defineEval({
   description:
     "The current Vercel Sandbox applies and validates one supported-source proposal, then records the reviewed change set without publication.",
@@ -41,7 +43,8 @@ export default defineEval({
     t.check(t.reply, includes("private preview"));
     t.check(t.reply, staysProductFacing);
 
-    await t.send("Validate the applied creation.");
+    const validation = await t.send("Validate the applied creation.");
+    validation.notEvent("input.requested");
     t.succeeded();
     t.check(t.reply, includes("quality checks"));
     t.check(t.reply, staysProductFacing);
@@ -50,7 +53,8 @@ export default defineEval({
     t.succeeded();
     t.calledTool("change_set_status", { count: 1 });
 
-    await t.send("Accept the displayed change set.");
+    const review = await t.send("Accept the displayed change set.");
+    review.notEvent("input.requested");
     t.succeeded();
     t.check(t.reply, includes("ready for review"));
     t.check(t.reply, includes("draft pull request"));
@@ -61,13 +65,45 @@ export default defineEval({
     t.calledTool("artifact_workflow_status", { count: 1 });
     t.check(t.reply, includes('"phase":"reviewed"'));
 
+    t.eventsSatisfy(
+      "persisted workflow contains actual planning receipts and successful validation/review",
+      (events) =>
+        events.some((event) => {
+          if (
+            event.type !== "action.result" ||
+            event.data.result.kind !== "tool-result" ||
+            event.data.result.toolName !== "artifact_workflow_status"
+          )
+            return false;
+          const state = event.data.result.output as {
+            phase?: string;
+            dependencies?: { digest?: string };
+            identity?: { digest?: string };
+            proposal?: { digest?: string };
+            apply?: { digest?: string; status?: string };
+            validation?: { digest?: string; status?: string };
+            review?: { digest?: string; changeSetDigest?: string };
+          };
+          return (
+            state?.phase === "reviewed" &&
+            [state.dependencies?.digest, state.identity?.digest, state.proposal?.digest].every(
+              digest,
+            ) &&
+            state.apply?.status === "applied" &&
+            digest(state.apply.digest) &&
+            state.validation?.status === "passed" &&
+            digest(state.validation.digest) &&
+            digest(state.review?.digest) &&
+            digest(state.review?.changeSetDigest)
+          );
+        }),
+    );
+
     for (const tool of [
       "inspect_source",
       "prepare_workspace",
       "record_prototype_artifact",
       "accept_app_spec",
-      "prepare_target_dependencies",
-      "plan_app_creation",
       "apply_app_creation",
       "validate_app_creation",
       "change_set_status",
@@ -85,27 +121,6 @@ export default defineEval({
       "write_file",
     ])
       t.notCalledTool(tool);
-
-    process.stdout.write(
-      `${JSON.stringify({
-        requiredTools: [
-          "inspect_source",
-          "prepare_workspace",
-          "record_prototype_artifact",
-          "accept_app_spec",
-          "prepare_target_dependencies",
-          "plan_app_creation",
-          "apply_app_creation",
-          "validate_app_creation",
-          "change_set_status",
-          "accept_change_set",
-          "artifact_workflow_status",
-        ],
-        sourceKind: "supported-existing-repository",
-        terminalPhase: "reviewed",
-        version: 1,
-      })}\n`,
-    );
   },
   timeoutMs: 360_000,
 });
