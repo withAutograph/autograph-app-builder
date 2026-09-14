@@ -35,16 +35,18 @@ export default defineEval({
       t.succeeded();
       t.check(t.reply, includes("separately approved exact"));
 
-      await withFreshBootstrapTestCapability(fixture.capability, () =>
+      const retry = await withFreshBootstrapTestCapability(fixture.capability, () =>
         t.send("Retry fresh repository recovery after a lost response."),
       );
       t.succeeded();
-      t.check(t.reply, includes("without redispatching recovery"));
+      // Assert idempotent behavior instead of a particular summary sentence.
+      retry.notCalledTool("recover_fresh_repository");
+      retry.notEvent("input.requested");
       t.calledTool("recover_fresh_repository", { count: 1 });
       t.notCalledTool("bash");
       t.notCalledTool("write_file");
       t.notCalledTool("publish_reviewed_change_set");
-      t.notCalledTool("publish-reviewed-change-set_to_branch_worktree");
+      t.notCalledTool("publish_reviewed_change_set_to_branch_worktree");
     } finally {
       await fixture.cleanup();
     }

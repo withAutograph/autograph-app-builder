@@ -21,7 +21,7 @@ describe("fresh bootstrap executable identity transport", () => {
   ] as const)("preserves producer digest bytes for %s", (field) => {
     const schema = freshBootstrapProposalSchema.shape.capability.shape[field];
     const serialized = JSON.stringify(identity);
-      const parsed = schema.parse(JSON.parse(serialized));
+    const parsed = schema.parse(JSON.parse(serialized));
     expect(JSON.stringify(parsed)).toBe(JSON.stringify(identity));
     expect(stableDigest(parsed)).toBe(stableDigest(identity));
     expect(() => schema.parse({ ...identity, sha256: "tampered" })).toThrow();

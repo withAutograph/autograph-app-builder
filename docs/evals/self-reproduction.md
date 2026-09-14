@@ -210,3 +210,7 @@ unassessed until its required behaviors have independent evidence. A failed
 readback remains a failure even when the write returned success. Evaluator-owned
 observations must still exercise the delivered app as a user; Builder's partial
 checks do not replace that comparison.
+
+## Resume and cross-eval coverage
+
+See [the handoff](self-reproduction-handoff.md) for the frozen baseline, landed repairs, and ordered remaining work. The [cross-eval assessment](cross-eval-regression-2026-09-14.md) records exact-revision CI evidence, additional executions, and coverage limits across other products. Shared repairs must preserve those capability families; self-reproduction results do not replace their checks.

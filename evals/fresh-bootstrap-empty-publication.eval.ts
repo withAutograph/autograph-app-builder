@@ -33,7 +33,7 @@ export default defineEval({
       t.notCalledTool("bash");
       t.notCalledTool("write_file");
       t.notCalledTool("publish_reviewed_change_set");
-      t.notCalledTool("publish-reviewed-change-set_to_branch_worktree");
+      t.notCalledTool("publish_reviewed_change_set_to_branch_worktree");
     } finally {
       await fixture.cleanup();
     }

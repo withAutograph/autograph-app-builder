@@ -25,9 +25,9 @@ export async function prepareReviewedWorkflow(
   // pending request list is the stable context-level contract.
   if (
     t.pendingInputRequests.length !== 1 ||
-    t.pendingInputRequests[0]?.action.toolName !== "apply-app-creation"
+    t.pendingInputRequests[0]?.action.toolName !== "apply_app_creation"
   ) {
-    throw new Error("Expected one apply-app-creation approval request.");
+    throw new Error("Expected one apply_app_creation approval request.");
   }
   await t.respondAll("approve");
 

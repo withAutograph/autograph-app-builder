@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="Run the real Gate A fresh-bootstrap Eve evaluations for CI"
+#MISE description="Run deterministic local fresh-bootstrap contract evaluations for CI"
 set -eu
 
 exec mise run test:fresh-bootstrap-evals
