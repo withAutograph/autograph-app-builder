@@ -118,6 +118,8 @@ test("Sign In and Sign Up are passive, reciprocal, and geometrically identical",
   page,
 }) => {
   const callbackURL = "/dashboard?tab=recent&tab=saved#complete";
+  const expectedRedirect =
+    "/auth/setting-up?callbackURL=%2Fdashboard%3Ftab%3Drecent%26tab%3Dsaved%23complete";
   let passkeyRequests = 0;
   page.on("request", (request) => {
     if (new URL(request.url()).pathname.startsWith("/api/auth/passkey/")) {
@@ -131,6 +133,10 @@ test("Sign In and Sign Up are passive, reciprocal, and geometrically identical",
   const signUpLink = page.getByRole("link", { name: "Sign Up" });
   await expect(page.getByText("Need to create an account?")).toBeVisible();
   await expect(signUpLink).toBeVisible();
+  await expect(signUpLink).toHaveAttribute(
+    "href",
+    `/auth/sign-up?redirectTo=${encodeURIComponent(expectedRedirect)}`,
+  );
   const signUpHref = await signUpLink.getAttribute("href");
 
   expect(passkeyRequests).toBe(0);
@@ -151,6 +157,10 @@ test("Sign In and Sign Up are passive, reciprocal, and geometrically identical",
   const signUpURL = new URL(signUpHref, page.url());
   expect(signUpURL.searchParams.get("redirectTo")).toBe(
     "/auth/setting-up?callbackURL=%2Fdashboard%3Ftab%3Drecent%26tab%3Dsaved%23complete",
+  );
+  await expect(signInLink).toHaveAttribute(
+    "href",
+    `/auth/sign-in?redirectTo=${encodeURIComponent(expectedRedirect)}`,
   );
   const signInHref = await signInLink.getAttribute("href");
   if (!signInHref) throw new Error("Sign In link must have an href");
