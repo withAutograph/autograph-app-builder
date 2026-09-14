@@ -1,9 +1,15 @@
 import { readFile, readdir, mkdir, writeFile } from "node:fs/promises";
-import { resolve, relative, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { zstdDecompressSync } from "node:zlib";
+import { z } from "zod";
 import { decodeOwnerGraph, observeSourceReviews } from "./source-review-observation";
 
+const encodedSchema = z.object({ __type: z.literal("Uint8Array"), data: z.string() });
+const stepSchema = z.object({
+  createdAt: z.string(),
+  input: encodedSchema.optional(),
+  output: encodedSchema.optional(),
+});
 const args = process.argv.slice(2);
 const option = (name: string) => {
   const index = args.indexOf(name);
@@ -14,73 +20,71 @@ const request = option("--original-request-file");
 const output = option("--output-dir");
 const runIds = args.flatMap((v, i) => (v === "--run-id" ? [args[i + 1]] : []));
 if (
-  !store ||
-  !output ||
-  !runIds.length ||
+  store === undefined ||
+  output === undefined ||
+  runIds.length === 0 ||
   runIds.some((id) => !/^wrun_[A-Za-z0-9]+$/u.test(id ?? ""))
 ) {
   throw new Error("Supply owner store, output directory and explicit owner run IDs.");
 }
-const destination = resolve(output);
-const repository = resolve(import.meta.dirname, "..");
-const inside = (root: string, path: string) => {
-  const r = relative(root, path);
-  return r === "" || (!r.startsWith("..") && !r.startsWith("/"));
+const destination = path.resolve(output);
+const repository = path.resolve(import.meta.dirname, "..");
+const inside = (root: string, candidate: string) => {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 };
-if (inside(repository, destination) || inside(resolve(store), destination)) {
+if (inside(repository, destination) || inside(path.resolve(store), destination)) {
   throw new Error("Output must be outside source and owner store.");
 }
 await mkdir(destination, { mode: 0o700 });
-const records: { time: string; values: unknown[] }[] = [];
 let unreadable = 0;
 let original: string | undefined;
 try {
-  if (request) {
-    original = await readFile(request, "utf8");
+  if (request !== undefined) {
+    original = await readFile(request, "utf-8");
   }
 } catch {
   unreadable += 1;
 }
-try {
-  for (const file of (await readdir(resolve(store, "steps"))).sort()) {
-    if (!runIds.some((id) => file.startsWith(`${id}-`)) || !file.endsWith(".json")) {
-      continue;
-    }
-    try {
-      const step = JSON.parse(await readFile(resolve(store, "steps", file), "utf-8"));
-      const values: unknown[] = [];
-      for (const field of ["input", "output"]) {
-        if (!step[field]) {
-          continue;
-        }
-        const encoded = step[field];
-        if (encoded.__type !== "Uint8Array" || typeof encoded.data !== "string") {
-          unreadable += 1;
-          continue;
-        }
-        let bytes = Buffer.from(encoded.data, "base64");
-        if (bytes.subarray(0, 4).toString() === "zstd") {
-          bytes = zstdDecompressSync(bytes.subarray(4), { maxOutputLength: 64 * 1024 * 1024 });
-        }
-        if (bytes.subarray(0, 4).toString() !== "devl") {
-          unreadable += 1;
-          continue;
-        }
-        values.push(decodeOwnerGraph(JSON.parse(bytes.subarray(4).toString())));
+const readStep = async (file: string) => {
+  try {
+    const step = stepSchema.parse(
+      JSON.parse(await readFile(path.resolve(store, "steps", file), "utf-8")),
+    );
+    const values = [step.input, step.output].flatMap((encoded) => {
+      if (encoded === undefined) {
+        return [];
       }
-      records.push({ time: typeof step.createdAt === "string" ? step.createdAt : "", values });
-    } catch {
-      unreadable += 1;
-    }
+      let bytes = Buffer.from(encoded.data, "base64");
+      if (bytes.subarray(0, 4).toString() === "zstd") {
+        bytes = zstdDecompressSync(bytes.subarray(4), { maxOutputLength: 64 * 1024 * 1024 });
+      }
+      if (bytes.subarray(0, 4).toString() !== "devl") {
+        throw new Error("unsupported owner encoding");
+      }
+      return [decodeOwnerGraph(bytes.subarray(4).toString())];
+    });
+    return [{ time: step.createdAt, values }];
+  } catch {
+    unreadable += 1;
+    return [];
   }
+};
+let files: string[] = [];
+try {
+  files = await readdir(path.resolve(store, "steps"));
 } catch {
   unreadable += 1;
 }
-records.sort((a, b) => a.time.localeCompare(b.time));
+const selected = files.filter(
+  (file) => runIds.some((id) => file.startsWith(`${id}-`)) && file.endsWith(".json"),
+);
+const batches = await Promise.all(selected.map(readStep));
+const records = batches.flat().toSorted((a, b) => a.time.localeCompare(b.time));
 const report = {
   ...observeSourceReviews(
     original,
-    records.flatMap((r) => r.values),
+    records.flatMap((record) => record.values),
   ),
   coverage: {
     inputAvailable: original !== undefined,
@@ -89,11 +93,12 @@ const report = {
     unreadable,
   },
 };
-await writeFile(resolve(destination, "report.json"), `${JSON.stringify(report, null, 2)}\n`, {
+await writeFile(path.resolve(destination, "report.json"), `${JSON.stringify(report, null, 2)}\n`, {
   mode: 0o600,
 });
+const limits = report.limits.map((value) => `- ${value}`).join("\n");
 await writeFile(
-  resolve(destination, "report.md"),
-  `# Owner source review observation\n\nStatus: ${report.status}.\n\nReadable records: ${records.length}; unreadable: ${unreadable}; selected runs: ${runIds.length}.\n\n${report.limits.map((v) => `- ${v}`).join("\n")}\n\nSee report.json for sanitized tool observations.\n`,
+  path.resolve(destination, "report.md"),
+  `# Owner source review observation\n\nStatus: ${report.status}.\n\nReadable records: ${records.length}; unreadable: ${unreadable}; selected runs: ${runIds.length}.\n\n${limits}\n\nSee report.json for sanitized tool observations.\n`,
   { mode: 0o600 },
 );

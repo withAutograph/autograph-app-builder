@@ -11,15 +11,15 @@ describe("private owner source review observation", () => {
             evidenceDigest: "a".repeat(64),
             findings: [
               {
-                explanation: "secret source",
                 citations: [
                   {
-                    path: "secret-file.ts",
-                    startLine: 1,
                     endLine: 3,
                     excerptDigest: "b".repeat(64),
+                    path: "secret-file.ts",
+                    startLine: 1,
                   },
                 ],
+                explanation: "secret source",
               },
             ],
             modelId: "openai/gpt-6-astra",
@@ -51,10 +51,33 @@ describe("private owner source review observation", () => {
     expect(observeSourceReviews(undefined, []).status).toBe("unassessed");
   });
   it("resolves references without executing tagged classes and handles shared references", () => {
-    expect(decodeOwnerGraph([{ a: 1, b: 1 }, { value: 2 }, "retained"])).toEqual({
+    expect(decodeOwnerGraph(JSON.stringify([{ a: 1, b: 1 }, { value: 2 }, "retained"]))).toEqual({
       a: { value: "retained" },
       b: { value: "retained" },
     });
-    expect(decodeOwnerGraph([["Class", 1], "payload"])).toBeUndefined();
+    expect(decodeOwnerGraph(JSON.stringify([["Class", 1], "payload"]))).toBeNull();
   });
+});
+
+it("pairs separate input and JSON result fragments without conflating later calls", () => {
+  const report = observeSourceReviews("brief", [
+    {
+      input: { implementationFiles: [{ content: "private" }] },
+      toolCallId: "one",
+      toolName: "validate_app_creation",
+    },
+    {
+      output: { type: "json", value: { status: "validated" } },
+      toolCallId: "one",
+      toolName: "validate_app_creation",
+    },
+    {
+      output: { type: "json", value: { status: "failed" } },
+      toolCallId: "two",
+      toolName: "validate_app_creation",
+    },
+  ]);
+  expect(report.rows).toHaveLength(2);
+  expect(report.rows[0]).toMatchObject({ implementationWriteCount: 1, status: "validated" });
+  expect(report.rows[1].status).toBe("failed");
 });
