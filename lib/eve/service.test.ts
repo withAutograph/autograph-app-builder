@@ -529,7 +529,26 @@ describe("local Eve acceptance", () => {
     const revision = createHash("sha256")
       .update(JSON.stringify({ digest, mediaType, path }))
       .digest("hex");
+    const workingPreview = {
+      appId: "vendor-onboarding",
+      expiresAt: "2099-09-13T18:00:00.000Z",
+      status: "ready" as const,
+      url: "https://preview.example.test/app?access=opaque-signed-value",
+      verifiedAt: "2026-09-13T17:00:00.000Z",
+    };
     const events = [
+      {
+        data: {
+          result: {
+            callId: "launch-preview",
+            kind: "tool-result",
+            output: { workingPreview },
+            toolName: "start_app_preview",
+          },
+          status: "completed",
+        },
+        type: "action.result",
+      },
       {
         data: {
           actions: [
@@ -604,6 +623,7 @@ describe("local Eve acceptance", () => {
         cursor: 1,
         events: [],
         prototype: { content, digest, mediaType, path, revision },
+        workingPreview,
       });
     });
     await expect(
@@ -615,6 +635,7 @@ describe("local Eve acceptance", () => {
     ).resolves.toMatchObject({
       prototype: { content, digest, mediaType, path, revision },
       status: "working",
+      workingPreview,
     });
   });
 

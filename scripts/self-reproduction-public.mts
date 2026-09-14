@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import {
-  appendFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -12,9 +11,11 @@ import {
 import pathModule from "node:path";
 
 import { parseArgs } from "node:util";
-import { sanitizeEvidence } from "../evals/support/self-reproduction-evidence.ts";
 import {
   makePublicTransport,
+  publicObservationReport,
+  recordPublicObservation,
+  sanitizePublicObservation,
   runPublicSession,
   validatePublicEndpoint,
 } from "../evals/support/self-reproduction-public.ts";
@@ -107,13 +108,7 @@ const save = () => {
   // Private continuation state preserves exact request IDs and pending replies; public reports are sanitized.
   writeFileSync(`${path}.tmp`, JSON.stringify(state, null, 2), { mode: 0o600 });
   renameSync(`${path}.tmp`, path);
-  const report = sanitizeEvidence({
-    ...state,
-    comparison: "unassessed",
-    elapsedMs: Date.now() - Date.parse(state.startedAt),
-    note: "A completed Builder session does not prove a working independent replica. Compare the user-visible output separately.",
-    outOfBoxProof: false,
-  });
+  const report = publicObservationReport(state);
   const json = JSON.stringify(report, null, 2);
   writeFileSync(resolve(output, "report.json"), json, { mode: 0o600 });
   writeFileSync(
@@ -132,12 +127,7 @@ save();
 try {
   const transport = await makePublicTransport(
     values.endpoint,
-    (record) =>
-      appendFileSync(
-        resolve(output, "transcript.jsonl"),
-        `${JSON.stringify(sanitizeEvidence(record))}\n`,
-        { mode: 0o600 },
-      ),
+    (record) => recordPublicObservation(output, record),
     timeoutMs,
   );
   const responses = values["responses-file"]
@@ -149,14 +139,10 @@ try {
   await runPublicSession({ message, pollMs, responses, save, state, timeoutMs, transport });
 } catch (error) {
   state.outcome = "blocked_transport_or_contract";
-  state.error = String(sanitizeEvidence(String(error)));
+  state.error = String(sanitizePublicObservation(String(error)));
   save();
-  appendFileSync(
-    resolve(output, "transcript.jsonl"),
-    `${JSON.stringify(sanitizeEvidence({ error: String(error) }))}\n`,
-    { mode: 0o600 },
-  );
-  console.error(sanitizeEvidence(String(error)));
+  recordPublicObservation(output, { error: String(error) });
+  console.error(sanitizePublicObservation(String(error)));
   process.exitCode = 1;
 }
 console.log(`Public eval ${state.outcome}; report: ${resolve(output, "index.html")}`);

@@ -1,8 +1,11 @@
 /* eslint-disable eslint/no-await-in-loop -- Public session continuations and SSE chunks are ordered. */
 import { setTimeout as delay } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
+import { appendFileSync, chmodSync, existsSync } from "node:fs";
+import path from "node:path";
 import { eveRespondInputSchema, eveSessionResultSchema } from "../../lib/mcp/contracts";
 import type { EveSessionResult } from "../../lib/mcp/contracts";
+import { sanitizeEvidence } from "./self-reproduction-evidence";
 
 export type Responses = {
   requestId: string;
@@ -26,6 +29,92 @@ export interface PublicState {
 export interface PublicTransport {
   call: (name: string, args: Record<string, unknown>) => Promise<unknown>;
 }
+
+const redactObservationUrls = (entry: unknown): unknown => {
+  if (typeof entry === "string") {
+    return entry.replaceAll(/https?:\/\/[^\s"'<>`]+/giu, (value) => {
+      try {
+        return `${new URL(value).origin}/[REDACTED URL]`;
+      } catch {
+        return "[REDACTED URL]";
+      }
+    });
+  }
+  if (Array.isArray(entry)) {
+    return entry.map(redactObservationUrls);
+  }
+  if (entry && typeof entry === "object") {
+    return Object.fromEntries(
+      Object.entries(entry).map(([key, item]) => [key, redactObservationUrls(item)]),
+    );
+  }
+  return entry;
+};
+
+/** Public artifacts retain URL origins only; opaque capabilities can live in paths or queries. */
+export const sanitizePublicObservation = (value: unknown): unknown =>
+  redactObservationUrls(sanitizeEvidence(value));
+
+/** Preserve every original public response privately, separately from the shareable transcript. */
+export const recordPublicObservation = (outputDir: string, record: unknown) => {
+  const privatePath = path.join(outputDir, "transcript.private.jsonl");
+  if (existsSync(privatePath)) {
+    chmodSync(privatePath, 0o600);
+  }
+  appendFileSync(privatePath, `${JSON.stringify(record)}\n`, { mode: 0o600 });
+  appendFileSync(
+    path.join(outputDir, "transcript.jsonl"),
+    `${JSON.stringify(sanitizePublicObservation(record))}\n`,
+    { mode: 0o600 },
+  );
+};
+
+export const publicObservationReport = (state: PublicState, nowMs = Date.now()) => {
+  const receipt = state.session?.workingPreview;
+  const failed = state.session?.status === "failed" || state.session?.status === "cancelled";
+  let availability: "reported_ready" | "expired" | "unavailable" | "unassessed" = "unassessed";
+  let reason = "No working-app receipt was exposed by the public session.";
+  if (failed || receipt === null) {
+    availability = "unavailable";
+    reason = failed
+      ? "The public session failed or was cancelled."
+      : "The public session explicitly invalidated its working-app preview; the cause is not established by this receipt alone.";
+  } else if (receipt) {
+    const expired = Date.parse(receipt.expiresAt) <= nowMs;
+    availability = expired ? "expired" : "reported_ready";
+    reason = expired
+      ? "The working-app preview receipt has expired."
+      : "The Builder reported runtime readiness at verifiedAt; current reachability and product behavior still require browser assessment.";
+  }
+  return sanitizePublicObservation({
+    ...state,
+    comparison: "unassessed",
+    elapsedMs: nowMs - Date.parse(state.startedAt),
+    note: "A completed Builder session or HTTP-ready preview does not prove a working independent replica. Compare user-visible behavior separately.",
+    outOfBoxProof: false,
+    previewObservation: {
+      backendCorrectness: "unassessed",
+      browserInteraction: "unassessed",
+      fixtureUi: {
+        functionality: "fixtures-only",
+        present: state.session?.uiPreview !== undefined,
+      },
+      independentChildCreation: "unassessed",
+      observedAt: new Date(nowMs).toISOString(),
+      prototype: {
+        functionality: "visual-prototype",
+        present: state.session?.prototype !== undefined,
+      },
+      workingApp: {
+        availability,
+        reason,
+        ...(receipt ? { expiresAt: receipt.expiresAt, verifiedAt: receipt.verifiedAt } : {}),
+      },
+    },
+    redaction:
+      "Shareable URLs retain origins only. Original public responses and usable preview URLs remain in owner-only transcript.private.jsonl and state.json; do not share these private files.",
+  });
+};
 
 export const validatePublicEndpoint = (endpoint: string) => {
   const url = new URL(endpoint);

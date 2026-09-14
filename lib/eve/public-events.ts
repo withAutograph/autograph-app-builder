@@ -4,6 +4,7 @@ import {
   publicImplementationPlanSchema,
   publicPrototypeSchema,
   publicUiPreviewSchema,
+  publicWorkingPreviewSchema,
 } from "../mcp/contracts";
 import type {
   EveSessionStatus,
@@ -12,6 +13,7 @@ import type {
   PublicInputRequest,
   PublicPrototype,
   PublicUiPreview,
+  PublicWorkingPreview,
 } from "../mcp/contracts";
 import { targetProposalSchema } from "../repository/target-planning";
 import type { MessageStreamEvent } from "eve/client";
@@ -349,6 +351,52 @@ export const latestInstalledUiPreview = (
     });
   }
   return latest;
+};
+
+/** Keep expired receipts in durable evidence, but never offer them as current previews. */
+export const currentWorkingPreview = (
+  receipt: PublicWorkingPreview | null | undefined,
+  nowMs = Date.now(),
+): PublicWorkingPreview | null | undefined =>
+  receipt && Date.parse(receipt.expiresAt) <= nowMs ? null : receipt;
+
+/** Only the shared runtime's successful launch receipt can attest to a working app. */
+export const latestInstalledWorkingPreview = (
+  events: readonly MessageStreamEvent[],
+): PublicWorkingPreview | null | undefined => {
+  let latest: PublicWorkingPreview | null | undefined;
+  for (const event of events) {
+    if (
+      event.type === "turn.cancelled" ||
+      event.type === "turn.failed" ||
+      event.type === "session.failed"
+    ) {
+      latest = null;
+      continue;
+    }
+    if (event.type === "actions.requested") {
+      if (
+        event.data.actions.some(
+          (action) => action.kind === "tool-call" && action.toolName === "start_app_preview",
+        )
+      )
+        latest = null;
+      continue;
+    }
+    if (
+      event.type !== "action.result" ||
+      event.data.result.kind !== "tool-result" ||
+      event.data.result.toolName !== "start_app_preview"
+    )
+      continue;
+    latest = null;
+    if (event.data.status !== "completed" || event.data.result.isError === true) continue;
+    const output = z
+      .object({ workingPreview: publicWorkingPreviewSchema })
+      .safeParse(event.data.result.output);
+    if (output.success) latest = output.data.workingPreview;
+  }
+  return currentWorkingPreview(latest);
 };
 
 const inputRequest = (request: {

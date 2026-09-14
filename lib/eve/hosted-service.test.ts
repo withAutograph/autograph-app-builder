@@ -944,6 +944,40 @@ describe("hosted Eve service core", () => {
     expect(record.checkpoint?.truncatedBeforeIndex).toBeGreaterThan(0);
   });
 
+  it("persists the working preview receipt in the durable checkpoint", async () => {
+    const workingPreview = {
+      appId: "stock-exceptions",
+      expiresAt: "2099-09-13T18:00:00.000Z",
+      status: "ready" as const,
+      url: "https://preview.example.test/app?access=opaque-signed-value",
+      verifiedAt: "2026-09-13T17:00:00.000Z",
+    };
+    const store = new InMemoryHostedEveStore();
+    const first = await started({
+      store,
+      transport: transport({
+        get: vi.fn(() => Promise.resolve({ ...snapshot, workingPreview: null })),
+        start: vi.fn(() =>
+          Promise.resolve({
+            adapterSessionId: "working-preview",
+            snapshot: { ...snapshot, workingPreview },
+          }),
+        ),
+      }),
+    });
+    const record = await store.getSession(principal, first.result.sessionId);
+    expect(record?.version).toBe(2);
+    if (record?.version !== 2) throw new Error("Expected durable session");
+    expect(record.checkpoint?.workingPreview).toEqual(workingPreview);
+    const read = { cursor: 0, limit: 100, sessionId: first.result.sessionId };
+    await expect(first.service.get(read)).resolves.toMatchObject({ workingPreview: null });
+    vi.mocked(first.adapter.get).mockRejectedValueOnce(new HostedAdapterSessionUnavailableError());
+    await expect(first.service.get(read)).resolves.toMatchObject({ workingPreview: null });
+    const latestRecord = await store.getSession(principal, first.result.sessionId);
+    if (latestRecord?.version !== 2) throw new Error("Expected durable session");
+    expect(latestRecord.checkpoint?.workingPreview).toBeNull();
+  });
+
   it("compacts max-shape user fields without losing outstanding request IDs", async () => {
     const requestIds = Array.from(
       { length: 32 },

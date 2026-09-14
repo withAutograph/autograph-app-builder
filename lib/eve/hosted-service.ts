@@ -335,6 +335,9 @@ function checkpointForSnapshot(
       const candidate = hostedSessionCheckpointSchema.safeParse({
         capturedAtEpochMs,
         events: retainedEvents,
+        ...(snapshot.workingPreview === undefined
+          ? {}
+          : { workingPreview: snapshot.workingPreview }),
         ...(input.includeImplementationPlan && snapshot.implementationPlan !== undefined
           ? { implementationPlan: snapshot.implementationPlan }
           : {}),

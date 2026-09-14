@@ -1,5 +1,7 @@
 import { defineHook } from "eve/hooks";
 import type { HookContext } from "eve/hooks";
+import { hasLiveWorkingPreview, workingPreviewState } from "../../lib/agent/working-preview-state";
+import { getVercelPreviewProvider } from "../../lib/sandbox/vercel-preview-provider";
 
 import {
   acquireHostedSandboxExecutionLease,
@@ -18,12 +20,38 @@ async function release(
     | "session-failed",
 ) {
   const environment = process.env;
-  if (!isHostedSandboxExecutionEnabled(environment)) return;
+  const hosted = isHostedSandboxExecutionEnabled(environment);
+  const preview = workingPreviewState.get();
+  if (!hosted && preview === null) return;
   try {
+    const sandbox = await ctx.getSandbox();
+    if (
+      (reason === "turn-completed" || reason === "session-completed") &&
+      hasLiveWorkingPreview(preview, sandbox.id)
+    ) {
+      const provider = await getVercelPreviewProvider(sandbox.id, undefined, false);
+      const command =
+        preview !== null &&
+        provider.status === "running" &&
+        provider.currentSession().sessionId === preview.providerSessionId
+          ? await provider.getCommand(preview.commandId)
+          : undefined;
+      if (command?.exitCode === null) {
+        // Keep only the same still-running preview process. A resumed or
+        // replaced VM must not inherit an old claim of readiness.
+        return;
+      }
+    }
+    workingPreviewState.update(() => null);
+    if (!hosted) {
+      // Local development uses the same cancellation and failure lifecycle.
+      await sandbox.stop();
+      return;
+    }
     await releaseHostedSandboxExecutionLease({
       environment,
       reason,
-      sandbox: await ctx.getSandbox(),
+      sandbox,
       sessionAuth: ctx.session.auth,
       sessionId: ctx.session.id,
     });

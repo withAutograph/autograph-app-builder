@@ -168,6 +168,30 @@ export const publicUiPreviewSchema = z
 
 export type PublicUiPreview = z.infer<typeof publicUiPreviewSchema>;
 
+/** A working app verified by the shared preview runtime; expiresAt bounds readiness. */
+export const publicWorkingPreviewSchema = z
+  .object({
+    appId: z.string().min(1),
+    expiresAt: z.iso.datetime(),
+    status: z.literal("ready"),
+    url: z
+      .string()
+      .url()
+      .max(2048)
+      .superRefine((value, context) => {
+        const url = new URL(value);
+        if (url.protocol !== "https:" || url.username || url.password)
+          context.addIssue({
+            code: "custom",
+            message: "Working previews require HTTPS without embedded credentials.",
+          });
+      }),
+    verifiedAt: z.iso.datetime(),
+  })
+  .strict();
+
+export type PublicWorkingPreview = z.infer<typeof publicWorkingPreviewSchema>;
+
 export const publicImplementationPlanSchema = z
   .object({
     appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
@@ -192,6 +216,7 @@ export const eveSessionResultSchema = z
     sessionId: z.string(),
     status: sessionStatusSchema,
     uiPreview: publicUiPreviewSchema.optional(),
+    workingPreview: publicWorkingPreviewSchema.nullable().optional(),
   })
   .strict();
 
