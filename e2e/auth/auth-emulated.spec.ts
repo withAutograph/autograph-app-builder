@@ -114,12 +114,37 @@ test("passkey UI defaults off without a Vercel flag override", async ({ browser 
   }
 });
 
+test("server-rendered reciprocal auth links preserve callbacks before hydration", async ({
+  request,
+}) => {
+  const callbackURL = "/dashboard?tab=recent&tab=saved#complete";
+  const redirectTo =
+    "/auth/setting-up?callbackURL=%2Fdashboard%3Ftab%3Drecent%26tab%3Dsaved%23complete";
+  await Promise.all(
+    [
+      ["sign-in", "sign-up"],
+      ["sign-up", "sign-in"],
+    ].map(async ([route, alternate]) => {
+      // Read actual response HTML without running hydration or stream-reveal scripts.
+      const response = await request.get(
+        `/auth/${route}?callbackURL=${encodeURIComponent(callbackURL)}`,
+      );
+      expect(response.ok()).toBe(true);
+      const html = await response.text();
+      expect(html).toContain(
+        `href="/auth/${alternate}?redirectTo=${encodeURIComponent(redirectTo)}"`,
+      );
+      expect(html).not.toContain(
+        `href="/auth/${alternate}?redirectTo=${encodeURIComponent("/auth/setting-up?callbackURL=%2F")}"`,
+      );
+    }),
+  );
+});
+
 test("Sign In and Sign Up are passive, reciprocal, and geometrically identical", async ({
   page,
 }) => {
   const callbackURL = "/dashboard?tab=recent&tab=saved#complete";
-  const expectedRedirect =
-    "/auth/setting-up?callbackURL=%2Fdashboard%3Ftab%3Drecent%26tab%3Dsaved%23complete";
   let passkeyRequests = 0;
   page.on("request", (request) => {
     if (new URL(request.url()).pathname.startsWith("/api/auth/passkey/")) {
@@ -133,10 +158,6 @@ test("Sign In and Sign Up are passive, reciprocal, and geometrically identical",
   const signUpLink = page.getByRole("link", { name: "Sign Up" });
   await expect(page.getByText("Need to create an account?")).toBeVisible();
   await expect(signUpLink).toBeVisible();
-  await expect(signUpLink).toHaveAttribute(
-    "href",
-    `/auth/sign-up?redirectTo=${encodeURIComponent(expectedRedirect)}`,
-  );
   const signUpHref = await signUpLink.getAttribute("href");
 
   expect(passkeyRequests).toBe(0);
@@ -157,10 +178,6 @@ test("Sign In and Sign Up are passive, reciprocal, and geometrically identical",
   const signUpURL = new URL(signUpHref, page.url());
   expect(signUpURL.searchParams.get("redirectTo")).toBe(
     "/auth/setting-up?callbackURL=%2Fdashboard%3Ftab%3Drecent%26tab%3Dsaved%23complete",
-  );
-  await expect(signInLink).toHaveAttribute(
-    "href",
-    `/auth/sign-in?redirectTo=${encodeURIComponent(expectedRedirect)}`,
   );
   const signInHref = await signInLink.getAttribute("href");
   if (!signInHref) throw new Error("Sign In link must have an href");
