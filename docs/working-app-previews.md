@@ -51,3 +51,11 @@ confirmed failed HMR WebSocket handshakes. Authenticated upgrade forwarding
 repairs that transport gap, but is not evidence that the frozen candidate's
 hydration or product behavior is fixed. A separately recorded normal browser
 acceptance is required for that claim.
+
+For Next.js development HMR upgrades ending in `/_next/hmr` (including a
+base path), the gateway first verifies the exact public host, origin, preview
+cookie, and expiry. It then translates only the upstream HMR Origin to
+`http://localhost:<appPort>` so Next's development-origin guard accepts the
+trusted loopback hop. Application WebSocket and HTTP origins remain unchanged.
+This does not add wildcard `allowedDevOrigins` or change generated app config.
+The translation is transport support, not evidence of working product behavior.

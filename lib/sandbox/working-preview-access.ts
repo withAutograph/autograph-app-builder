@@ -153,6 +153,9 @@ server.on("upgrade", (request, socket, head) => {
   const accessCookie = digest(session + config.launchDigest).toString("base64url");
   if (access.length !== 1 || !equal(access[0].slice(cookieName.length + 1), accessCookie)) return reject();
   const headers = forwardedHeaders(request, config, cookies);
+  // The public origin was authenticated above. Translate only Next dev HMR
+  // to the loopback origin accepted by its internal development guard.
+  if (url.pathname.endsWith("/_next/hmr")) headers.origin = "http://localhost:" + config.appPort;
   headers.connection = "Upgrade";
   headers.upgrade = "websocket";
   socket.pause();
