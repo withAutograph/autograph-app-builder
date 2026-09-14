@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { VercelInstallationBinding } from "../integrations/vercel-installation";
 import type { GitHubProvisionResult, VercelProvisionResult } from "./contracts";
 import { suffixedProviderName } from "./names";
-import { runSequentiallyUntil } from "../async-sequential";
+import { runSequentiallyUntil } from "../async-sequential.ts";
 
 const projectSchema = z
   .object({

@@ -9,7 +9,7 @@ import type { GitHubUserCredentialStore } from "./github-user-credential";
 import type { BuilderProvisionAuthority } from "./journal";
 import { suffixedProviderName } from "./names";
 import type { StarterSource } from "./starter-source";
-import { runSequentiallyUntil } from "../async-sequential";
+import { runSequentiallyUntil } from "../async-sequential.ts";
 
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);

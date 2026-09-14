@@ -5,7 +5,7 @@ import Ajv2020 from "ajv/dist/2020.js";
 import { isMap, parseDocument } from "yaml";
 
 import { isReservedPublicReleaseHostname } from "./public-release-endpoint.ts";
-import { runSequentially } from "../async-sequential";
+import { runSequentially } from "../async-sequential.ts";
 
 const SPEC_VERSION = "1.0.0";
 export const AUTOGRAPH_PACKAGE_VERSION = "0.2.12";
