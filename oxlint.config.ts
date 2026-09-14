@@ -254,17 +254,6 @@ const existingFindingOverrides: { files: string[]; rules: Record<string, "off"> 
   },
   {
     files: [
-      "**/lib/image/lifecycle.ts",
-      "**/lib/image/node-lifecycle.ts",
-      "**/lib/repository/fresh-bootstrap.ts",
-      "**/lib/sandbox/working-preview-ownership.test.ts",
-    ],
-    rules: {
-      "anti-slop/no-object-parameters": "off",
-    },
-  },
-  {
-    files: [
       "**/.config/mise/scripts/repository/build-hosted-arrusted-artifact.mts",
       "**/.config/mise/scripts/repository/prove-hosted-starter-clone.mts",
       "**/agent/agent.ts",
