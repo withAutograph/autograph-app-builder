@@ -67,4 +67,6 @@ The acceptance is informative when it can show exactly what ran and what did not
 
 ## Additional open eval gaps
 
-See [other eval follow-ups](other-eval-followups.md) for the 12 remaining runner failures, toolchain blocker, unassessed image/source cases, evidence, and closure criteria from the expanded audit.
+The cross-eval milestone landed through PRs #444 and #446. All 39 deterministic cases (553 gates), all five real Sandbox cases (128 gates), and post-merge main CI at `8550300364b69621cc30649997ebf75edcca345b` passed. See [other eval follow-ups](other-eval-followups.md) for the frozen failures and their closure evidence. These results do not establish self-reproduction.
+
+A new public baseline started at that main revision with brief SHA-256 `44d84f9a13978521acc1fccf99e5bc72614e274a3ac2e9f6d33d683ca4265c9d`. Its input omitted explicit MCP support; retain that as an input-coverage gap. The updated brief adds the five public MCP tools for future runs only. Never retroactively apply that requirement to the frozen prompt or replace the existing session with a better reroll. Current reference assessment must also use the server-owned shell/form composition, rather than inherit the historical whole-page-client finding. Account settings, onboarding, and MCP need explicit supplemental findings alongside the legacy parity matrix.

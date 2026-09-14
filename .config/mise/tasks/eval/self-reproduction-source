@@ -1,0 +1,7 @@
+#!/bin/sh
+#MISE description="Observe unchanged final source from an existing delivered Sandbox"
+set -eu
+exec .config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" --import tsx scripts/observe-self-reproduction-source.mts \
+  --mise-executable "$(command -v mise)" \
+  --vercel-executable "$(mise which vercel)" "$@"

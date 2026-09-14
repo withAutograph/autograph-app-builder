@@ -135,6 +135,40 @@ These candidate-only observations do not earn paired visual, authenticated
 workflow, persistence, child-creation, or framework credit. They provide a
 repeatable first check of what the delivered app actually lets a user do.
 
+## Observe final source without changing the candidate
+
+After generation stops producing changes, resolve the delivered preview's
+owner-scoped Sandbox name and applied repository root from its retained product
+state. Observe that existing running Sandbox with:
+
+```sh
+mise run eval:self-reproduction-source -- \
+  --sandbox-name EXISTING_PROVIDER_SANDBOX_NAME \
+  --source-root ABSOLUTE_APPLIED_REPOSITORY_ROOT \
+  --output-dir /absolute/external/new-source-observation
+```
+
+The observer uses managed project OIDC and supported filesystem reads. It does
+not install, launch, repair, or send workflow instructions. A stopped Sandbox
+blocks observation; the observer does not explicitly resume it. The SDK may
+still auto-resume if the Sandbox stops between the state check and a read, and
+that limitation is recorded. Preview lifecycle remains owned by the product.
+
+The owner-private manifest inventories dotfiles, regular files, directories,
+link targets, hashes, modes, and explicit runtime exclusions. It reads raw
+bytes twice for comparison (only the first scan is saved) and reports changing
+or unreadable source as incomplete. Links are not followed or recreated. A
+stable result proves only the declared source scope, not an atomic snapshot or
+unobserved dependency/link contents. Review and sanitize the retained material
+before including it in a portable report; never publish private continuation
+state or credentials.
+
+Preview observation also writes a WebSocket lifecycle sidecar with sanitized
+origins and creation/error/close events for each desktop capture. Playwright
+creation is not proof of a successful handshake and exposes no close code.
+Neither these events nor their absence establish HMR or functional correctness;
+the report keeps that broader transport coverage unassessed.
+
 ## Comparison and supplementary assessment
 
 Comparison is observation after generation. It must use the unchanged result
