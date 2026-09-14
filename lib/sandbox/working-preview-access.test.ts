@@ -1,5 +1,8 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import nodePath from "node:path";
 import { createServer, request } from "node:http";
 import type { IncomingHttpHeaders, Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -49,12 +52,14 @@ const call = (port: number, path: string, headers: IncomingHttpHeaders = {}, met
 
 const withGateway = async (
   run: (fixture: {
+    appPort: number;
     port: number;
     launch: string;
     observed: { headers: IncomingHttpHeaders; url: string; body: string }[];
   }) => Promise<void>,
   expiresAt = Date.now() + 60_000,
   landingPath?: string,
+  configurationPath?: string,
 ) => {
   const observed: { headers: IncomingHttpHeaders; url: string; body: string }[] = [];
   const app = createServer((incoming, response) => {
@@ -78,10 +83,11 @@ const withGateway = async (
   await close(reservation);
   const access = createWorkingPreviewAccess({
     appPort,
+    configurationPath,
     expiresAt,
     gatewayPort: port,
     landingPath,
-    origin: "https://preview.example",
+    origin: configurationPath ? "https://pending.invalid" : "https://preview.example",
   });
   const child = spawn(
     process.execPath,
@@ -95,7 +101,7 @@ const withGateway = async (
   try {
     await once(child.stdout, "data", { signal: AbortSignal.timeout(5000) });
     const launch = new URL(access.launchUrl);
-    await run({ launch: launch.pathname + launch.search, observed, port });
+    await run({ appPort, launch: launch.pathname + launch.search, observed, port });
   } finally {
     child.kill();
     await once(child, "exit");
@@ -154,6 +160,66 @@ describe("working preview access", () => {
       Date.now() + 60_000,
       "/apps/builder?tab=drafts",
     );
+  });
+
+  it("denies access until valid runtime configuration activates the bound gateway", async () => {
+    const directory = await mkdtemp(nodePath.join(tmpdir(), "working-preview-access-"));
+    const configurationPath = nodePath.join(directory, "access.json");
+    try {
+      await withGateway(
+        async ({ appPort, port, launch, observed }) => {
+          await expect(call(port, launch, { host: "pending.invalid" })).resolves.toMatchObject({
+            status: 403,
+          });
+          await expect(call(port, "/")).resolves.toMatchObject({ status: 403 });
+          const active = createWorkingPreviewAccess({
+            appPort,
+            expiresAt: Date.now() + 60_000,
+            gatewayPort: port,
+            landingPath: "/apps/builder",
+            origin: "https://preview.example",
+          });
+          await writeFile(configurationPath, active.configuration);
+          const url = new URL(active.launchUrl);
+          const entry = await call(port, url.pathname + url.search);
+          expect(entry.status).toBe(303);
+          expect(entry.headers.location).toBe("/apps/builder");
+          const [cookie] = (entry.headers["set-cookie"]?.[0] ?? "").split(";");
+          await expect(call(port, "/apps/builder", { cookie })).resolves.toMatchObject({
+            status: 200,
+          });
+          expect(observed).toHaveLength(1);
+          await writeFile(
+            configurationPath,
+            JSON.stringify({ ...JSON.parse(active.configuration), expiresAt: Date.now() - 1 }),
+          );
+          await expect(call(port, "/apps/builder", { cookie })).resolves.toMatchObject({
+            status: 403,
+          });
+          await writeFile(configurationPath, "{");
+          await expect(call(port, "/apps/builder", { cookie })).resolves.toMatchObject({
+            status: 403,
+          });
+          await writeFile(
+            configurationPath,
+            JSON.stringify({ ...JSON.parse(active.configuration), launchDigest: "invalid" }),
+          );
+          await expect(call(port, url.pathname + url.search)).resolves.toMatchObject({
+            status: 403,
+          });
+          await rm(configurationPath);
+          await expect(call(port, "/apps/builder", { cookie })).resolves.toMatchObject({
+            status: 403,
+          });
+          expect(observed).toHaveLength(1);
+        },
+        Date.now() + 60_000,
+        undefined,
+        configurationPath,
+      );
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
   });
 
   it("denies an expired launch capability", async () => {

@@ -1,6 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
 
 export interface WorkingPreviewAccess {
+  /** Validated runtime configuration; contains a launch digest, never the bearer capability. */
+  configuration: string;
   /** Bearer capability. Deliver only through the owning user's authenticated session. */
   launchUrl: string;
   expiresAt: number;
@@ -9,6 +11,8 @@ export interface WorkingPreviewAccess {
 
 /** Produces an ingress gateway, not an isolation boundary against code sharing its OS user. */
 export const createWorkingPreviewAccess = (input: {
+  /** Coordinator-owned file. Missing or invalid content keeps an already-bound gateway closed. */
+  configurationPath?: string;
   origin: string;
   appPort: number;
   gatewayPort: number;
@@ -44,11 +48,27 @@ export const createWorkingPreviewAccess = (input: {
     launchDigest: createHash("sha256").update(credential).digest("hex"),
   });
   return {
+    configuration: config,
     expiresAt: input.expiresAt,
     launchUrl: `${origin.origin}/__autograph_preview_launch?token=${credential}`,
     source: `import http from "node:http";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-const config = ${config};
+import { readFileSync } from "node:fs";
+const bootstrap = ${config};
+const loadConfiguration = () => {
+  if (bootstrap.configurationPath === undefined) return bootstrap;
+  try {
+    const active = JSON.parse(readFileSync(bootstrap.configurationPath, "utf8"));
+    const origin = new URL(active.origin);
+    const landing = new URL(active.landingPath, origin);
+    if (origin.protocol !== "https:" || origin.origin !== active.origin || origin.host !== active.host ||
+        typeof active.landingPath !== "string" || !active.landingPath.startsWith("/") || landing.origin !== origin.origin ||
+        landing.pathname === "/__autograph_preview_launch" || !Number.isSafeInteger(active.expiresAt) ||
+        active.appPort !== bootstrap.appPort || active.gatewayPort !== bootstrap.gatewayPort ||
+        typeof active.launchDigest !== "string" || !/^[a-f0-9]{64}$/.test(active.launchDigest)) return null;
+    return active;
+  } catch { return null; }
+};
 const cookieName = "__Host-autograph-preview";
 const session = randomBytes(32).toString("base64url");
 const digest = value => createHash("sha256").update(value).digest();
@@ -60,6 +80,9 @@ const cleanHeaders = headers => {
 };
 const deny = (response, status = 403) => { response.writeHead(status, { "cache-control": "private, no-store", "referrer-policy": "no-referrer" }); response.end(); };
 const server = http.createServer((request, response) => {
+  const config = loadConfiguration();
+  if (config === null) return deny(response);
+  const accessCookie = digest(session + config.launchDigest).toString("base64url");
   if (request.headers.host !== config.host || Date.now() >= config.expiresAt) return deny(response);
   let url;
   try { url = new URL(request.url, config.origin); } catch { return deny(response, 400); }
@@ -69,7 +92,7 @@ const server = http.createServer((request, response) => {
     if (request.method !== "GET" || url.searchParams.getAll("token").length !== 1 || !timingSafeEqual(digest(token), Buffer.from(config.launchDigest, "hex"))) return deny(response);
     response.writeHead(303, {
       location: config.landingPath,
-      "set-cookie": cookieName + "=" + session + "; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=" + new Date(config.expiresAt).toUTCString(),
+      "set-cookie": cookieName + "=" + accessCookie + "; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=" + new Date(config.expiresAt).toUTCString(),
       "cache-control": "private, no-store",
       "referrer-policy": "no-referrer",
     });
@@ -77,7 +100,7 @@ const server = http.createServer((request, response) => {
   }
   const cookies = (request.headers.cookie ?? "").split(";").map(value => value.trim());
   const access = cookies.filter(value => value.startsWith(cookieName + "="));
-  if (access.length !== 1 || !equal(access[0].slice(cookieName.length + 1), session)) return deny(response);
+  if (access.length !== 1 || !equal(access[0].slice(cookieName.length + 1), accessCookie)) return deny(response);
   if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && request.headers.origin !== config.origin) return deny(response);
   const headers = cleanHeaders(request.headers);
   delete headers.authorization;
@@ -103,7 +126,7 @@ const server = http.createServer((request, response) => {
 });
 server.on("upgrade", (_request, socket) => socket.destroy());
 server.on("connect", (_request, socket) => socket.destroy());
-server.listen(config.gatewayPort, "0.0.0.0");
+server.listen(bootstrap.gatewayPort, "0.0.0.0");
 `,
   };
 };
