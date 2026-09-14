@@ -69,10 +69,10 @@ function fixtureGit(root: string, args: string[]): void {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createSupportedRepositoryFixture(): string {
   if (process.env.APP_BUILDER_BRANCH_WORKTREE_PUBLICATION === "1")
-    mkdirSync(path.join(tmpdir(), "autograph-app-builder-branch-publication"), {
+    {mkdirSync(path.join(tmpdir(), "autograph-app-builder-branch-publication"), {
       mode: 0o700,
       recursive: true,
-    });
+    });}
   const root = realpathSync(mkdtempSync(path.join(tmpdir(), "app-builder-eval-repository-")));
   const files: Record<string, string> = {
     ".config/mise/config.toml": [

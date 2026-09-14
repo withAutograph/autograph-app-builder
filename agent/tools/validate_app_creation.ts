@@ -28,7 +28,7 @@ export default defineTool({
       current.phase !== "validated" &&
       current.phase !== "reviewed"
     )
-      throw new Error("Apply the requested changes before running the repository checks.");
+      {throw new Error("Apply the requested changes before running the repository checks.");}
     if (
       (current.phase === "validated" || current.phase === "reviewed") &&
       input.implementationFiles.length === 0
@@ -50,7 +50,7 @@ export default defineTool({
     const relativeApplyRoot = current.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
     const writeImplementationFiles = async (index: number): Promise<void> => {
       const file = input.implementationFiles[index];
-      if (file === undefined) return;
+      if (file === undefined) {return;}
       await sandbox.writeTextFile({
         content: file.content,
         path: `${relativeApplyRoot}/${file.path}`,

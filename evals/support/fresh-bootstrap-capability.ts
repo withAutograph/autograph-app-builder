@@ -23,9 +23,9 @@ export function withFreshBootstrapEvalCapability<T>(
   hooks?: FreshBootstrapFaultHooks,
 ): Promise<T> {
   if (capability.authority === "structural-test-injection")
-    return withFreshBootstrapTestCapability(capability, operation, hooks);
+    {return withFreshBootstrapTestCapability(capability, operation, hooks);}
   if (hooks !== undefined)
-    throw new Error("Configured-production eval capability cannot inject faults.");
+    {throw new Error("Configured-production eval capability cannot inject faults.");}
   return operation();
 }
 

@@ -10,7 +10,7 @@ const backend = (results: { exitCode: number; stdout?: string; stderr?: string }
   const shutdown = vi.fn(() => Promise.resolve());
   const run = vi.fn(() => {
     const result = results.shift();
-    if (!result) throw new Error("Runtime backend fixture was exhausted.");
+    if (!result) {throw new Error("Runtime backend fixture was exhausted.");}
     return Promise.resolve({ stderr: "", stdout: "", ...result });
   });
   const writeTextFile = vi.fn(() => Promise.resolve());

@@ -42,7 +42,7 @@ const browserFixture = (
       listener: (request: { method: () => string; url: () => string }) => void,
     ) => {
       if (serverRequest)
-        listener({ method: () => "POST", url: () => "https://candidate.example/api/create" });
+        {listener({ method: () => "POST", url: () => "https://candidate.example/api/create" });}
     },
     reload: vi.fn(),
     setDefaultTimeout: vi.fn(),

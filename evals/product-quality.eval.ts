@@ -33,7 +33,7 @@ export default defineEval({
       count: 1,
       input: {
         content: (value) => {
-          if (typeof value !== "string") return false;
+          if (typeof value !== "string") {return false;}
           const report = evaluatePrototypeQuality({
             appSpec: `## Status and prototype
 

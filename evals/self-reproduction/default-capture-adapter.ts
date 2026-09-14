@@ -18,22 +18,22 @@ const signature = async (page: Page) => {
 
 const stateTarget = (page: Page, state: CaptureState) => {
   if (state === "panel-resize")
-    return firstVisible([page.getByRole("separator"), page.locator("[data-panel-resize-handle]")]);
+    {return firstVisible([page.getByRole("separator"), page.locator("[data-panel-resize-handle]")]);}
   if (state === "loading")
-    return firstVisible([
+    {return firstVisible([
       page.getByRole("progressbar"),
       page.locator('[aria-busy="true"]'),
       page.getByText(/building|creating|generating|loading|preparing/iu),
-    ]);
+    ]);}
   if (state === "empty")
-    return firstVisible([
+    {return firstVisible([
       page.getByText(/no apps|no drafts|create your first|get started|what should this app do/iu),
-    ]);
+    ]);}
   if (state === "error")
-    return firstVisible([
+    {return firstVisible([
       page.getByRole("alert"),
       page.getByText(/failed|error|could not|try again/iu),
-    ]);
+    ]);}
   return firstVisible([
     page.getByRole("button", { name: /build|create|continue|connect|documentation|docs/iu }),
     page.getByRole("link", { name: /build|create|continue|connect|documentation|docs/iu }),
@@ -42,11 +42,11 @@ const stateTarget = (page: Page, state: CaptureState) => {
 
 const unavailableState = (state: CaptureState, side: "reference" | "candidate") => {
   if (["loading", "empty", "error"].includes(state))
-    return {
+    {return {
       disposition: "not-run" as const,
       ready: false as const,
       reason: `The default semantic adapter has no evaluator-owned ${state} fixture binding for the ${side} application.`,
-    };
+    };}
   return {
     disposition: "missing-functionality" as const,
     ready: false as const,
@@ -61,13 +61,13 @@ export const createSemanticCaptureAdapter = (
   async exercise(page, state, capture) {
     const target = await stateTarget(page, state);
     if (!target)
-      return [
+      {return [
         {
           detail: `The ${state} target disappeared before exercise.`,
           id: "fixture-execution",
           passed: false,
         },
-      ];
+      ];}
     if (state === "panel-resize") {
       const before = await target.boundingBox();
       if (before) {

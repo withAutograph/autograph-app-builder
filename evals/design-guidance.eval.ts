@@ -37,7 +37,7 @@ ${renewalReviewDesignPrompt}`);
               !file.content.includes("fetch("),
           ),
         manifest: (value) => {
-          if (typeof value !== "object" || value === null) return false;
+          if (typeof value !== "object" || value === null) {return false;}
           const manifest = value as {
             productionComponents?: unknown[];
             productionCompositions?: { name?: unknown }[];

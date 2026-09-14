@@ -27,7 +27,7 @@ export default defineDynamic({
             try {
               await sourceStatus.execute({}, ctx);
               const source = sourceWorkflowState.get();
-              if (source.phase !== "empty") await prepareWorkspace.execute({}, ctx);
+              if (source.phase !== "empty") {await prepareWorkspace.execute({}, ctx);}
             } catch {
               // The session sandbox remains the authority for a best-effort
               // read of newly generated files, even before its workflow state
@@ -37,7 +37,7 @@ export default defineDynamic({
           }
           const prefix = `apps/${appId}/`;
           if (!safeSourcePath(appId) || appId.includes("/"))
-            throw new Error("The requested application cannot be read safely.");
+            {throw new Error("The requested application cannot be read safely.");}
           const requestedPaths = paths.flatMap((path) =>
             safeSourcePath(path) ? [path.startsWith(prefix) ? path : `${prefix}${path}`] : [],
           );
@@ -73,7 +73,7 @@ export default defineDynamic({
           const omittedPaths: string[] = [];
           const readRequestedPath = async (index: number): Promise<void> => {
             const path = requestedPaths[index];
-            if (path === undefined) return;
+            if (path === undefined) {return;}
             const content = await sandbox.readTextFile({
               path: `repository/${path}`,
             });

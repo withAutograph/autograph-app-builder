@@ -39,13 +39,13 @@ export default defineTool({
   execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase === "empty")
-      return {
+      {return {
         phase: state.phase,
         sessionId: ctx.session.id,
         version: state.version,
-      };
+      };}
     if (state.artifacts.some(({ sessionId }) => sessionId !== ctx.session.id))
-      throw new Error("Prototype artifact state belongs to a different session.");
+      {throw new Error("Prototype artifact state belongs to a different session.");}
     let publication = {};
     if (state.phase === "publication_pending") {
       publication = {

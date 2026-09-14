@@ -27,10 +27,10 @@ export const runtimeReceiptSchema = z
   .strict()
   .superRefine((value, ctx) => {
     if (!runtimeRequirementIds.has(value.observation.requirementId))
-      ctx.addIssue({
+      {ctx.addIssue({
         code: "custom",
         message: "Runtime receipts cannot claim capture requirements",
-      });
+      });}
   });
 
 export const captureReceiptSchema = z
@@ -58,13 +58,13 @@ export const captureReceiptSchema = z
   .superRefine((value, ctx) => {
     const expected = `capture/${value.viewport.name}/${value.state}`;
     if (value.requirementId !== expected)
-      ctx.addIssue({ code: "custom", message: `Capture identity must be ${expected}` });
+      {ctx.addIssue({ code: "custom", message: `Capture identity must be ${expected}` });}
     const configured = desktopViewports.find((item) => item.name === value.viewport.name);
     if (configured?.width !== value.viewport.width || configured.height !== value.viewport.height)
-      ctx.addIssue({
+      {ctx.addIssue({
         code: "custom",
         message: "Capture viewport does not match the parity matrix",
-      });
+      });}
   });
 
 export interface EvidenceSideInput {

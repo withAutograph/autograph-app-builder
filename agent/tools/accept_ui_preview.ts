@@ -13,9 +13,9 @@ export default defineTool({
   execute({ expectedRevision }, ctx) {
     const current = appBuilderWorkflowState.get();
     if (current.phase !== "ui_previewed")
-      throw new Error("A current UI preview is required before finalization.");
+      {throw new Error("A current UI preview is required before finalization.");}
     if (current.uiPreview.revision !== expectedRevision)
-      throw new Error("The reviewed UI preview changed before finalization.");
+      {throw new Error("The reviewed UI preview changed before finalization.");}
     updateExactWorkflow({
       expected: current,
       operation: "UI preview finalization",

@@ -21,16 +21,16 @@ const branchWorkflow = () => {
     workflow.phase !== "branch_publication_failed" &&
     workflow.phase !== "published_branch_worktree"
   )
-    throw new Error(
+    {throw new Error(
       "An exact separately reviewed change set is required before branch-worktree publication.",
-    );
+    );}
   return workflow;
 };
 
 export const exactBranchWorktreePublicationProposal = (input: { expectedReviewDigest: string }) => {
   const workflow = branchWorkflow();
   if (workflow.reviewReceipt.digest !== input.expectedReviewDigest)
-    throw new Error("The reviewed change-set receipt changed before publication.");
+    {throw new Error("The reviewed change-set receipt changed before publication.");}
   return deriveBranchWorktreePublicationProposal({
     review: workflow.reviewReceipt,
     sourceReceipt: workflow.sourceReceipt,
@@ -43,24 +43,24 @@ export default defineTool({
   async execute(input) {
     const workflow = branchWorkflow();
     if (workflow.reviewReceipt.digest !== input.expectedReviewDigest)
-      throw new Error("The reviewed receipt changed before publication status.");
+      {throw new Error("The reviewed receipt changed before publication status.");}
     const proposal = await (() => {
-      if (workflow.phase === "reviewed") return exactBranchWorktreePublicationProposal(input);
+      if (workflow.phase === "reviewed") {return exactBranchWorktreePublicationProposal(input);}
       if (workflow.phase === "branch_publication_pending")
-        return workflow.branchPublicationProposal;
+        {return workflow.branchPublicationProposal;}
       return proposalFromBranchJournal(workflow.branchPublicationReceipt);
     })();
     const journal = await readBranchWorktreePublicationJournal(proposal);
     if (journal === undefined) {
       if (workflow.phase === "branch_publication_pending")
-        updateExactWorkflow({
+        {updateExactWorkflow({
           expected: workflow,
           operation: "pre-journal branch publication reconciliation",
           transition: (current) => {
             if (current.phase !== "branch_publication_pending")
-              throw new Error(
+              {throw new Error(
                 "The publication workflow changed before pre-journal reconciliation.",
-              );
+              );}
             const {
               branchPublicationProposal: _proposal,
               branchPublicationCallId: _callId,
@@ -70,15 +70,15 @@ export default defineTool({
             void _callId;
             return { ...reviewed, phase: "reviewed" };
           },
-        });
-      if (workflow.phase === "reviewed") return { ...proposal, workflowPhase: workflow.phase };
+        });}
+      if (workflow.phase === "reviewed") {return { ...proposal, workflowPhase: workflow.phase };}
       if (workflow.phase === "branch_publication_pending")
-        return {
+        {return {
           ...proposal,
           retryAllowed: true,
           transactionWindow: "before-journal" as const,
           workflowPhase: "reviewed" as const,
-        };
+        };}
       return {
         ...proposal,
         retryAllowed: false,
@@ -87,7 +87,7 @@ export default defineTool({
       };
     }
     if (!exactBranchWorktreeProposalMatch(proposalFromBranchJournal(journal), proposal))
-      throw new Error("The durable branch-worktree journal belongs to a different proposal.");
+      {throw new Error("The durable branch-worktree journal belongs to a different proposal.");}
     if (journal.status === "succeeded") {
       await verifyBranchWorktreePublication({
         receipt: journal,
@@ -99,7 +99,7 @@ export default defineTool({
         workflow.phase === "branch_publication_pending" ||
         workflow.phase === "branch_publication_failed"
       )
-        updateExactWorkflow({
+        {updateExactWorkflow({
           expected: workflow,
           operation: "branch publication success reconciliation",
           transition: (current) => {
@@ -108,14 +108,14 @@ export default defineTool({
               current.phase !== "branch_publication_pending" &&
               current.phase !== "branch_publication_failed"
             )
-              throw new Error("The publication workflow changed before reconciliation.");
+              {throw new Error("The publication workflow changed before reconciliation.");}
             return {
               ...current,
               branchPublicationReceipt: journal,
               phase: "published_branch_worktree",
             };
           },
-        });
+        });}
       return {
         ...journal,
         reused: true,
@@ -123,12 +123,12 @@ export default defineTool({
       };
     }
     if (journal.status === "pending" && workflow.phase === "reviewed")
-      updateExactWorkflow({
+      {updateExactWorkflow({
         expected: workflow,
         operation: "branch publication pending reconciliation",
         transition: (current) => {
           if (current.phase !== "reviewed")
-            throw new Error("The publication workflow changed before pending reconciliation.");
+            {throw new Error("The publication workflow changed before pending reconciliation.");}
           return {
             ...current,
             branchPublicationCallId: journal.publishedByCallId,
@@ -136,24 +136,24 @@ export default defineTool({
             phase: "branch_publication_pending",
           };
         },
-      });
+      });}
     if (
       journal.status === "failed" &&
       (workflow.phase === "reviewed" || workflow.phase === "branch_publication_pending")
     )
-      updateExactWorkflow({
+      {updateExactWorkflow({
         expected: workflow,
         operation: "branch publication failure reconciliation",
         transition: (current) => {
           if (current.phase !== "reviewed" && current.phase !== "branch_publication_pending")
-            throw new Error("The publication workflow changed before reconciliation.");
+            {throw new Error("The publication workflow changed before reconciliation.");}
           return {
             ...current,
             branchPublicationReceipt: journal,
             phase: "branch_publication_failed",
           };
         },
-      });
+      });}
     return {
       ...journal,
       recoveryAllowed: true,

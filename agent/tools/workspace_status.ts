@@ -160,7 +160,7 @@ export default defineTool({
     const sandbox = await ctx.getSandbox();
     if (durable.phase === "empty") {
       const observed = await inspectPreparedSandboxWorkspace(sandbox);
-      if (observed.state === "absent") return durable;
+      if (observed.state === "absent") {return durable;}
       throw new Error(
         "The sandbox workspace cannot be recovered without its original durable source receipt.",
       );
@@ -175,7 +175,7 @@ export default defineTool({
       !canAutoSelectDevelopmentSource() &&
       JSON.stringify(workflowWorkspace(durable)) !== JSON.stringify(observed)
     )
-      throw new Error("The durable workflow receipt does not match the sandbox workspace.");
+      {throw new Error("The durable workflow receipt does not match the sandbox workspace.");}
     return {
       ...statusReceipt(durable, false),
       workspace: observed,

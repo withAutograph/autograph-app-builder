@@ -67,9 +67,9 @@ export default defineTool({
     "Apply one exact separately reviewed change set to one approved existing local checkout. This approval-bound operation writes only approved paths, never commits or changes Git history, and never publishes remotely.",
   async execute({ publication: expected }, ctx) {
     if (process.env.APP_BUILDER_LOCAL_PUBLICATION !== "1")
-      throw new Error(
+      {throw new Error(
         "Local publication is disabled until APP_BUILDER_LOCAL_PUBLICATION=1 is explicitly configured.",
-      );
+      );}
     const workflow = appBuilderWorkflowState.get();
     if (
       workflow.phase !== "reviewed" &&
@@ -77,32 +77,32 @@ export default defineTool({
       workflow.phase !== "publication_failed" &&
       workflow.phase !== "published_local"
     )
-      throw new Error("An exact reviewed change set is required before local publication.");
+      {throw new Error("An exact reviewed change set is required before local publication.");}
     assertExactProposal(expected);
     const matches = (actual: LocalPublicationProposal) => exactProposalMatch(actual, expected);
     const durable = await readLocalPublicationJournal(expected.destinationPath);
     // A successful destination necessarily has approved dirty paths. Reuse must
     // therefore happen before normal clean-path proposal derivation.
     if (workflow.phase === "published_local")
-      assertExactDurablePublicationSuccess(workflow.publicationReceipt, durable);
+      {assertExactDurablePublicationSuccess(workflow.publicationReceipt, durable);}
     if (workflow.phase === "published_local" || durable?.status === "succeeded") {
       const stored: LocalPublicationSuccessReceipt =
         workflow.phase === "published_local"
           ? workflow.publicationReceipt
           : (durable as LocalPublicationSuccessReceipt);
       if (!matches(proposalFromJournal(stored)))
-        throw new Error(
+        {throw new Error(
           "The local-publication retry does not exactly match the durable success proposal.",
-        );
+        );}
       if (workflow.reviewReceipt.digest !== stored.reviewDigest)
-        throw new Error("The reviewed receipt changed after local publication.");
+        {throw new Error("The reviewed receipt changed after local publication.");}
       assertCanonicalLocalPublicationJournal(stored);
       if (
         workflow.phase === "publication_pending" &&
         (stored.publishedByCallId !== workflow.publicationCallId ||
           stored.sourceReceiptDigest !== workflow.sourceReceipt.digest)
       )
-        throw new Error("The durable success does not exactly bind the pending workflow.");
+        {throw new Error("The durable success does not exactly bind the pending workflow.");}
       await verifyPublishedChangeSet({
         receipt: stored,
         review: workflow.reviewReceipt,
@@ -118,7 +118,7 @@ export default defineTool({
               current.publicationCallId !== workflow.publicationCallId ||
               !exactProposalMatch(current.publicationProposal, expected)
             )
-              throw new Error("The publication workflow changed before success recovery.");
+              {throw new Error("The publication workflow changed before success recovery.");}
             return {
               ...current,
               phase: "published_local",
@@ -140,9 +140,9 @@ export default defineTool({
         stored.sourceReceiptDigest !== workflow.sourceReceipt.digest ||
         stored.reviewDigest !== workflow.reviewReceipt.digest
       )
-        throw new Error(
+        {throw new Error(
           "The durable failed publication does not exactly bind the pending workflow.",
-        );
+        );}
       updateExactWorkflow({
         expected: workflow,
         operation: "local-publication failure recovery",
@@ -152,7 +152,7 @@ export default defineTool({
             current.publicationCallId !== workflow.publicationCallId ||
             !exactProposalMatch(current.publicationProposal, expected)
           )
-            throw new Error("The publication workflow changed before failure recovery.");
+            {throw new Error("The publication workflow changed before failure recovery.");}
           return {
             ...current,
             phase: "publication_failed",
@@ -172,17 +172,17 @@ export default defineTool({
       durable?.status === "pending" ||
       durable?.status === "failed"
     )
-      throw new Error(
+      {throw new Error(
         "The prior local-publication attempt is recovery-required and will not be rerun automatically.",
-      );
+      );}
     const proposal = await exactLocalPublicationProposal({
       destinationPath: expected.destinationPath,
       expectedReviewDigest: expected.reviewDigest,
     });
     if (!matches(proposal))
-      throw new Error(
+      {throw new Error(
         "The destination preconditions or reviewed change set changed before approval.",
-      );
+      );}
     // The workflow aggregate owns publication authority. Persist pending before
     // reading the canonical overlay or touching the destination.
     updateExactWorkflow({
@@ -195,9 +195,9 @@ export default defineTool({
           current.reviewReceipt.digest !== workflow.reviewReceipt.digest ||
           !exactProposalMatch(proposal, expected)
         )
-          throw new Error(
+          {throw new Error(
             "The reviewed workflow changed before publication pending could be recorded.",
-          );
+          );}
         return {
           ...current,
           phase: "publication_pending",
@@ -210,9 +210,9 @@ export default defineTool({
       hasTestCapability("simulated-publication") &&
       workflow.appSpec.appId === "publication-pre-journal-interruption"
     )
-      throw new Error(
+      {throw new Error(
         "Fixture interruption after workflow pending and before durable publication journal.",
-      );
+      );}
     const relativeRoot = workflow.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
     const result = await publishReviewedChangeSet({
       proposal,
@@ -254,29 +254,29 @@ export default defineTool({
         terminalJournal?.status !== "succeeded" ||
         terminalJournal.digest !== result.receipt.digest
       )
-        throw new Error(
+        {throw new Error(
           "The successful publication journal was not durably read back; workflow remains pending.",
-        );
+        );}
     } else if (result.receipt.reason === "precondition-failed") {
       if (terminalJournal !== undefined)
-        throw new Error(
+        {throw new Error(
           "A pre-journal precondition failure unexpectedly created a durable journal; workflow remains pending.",
-        );
+        );}
     } else if (
       terminalJournal?.status !== "failed" ||
       terminalJournal.digest !== result.receipt.digest
     )
-      throw new Error(
+      {throw new Error(
         "The failed publication journal was not durably read back; workflow remains pending.",
-      );
+      );}
     if (
       hasTestCapability("simulated-publication") &&
       (workflow.appSpec.appId === "publication-success-recovery" ||
         workflow.appSpec.appId === "publication-failure-recovery")
     )
-      throw new Error(
+      {throw new Error(
         "Fixture interruption after durable terminal publication journal and before workflow terminal CAS.",
-      );
+      );}
     const expectedPending = {
       ...workflow,
       phase: "publication_pending" as const,
@@ -294,7 +294,7 @@ export default defineTool({
           current.sourceReceipt.digest !== workflow.sourceReceipt.digest ||
           current.reviewReceipt.digest !== workflow.reviewReceipt.digest
         )
-          throw new Error("The pending publication workflow changed before terminal recording.");
+          {throw new Error("The pending publication workflow changed before terminal recording.");}
         return result.ok
           ? {
               ...current,
@@ -309,9 +309,9 @@ export default defineTool({
       },
     });
     if (!result.ok)
-      throw new Error(
+      {throw new Error(
         `Local publication failed with ${result.receipt.reason}; ${result.receipt.recoveryRequired ? "recovery is required" : "no destination mutation was accepted"}.`,
-      );
+      );}
     return { ...result.receipt, reused: false };
   },
   inputSchema: z.strictObject({ publication }),

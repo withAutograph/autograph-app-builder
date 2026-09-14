@@ -31,11 +31,11 @@ export const referenceNavigationObservation = (input: {
       source === "navigation.spec.ts" ||
       source.endsWith("production-navigation/navigation.spec.ts")
     )
-      for (const spec of suite.specs ?? [])
-        results.set(spec.title, spec.tests?.flatMap((test) => test.results ?? []) ?? []);
-    for (const child of suite.suites ?? []) visit(child, source);
+      {for (const spec of suite.specs ?? [])
+        {results.set(spec.title, spec.tests?.flatMap((test) => test.results ?? []) ?? []);}}
+    for (const child of suite.suites ?? []) {visit(child, source);}
   };
-  for (const suite of input.report.suites ?? []) visit(suite);
+  for (const suite of input.report.suites ?? []) {visit(suite);}
   const completed = (title: string) =>
     results
       .get(title)

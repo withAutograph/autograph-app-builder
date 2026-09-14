@@ -13,7 +13,7 @@ export default defineTool({
   async execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "validated" && state.phase !== "reviewed")
-      throw new Error("Run the repository validation before reviewing its changes.");
+      {throw new Error("Run the repository validation before reviewing its changes.");}
     const changeSet = await exactNormalizedChangeSet({
       sandbox: await ctx.getSandbox(),
       state,
@@ -24,14 +24,14 @@ export default defineTool({
         state.reviewReceipt.reviewedByCallId,
       );
       if (expectedReceipt.digest === state.reviewReceipt.digest)
-        return {
+        {return {
           ...state.reviewReceipt,
           productAcceptance: productAcceptanceObligations(
             state.appSpec,
             currentProductBehaviorEvidence(state.appSpec.digest, state.applyReceipt.digest),
           ),
           reused: true,
-        };
+        };}
     }
     const receipt = createReviewedChangeSetReceipt(changeSet, ctx.callId);
     appBuilderWorkflowState.update(() => ({

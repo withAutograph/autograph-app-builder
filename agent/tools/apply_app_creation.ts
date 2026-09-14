@@ -34,7 +34,13 @@ export default defineTool({
       current.phase !== "apply_failed" &&
       current.phase !== "applied"
     )
-      throw new Error("Derive an exact canonical proposal before requesting target apply.");
+      {throw new Error("Derive an exact canonical proposal before requesting target apply.");}
+    assertImplementationArchitecture(
+      input.implementationFiles,
+      current.proposal.target.plan.source.schema.kind,
+    );
+    const sandbox = await ctx.getSandbox();
+    const fixture = hasTestCapability("simulated-target");
     if (current.phase === "applied") {
       return {
         appId: current.proposal.target.contract.appId,

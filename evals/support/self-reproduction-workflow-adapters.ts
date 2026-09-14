@@ -85,7 +85,7 @@ export const runTrustedBrowserWorkflows = async (input: {
   const observations: TrustedWorkflowRun["observations"] = { candidate: [], reference: [] };
   const receipts: unknown[] = [];
   for (const side of sides)
-    for (const workflow of testedWorkflows) {
+    {for (const workflow of testedWorkflows) {
       const receiptPath = `parity/workflows/${workflow.id}/${side}.json`;
       const adapter = input.adapters[side];
       let observation: Observation;
@@ -148,9 +148,9 @@ export const runTrustedBrowserWorkflows = async (input: {
           );
         } finally {
           for (const context of contexts)
-            await context.close().catch(() => {
+            {await context.close().catch(() => {
               // Cleanup does not change the recorded product outcome.
-            });
+            });}
         }
       }
       const receipt = runtimeReceiptSchema.parse({
@@ -169,6 +169,6 @@ export const runTrustedBrowserWorkflows = async (input: {
       );
       observations[side].push(observation);
       receipts.push(receipt);
-    }
+    }}
   return { observations, receipts };
 };

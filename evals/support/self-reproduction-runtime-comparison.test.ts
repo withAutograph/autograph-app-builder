@@ -63,9 +63,9 @@ describe("live sandbox comparison", () => {
       readTextFile: vi.fn(async ({ path }: { path: string }) => files.get(path) ?? null),
       run: vi.fn(async ({ command }: { command: string }) => {
         invocation += 1;
-        if (invocation === 2) throw new Error("second probe failed before writing");
+        if (invocation === 2) {throw new Error("second probe failed before writing");}
         const outputPath = command.split(" ").at(-1);
-        if (!outputPath) throw new Error("Comparison output path is missing.");
+        if (!outputPath) {throw new Error("Comparison output path is missing.");}
         files.set(outputPath, JSON.stringify({ probe: invocation }));
         artifacts.set(outputPath.replace("output.json", "capture.png"), new Uint8Array([1]));
         return { exitCode: 0, stderr: "", stdout: "" };

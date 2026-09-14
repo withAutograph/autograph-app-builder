@@ -15,9 +15,9 @@ export default defineTool({
       current.phase === "ui_previewed" ||
       current.phase === "ui_accepted"
     )
-      throw new Error(
+      {throw new Error(
         "Finalize the UI and accept a build-ready AppSpec before preparing target dependencies.",
-      );
+      );}
     const prepared = await prepareOrReuseDependencies({
       callId: ctx.callId,
       current,

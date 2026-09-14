@@ -22,9 +22,9 @@ export default defineTool({
       state.githubDraftProposal === undefined ||
       state.githubSource === undefined
     )
-      throw new Error(
+      {throw new Error(
         "Choose a repository and finish the implementation plan before opening a draft pull request.",
-      );
+      );}
     assertApprovalReceipt({
       actual: input.approvalReceipt,
       phase: "publication",

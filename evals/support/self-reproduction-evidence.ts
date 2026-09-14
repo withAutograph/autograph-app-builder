@@ -8,7 +8,7 @@ export const evidencePrefix = "SELF_REPRODUCTION_EVIDENCE ";
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sanitizeEvidence(value: unknown): unknown {
   if (typeof value === "string")
-    return value
+    {return value
       .replaceAll(/\bBearer\s+[^\s"',}]+/giu, "Bearer [REDACTED]")
       .replaceAll(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu, "[REDACTED JWT]")
       .replaceAll(
@@ -22,10 +22,10 @@ export function sanitizeEvidence(value: unknown): unknown {
       .replaceAll(
         /(?<prefix>[?&](?:token|key|signature|code|state|x-vercel-protection-bypass)=)[^&\s"']+/giu,
         "$<prefix>[REDACTED]",
-      );
-  if (Array.isArray(value)) return value.map(sanitizeEvidence);
+      );}
+  if (Array.isArray(value)) {return value.map(sanitizeEvidence);}
   if (value && typeof value === "object")
-    return Object.fromEntries(
+    {return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
         key,
         /^(?:authorization|cookie|set-cookie|.*(?:token|secret|password)|api[_-]?key|credentials)$/iu.test(
@@ -34,7 +34,7 @@ export function sanitizeEvidence(value: unknown): unknown {
           ? "[REDACTED]"
           : sanitizeEvidence(item),
       ]),
-    );
+    );}
   return value;
 }
 
@@ -45,17 +45,17 @@ export function digest(content: string) {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function evidenceCompletion(exitCode: number | null, records: Record<string, unknown>[]) {
-  if (exitCode !== 0) return { reason: "Native eval failed or was interrupted.", status: "failed" };
+  if (exitCode !== 0) {return { reason: "Native eval failed or was interrupted.", status: "failed" };}
   if (!records.some((record) => record.kind === "eval-completed"))
-    return {
+    {return {
       reason: "Native eval exited without its completion receipt; evidence is incomplete.",
       status: "failed",
-    };
+    };}
   if (!records.some((record) => record.kind === "event"))
-    return {
+    {return {
       reason: "Native eval produced no transcript/tool events; evidence is incomplete.",
       status: "failed",
-    };
+    };}
   return { status: "completed" };
 }
 
@@ -71,7 +71,7 @@ export function evidenceSink(
   function line(raw: string) {
     appendFileSync(logPath, `${sanitizeEvidence(raw)}\n`, { mode: 0o600 });
     const start = raw.indexOf(evidencePrefix);
-    if (start === -1) return;
+    if (start === -1) {return;}
     try {
       const record = sanitizeEvidence(
         JSON.parse(raw.slice(start + evidencePrefix.length)),
@@ -82,7 +82,7 @@ export function evidenceSink(
         typeof record !== "object" ||
         typeof record.kind !== "string"
       )
-        return;
+        {return;}
       records.push(record);
       appendFileSync(transcriptPath, `${JSON.stringify(record)}\n`, { mode: 0o600 });
     } catch {
@@ -91,7 +91,7 @@ export function evidenceSink(
   }
   return {
     end() {
-      if (pending) line(pending);
+      if (pending) {line(pending);}
       pending = "";
     },
     write(chunk: string) {
@@ -120,7 +120,7 @@ function changeSetStatusOutput(
         };
       }
     | undefined;
-  if (event?.type !== "action.result" || !event.data?.result) return undefined;
+  if (event?.type !== "action.result" || !event.data?.result) {return undefined;}
   if (["change-set-status", "change_set_status"].includes(event.data.result.toolName as string)) {
     const { output } = event.data.result;
     return output && typeof output === "object" && !Array.isArray(output)
@@ -139,9 +139,9 @@ export function candidateExportProvenanceFromEvidence(
   for (const record of records.toReversed()) {
     const output = changeSetStatusOutput(record);
     if (Array.isArray(output?.exportFiles))
-      return output?.status === "validation_failed"
+      {return output?.status === "validation_failed"
         ? "native unreviewed validation-failed export"
-        : "native reviewed change-set-status export";
+        : "native reviewed change-set-status export";}
   }
   return "native reviewed change-set-status export";
 }
@@ -152,11 +152,11 @@ export function candidateExportFromEvidence(
 ): CandidateExportFile[] | undefined {
   for (const record of records.toReversed()) {
     const files = changeSetStatusOutput(record)?.exportFiles;
-    if (!Array.isArray(files) || files.length === 0) continue;
+    if (!Array.isArray(files) || files.length === 0) {continue;}
     const validated: CandidateExportFile[] = [];
     const paths = new Set<string>();
     for (const file of files) {
-      if (!file || typeof file !== "object" || Array.isArray(file)) return undefined;
+      if (!file || typeof file !== "object" || Array.isArray(file)) {return undefined;}
       const { path, content } = file as { path?: unknown; content?: unknown };
       if (
         typeof path !== "string" ||
@@ -166,7 +166,7 @@ export function candidateExportFromEvidence(
         path.split("/").some((segment) => !segment || segment === "." || segment === "..") ||
         paths.has(path)
       )
-        return undefined;
+        {return undefined;}
       paths.add(path);
       validated.push({ content, path });
     }

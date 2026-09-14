@@ -106,15 +106,15 @@ export default defineTool({
       state.phase !== "reviewed" &&
       state.phase !== "validation_failed"
     )
-      throw new Error("Run the repository validation before reviewing its changes.");
+      {throw new Error("Run the repository validation before reviewing its changes.");}
     const sandbox = await ctx.getSandbox();
     if (state.phase === "validation_failed") {
       if (!input.includeContent)
-        return {
+        {return {
           reviewed: false,
           status: "validation_failed" as const,
           validationFailure: state.validationFailure,
-        };
+        };}
       return {
         ...(await exportAppliedTextFiles({ sandbox, state })),
         reviewed: false,

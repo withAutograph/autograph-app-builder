@@ -30,9 +30,9 @@ const freshWorkflow = () => {
     workflow.phase !== "fresh_bootstrap_failed" &&
     workflow.phase !== "published_fresh_bootstrap"
   )
-    throw new Error("An exact reviewed fresh-template change set is required.");
+    {throw new Error("An exact reviewed fresh-template change set is required.");}
   if (workflow.sourceReceipt.sourceKind !== "fresh-template")
-    throw new Error("Fresh bootstrap is unavailable for existing-repository sources.");
+    {throw new Error("Fresh bootstrap is unavailable for existing-repository sources.");}
   return workflow;
 };
 
@@ -50,7 +50,7 @@ export default defineTool({
     const capability = await currentFreshBootstrapCapability();
     const workflow = freshWorkflow();
     if (workflow.reviewReceipt.digest !== input.expectedReviewDigest)
-      throw new Error("The reviewed change set changed before fresh-bootstrap status.");
+      {throw new Error("The reviewed change set changed before fresh-bootstrap status.");}
     const relativeRoot = workflow.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
     const sandbox = await ctx.getSandbox();
     const readOverlayFile = async (path: string) =>
@@ -83,17 +83,17 @@ export default defineTool({
       JSON.stringify(proposal.repositoryIdentity) !== JSON.stringify(input.repositoryIdentity) ||
       proposal.destinationPrestate.kind !== input.expectedPrestate
     )
-      throw new Error("Fresh-bootstrap status inputs differ from the exact proposal.");
+      {throw new Error("Fresh-bootstrap status inputs differ from the exact proposal.");}
     const journal = await readFreshBootstrapJournal({ capability, proposal });
     assertFreshBootstrapJournalStatus(workflow.phase, journal?.status);
     if (journal === undefined)
-      return {
+      {return {
         ...proposal,
         retryAllowed: workflow.phase === "reviewed",
         workflowPhase: workflow.phase,
-      };
+      };}
     if (!exactFreshBootstrapProposalMatch(proposalFromFreshBootstrapJournal(journal), proposal))
-      throw new Error("The fresh-bootstrap journal belongs to another proposal.");
+      {throw new Error("The fresh-bootstrap journal belongs to another proposal.");}
     if (journal.status === "succeeded") {
       await verifyFreshBootstrap({
         capability,
@@ -104,7 +104,7 @@ export default defineTool({
         sourceWorkspace,
       });
       if (workflow.phase !== "published_fresh_bootstrap")
-        updateExactWorkflow({
+        {updateExactWorkflow({
           expected: workflow,
           operation: "fresh-bootstrap success reconciliation",
           transition: (current) => {
@@ -113,14 +113,14 @@ export default defineTool({
               current.phase !== "fresh_bootstrap_pending" &&
               current.phase !== "fresh_bootstrap_failed"
             )
-              throw new Error("The workflow cannot reconcile fresh-bootstrap success.");
+              {throw new Error("The workflow cannot reconcile fresh-bootstrap success.");}
             return {
               ...current,
               freshBootstrapReceipt: journal,
               phase: "published_fresh_bootstrap",
             };
           },
-        });
+        });}
       return {
         ...journal,
         reused: true,
@@ -128,26 +128,26 @@ export default defineTool({
       };
     }
     if (journal.status === "failed" && workflow.phase !== "fresh_bootstrap_failed")
-      updateExactWorkflow({
+      {updateExactWorkflow({
         expected: workflow,
         operation: "fresh-bootstrap failure reconciliation",
         transition: (current) => {
           if (current.phase !== "reviewed" && current.phase !== "fresh_bootstrap_pending")
-            throw new Error("The workflow cannot reconcile fresh-bootstrap failure.");
+            {throw new Error("The workflow cannot reconcile fresh-bootstrap failure.");}
           return {
             ...current,
             freshBootstrapReceipt: journal,
             phase: "fresh_bootstrap_failed",
           };
         },
-      });
+      });}
     if (journal.status === "pending" && workflow.phase === "reviewed")
-      updateExactWorkflow({
+      {updateExactWorkflow({
         expected: workflow,
         operation: "fresh-bootstrap pending reconciliation",
         transition: (current) => {
           if (current.phase !== "reviewed")
-            throw new Error("The workflow cannot reconcile fresh-bootstrap pending state.");
+            {throw new Error("The workflow cannot reconcile fresh-bootstrap pending state.");}
           return {
             ...current,
             freshBootstrapCallId: journal.publishedByCallId,
@@ -155,7 +155,7 @@ export default defineTool({
             phase: "fresh_bootstrap_pending",
           };
         },
-      });
+      });}
     return {
       ...journal,
       recoveryAllowed: true,

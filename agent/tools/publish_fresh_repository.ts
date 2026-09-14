@@ -27,7 +27,7 @@ export default defineTool({
     const capability = await currentFreshBootstrapCapability();
     const workflow = appBuilderWorkflowState.get();
     if (workflow.phase !== "reviewed" || workflow.sourceReceipt.sourceKind !== "fresh-template")
-      throw new Error("Initial fresh bootstrap requires the exact reviewed fresh-template phase.");
+      {throw new Error("Initial fresh bootstrap requires the exact reviewed fresh-template phase.");}
     assertExactFreshBootstrapProposal(expected);
     const relativeRoot = workflow.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
     const sandbox = await ctx.getSandbox();
@@ -50,7 +50,7 @@ export default defineTool({
       sourceWorkspace,
     });
     if (!exactFreshBootstrapProposalMatch(proposal, expected))
-      throw new Error("Fresh-bootstrap preconditions changed after approval.");
+      {throw new Error("Fresh-bootstrap preconditions changed after approval.");}
     let pendingWorkflow: ReturnType<typeof appBuilderWorkflowState.get> | undefined;
     const result = await publishFreshBootstrap({
       capability,
@@ -63,7 +63,7 @@ export default defineTool({
             operation: "fresh-bootstrap pending recording",
             transition: (current) => {
               if (current.phase !== "reviewed")
-                throw new Error("The reviewed workflow changed before fresh bootstrap.");
+                {throw new Error("The reviewed workflow changed before fresh bootstrap.");}
               return {
                 ...current,
                 freshBootstrapCallId: ctx.callId,
@@ -83,7 +83,7 @@ export default defineTool({
       sourceWorkspace,
     });
     if (pendingWorkflow === undefined)
-      throw new Error("Durable fresh-bootstrap intent was not bound to workflow state.");
+      {throw new Error("Durable fresh-bootstrap intent was not bound to workflow state.");}
     const exactPending = pendingWorkflow;
     updateExactWorkflow({
       expected: exactPending,
@@ -94,9 +94,9 @@ export default defineTool({
           current.freshBootstrapCallId !== ctx.callId ||
           !exactFreshBootstrapProposalMatch(current.freshBootstrapProposal, proposal)
         )
-          throw new Error(
+          {throw new Error(
             "The pending fresh-bootstrap workflow changed before terminal recording.",
-          );
+          );}
         return result.ok
           ? {
               ...current,

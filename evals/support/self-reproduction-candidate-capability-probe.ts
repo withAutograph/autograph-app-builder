@@ -146,13 +146,13 @@ export const runCandidateCapabilityProbe = async (input: {
       stdout: result.stdout,
     });
     if (result.exitCode !== 0)
-      return {
+      {return {
         applicationFunctionalCredit: false,
         comparison: null,
         reason: "Evaluator-only capability tooling installation failed.",
         setup,
         status: "blocked" as const,
-      };
+      };}
     const comparison = await runSandboxRuntimeComparison({
       abortSignal: input.abortSignal,
       ...sandboxCandidateCapabilityProbe(),

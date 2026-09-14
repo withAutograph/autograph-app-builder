@@ -199,7 +199,7 @@ export const observationSchema = z
   .strict()
   .superRefine((value, ctx) => {
     if (new Set(value.assertions.map((item) => item.id)).size !== value.assertions.length)
-      ctx.addIssue({ code: "custom", message: "Duplicate assertions" });
+      {ctx.addIssue({ code: "custom", message: "Duplicate assertions" });}
   });
 export const sideEvidenceSchema = z
   .object({
@@ -214,7 +214,7 @@ export const sideEvidenceSchema = z
       new Set(value.observations.map((item) => item.requirementId)).size !==
       value.observations.length
     )
-      ctx.addIssue({ code: "custom", message: "Duplicate requirement observations" });
+      {ctx.addIssue({ code: "custom", message: "Duplicate requirement observations" });}
   });
 export const parityEvidenceSchema = z
   .object({

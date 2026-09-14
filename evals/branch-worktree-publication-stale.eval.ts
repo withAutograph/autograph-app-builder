@@ -29,14 +29,14 @@ export default defineEval({
         encoding: "utf-8",
       }) !== head
     )
-      throw new Error("A stale approval changed the source HEAD.");
+      {throw new Error("A stale approval changed the source HEAD.");}
     if (
       execFileSync("git", ["branch", "--list", "app-builder/*"], {
         cwd: repository,
         encoding: "utf-8",
       }) !== ""
     )
-      throw new Error("A stale approval created a branch.");
+      {throw new Error("A stale approval created a branch.");}
     t.notCalledTool("recover_branch_worktree_publication");
     t.notCalledTool("bash");
     t.notCalledTool("write_file");

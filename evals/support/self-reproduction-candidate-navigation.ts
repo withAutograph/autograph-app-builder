@@ -17,7 +17,7 @@ export const exerciseCandidateNavigation = async (
   };
   try {
     const response = await page.goto(baseURL, { waitUntil: "domcontentloaded" });
-    if (!response?.ok()) throw new Error("Candidate entry unavailable");
+    if (!response?.ok()) {throw new Error("Candidate entry unavailable");}
   } catch {
     return {
       ...observation,
@@ -58,7 +58,7 @@ export const exerciseCandidateNavigation = async (
         ? "The known Docs control accepted keyboard activation but left URL and visible content unchanged. Browser history continuity cannot proceed."
         : "Docs changed the application, but its destination does not match the supported history fixture.";
       if (inert)
-        observation.assertions = [
+        {observation.assertions = [
           {
             artifacts: [],
             detail:
@@ -66,7 +66,7 @@ export const exerciseCandidateNavigation = async (
             id: "back-forward-preserves-draft",
             passed: false,
           },
-        ];
+        ];}
       await capture("documentation");
       return observation;
     }

@@ -122,8 +122,8 @@ export async function captureParity(input: {
 }): Promise<Record<(typeof sides)[number], Observation[]>> {
   const output: Record<(typeof sides)[number], Observation[]> = { candidate: [], reference: [] };
   for (const viewport of desktopViewports)
-    for (const state of captureStates)
-      for (const side of sides) {
+    {for (const state of captureStates)
+      {for (const side of sides) {
         const requirementId = `capture/${viewport.name}/${state}`;
         const adapter = input.adapters[side];
         if (!adapter) {
@@ -212,7 +212,7 @@ export async function captureParity(input: {
           { mode: 0o600 },
         );
         output[side].push(result);
-      }
+      }}}
   return output;
 }
 

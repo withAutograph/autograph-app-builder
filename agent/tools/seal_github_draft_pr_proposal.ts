@@ -13,14 +13,14 @@ export default defineTool({
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "reviewed" || state.githubSource === undefined)
-      throw new Error("No reviewed workflow with an immutable GitHub source is available.");
+      {throw new Error("No reviewed workflow with an immutable GitHub source is available.");}
     if (
       state.githubSource.digest !== input.expectedGitHubSourceDigest ||
       state.reviewReceipt.digest !== input.expectedReviewDigest
     )
-      throw new Error(
+      {throw new Error(
         "The proposal request is not bound to the exact GitHub source and review receipts.",
-      );
+      );}
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
     const proposal = await runtime.sealDraftPullRequestProposal({
       githubSource: state.githubSource,
@@ -33,15 +33,15 @@ export default defineTool({
       proposal.changeSetDigest !== state.reviewReceipt.changeSetDigest ||
       proposal.repositoryId !== state.githubSource.repository.repositoryId
     )
-      throw new Error(
+      {throw new Error(
         "The sealed draft pull-request proposal is not bound to the current reviewed workflow.",
-      );
+      );}
     updateExactWorkflow({
       expected: state,
       operation: "draft pull-request proposal sealing",
       transition: (latest) => {
         if (latest.phase !== "reviewed" || latest.githubSource === undefined)
-          throw new Error("The reviewed GitHub workflow changed before proposal sealing.");
+          {throw new Error("The reviewed GitHub workflow changed before proposal sealing.");}
         return {
           ...latest,
           githubDraftProposal: {

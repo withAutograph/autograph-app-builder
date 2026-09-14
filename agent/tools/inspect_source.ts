@@ -21,19 +21,19 @@ export default defineTool({
       sourceKind === "fresh-template" &&
       !(hasTestCapability("simulated-target") && path !== undefined)
     )
-      receipt = await acquireCanonicalArrustedTemplate({
+      {receipt = await acquireCanonicalArrustedTemplate({
         callId: ctx.callId,
         sandbox: () => ctx.getSandbox(),
         sessionId: ctx.session.id,
-      });
+      });}
     if (receipt === undefined && isHostedVercelRuntime(process.env)) {
       const selected = sourceWorkflowState.get();
-      if (selected.phase !== "empty") ({ receipt } = selected);
+      if (selected.phase !== "empty") {({ receipt } = selected);}
     }
     if (receipt === undefined && path !== undefined && !isHostedVercelRuntime(process.env))
-      receipt = await inspectSourceReceipt(sourceKind, path);
+      {receipt = await inspectSourceReceipt(sourceKind, path);}
     if (receipt === undefined)
-      throw new Error("The selected source is not available in this app build session.");
+      {throw new Error("The selected source is not available in this app build session.");}
     sourceWorkflowState.update(() => ({
       phase: "reviewed",
       receipt,
@@ -52,20 +52,20 @@ export default defineTool({
         value.path === undefined &&
         !canAutoSelectDevelopmentSource()
       )
-        context.addIssue({
+        {context.addIssue({
           code: "custom",
           message: "Existing repositories require an allowlisted local path.",
           path: ["path"],
-        });
+        });}
       if (
         value.sourceKind === "fresh-template" &&
         value.path !== undefined &&
         !hasTestCapability("simulated-target")
       )
-        context.addIssue({
+        {context.addIssue({
           code: "custom",
           message: "Fresh templates are acquired from the canonical Arrusted remote.",
           path: ["path"],
-        });
+        });}
     }),
 });

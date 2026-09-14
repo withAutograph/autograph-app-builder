@@ -27,7 +27,7 @@ async function release(
   const hosted = isHostedSandboxExecutionEnabled(environment);
   const preview = workingPreviewState.get();
   const pending = workingPreviewAttemptState.get();
-  if (!hosted && preview === null && pending === null) return;
+  if (!hosted && preview === null && pending === null) {return;}
   try {
     const sandbox = await ctx.getSandbox();
     if (
@@ -86,7 +86,7 @@ export default defineHook({
     },
     async "turn.started"(_event, ctx) {
       const environment = process.env;
-      if (!isHostedSandboxExecutionEnabled(environment)) return;
+      if (!isHostedSandboxExecutionEnabled(environment)) {return;}
       await acquireHostedSandboxExecutionLease({
         environment,
         sandbox: await ctx.getSandbox(),

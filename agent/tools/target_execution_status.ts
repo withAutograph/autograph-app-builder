@@ -19,9 +19,9 @@ export default defineTool({
       current.phase !== "validated" &&
       current.phase !== "reviewed"
     )
-      throw new Error(
+      {throw new Error(
         "Derive a canonical AppSpec-bound proposal before checking target command readiness.",
-      );
+      );}
     return inspectTargetExecutionReadiness({
       expectedProposalDigest,
       sandbox: await ctx.getSandbox(),
