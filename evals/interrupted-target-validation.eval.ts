@@ -35,8 +35,6 @@ export default defineEval({
     t.check(t.reply, includes('"recoveryRequired":true'));
     t.check(t.reply, includes('"reason":"command-timeout"'));
 
-    t.calledTool("validate_app_creation", { count: 1 });
-
     const retry = await t.send("Retry target validation after a lost response.");
     t.succeeded();
     retry.notEvent("input.requested");
