@@ -11,8 +11,8 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 vi.mock("./product-behavior-state", () => ({
-  currentProductBehaviorGeneration: () => 3,
   bindProductBehaviorPreview: mocks.bind,
+  currentProductBehaviorGeneration: () => 3,
 }));
 vi.mock("./workflow-state", () => ({
   appBuilderWorkflowState: {

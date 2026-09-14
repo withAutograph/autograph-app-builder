@@ -4,9 +4,9 @@ import verifyAppBehavior from "../../agent/tools/verify_app_behavior";
 
 const mocks = vi.hoisted(() => ({
   authority: vi.fn(),
+  eligible: vi.fn(() => true),
   evidence: vi.fn(),
   hasLive: vi.fn(() => true),
-  eligible: vi.fn(() => true),
   preview: {
     receipt: {
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
@@ -20,8 +20,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 vi.mock("./product-behavior", () => ({ executeProductReadback: mocks.readback }));
 vi.mock("./product-behavior-state", () => ({
-  recordProductBehaviorEvidence: mocks.evidence,
   hasCurrentProductBehaviorPreview: mocks.eligible,
+  recordProductBehaviorEvidence: mocks.evidence,
 }));
 vi.mock("./workflow-state", () => ({
   appBuilderWorkflowState: {
