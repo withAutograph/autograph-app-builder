@@ -83,6 +83,7 @@ const absorbCookies = (cookies: Map<string, string>, response: Response) => {
 
 const openApp = async (input: {
   launchUrl: string;
+  observe: (observation: string) => void;
   fetch: typeof fetch;
   signal?: AbortSignal;
 }): Promise<boolean> => {
@@ -90,17 +91,20 @@ const openApp = async (input: {
     redirect: "manual",
     signal: requestSignal(input.signal),
   });
+  input.observe(`Launch HTTP ${launch.status}`);
   const cookies = new Map<string, string>();
   absorbCookies(cookies, launch);
   const location = launch.headers.get("location");
   await launch.body?.cancel();
   if (launch.status !== 303 || cookies.size === 0 || !location) {
+    input.observe(`Launch HTTP ${launch.status}; expected redirect with access cookie`);
     return false;
   }
   const { origin } = new URL(input.launchUrl);
   let url = new URL(location, origin);
   for (let redirects = 0; redirects < 5; redirects += 1) {
     if (url.origin !== origin) {
+      input.observe("Application redirected outside the preview origin");
       return false;
     }
     // oxlint-disable-next-line eslint/no-await-in-loop -- Follow the application's actual navigation sequentially.
@@ -109,6 +113,7 @@ const openApp = async (input: {
       redirect: "manual",
       signal: requestSignal(input.signal),
     });
+    input.observe(`Application HTTP ${response.status}`);
     absorbCookies(cookies, response);
     const next = response.headers.get("location");
     const ready = response.ok && response.headers.get("content-type")?.includes("text/html");
@@ -122,26 +127,36 @@ const openApp = async (input: {
     }
     url = new URL(next, url);
   }
+  input.observe("Application exceeded the readiness redirect limit");
   return false;
 };
 
 const waitForPreview = async (input: {
   provider: Sandbox;
-  check: () => Promise<boolean>;
+  check: (observe: (observation: string) => void) => Promise<boolean>;
+  phase: "listener startup" | "application HTTP readiness";
   failurePath: string;
   signal?: AbortSignal;
   readinessTimeoutMs: number;
 }) => {
   const deadline = Date.now() + input.readinessTimeoutMs;
+  let observation = "No readiness observation completed";
+  const observe = (value: string) => {
+    observation = value;
+  };
   while (Date.now() < deadline) {
     input.signal?.throwIfAborted();
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Observe one startup; never rerun it on a polling timeout.
-      if (await input.check()) {
+      if (await input.check(observe)) {
         return;
       }
-    } catch {
+    } catch (error) {
       input.signal?.throwIfAborted();
+      // Report only known classes, never messages, URLs, headers, or custom names.
+      observe(
+        error instanceof TypeError ? "Readiness transport TypeError" : "Readiness check Error",
+      );
       // Connection refusal is normal during startup. Check its actual diagnostics below.
     }
     input.signal?.throwIfAborted();
@@ -158,7 +173,9 @@ const waitForPreview = async (input: {
     // oxlint-disable-next-line eslint/no-await-in-loop -- Wait for the current startup without launching a new one.
     await delay(500, undefined, { signal: input.signal });
   }
-  throw new Error("The application preview did not become ready before startup timed out.");
+  throw new Error(
+    `The application preview timed out during ${input.phase}. Last observation: ${observation}.`,
+  );
 };
 
 /** Runs only in the already-approved user sandbox. A ready receipt is HTTP evidence, not product verification. */
@@ -241,10 +258,15 @@ export const startWorkingPreview = async (input: {
     };
     await waitForPreview({
       ...waitOptions,
-      check: async () =>
-        (await provider.fs
-          .readFile(readyPath, { encoding: "utf-8", signal })
-          .catch(missingRuntimeFile)) === "ready",
+      check: async (observe) => {
+        const ready =
+          (await provider.fs
+            .readFile(readyPath, { encoding: "utf-8", signal })
+            .catch(missingRuntimeFile)) === "ready";
+        observe(ready ? "Listener ready" : "Listener readiness marker absent");
+        return ready;
+      },
+      phase: "listener startup",
     });
     signal?.throwIfAborted();
     await provider.update({ ports: [gatewayPort] }, { signal });
@@ -255,7 +277,9 @@ export const startWorkingPreview = async (input: {
     await provider.fs.writeFile(configurationPath, access.configuration, { signal });
     await waitForPreview({
       ...waitOptions,
-      check: () => openApp({ fetch: input.fetch ?? fetch, launchUrl: access.launchUrl, signal }),
+      check: (observe) =>
+        openApp({ fetch: input.fetch ?? fetch, launchUrl: access.launchUrl, observe, signal }),
+      phase: "application HTTP readiness",
     });
     signal?.throwIfAborted();
     return {

@@ -146,3 +146,52 @@ describe("shared working preview startup", () => {
     expect(provider.update).toHaveBeenLastCalledWith({ ports: [] }, expect.anything());
   });
 });
+
+describe("safe startup timeout diagnostics", () => {
+  it("identifies listener startup without exposing a gateway or starting HTTP checks", async () => {
+    const { options, provider, command } = setup();
+    provider.fs.readFile.mockRejectedValue(Object.assign(new Error("missing"), { code: "ENOENT" }));
+    const fetcher = vi.fn<typeof fetch>();
+    await expect(
+      startWorkingPreview({ ...options, fetch: fetcher, readinessTimeoutMs: 100 }),
+    ).rejects.toThrow(
+      "timed out during listener startup. Last observation: Listener readiness marker absent",
+    );
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(command.kill).toHaveBeenCalled();
+  });
+
+  it("reports application HTTP status without copying response bodies, cookies, or URLs", async () => {
+    const { options } = setup();
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(launchResponse())
+      .mockResolvedValue(
+        new Response("secret-response-body", {
+          headers: { location: "/private?token=secret-token", "set-cookie": "secret-cookie" },
+          status: 503,
+        }),
+      );
+    const failure = await startWorkingPreview({
+      ...options,
+      fetch: fetcher,
+      readinessTimeoutMs: 100,
+    }).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(Error);
+    const { message } = failure as Error;
+    expect(message).toContain("application HTTP readiness. Last observation: Application HTTP 503");
+    expect(message).not.toMatch(/secret|https:|token|cookie|preview\.example/u);
+  });
+
+  it("reports a safe transport class instead of an error message containing credentials", async () => {
+    const { options } = setup();
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new TypeError("https://preview.example/?token=secret Cookie: private"));
+    await expect(
+      startWorkingPreview({ ...options, fetch: fetcher, readinessTimeoutMs: 100 }),
+    ).rejects.toThrow(
+      "application HTTP readiness. Last observation: Readiness transport TypeError.",
+    );
+  });
+});
