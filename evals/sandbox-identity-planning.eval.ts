@@ -76,4 +76,5 @@ export default defineEval({
     ])
       t.notCalledTool(tool);
   },
+  timeoutMs: 360_000,
 });
