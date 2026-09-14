@@ -44,21 +44,23 @@ const outputSchema = z.object({
   sourceAssessment: assessmentSchema.optional(),
   status: z.enum(["failed", "passed", "validated", "reviewed", "unavailable"]).optional(),
 });
-const inputSchema = z.object({ implementationFiles: z.array(jsonSchema).optional() });
-const fragmentSchema = z.object({
-  args: jsonSchema.optional(),
-  input: jsonSchema.optional(),
-  name: z.string().optional(),
-  output: jsonSchema.optional(),
-  result: jsonSchema.optional(),
-  toolCallId: z.string().optional(),
-  toolName: z.string().optional(),
+const actionResultSchema = z.object({
+  data: z.object({
+    result: z.object({
+      callId: z.string(),
+      kind: z.literal("tool-result"),
+      output: jsonSchema,
+      toolName: z.string(),
+    }),
+    sequence: countSchema,
+    status: z.string(),
+    stepIndex: countSchema,
+    turnId: z.string(),
+  }),
+  type: z.literal("action.result"),
 });
-const wrapperSchema = z.object({ type: z.literal("json"), value: jsonSchema });
-type Fragment = z.infer<typeof fragmentSchema>;
 interface ToolObservation {
   callDigest?: string;
-  implementationWriteCount?: number;
   sourceAssessment?: z.infer<typeof assessmentSchema>;
   status: string;
   tool: string;
@@ -119,85 +121,53 @@ export const decodeOwnerGraph = (serialized: string): Json => {
   return resolveReference(0);
 };
 
-const readFragment = (fragment: Fragment): ToolObservation | undefined => {
-  const tool = fragment.toolName ?? fragment.name;
-  if (tool !== "accept_change_set" && tool !== "validate_app_creation") {
-    return undefined;
+export const decodeOwnerStreamChunk = (bytes: Buffer): Json => {
+  if (
+    bytes[0] !== 0 ||
+    bytes.readUInt32BE(1) !== bytes.length - 5 ||
+    bytes.subarray(5, 9).toString() !== "devl"
+  ) {
+    throw new Error("unsupported stream frame");
   }
-  const raw = fragment.output ?? fragment.result;
-  const wrapper = wrapperSchema.safeParse(raw);
-  const output = outputSchema.safeParse(wrapper.success ? wrapper.data.value : raw);
-  const input = inputSchema.safeParse(fragment.input ?? fragment.args);
-  return {
-    callDigest: fragment.toolCallId === undefined ? undefined : hash(fragment.toolCallId),
-    implementationWriteCount: input.success ? input.data.implementationFiles?.length : undefined,
-    sourceAssessment: output.success ? output.data.sourceAssessment : undefined,
-    status: output.success ? (output.data.status ?? "unassessed") : "unassessed",
-    tool,
-  };
+  const frame = z
+    .tuple([z.tuple([z.literal("Uint8Array"), z.literal(1)]), z.string()])
+    .parse(JSON.parse(bytes.subarray(9).toString()));
+  return jsonSchema.parse(JSON.parse(Buffer.from(frame[1], "base64").toString()));
 };
 
 export const observeSourceReviews = (originalRequest: string | undefined, records: Json[]) => {
   const rows: ToolObservation[] = [];
   const paired = new Map<string, ToolObservation>();
-  const seen = new Set<Json>();
-  const retain = (row: ToolObservation) => {
-    const key = row.callDigest === undefined ? undefined : `${row.tool}:${row.callDigest}`;
-    const previous = key === undefined ? undefined : paired.get(key);
-    if (previous === undefined) {
-      rows.push(row);
-      if (key !== undefined) {
-        paired.set(key, row);
-      }
-    } else {
-      previous.implementationWriteCount ??= row.implementationWriteCount;
-      previous.sourceAssessment ??= row.sourceAssessment;
-      if (previous.status === "unassessed") {
-        previous.status = row.status;
-      }
-    }
-  };
-  const visit = (value: Json, depth = 0): void => {
-    if (depth > 80 || seen.has(value)) {
-      return;
-    }
-    seen.add(value);
-    const text = z.string().max(4_000_000).regex(/^[[{]/u).safeParse(value);
-    if (text.success) {
-      try {
-        visit(jsonSchema.parse(JSON.parse(text.data)), depth + 1);
-      } catch {
-        // Private non-JSON text is ignored.
-      }
-      return;
-    }
-    const fragment = fragmentSchema.safeParse(value);
-    const row = fragment.success ? readFragment(fragment.data) : undefined;
-    if (row !== undefined) {
-      retain(row);
-    }
-    if (Array.isArray(value)) {
-      for (const child of value) {
-        visit(child, depth + 1);
-      }
-      return;
-    }
-    const dictionary = dictionarySchema.safeParse(value);
-    if (dictionary.success) {
-      for (const child of Object.values(dictionary.data)) {
-        visit(child, depth + 1);
-      }
-    }
-  };
   for (const record of records) {
-    visit(record);
+    // Only direct runtime stream envelopes qualify. Never traverse inputs/messages or parse embedded text.
+    const parsed = actionResultSchema.safeParse(record);
+    if (parsed.success) {
+      const { result } = parsed.data.data;
+
+      const key = `${parsed.data.data.turnId}:${result.toolName}:${result.callId}`;
+      if (
+        paired.has(key) ||
+        (result.toolName !== "accept_change_set" && result.toolName !== "validate_app_creation")
+      ) {
+        continue;
+      }
+      const output = outputSchema.safeParse(result.output);
+      const row: ToolObservation = {
+        callDigest: hash(result.callId),
+        sourceAssessment: output.success ? output.data.sourceAssessment : undefined,
+        status: output.success ? (output.data.status ?? "unassessed") : "unassessed",
+        tool: result.toolName,
+      };
+      paired.set(key, row);
+      rows.push(row);
+    }
   }
   return {
     kind: "owner-source-review-observation/v1",
     limits: [
       "Observation only; no internal tools invoked or runtime behavior credited.",
       "Request digest binds supplied original request; owner-event request equivalence is not inferred.",
-      "Rows pair only matching tool call IDs. Chronological adjacency or later evidence digests do not prove causal repair.",
+      "Only direct canonical action.result envelopes qualify; turn and call IDs bind results. Input/write counts are unassessed without a supported runtime request envelope.",
       "Missing results, writes or source assessments remain unassessed; no source, messages, URLs or tokens exported.",
       "Tagged graph classes are not revived; only plain retained data is supported.",
     ],
