@@ -108,6 +108,33 @@ records. Do not publish private continuation state, bearer URLs, credentials, or
 unsanitized transport data. A completed public session still needs independent
 assessment of the delivered app.
 
+## Observe the delivered preview
+
+After the public session returns a working preview, use its private continuation
+state to observe the existing URL before expiry:
+
+```sh
+mise run eval:self-reproduction-observe -- \
+  --state-file /absolute/external/evidence/public-baseline/state.json \
+  --output-dir /absolute/external/evidence/browser-observation
+```
+
+An optional `--brief-file /absolute/path/to/synthetic-brief.txt` fills a matching
+accessible app-brief/description field and records its actual value and whether
+Continue becomes enabled. It never clicks Create, connects providers, or
+publishes. `--timeout-ms` bounds each browser operation.
+
+This command captures the existing three desktop sizes, visible controls, and
+browser failures, then writes sanitized HTML, Markdown, JSON, and screenshots.
+It does not start a candidate runtime, install dependencies, modify generated
+files, send another Builder message, or provide implementation feedback. Keep
+`state.json` private: it contains the launch capability. Missing or expired
+previews and partial browser failures remain explicit in the report.
+
+These candidate-only observations do not earn paired visual, authenticated
+workflow, persistence, child-creation, or framework credit. They provide a
+repeatable first check of what the delivered app actually lets a user do.
+
 ## Comparison and supplementary assessment
 
 Comparison is observation after generation. It must use the unchanged result
