@@ -8,7 +8,9 @@ function previewHostname(value: string | undefined) {
     !value.endsWith(".vercel.app") ||
     !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.vercel\.app$/u.test(value)
   )
+  {
     return;
+  }
   return value;
 }
 
@@ -23,7 +25,9 @@ export function proxy(request: NextRequest) {
     process.env.APP_BUILDER_PREVIEW_PROVIDER_EMULATION !== "1" ||
     process.env.VERCEL_ENV !== "preview"
   )
+  {
     return NextResponse.next();
+  }
 
   const canonicalHostname = previewHostname(process.env.VERCEL_BRANCH_URL);
   const requestHostname = previewHostname(request.nextUrl.hostname);
@@ -32,7 +36,9 @@ export function proxy(request: NextRequest) {
     requestHostname === undefined ||
     requestHostname === canonicalHostname
   )
+  {
     return NextResponse.next();
+  }
 
   const destination = request.nextUrl.clone();
   destination.protocol = "https:";
