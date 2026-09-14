@@ -110,6 +110,13 @@ const observer = values["no-preview-observation"]
   ? undefined
   : createAutomaticPreviewObserver({ outputDir: output, repositoryRoot: repo });
 observer?.observe(state);
+const previewMarkdown = observer
+  ? "[Automatic preview observations](preview-observations/index.html) · [Runner ledger](preview-observations/ledger.json)"
+  : "Automatic preview observation disabled; browser comparison remains unassessed.";
+const previewHtml = observer
+  ? '<a href="preview-observations/index.html">Automatic preview observations</a> · <a href="preview-observations/ledger.json">Runner ledger</a>'
+  : "Automatic preview observation disabled; browser comparison remains unassessed.";
+observer?.observe(state);
 const save = () => {
   // Private continuation state preserves exact request IDs and pending replies; public reports are sanitized.
   writeFileSync(`${path}.tmp`, JSON.stringify(state, null, 2), { mode: 0o600 });
@@ -119,13 +126,13 @@ const save = () => {
   writeFileSync(resolve(output, "report.json"), json, { mode: 0o600 });
   writeFileSync(
     resolve(output, "report.md"),
-    `# Public App Builder observation\n\nOutcome: ${state.outcome}\n\n[Automatic preview observations](preview-observations/index.html) · [Runner ledger](preview-observations/ledger.json)\n\nComparison: unassessed. A completed session is not proof of successful self-reproduction.\n\n\`\`\`json\n${json}\n\`\`\`\n`,
+    `# Public App Builder observation\n\nOutcome: ${state.outcome}\n\n${previewMarkdown}\n\nComparison: unassessed. A completed session is not proof of successful self-reproduction.\n\n\`\`\`json\n${json}\n\`\`\`\n`,
     { mode: 0o600 },
   );
   const escaped = json.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
   writeFileSync(
     resolve(output, "index.html"),
-    `<!doctype html><meta charset="utf-8"><title>Public App Builder observation</title><h1>Public App Builder observation</h1><p><a href="preview-observations/index.html">Automatic preview observations</a> · <a href="preview-observations/ledger.json">Runner ledger</a></p><p>Comparison remains unassessed. Completed session does not establish successful self-reproduction.</p><pre>${escaped}</pre>`,
+    `<!doctype html><meta charset="utf-8"><title>Public App Builder observation</title><h1>Public App Builder observation</h1><p>${previewHtml}</p><p>Comparison remains unassessed. Completed session does not establish successful self-reproduction.</p><pre>${escaped}</pre>`,
     { mode: 0o600 },
   );
 };

@@ -15,6 +15,8 @@ App Builder owns cloning, installation, planning, implementation, recovery and v
 
 Drive that same public MCP conversation reproducibly (no internal stages):
   mise run eval:self-reproduction -- --endpoint http://127.0.0.1:64613/mcp --output-dir /tmp/self-reproduction
+Delivered previews are observed automatically while public polling continues.
+Use --no-preview-observation only for transport-only runs; browser coverage stays unassessed.
 Resume the same session and answer its outstanding product questions:
   mise run eval:self-reproduction -- --endpoint http://127.0.0.1:64613/mcp --output-dir /tmp/self-reproduction --resume --responses-file /tmp/responses.json
 
