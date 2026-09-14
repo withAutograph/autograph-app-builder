@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Observe an existing delivered self-reproduction working preview"
+set -eu
+exec .config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" --import tsx scripts/observe-self-reproduction-preview.mts "$@"
