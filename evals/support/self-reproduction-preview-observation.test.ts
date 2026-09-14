@@ -79,6 +79,24 @@ it("never passes all-blocked or mixed partial observations", () => {
     "unassessed",
   );
 });
+it("does not pass when all expected viewport rows are unassessed", () => {
+  const viewports = [
+    { height: 900, name: "desktop", width: 1440 },
+    { height: 1080, name: "desktop-wide", width: 1920 },
+    { height: 768, name: "desktop-window", width: 1024 },
+  ] as const;
+  const rows = summarizePreviewRows(
+    viewports.map((viewport) => ({
+      consoleErrors: [],
+      controls: [],
+      pageErrors: [],
+      status: "unassessed" as const,
+      viewport,
+    })),
+    false,
+  );
+  expect(rows[1]?.status).toBe("unassessed");
+});
 it("leaves an unfamiliar semantic field unassessed and retains partial successful viewports", () => {
   const viewport = { height: 900, name: "desktop", width: 1440 } as const;
   const rows = summarizePreviewRows(

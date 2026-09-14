@@ -142,18 +142,28 @@ if (finding.status === "ready") {
             await field.fill(syntheticBrief);
             const actualValue = await field.inputValue();
             const continuation = page.getByRole("button", { name: /continue/iu }).first();
-            const enabled = await continuation.isEnabled().catch(() => false);
             const valueMatched = actualValue === syntheticBrief;
-            brief = {
-              actualValue,
-              reason:
-                enabled && valueMatched
-                  ? "The supported brief field retained the exact synthetic value and Continue was enabled."
-                  : "The supported brief field did not retain the exact value or Continue remained disabled.",
-              status: enabled && valueMatched ? "passed" : "failed",
-            };
+            const continuationVisible = await continuation.isVisible().catch(() => false);
+            const enabled = continuationVisible
+              ? await continuation.isEnabled().catch(() => false)
+              : false;
+            brief = continuationVisible
+              ? {
+                  actualValue,
+                  reason:
+                    enabled && valueMatched
+                      ? "The supported brief field retained the exact synthetic value and Continue was enabled."
+                      : "The supported brief field did not retain the exact value or the visible Continue control remained disabled.",
+                  status: enabled && valueMatched ? "passed" : "failed",
+                }
+              : {
+                  actualValue,
+                  reason:
+                    "The brief field was supported, but no familiar visible Continue control was present.",
+                  status: "unassessed",
+                };
             controls.push({
-              name: `Synthetic brief value: ${actualValue.slice(0, 500)}; Continue enabled: ${enabled}`,
+              name: `Synthetic brief value: ${actualValue.slice(0, 500)}; Continue visible: ${continuationVisible}; enabled: ${enabled}`,
               role: "diagnostic",
             });
           } else {
@@ -221,8 +231,10 @@ if (finding.status === "ready") {
     };
     const browserRow = report.rows.find((row) => row.id === "browser-observation");
     if (browserRow) {
-      browserRow.status = "blocked";
-      browserRow.reason = `Observation stopped after an evaluator error: ${sanitizePreviewEvidence(String(error)).slice(0, 1000)}`;
+      if (browserRow.status !== "failed") {
+        browserRow.status = "blocked";
+      }
+      browserRow.reason += ` Observation stopped after an evaluator error: ${sanitizePreviewEvidence(String(error)).slice(0, 1000)}`;
     }
     await writePreviewObservationReport(output, report);
     console.error(`Preview observation blocked; report: ${path.join(output, "index.html")}`);

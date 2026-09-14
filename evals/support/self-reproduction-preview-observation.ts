@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { desktopViewports } from "./self-reproduction-parity";
+import { desktopViewports } from "./self-reproduction-parity";
 
 export type ObservationStatus = "passed" | "failed" | "blocked" | "unassessed";
 export interface PreviewReceipt {
@@ -174,7 +174,10 @@ export const summarizePreviewRows = (
     browserStatus = "failed";
   } else if (viewports.some((item) => item.status === "blocked")) {
     browserStatus = "blocked";
-  } else if (viewports.length === 3) {
+  } else if (
+    viewports.length === desktopViewports.length &&
+    viewports.every((item) => item.status === "passed")
+  ) {
     browserStatus = "passed";
   }
   const briefs = viewports.flatMap((item) => (item.brief ? [item.brief] : []));
@@ -183,7 +186,7 @@ export const summarizePreviewRows = (
     briefStatus = "failed";
   } else if (
     briefRequested &&
-    briefs.length === 3 &&
+    briefs.length === desktopViewports.length &&
     briefs.every((item) => item.status === "passed")
   ) {
     briefStatus = "passed";
