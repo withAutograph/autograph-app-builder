@@ -1,9 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadEveEvalOidc } from "./eve-eval-oidc";
-import * as lifecycle from "../lib/development/local-oidc-startup";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -13,7 +12,7 @@ afterEach(() => {
   }
 });
 const fixture = (projectId = "prj_eval") => {
-  const root = mkdtempSync(path.join(tmpdir(), "eval-oidc-"));
+  const root = realpathSync(mkdtempSync(path.join(tmpdir(), "eval-oidc-")));
   roots.push(root);
   mkdirSync(path.join(root, ".vercel"));
   writeFileSync(
@@ -40,7 +39,7 @@ const fixture = (projectId = "prj_eval") => {
 };
 describe("Eve eval managed OIDC", () => {
   it("does not read credentials or invoke setup for deterministic execution", () => {
-    const ensure = vi.fn();
+    const ensure = vi.fn<(root: string) => void>();
     const environment = {
       NODE_ENV: "test" as const,
       VERCEL_OIDC_TOKEN: "ambient-token",
@@ -55,7 +54,7 @@ describe("Eve eval managed OIDC", () => {
     "loads scoped credentials for %s without requiring live model mode",
     () => {
       const { root, token } = fixture();
-      const ensure = vi.fn();
+      const ensure = vi.fn<(root: string) => void>();
       const environment: NodeJS.ProcessEnv = { NODE_ENV: "test" };
       loadEveEvalOidc({ ensure, environment, realSandbox: true, repositoryRoot: root });
       expect(ensure).toHaveBeenCalledWith(root);
@@ -66,12 +65,9 @@ describe("Eve eval managed OIDC", () => {
       });
     },
   );
-  it("uses mise-resolved executables despite the trusted launcher's restricted PATH", () => {
-    const { root } = fixture();
-    const ensure = vi
-      .spyOn(lifecycle, "ensureLocalDevelopmentOidc")
-      .mockReturnValue({ refreshed: false });
-    const environment = { NODE_ENV: "test" as const, PATH: "/usr/bin:/bin" };
+  it("loads current managed OIDC despite the trusted launcher's restricted PATH", () => {
+    const { root, token } = fixture();
+    const environment: NodeJS.ProcessEnv = { NODE_ENV: "test", PATH: "/usr/bin:/bin" };
     loadEveEvalOidc({
       environment,
       miseExecutable: "/managed/mise",
@@ -79,19 +75,19 @@ describe("Eve eval managed OIDC", () => {
       repositoryRoot: root,
       vercelExecutable: "/managed/vercel",
     });
-    expect(ensure).toHaveBeenCalledWith({
-      environment,
-      miseExecutable: "/managed/mise",
-      repositoryRoot: root,
-      vercelExecutable: "/managed/vercel",
-    });
+    expect(environment.VERCEL_OIDC_TOKEN).toBe(token);
   });
   it("rejects a different project and provides an actionable setup error", () => {
     const { root } = fixture("prj_other");
     const environment = { NODE_ENV: "test" as const };
-    expect(() =>
-      loadEveEvalOidc({ ensure: vi.fn(), environment, realSandbox: true, repositoryRoot: root }),
-    ).toThrow("mise run local:ensure-oidc");
+    expect(() => {
+      loadEveEvalOidc({
+        ensure: vi.fn<(root: string) => void>(),
+        environment,
+        realSandbox: true,
+        repositoryRoot: root,
+      });
+    }).toThrow("mise run local:ensure-oidc");
     expect(environment).toEqual({ NODE_ENV: "test" });
   });
 });

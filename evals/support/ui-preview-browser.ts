@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { chromium } from "playwright";
 
 type ObserveHtml = (html: string) => Promise<UiPreviewBrowserObservation>;
@@ -9,45 +10,25 @@ export interface UiPreviewBrowserObservation {
   viewport: "1440x900";
 }
 
-const isRecordUiPreviewResult = (
-  event: unknown,
-): event is {
-  data: {
-    result: {
-      isError?: boolean;
-      kind: "tool-result";
-      output: { content: string };
-      toolName: string;
-    };
-  };
-  type: "action.result";
-} => {
-  if (typeof event !== "object" || event === null) {
-    return false;
-  }
-  const candidate = event as {
-    data?: { result?: { isError?: unknown; kind?: unknown; output?: unknown; toolName?: unknown } };
-    type?: unknown;
-  };
-  const output = candidate.data?.result?.output;
-  return (
-    candidate.type === "action.result" &&
-    candidate.data?.result?.kind === "tool-result" &&
-    candidate.data.result.toolName === "record_ui_preview" &&
-    candidate.data.result.isError !== true &&
-    typeof output === "object" &&
-    output !== null &&
-    "content" in output &&
-    typeof output.content === "string"
-  );
-};
+const previewResultSchema = z.object({
+  data: z.object({
+    result: z.object({
+      isError: z.literal(false).optional(),
+      kind: z.literal("tool-result"),
+      output: z.object({ content: z.string() }),
+      toolName: z.literal("record_ui_preview"),
+    }),
+  }),
+  type: z.literal("action.result"),
+});
 
 export const extractRecordedUiPreviewHtml = (events: readonly unknown[]): string => {
-  const result = events.findLast(isRecordUiPreviewResult);
-  if (result === undefined) {
+  const results = events.map((event) => previewResultSchema.safeParse(event));
+  const result = results.findLast((candidate) => candidate.success);
+  if (result?.success !== true) {
     throw new Error("The eval did not receive a completed record_ui_preview HTML result.");
   }
-  return result.data.result.output.content;
+  return result.data.data.result.output.content;
 };
 
 const observeRenewalReviewHtml: ObserveHtml = async (html) => {
@@ -69,7 +50,7 @@ const observeRenewalReviewHtml: ObserveHtml = async (html) => {
       throw new Error(`The rendered preview reported browser errors: ${failures.join("; ")}`);
     }
     const expected = page.getByText("Mercury Labs", { exact: true });
-    if (await expected.isVisible().catch(() => false)) {
+    if (await expected.isVisible()) {
       throw new Error("Mercury Labs was visible before the All renewals action.");
     }
     const control = page.getByRole("button", { exact: true, name: "All renewals" });
@@ -94,7 +75,7 @@ const observeRenewalReviewHtml: ObserveHtml = async (html) => {
   }
 };
 
-export const observeRecordedRenewalReview = (
+export const observeRecordedRenewalReview = async (
   events: readonly unknown[],
   observe: ObserveHtml = observeRenewalReviewHtml,
-): Promise<UiPreviewBrowserObservation> => observe(extractRecordedUiPreviewHtml(events));
+): Promise<UiPreviewBrowserObservation> => await observe(extractRecordedUiPreviewHtml(events));

@@ -18,7 +18,7 @@ import { targetExecutionBinding } from "@/lib/repository/target-planning";
 const commands = ["bash", "git", "mise", "bun", "node", "pnpm"] as const;
 
 export const inspectSandboxCommand = async (
-  sandbox: SandboxSession,
+  sandbox: Pick<SandboxSession, "run">,
   command: (typeof commands)[number],
 ) => {
   const location = await sandbox.run({
@@ -41,7 +41,7 @@ export default defineTool({
   async execute(_input, ctx) {
     const sandbox = await ctx.getSandbox();
     const tools = await Promise.all(
-      commands.map((command) => inspectSandboxCommand(sandbox, command)),
+      commands.map(async (command) => await inspectSandboxCommand(sandbox, command)),
     );
     const image = configuredToolchainImage();
     const backend = sandboxBackendPlan({

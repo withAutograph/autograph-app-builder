@@ -1,42 +1,47 @@
+import { z } from "zod";
 import { defineEval } from "eve/evals";
 import { includes } from "eve/evals/expect";
 
 const requiredCommands = ["bash", "git", "mise", "bun", "node"] as const;
 
+const toolchainResultSchema = z.object({
+  data: z.object({
+    result: z.object({
+      kind: z.literal("tool-result"),
+      output: z.object({
+        dependencyCacheDigest: z.string().optional(),
+        imageConfiguration: z.string().optional(),
+        toolchainReady: z.boolean().optional(),
+        tools: z.array(
+          z.object({ available: z.boolean(), command: z.string(), version: z.string().optional() }),
+        ),
+      }),
+      toolName: z.literal("inspect_sandbox_toolchain"),
+    }),
+  }),
+  type: z.literal("action.result"),
+});
 const toolchainDiagnostics = (events: readonly unknown[]) => {
-  for (const event of events.toReversed()) {
-    if (typeof event !== "object" || event === null) {
-      continue;
-    }
-    const candidate = event as {
-      data?: { result?: { kind?: unknown; output?: unknown; toolName?: unknown } };
-      type?: unknown;
-    };
-    if (
-      candidate.type !== "action.result" ||
-      candidate.data?.result?.kind !== "tool-result" ||
-      candidate.data.result.toolName !== "inspect_sandbox_toolchain"
-    ) {
-      continue;
-    }
-    const { output } = candidate.data.result;
-    if (typeof output !== "object" || output === null) {
-      return {};
-    }
-    const receipt = output as Record<string, unknown>;
-    const tools = Array.isArray(receipt.tools) ? receipt.tools : [];
-    return {
-      dependencyCacheDigest: receipt.dependencyCacheDigest,
-      imageConfiguration: receipt.imageConfiguration,
-      pnpm: tools.find(
-        (tool) =>
-          typeof tool === "object" && tool !== null && "command" in tool && tool.command === "pnpm",
-      ),
-      toolchainReady: receipt.toolchainReady,
-    };
+  const results = events.map((event) => toolchainResultSchema.safeParse(event));
+  const result = results.findLast((candidate) => candidate.success);
+  if (result?.success !== true) {
+    return {};
   }
-  return {};
+  const receipt = result.data.data.result.output;
+  return {
+    dependencyCacheDigest: receipt.dependencyCacheDigest,
+    imageConfiguration: receipt.imageConfiguration,
+    pnpm: receipt.tools.find((tool) => tool.command === "pnpm"),
+    toolchainReady: receipt.toolchainReady,
+  };
 };
+
+const requiredToolsAvailable = (receipt: z.infer<typeof toolchainResultSchema>) =>
+  requiredCommands.every((command) =>
+    receipt.data.result.output.tools.some(
+      (tool) => tool.command === command && tool.available && (tool.version?.length ?? 0) > 0,
+    ),
+  );
 
 export default defineEval({
   description:
@@ -51,34 +56,11 @@ export default defineEval({
     t.check(t.reply, includes('"backendBlockers":[]'));
     t.eventsSatisfy("current required tool commands executed successfully", (events) =>
       events.some((event) => {
-        if (event.type !== "action.result" || event.data.result.kind !== "tool-result") {
+        const result = toolchainResultSchema.safeParse(event);
+        if (!result.success) {
           return false;
         }
-        if (event.data.result.toolName !== "inspect_sandbox_toolchain") {
-          return false;
-        }
-        const { output } = event.data.result;
-        if (typeof output !== "object" || output === null || !("tools" in output)) {
-          return false;
-        }
-        const { tools } = output;
-        if (!Array.isArray(tools)) {
-          return false;
-        }
-        return requiredCommands.every((command) =>
-          tools.some(
-            (tool) =>
-              typeof tool === "object" &&
-              tool !== null &&
-              "command" in tool &&
-              tool.command === command &&
-              "available" in tool &&
-              tool.available === true &&
-              "version" in tool &&
-              typeof tool.version === "string" &&
-              tool.version.length > 0,
-          ),
-        );
+        return requiredToolsAvailable(result.data);
       }),
     );
     t.check(t.reply, includes("toolchainReady"));

@@ -9,7 +9,7 @@ describe("sandbox command inspection", () => {
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "/usr/local/bin/bun\n" })
       .mockResolvedValueOnce({ exitCode: 1, stderr: "cannot load runtime", stdout: "" });
 
-    await expect(inspectSandboxCommand({ run } as never, "bun")).resolves.toEqual({
+    await expect(inspectSandboxCommand({ run }, "bun")).resolves.toEqual({
       available: false,
       command: "bun",
     });
