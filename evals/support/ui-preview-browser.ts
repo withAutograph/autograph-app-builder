@@ -51,7 +51,10 @@ export const extractRecordedUiPreviewHtml = (events: readonly unknown[]): string
 };
 
 const observeRenewalReviewHtml: ObserveHtml = async (html) => {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    executablePath: process.env.APP_BUILDER_EVAL_BROWSER_EXECUTABLE,
+    headless: true,
+  });
   try {
     const page = await browser.newPage({ viewport: { height: 900, width: 1440 } });
     const failures: string[] = [];

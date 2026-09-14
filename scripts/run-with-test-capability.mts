@@ -49,6 +49,7 @@ const allowedEnvironment = [
   "VERCEL_OIDC_TOKEN",
   "VERCEL_TEAM_ID",
   "VERCEL_PROJECT_ID",
+  "APP_BUILDER_EVAL_BROWSER_EXECUTABLE",
 ] as const;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

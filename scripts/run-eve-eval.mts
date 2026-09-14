@@ -1,4 +1,5 @@
 import path from "node:path";
+import { chromium } from "playwright";
 
 import { reconcileDeadEveEvalPrewarmLocks } from "../lib/testing/eve-eval-lifecycle";
 import { createGateAEvalProfile } from "./gate-a-eval-profile.mjs";
@@ -141,6 +142,10 @@ if (realSandbox) {
 if (liveModel && (gateAEvalProfile.profile !== "sandbox" || args[0] !== "self-reproduction"))
   throw new Error("The live model is restricted to the self-reproduction sandbox evaluation.");
 loadEveEvalOidc({ miseExecutable, realSandbox, repositoryRoot, vercelExecutable });
+if (realSandbox) {
+  // Resolve the installed observer before Eve isolates HOME for the model runtime.
+  process.env.APP_BUILDER_EVAL_BROWSER_EXECUTABLE = chromium.executablePath();
+}
 
 let capabilities: string[];
 if (liveModel) {
