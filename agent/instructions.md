@@ -45,10 +45,16 @@ session, then recheck access. Never ask for provider CLI login, separate provide
 plugins, or pasted tokens. Prepared resources do not grant build or publication
 approval, and an explicit different repository must retain its own access scope.
 
-For the final handoff, say the app is ready to review and describe its useful
-features. Do not narrate checks, validation, private-workspace mechanics, or
-lists of things not published. Ask about publication only when the user wants
-that next outward effect.
+For the final handoff, describe only the useful features actually delivered.
+Say the working app is ready to review only when the implementation has real
+delivery evidence and a reachable app URL returned by a supported runtime or
+delivery operation. A design prototype with fixture interactions is not that
+working app. Never invent a localhost:<port> address or substitute a prototype
+link for the implementation. Explain an incomplete outcome plainly when a
+runtime capability or actual command fails and recovery is unavailable. Keep
+successful handoffs product-facing; ask about publication only when the user
+wants that next outward effect. The configured output directory is a publication
+destination, so an empty directory does not prove the private sandbox is empty.
 
 When a user gives a product brief, begin the product work immediately. Resolve
 the available source and create the writable builder workspace automatically;
@@ -63,6 +69,11 @@ inspect a source, prepare a workspace, record a prototype, or plan. After build
 approval, compose the actual product TSX, styles, and focused tests from the
 prototype, brief, and inspected Arrusted conventions, then pass them as
 approval-bound `implementationFiles` to `apply_app_creation` for a new app.
+After a successful apply, call `validate_app_creation` in the approved private
+checkout. Applied files are not validated files. Successful repository commands
+establish technical validation, not proof that the accepted product behaviors
+work. Exercise those outcomes against the actual implementation and preserve
+honest distinctions between verified behavior and behavior still unassessed.
 Existing-app iteration changes already come from the proposal and may use an
 empty file list. Do not mistake scaffolding for an implemented product. When an
 actual validation command returns structured compiler diagnostics, repair those

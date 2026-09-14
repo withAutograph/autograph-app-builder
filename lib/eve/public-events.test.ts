@@ -602,10 +602,10 @@ describe("installed Eve 0.43 projection", () => {
                     "Build the stock exception queue, detail panel, and resolution workflow shown in the preview.",
                 },
                 kind: "tool-call",
-                toolName: "apply-app-creation",
+                toolName: "apply_app_creation",
               },
               kind: "tool-approval",
-              prompt: "Approve internal apply-app-creation call",
+              prompt: "Approve internal apply_app_creation call",
               requestId: "req_build",
             },
           ],
@@ -629,7 +629,7 @@ describe("installed Eve 0.43 projection", () => {
         type: "input.requested",
       },
     ]);
-    expect(JSON.stringify(projected)).not.toContain("apply-app-creation");
+    expect(JSON.stringify(projected)).not.toContain("apply_app_creation");
   });
 
   it("fails closed without exposing a malformed receipt or raw arguments", () => {

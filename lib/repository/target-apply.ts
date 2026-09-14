@@ -329,6 +329,8 @@ const visit = (directory, relativeDirectory) => {
       (relativePath === "node_modules" || relativePath === ".scratch")
     )
       continue;
+    // Next build output is runtime state, never a reviewable source change.
+    if (entry.isDirectory() && entry.name === ".next") continue;
     const absolutePath = join(directory, entry.name);
     if (entry.isDirectory()) {
       visit(absolutePath, relativePath);
