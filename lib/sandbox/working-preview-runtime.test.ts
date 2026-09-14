@@ -1,11 +1,49 @@
+import { setTimeout as delay } from "node:timers/promises";
 import type { Sandbox } from "@vercel/sandbox";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { startWorkingPreview } from "./working-preview-runtime";
+import { startWorkingPreview, stopWorkingPreviewCommand } from "./working-preview-runtime";
+
+const ownership = vi.hoisted(() => ({ current: null as Record<string, unknown> | null }));
+vi.mock("./working-preview-ownership", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    previewOwnershipOperation: (_provider: unknown, operation: Record<string, unknown>) => {
+      if (operation.kind === "read") {
+        return Promise.resolve(ownership.current);
+      }
+      if (operation.kind === "claim") {
+        if (ownership.current !== null) {
+          return Promise.resolve({ claimed: false });
+        }
+        ownership.current = operation.attempt as Record<string, unknown>;
+        return Promise.resolve({ claimed: true });
+      }
+      if (ownership.current?.attemptId !== operation.attemptId) {
+        return Promise.reject(new Error("ownership changed"));
+      }
+      if (operation.kind === "release") {
+        ownership.current = null;
+      }
+      if (operation.kind === "update") {
+        ownership.current = { ...ownership.current, ...(operation.patch as object) };
+      }
+      return Promise.resolve(ownership.current);
+    },
+  };
+});
+beforeEach(() => {
+  ownership.current = null;
+});
 
 const setup = () => {
   const events: string[] = [];
-  const command = { cmdId: "command-1", kill: vi.fn(async () => {}) };
+  const command = {
+    cmdId: "command-1",
+    kill: vi.fn(async () => {}),
+    wait: vi.fn(() => Promise.resolve()),
+  };
   const provider = {
     currentSession: () => ({ sessionId: "provider-1" }),
     domain: () => "https://preview.example",
@@ -13,7 +51,7 @@ const setup = () => {
     extendTimeout: vi.fn(),
     fs: {
       mkdir: vi.fn(),
-      readFile: vi.fn((file: string) => {
+      readFile: vi.fn((file: string, _options?: { signal?: AbortSignal }) => {
         if (file.endsWith("listener-ready")) {
           events.push("bound");
           return Promise.resolve("ready");
@@ -163,15 +201,16 @@ describe("safe startup timeout diagnostics", () => {
 
   it("reports application HTTP status without copying response bodies, cookies, or URLs", async () => {
     const { options } = setup();
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(launchResponse())
-      .mockResolvedValue(
-        new Response("secret-response-body", {
-          headers: { location: "/private?token=secret-token", "set-cookie": "secret-cookie" },
-          status: 503,
-        }),
-      );
+    const fetcher = vi.fn<typeof fetch>((url) =>
+      Promise.resolve(
+        String(url).includes("/__autograph_preview_launch")
+          ? launchResponse()
+          : new Response("secret-response-body", {
+              headers: { location: "/private?token=secret-token", "set-cookie": "secret-cookie" },
+              status: 503,
+            }),
+      ),
+    );
     const failure = await startWorkingPreview({
       ...options,
       fetch: fetcher,
@@ -194,4 +233,131 @@ describe("safe startup timeout diagnostics", () => {
       "application HTTP readiness. Last observation: Readiness transport TypeError.",
     );
   });
+});
+
+describe("preview command termination", () => {
+  it("does not finish cleanup on signal acknowledgement before command termination", async () => {
+    const exited = Promise.withResolvers<null>();
+    const command = { kill: vi.fn(() => Promise.resolve()), wait: vi.fn(() => exited.promise) };
+    let settled = false;
+    const cleanup = stopWorkingPreviewCommand(
+      command as unknown as Parameters<typeof stopWorkingPreviewCommand>[0],
+    ).then(() => {
+      settled = true;
+    });
+    await vi.waitFor(() => expect(command.wait).toHaveBeenCalledOnce());
+    expect(settled).toBe(false);
+    exited.resolve(null);
+    await cleanup;
+    expect(settled).toBe(true);
+    expect(command.kill).toHaveBeenCalledWith("SIGTERM", { abortSignal: expect.any(AbortSignal) });
+    expect(command.wait).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
+  });
+
+  it("reports unconfirmed termination and uses an independent live cleanup signal", async () => {
+    const { command, options, provider } = setup();
+    const cancellation = new AbortController();
+    command.wait.mockRejectedValue(new Error("termination unconfirmed"));
+    // Abort after the detached command has been obtained so cleanup owns it.
+    provider.runCommand.mockImplementation(() => {
+      cancellation.abort();
+      return Promise.resolve(command);
+    });
+    await expect(startWorkingPreview({ ...options, signal: cancellation.signal })).rejects.toThrow(
+      "cleanup was incomplete",
+    );
+    expect(command.wait).toHaveBeenCalledOnce();
+  });
+});
+
+describe("startup ownership recovery", () => {
+  it("does not launch or mutate ingress while a previous startup remains pending", async () => {
+    const { options, provider } = setup();
+    const response = Promise.withResolvers<Response>();
+    const fetcher = vi.fn<typeof fetch>(() => response.promise);
+    const first = (async () => {
+      try {
+        return await startWorkingPreview({ ...options, fetch: fetcher, readinessTimeoutMs: 100 });
+      } catch (error) {
+        return error;
+      }
+    })();
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
+    const mutations = provider.update.mock.calls.length;
+    await expect(startWorkingPreview(options)).rejects.toThrow("still pending");
+    expect(provider.update.mock.calls).toHaveLength(mutations);
+    expect(provider.runCommand).toHaveBeenCalledOnce();
+    response.resolve(new Response(null, { status: 503 }));
+    expect(await first).toBeInstanceOf(Error);
+    expect(ownership.current).toBeNull();
+  });
+
+  it("retains ownership when dispatch did not return a command handle", async () => {
+    const { options, provider } = setup();
+    provider.runCommand.mockRejectedValue(new Error("dispatch response lost"));
+    await expect(startWorkingPreview(options)).rejects.toThrow("cleanup was incomplete");
+    expect(ownership.current).toMatchObject({ status: "cleanup-required" });
+    await expect(startWorkingPreview(options)).rejects.toThrow("still pending");
+    expect(provider.runCommand).toHaveBeenCalledOnce();
+  });
+
+  it("cannot close replacement ingress when an old startup fails late", async () => {
+    const { options, provider, command } = setup();
+    const fetcher = vi.fn<typeof fetch>(() => {
+      ownership.current = {
+        attemptId: "replacement",
+        providerSessionId: "provider-1",
+        status: "starting",
+      };
+      return Promise.resolve(new Response(null, { status: 503 }));
+    });
+    await expect(
+      startWorkingPreview({ ...options, fetch: fetcher, readinessTimeoutMs: 100 }),
+    ).rejects.toThrow();
+    expect(provider.update).toHaveBeenLastCalledWith({ ports: [3001] }, expect.anything());
+    expect(ownership.current?.attemptId).toBe("replacement");
+    expect(command.wait).toHaveBeenCalledOnce();
+  });
+});
+
+it("bounds a provider readiness read by the stage deadline", async () => {
+  const { options, provider, command } = setup();
+  provider.fs.readFile.mockImplementation((file, readOptions) =>
+    file.endsWith("listener-ready")
+      ? delay(60_000, "ready", { signal: readOptions?.signal })
+      : Promise.reject(Object.assign(new Error("missing"), { code: "ENOENT" })),
+  );
+  const started = Date.now();
+  await expect(startWorkingPreview({ ...options, readinessTimeoutMs: 100 })).rejects.toThrow(
+    "timed out during listener startup",
+  );
+  expect(Date.now() - started).toBeLessThan(1000);
+  expect(command.wait).toHaveBeenCalledOnce();
+}, 8000);
+
+it("sanitizes startup error files and keeps the safe cause visible if cleanup fails", async () => {
+  const { options, provider, command } = setup();
+  provider.fs.readFile.mockImplementation((file) =>
+    Promise.resolve(
+      file.endsWith("listener-ready")
+        ? "ready"
+        : JSON.stringify({
+            stderr:
+              "Error: API_KEY=private-value request https://preview.example/?token=private-token failed",
+          }),
+    ),
+  );
+  command.wait.mockRejectedValue(new Error("termination not confirmed"));
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 503 }));
+  let observed: unknown;
+  try {
+    await startWorkingPreview({ ...options, fetch: fetcher, readinessTimeoutMs: 100 });
+  } catch (error) {
+    observed = error;
+  }
+  expect(observed).toBeInstanceOf(AggregateError);
+  const { message } = observed as Error;
+  expect(message).toContain("The application server failed to start");
+  expect(message).toContain("Error:");
+  expect(message).not.toMatch(/private-value|private-token|https:/u);
 });

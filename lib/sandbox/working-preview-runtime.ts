@@ -3,6 +3,12 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
 import type { PublicWorkingPreview } from "../mcp/contracts";
+import { previewOwnershipOperation, previewOwnershipSource } from "./working-preview-ownership";
+import type { PreviewAttempt } from "./working-preview-ownership";
+import {
+  workingPreviewDiagnosticCollectorSource,
+  workingPreviewDiagnosticExcerpt,
+} from "./working-preview-diagnostics";
 import { createWorkingPreviewAccess } from "./working-preview-access";
 
 export interface WorkingPreviewCommand {
@@ -34,10 +40,21 @@ export const workingPreviewSupervisorSource = (input: {
   failurePath: string;
   readyPath: string;
   configurationPath: string;
-}): string => `${input.gatewaySource}
+  ownership?: PreviewAttempt;
+  diagnosticsPath?: string;
+}): string => `${
+  input.ownership === undefined
+    ? ""
+    : `${previewOwnershipSource}
+const supervisorOwnership = ${JSON.stringify(input.ownership)};
+await ownershipOperation({kind:"assert", ...supervisorOwnership});
+await ownershipOperation({kind:"update", attemptId:supervisorOwnership.attemptId, providerSessionId:supervisorOwnership.providerSessionId, patch:{supervisorPid:process.pid, supervisorPath:process.argv[1]}});
+`
+}${input.gatewaySource}
 import { spawn } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
 const launch = ${JSON.stringify({ ...input, gatewaySource: undefined })};
+${workingPreviewDiagnosticCollectorSource}
 let stderr = "";
 let closing = false;
 let child;
@@ -51,11 +68,15 @@ const close = () => {
 };
 const fail = message => { writeFileSync(launch.failurePath, JSON.stringify({ message, stderr })); close(); };
 const activation = setInterval(() => {
+  if (launch.ownership !== undefined) {
+    const owner = ownershipRead();
+    if (owner?.attemptId !== launch.ownership.attemptId || owner.providerSessionId !== launch.ownership.providerSessionId || owner.expiresAt <= Date.now() || owner.status !== "starting") { close(); return; }
+  }
   if (!existsSync(launch.configurationPath)) return;
   clearInterval(activation);
   child = spawn(launch.command.executable, launch.command.args, { cwd: launch.cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] });
-  child.stdout.on("data", chunk => process.stdout.write(chunk));
-  child.stderr.on("data", chunk => { stderr = (stderr + chunk.toString()).slice(-8192); process.stderr.write(chunk); });
+  child.stdout.on("data", chunk => { if (launch.diagnosticsPath) appendPreviewDiagnostic("stdout", chunk); process.stdout.write(chunk); });
+  child.stderr.on("data", chunk => { if (launch.diagnosticsPath) appendPreviewDiagnostic("stderr", chunk); stderr = (stderr + chunk.toString()).slice(-8192); process.stderr.write(chunk); });
   child.on("error", error => fail(error.message));
   child.on("exit", (code, signal) => { if (!closing) fail("Application server exited: " + (signal ?? code)); });
 }, 50);
@@ -133,26 +154,34 @@ const openApp = async (input: {
 
 const waitForPreview = async (input: {
   provider: Sandbox;
-  check: (observe: (observation: string) => void) => Promise<boolean>;
+  check: (observe: (observation: string) => void, signal: AbortSignal) => Promise<boolean>;
   phase: "listener startup" | "application HTTP readiness";
   failurePath: string;
   signal?: AbortSignal;
   readinessTimeoutMs: number;
 }) => {
   const deadline = Date.now() + input.readinessTimeoutMs;
+  const stageSignal = AbortSignal.any([
+    AbortSignal.timeout(input.readinessTimeoutMs),
+    ...(input.signal === undefined ? [] : [input.signal]),
+  ]);
   let observation = "No readiness observation completed";
   const observe = (value: string) => {
     observation = value;
   };
-  while (Date.now() < deadline) {
+  while (!stageSignal.aborted && Date.now() < deadline) {
     input.signal?.throwIfAborted();
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Observe one startup; never rerun it on a polling timeout.
-      if (await input.check(observe)) {
+      if (await input.check(observe, stageSignal)) {
+        stageSignal.throwIfAborted();
         return;
       }
     } catch (error) {
       input.signal?.throwIfAborted();
+      if (stageSignal.aborted) {
+        break;
+      }
       // Report only known classes, never messages, URLs, headers, or custom names.
       observe(
         error instanceof TypeError ? "Readiness transport TypeError" : "Readiness check Error",
@@ -164,18 +193,224 @@ const waitForPreview = async (input: {
     const failure = await input.provider.fs
       .readFile(input.failurePath, {
         encoding: "utf-8",
-        signal: input.signal,
+        signal: stageSignal,
       })
-      .catch(missingRuntimeFile);
+      .catch((error: unknown) => {
+        input.signal?.throwIfAborted();
+        if (stageSignal.aborted) {
+          return null;
+        }
+        return missingRuntimeFile(error);
+      });
     if (failure) {
-      throw new Error(`The application server failed to start: ${failure}`);
+      throw new Error(
+        `The application server failed to start. ${workingPreviewDiagnosticExcerpt(failure) || "No safe process diagnostic was available."}`,
+      );
     }
     // oxlint-disable-next-line eslint/no-await-in-loop -- Wait for the current startup without launching a new one.
-    await delay(500, undefined, { signal: input.signal });
+    await delay(500, undefined, { signal: stageSignal }).catch((error: unknown) => {
+      if (!stageSignal.aborted) {
+        throw error;
+      }
+    });
+    input.signal?.throwIfAborted();
   }
   throw new Error(
     `The application preview timed out during ${input.phase}. Last observation: ${observation}.`,
   );
+};
+
+/** A successful signal request is not evidence that its listener has terminated. */
+export const stopWorkingPreviewCommand = async (command: Command): Promise<void> => {
+  const signal = AbortSignal.timeout(10_000);
+  await command.kill("SIGTERM", { abortSignal: signal });
+  await command.wait({ signal });
+};
+
+const attemptIdentity = (attempt: PreviewAttempt) => ({
+  attemptId: attempt.attemptId,
+  providerSessionId: attempt.providerSessionId,
+});
+
+const reconcilePreviewAttempt = async (
+  provider: Sandbox,
+  attempt: PreviewAttempt,
+): Promise<void> => {
+  const signal = AbortSignal.timeout(15_000);
+  if (
+    attempt.providerSessionId === provider.currentSession().sessionId &&
+    (attempt.status === "starting" || attempt.commandId === undefined)
+  ) {
+    if (attempt.expiresAt > Date.now()) {
+      throw new Error(
+        "The previous preview startup is still pending. Wait for it to finish before starting another preview.",
+      );
+    }
+    if (attempt.commandId !== undefined) {
+      const prior = await provider.getCommand(attempt.commandId, { signal });
+      if (prior.exitCode === null) {
+        throw new Error(
+          "The previous preview supervisor is still running; its startup must settle before retrying.",
+        );
+      }
+    }
+    if (attempt.supervisorPid !== undefined) {
+      const check = await provider.runCommand({
+        args: [
+          "-e",
+          `try { process.kill(${attempt.supervisorPid}, 0); process.exitCode=1; } catch (error) { if (error.code !== "ESRCH") throw error; }`,
+        ],
+        cmd: "node",
+        signal,
+      });
+      if (check.exitCode !== 0) {
+        throw new Error(
+          "The previous preview supervisor is still running; its startup must settle before retrying.",
+        );
+      }
+    }
+  }
+  try {
+    if (
+      attempt.providerSessionId === provider.currentSession().sessionId &&
+      attempt.commandId !== undefined
+    ) {
+      const command = await provider.getCommand(attempt.commandId, { signal });
+      await (command.exitCode === null
+        ? stopWorkingPreviewCommand(command)
+        : command.wait({ signal }));
+    }
+    await previewOwnershipOperation(
+      provider,
+      { kind: "release", ...attemptIdentity(attempt) },
+      signal,
+    );
+  } catch (error) {
+    await previewOwnershipOperation(
+      provider,
+      { kind: "update", ...attemptIdentity(attempt), patch: { status: "cleanup-required" } },
+      AbortSignal.timeout(5000),
+    );
+    throw error;
+  }
+};
+
+const claimPreviewAttempt = async (
+  provider: Sandbox,
+  attempt: PreviewAttempt,
+  signal?: AbortSignal,
+) => {
+  const current = await previewOwnershipOperation<PreviewAttempt | null>(
+    provider,
+    { kind: "read" },
+    signal,
+  );
+  if (current !== null) {
+    await reconcilePreviewAttempt(provider, current);
+  }
+  const result = await previewOwnershipOperation<{ claimed: boolean }>(
+    provider,
+    { attempt, kind: "claim" },
+    signal,
+  );
+  if (!result.claimed) {
+    throw new Error("Another preview startup owns this sandbox. Wait for that attempt to settle.");
+  }
+};
+
+const cleanupPreviewAttempt = async (input: {
+  provider: Sandbox;
+  attempt: PreviewAttempt;
+  command?: Command;
+  diagnosticsPath?: string;
+  expiresAt: number;
+  launchDispatched: boolean;
+  error: unknown;
+  onAttempt?: (attempt: PreviewAttempt | null) => void;
+}): Promise<never> => {
+  const {
+    provider,
+    attempt,
+    command,
+    diagnosticsPath,
+    expiresAt,
+    launchDispatched,
+    error,
+    onAttempt,
+  } = input;
+  // Keep ownership until both ingress closure and process termination settle.
+  // An expired/stale controller must never alter a replacement's ingress.
+  let diagnostic = "";
+  if (diagnosticsPath !== undefined) {
+    try {
+      diagnostic = workingPreviewDiagnosticExcerpt(
+        await provider.fs.readFile(diagnosticsPath, {
+          encoding: "utf-8",
+          signal: AbortSignal.timeout(5000),
+        }),
+      );
+    } catch {
+      /* Diagnostic access must not prevent cleanup. */
+    }
+  }
+  const failure =
+    diagnostic && error instanceof Error
+      ? new Error(`${error.message}\n${diagnostic}`, { cause: error })
+      : error;
+  const current = await previewOwnershipOperation<PreviewAttempt | null>(
+    provider,
+    { kind: "read" },
+    AbortSignal.timeout(5000),
+  ).catch(() => null);
+  const owned =
+    current?.attemptId === attempt.attemptId &&
+    current.providerSessionId === attempt.providerSessionId &&
+    current.status === "starting";
+  const cleanup = await Promise.allSettled([
+    command === undefined ? undefined : stopWorkingPreviewCommand(command),
+    owned && Date.now() < expiresAt
+      ? provider.update({ ports: [] }, { signal: AbortSignal.timeout(10_000) })
+      : undefined,
+  ]);
+  const failed = cleanup.filter((result) => result.status === "rejected");
+  if (launchDispatched && command === undefined) {
+    failed.push({
+      reason: new Error(
+        "Preview command dispatch did not return its identity; cleanup remains pending.",
+      ),
+      status: "rejected",
+    });
+  }
+  try {
+    if (owned) {
+      if (failed.length === 0) {
+        await previewOwnershipOperation(
+          provider,
+          { kind: "release", ...attemptIdentity(attempt) },
+          AbortSignal.timeout(5000),
+        );
+        onAttempt?.(null);
+      } else {
+        const pending = { ...attempt, status: "cleanup-required" as const };
+        await previewOwnershipOperation(
+          provider,
+          { kind: "update", ...attemptIdentity(attempt), patch: { status: "cleanup-required" } },
+          AbortSignal.timeout(5000),
+        );
+        onAttempt?.(pending);
+      }
+    }
+  } catch (journalError) {
+    failed.push({ reason: journalError, status: "rejected" });
+  }
+  if (failed.length > 0) {
+    throw new AggregateError(
+      [failure, ...failed.map((result) => result.reason)],
+      `Preview startup failed and its cleanup was incomplete. ${failure instanceof Error ? failure.message : "Startup did not complete."}`,
+      { cause: failure },
+    );
+  }
+  throw failure;
 };
 
 /** Runs only in the already-approved user sandbox. A ready receipt is HTTP evidence, not product verification. */
@@ -191,12 +426,28 @@ export const startWorkingPreview = async (input: {
   fetch?: typeof fetch;
   readinessTimeoutMs?: number;
   signal?: AbortSignal;
+  onAttempt?: (attempt: PreviewAttempt | null) => void;
 }): Promise<WorkingPreviewRuntime> => {
   input.signal?.throwIfAborted();
-  const { provider, signal } = input;
+  const { provider } = input;
+  const expiresAt = Date.now() + previewLifetimeMs;
+  const signal = AbortSignal.any([
+    AbortSignal.timeout(previewLifetimeMs),
+    ...(input.signal === undefined ? [] : [input.signal]),
+  ]);
   const providerSessionId = provider.currentSession().sessionId;
   const gatewayPort = input.port === 3001 ? 3002 : 3001;
+  const attempt: PreviewAttempt = {
+    attemptId: randomUUID(),
+    expiresAt,
+    providerSessionId,
+    status: "starting",
+  };
+  await claimPreviewAttempt(provider, attempt, signal);
+  input.onAttempt?.(attempt);
   let command: Command | undefined;
+  let launchDispatched = false;
+  let diagnosticsPath: string | undefined;
   try {
     // Bind a deny-by-default listener before exposing any inbound port.
     await provider.update({ networkPolicy: "allow-all", ports: [] }, { signal });
@@ -211,9 +462,9 @@ export const startWorkingPreview = async (input: {
     const directory = `/workspace/.autograph-working-preview/${randomUUID()}`;
     const failurePath = `${directory}/startup-error.json`;
     const readyPath = `${directory}/listener-ready`;
+    diagnosticsPath = `${directory}/diagnostics.json`;
     const supervisorPath = `${directory}/server.mjs`;
     const configurationPath = `${directory}/access.json`;
-    const expiresAt = Date.now() + previewLifetimeMs;
     const remaining = (provider.expiresAt?.getTime() ?? Date.now()) - Date.now();
     if (remaining < previewLifetimeMs + 120_000) {
       await provider.extendTimeout(previewLifetimeMs + 120_000 - remaining, { signal });
@@ -237,19 +488,29 @@ export const startWorkingPreview = async (input: {
         command: input.command,
         configurationPath,
         cwd: input.cwd,
+        diagnosticsPath,
         expiresAt,
         failurePath,
         gatewaySource: inactive.source,
+        ownership: attempt,
         readyPath,
       }),
       { signal },
     );
+    launchDispatched = true;
     command = await provider.runCommand({
       args: [supervisorPath],
       cmd: "node",
       detached: true,
       signal,
     });
+    attempt.commandId = command.cmdId;
+    await previewOwnershipOperation(
+      provider,
+      { kind: "update", ...attemptIdentity(attempt), patch: { commandId: command.cmdId } },
+      signal,
+    );
+    input.onAttempt?.(attempt);
     const waitOptions = {
       failurePath,
       provider,
@@ -258,10 +519,10 @@ export const startWorkingPreview = async (input: {
     };
     await waitForPreview({
       ...waitOptions,
-      check: async (observe) => {
+      check: async (observe, readinessSignal) => {
         const ready =
           (await provider.fs
-            .readFile(readyPath, { encoding: "utf-8", signal })
+            .readFile(readyPath, { encoding: "utf-8", signal: readinessSignal })
             .catch(missingRuntimeFile)) === "ready";
         observe(ready ? "Listener ready" : "Listener readiness marker absent");
         return ready;
@@ -269,6 +530,11 @@ export const startWorkingPreview = async (input: {
       phase: "listener startup",
     });
     signal?.throwIfAborted();
+    await previewOwnershipOperation(
+      provider,
+      { kind: "assert", ...attemptIdentity(attempt) },
+      signal,
+    );
     await provider.update({ ports: [gatewayPort] }, { signal });
     const access = createWorkingPreviewAccess({
       ...accessInput,
@@ -277,11 +543,22 @@ export const startWorkingPreview = async (input: {
     await provider.fs.writeFile(configurationPath, access.configuration, { signal });
     await waitForPreview({
       ...waitOptions,
-      check: (observe) =>
-        openApp({ fetch: input.fetch ?? fetch, launchUrl: access.launchUrl, observe, signal }),
+      check: (observe, readinessSignal) =>
+        openApp({
+          fetch: input.fetch ?? fetch,
+          launchUrl: access.launchUrl,
+          observe,
+          signal: readinessSignal,
+        }),
       phase: "application HTTP readiness",
     });
     signal?.throwIfAborted();
+    await previewOwnershipOperation(
+      provider,
+      { kind: "update", ...attemptIdentity(attempt), patch: { status: "ready" } },
+      signal,
+    );
+    input.onAttempt?.(null);
     return {
       commandId: command.cmdId,
       providerSessionId,
@@ -295,18 +572,15 @@ export const startWorkingPreview = async (input: {
       sandboxId: input.sandboxId,
     };
   } catch (error) {
-    const cleanup = await Promise.allSettled([
-      command?.kill("SIGTERM", { abortSignal: AbortSignal.timeout(10_000) }),
-      provider.update({ ports: [] }, { signal: AbortSignal.timeout(10_000) }),
-    ]);
-    const failed = cleanup.filter((result) => result.status === "rejected");
-    if (failed.length > 0) {
-      throw new AggregateError(
-        [error, ...failed.map((result) => result.reason)],
-        "Preview startup failed and its cleanup was incomplete.",
-        { cause: error },
-      );
-    }
-    throw error;
+    return cleanupPreviewAttempt({
+      attempt,
+      command,
+      diagnosticsPath: input.signal?.aborted ? undefined : diagnosticsPath,
+      error,
+      expiresAt,
+      launchDispatched,
+      onAttempt: input.onAttempt,
+      provider,
+    });
   }
 };

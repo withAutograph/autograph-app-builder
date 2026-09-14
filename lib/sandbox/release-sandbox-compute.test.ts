@@ -13,7 +13,11 @@ import {
 // An absent preview is the normal initial state for this gate-only fixture.
 vi.mock("../agent/working-preview-state", async (importOriginal) => {
   const actual = await importOriginal<typeof WorkingPreviewModule>();
-  return { ...actual, workingPreviewState: { get: () => null, update: vi.fn() } };
+  return {
+    ...actual,
+    workingPreviewAttemptState: { get: () => null, update: vi.fn() },
+    workingPreviewState: { get: () => null, update: vi.fn() },
+  };
 });
 
 const originalEnvironment = {

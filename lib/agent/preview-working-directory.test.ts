@@ -18,6 +18,7 @@ vi.mock("./workflow-state", () => ({
   },
 }));
 vi.mock("./working-preview-state", () => ({
+  workingPreviewAttemptState: { get: () => null, update: vi.fn() },
   workingPreviewState: { get: () => null, update: vi.fn() },
 }));
 vi.mock("../sandbox/deployment-execution-lease", () => ({
