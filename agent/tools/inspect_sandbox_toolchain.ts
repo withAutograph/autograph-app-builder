@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
 import {
@@ -16,25 +17,31 @@ import { targetExecutionBinding } from "@/lib/repository/target-planning";
 
 const commands = ["bash", "git", "mise", "bun", "node", "pnpm"] as const;
 
+export const inspectSandboxCommand = async (
+  sandbox: SandboxSession,
+  command: (typeof commands)[number],
+) => {
+  const location = await sandbox.run({
+    command: `command -v ${command}`,
+  });
+  if (location.exitCode !== 0) return { available: false as const, command };
+  const version = await sandbox.run({ command: `${command} --version` });
+  if (version.exitCode !== 0) return { available: false as const, command };
+  return {
+    available: true as const,
+    command,
+    path: location.stdout.trim(),
+    version: (version.stdout.trim() || version.stderr.trim()).split("\n")[0] ?? "",
+  };
+};
+
 export default defineTool({
   description:
     "Inspect the fixed sandbox build-tool allowlist without installing packages or mutating the workspace.",
   async execute(_input, ctx) {
     const sandbox = await ctx.getSandbox();
     const tools = await Promise.all(
-      commands.map(async (command) => {
-        const location = await sandbox.run({
-          command: `command -v ${command}`,
-        });
-        if (location.exitCode !== 0) return { available: false as const, command };
-        const version = await sandbox.run({ command: `${command} --version` });
-        return {
-          available: true as const,
-          command,
-          path: location.stdout.trim(),
-          version: (version.stdout.trim() || version.stderr.trim()).split("\n")[0] ?? "",
-        };
-      }),
+      commands.map((command) => inspectSandboxCommand(sandbox, command)),
     );
     const image = configuredToolchainImage();
     const backend = sandboxBackendPlan({

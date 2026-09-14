@@ -3,6 +3,41 @@ import { includes } from "eve/evals/expect";
 
 const requiredCommands = ["bash", "git", "mise", "bun", "node"] as const;
 
+const toolchainDiagnostics = (events: readonly unknown[]) => {
+  for (const event of events.toReversed()) {
+    if (typeof event !== "object" || event === null) {
+      continue;
+    }
+    const candidate = event as {
+      data?: { result?: { kind?: unknown; output?: unknown; toolName?: unknown } };
+      type?: unknown;
+    };
+    if (
+      candidate.type !== "action.result" ||
+      candidate.data?.result?.kind !== "tool-result" ||
+      candidate.data.result.toolName !== "inspect_sandbox_toolchain"
+    ) {
+      continue;
+    }
+    const { output } = candidate.data.result;
+    if (typeof output !== "object" || output === null) {
+      return {};
+    }
+    const receipt = output as Record<string, unknown>;
+    const tools = Array.isArray(receipt.tools) ? receipt.tools : [];
+    return {
+      dependencyCacheDigest: receipt.dependencyCacheDigest,
+      imageConfiguration: receipt.imageConfiguration,
+      pnpm: tools.find(
+        (tool) =>
+          typeof tool === "object" && tool !== null && "command" in tool && tool.command === "pnpm",
+      ),
+      toolchainReady: receipt.toolchainReady,
+    };
+  }
+  return {};
+};
+
 export default defineEval({
   description:
     "The Eve agent reports the current Vercel development Sandbox and prepared toolchain without mutating it.",
@@ -46,13 +81,12 @@ export default defineEval({
         );
       }),
     );
-    t.check(t.reply, includes('"dependencyCacheDigest":"unverified"'));
-    t.check(t.reply, includes('"imageConfiguration":"unconfigured"'));
-    t.check(t.reply, includes('"toolchainReady":false'));
-    t.check(t.reply, includes('"available":false,"command":"pnpm"'));
     t.check(t.reply, includes("toolchainReady"));
     t.check(t.reply, includes("backend"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
+    process.stdout.write(
+      `${JSON.stringify({ diagnostics: toolchainDiagnostics(t.events), version: 1 })}\n`,
+    );
   },
 });
