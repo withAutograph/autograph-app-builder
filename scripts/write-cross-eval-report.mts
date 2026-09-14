@@ -2,6 +2,8 @@ import { z } from "zod";
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+const notSupplied = "not supplied";
+const supplementalOption = "--supplemental";
 const improvements = [
   "failed-journal-recovery",
   "interrupted-local-publication",
@@ -14,7 +16,7 @@ const improvements = [
 const statuses = ["passed", "failed", "blocked", "unassessed", "excluded"];
 const assertionSchema = z.object({ passed: z.boolean().nullish(), severity: z.string().nullish() });
 const evalSchema = z.object({
-  // eslint-disable-next-line promise/prefer-await-to-then -- Zod synchronous malformed-input fallback, not a Promise.
+  // eslint-disable-next-line promise/prefer-await-to-then, github/no-then -- Zod synchronous malformed-input fallback, not a Promise.
   assertions: z.array(assertionSchema).catch([]),
   id: z.string(),
   verdict: z.string().optional(),
@@ -49,10 +51,10 @@ const baselineSchema = z
           name: z.string().optional(),
         }),
       )
-      // eslint-disable-next-line promise/prefer-await-to-then -- Zod synchronous missing-baseline fallback.
+      // eslint-disable-next-line promise/prefer-await-to-then, github/no-then -- Zod synchronous missing-baseline fallback.
       .catch([]),
   })
-  // eslint-disable-next-line promise/prefer-await-to-then -- Zod synchronous missing-baseline fallback.
+  // eslint-disable-next-line promise/prefer-await-to-then, github/no-then -- Zod synchronous missing-baseline fallback.
   .catch({ rows: [] });
 const supplementalSchema = z.object({
   scenarios: z
@@ -73,7 +75,7 @@ const assertionCounts = (assertions: z.infer<typeof assertionSchema>[]) => ({
 });
 const gateAssertion = (assertion: z.infer<typeof assertionSchema>) => assertion.severity === "gate";
 const clean = (value: string | undefined): string =>
-  String(value ?? "")
+  (value ?? "")
     .replaceAll(/https?:\/\/[^\s<>"']+/giu, "[URL omitted]")
     .replaceAll(/Bearer\s+\S+/giu, "Bearer [redacted]")
     .replaceAll(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu, "[redacted]")
@@ -174,7 +176,7 @@ export function buildCrossEvalReport(input: {
           `Supplemental assessment requires passing nonempty runner evidence for ${item.id}.`,
         );
       }
-      status = String(supplement.status);
+      ({ status } = supplement);
       reason = clean(supplement.reason);
     }
     const before = baseline.find((row) => row.name === item.id || row.id === item.id);
@@ -191,7 +193,7 @@ export function buildCrossEvalReport(input: {
             },
       execution: clean(item.execution),
       group: clean(item.group),
-      id: String(item.id),
+      id: item.id,
       runner: runner ?? null,
       transition:
         before === undefined ? "no baseline" : `${clean(previous?.assessmentStatus)} → ${status}`,
@@ -243,7 +245,7 @@ export function buildCrossEvalReport(input: {
   };
 }
 
-const escape = (value: string) =>
+const escapeHtml = (value: string) =>
   value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -269,19 +271,39 @@ export function renderCrossEvalReport(report: ReturnType<typeof buildCrossEvalRe
     ...report.rows.flatMap((row) =>
       row.attempts.map(
         (attempt) =>
-          `- ${row.id}, summary ${attempt.summaryIndex}, ${attempt.verdict}: ${cell(attempt.provenance.sourceRevision)} (${attempt.provenance.revisionBasis}); command: ${cell(attempt.provenance.command || "not supplied")}; evidence: ${cell(attempt.provenance.evidencePath || "not supplied")}`,
+          `- ${row.id}, summary ${attempt.summaryIndex}, ${attempt.verdict}: ${cell(attempt.provenance.sourceRevision)} (${attempt.provenance.revisionBasis}); command: ${cell(attempt.provenance.command || notSupplied)}; evidence: ${cell(attempt.provenance.evidencePath || notSupplied)}`,
       ),
     ),
     "## Seven improvements",
     ...report.improvements.map((row) => `- ${row.id}: ${row.preservation}`),
   ].join("\n");
+  const htmlRows = report.rows
+    .map(
+      (row) =>
+        `<tr><td>${escapeHtml(row.id)}</td><td>${escapeHtml(row.runner?.verdict ?? "missing")}</td><td>${escapeHtml(row.assessment.status)}</td><td>${escapeHtml(row.transition)}</td><td>${escapeHtml(row.assessment.reason)}</td></tr>`,
+    )
+    .join("");
+  const htmlAttempts = report.rows
+    .flatMap((row) =>
+      row.attempts.map(
+        (attempt) =>
+          `<li>${escapeHtml(row.id)}: ${escapeHtml(attempt.verdict)}; ${escapeHtml(attempt.provenance.sourceRevision)} (${escapeHtml(attempt.provenance.revisionBasis)}); command: ${escapeHtml(attempt.provenance.command || notSupplied)}; evidence: ${escapeHtml(attempt.provenance.evidencePath || notSupplied)}</li>`,
+      ),
+    )
+    .join("");
+  const htmlImprovements = report.improvements
+    .map((row) => `<li>${escapeHtml(row.id)}: ${escapeHtml(row.preservation)}</li>`)
+    .join("");
   return {
-    html: `<!doctype html><html lang="en"><meta charset="utf-8"><title>Cross-eval assessment</title><style>body{font:15px system-ui;margin:32px;max-width:1400px}pre{white-space:pre-wrap;overflow-wrap:anywhere}table{border-collapse:collapse}td,th{text-align:left;vertical-align:top;padding:8px;border:1px solid #ddd}</style><h1>Cross-eval assessment</h1><p>${escape(report.evidenceScope)}</p><p>Source: ${escape(report.sourceRevision)}. Observed ${report.coverage.observed}/${report.coverage.total} scenarios.</p><table><thead><tr><th>Scenario</th><th>Runner</th><th>Assessment</th><th>Baseline change</th><th>Reason</th></tr></thead><tbody>${report.rows.map((row) => `<tr><td>${escape(row.id)}</td><td>${escape(row.runner?.verdict ?? "missing")}</td><td>${escape(row.assessment.status)}</td><td>${escape(row.transition)}</td><td>${escape(row.assessment.reason)}</td></tr>`).join("")}</tbody></table><h2>Attempt provenance</h2><ul>${report.rows.flatMap((row) => row.attempts.map((attempt) => `<li>${escape(row.id)}: ${escape(attempt.verdict)}; ${escape(attempt.provenance.sourceRevision)} (${escape(attempt.provenance.revisionBasis)}); command: ${escape(attempt.provenance.command || "not supplied")}; evidence: ${escape(attempt.provenance.evidencePath || "not supplied")}</li>`)).join("")}</ul><h2>Seven improvements</h2><ul>${report.improvements.map((row) => `<li>${escape(row.id)}: ${escape(row.preservation)}</li>`).join("")}</ul><pre>${escape(JSON.stringify(report.inputIssues))}</pre></html>`,
+    html: `<!doctype html><html lang="en"><meta charset="utf-8"><title>Cross-eval assessment</title><style>body{font:15px system-ui;margin:32px;max-width:1400px}pre{white-space:pre-wrap;overflow-wrap:anywhere}table{border-collapse:collapse}td,th{text-align:left;vertical-align:top;padding:8px;border:1px solid #ddd}</style><h1>Cross-eval assessment</h1><p>${escapeHtml(report.evidenceScope)}</p><p>Source: ${escapeHtml(report.sourceRevision)}. Observed ${report.coverage.observed}/${report.coverage.total} scenarios.</p><table><thead><tr><th>Scenario</th><th>Runner</th><th>Assessment</th><th>Baseline change</th><th>Reason</th></tr></thead><tbody>${htmlRows}</tbody></table><h2>Attempt provenance</h2><ul>${htmlAttempts}</ul><h2>Seven improvements</h2><ul>${htmlImprovements}</ul><pre>${escapeHtml(JSON.stringify(report.inputIssues))}</pre></html>`,
     markdown,
   };
 }
 
-const read = (file: string): unknown => JSON.parse(readFileSync(file, "utf-8"));
+const jsonValueSchema = z.json();
+type ReportJsonInput = z.infer<typeof jsonValueSchema>;
+const read = (file: string): ReportJsonInput =>
+  jsonValueSchema.parse(JSON.parse(readFileSync(file, "utf-8")));
 // eslint-disable-next-line eslint/func-style -- Named CLI entrypoint.
 function main() {
   const args = process.argv.slice(2);
@@ -298,7 +320,7 @@ function main() {
         "--source-revision",
         "--baseline",
         "--output-dir",
-        "--supplemental",
+        supplementalOption,
       ].includes(key)
     ) {
       throw new Error("Invalid report arguments.");
@@ -333,7 +355,7 @@ function main() {
         return null;
       }
     }),
-    supplemental: values.has("--supplemental") ? read(required("--supplemental")) : undefined,
+    supplemental: values.has(supplementalOption) ? read(required(supplementalOption)) : undefined,
   });
   const rendered = renderCrossEvalReport(report);
   writeFileSync(path.join(output, "assessment.json"), `${JSON.stringify(report, null, 2)}\n`);
