@@ -1,0 +1,109 @@
+import { createHash, randomBytes } from "node:crypto";
+
+export interface WorkingPreviewAccess {
+  /** Bearer capability. Deliver only through the owning user's authenticated session. */
+  launchUrl: string;
+  expiresAt: number;
+  source: string;
+}
+
+/** Produces an ingress gateway, not an isolation boundary against code sharing its OS user. */
+export const createWorkingPreviewAccess = (input: {
+  origin: string;
+  appPort: number;
+  gatewayPort: number;
+  landingPath?: string;
+  expiresAt: number;
+}): WorkingPreviewAccess => {
+  const origin = new URL(input.origin);
+  if (origin.protocol !== "https:" || origin.origin !== input.origin) {
+    throw new Error("Working preview access requires an exact HTTPS origin.");
+  }
+  for (const port of [input.appPort, input.gatewayPort]) {
+    if (!Number.isInteger(port) || port < 1024 || port > 65_535) {
+      throw new Error("Working preview ports must be valid unprivileged ports.");
+    }
+  }
+  if (input.appPort === input.gatewayPort || !Number.isSafeInteger(input.expiresAt)) {
+    throw new Error("Working preview requires separate ports and an expiry timestamp.");
+  }
+  const landingPath = input.landingPath ?? "/";
+  const landing = new URL(landingPath, origin);
+  if (
+    !landingPath.startsWith("/") ||
+    landing.origin !== origin.origin ||
+    landing.pathname === "/__autograph_preview_launch"
+  ) {
+    throw new Error("Working preview landing path must stay on the preview origin.");
+  }
+  const credential = randomBytes(32).toString("base64url");
+  const config = JSON.stringify({
+    ...input,
+    host: origin.host,
+    landingPath: landing.pathname + landing.search + landing.hash,
+    launchDigest: createHash("sha256").update(credential).digest("hex"),
+  });
+  return {
+    expiresAt: input.expiresAt,
+    launchUrl: `${origin.origin}/__autograph_preview_launch?token=${credential}`,
+    source: `import http from "node:http";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+const config = ${config};
+const cookieName = "__Host-autograph-preview";
+const session = randomBytes(32).toString("base64url");
+const digest = value => createHash("sha256").update(value).digest();
+const equal = (value, expected) => timingSafeEqual(digest(value), digest(expected));
+const hop = new Set(["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade"]);
+const cleanHeaders = headers => {
+  const excluded = new Set([...hop, ...(headers.connection ?? "").toLowerCase().split(",").map(value => value.trim())]);
+  return Object.fromEntries(Object.entries(headers).filter(([name]) => !excluded.has(name)));
+};
+const deny = (response, status = 403) => { response.writeHead(status, { "cache-control": "private, no-store", "referrer-policy": "no-referrer" }); response.end(); };
+const server = http.createServer((request, response) => {
+  if (request.headers.host !== config.host || Date.now() >= config.expiresAt) return deny(response);
+  let url;
+  try { url = new URL(request.url, config.origin); } catch { return deny(response, 400); }
+  if (url.origin !== config.origin) return deny(response);
+  if (url.pathname === "/__autograph_preview_launch") {
+    const token = url.searchParams.get("token") ?? "";
+    if (request.method !== "GET" || url.searchParams.getAll("token").length !== 1 || !timingSafeEqual(digest(token), Buffer.from(config.launchDigest, "hex"))) return deny(response);
+    response.writeHead(303, {
+      location: config.landingPath,
+      "set-cookie": cookieName + "=" + session + "; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=" + new Date(config.expiresAt).toUTCString(),
+      "cache-control": "private, no-store",
+      "referrer-policy": "no-referrer",
+    });
+    response.end(); return;
+  }
+  const cookies = (request.headers.cookie ?? "").split(";").map(value => value.trim());
+  const access = cookies.filter(value => value.startsWith(cookieName + "="));
+  if (access.length !== 1 || !equal(access[0].slice(cookieName.length + 1), session)) return deny(response);
+  if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && request.headers.origin !== config.origin) return deny(response);
+  const headers = cleanHeaders(request.headers);
+  delete headers.authorization;
+  delete headers.referer;
+  delete headers["forwarded"];
+  for (const name of Object.keys(headers)) if (name.startsWith("x-forwarded-")) delete headers[name];
+  headers.cookie = cookies.filter(value => !value.startsWith(cookieName + "=")).join("; ");
+  headers.host = config.host;
+  headers["x-forwarded-host"] = config.host;
+  headers["x-forwarded-proto"] = "https";
+  const upstream = http.request({ hostname: "127.0.0.1", port: config.appPort, path: url.pathname + url.search, method: request.method, headers }, result => {
+    const outgoing = cleanHeaders(result.headers);
+    outgoing["cache-control"] = "private, no-store";
+    outgoing["referrer-policy"] = "no-referrer";
+    if (outgoing["set-cookie"]) outgoing["set-cookie"] = outgoing["set-cookie"].filter(value => !value.trim().startsWith(cookieName + "="));
+    response.writeHead(result.statusCode ?? 502, outgoing);
+    result.pipe(response);
+  });
+  upstream.on("error", () => { if (!response.headersSent) deny(response, 502); else response.destroy(); });
+  request.on("aborted", () => upstream.destroy());
+  response.on("close", () => upstream.destroy());
+  request.pipe(upstream);
+});
+server.on("upgrade", (_request, socket) => socket.destroy());
+server.on("connect", (_request, socket) => socket.destroy());
+server.listen(config.gatewayPort, "0.0.0.0");
+`,
+  };
+};
