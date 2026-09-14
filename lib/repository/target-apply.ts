@@ -565,27 +565,12 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
           content: change.after.content,
           path: `${relativeRoot}/${change.path}`,
         });
-      const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
-      const receipt: TargetApplyCommandReceipt = {
-        appId: proposal.contract.appId,
-        contractPath: proposal.futurePath,
-        mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
-        omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
-        recovered: false,
-        topology: {
-          newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
-          oldDigest,
-          path: "microfrontends.json",
-        },
-        version: 1,
-        workspacePath: proposal.plan.source.workspacePath,
-      };
-      return { exitCode: 0, stderr: "", stdout: JSON.stringify(receipt) };
     }
     // The writable checkout is the execution environment. Prepared dependency
     // roots are only a cache optimization; a checkout-backed flow can have no
     // roots at all. Let Bun establish the repository's actual dependency state
-    // before invoking its generator, and treat Bun's real result as authority.
+    // after iteration writes or before invoking its generator, and treat Bun's
+    // real result as authority. Failed installs retain partial-apply evidence.
     await sandbox.setNetworkPolicy("allow-all");
     const install = await sandbox.run({
       command: "bun install",
@@ -612,6 +597,24 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
         reason,
       });
       return install;
+    }
+    if ("operation" in proposal) {
+      const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
+      const receipt: TargetApplyCommandReceipt = {
+        appId: proposal.contract.appId,
+        contractPath: proposal.futurePath,
+        mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
+        omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
+        recovered: false,
+        topology: {
+          newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
+          oldDigest,
+          path: "microfrontends.json",
+        },
+        version: 1,
+        workspacePath: proposal.plan.source.workspacePath,
+      };
+      return { exitCode: 0, stderr: "", stdout: JSON.stringify(receipt) };
     }
     const generated = await sandbox.run({
       command: `bun .config/turbo/generators/create-app.ts --proposal ${proposalPath}`,
