@@ -1,0 +1,321 @@
+{
+  "sourceRevision": "f65f36ebd6ff14df4d282dcf13dab8312aeba941",
+  "scope": "Frozen 2026-09-14 cross-eval audit. Runner outcomes and assessed infrastructure limitations remain separate.",
+  "rows": [
+    {
+      "name": "accept-app-spec",
+      "current": {
+        "assessmentStatus": "failed",
+        "runnerOutcome": "failed"
+      }
+    },
+    {
+      "name": "branch-worktree-publication-lost-response",
+      "current": {
+        "assessmentStatus": "failed",
+        "runnerOutcome": "failed"
+      }
+    },
+    {
+      "name": "branch-worktree-publication-negative",
+      "current": {
+        "assessmentStatus": "failed",
+        "runnerOutcome": "failed"
+      }
+    },
+    {
+      "name": "branch-worktree-publication-recovery",
+      "current": {
+        "assessmentStatus": "failed",
+        "runnerOutcome": "failed"
+      }
+    },
+    {
+      "name": "branch-worktree-publication-stale",
+      "current": {
+        "assessmentStatus": "failed",
+        "runnerOutcome": "failed"
+      }
+    },
+    {
+      "name": "branch-worktree-publication",
+      "current": {
+        "assessmentStatus": "failed",
+        "runnerOutcome": "failed"
+      }
+    },
+    {
+      "name": "cancel-dependency-preparation",
+      "current": {
+        "assessmentStatus": "failed",
+        "runnerOutcome": "failed"
+      }
+    },
+    {
+      "name": "cancel-fresh-template",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "cancel-prepare-workspace",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "cancel-prototype-artifact",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "cancel-target-planning",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "capabilities",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "design-guidance",
+      "current": {
+        "assessmentStatus": "blocked",
+        "runnerOutcome": "failed"
+      }
+    },
+    {
+      "name": "failed-journal-recovery",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "failed-target-validation",
+      "current": {
+        "assessmentStatus": "failed",
+        "runnerOutcome": "failed"
+      }
+    },
+    {
+      "name": "fresh-bootstrap-capabilities",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "fresh-bootstrap-empty-publication",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "fresh-bootstrap-negative",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "fresh-bootstrap-publication",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "fresh-bootstrap-recovery",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "fresh-bootstrap-wrong-source",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "fresh-template",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "github-publication-disabled",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "interrupted-local-publication",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "interrupted-target-validation",
+      "current": {
+        "assessmentStatus": "failed",
+        "runnerOutcome": "failed"
+      }
+    },
+    {
+      "name": "local-publication-disabled",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "local-publication-overlap",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "parallel-prototype-artifacts",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "partial-target-apply",
+      "current": {
+        "assessmentStatus": "failed",
+        "runnerOutcome": "failed"
+      }
+    },
+    {
+      "name": "pre-journal-branch-worktree-publication",
+      "current": {
+        "assessmentStatus": "failed",
+        "runnerOutcome": "failed"
+      }
+    },
+    {
+      "name": "pre-journal-local-publication",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "precondition-failed-publication",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "prepare-workspace",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "product-quality",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "published-local-workflow-boundary",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "sandbox-existing-iteration",
+      "current": {
+        "assessmentStatus": "unassessed",
+        "runnerOutcome": "not_complete"
+      }
+    },
+    {
+      "name": "sandbox-identity-planning",
+      "current": {
+        "assessmentStatus": "unassessed",
+        "runnerOutcome": "not_complete"
+      }
+    },
+    {
+      "name": "sandbox-reviewed-change-set",
+      "current": {
+        "assessmentStatus": "unassessed",
+        "runnerOutcome": "not_complete"
+      }
+    },
+    {
+      "name": "sandbox-toolchain",
+      "current": {
+        "assessmentStatus": "blocked",
+        "runnerOutcome": "failed"
+      }
+    },
+    {
+      "name": "self-reproduction",
+      "current": {
+        "assessmentStatus": "excluded",
+        "runnerOutcome": "not_complete"
+      }
+    },
+    {
+      "name": "stale-fresh-template",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "succeeded-journal-recovery",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "unavailable-product-alternative",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "uncertain-product-brief",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    },
+    {
+      "name": "vendor-onboarding-inference",
+      "current": {
+        "assessmentStatus": "passed",
+        "runnerOutcome": "passed"
+      }
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+#!/bin/sh
+#MISE description="Compare explicit runner summaries against the frozen cross-eval audit"
+set -eu
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" --import tsx scripts/write-cross-eval-report.mts \
+  --inventory evals/scenario-inventory.json \
+  --baseline evals/baselines/cross-eval-2026-09-14.json "$@"
