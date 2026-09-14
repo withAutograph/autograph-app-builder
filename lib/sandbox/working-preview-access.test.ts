@@ -115,6 +115,9 @@ describe("working preview access", () => {
       await expect(call(port, "/")).resolves.toMatchObject({ status: 403 });
       await expect(call(port, "/_next/static/app.js")).resolves.toMatchObject({ status: 403 });
       await expect(call(port, `${launch}wrong`)).resolves.toMatchObject({ status: 403 });
+      await expect(
+        call(port, "/api/mcp", { authorization: "Bearer application-token" }),
+      ).resolves.toMatchObject({ status: 403 });
       const entry = await call(port, launch);
       expect(entry.status).toBe(303);
       expect(entry.headers.location).toBe("/");
@@ -123,9 +126,12 @@ describe("working preview access", () => {
       expect(cookie).toContain("HttpOnly; Secure; SameSite=Lax; Expires=");
       const [session] = cookie.split(";");
       const headers = {
-        authorization: "Bearer builder-secret",
+        authorization: "Bearer application-token",
         cookie: `${session}; app-session=xyz`,
         referer: `https://preview.example${launch}`,
+        "x-vercel-oidc-token": "platform-identity",
+        "x-vercel-protection-bypass": "platform-bypass",
+        "x-vercel-set-bypass-cookie": "true",
       };
       const asset = await call(port, "/_next/static/app.js", headers);
       expect(asset.body).toBe("working-app");
@@ -139,7 +145,10 @@ describe("working preview access", () => {
       expect(observed).toHaveLength(2);
       expect(observed[1].body).toBe("action-payload");
       expect(observed[0].headers.cookie).toBe("app-session=xyz");
-      expect(observed[0].headers.authorization).toBeUndefined();
+      expect(observed[0].headers.authorization).toBe("Bearer application-token");
+      expect(observed[0].headers["x-vercel-oidc-token"]).toBeUndefined();
+      expect(observed[0].headers["x-vercel-protection-bypass"]).toBeUndefined();
+      expect(observed[0].headers["x-vercel-set-bypass-cookie"]).toBeUndefined();
       expect(observed[0].headers.referer).toBeUndefined();
       expect(JSON.stringify(observed)).not.toContain(session);
       expect(JSON.stringify(observed)).not.toContain("token=");

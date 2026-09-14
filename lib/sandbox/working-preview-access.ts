@@ -9,7 +9,12 @@ export interface WorkingPreviewAccess {
   source: string;
 }
 
-/** Produces an ingress gateway, not an isolation boundary against code sharing its OS user. */
+/**
+ * The preview uses its own origin: explicit Authorization belongs to the application.
+ * Never inject Builder credentials into requests to this gateway. Arbitrary bearer
+ * values cannot be classified as application or Builder credentials here.
+ * This is not an isolation boundary against code sharing the gateway OS user.
+ */
 export const createWorkingPreviewAccess = (input: {
   /** Coordinator-owned file. Missing or invalid content keeps an already-bound gateway closed. */
   configurationPath?: string;
@@ -103,7 +108,9 @@ const server = http.createServer((request, response) => {
   if (access.length !== 1 || !equal(access[0].slice(cookieName.length + 1), accessCookie)) return deny(response);
   if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && request.headers.origin !== config.origin) return deny(response);
   const headers = cleanHeaders(request.headers);
-  delete headers.authorization;
+  delete headers["x-vercel-oidc-token"];
+  delete headers["x-vercel-protection-bypass"];
+  delete headers["x-vercel-set-bypass-cookie"];
   delete headers.referer;
   delete headers["forwarded"];
   for (const name of Object.keys(headers)) if (name.startsWith("x-forwarded-")) delete headers[name];
