@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   authority: vi.fn(),
   evidence: vi.fn(),
   hasLive: vi.fn(() => true),
+  eligible: vi.fn(() => true),
   preview: {
     receipt: {
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
@@ -18,7 +19,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 vi.mock("./product-behavior", () => ({ executeProductReadback: mocks.readback }));
-vi.mock("./product-behavior-state", () => ({ recordProductBehaviorEvidence: mocks.evidence }));
+vi.mock("./product-behavior-state", () => ({
+  recordProductBehaviorEvidence: mocks.evidence,
+  hasCurrentProductBehaviorPreview: mocks.eligible,
+}));
 vi.mock("./workflow-state", () => ({
   appBuilderWorkflowState: {
     get: () => ({
@@ -58,6 +62,7 @@ describe("verify_app_behavior", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.hasLive.mockReturnValue(true);
+    mocks.eligible.mockReturnValue(true);
   });
 
   it("blocks before any application request when no current preview exists", async () => {
@@ -71,6 +76,17 @@ describe("verify_app_behavior", () => {
     expect(mocks.readback).not.toHaveBeenCalled();
   });
 
+  it("rejects an older preview after implementation repair before probing it", async () => {
+    mocks.eligible.mockReturnValue(false);
+    await expect(
+      verifyAppBehavior.execute(
+        { acceptedOutcomeText: "Create a durable draft and read it back.", scenario },
+        context,
+      ),
+    ).rejects.toThrow("Reopen the working preview");
+    expect(mocks.readback).not.toHaveBeenCalled();
+    expect(mocks.evidence).not.toHaveBeenCalled();
+  });
   it("rejects outcome text absent from the accepted walkthrough", async () => {
     await expect(
       verifyAppBehavior.execute(

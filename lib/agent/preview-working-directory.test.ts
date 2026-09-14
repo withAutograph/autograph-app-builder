@@ -6,9 +6,14 @@ import {
 } from "./preview-working-directory";
 
 const mocks = vi.hoisted(() => ({
-  start: vi.fn().mockResolvedValue({ receipt: { status: "ready" } }),
+  bind: vi.fn(),
+  start: vi.fn().mockResolvedValue({ commandId: "preview-command", receipt: { status: "ready" } }),
 }));
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
+vi.mock("./product-behavior-state", () => ({
+  currentProductBehaviorGeneration: () => 3,
+  bindProductBehaviorPreview: mocks.bind,
+}));
 vi.mock("./workflow-state", () => ({
   appBuilderWorkflowState: {
     get: () => ({
@@ -52,6 +57,7 @@ describe("preview command working directory", () => {
       getSandbox: () => Promise.resolve({ id: "sandbox" }),
       session: { id: "session" },
     } as Parameters<typeof startAppPreview.execute>[1]);
+    expect(mocks.bind).toHaveBeenCalledWith("preview-command", 3);
     expect(mocks.start).toHaveBeenCalledWith(
       expect.objectContaining({
         command: input.command,
