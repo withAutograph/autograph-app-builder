@@ -51,6 +51,16 @@ export const uiPreviewManifestSchema = z.strictObject({
       }),
     )
     .max(128),
+  interactionChecks: z
+    .array(
+      z.strictObject({
+        controlName: z.string().min(1).max(160),
+        expectedText: z.string().min(1).max(300),
+        route,
+      }),
+    )
+    .max(32)
+    .optional(),
   openQuestions: z.array(manifestItem).max(32),
   productionComponents: z.array(catalogElement(z.literal("@autograph/components"))).max(128),
   productionCompositions: z.array(catalogElement(z.literal("@autograph/compositions"))).max(64),
@@ -254,6 +264,9 @@ export function validateUiPreview(input: UiPreviewInput): void {
     for (const item of collection)
       if (item.routes.some((value) => !screenRoutes.has(value)))
         throw new Error("UI preview manifest metadata refers to an unknown route.");
+  for (const check of parsed.manifest.interactionChecks ?? [])
+    if (!screenRoutes.has(check.route))
+      throw new Error("A UI preview interaction check refers to an unknown route.");
   for (const gap of parsed.catalogGaps)
     for (const item of gap.composes) {
       const inventory = item.source === "@autograph/components" ? componentNames : iconNames;

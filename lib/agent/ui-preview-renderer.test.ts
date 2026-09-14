@@ -16,6 +16,16 @@ const previewInput = {
   routes: ["/"],
 } as unknown as UiPreviewInput;
 
+const interactivePreviewInput = {
+  ...previewInput,
+  manifest: {
+    ...previewInput.manifest,
+    interactionChecks: [
+      { controlName: "Show details", expectedText: "Visible detail", route: "/" },
+    ],
+  },
+} as UiPreviewInput;
+
 describe("preview runtime initialization", () => {
   it.each([true, false])("initializes charts only when used (%s)", (usesCharts) => {
     const input = {
@@ -143,7 +153,6 @@ describe("preview stylesheet provenance", () => {
 
 describe("real sandbox browser verification", () => {
   it("installs the fixed browser and requires an interaction after compilation", async () => {
-    vi.stubEnv("APP_BUILDER_REAL_SANDBOX", "1");
     const run = vi
       .fn()
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
@@ -159,7 +168,9 @@ describe("real sandbox browser verification", () => {
       writeTextFile: vi.fn().mockResolvedValue(null),
     } as never;
 
-    await expect(renderUiPreview(previewInput, sandbox)).resolves.toBe("<html>preview</html>");
+    await expect(renderUiPreview(interactivePreviewInput, sandbox)).resolves.toBe(
+      "<html>preview</html>",
+    );
     expect(run).toHaveBeenNthCalledWith(2, {
       command: "bun node_modules/playwright/cli.js install --with-deps chromium",
       workingDirectory: "/workspace/repository",
@@ -168,11 +179,9 @@ describe("real sandbox browser verification", () => {
       command: expect.stringMatching(/^bun \.builder-preview\/[a-f\d]+\/browser-check\.mjs$/u),
       workingDirectory: "/workspace/repository",
     });
-    vi.unstubAllEnvs();
   });
 
   it("rejects a preview whose real browser interaction fails", async () => {
-    vi.stubEnv("APP_BUILDER_REAL_SANDBOX", "1");
     const sandbox = {
       readTextFile: vi.fn().mockResolvedValue("<html>preview</html>"),
       run: vi
@@ -181,20 +190,18 @@ describe("real sandbox browser verification", () => {
         .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
         .mockResolvedValueOnce({
           exitCode: 1,
-          stderr: "Rendered preview did not expose a working interactive control.",
+          stderr: "Expected interaction outcome did not become visible: Visible detail",
           stdout: "",
         }),
       writeTextFile: vi.fn().mockResolvedValue(null),
     } as never;
 
-    await expect(renderUiPreview(previewInput, sandbox)).rejects.toThrow(
-      "Rendered preview did not expose a working interactive control.",
+    await expect(renderUiPreview(interactivePreviewInput, sandbox)).rejects.toThrow(
+      "Expected interaction outcome did not become visible: Visible detail",
     );
-    vi.unstubAllEnvs();
   });
 
-  it("does not install or run a browser outside the real sandbox eval profile", async () => {
-    vi.stubEnv("APP_BUILDER_REAL_SANDBOX", "0");
+  it("does not install or run a browser when the preview declares no interaction checks", async () => {
     const run = vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
     const sandbox = {
       readTextFile: vi.fn().mockResolvedValue("<html>preview</html>"),
@@ -204,6 +211,5 @@ describe("real sandbox browser verification", () => {
 
     await expect(renderUiPreview(previewInput, sandbox)).resolves.toBe("<html>preview</html>");
     expect(run).toHaveBeenCalledOnce();
-    vi.unstubAllEnvs();
   });
 });

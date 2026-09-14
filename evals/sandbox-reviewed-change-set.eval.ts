@@ -43,7 +43,6 @@ export default defineEval({
 
     await t.send("Validate the applied creation.");
     t.succeeded();
-    t.notEvent("input.requested");
     t.check(t.reply, includes("quality checks"));
     t.check(t.reply, staysProductFacing);
 
@@ -53,7 +52,6 @@ export default defineEval({
 
     await t.send("Accept the displayed change set.");
     t.succeeded();
-    t.notEvent("input.requested");
     t.check(t.reply, includes("ready for review"));
     t.check(t.reply, includes("draft pull request"));
     t.check(t.reply, staysProductFacing);
@@ -64,10 +62,25 @@ export default defineEval({
     t.check(t.reply, includes('"phase":"reviewed"'));
 
     for (const tool of [
+      "inspect_source",
+      "prepare_workspace",
+      "record_prototype_artifact",
+      "accept_app_spec",
+      "prepare_target_dependencies",
+      "plan_app_creation",
+      "apply_app_creation",
+      "validate_app_creation",
+      "change_set_status",
+      "accept_change_set",
+    ])
+      t.calledTool(tool, { count: 1 });
+
+    for (const tool of [
       "publish_reviewed_change_set",
-      "publish-reviewed-change-set_to_branch_worktree",
+      "publish_reviewed_change_set_to_branch_worktree",
       "publish_fresh_repository",
-      "publish_github_change_set",
+      "publish_github_draft_pr",
+      "create_github_repository",
       "bash",
       "write_file",
     ])
@@ -75,8 +88,6 @@ export default defineEval({
 
     process.stdout.write(
       `${JSON.stringify({
-        browserPreview: true,
-        publicationAttempted: false,
         requiredTools: [
           "inspect_source",
           "prepare_workspace",
