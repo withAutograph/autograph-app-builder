@@ -167,5 +167,6 @@ Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
     ])
       t.notCalledTool(tool);
   },
-  timeoutMs: 360_000,
+  // Source preparation plus existing-app validation exceeds the shorter planning-only budget.
+  timeoutMs: 600_000,
 });
