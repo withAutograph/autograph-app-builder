@@ -1,62 +1,114 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
-import { sandboxApplyCommandExecutor } from "./target-apply";
-import type { TargetProposal } from "./target-planning";
+import { sandboxApplyCommandExecutor, targetApplyCommandReceiptSchema } from "./target-apply";
+import { targetIterationProposalSchema } from "./target-planning";
 
 const digest = (content: string) => createHash("sha256").update(content).digest("hex");
 const before = '{"dependencies":{}}';
 const after = '{"dependencies":{"path-to-regexp":"8.4.2"}}';
 const fixture = (options: { stale?: boolean; installFails?: boolean } = {}) => {
   const events: string[] = [];
-  let manifest = options.stale ? "changed by another writer" : before;
+  const policies: Parameters<SandboxSession["setNetworkPolicy"]>[0][] = [];
+  let manifest = options.stale === true ? "changed by another writer" : before;
   const failure = { exitCode: 1, stderr: "package not found", stdout: "" };
   const sandbox = {
-    readBinaryFile: vi.fn(({ path }: { path: string }) => {
+    id: "fixture",
+    readBinaryFile: vi.fn<SandboxSession["readBinaryFile"]>(async ({ path }) => {
+      await Promise.resolve();
       events.push(`read:${path}`);
-      return Promise.resolve(Buffer.from(manifest));
+      return Buffer.from(manifest);
     }),
-    run: vi.fn(() => {
+    readFile: vi.fn<SandboxSession["readFile"]>(async () => {
+      await Promise.resolve();
+      throw new Error("The dependency installation fixture does not read streams.");
+    }),
+    readTextFile: vi.fn<SandboxSession["readTextFile"]>(async () => {
+      await Promise.resolve();
+      throw new Error("The dependency installation fixture does not read text files.");
+    }),
+    removePath: vi.fn<SandboxSession["removePath"]>(async () => {
+      await Promise.resolve();
+    }),
+    resolvePath: (path) => path,
+    run: vi.fn<SandboxSession["run"]>(async () => {
+      await Promise.resolve();
       events.push("install");
       expect(manifest).toBe(after);
-      return Promise.resolve(
-        options.installFails ? failure : { exitCode: 0, stderr: "", stdout: "" },
-      );
+      return options.installFails === true ? failure : { exitCode: 0, stderr: "", stdout: "" };
     }),
-    setNetworkPolicy: vi.fn((policy: string) => {
-      events.push(policy);
-      return Promise.resolve();
+    setNetworkPolicy: vi.fn<SandboxSession["setNetworkPolicy"]>(async (policy) => {
+      await Promise.resolve();
+      policies.push(policy);
     }),
-    writeTextFile: vi.fn(({ content }: { content: string }) => {
+    spawn: vi.fn<SandboxSession["spawn"]>(async () => {
+      await Promise.resolve();
+      throw new Error("The dependency installation fixture does not spawn processes.");
+    }),
+    writeBinaryFile: vi.fn<SandboxSession["writeBinaryFile"]>(async () => {
+      await Promise.resolve();
+      throw new Error("The dependency installation fixture does not write binary files.");
+    }),
+    writeFile: vi.fn<SandboxSession["writeFile"]>(async () => {
+      await Promise.resolve();
+      throw new Error("The dependency installation fixture does not write streams.");
+    }),
+    writeTextFile: vi.fn<SandboxSession["writeTextFile"]>(async ({ content }) => {
+      await Promise.resolve();
       events.push("write");
       manifest = content;
-      return Promise.resolve();
     }),
-  };
-  const proposal = {
-    contract: { appId: "vendor" },
+  } satisfies SandboxSession;
+  const changes = [
+    {
+      after: { content: after, digest: digest(after), mode: "644" },
+      before: { digest: digest(before), mode: "644" },
+      path: "apps/vendor/package.json",
+    },
+  ];
+  const proposal = targetIterationProposalSchema.parse({
+    blockers: [],
+    contract: {
+      appId: "vendor",
+      appSpec: { path: "apps/vendor/app-spec.md", sha256: digest("app spec") },
+      version: 1,
+    },
     futurePath: "apps/vendor/app.contract.json",
     iteration: {
-      changes: [
-        {
-          after: { content: after, digest: digest(after) },
-          before: { digest: digest(before) },
-          path: "apps/vendor/package.json",
-        },
-      ],
+      changes,
+      digest: digest(JSON.stringify(changes)),
     },
+    mutations: [],
     operation: "iterate-existing-app",
-    plan: { source: { workspacePath: "apps/vendor" }, topology: {} },
-  } as unknown as TargetProposal;
-  const execute = () =>
-    sandboxApplyCommandExecutor()({
+    plan: {
+      product: {
+        appSpec: { path: "apps/vendor/app-spec.md", sha256: digest("app spec") },
+        optionalCapabilities: { hostedResources: [], integrations: [] },
+        owner: "App Builder",
+      },
+      source: {
+        packageName: "@autograph/vendor",
+        runtime: "nextjs",
+        schema: { kind: "none" },
+        workspacePath: "apps/vendor",
+      },
+      topology: {
+        configPath: "microfrontends.json",
+        packageName: "@autograph/vendor",
+        projectName: "apps-vendor",
+        routes: ["/vendor"],
+      },
+    },
+  });
+  const execute = async () =>
+    await sandboxApplyCommandExecutor()({
       appId: "vendor",
       applyRoot: "/workspace/repository",
       proposal,
       proposalPath: "/workspace/proposal.json",
-      sandbox: sandbox as unknown as SandboxSession,
+      sandbox,
     });
-  return { events, execute, failure, sandbox };
+  return { events, execute, failure, policies, sandbox };
 };
 
 describe("existing-app dependency installation", () => {
@@ -64,13 +116,14 @@ describe("existing-app dependency installation", () => {
     const state = fixture();
     const result = await state.execute();
     expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.stdout).appId).toBe("vendor");
+    const receipt = targetApplyCommandReceiptSchema.parse(JSON.parse(result.stdout));
+    expect(receipt.appId).toBe("vendor");
     expect(state.events).toEqual([
       "read:repository/apps/vendor/package.json",
       "write",
-      "allow-all",
       "install",
     ]);
+    expect(state.policies).toEqual(["allow-all"]);
     expect(state.sandbox.run).toHaveBeenCalledExactlyOnceWith({
       command: "bun install",
       workingDirectory: "/workspace/repository",
