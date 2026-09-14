@@ -20,6 +20,7 @@ import {
   implementationFilesSchema,
   withImplementationFiles,
 } from "@/lib/agent/apply-implementation-files";
+import { clearProductBehaviorEvidence } from "@/lib/agent/product-behavior-state";
 
 export default defineTool({
   approval: always(),
@@ -65,6 +66,7 @@ export default defineTool({
       sourceTree: current.workspace.sourceTree,
       workspaceDigest: current.workspace.workspaceDigest,
     };
+    clearProductBehaviorEvidence();
     const result = await executeProposalBoundApply({
       appliedByCallId: ctx.callId,
       artifactRevision: current.appSpec.artifactRevision,
