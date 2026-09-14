@@ -264,12 +264,6 @@ const existingFindingOverrides: { files: string[]; rules: Record<string, "off"> 
     },
   },
   {
-    files: ["**/scripts/eve-eval-fetch-preload.mjs"],
-    rules: {
-      "anti-slop/no-reflect-apply": "off",
-    },
-  },
-  {
     files: ["**/lib/eve/public-events.ts", "**/lib/github/octokit.ts"],
     rules: {
       "anti-slop/no-reflect-get": "off",
