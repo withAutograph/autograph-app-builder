@@ -62,6 +62,7 @@ const requestInput = async (kind: "question" | "tool-approval", requestId = "sco
       stepIndex: 0,
       turnId: "turn_1",
     },
+    meta: { at: "2026-09-14T00:00:00.000Z", id: `requested-${requestId}` },
     type: "input.requested",
   } as HookEvent<"input.requested">;
   await hook.events?.["input.requested"]?.(event, inputContext());
@@ -73,6 +74,7 @@ const resolveInput = async (
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   const event = {
     data: { resolutions: [resolution], sequence: 1, stepIndex: 0, turnId: "turn_1" },
+    meta: { at: "2026-09-14T00:00:01.000Z", id: `resolved-${resolution.requestId}` },
     type: "input.resolved",
   } as HookEvent<"input.resolved">;
   await hook.events?.["input.resolved"]?.(event, inputContext());
