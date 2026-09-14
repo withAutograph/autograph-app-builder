@@ -357,12 +357,18 @@ export const sandboxValidationCommandExecutor =
 
 export const fixtureValidationCommandExecutor =
   (): ValidationCommandExecutor =>
-  ({ appId, command }) =>
-    Promise.resolve(
+  ({ appId, command }) => {
+    if (appId === "validation-interruption" && command.startsWith("mise run app:check-build ")) {
+      const error = new Error("fixture validation interruption");
+      error.name = "TimeoutError";
+      return Promise.reject(error);
+    }
+    return Promise.resolve(
       appId === "validation-failure" && command.startsWith("mise run app:check-build ")
         ? { exitCode: 1, stderr: "fixture validation failure", stdout: "" }
         : { exitCode: 0, stderr: "", stdout: `${command} passed` },
     );
+  };
 
 const failureReceipt = (
   attempt: TargetValidationAttemptReceipt,

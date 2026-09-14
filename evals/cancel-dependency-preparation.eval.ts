@@ -13,12 +13,12 @@ export default defineEval({
     await t.send(`Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`);
     t.succeeded();
 
-    await t.send("Prepare offline target dependencies.");
+    const preparation = await t.send("Prepare offline target dependencies.");
     t.succeeded();
-    t.notEvent("input.requested");
+    preparation.notEvent("input.requested");
     t.notCalledTool("prepare_target_dependencies");
-    t.check(t.reply, includes("already available"));
-    t.notCalledTool("plan_app_creation");
+    t.check(t.reply, includes("already recorded for planning"));
+    preparation.notCalledTool("plan_app_creation");
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
