@@ -36,12 +36,6 @@ export default defineTool({
     ) {
       throw new Error("Derive an exact canonical proposal before requesting target apply.");
     }
-    assertImplementationArchitecture(
-      input.implementationFiles,
-      current.proposal.target.plan.source.schema.kind,
-    );
-    const sandbox = await ctx.getSandbox();
-    const fixture = hasTestCapability("simulated-target");
     if (current.phase === "applied") {
       return {
         appId: current.proposal.target.contract.appId,
@@ -61,6 +55,8 @@ export default defineTool({
       implementationFiles,
       current.proposal.target.plan.source.schema.kind,
     );
+    const sandbox = await ctx.getSandbox();
+    const fixture = hasTestCapability("simulated-target");
     const binding = {
       appSpecDigest: current.appSpec.digest,
       appSpecPath: current.appSpec.artifactPath,

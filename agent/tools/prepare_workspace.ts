@@ -27,7 +27,7 @@ export default defineTool({
     const development = canAutoSelectDevelopmentSource();
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "workspace preparation");
-    if (development && sourceWorkflowState.get().phase === "empty") {
+    if (sourceWorkflowState.get().phase === "empty") {
       await sourceStatus.execute({}, ctx);
     }
     const source = sourceWorkflowState.get();
