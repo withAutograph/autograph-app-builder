@@ -61,9 +61,6 @@ export default defineTool({
       implementationFiles,
       current.proposal.target.plan.source.schema.kind,
     );
-    const sandbox = await ctx.getSandbox();
-    const fixture = hasTestCapability("simulated-target");
-
     const binding = {
       appSpecDigest: current.appSpec.digest,
       appSpecPath: current.appSpec.artifactPath,

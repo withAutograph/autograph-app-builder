@@ -13,17 +13,20 @@ export const runSequentially = async <T>(
   await run(0);
 };
 
-export const runSequentiallyUntil = <T, R>(
+export const runSequentiallyUntil = async <T, R>(
   values: Iterable<T>,
-  operation: (value: T) => Promise<R | undefined>,
-): Promise<R | undefined> => {
+  operation: (value: T) => Promise<R | null>,
+): Promise<R | null> => {
   const entries = [...values];
-  const run = async (index: number): Promise<R | undefined> => {
+  const run = async (index: number): Promise<R | null> => {
     if (index >= entries.length) {
-      return;
+      return null;
     }
     const result = await operation(entries[index]);
-    return result ?? run(index + 1);
+    if (result !== null) {
+      return result;
+    }
+    return await run(index + 1);
   };
-  return run(0);
+  return await run(0);
 };

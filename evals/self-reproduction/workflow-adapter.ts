@@ -50,7 +50,7 @@ const unsupported = (workflowId: WorkflowId, detail: string) => ({
   reason: detail,
 });
 
-const firstVisible = (locators: Locator[]) => {
+const firstVisible = async (locators: Locator[]) => {
   const find = async (index: number): Promise<Locator | undefined> => {
     const locator = locators[index];
     if (locator === undefined) {
@@ -64,9 +64,9 @@ const firstVisible = (locators: Locator[]) => {
     ) {
       return locator.first();
     }
-    return find(index + 1);
+    return await find(index + 1);
   };
-  return find(0);
+  return await find(0);
 };
 
 const semanticCandidateAdapter = (candidateUrl: string): TrustedBrowserWorkflowAdapter => {

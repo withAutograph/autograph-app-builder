@@ -993,13 +993,15 @@ const verifyDevelopmentSandboxWorkspace = async function verifyDevelopmentSandbo
   const normalizedStdout = inspection.stdout
     .replaceAll(new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
     .trim();
-  if (inspection.exitCode !== 0)
+  if (inspection.exitCode !== 0) {
     throw new Error("The prepared development workspace inspection command failed.");
+  }
   if (
     Buffer.byteLength(inspection.stdout) > sandboxOperationOutputBytes ||
     Buffer.byteLength(inspection.stderr) > sandboxOperationOutputBytes
-  )
+  ) {
     throw new Error("The prepared development workspace inspection output was too large.");
+  }
   let observed: unknown;
   try {
     observed = JSON.parse(normalizedStdout) as unknown;
@@ -1017,8 +1019,9 @@ const verifyDevelopmentSandboxWorkspace = async function verifyDevelopmentSandbo
     Object.entries(developmentWorkspaceInspectionReceipt).some(
       ([key, expected]) => (observed as Record<string, unknown>)[key] !== expected,
     )
-  )
-    {throw new Error("The prepared development workspace escaped its sandbox boundary.");}
+  ) {
+    throw new Error("The prepared development workspace escaped its sandbox boundary.");
+  }
 };
 
 export type PreparedSandboxWorkspaceStatus =
@@ -1517,8 +1520,9 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
           Buffer.byteLength(extraction.stdout) > sandboxOperationOutputBytes ||
           Buffer.byteLength(extraction.stderr) > sandboxOperationOutputBytes ||
           extraction.exitCode !== 0
-        )
+        ) {
           throw new Error("The development source could not be materialized.");
+        }
       } finally {
         await sandbox.removePath({ force: true, path: sandboxSourceArchivePath });
       }

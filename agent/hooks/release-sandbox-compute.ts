@@ -27,7 +27,9 @@ async function release(
   const hosted = isHostedSandboxExecutionEnabled(environment);
   const preview = workingPreviewState.get();
   const pending = workingPreviewAttemptState.get();
-  if (!hosted && preview === null && pending === null) {return;}
+  if (!hosted && preview === null && pending === null) {
+    return;
+  }
   try {
     const sandbox = await ctx.getSandbox();
     if (

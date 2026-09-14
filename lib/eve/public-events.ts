@@ -413,22 +413,28 @@ export const latestInstalledWorkingPreview = (
         event.data.actions.some(
           (action) => action.kind === "tool-call" && action.toolName === "start_app_preview",
         )
-      )
+      ) {
         latest = null;
+      }
       continue;
     }
     if (
       event.type !== "action.result" ||
       event.data.result.kind !== "tool-result" ||
       event.data.result.toolName !== "start_app_preview"
-    )
+    ) {
       continue;
+    }
     latest = null;
-    if (event.data.status !== "completed" || event.data.result.isError === true) continue;
+    if (event.data.status !== "completed" || event.data.result.isError === true) {
+      continue;
+    }
     const output = z
       .object({ workingPreview: publicWorkingPreviewSchema })
       .safeParse(event.data.result.output);
-    if (output.success) latest = output.data.workingPreview;
+    if (output.success) {
+      latest = output.data.workingPreview;
+    }
   }
   return currentWorkingPreview(latest);
 };

@@ -325,17 +325,17 @@ export function createGitHubAppSourceResolutionAdapter(
 ): GitHubSourceResolutionAdapter {
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function inspectInstallation(operation: GitHubOperation) {
-    const expected = githubPermissionsFor(operation);
+    const requestedPermissions = githubPermissionsFor(operation);
     const snapshot = parseProviderResponse(
       installationSnapshotSchema,
       await sanitizedProviderCall(() =>
         provider.inspectInstallation({
           operation,
-          requestedPermissions: expected,
+          requestedPermissions,
         }),
       ),
     );
-    if (JSON.stringify(snapshot.grantedPermissions) !== JSON.stringify(expected)) {
+    if (JSON.stringify(snapshot.grantedPermissions) !== JSON.stringify(requestedPermissions)) {
       throw new Error("GitHub installation permissions do not match the operation.");
     }
     return createGitHubInstallationIdentity({

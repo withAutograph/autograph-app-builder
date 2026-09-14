@@ -27,8 +27,9 @@ export default defineTool({
       current.phase !== "validation_failed" &&
       current.phase !== "validated" &&
       current.phase !== "reviewed"
-    )
-      {throw new Error("Apply the requested changes before running the repository checks.");}
+    ) {
+      throw new Error("Apply the requested changes before running the repository checks.");
+    }
     if (
       (current.phase === "validated" || current.phase === "reviewed") &&
       input.implementationFiles.length === 0

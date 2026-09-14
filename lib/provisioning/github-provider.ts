@@ -568,7 +568,7 @@ export async function provisionGitHubRepository(input: {
         const before = await repository(candidate);
         const wasAbsent = input.persistedAbsentCandidates.includes(candidate);
         if (before.status === 200 && !wasAbsent) {
-          return;
+          return null;
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         if (before.status === 404 && !wasAbsent) {
@@ -596,7 +596,7 @@ export async function provisionGitHubRepository(input: {
             // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
             const recovered = await repository(candidate);
             if (recovered.status !== 200) {
-              return;
+              return null;
             }
           } else {
             // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -613,7 +613,7 @@ export async function provisionGitHubRepository(input: {
           owned.status !== 200 ||
           stringProperty(owned.body, "description") !== marker(input.requestId)
         ) {
-          return;
+          return null;
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const main = await github({

@@ -249,14 +249,16 @@ export const assertExactReviewedChangeSet = (review: ReviewedChangeSetReceipt): 
     workspaceDigest: review.workspaceDigest,
   };
   const changeSetDigest = stableDigest(changeSetUnsigned);
-  if (review.changeSetDigest !== changeSetDigest)
-    {throw new Error("The reviewed change-set digest is malformed.");}
+  if (review.changeSetDigest !== changeSetDigest) {
+    throw new Error("The reviewed change-set digest is malformed.");
+  }
   const expectedReview = createReviewedChangeSetReceipt(
     { ...changeSetUnsigned, digest: changeSetDigest },
     review.reviewedByCallId,
   );
-  if (review.digest !== expectedReview.digest)
-    {throw new Error("The outer reviewed change-set receipt digest is malformed.");}
+  if (review.digest !== expectedReview.digest) {
+    throw new Error("The outer reviewed change-set receipt digest is malformed.");
+  }
 };
 
 export const createLocalPublicationProposal = (input: {

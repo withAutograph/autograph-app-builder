@@ -50,7 +50,7 @@ import { sourceIdentityDigest } from "./source-receipt";
 import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
-import { resolveAllowedRepository, SUPPORTED_REPOSITORY_CONTRACT } from "./supported-template";
+import { resolveAllowedRepository } from "./supported-template";
 import { runSequentially } from "../async-sequential";
 
 const { dirname, isAbsolute, relative, resolve: pathResolve, sep } = nodePath;
