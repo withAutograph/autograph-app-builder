@@ -1,3 +1,4 @@
+import { currentProductBehaviorEvidence } from "@/lib/agent/product-behavior-state";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
@@ -25,7 +26,10 @@ export default defineTool({
       if (expectedReceipt.digest === state.reviewReceipt.digest)
         return {
           ...state.reviewReceipt,
-          productAcceptance: productAcceptanceObligations(state.appSpec),
+          productAcceptance: productAcceptanceObligations(
+            state.appSpec,
+            currentProductBehaviorEvidence(state.appSpec.digest, state.applyReceipt.digest),
+          ),
           reused: true,
         };
     }
@@ -48,7 +52,10 @@ export default defineTool({
     }));
     return {
       ...receipt,
-      productAcceptance: productAcceptanceObligations(state.appSpec),
+      productAcceptance: productAcceptanceObligations(
+        state.appSpec,
+        currentProductBehaviorEvidence(state.appSpec.digest, state.applyReceipt.digest),
+      ),
       reused: false,
     };
   },

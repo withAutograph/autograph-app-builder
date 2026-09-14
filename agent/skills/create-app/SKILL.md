@@ -167,7 +167,16 @@ app-owned files and reuse the same component-backed preview flow.
    available supported observation capabilities and focused behavioral tests:
    verify visible interaction outcomes and independent server readbacks for
    durable writes, reload/recovery, and the app's real orchestration where
-   applicable. Fixture interactions and command exit codes cannot substitute
+   applicable. For an app-owned JSON write/read workflow, use
+   `verify_app_behavior` with the exact accepted walkthrough outcome and the
+   implemented app-relative routes. It supplies its own synthetic marker,
+   performs the write, and checks a separate read. Report its result only as
+   action/readback evidence: it does not test restart durability, authentication,
+   tenant isolation, or child generation. Do not add a fake verification route
+   or weaken the product to satisfy this check. Apps using other interaction
+   contracts still need appropriate behavioral evidence; do not rewrite them
+   merely to fit this tool.
+   Fixture interactions and command exit codes cannot substitute
    for this evidence. If an observation capability or external dependency is
    unavailable, identify the affected outcome as unverified rather than
    inventing a tool or claiming success.
