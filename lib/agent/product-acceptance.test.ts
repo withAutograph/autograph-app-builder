@@ -42,3 +42,26 @@ describe("accepted product obligations", () => {
     expect(result.walkthrough).toContain("Verify server readback.");
   });
 });
+
+it("retains source failures separately from technical or partial runtime evidence", () => {
+  const sourceAssessment = {
+    basis: "source-review" as const,
+    evidenceDigest: "review",
+    evidenceNote: "Source review only",
+    findings: [],
+    modelId: "reviewer",
+    omissions: [],
+    reason: "Cited contradiction",
+    remainingRuntimeChecks: [],
+    reviewCompleted: true,
+    status: "failed" as const,
+  };
+  const result = productAcceptanceObligations(
+    { content: "## Acceptance walkthrough\nSave a server draft", digest: "spec" },
+    [{ coverage: "action-readback-only", status: "passed" }],
+    sourceAssessment,
+  );
+  expect(result.productStatus).toBe("failed");
+  expect(result.sourceAssessment).toEqual(sourceAssessment);
+  expect(result.evidence).toHaveLength(1);
+});

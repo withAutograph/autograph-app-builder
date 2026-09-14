@@ -154,6 +154,12 @@ app-owned files and reuse the same component-backed preview flow.
    technical validation, not product acceptance. Use `change_set_status` and
    `accept_change_set` after validation to record the current reviewed changes;
    review is neither publication nor proof of working user interactions.
+   The independent source assessment compares implementation with the original
+   request as well as the accepted plan. Repair cited product contradictions
+   through `validate_app_creation` with corrected implementation files, then
+   review again. An unavailable or clean source review never proves runtime
+   success. Keep incomplete previews inspectable and report remaining checks;
+   do not replace a requested backend outcome with a simulated transition.
 9. Continue to the implemented app's private preview with `start_app_preview`.
    Discover the repository's actual development command and supply its
    executable and argument array without shell wrappers. For a nested app
