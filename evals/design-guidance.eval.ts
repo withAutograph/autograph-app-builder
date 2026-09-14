@@ -90,5 +90,6 @@ ${renewalReviewDesignPrompt}`);
       ),
     );
   },
-  timeoutMs: 360_000,
+  // Include measured cold shared toolchain preparation before workflow assertions.
+  timeoutMs: 600_000,
 });
