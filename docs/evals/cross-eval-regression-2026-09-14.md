@@ -57,3 +57,7 @@ Commands: `mise run test:product-evals`; `mise run test:fresh-bootstrap-evals`; 
 For every shared workflow repair, name affected capability families (creation, existing-app iteration, persistence, recovery/cancellation, auth/provider isolation, visual composition, navigation, and package delivery). Add focused regression coverage for the actual defect, retain existing expectations, and inspect every exact-head CI lane before merging. Record skips, blockers, and unassessed live behavior explicitly. Use a live public-entrypoint acceptance when claiming generated-product improvement; mock-model success cannot supply that claim.
 
 See [self-reproduction handoff](self-reproduction-handoff.md) for the frozen failed baseline and ordered remaining work. Local raw logs under `/private/tmp/eval-main-ci.log` are convenient diagnostics, not portable evidence; the immutable GitHub run above is the durable source.
+
+## Additional open eval gaps
+
+See [other eval follow-ups](other-eval-followups.md) for the 12 remaining runner failures, toolchain blocker, unassessed image/source cases, evidence, and closure criteria from the expanded audit.
