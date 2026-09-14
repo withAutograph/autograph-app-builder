@@ -28,6 +28,12 @@ Options:
                            .artifacts/development/destination.
   --next-port PORT         Loopback App Builder and /mcp port. Default: 3000.
   --eve-port PORT          Loopback Eve port. Default: 2000.
+  --emulated-web true      Prepare synthetic local auth/providers/PostgreSQL and
+                           serve HTTPS localhost. Requires Docker and existing
+                           trusted local TLS files; no trust-store changes.
+  --web-certificate PATH   Existing localhost certificate (default certificates/localhost.pem).
+  --web-key PATH           Existing key (default certificates/localhost-key.pem).
+  --web-ca PATH            Existing CA (default CAROOT or cached mkcert -CAROOT).
   -h, --help               Show this help.
 
 The command snapshots Arrusted, starts loopback /mcp, verifies exactly five
@@ -41,6 +47,7 @@ esac
 
 mise run local:ensure-oidc
 
+export APP_BUILDER_DEV_MISE_BIN="$(command -v mise)"
 export APP_BUILDER_DEV_NODE_BIN="$(mise which node)"
 export APP_BUILDER_DEV_CODEX_BIN="$(mise which codex)"
 app_builder_codex_home="${CODEX_HOME:-$HOME/.codex}"

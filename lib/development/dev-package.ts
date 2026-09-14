@@ -48,12 +48,14 @@ const packageInputDigest = async (directoryPath: string): Promise<string> => {
 export const developmentPackageFingerprint = async (input: {
   repositoryRoot: string;
   port: number;
+  origin?: string;
 }) => {
   const repositoryRoot = path.resolve(input.repositoryRoot);
   return sha256(
     JSON.stringify({
       icon: sha256(await readFile(path.join(repositoryRoot, "assets/autograph-icon.png"))),
       mcpHandler: sha256(await readFile(path.join(repositoryRoot, "lib/mcp/request-handler.ts"))),
+      origin: input.origin,
       plugin: sha256(await readFile(path.join(repositoryRoot, ".codex-plugin/plugin.json"))),
       port: input.port,
       skills: await packageInputDigest(path.join(repositoryRoot, "skills")),
@@ -65,6 +67,7 @@ export const createDevelopmentPackage = async (input: {
   repositoryRoot: string;
   outputRoot: string;
   port: number;
+  origin?: string;
 }) => {
   const repositoryRoot = path.resolve(input.repositoryRoot);
   const outputRoot = path.resolve(input.outputRoot);
@@ -72,11 +75,12 @@ export const createDevelopmentPackage = async (input: {
   const temporaryMarketplaceRoot = await mkdtemp(path.join(outputRoot, ".marketplace-"));
   const marketplaceRoot = path.join(outputRoot, "marketplace");
   const pluginRoot = path.join(temporaryMarketplaceRoot, "plugins", DEVELOPMENT_PLUGIN_NAME);
-  const endpoint = `http://127.0.0.1:${input.port}/mcp`;
+  const origin = input.origin ?? `http://127.0.0.1:${input.port}`;
+  const endpoint = `${origin}/mcp`;
   // Codex retains an MCP transport by server name across tasks.  Make the
   // local-only transport identity include its loopback port so a fresh
   // development task cannot inherit a connection to an earlier dev server.
-  const mcpServer = `${DEVELOPMENT_MCP_SERVER_NAME}-${input.port}`;
+  const mcpServer = `${DEVELOPMENT_MCP_SERVER_NAME}-${input.port}${input.origin === undefined ? "" : "-https"}`;
   const version = developmentVersion(input.port);
   try {
     await mkdir(path.join(pluginRoot, ".codex-plugin"), {

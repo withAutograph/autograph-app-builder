@@ -1,9 +1,11 @@
+import type { ProductSourceAssessment } from "./product-source-review";
 import type { AcceptedAppSpec } from "./workflow-state";
 
 /** Retain product outcomes independently of successful compiler/test commands. */
 export const productAcceptanceObligations = (
   appSpec: Pick<AcceptedAppSpec, "content" | "digest">,
   evidence: readonly unknown[] = [],
+  sourceAssessment?: ProductSourceAssessment,
 ) => {
   const lines = appSpec.content.split(/\r?\n/u);
   const selected: string[] = [];
@@ -36,9 +38,11 @@ export const productAcceptanceObligations = (
     implementationPrompt: walkthrough
       ? `Implement the accepted product outcomes below, including their real data and execution paths. For each outcome, identify the user action, the actual application operation, and an independent observable readback. Preserve these scenarios in executable behavioral tests. Prototype state transitions and passing repository commands do not establish product completion.\n\n${walkthrough}`
       : "The accepted specification contains no executable acceptance walkthrough. Product behavior remains unassessed; repository command success alone does not establish completion.",
-    productStatus: "unassessed" as const,
+    productStatus:
+      sourceAssessment?.status === "failed" ? ("failed" as const) : ("unassessed" as const),
     reason:
       "Repository validation establishes technical checks only. Product outcomes require executed action and independent readback evidence.",
+    sourceAssessment,
     walkthrough,
   };
 };

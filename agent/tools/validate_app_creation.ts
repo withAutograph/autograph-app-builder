@@ -1,3 +1,9 @@
+import {
+  currentProductSourceAssessment,
+  productRequestState,
+} from "@/lib/agent/product-source-review-state";
+import { inspectApplyOverlay } from "@/lib/repository/target-apply";
+import type { ProductSourceAssessment } from "@/lib/agent/product-source-review";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
@@ -38,9 +44,32 @@ export default defineTool({
         current.appSpec.digest,
         current.applyReceipt.digest,
       );
+      let sourceAssessment: ProductSourceAssessment | undefined;
+      if (!hasTestCapability("mock-model")) {
+        try {
+          const observed = await inspectApplyOverlay(
+            await ctx.getSandbox(),
+            current.applyReceipt.applyRoot,
+          );
+          const request = productRequestState.get();
+          sourceAssessment = currentProductSourceAssessment({
+            appSpecDigest: current.appSpec.digest,
+            clarifications: request.clarifications,
+            originalRequest: request.original,
+            sourceDigest: observed.treeDigest,
+          });
+        } catch {
+          // Unavailable current source cannot establish that retained findings still apply.
+        }
+      }
+      ctx.abortSignal?.throwIfAborted();
       return {
         commandCount: current.validationReceipt.commands.length,
-        productAcceptance: productAcceptanceObligations(current.appSpec, evidence),
+        productAcceptance: productAcceptanceObligations(
+          current.appSpec,
+          evidence,
+          sourceAssessment,
+        ),
         productBehaviorEvidence: evidence,
         reused: true,
         status: "validated" as const,

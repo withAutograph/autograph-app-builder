@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { execFile, execFileSync } from "node:child_process";
 import { constants, watch } from "node:fs";
@@ -43,6 +44,10 @@ export type DevelopmentArguments = Readonly<{
   arrustedRoot: string;
   stateRoot?: string;
   destinationRoot?: string;
+  emulatedWeb?: boolean;
+  webCertificate?: string;
+  webKey?: string;
+  webCa?: string;
   nextPort: number;
   evePort: number;
 }>;
@@ -75,11 +80,28 @@ const port = (value: string, name: string) => {
   return parsed;
 };
 
+const parseEmulatedWeb = (value: string) => {
+  if (value !== "true" && value !== "false") {
+    throw new Error("--emulated-web must be true or false.");
+  }
+  return value === "true";
+};
+
+const defaultStateRoot = (stateRoot: string | undefined, emulatedWeb = false) =>
+  stateRoot ??
+  (emulatedWeb
+    ? nodePath.join(tmpdir(), `autograph-development-${sha256(process.cwd()).slice(0, 12)}`)
+    : undefined);
+
 export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentArguments => {
   const parsed: {
     arrustedRoot?: string;
     stateRoot?: string;
     destinationRoot?: string;
+    emulatedWeb?: boolean;
+    webCertificate?: string;
+    webKey?: string;
+    webCa?: string;
     nextPort: number;
     evePort: number;
   } = { evePort: 2000, nextPort: 3000 };
@@ -100,6 +122,22 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
       }
       case "--destination-root": {
         parsed.destinationRoot = value;
+        break;
+      }
+      case "--emulated-web": {
+        parsed.emulatedWeb = parseEmulatedWeb(value);
+        break;
+      }
+      case "--web-certificate": {
+        parsed.webCertificate = value;
+        break;
+      }
+      case "--web-key": {
+        parsed.webKey = value;
+        break;
+      }
+      case "--web-ca": {
+        parsed.webCa = value;
         break;
       }
       case "--next-port": {
@@ -127,6 +165,7 @@ export const parseDevelopmentArguments = (args: readonly string[]): DevelopmentA
   if (parsed.destinationRoot !== undefined && !isAbsolute(parsed.destinationRoot)) {
     throw new Error("--destination-root must be absolute.");
   }
+  parsed.stateRoot = defaultStateRoot(parsed.stateRoot, parsed.emulatedWeb);
   return { ...parsed, arrustedRoot: parsed.arrustedRoot };
 };
 

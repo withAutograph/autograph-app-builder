@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   mkdirSync,
@@ -35,6 +36,23 @@ function taskFiles(directory: string): string[] {
 }
 
 describe("trusted Node launcher", () => {
+  it("keeps the explicitly attested launcher digest aligned with its reviewed source", () => {
+    const broker = readFileSync(
+      pathModule.join(repositoryRoot, "scripts/run-with-test-capability.mts"),
+      "utf-8",
+    );
+    const pinnedDigest = /const launcherDigest = "(?<digest>[a-f0-9]{64})";/u.exec(broker)?.groups
+      ?.digest;
+    expect(pinnedDigest).toBeDefined();
+    expect(createHash("sha256").update(readFileSync(launcher)).digest("hex")).toBe(pinnedDigest);
+    expect(
+      createHash("sha256")
+        .update(readFileSync(launcher))
+        .update("\n# changed source\n")
+        .digest("hex"),
+    ).not.toBe(pinnedDigest);
+  });
+
   it("rejects data-URL NODE_OPTIONS before the first Node process", () => {
     const result = spawnSync(launcher, [pinnedNode, "-e", "process.stdout.write('node-ran')"], {
       cwd: repositoryRoot,

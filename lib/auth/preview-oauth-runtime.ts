@@ -329,6 +329,7 @@ const previewOAuthRuntimeConfigSchema = z
       .optional(),
     hostedAdapter: z.enum(["0", "1"]),
     issuer: z.string().url(),
+    localDevelopmentEmulation: z.literal(true).optional(),
     passkeyOnboarding: z.custom<PasskeyOnboardingConfig>().nullable(),
     resource: z.string().url(),
     secret: z
@@ -413,7 +414,14 @@ const previewOAuthRuntimeConfigSchema = z
       resource.protocol === "http:" &&
       issuer.hostname === "localhost";
     if (
-      config.hostedAdapter !== "1" ||
+      !(
+        config.hostedAdapter === "1" ||
+        (config.localDevelopmentEmulation === true &&
+          config.environment === "local" &&
+          config.hostedAdapter === "0" &&
+          issuer.hostname === "localhost" &&
+          issuer.protocol === "https:")
+      ) ||
       (!localHttp && (issuer.protocol !== "https:" || resource.protocol !== "https:"))
     ) {
       context.addIssue({
@@ -525,6 +533,16 @@ export function readPreviewOAuthRuntimeConfig(
       githubClientSecret: environment.GITHUB_CLIENT_SECRET,
       hostedAdapter: environment.EVE_HOSTED_ADAPTER,
       issuer: environment.BETTER_AUTH_URL,
+      localDevelopmentEmulation:
+        environment.APP_BUILDER_EXECUTION_MODE === "development" &&
+        environment.APP_BUILDER_EXECUTION_BUNDLE === "local-development" &&
+        environment.APP_BUILDER_LOCAL_ADAPTER === "1" &&
+        environment.APP_BUILDER_LOCAL_AUTH_EMULATION === "1" &&
+        environment.APP_BUILDER_LOCAL_PROVIDER_EMULATION === "1" &&
+        environment.VERCEL_ENV === undefined &&
+        environment.EVE_HOSTED_VERCEL_ENVIRONMENT === undefined
+          ? true
+          : undefined,
       passkeyOnboarding,
       resource: environment.MCP_RESOURCE_URL,
       secret: environment.BETTER_AUTH_SECRET,
