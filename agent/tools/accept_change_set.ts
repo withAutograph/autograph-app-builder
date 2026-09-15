@@ -1,15 +1,4 @@
-import {
-  productRequestState,
-  reviewCurrentProductSource,
-} from "@/lib/agent/product-source-review-state";
-import { readProductReviewSource } from "@/lib/agent/product-source-review-input";
-import { inspectApplyOverlay } from "@/lib/repository/target-apply";
-import { hasTestCapability } from "@/lib/testing/test-capability";
-import { unavailableSourceAssessment } from "@/lib/agent/product-source-review";
-import type {
-  ProductSourceAssessment,
-  ProductSourceReviewInput,
-} from "@/lib/agent/product-source-review";
+import { reviewAppliedProductSource } from "@/lib/agent/review-applied-product-source";
 import { currentProductBehaviorEvidence } from "@/lib/agent/product-behavior-state";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
@@ -31,56 +20,12 @@ export default defineTool({
       sandbox: await ctx.getSandbox(),
       state,
     });
-    const request = productRequestState.get();
-    const reviewInput: ProductSourceReviewInput = {
-      appSpec: state.appSpec.content,
-      appSpecDigest: state.appSpec.digest,
-      clarifications: request.clarifications,
-      files: [],
-      omissions: [],
-      originalRequest: request.original,
-      sourceDigest: changeSet.postTreeDigest,
-    };
-    let sourceAssessment: ProductSourceAssessment;
-    if (hasTestCapability("mock-model")) {
-      sourceAssessment = unavailableSourceAssessment(
-        reviewInput,
-        "Independent review is unassessed in the credential-free mock profile.",
-      );
-    } else if (request.original === null) {
-      sourceAssessment = unavailableSourceAssessment(
-        reviewInput,
-        "Original user request was not retained; the AppSpec cannot substitute for it.",
-      );
-    } else {
-      try {
-        const sandbox = await ctx.getSandbox();
-        const observed = await inspectApplyOverlay(sandbox, state.applyReceipt.applyRoot);
-        const source = await readProductReviewSource({
-          appId: state.appSpec.appId,
-          applyRoot: state.applyReceipt.applyRoot,
-          changedPaths: state.applyReceipt.changes.map((change) => change.path),
-          observed,
-          sandbox,
-        });
-        sourceAssessment = await reviewCurrentProductSource(
-          { ...reviewInput, ...source, sourceDigest: observed.treeDigest },
-          false,
-          async () => {
-            const latest = await inspectApplyOverlay(sandbox, state.applyReceipt.applyRoot);
-            return latest.treeDigest;
-          },
-          undefined,
-          ctx.abortSignal,
-        );
-      } catch {
-        sourceAssessment = unavailableSourceAssessment(
-          reviewInput,
-          "Applied source observation was unavailable; independent review remains blocked.",
-          "blocked",
-        );
-      }
-    }
+    const sourceAssessment = await reviewAppliedProductSource({
+      abortSignal: ctx.abortSignal,
+      appSpec: state.appSpec,
+      applyReceipt: state.applyReceipt,
+      getSandbox: async () => await ctx.getSandbox(),
+    });
     ctx.abortSignal?.throwIfAborted();
     if (state.phase === "reviewed") {
       const expectedReceipt = createReviewedChangeSetReceipt(

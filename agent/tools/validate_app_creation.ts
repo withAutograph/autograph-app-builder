@@ -1,9 +1,4 @@
-import {
-  currentProductSourceAssessment,
-  productRequestState,
-} from "@/lib/agent/product-source-review-state";
-import { inspectApplyOverlay } from "@/lib/repository/target-apply";
-import type { ProductSourceAssessment } from "@/lib/agent/product-source-review";
+import { reviewAppliedProductSource } from "@/lib/agent/review-applied-product-source";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
@@ -24,7 +19,7 @@ import {
 
 export default defineTool({
   description:
-    "Run the repository's normal validation commands against the current applied app. Command exit status is the validation result. This does not publish or otherwise change an external repository.",
+    "Run the repository's normal validation commands against the current applied app. Command exit status is the technical validation result; successful checks also return an independent source assessment against the original product request. Neither proves runtime behavior. This does not publish or otherwise change an external repository.",
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
     if (
@@ -44,24 +39,12 @@ export default defineTool({
         current.appSpec.digest,
         current.applyReceipt.digest,
       );
-      let sourceAssessment: ProductSourceAssessment | undefined;
-      if (!hasTestCapability("mock-model")) {
-        try {
-          const observed = await inspectApplyOverlay(
-            await ctx.getSandbox(),
-            current.applyReceipt.applyRoot,
-          );
-          const request = productRequestState.get();
-          sourceAssessment = currentProductSourceAssessment({
-            appSpecDigest: current.appSpec.digest,
-            clarifications: request.clarifications,
-            originalRequest: request.original,
-            sourceDigest: observed.treeDigest,
-          });
-        } catch {
-          // Unavailable current source cannot establish that retained findings still apply.
-        }
-      }
+      const sourceAssessment = await reviewAppliedProductSource({
+        abortSignal: ctx.abortSignal,
+        appSpec: current.appSpec,
+        applyReceipt: current.applyReceipt,
+        getSandbox: async () => await ctx.getSandbox(),
+      });
       ctx.abortSignal?.throwIfAborted();
       return {
         commandCount: current.validationReceipt.commands.length,
@@ -72,6 +55,7 @@ export default defineTool({
         ),
         productBehaviorEvidence: evidence,
         reused: true,
+        sourceAssessment,
         status: "validated" as const,
         technicalStatus: "passed" as const,
       };
@@ -145,11 +129,18 @@ export default defineTool({
       current.appSpec.digest,
       current.applyReceipt.digest,
     );
+    const sourceAssessment = await reviewAppliedProductSource({
+      abortSignal: ctx.abortSignal,
+      appSpec: current.appSpec,
+      applyReceipt: current.applyReceipt,
+      getSandbox: async () => await ctx.getSandbox(),
+    });
     return {
       commandCount: result.receipt.commands.length,
-      productAcceptance: productAcceptanceObligations(current.appSpec, evidence),
+      productAcceptance: productAcceptanceObligations(current.appSpec, evidence, sourceAssessment),
       productBehaviorEvidence: evidence,
       reused: false,
+      sourceAssessment,
       status: "validated" as const,
       technicalStatus: "passed" as const,
     };

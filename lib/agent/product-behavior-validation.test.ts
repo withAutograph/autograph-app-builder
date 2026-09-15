@@ -5,9 +5,11 @@ import validateAppCreation from "../../agent/tools/validate_app_creation";
 const mocks = vi.hoisted(() => ({
   clear: vi.fn(),
   execute: vi.fn(),
+  review: vi.fn(),
   state: { current: {} as Record<string, unknown>, update: vi.fn() },
 }));
 
+vi.mock("./review-applied-product-source", () => ({ reviewAppliedProductSource: mocks.review }));
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 vi.mock("./workflow-state", () => ({
   APP_BUILDER_WORKFLOW_VERSION: 1,
@@ -51,6 +53,46 @@ describe("behavior evidence invalidation during validation repair", () => {
       mocks.state.current = change(mocks.state.current);
     });
     mocks.execute.mockResolvedValue({ ok: true, receipt: { commands: [] } });
+    mocks.review.mockResolvedValue({ findings: [], reviewCompleted: true, status: "failed" });
+  });
+
+  it("automatically returns source findings after technical validation without a review-tool call", async () => {
+    mocks.state.current = { ...workflow("validated"), phase: "applied" };
+    const result = await validateAppCreation.execute({ implementationFiles: [] }, {
+      callId: "validate",
+      getSandbox: () => Promise.resolve({}),
+    } as never);
+    expect(mocks.execute).toHaveBeenCalledBefore(mocks.review);
+    expect(mocks.review).toHaveBeenCalledOnce();
+    expect(mocks.state.current.phase).toBe("validated");
+    expect(result).toMatchObject({
+      productAcceptance: { productStatus: "failed" },
+      sourceAssessment: { status: "failed" },
+      technicalStatus: "passed",
+    });
+  });
+  it("does not invoke the source judge when repository commands fail", async () => {
+    mocks.state.current = { ...workflow("validated"), phase: "applied" };
+    mocks.execute.mockResolvedValue({ ok: false, receipt: { reason: "command failed" } });
+    await validateAppCreation.execute({ implementationFiles: [] }, {
+      callId: "validate",
+      getSandbox: () => Promise.resolve({}),
+    } as never);
+    expect(mocks.review).not.toHaveBeenCalled();
+  });
+  it("assesses reused validation without rerunning technical commands or claiming runtime success", async () => {
+    mocks.state.current = workflow("validated");
+    mocks.review.mockResolvedValue({ findings: [], reviewCompleted: true, status: "passed" });
+    const result = await validateAppCreation.execute({ implementationFiles: [] }, {
+      callId: "validate",
+      getSandbox: () => Promise.resolve({}),
+    } as never);
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.review).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({
+      productAcceptance: { productStatus: "unassessed" },
+      reused: true,
+    });
   });
 
   it.each(["validated", "reviewed"] as const)(

@@ -154,8 +154,10 @@ app-owned files and reuse the same component-backed preview flow.
    technical validation, not product acceptance. Use `change_set_status` and
    `accept_change_set` after validation to record the current reviewed changes;
    review is neither publication nor proof of working user interactions.
-   The independent source assessment compares implementation with the original
-   request as well as the accepted plan. Repair cited product contradictions
+   Successful validation automatically runs the independent source assessment
+   against the original request and accepted plan. An unchanged later review
+   reuses that assessment; you do not need a separate tool call to obtain it.
+   Repair cited product contradictions
    through `validate_app_creation` with corrected implementation files, then
    review again. An unavailable or clean source review never proves runtime
    success. Keep incomplete previews inspectable and report remaining checks;
