@@ -41,17 +41,15 @@ describe("self-reproduction evidence completion", () => {
   });
 
   it("requires a completion receipt after transcript events", () => {
-    expect(evidenceCompletion(0, [{ kind: "event", text: "Still working" }])).toMatchObject({
-      reason: expect.stringContaining("completion receipt"),
-      status: "failed",
-    });
+    const result = evidenceCompletion(0, [{ kind: "event", text: "Still working" }]);
+    expect(result.status).toBe("failed");
+    expect(result.reason).toContain("completion receipt");
   });
 
   it("requires transcript or tool events even when a completion receipt exists", () => {
-    expect(evidenceCompletion(0, [{ kind: "eval-completed" }])).toMatchObject({
-      reason: expect.stringContaining("transcript/tool events"),
-      status: "failed",
-    });
+    const result = evidenceCompletion(0, [{ kind: "eval-completed" }]);
+    expect(result.status).toBe("failed");
+    expect(result.reason).toContain("transcript/tool events");
   });
 
   it.each([1, 137, null])("retains failure for exit %s despite complete receipts", (exitCode) => {
