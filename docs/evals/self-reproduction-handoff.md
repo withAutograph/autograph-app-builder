@@ -284,3 +284,22 @@ repairs that test integration while retaining callback-only routing coverage and
 an explicit token-route negative test. Its required checks and post-merge main
 verification remain the landing gate; the normal deployment and template-readiness
 check at `a24c87eb` passed. This failure does not change the frozen replica verdict.
+
+### Green-main baseline: UI revision recovery
+
+The public baseline on `88aa9b53034bafe03d1ad948c87918114af25158`
+(session `wrun_01M2HBJTVV5W4NNR67KZ22P5A5`) stopped before implementation after
+one ordinary continuation. `record_ui_preview` returned the correct UI source
+revision, but the model selected outer HTML and decisions-document revisions
+for finalization. Those rejections were correct; no actual UI source change
+was established. `artifact_workflow_status` omitted the current UI revision,
+so its recovery response could not supply the value required by finalization.
+The shared fix exposes `uiPreview.revision` separately from document revisions
+and clarifies the tool guidance while retaining genuine stale-revision checks.
+Focused regressions cover recovery and rejection; a new public acceptance run
+is still required to establish end-to-end recovery. The frozen baseline remains
+a failure, and this repair does not close downstream product-quality gaps.
+
+Sanitized evidence: `/private/tmp/self-reproduction-green-main-20260915/post-session-diagnosis/ui-revision.json`
+and the adjacent Markdown diagnosis. These observer artifacts were never supplied
+to the generator.
