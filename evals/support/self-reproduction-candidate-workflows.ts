@@ -285,14 +285,21 @@ export const exerciseCandidateBrowserWorkflows = async (
         await runChildArtifact();
       }
     };
-    const runWorkflow =
-      (
-        {
-          documentation: runDocumentation,
-          "durable-draft": runDurableDraft,
-          "provider-return-success": runProviderReturn,
-        } as Record<string, () => Promise<void>>
-      )[requirementId] ?? runCreation;
+    const workflows: Record<string, () => Promise<null>> = {
+      documentation: async () => {
+        await runDocumentation();
+        return null;
+      },
+      "durable-draft": async () => {
+        await runDurableDraft();
+        return null;
+      },
+      "provider-return-success": async () => {
+        await runProviderReturn();
+        return null;
+      },
+    };
+    const runWorkflow = workflows[requirementId] ?? runCreation;
     try {
       const response = await page.goto(baseURL, { waitUntil: "networkidle" });
       runtimeReady = Boolean(response?.ok());
