@@ -177,7 +177,7 @@ hashes, and continuation state remain private. Machine-local supporting evidence
 | P0       | Normal source-review repair loop unassessed           | Retain ordinary structured product answers in shared session state, then observe actual review findings and subsequent implementation/review during the public run. Standalone judging and temporal adjacency alone do not prove the loop. |
 | P1       | Preview observation can miss delivery                 | Capture each newly delivered receipt while polling the public session, without extra product calls or candidate setup. Preserve observer failures separately from session outcomes.                                                        |
 | P1       | Full paired runtime and framework coverage unassessed | Match supported authenticated states, exercise remaining workflows and navigation behavior, and record missing candidate functionality as failed. Source and configuration flags cannot substitute for runtime proof.                      |
-| P1       | Arrusted #1382 Preview blocked                        | Diagnose the specific Preview database state read-only. Preserve the forward-only migration guard and existing data. Do not merge a red revision or relabel the database blocker as a template-readiness regression.                       |
+| P1       | Arrusted #1382 post-merge verification pending        | The normal Preview and required PR checks passed and the repair merged; see the setup milestone below. Main verification remains separate from replica quality proof.                                                                      |
 
 The original candidate and evidence remain immutable. The next run must record
 new revisions, brief and answer-sheet hashes, session identity, and normal replies.
@@ -226,3 +226,53 @@ do not rewrite this failed baseline or treat integration checks as a reroll.
 Sanitized machine-local evidence is under
 `/private/tmp/self-reproduction-next-main-20260914/assessment` and
 `post-session-diagnosis`; private continuation state remains owner-only.
+
+## Landed identity and setup milestone — 2026-09-15
+
+[Builder PR #458](https://github.com/withAutograph/autograph-app-builder/pull/458)
+merged as `014e5e688e7c0d0fdb8b6320366d175059d7f767`.
+[Main CI 34914189856](https://github.com/withAutograph/autograph-app-builder/actions/runs/34914189856)
+is green. This lands the additive target-identity compatibility repair described
+above; it does not replace the failed `b2e25707` public baseline.
+
+[Arrusted PR #1382](https://github.com/withAutograph/arrusted-development/pull/1382)
+passed all required checks in
+[CI 34915283696](https://github.com/withAutograph/arrusted-development/actions/runs/34915283696)
+and normal Vercel Preview at exact revision `a116fb65`. It merged as
+`a24c87eb97bd138446ed425030c0522e0075206e` at `2026-09-15T01:03:39Z`.
+Normal Preview deployment `dpl_5tr1BPxGRbEXv5jW7wDqTtKhJcvF` passed HC and Vendor
+materialization: HC reports 9/10 steps and Vendor 11/12, with materialization
+passed rather than a claim that every step was completed. The repair preserves
+existing tenant data and the forward-only migration guard; no manual database
+repair was performed. Arrusted post-merge [main CI 34915728778](https://github.com/withAutograph/arrusted-development/actions/runs/34915728778)
+reports Kernel Workspace, Rust, and Kernel failures under investigation. Main is
+not green; the setup milestone remains open despite successful PR and Preview
+proof.
+
+The portable historical replica report remains at
+`/Volumes/Home/jasonmorganson/.config/codex/visualizations/2026/09/12/01a095af-7cdc-7171-b268-bfc3a087175b/self-reproduction-20260914/index.html`.
+Keep its failed product behavior and evidence limits distinct from these shared
+setup and integration results. No new full self-reproduction baseline is part of
+this milestone. Independent replica delivery, durable authenticated data, child
+orchestration, the normal source-review repair loop, and paired framework/runtime
+coverage still need the separate public-entrypoint acceptance already described.
+
+The subsequent five-case real Sandbox rerun passed **128/128 gates**: design17,
+existing iteration40, identity/planning23, reviewed changes38, and toolchain10.
+Each case completed in `/private/tmp/builder458-real-sandbox-evals.log`. This is
+shared setup/compatibility evidence with a mocked model, not a new full baseline.
+Its source declaration is retained separately from the merged Builder SHA; see
+[the cross-eval follow-up](other-eval-followups.md#identity-compatibility-rerun--2026-09-15).
+
+The five-case rerun used coordinator checkout
+`06bc0df47989b759a5f81e178d3f32a1f7e854d3`. Toolchain assertions verify their
+declared command-execution scope: raw diagnostics still reported
+`toolchainReady: false`, pnpm unavailable, and legacy image/cache evidence
+unconfigured or unverified. The 10 passing assertions do not make those
+configuration diagnostics true or establish broader readiness.
+
+Portable repair validation is retained at
+`/Volumes/Home/jasonmorganson/.config/codex/visualizations/2026/09/12/01a095af-7cdc-7171-b268-bfc3a087175b/self-reproduction-20260914/next-baseline/repair-validation.json`.
+The overall five-case runner exited0. Its toolchain checks establish available
+executables and nonempty versions for bash, git, mise, Bun, and Node; optional
+pnpm, cache, image, and legacy readiness diagnostics remain separate.
