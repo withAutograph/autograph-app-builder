@@ -9,7 +9,7 @@ import {
 
 export default defineTool({
   description:
-    "Silently carry the current component-backed UI direction into implementation planning. This internal step requires no user prompt and does not authorize building or publication. Ask Build this app only after the Browser preview and implementation plan are ready.",
+    "Silently carry the current component-backed UI direction into implementation planning. Use the revision returned by record_ui_preview or artifact_workflow_status.uiPreview.revision, never an artifacts[].revision or document digest. This internal step requires no user prompt and does not authorize building or publication. Ask Build this app only after the Browser preview and implementation plan are ready.",
   execute({ expectedRevision }, ctx) {
     const current = appBuilderWorkflowState.get();
     if (current.phase !== "ui_previewed") {

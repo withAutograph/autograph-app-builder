@@ -35,7 +35,7 @@ const isReviewedPhase = (
 
 export default defineTool({
   description:
-    "Return session-bound artifact workflow receipt metadata without artifact content or mutation.",
+    "Return session-bound artifact workflow receipt metadata without artifact content or mutation. uiPreview.revision is the current component-backed UI revision for accept_ui_preview expectedRevision and record_ui_preview baseRevision. artifacts[].revision identifies a document artifact and must not be used as a UI revision.",
   execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase === "empty") {
@@ -116,6 +116,15 @@ export default defineTool({
     }
     return {
       artifacts: state.artifacts.map(prototypeArtifactReceipt),
+      ...("uiPreview" in state
+        ? {
+            uiPreview: {
+              appId: state.uiPreview.appId,
+              revision: state.uiPreview.revision,
+              sourceDigest: state.uiPreview.sourceDigest,
+            },
+          }
+        : {}),
       phase: state.phase,
       sessionId: ctx.session.id,
       version: state.version,
