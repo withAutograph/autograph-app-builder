@@ -189,3 +189,41 @@ carryover while retaining working sign-in, sign-up, authenticated creation, and
 tenant isolation. This implements the requested scope exclusion and prevents the
 shared source judge from treating it as a missing requirement. The frozen baseline
 brief and its recorded hash are unchanged; record a new hash for the next run.
+
+
+## Post-repair baseline: identity compatibility failure
+
+PR #455 merged as `b2e25707dc0c724ebf283c088bba5ae5450ac7d1`. Main CI
+`34910591756` passed 39 deterministic scenarios / 553 gates and 80 authentication
+tests. These results do not establish autonomous self-reproduction.
+
+A new public session, `wrun_01M2H5W1TRBC0BEX52C8WV66CB`, used that clean Builder
+revision and brief SHA-256
+`ccb356910ff02563f3f89333241de19b3da0d7b2c41592e320c40b4908daeb78`.
+Authentication and MCP remained required; anonymous entry was excluded. The only
+reply after the brief was “Please continue with the original app request.”
+No build approval was reached and no implementation assistance was supplied.
+
+The supported development stack used clean Arrusted
+`c3ff29dad22e80c0f7f9a429b04d33b2ca4a858f` as its source input. Its canonical
+source receipt identifies an existing-repository development snapshot, with
+synthetic commit `e2fb36a399f2949ad630e17852704ebed2b9a445`; this is not an
+upstream revision or evidence of fresh repository cloning. Preserve that
+coverage distinction in future reports.
+
+Three canonical planning results failed with “Target identity command returned
+an invalid shape.” The bound Arrusted producer includes `prototypeCuePath`,
+while Builder rejected fields beyond the eight it consumes. Raw command stdout
+was not retained; the field-level diagnosis combines the bound source with a
+focused reproduction. The shared consumer now projects the consumed fields,
+ignores additive metadata, and still rejects incorrect app, workspace and
+AppSpec identities before planning. The fixture follows the current producer.
+
+This run failed to deliver the independent replica. Its visual comparison,
+runtime workflows, source-review repair loop and child-app creation remain
+unassessed. A prototype or accepted specification earns no implementation
+credit. The compatibility repair requires fresh public acceptance after landing;
+do not rewrite this failed baseline or treat integration checks as a reroll.
+Sanitized machine-local evidence is under
+`/private/tmp/self-reproduction-next-main-20260914/assessment` and
+`post-session-diagnosis`; private continuation state remains owner-only.
