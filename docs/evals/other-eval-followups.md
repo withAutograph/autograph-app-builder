@@ -180,3 +180,11 @@ declared command-execution scope: raw diagnostics still reported
 `toolchainReady: false`, pnpm unavailable, and legacy image/cache evidence
 unconfigured or unverified. The 10 passing assertions do not make those
 configuration diagnostics true or establish broader readiness.
+
+The post-merge failure was traced to a Vendor Rust test embedding the deleted
+root `vercel.json` after the independent typed-configuration migration.
+[Arrusted PR #1390](https://github.com/withAutograph/arrusted-development/pull/1390)
+repairs that test integration while retaining callback-only routing coverage and
+an explicit token-route negative test. Its required checks and post-merge main
+verification remain the landing gate; the normal deployment and template-readiness
+check at `a24c87eb` passed. This failure does not change the frozen replica verdict.

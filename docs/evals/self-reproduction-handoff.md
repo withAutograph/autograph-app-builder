@@ -276,3 +276,11 @@ Portable repair validation is retained at
 The overall five-case runner exited0. Its toolchain checks establish available
 executables and nonempty versions for bash, git, mise, Bun, and Node; optional
 pnpm, cache, image, and legacy readiness diagnostics remain separate.
+
+The post-merge failure was traced to a Vendor Rust test embedding the deleted
+root `vercel.json` after the independent typed-configuration migration.
+[Arrusted PR #1390](https://github.com/withAutograph/arrusted-development/pull/1390)
+repairs that test integration while retaining callback-only routing coverage and
+an explicit token-route negative test. Its required checks and post-merge main
+verification remain the landing gate; the normal deployment and template-readiness
+check at `a24c87eb` passed. This failure does not change the frozen replica verdict.
