@@ -146,3 +146,45 @@ Sanitized HTML, Markdown, JSON, ordered summaries, CI scenario counts, and histo
 Post-merge auth CI exposed an intermittent session readback and a real pre-hydration reciprocal callback defect. `457b5c20` checks the same established user/workspace after callbacks; the earlier missing read's cause remains unconfirmed. `46a0395e` resolves reciprocal auth callbacks on the server and adds raw HTML coverage. `f6cc7ed4` restores the full loading shell under Suspense. Original browser assertions remain, and auth CI passes.
 
 This closes the cross-eval integration milestone after green landing; it does not establish autonomous self-reproduction. A new live public-entrypoint generation remains the next milestone.
+
+## Identity compatibility rerun — 2026-09-15
+
+After the shared target-identity compatibility repair, all five supported real
+Sandbox cases passed again: design **17/17**, existing iteration **40/40**,
+identity/planning **23/23**, reviewed changes **38/38**, and toolchain **10/10**
+(**128 gates total**). Retained execution is
+`/private/tmp/builder458-real-sandbox-evals.log`; each case has its own completed
+runner result. Earlier failed and interrupted attempts remain historical evidence.
+These cases execute the real shared Sandbox workflow with a mocked model; they do
+not establish public-entrypoint autonomous self-reproduction or improve the frozen
+replica's quality verdict.
+
+[Builder PR #458](https://github.com/withAutograph/autograph-app-builder/pull/458)
+merged as `014e5e688e7c0d0fdb8b6320366d175059d7f767`, with green
+[main CI 34914189856](https://github.com/withAutograph/autograph-app-builder/actions/runs/34914189856).
+The integration run's source declaration is separate from that merge revision;
+its exact provenance belongs to the retained report, not an inferred main SHA.
+The failed `b2e25707` public baseline and outstanding replica quality gaps remain
+in [the self-reproduction handoff](self-reproduction-handoff.md).
+
+Arrusted #1382 separately passed required PR CI and normal Preview materialization
+and merged as `a24c87eb97bd138446ed425030c0522e0075206e`. Its post-merge main CI
+`34915728778` has Kernel Workspace, Rust, and Kernel failures under investigation.
+Do not treat successful Preview materialization or this Builder rerun as a green
+Arrusted main or closure of the full setup milestone. No new full self-reproduction
+baseline is included here.
+
+The five-case rerun used coordinator checkout
+`06bc0df47989b759a5f81e178d3f32a1f7e854d3`. Toolchain assertions verify their
+declared command-execution scope: raw diagnostics still reported
+`toolchainReady: false`, pnpm unavailable, and legacy image/cache evidence
+unconfigured or unverified. The 10 passing assertions do not make those
+configuration diagnostics true or establish broader readiness.
+
+The post-merge failure was traced to a Vendor Rust test embedding the deleted
+root `vercel.json` after the independent typed-configuration migration.
+[Arrusted PR #1390](https://github.com/withAutograph/arrusted-development/pull/1390)
+repairs that test integration while retaining callback-only routing coverage and
+an explicit token-route negative test. Its required checks and post-merge main
+verification remain the landing gate; the normal deployment and template-readiness
+check at `a24c87eb` passed. This failure does not change the frozen replica verdict.
