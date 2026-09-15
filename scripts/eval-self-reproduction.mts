@@ -984,17 +984,29 @@ The checked-in brief and fixed answers are always preserved unchanged.`);
         },
       ),
     );
-    settings = {
-      model: activeBuilderModelId,
-      publication: "disabled by sandbox eval profile",
-      reasoningConfiguration:
-        "Preserved verbatim in settings-source/agent.ts; effective runtime identity is retained in transcript events.",
-      runtimeIdentity: "See session.started events in generation-transcript.jsonl",
-      source: "settings-source/",
-      status: "preserved",
-    };
+    settings = values["report-only"]
+      ? {
+          configuredModel: activeBuilderModelId,
+          modelInvocation: "unverified: report-only does not run generation",
+          publication: "No publication is performed by report-only comparison.",
+          reasoningConfiguration:
+            "Static source configuration retained in settings-source/agent.ts; no effective invocation settings are asserted.",
+          source: "settings-source/",
+          status: "source-config-only",
+        }
+      : {
+          model: activeBuilderModelId,
+          publication: "disabled by sandbox eval profile",
+          reasoningConfiguration:
+            "Preserved verbatim in settings-source/agent.ts; effective runtime identity is retained in transcript events.",
+          runtimeIdentity: "See session.started events in generation-transcript.jsonl",
+          source: "settings-source/",
+          status: "preserved",
+        };
     await jsonFile("settings.json", settings);
-    generation = { status: "running" };
+    generation = values["report-only"]
+      ? { reason: "Report-only mode selected.", status: "not-run" }
+      : { status: "running" };
     await saveReport();
     generation = await runGenerator(arrustedRoot);
     await saveReport();
