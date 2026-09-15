@@ -82,10 +82,10 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Retry target apply after a lost response.");
-    t.requireInputRequest({ toolName: "apply_app_creation" });
-    await t.respondAll("approve");
+    const retryApply = await t.send("Retry target apply after a lost response.");
     t.succeeded();
+    retryApply.notEvent("input.requested");
+    retryApply.calledTool("apply_app_creation", { count: 1 });
     t.check(t.reply, includes("prepared app is unchanged"));
 
     const validation = await t.send("Validate the applied creation.");
