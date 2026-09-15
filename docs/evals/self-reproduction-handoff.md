@@ -190,7 +190,6 @@ tenant isolation. This implements the requested scope exclusion and prevents the
 shared source judge from treating it as a missing requirement. The frozen baseline
 brief and its recorded hash are unchanged; record a new hash for the next run.
 
-
 ## Post-repair baseline: identity compatibility failure
 
 PR #455 merged as `b2e25707dc0c724ebf283c088bba5ae5450ac7d1`. Main CI
