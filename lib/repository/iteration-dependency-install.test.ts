@@ -151,9 +151,11 @@ const executeCueActivation = async function executeCueActivation(
       chmod(miseBin, 0o755),
       chmod(nodePath.join(runtimeBin, "bun"), 0o755),
     ]);
-    execFileSync("/bin/bash", ["-c", command], {
+    // Keep user shell startup and exported functions from replacing fixture tools.
+    execFileSync("/bin/bash", ["--noprofile", "--norc", "-p", "-c", command], {
       cwd: root,
       env: {
+        ...process.env,
         CUE_SOURCE: sourceCue,
         PATH: `${nodePath.dirname(miseBin)}:${runtimeBin}:${process.env.PATH}`,
       },
