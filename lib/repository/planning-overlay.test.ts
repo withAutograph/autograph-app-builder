@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
 
@@ -25,7 +24,7 @@ describe("planning from the current checkout", () => {
       removePath: vi.fn(async () => {}),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       run: vi.fn(async ({ command }: { command: string }) => ({
-        exitCode: command.startsWith("test -d") ? 1 : 0,
+        exitCode: command.startsWith("test -") ? 1 : 0,
         stderr: "",
         stdout: "",
       })),
@@ -41,10 +40,7 @@ describe("planning from the current checkout", () => {
       sandbox,
     });
     expect(result.proposal.contract.appId).toBe("stock-exceptions");
-    expect(executor.mock.calls.map(([request]) => request.command)).toEqual([
-      "identity",
-      "planning",
-    ]);
+    expect(executor.mock.calls.map(([request]) => request.command)).toEqual(["identity"]);
   });
 
   it.each([undefined, "appId", "workspacePath", "appSpecPath"])(
@@ -56,12 +52,12 @@ describe("planning from the current checkout", () => {
         if (request.command !== "identity") {
           return result;
         }
-        // Current Arrusted deriveAppIdentity includes prototypeCuePath. Reverse
-        // the wire order to ensure only parsed, consumed fields bind identity.
-        const parsed = targetIdentitySchema
-          .extend({ prototypeCuePath: z.string() })
-          .parse(JSON.parse(result.stdout));
-        expect(parsed.prototypeCuePath).toBe("prototype/stock-exceptions/schema.cue");
+        // Add producer metadata and reverse wire order to ensure only consumed
+        // identity fields bind the receipt.
+        const parsed = {
+          ...targetIdentitySchema.parse(JSON.parse(result.stdout)),
+          producerMetadata: "additional metadata",
+        };
         if (changedField !== undefined) {
           Object.assign(parsed, {
             [changedField]: changedField === "appId" ? "other" : "apps/other",
@@ -94,11 +90,11 @@ describe("planning from the current checkout", () => {
       });
       if (changedField === undefined) {
         const result = await planning;
-        expect(result.identity).not.toHaveProperty("prototypeCuePath");
+        expect(result.identity).not.toHaveProperty("producerMetadata");
         expect(result.proposal.contract.appId).toBe("stock-exceptions");
       } else {
         await expect(planning).rejects.toThrow(
-          "Target identity did not match the accepted AppSpec.",
+          "Target identity did not match the accepted app id.",
         );
         expect(executor.mock.calls.map(([request]) => request.command)).toEqual(["identity"]);
       }
@@ -112,7 +108,7 @@ describe("planning from the current checkout", () => {
       removePath: vi.fn(async () => {}),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       run: vi.fn(async ({ command }: { command: string }) => ({
-        exitCode: command.startsWith("test -d") ? 1 : 0,
+        exitCode: command.startsWith("test -") ? 1 : 0,
         stderr: "",
         stdout: "",
       })),
@@ -136,10 +132,7 @@ describe("planning from the current checkout", () => {
     });
 
     expect(result.proposal).not.toHaveProperty("operation");
-    expect(executor.mock.calls.map(([request]) => request.command)).toEqual([
-      "identity",
-      "planning",
-    ]);
+    expect(executor.mock.calls.map(([request]) => request.command)).toEqual(["identity"]);
   });
 
   it("plans explicit existing-app edits from the actual checkout", async () => {

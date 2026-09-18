@@ -18,62 +18,11 @@ export const REQUIRED_APP_SPEC_HEADINGS = [
 ] as const;
 
 export const BUILD_READY_HANDOFF_EXAMPLE = {
-  additionalPublicRoutes: [],
-  optionalCapabilities: { hostedResources: [], integrations: [] },
-  owner: "product-operations",
-  schema: { kind: "none" },
   status: "build-ready",
 } as const;
 
-const capabilityIdPattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
-const publicRoutePattern = /^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+(?:\*)?$/u;
-// The Arrusted planner rejects these provider segments. Include source-control
-// brands here too: product prose can name a provider, but capability intent
-// must remain portable. Do not silently strip or guess replacements in the
-// normalizer, since that can change the requested integration's meaning.
-const providerCapabilitySegments = new Set([
-  "aws",
-  "azure",
-  "cloudflare",
-  "gcp",
-  "github",
-  "gitlab",
-  "neon",
-  "vercel",
-]);
-const capabilityId = z
-  .string()
-  .regex(capabilityIdPattern)
-  .refine(
-    (value) => !value.split("-").some((segment) => providerCapabilitySegments.has(segment)),
-    "Use provider-neutral capability identifiers (for example source-control or application-hosting); keep provider names in Integrations and reconciliation prose.",
-  );
-const publicRoute = z.string().regex(publicRoutePattern);
-const sortedUnique = <T extends z.ZodType<string>>(item: T) =>
-  z.array(item).superRefine((values, context) => {
-    const sorted = [...values].toSorted();
-    if (
-      new Set(values).size !== values.length ||
-      values.some((value, index) => value !== sorted[index])
-    ) {
-      context.addIssue({
-        code: "custom",
-        message: "Values must be sorted and contain no duplicates.",
-      });
-    }
-  });
-
 export const buildReadyHandoffSchema = z
   .object({
-    additionalPublicRoutes: sortedUnique(publicRoute),
-    optionalCapabilities: z
-      .object({
-        hostedResources: sortedUnique(capabilityId),
-        integrations: sortedUnique(capabilityId),
-      })
-      .strict(),
-    owner: z.string().trim().min(1),
-    schema: z.object({ kind: z.enum(["none", "kernel"]) }).strict(),
     status: z.literal("build-ready"),
   })
   .strict();
@@ -93,29 +42,10 @@ export type AppSpecValidationResult =
   | { valid: true }
   | { valid: false; issues: AppSpecValidationIssue[] };
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function record(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function normalizedStrings(value: unknown, pattern: RegExp): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return [
-    ...new Set(
-      value.filter((item): item is string => typeof item === "string" && pattern.test(item)),
-    ),
-  ].toSorted();
-}
-
 /**
- * Canonicalizes the machine-only tail of an otherwise authored product brief.
- * The agent should not spend turns repairing ordering, unknown keys, or a
- * mechanical enum that the builder can resolve deterministically.
+ * Canonicalizes a new draft's readiness marker before acceptance computes its
+ * digest. Accepted snapshots retain their recorded bytes and are never migrated
+ * through this function during a resume.
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function normalizeBuildReadyAppSpec(content: string): string {
@@ -136,25 +66,10 @@ export function normalizeBuildReadyAppSpec(content: string): string {
   } catch {
     return normalizedContent;
   }
-  const input = record(parsed);
-  const schema = record(input.schema);
-  const capabilities = record(input.optionalCapabilities);
-  const owner =
-    typeof input.owner === "string" && input.owner.trim().length > 0
-      ? input.owner.trim()
-      : BUILD_READY_HANDOFF_EXAMPLE.owner;
-  const canonical = {
-    additionalPublicRoutes: normalizedStrings(input.additionalPublicRoutes, publicRoutePattern),
-    optionalCapabilities: {
-      hostedResources: normalizedStrings(capabilities.hostedResources, capabilityIdPattern),
-      integrations: normalizedStrings(capabilities.integrations, capabilityIdPattern),
-    },
-    owner,
-    schema: {
-      kind: schema.kind === "none" ? ("none" as const) : ("kernel" as const),
-    },
-    status: "build-ready" as const,
-  };
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return normalizedContent;
+  }
+  const canonical = BUILD_READY_HANDOFF_EXAMPLE;
   const prefix = normalizedContent.slice(0, heading.index).trimEnd();
   return `${prefix}\n\n## Build handoff\n\n\`\`\`json\n${JSON.stringify(canonical, null, 2)}\n\`\`\``;
 }

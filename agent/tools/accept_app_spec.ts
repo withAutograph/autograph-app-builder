@@ -16,44 +16,38 @@ import {
 import { planAcceptedAppSpec as continueAcceptedAppSpec } from "@/lib/agent/accepted-spec-planning";
 import { existingAppChangesSchema } from "@/lib/agent/existing-app-changes";
 
-import planAppCreation from "./plan_app_creation";
+import { prepareAppCreation } from "@/lib/agent/prepare-app-creation";
+import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
+import type { AcceptedAppSpec } from "@/lib/agent/workflow-state";
+
+const acceptanceResult = (appSpec: AcceptedAppSpec, reused: boolean) => ({
+  ...appSpec,
+  productAcceptance: productAcceptanceObligations(appSpec),
+  reused,
+});
 
 /**
  * Planning is the deterministic continuation of a successfully accepted
  * design.  Keeping it here prevents a live model turn from becoming a
  * required orchestration hop between a complete design and its plan.
- *
- * `plan_app_creation` remains independently callable for diagnostics and its
- * own state transition makes retries safe.  This guard avoids even invoking
- * it again once the accepted design has already produced a proposal.
  */
 const planAcceptedAppSpec = async (
-  ctx: Parameters<typeof planAppCreation.execute>[1],
+  ctx: Parameters<typeof prepareAppCreation>[1],
   existingAppChanges?: { path: string; content: string }[],
 ) => {
   const latest = appBuilderWorkflowState.get();
   await continueAcceptedAppSpec({
     phase: latest.phase,
     plan: async () => {
-      await planAppCreation.execute(
-        existingAppChanges === undefined ? {} : { existingAppChanges },
-        ctx,
-      );
+      await prepareAppCreation(existingAppChanges === undefined ? {} : { existingAppChanges }, ctx);
     },
-    planComplete:
-      latest.phase === "planned" ||
-      latest.phase === "apply_failed" ||
-      latest.phase === "applied" ||
-      latest.phase === "validation_pending" ||
-      latest.phase === "validation_failed" ||
-      latest.phase === "validated" ||
-      latest.phase === "reviewed",
+    planComplete: "proposal" in latest,
   });
 };
 
 export default defineTool({
   description:
-    "Silently validate the complete AppSpec artifact and continue planning. Before authoring it, read design-app references/app-spec.md and use its complete canonical skeleton: every required heading and the exact final Build handoff with provider-neutral capability identifiers. Missing product sections must be authored, not inferred by this tool. No source, workspace, or approval receipt is required. This does not publish or change an external repository.",
+    "Silently validate the complete AppSpec artifact and continue planning. Before authoring it, read design-app references/app-spec.md and use its complete canonical skeleton: every required heading and the final Build handoff status. Missing product sections must be authored, not inferred by this tool. No source, workspace, or approval receipt is required. This does not publish or change an external repository.",
   async execute(
     { appId, expectedArtifactDigest, expectedArtifactRevision, existingAppChanges },
     ctx,
@@ -79,6 +73,18 @@ export default defineTool({
     if (artifact.mediaType !== "text/markdown") {
       throw new Error("The accepted AppSpec artifact media type is invalid.");
     }
+    // A resumed acceptance is bound to the recorded artifact revision. New
+    // draft normalization must not rewrite an already accepted snapshot or
+    // invalidate its preparation, apply, validation, or publication receipts.
+    if (
+      "appSpec" in current &&
+      current.appSpec.appId === appId &&
+      current.appSpec.artifactPath === artifact.path &&
+      current.appSpec.artifactRevision === artifact.revision
+    ) {
+      await planAcceptedAppSpec(ctx, existingAppChanges);
+      return acceptanceResult(current.appSpec, true);
+    }
     const content = normalizeBuildReadyAppSpec(artifact.content);
     const validation = validateBuildReadyAppSpec(content);
     if (!validation.valid) {
@@ -94,20 +100,12 @@ export default defineTool({
       ...(current.phase === "ui_accepted" ? { uiRevision: current.uiPreview.revision } : {}),
     };
     if (
-      (current.phase === "app_spec_accepted" ||
-        current.phase === "dependencies_prepared" ||
-        current.phase === "identity_resolved" ||
-        current.phase === "planned" ||
-        current.phase === "apply_failed" ||
-        current.phase === "applied" ||
-        current.phase === "validation_failed" ||
-        current.phase === "validated" ||
-        current.phase === "reviewed") &&
+      "appSpec" in current &&
       current.appSpec.digest === accepted.digest &&
       current.appSpec.appId === accepted.appId
     ) {
       await planAcceptedAppSpec(ctx, existingAppChanges);
-      return { ...current.appSpec, reused: true };
+      return acceptanceResult(current.appSpec, true);
     }
     updateExactWorkflow({
       expected: current,
@@ -124,7 +122,7 @@ export default defineTool({
       }),
     });
     await planAcceptedAppSpec(ctx, existingAppChanges);
-    return { ...accepted, reused: false };
+    return acceptanceResult(accepted, false);
   },
   inputSchema: z.strictObject({
     appId: z.string().min(1),

@@ -131,7 +131,7 @@ describe("prototype artifact receipts", () => {
       }),
     ).toBeUndefined();
 
-    const content = `## Status and prototype\n\nReady.\n\n## User and outcome\n\nA.\n\n## Interfaces and navigation\n\nA.\n\n## Controls and behavior\n\nA.\n\n## Data model\n\nA.\n\n## Integrations and reconciliation\n\nA.\n\n## Temporal semantics\n\nA.\n\n## Writes, review, and authority\n\nA.\n\n## Access and tenancy\n\nA.\n\n## Agent behavior\n\nA.\n\n## Operational states\n\nA.\n\n## Defaults, non-goals, and risks\n\nA.\n\n## Acceptance walkthrough\n\nA.\n\n## Build handoff\n\n\`\`\`json\n{\n  "status": "build-ready",\n  "owner": "operations",\n  "schema": { "kind": "none" },\n  "additionalPublicRoutes": [],\n  "optionalCapabilities": { "integrations": [], "hostedResources": [] }\n}\n\`\`\``;
+    const content = `## Status and prototype\n\nReady.\n\n## User and outcome\n\nA.\n\n## Interfaces and navigation\n\nA.\n\n## Controls and behavior\n\nA.\n\n## Data model\n\nA.\n\n## Integrations and reconciliation\n\nA.\n\n## Temporal semantics\n\nA.\n\n## Writes, review, and authority\n\nA.\n\n## Access and tenancy\n\nA.\n\n## Agent behavior\n\nA.\n\n## Operational states\n\nA.\n\n## Defaults, non-goals, and risks\n\nA.\n\n## Acceptance walkthrough\n\nA.\n\n## Build handoff\n\n\`\`\`json\n{\n  "status": "build-ready"\n}\n\`\`\``;
     const complete = record({
       artifacts: incomplete.artifacts,
       callId: "call-4",

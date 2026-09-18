@@ -6,7 +6,6 @@ import {
   eveSessionResultSchema,
   publicEveEventSchema,
   publicInputRequestSchema,
-  publicImplementationPlanSchema,
   publicPrototypeSchema,
   publicUiPreviewSchema,
   publicWorkingPreviewSchema,
@@ -76,7 +75,9 @@ export const hostedSessionCheckpointSchema = z
   .object({
     capturedAtEpochMs: z.number().int().nonnegative(),
     events: z.array(publicEveEventSchema).max(512),
-    implementationPlan: publicImplementationPlanSchema.optional(),
+    // Private legacy checkpoint bytes remain digest-stable for resume/cancel.
+    // New checkpoints and every public projection omit this retired field.
+    implementationPlan: z.unknown().optional(),
     inputRequests: z.array(publicInputRequestSchema).max(32).optional(),
     prototype: publicPrototypeSchema.optional(),
     status: sessionStatusSchema,

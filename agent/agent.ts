@@ -177,14 +177,7 @@ export const vendorOnboardingCompleteAppSpec = `${vendorOnboardingAppSpec}
 
 \`\`\`json
 {
-  "status": "build-ready",
-  "owner": "operations",
-  "schema": { "kind": "kernel" },
-  "additionalPublicRoutes": [],
-  "optionalCapabilities": {
-    "integrations": [],
-    "hostedResources": []
-  }
+  "status": "build-ready"
 }
 \`\`\``;
 
@@ -406,21 +399,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (accepted?.digest === undefined) {
       return "The product direction is not complete enough to plan reliably yet.";
     }
-    const plan = toolResults.find(({ name }) => name === "plan_app_creation");
-    if (plan === undefined) {
-      return {
-        toolCalls: [
-          {
-            input: {},
-            name: "plan_app_creation",
-          },
-        ],
-      };
-    }
-    if (plan.isError) {
-      return "A real project conflict prevents this product direction from becoming a reliable plan.";
-    }
-    const planned = plan.output as { digest?: string } | undefined;
+    const planned = accepted;
     const application = toolResults.find(({ name }) => name === "apply_app_creation");
     if (application === undefined) {
       if (planned?.digest === undefined) {
@@ -596,44 +575,13 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     return "The existing Vendor application is ready for a bounded product iteration.";
   }
   if (message.includes("retry target planning")) {
-    const planResults = toolResults.filter(({ name }) => name === "plan_app_creation");
-    const requiredResults = 2;
-    const statusResult = [...toolResults]
-      .toReversed()
-      .find(({ name }) => name === "workspace_status");
-    if (
-      statusResult === undefined ||
-      (planResults.length < requiredResults && toolResults.at(-1)?.name === "plan_app_creation")
-    ) {
+    const statusResult = toolResults.at(-1);
+    if (statusResult?.name !== "workspace_status") {
       return { toolCalls: [{ input: {}, name: "workspace_status" }] };
     }
-    const status = statusResult.output as
-      | { appSpec?: { digest?: string }; phase?: string }
-      | undefined;
-    if (status?.phase !== "planned" || status.appSpec?.digest === undefined) {
-      return "A completed target plan is required before retry.";
-    }
-    const planResult = planResults.at(-1);
-    if (planResults.length < requiredResults) {
-      return {
-        toolCalls: [
-          {
-            input: {},
-            name: "plan_app_creation",
-          },
-        ],
-      };
-    }
-    if (planResult === undefined) {
-      return "The target-planning retry result is unavailable.";
-    }
-    if (planResult.isError) {
-      return "The target-planning retry failed; inspect its actual error.";
-    }
-    const output = planResult.output as { reused?: boolean } | undefined;
-    return output?.reused === true
+    return (statusResult.output as { phase?: string } | undefined)?.phase === "planned"
       ? "The lost-response retry reused the exact durable target-planning receipt without rerunning either target command."
-      : "The target-planning retry did not reuse its durable receipt.";
+      : "A completed target plan is required before retry.";
   }
   if (
     message.includes("prepare offline target dependencies") ||
@@ -712,32 +660,9 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (status?.phase !== "dependencies_prepared" || status.appSpec?.digest === undefined) {
       return "Approved offline dependency preparation is required before target planning.";
     }
-    const latestResult = toolResults.at(-1);
-    const planResult = latestResult?.name === "plan_app_creation" ? latestResult : undefined;
-    if (planResult === undefined) {
-      const existing = [...toolResults]
-        .toReversed()
-        .find(({ name }) => name === "inspect_existing_app")?.output as
-        | { files?: readonly { path: string; content: string }[] }
-        | undefined;
-      const existingAppChanges =
-        existing?.files === undefined ? undefined : addVendorTaxVerificationStatus(existing.files);
-      return {
-        toolCalls: [
-          {
-            input:
-              existingAppChanges === undefined || existingAppChanges.length === 0
-                ? {}
-                : { existingAppChanges },
-            name: "plan_app_creation",
-          },
-        ],
-      };
-    }
-    return planResult.isError
-      ? "Target identity and planning were canceled or rejected; no target mutation occurred."
-      : "The Vendor review now shows when tax verification is required, and the update is ready for the private preview.";
+    return "Accept the current product design to continue automatic preparation.";
   }
+
   if (
     message.includes("apply the current creation proposal") ||
     message.includes("retry target apply") ||
@@ -756,7 +681,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     const statusResults = toolResults.filter(({ name }) => name === "workspace_status");
     const latestStatus = statusResults.at(-1);
     const latestApplyIndex = toolResults.findLastIndex(({ name }) => name === "apply_app_creation");
-    const latestPlanIndex = toolResults.findLastIndex(({ name }) => name === "plan_app_creation");
+    const latestPlanIndex = toolResults.findLastIndex(({ name }) => name === "accept_app_spec");
     const latestStatusIndex = toolResults.findLastIndex(({ name }) => name === "workspace_status");
     if (
       latestStatus === undefined ||

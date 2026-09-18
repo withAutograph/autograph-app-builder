@@ -5,7 +5,7 @@ import { isDevelopmentRuntimePath } from "./runtime-watch";
 describe("development runtime restart paths", () => {
   it.each([
     "agent/agent.ts",
-    "agent/tools/plan_app_creation.ts",
+    "lib/agent/prepare-app-creation.ts",
     "skills/autograph-app-builder/SKILL.md",
     "schemas/app-spec.ts",
     "app/mcp/route.ts",

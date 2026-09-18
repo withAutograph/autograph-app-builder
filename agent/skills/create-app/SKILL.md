@@ -72,21 +72,18 @@ app-owned files and reuse the same component-backed preview flow.
    errors, repair completeness and retry automatically. Ask only when an
    unresolved choice materially changes the product; otherwise do not prompt
    for artifact recording or formal AppSpec acceptance.
-5. Follow [$plan_app_creation](../plan-app-creation/SKILL.md) automatically to
-   produce the canonical validated proposal. A prose outline is not a plan:
-   never finish an app-creation turn or claim the plan is ready until
-   `plan_app_creation` succeeds for the current artifact bytes. If the visual
-   prototype is ready first, continue the silent workflow. For an existing app,
-   when planning identifies a replacement without an exact preimage, inspect
-   only the exact app-owned paths returned by that error, rebuild the
-   replacements, and retry planning without resolving or preparing the source
-   again. Never expose this repair or substitute prose. Return only product
-   blockers without workarounds or internal validator mechanics. When the
-   accepted change creates or evolves a native Arrusted Next App Router zone,
-   load `$arrusted-next-app-like-experience` before applying it. It selects the
-   relevant published Vercel workflow while preserving this Builder's typed-tool
-   boundary.
-6. Carry `productAcceptance.implementationPrompt` from the planning tool into
+5. Accepting the product design automatically prepares its private durable
+   creation state. New apps use `mise run create:app <app-id>` through the
+   builder-owned apply tool. The command derives identity and default routes
+   from the id and current catalog. The accepted Markdown is staged at
+   `.config/app-specs/<id>.md` and copied into the generated app as a snapshot.
+   Only `.config/app-specs/<id>.cue` selects CUE-backed generation; Markdown
+   alone never requests a backend. Additional routes require a separately
+   reviewed topology edit. For existing apps, supply exact app-owned changes
+   when accepting the design; inspect the returned paths to repair a missing
+   preimage and retry acceptance. When creating or evolving a native Next App
+   Router zone, load `$arrusted-next-app-like-experience` before applying it.
+6. Carry `productAcceptance.implementationPrompt` from design acceptance into
    implementation: it contains the accepted walkthrough, not a new product brief.
    Keep its user actions and independent readbacks visible in behavioral tests.
    When later tools return `productStatus: unassessed`, describe technical checks
@@ -210,8 +207,7 @@ app-owned files and reuse the same component-backed preview flow.
   reviewed changes, without effect-based approval for that exact outcome.
 - Never use `$scaffold-app-workspace` as the apply step for a planned route-owned
   app; the complete command owns contract, workspace, and topology composition.
-- Never create schema contents merely because the proposal derives a kernel
-  schema path.
+- Never create schema contents merely because the product brief describes durable data.
 - Never publish without the separate publication approval. Never reconcile providers, mutate `amp.yaml`, create secrets or environment
   configuration, deploy, or claim admission or Production readiness.
 - If the complete command reports stale, conflicting, or ambiguous recovery
@@ -224,3 +220,8 @@ app-owned files and reuse the same component-backed preview flow.
   blocker copy. Translate unavoidable constraints into the smallest
   product-domain question with a recommended default, or offer a product-level
   alternative when no answer can make the requested outcome available.
+
+For a new CUE-backed app, include `.config/app-specs/<id>.cue` in
+`implementationFiles` with the reviewed schema contents. Apply stages this
+convention input before creation and preserves the resulting app-owned CUE and
+checked release. Do not request a backend through Markdown metadata.

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { APP_BUILDER_WORKFLOW_VERSION } from "./workflow-state";
 import type {
-  AppCreationProposal,
+  PreparedAppCreation,
   AppBuilderWorkflowState,
   DependencyPreparationReceipt,
 } from "./workflow-state";
@@ -74,12 +74,14 @@ const state = {
     eligibilityDigest: "d".repeat(64),
     identity: {
       appId: "expense-review",
-      appSpecPath: "prototype/expense-review/app-spec.md",
+      appSpecPath: "apps/expense-review/.config/app-spec.md",
+      appSpecSourcePath: ".config/app-specs/expense-review.md",
       baseRoutes: ["/expense-review", "/expense-review/:path*"],
-      contractPath: "apps/expense-review/app.contract.json",
-      kernelSchemaPath: "apps/expense-review/schema/expense-review-schema.json",
+      cueSourcePath: ".config/app-specs/expense-review.cue",
       packageName: "@autograph/expense-review",
       projectName: "apps-expense-review",
+      schemaCuePath: "apps/expense-review/schema/expense-review.cue",
+      title: "Expense Review",
       workspacePath: "apps/expense-review",
     },
     imageDigest: `fixture@sha256:${"1".repeat(64)}`,
@@ -105,7 +107,7 @@ const state = {
     sourceReceiptDigest: "f".repeat(64),
     sourceSha: "a".repeat(40),
     sourceTree: "b".repeat(40),
-    target: {} as AppCreationProposal["target"],
+    target: {} as PreparedAppCreation["target"],
     version: 1,
     workspaceDigest: "c".repeat(64),
   },

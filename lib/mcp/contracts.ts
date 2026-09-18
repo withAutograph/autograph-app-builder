@@ -194,25 +194,11 @@ export const publicWorkingPreviewSchema = z
 
 export type PublicWorkingPreview = z.infer<typeof publicWorkingPreviewSchema>;
 
-export const publicImplementationPlanSchema = z
-  .object({
-    appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-    packageName: z.string().regex(/^@autograph\/[a-z][a-z0-9-]*$/u),
-    projectName: z.string().regex(/^apps-[a-z][a-z0-9-]*$/u),
-    readOnly: z.literal(true),
-    routes: z.array(z.string().startsWith("/")).min(1),
-    runtime: z.literal("nextjs"),
-  })
-  .strict();
-
-export type PublicImplementationPlan = z.infer<typeof publicImplementationPlanSchema>;
-
 export const eveSessionResultSchema = z
   .object({
     cursor: z.number().int().nonnegative(),
     error: z.object({ code: z.string(), message: z.string() }).strict().optional(),
     events: z.array(publicEveEventSchema),
-    implementationPlan: publicImplementationPlanSchema.optional(),
     inputRequests: z.array(publicInputRequestSchema).optional(),
     prototype: publicPrototypeSchema.optional(),
     sessionId: z.string(),

@@ -12,10 +12,6 @@ export const readSkillReferenceInputSchema = z.discriminatedUnion("skill", [
     ]),
     skill: z.literal("design-app"),
   }),
-  z.strictObject({
-    reference: z.literal("references/app-contract-v1.md"),
-    skill: z.literal("plan_app_creation"),
-  }),
 ]);
 
 export default defineTool({

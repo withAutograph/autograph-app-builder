@@ -92,18 +92,29 @@ export function withImplementationFiles(
   files: readonly ImplementationFile[],
 ): ApplyCommandExecutor {
   return async (input) => {
+    const relativeApplyRoot = input.applyRoot.replace(/^\/workspace\//u, "");
+    const cuePath = `.config/app-specs/${input.appId}.cue`;
+    const cue = files.find((file) => file.path === cuePath);
+    if (cue !== undefined) {
+      await input.sandbox.writeTextFile({
+        content: cue.content,
+        path: `${relativeApplyRoot}/${cue.path}`,
+      });
+    }
     const result = await executor(input);
     if (result.exitCode !== 0) {
       return result;
     }
 
-    const relativeApplyRoot = input.applyRoot.replace(/^\/workspace\//u, "");
-    await runSequentially(files, async (file) => {
-      await input.sandbox.writeTextFile({
-        content: file.content,
-        path: `${relativeApplyRoot}/${file.path}`,
-      });
-    });
+    await runSequentially(
+      files.filter((file) => file.path !== cuePath),
+      async (file) => {
+        await input.sandbox.writeTextFile({
+          content: file.content,
+          path: `${relativeApplyRoot}/${file.path}`,
+        });
+      },
+    );
     return result;
   };
 }

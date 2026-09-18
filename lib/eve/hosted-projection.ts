@@ -3,7 +3,6 @@ import { z } from "zod";
 import {
   eveSessionResultSchema,
   publicEveEventSchema,
-  publicImplementationPlanSchema,
   publicPrototypeSchema,
   publicUiPreviewSchema,
   publicWorkingPreviewSchema,
@@ -20,7 +19,6 @@ import type { InternalEveEvent } from "./public-events";
 const hostedSnapshotSchema = z
   .object({
     events: z.array(z.unknown()).max(100_000),
-    implementationPlan: publicImplementationPlanSchema.optional(),
     prototype: publicPrototypeSchema.optional(),
     status: sessionStatusSchema,
     uiPreview: publicUiPreviewSchema.optional(),
@@ -73,8 +71,5 @@ export function projectHostedSnapshot(
               ? null
               : currentWorkingPreview(snapshot.workingPreview),
         }),
-    ...(snapshot.implementationPlan === undefined
-      ? {}
-      : { implementationPlan: snapshot.implementationPlan }),
   });
 }

@@ -25,7 +25,6 @@ export interface NormalizedChangeSet {
   dependencyCacheContentDigest: string;
   targetReceipt: {
     version: 1;
-    contractPath: string;
     topology: { path: string; oldDigest: string; newDigest: string };
   };
   preTreeDigest: string;
@@ -75,7 +74,6 @@ export function deriveNormalizedChangeSet(
     sourceSha: apply.sourceSha,
     sourceTree: apply.sourceTree,
     targetReceipt: {
-      contractPath: apply.targetReceipt.contractPath,
       topology: apply.targetReceipt.topology,
       version: apply.targetReceipt.version,
     },

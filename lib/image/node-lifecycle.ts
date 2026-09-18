@@ -84,7 +84,6 @@ const receiptKinds = {
 } as const;
 
 const targetArguments = {
-  APP_CONTRACT_SHA256: ".config/mise/scripts/repository/app-contract.ts",
   APP_IDENTITY_SHA256: ".config/mise/scripts/repository/app-identity.ts",
   APP_TEMPLATE_PACKAGE_SHA256: ".config/turbo/generators/templates/app/package.json.hbs",
   APP_VALIDATION_SHA256: ".config/mise/scripts/repository/app-validation.ts",

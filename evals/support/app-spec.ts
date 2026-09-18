@@ -54,13 +54,6 @@ User accepted this AppSpec.
 
 \`\`\`json
 {
-  "status": "build-ready",
-  "owner": "finance-platform",
-  "schema": { "kind": "none" },
-  "additionalPublicRoutes": [],
-  "optionalCapabilities": {
-    "integrations": [],
-    "hostedResources": []
-  }
+  "status": "build-ready"
 }
 \`\`\``;

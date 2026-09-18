@@ -58,58 +58,35 @@ describe("build-ready AppSpec validation", () => {
     });
   });
 
-  it.each(["integrations", "hostedResources"] as const)(
-    "rejects provider-specific %s before planning without silently dropping intent",
+  it.each(["owner", "schema", "additionalPublicRoutes", "optionalCapabilities"])(
+    "rejects unused %s metadata in a new handoff",
     (field) => {
-      for (const provider of [
-        "aws",
-        "azure",
-        "cloudflare",
-        "gcp",
-        "github",
-        "gitlab",
-        "neon",
-        "vercel",
-      ]) {
-        for (const value of [provider, `${provider}-sync`, `sync-${provider}`]) {
-          const content = completeAppSpec({
+      expect(
+        validateBuildReadyAppSpec(
+          completeAppSpec({
             ...BUILD_READY_HANDOFF_EXAMPLE,
-            optionalCapabilities: {
-              hostedResources: [],
-              integrations: [],
-              [field]: [value],
-            },
-          });
-          const normalized = normalizeBuildReadyAppSpec(content);
-          expect(normalized).toContain(`"${value}"`);
-          for (const draft of [content, normalized]) {
-            expect(validateBuildReadyAppSpec(draft)).toMatchObject({
-              issues: expect.arrayContaining([
-                expect.objectContaining({
-                  code: "build_handoff_shape",
-                  message: expect.stringContaining("provider-neutral"),
-                  path: `Build handoff.optionalCapabilities.${field}.0`,
-                }),
-              ]),
-              valid: false,
-            });
-          }
-        }
-      }
+            [field]: "unused",
+          }),
+        ),
+      ).toMatchObject({
+        issues: expect.arrayContaining([
+          expect.objectContaining({ code: "build_handoff_shape", path: "Build handoff" }),
+        ]),
+        valid: false,
+      });
     },
   );
 
-  it("preserves GitHub and Vercel product decisions with neutral handoff intent", () => {
-    const authored = completeAppSpec({
-      ...BUILD_READY_HANDOFF_EXAMPLE,
-      optionalCapabilities: {
-        hostedResources: ["relational-database"],
-        integrations: ["application-hosting", "source-control"],
-      },
-    }).replace(
-      "## Integrations and reconciliation\n\nProduct decision.",
-      "## Integrations and reconciliation\n\nGitHub owns repository history; Vercel owns preview deployment status. Publication requires separate approval.",
-    );
+  it("preserves provider choices, data needs, and approval decisions in product prose", () => {
+    const authored = completeAppSpec()
+      .replace(
+        "## Integrations and reconciliation\n\nProduct decision.",
+        "## Integrations and reconciliation\n\nGitHub owns repository history; Vercel owns preview deployment status. Publication requires separate approval.",
+      )
+      .replace(
+        "## Data model\n\nProduct decision.",
+        "## Data model\n\nThe operations team owns release decisions and their immutable evidence timestamps.",
+      );
     expect(validateBuildReadyAppSpec(authored)).toEqual({ valid: true });
     expect(normalizeBuildReadyAppSpec(authored)).toBe(authored);
   });
@@ -132,27 +109,30 @@ describe("build-ready AppSpec validation", () => {
     ).toEqual({ valid: true });
   });
 
-  it("normalizes mechanical handoff drift before validation", () => {
-    const normalized = normalizeBuildReadyAppSpec(
-      completeAppSpec({
-        additionalPublicRoutes: ["/z", "/bad/[id]", "/a", "/a"],
-        ignored: true,
-        optionalCapabilities: {
-          hostedResources: ["relational-database"],
-          integrations: ["inventory-sync", "inventory-sync", "Bad"],
-        },
-        owner: " operations ",
-        schema: { entities: ["exception"], kind: "operational" },
-        status: "ready",
-      }),
-    );
+  it("normalizes an unaccepted draft to status-only without changing its product prose", () => {
+    const draft = completeAppSpec({
+      additionalPublicRoutes: ["/review"],
+      optionalCapabilities: { hostedResources: [], integrations: ["source-control"] },
+      owner: "operations",
+      schema: { kind: "kernel" },
+      status: "ready",
+    });
+    const normalized = normalizeBuildReadyAppSpec(draft);
 
     expect(validateBuildReadyAppSpec(normalized)).toEqual({ valid: true });
-    expect(normalized).toContain('"kind": "kernel"');
-    expect(normalized).not.toContain("entities");
-    expect(normalized).not.toContain("/bad/[id]");
-    expect(normalized.indexOf('"/a"')).toBeLessThan(normalized.indexOf('"/z"'));
+    expect(normalized).toBe(completeAppSpec());
+    expect(normalizeBuildReadyAppSpec(normalized)).toBe(normalized);
+    expect(draft).toContain('"owner": "operations"');
   });
+
+  it.each([{ value: null }, { value: [] }, { value: "ready" }, { value: true }])(
+    "does not turn non-object $value into a ready handoff",
+    ({ value }) => {
+      const draft = completeAppSpec(value);
+      expect(normalizeBuildReadyAppSpec(draft)).toBe(draft);
+      expect(validateBuildReadyAppSpec(draft).valid).toBe(false);
+    },
+  );
 
   it.each([
     ["trailing prose", `${completeAppSpec()}\nnot part of the handoff`],
@@ -209,7 +189,7 @@ describe("build-ready AppSpec validation", () => {
 
     const extra = completeAppSpec({
       ...BUILD_READY_HANDOFF_EXAMPLE,
-      additionalPublicRoutes: ["/z", "/a", "/a"],
+      status: "ready",
       unexpected: "private-value",
     });
     const result = validateBuildReadyAppSpec(extra);
@@ -221,7 +201,7 @@ describe("build-ready AppSpec validation", () => {
       expect.arrayContaining([
         expect.objectContaining({
           code: "build_handoff_shape",
-          path: "Build handoff.additionalPublicRoutes",
+          path: "Build handoff.status",
         }),
         expect.objectContaining({
           code: "build_handoff_shape",

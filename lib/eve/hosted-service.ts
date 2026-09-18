@@ -139,7 +139,7 @@ function stageForResult(result: EveSessionResult): z.infer<typeof publicSessionS
   if (["failed", "cancelled"].includes(result.status)) {
     return "needs_attention";
   }
-  if (result.implementationPlan !== undefined) {
+  if (result.workingPreview !== undefined && result.workingPreview !== null) {
     return "ready";
   }
   if (result.prototype !== undefined) {
@@ -339,11 +339,7 @@ function checkpointForSnapshot(
   );
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-  function fitCheckpoint(input: {
-    profile: CheckpointInputProfile;
-    includePrototype: boolean;
-    includeImplementationPlan: boolean;
-  }) {
+  function fitCheckpoint(input: { profile: CheckpointInputProfile; includePrototype: boolean }) {
     const boundedEvents = events.map((event) => checkpointEvent(event, input.profile));
     const inputRequests = outstandingRequests
       .slice(0, 32)
@@ -368,9 +364,6 @@ function checkpointForSnapshot(
         ...(snapshot.workingPreview === undefined
           ? {}
           : { workingPreview: snapshot.workingPreview }),
-        ...(input.includeImplementationPlan && snapshot.implementationPlan !== undefined
-          ? { implementationPlan: snapshot.implementationPlan }
-          : {}),
         ...(inputRequests.length === 0 ? {} : { inputRequests }),
         ...(input.includePrototype && snapshot.prototype !== undefined
           ? { prototype: snapshot.prototype }
@@ -391,7 +384,6 @@ function checkpointForSnapshot(
 
   for (const profile of checkpointInputProfiles) {
     const checkpoint = fitCheckpoint({
-      includeImplementationPlan: true,
       includePrototype: true,
       profile,
     });
@@ -404,11 +396,7 @@ function checkpointForSnapshot(
   if (minimalProfile === undefined) {
     throw new HostedSessionRecoveryUnavailableError();
   }
-  for (const artifactSelection of [
-    { includeImplementationPlan: true, includePrototype: false },
-    { includeImplementationPlan: false, includePrototype: true },
-    { includeImplementationPlan: false, includePrototype: false },
-  ]) {
+  for (const artifactSelection of [{ includePrototype: true }, { includePrototype: false }]) {
     const checkpoint = fitCheckpoint({
       profile: minimalProfile,
       ...artifactSelection,
@@ -763,9 +751,9 @@ export function createHostedEveSessionService(input: {
     const checkpoint = checkpointForSnapshot(sessionId, snapshot, timestamp);
     const observed = await input.store.observeSession?.({
       checkpoint,
-      ...(completeResult.implementationPlan?.appId === undefined
+      ...(completeResult.uiPreview?.appId === undefined
         ? {}
-        : { appId: completeResult.implementationPlan.appId }),
+        : { appId: completeResult.uiPreview.appId }),
       nowEpochMs: timestamp,
       principal,
       resumability,
@@ -988,7 +976,7 @@ export function createHostedEveSessionService(input: {
               const timestamp = now();
               const checkpoint = checkpointForSnapshot(sessionId, response.snapshot, timestamp);
               const { appId: existingAppId } = existing;
-              const { appId: implementationAppId } = result.implementationPlan ?? {};
+              const { appId: implementationAppId } = result.uiPreview ?? {};
               const appId = implementationAppId ?? existingAppId;
               return {
                 newSession: durableHostedSessionRecordSchema.parse({
@@ -1066,9 +1054,7 @@ export function createHostedEveSessionService(input: {
             const replaced = hostedSessionRecordSchema.parse(
               await replaceSessionAdapter.call(input.store, {
                 adapterSessionId: response.adapterSessionId,
-                ...(result.implementationPlan?.appId === undefined
-                  ? {}
-                  : { appId: result.implementationPlan.appId }),
+                ...(result.uiPreview?.appId === undefined ? {} : { appId: result.uiPreview.appId }),
                 checkpoint,
                 expectedAdapterGeneration: existing.adapterGeneration,
                 expectedCheckpointDigest: existing.checkpointDigest,
@@ -1122,9 +1108,7 @@ export function createHostedEveSessionService(input: {
             newSession: durableHostedSessionRecordSchema.parse({
               adapterGeneration: 1,
               adapterSessionId: response.adapterSessionId,
-              ...(result.implementationPlan?.appId === undefined
-                ? {}
-                : { appId: result.implementationPlan.appId }),
+              ...(result.uiPreview?.appId === undefined ? {} : { appId: result.uiPreview.appId }),
               checkpoint,
               checkpointDigest: hostedSessionCheckpointDigest(checkpoint),
               checkpointProgressDigest: hostedSessionCheckpointProgressDigest(checkpoint),

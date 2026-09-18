@@ -37,7 +37,6 @@ export default defineEval({
     t.succeeded();
     preparation.notEvent("input.requested");
     t.notCalledTool("prepare_target_dependencies");
-    preparation.notCalledTool("plan_app_creation");
     preparation.notCalledTool("apply_app_creation");
     t.notCalledTool("bash");
     t.notCalledTool("write_file");

@@ -5,7 +5,6 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { EveSessionListResult, EveSessionResult } from "@/lib/mcp/contracts";
 import {
   deriveInstalledEveStatus,
-  latestInstalledImplementationPlan,
   latestInstalledPrototype,
   latestInstalledUiPreview,
   latestInstalledWorkingPreview,
@@ -242,7 +241,6 @@ function resultForEvents(
   const prototype = latestInstalledPrototype(snapshotEvents);
   const uiPreview = latestInstalledUiPreview(snapshotEvents);
   const workingPreview = latestInstalledWorkingPreview(snapshotEvents);
-  const implementationPlan = latestInstalledImplementationPlan(snapshotEvents);
   return {
     cursor: Math.min(cursor + events.length, projected.length),
     events,
@@ -252,7 +250,6 @@ function resultForEvents(
     ...(prototype === undefined ? {} : { prototype }),
     ...(uiPreview === undefined ? {} : { uiPreview }),
     ...(workingPreview === undefined ? {} : { workingPreview }),
-    ...(implementationPlan === undefined ? {} : { implementationPlan }),
     ...(options.error === undefined ? {} : { error: options.error }),
   };
 }
@@ -265,7 +262,6 @@ function acceptedResult(
   const prototype = latestInstalledPrototype(snapshotEvents);
   const uiPreview = latestInstalledUiPreview(snapshotEvents);
   const workingPreview = latestInstalledWorkingPreview(snapshotEvents);
-  const implementationPlan = latestInstalledImplementationPlan(snapshotEvents);
   return {
     cursor: 0,
     events: [],
@@ -274,7 +270,6 @@ function acceptedResult(
     ...(prototype === undefined ? {} : { prototype }),
     ...(uiPreview === undefined ? {} : { uiPreview }),
     ...(workingPreview === undefined ? {} : { workingPreview }),
-    ...(implementationPlan === undefined ? {} : { implementationPlan }),
   };
 }
 
@@ -615,7 +610,7 @@ export function createLocalEveSessionService(
         let stage: "complete" | "designing" | "prototype" | "ready";
         if (result.status === "completed") {
           stage = "complete";
-        } else if (result.implementationPlan === undefined) {
+        } else if (result.workingPreview === undefined || result.workingPreview === null) {
           stage = result.prototype === undefined ? "designing" : "prototype";
         } else {
           stage = "ready";
@@ -624,9 +619,7 @@ export function createLocalEveSessionService(
           ? ("terminal" as const)
           : ("live" as const);
         return {
-          ...(result.implementationPlan?.appId === undefined
-            ? {}
-            : { appId: result.implementationPlan.appId }),
+          ...(result.uiPreview?.appId === undefined ? {} : { appId: result.uiPreview.appId }),
           resumability,
           sessionId,
           stage,

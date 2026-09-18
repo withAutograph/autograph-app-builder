@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 
 import {
-  publicImplementationPlanSchema,
   publicPrototypeSchema,
   publicUiPreviewSchema,
   publicWorkingPreviewSchema,
@@ -9,13 +8,11 @@ import {
 import type {
   EveSessionStatus,
   PublicEveEvent,
-  PublicImplementationPlan,
   PublicInputRequest,
   PublicPrototype,
   PublicUiPreview,
   PublicWorkingPreview,
 } from "../mcp/contracts";
-import { targetProposalSchema } from "../repository/target-planning";
 import type { MessageStreamEvent } from "eve/client";
 import { z } from "zod";
 import { publicApprovalDescription } from "../agent/approval-receipt";
@@ -50,9 +47,6 @@ const unavailableContinuationMessage =
 const maximumPrototypeBytes = 8 * 1024 * 1024;
 const prototypePathPattern = /^prototype\/(?<appId>[a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/index\.html$/u;
 const lowercaseSha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
-const prefixedSha256Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
-const gitObjectIdSchema = z.string().regex(/^[a-f0-9]{40}$/u);
-const immutableExecutionArtifactSchema = z.string().regex(/^(?!fixture@).+@sha256:[a-f0-9]{64}$/u);
 const prototypeRequestSchema = z
   .object({
     content: z.string().min(1).max(maximumPrototypeBytes),
@@ -85,177 +79,7 @@ const uiPreviewResultSchema = z
     routes: z.array(z.string().startsWith("/")).min(1).max(16),
   })
   .passthrough();
-const planRequestSchema = z
-  .object({
-    existingAppChanges: z
-      .array(
-        z
-          .object({
-            content: z.string().max(262_144),
-            path: z
-              .string()
-              .min(1)
-              .max(512)
-              .regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._/@:-]+$/u),
-          })
-          .strict(),
-      )
-      .min(1)
-      .max(32)
-      .optional(),
-    expectedAppSpecDigest: lowercaseSha256Schema,
-  })
-  .strict();
-const planResultSchema = z
-  .object({
-    appSpecDigest: lowercaseSha256Schema,
-    artifactRevision: lowercaseSha256Schema,
-    contractDigest: lowercaseSha256Schema,
-    dependencyCacheDigest: prefixedSha256Schema,
-    digest: lowercaseSha256Schema,
-    eligibilityDigest: lowercaseSha256Schema,
-    identityDigest: lowercaseSha256Schema,
-    imageDigest: immutableExecutionArtifactSchema,
-    plannedByCallId: z.string().min(1),
-    reused: z.boolean(),
-    sourceReceiptDigest: lowercaseSha256Schema,
-    sourceSha: gitObjectIdSchema,
-    sourceTree: gitObjectIdSchema,
-    target: targetProposalSchema,
-    version: z.literal(1),
-    workspaceDigest: lowercaseSha256Schema,
-  })
-  .strict();
-
 const sha256 = (value: string): string => createHash("sha256").update(value, "utf-8").digest("hex");
-
-const verifiedImplementationPlan = (
-  callId: string,
-  request: z.infer<typeof planRequestSchema>,
-  candidate: unknown,
-): PublicImplementationPlan | undefined => {
-  const parsed = planResultSchema.safeParse(candidate);
-  if (!parsed.success) {
-    return undefined;
-  }
-  const result = parsed.data;
-  const rawResult = candidate as Record<string, unknown>;
-  const rawTarget = rawResult.target;
-  if (typeof rawTarget !== "object" || rawTarget === null) {
-    return undefined;
-  }
-  const { target } = result;
-  const requestedChanges = request.existingAppChanges;
-  const iterationMatchesRequest =
-    requestedChanges === undefined
-      ? !("operation" in target)
-      : "operation" in target &&
-        target.operation === "iterate-existing-app" &&
-        target.iteration.changes.length === requestedChanges.length &&
-        target.iteration.changes.every(
-          (change, index) =>
-            change.path === requestedChanges[index]?.path &&
-            change.after.content === requestedChanges[index]?.content,
-        );
-  if (
-    (!result.reused && result.plannedByCallId !== callId) ||
-    result.appSpecDigest !== request.expectedAppSpecDigest ||
-    target.contract.appSpec.sha256 !== request.expectedAppSpecDigest ||
-    target.plan.product.appSpec.sha256 !== request.expectedAppSpecDigest ||
-    !iterationMatchesRequest ||
-    result.contractDigest !==
-      sha256(JSON.stringify((rawTarget as Record<string, unknown>).contract)) ||
-    result.digest !==
-      sha256(
-        JSON.stringify(
-          Object.fromEntries(
-            Object.entries(rawResult).filter(([key]) => key !== "digest" && key !== "reused"),
-          ),
-        ),
-      ) ||
-    target.blockers.length !== 0 ||
-    target.mutations.length !== 0
-  ) {
-    return undefined;
-  }
-  return publicImplementationPlanSchema.parse({
-    appId: target.contract.appId,
-    packageName: target.plan.source.packageName,
-    projectName: target.plan.topology.projectName,
-    readOnly: true,
-    routes: target.plan.topology.routes,
-    runtime: target.plan.source.runtime,
-  });
-};
-
-/**
- * Projects a compact product plan only after the installed runtime durably
- * completes its fixed target-planning tool with exact request/result bindings.
- */
-export const latestInstalledImplementationPlan = (
-  events: readonly MessageStreamEvent[],
-): PublicImplementationPlan | undefined => {
-  const requested = new Map<string, z.infer<typeof planRequestSchema>>();
-  let latest: PublicImplementationPlan | undefined;
-
-  for (const event of events) {
-    if (event.type === "actions.requested") {
-      for (const action of event.data.actions) {
-        if (action.kind !== "tool-call") {
-          continue;
-        }
-        if (action.toolName !== "plan_app_creation") {
-          requested.delete(action.callId);
-          continue;
-        }
-        const parsed = planRequestSchema.safeParse(action.input);
-        if (parsed.success) {
-          requested.set(action.callId, parsed.data);
-        } else {
-          requested.delete(action.callId);
-        }
-      }
-      continue;
-    }
-
-    if (
-      event.type !== "action.result" ||
-      event.data.status !== "completed" ||
-      event.data.result.kind !== "tool-result" ||
-      event.data.result.isError === true
-    ) {
-      continue;
-    }
-
-    if (event.data.result.toolName === "record_prototype_artifact") {
-      const { output } = event.data.result;
-      if (
-        typeof output === "object" &&
-        output !== null &&
-        "invalidated" in output &&
-        output.invalidated === true
-      ) {
-        latest = undefined;
-      }
-      continue;
-    }
-    if (event.data.result.toolName !== "plan_app_creation") {
-      continue;
-    }
-
-    const { callId } = event.data.result;
-    const input = requested.get(callId);
-    if (input === undefined) {
-      continue;
-    }
-    const plan = verifiedImplementationPlan(callId, input, event.data.result.output);
-    if (plan !== undefined) {
-      latest = plan;
-    }
-  }
-
-  return latest;
-};
 
 /**
  * Recovers only a successfully recorded HTML prototype from Eve's durable

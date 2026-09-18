@@ -87,7 +87,6 @@ const fixture = (options: { stale?: boolean; installFails?: boolean; cueFails?: 
       appSpec: { path: "apps/vendor/app-spec.md", sha256: digest("app spec") },
       version: 1,
     },
-    futurePath: "apps/vendor/app.contract.json",
     iteration: {
       changes,
       digest: digest(JSON.stringify(changes)),
@@ -97,8 +96,6 @@ const fixture = (options: { stale?: boolean; installFails?: boolean; cueFails?: 
     plan: {
       product: {
         appSpec: { path: "apps/vendor/app-spec.md", sha256: digest("app spec") },
-        optionalCapabilities: { hostedResources: [], integrations: [] },
-        owner: "App Builder",
       },
       source: {
         packageName: "@autograph/vendor",
@@ -119,7 +116,6 @@ const fixture = (options: { stale?: boolean; installFails?: boolean; cueFails?: 
       appId: "vendor",
       applyRoot: "/workspace/repository",
       proposal,
-      proposalPath: "/workspace/proposal.json",
       sandbox,
     });
   return { cueCommand: () => cueCommand, cueFailure, events, execute, failure, policies, sandbox };
@@ -155,7 +151,8 @@ const executeCueActivation = async function executeCueActivation(
       chmod(miseBin, 0o755),
       chmod(nodePath.join(runtimeBin, "bun"), 0o755),
     ]);
-    execFileSync("/bin/bash", ["-c", command], {
+    // Keep user shell startup and exported functions from replacing fixture tools.
+    execFileSync("/bin/bash", ["--noprofile", "--norc", "-p", "-c", command], {
       cwd: root,
       env: {
         ...process.env,

@@ -23,7 +23,6 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
       "accept_app_spec",
       "record_prototype_artifact",
       "accept_app_spec",
-      "plan_app_creation",
       "apply_app_creation",
       "validate_app_creation",
       "change_set_status",
@@ -67,7 +66,6 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
     t.calledTool("accept_app_spec", { count: 1, status: "failed" });
     t.calledTool("accept_app_spec", { count: 1 });
     t.notCalledTool("prepare_target_dependencies");
-    t.calledTool("plan_app_creation", { count: 1 });
     t.calledTool("apply_app_creation", { count: 1 });
     t.calledTool("validate_app_creation", { count: 1 });
     t.calledTool("change_set_status", { count: 1 });

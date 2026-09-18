@@ -31,7 +31,7 @@ fence. Do not use a shorter example or reconstruct the headings from memory.
 The final section must be exactly `## Build handoff`, one blank line, and one
 lowercase `json` fenced block. End the document at that block's closing fence:
 no conclusion, checklist, comments, or additional sections after it. The
-handoff is a machine-readable projection of this same product specification.
+handoff records readiness only. Product decisions belong in the preceding prose.
 
 ````markdown
 # AppSpec: <product name>
@@ -56,15 +56,14 @@ Give every visible control an action, state transition, and cross-interface effe
 ## Data model
 
 Describe owned objects, stable identities, fields, and relationships, or explicitly
-state that no owned data is needed. Match schema.kind below to this decision.
+state that no owned data is needed. Describe persistence needs in product terms.
 
 ## Integrations and reconciliation
 
 Describe provider choices in prose, source of truth, refresh, imports, and
 reconciliation. For a GitHub and Vercel workflow, describe which source-control
 and application-hosting operations are required and which need separate approval.
-Use only the provider-neutral intent in optionalCapabilities below. Explicitly
-defer integrations that are outside the first version.
+Explicitly defer integrations that are outside the first version.
 
 ## Temporal semantics
 
@@ -102,51 +101,26 @@ outcome, including every enabled navigation and action path, expected visible st
 
 ```json
 {
-  "status": "build-ready",
-  "owner": "product-operations",
-  "schema": { "kind": "kernel" },
-  "additionalPublicRoutes": [],
-  "optionalCapabilities": {
-    "integrations": ["application-hosting", "source-control"],
-    "hostedResources": []
-  }
+  "status": "build-ready"
 }
 ```
 ````
 
-The skeleton's capability pair illustrates a GitHub/Vercel workflow; include it
-only when those operations are part of this app. Empty arrays are correct when
-no optional capabilities apply. Replace the instructional prose above with
-actual product decisions; completeness includes meaningful section content.
+Replace the instructional prose above with actual product decisions;
+completeness includes meaningful section content.
 
 ## Build handoff
 
-Every object is closed. Arrays must be sorted and contain no duplicates.
+The object is closed and contains only `status`, exactly `build-ready`. Set it
+after the complete AppSpec is internally validated from stated decisions and
+safe revisable defaults. Omit the entire block while a materially
+product-changing choice remains unresolved.
 
-- `status` is exactly `build-ready`, and may be set after the complete contract
-  is internally validated from stated decisions and safe revisable defaults.
-  Omit the entire block while a materially product-changing choice remains
-  unresolved.
-- `owner` is the non-empty accountable team or domain identity.
-- `schema.kind` is `none` when the app owns no kernel data, otherwise `kernel`.
-- `additionalPublicRoutes` contains only exceptional public routes. Do not list
-  the derived `/<app-id>` or `/<app-id>/:path*` routes.
-- Both capability arrays use provider-neutral lowercase kebab-case identifiers.
-  Name what the app needs, not the vendor that supplies it. For example:
-
-  | Product prose                                | Handoff intent when required          |
-  | -------------------------------------------- | ------------------------------------- |
-  | GitHub repositories, branches, pull requests | `source-control` integration          |
-  | Vercel previews and deployments              | `application-hosting` integration     |
-  | Neon or another relational database          | `relational-database` hosted resource |
-
-  Never put `github`, `github-repositories`, `vercel`, `vercel-deployments`,
-  `neon`, or other provider names in either array. The planner rejects provider
-  segments even when the identifier is valid kebab-case. Keep the requested
-  provider and its behavior in `Integrations and reconciliation` prose; do not
-  silently discard a required integration to make validation pass. Do not use
-  `hostedResources` to list providers the app connects to; it describes resources
-  the app itself needs. Use empty arrays when none apply.
+Repository creation derives identity and default routes from the app ID. The
+AppSpec is an optional product-intent snapshot; a convention CUE input selects
+the generated data boundary. Additional public routes require a separate
+reviewed topology edit. Record accountable teams, integrations, resources, data
+needs, and write behavior in product prose rather than machine metadata.
 
 Do not include app id, runtime, workspace, package, project, local port, schema
 path, authorization copies, workspace dependencies, credentials, secrets,
