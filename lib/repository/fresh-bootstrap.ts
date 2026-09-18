@@ -393,7 +393,10 @@ const canonicalProposal = (proposal: FreshBootstrapProposal) => {
   return unsigned;
 };
 
-const hasExactKeys = (value: object, keys: readonly string[]): boolean => {
+const hasExactKeys = <Value extends object>(
+  value: Value,
+  keys: readonly string[] & readonly (keyof Value | string)[],
+): boolean => {
   const observed = Object.keys(value).toSorted();
   return JSON.stringify(observed) === JSON.stringify([...keys].toSorted());
 };

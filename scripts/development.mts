@@ -1,3 +1,4 @@
+import { prepareDevelopmentEmulatedWeb } from "../lib/development/emulated-web";
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { lstat, mkdir, mkdtemp, realpath } from "node:fs/promises";
@@ -87,14 +88,16 @@ function nextEnvironment(input: {
   evePort: number;
   nextPort: number;
   runtimeHome: string;
+  web?: Awaited<ReturnType<typeof prepareDevelopmentEmulatedWeb>>;
 }) {
   return {
     AI_GATEWAY_API_KEY: "",
-    APP_BUILDER_DEVELOPMENT_ORIGIN: loopbackDevelopmentOrigin(input.nextPort),
+    ...input.web?.environment,
+    APP_BUILDER_DEVELOPMENT_ORIGIN: input.web?.origin ?? loopbackDevelopmentOrigin(input.nextPort),
     APP_BUILDER_EXECUTION_BUNDLE: "local-development",
     APP_BUILDER_EXECUTION_MODE: "development",
     APP_BUILDER_LOCAL_ADAPTER: "1",
-    APP_BUILDER_LOCAL_AUTH_EMULATION: "0",
+    APP_BUILDER_LOCAL_AUTH_EMULATION: input.web === undefined ? "0" : "1",
     APP_BUILDER_LOCAL_EVE_CYCLE_FILE: input.cycleFile,
     APP_BUILDER_SANDBOX_PROVIDER: "vercel",
     EVE_AGENT_HOST: `http://127.0.0.1:${input.evePort}`,
@@ -121,6 +124,7 @@ function eveWrapperEnvironment(input: {
   runsRoot: string;
   supervisorRoot: string;
   runtimeHome: string;
+  web?: Awaited<ReturnType<typeof prepareDevelopmentEmulatedWeb>>;
   workflowData: string;
 }) {
   const runtimeEnvironment = {
@@ -163,7 +167,8 @@ async function runEveCycle(input: {
   evePort: number;
   signal: AbortSignal;
   shutdownExitCode: () => number;
-  nextExited: Promise<{ kind: "next-exit"; code: number }>;
+  web?: Awaited<ReturnType<typeof prepareDevelopmentEmulatedWeb>>;
+  nextExited: Promise<{ kind: "next-exit" | "web-exit"; code: number }>;
 }) {
   input.signal.throwIfAborted();
   // Every child gets a new restart generation. Next keeps its public local
@@ -205,6 +210,7 @@ async function runEveCycle(input: {
     }
     const runtimeFingerprint = await fingerprintDevelopmentRuntime(repositoryRoot);
     const packageFingerprint = await developmentPackageFingerprint({
+      origin: input.web?.origin,
       port: input.nextPort,
       repositoryRoot,
     });
@@ -213,6 +219,7 @@ async function runEveCycle(input: {
       input.packageState.result !== undefined;
     if (!packageReused) {
       input.packageState.result = await createDevelopmentPackage({
+        origin: input.web?.origin,
         outputRoot: input.codexRoot,
         port: input.nextPort,
         repositoryRoot,
@@ -288,6 +295,7 @@ async function runEveCycle(input: {
       const startup = await Promise.race([
         waitForDevelopmentMcp({
           endpoint: packageResult.receipt.endpoint,
+          fetcher: input.web?.fetcher,
           signal: watchers.signal,
         }).then(() => ({ code: 0, kind: "ready" as const })),
         sourceChanged,
@@ -343,6 +351,7 @@ async function runEveCycle(input: {
 
 const shutdown = createDevelopmentShutdown();
 let next: ChildProcess | undefined;
+let web: Awaited<ReturnType<typeof prepareDevelopmentEmulatedWeb>> | undefined;
 try {
   const args = parseDevelopmentArguments(process.argv.slice(2));
   const sourceRoot = await realpath(args.arrustedRoot);
@@ -366,13 +375,22 @@ try {
   const destinationRoot = await privateRoot(
     args.destinationRoot ?? nodePath.join(artifactRoot, "destination"),
   );
+  if (args.emulatedWeb === true) {
+    web = await prepareDevelopmentEmulatedWeb({
+      args,
+      repositoryRoot,
+      signal: shutdown.signal,
+      stateRoot,
+    });
+  }
   next = spawn(
     requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
     [
       nodePath.join(repositoryRoot, "node_modules/next/dist/bin/next"),
       "dev",
+      ...(web?.nextArgs ?? []),
       "--hostname",
-      "127.0.0.1",
+      web === undefined ? "127.0.0.1" : "localhost",
       "--port",
       String(args.nextPort),
     ],
@@ -383,16 +401,22 @@ try {
         evePort: args.evePort,
         nextPort: args.nextPort,
         runtimeHome: nextHome,
+        web,
       }),
       stdio: "inherit",
     },
   );
   // This derived promise is an input to the shared race below.
   // oxlint-disable-next-line promise/prefer-await-to-then
-  const nextExited = developmentChildExit(next).then((code) => ({
+  const nextProcessExited = developmentChildExit(next).then((code) => ({
     code,
     kind: "next-exit" as const,
   }));
+  // Both owned services participate in the same supervisor exit race.
+  // oxlint-disable-next-line promise/prefer-await-to-then -- Preserve a live process exit handle.
+  const webExited = web?.exited.then((code) => ({ code, kind: "web-exit" as const }));
+  const nextExited =
+    webExited === undefined ? nextProcessExited : Promise.race([nextProcessExited, webExited]);
   while (!shutdown.signal.aborted) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const outcome = await runEveCycle({
@@ -409,8 +433,14 @@ try {
       signal: shutdown.signal,
       sourceRoot,
       supervisorRoot,
+      web,
     });
-    if (outcome.kind === "next-exit" || outcome.kind === "eve-exit" || outcome.kind === "stop") {
+    if (
+      outcome.kind === "next-exit" ||
+      outcome.kind === "eve-exit" ||
+      outcome.kind === "web-exit" ||
+      outcome.kind === "stop"
+    ) {
       process.exitCode = outcome.code;
       break;
     }
@@ -427,5 +457,6 @@ try {
   if (next !== undefined) {
     await stopDevelopmentChild(next);
   }
+  await web?.stop();
   shutdown.dispose();
 }

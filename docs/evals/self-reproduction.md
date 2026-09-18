@@ -135,6 +135,40 @@ These candidate-only observations do not earn paired visual, authenticated
 workflow, persistence, child-creation, or framework credit. They provide a
 repeatable first check of what the delivered app actually lets a user do.
 
+## Observe final source without changing the candidate
+
+After generation stops producing changes, resolve the delivered preview's
+owner-scoped Sandbox name and applied repository root from its retained product
+state. Observe that existing running Sandbox with:
+
+```sh
+mise run eval:self-reproduction-source -- \
+  --sandbox-name EXISTING_PROVIDER_SANDBOX_NAME \
+  --source-root ABSOLUTE_APPLIED_REPOSITORY_ROOT \
+  --output-dir /absolute/external/new-source-observation
+```
+
+The observer uses managed project OIDC and supported filesystem reads. It does
+not install, launch, repair, or send workflow instructions. A stopped Sandbox
+blocks observation; the observer does not explicitly resume it. The SDK may
+still auto-resume if the Sandbox stops between the state check and a read, and
+that limitation is recorded. Preview lifecycle remains owned by the product.
+
+The owner-private manifest inventories dotfiles, regular files, directories,
+link targets, hashes, modes, and explicit runtime exclusions. It reads raw
+bytes twice for comparison (only the first scan is saved) and reports changing
+or unreadable source as incomplete. Links are not followed or recreated. A
+stable result proves only the declared source scope, not an atomic snapshot or
+unobserved dependency/link contents. Review and sanitize the retained material
+before including it in a portable report; never publish private continuation
+state or credentials.
+
+Preview observation also writes a WebSocket lifecycle sidecar with sanitized
+origins and creation/error/close events for each desktop capture. Playwright
+creation is not proof of a successful handshake and exposes no close code.
+Neither these events nor their absence establish HMR or functional correctness;
+the report keeps that broader transport coverage unassessed.
+
 ## Comparison and supplementary assessment
 
 Comparison is observation after generation. It must use the unchanged result
@@ -214,3 +248,27 @@ checks do not replace that comparison.
 ## Resume and cross-eval coverage
 
 See [the handoff](self-reproduction-handoff.md) for the frozen baseline, landed repairs, and ordered remaining work. The [cross-eval assessment](cross-eval-regression-2026-09-14.md) records exact-revision CI evidence, additional executions, and coverage limits across other products. Shared repairs must preserve those capability families; self-reproduction results do not replace their checks.
+
+### Capture delivered previews during public polling
+
+The public driver starts the existing preview observer as soon as each validated
+working-preview receipt arrives. Polling and ordinary product questions continue;
+observer processes are awaited before the driver exits. Use
+`--no-preview-observation` to explicitly disable automatic capture.
+
+Evidence lives under the external run directory's `preview-observations/`.
+`ledger.json` records receipt hashes and capture states without capability URLs.
+Each receipt has an owner-private `private/state.json` and separate `capture/`
+output. Do not share private snapshots. A finished observer process is not a
+functional pass: inspect its assessment and coverage. Expired receipts, failed
+captures, and interrupted captures remain recorded; resume does not silently
+rerun them. Capture failures do not alter public session outcomes, supply replies,
+or grant approvals. The observer neither launches nor repairs the candidate.
+
+Automatic captures have a three-minute runner deadline. On timeout the driver
+terminates its owned observer process group (including its browser children),
+records `timed_out`, and finishes the public run without changing its outcome.
+The public report links the capture index and sanitized ledger. The ledger keeps
+runner exit codes, start/finish timestamps, and relative report paths; product
+findings remain in each separate capture report. Private snapshots contain only
+source revision, outcome, and session preview metadata, not prompts or replies.

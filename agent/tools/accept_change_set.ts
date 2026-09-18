@@ -1,3 +1,4 @@
+import { reviewAppliedProductSource } from "@/lib/agent/review-applied-product-source";
 import { currentProductBehaviorEvidence } from "@/lib/agent/product-behavior-state";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
@@ -19,6 +20,13 @@ export default defineTool({
       sandbox: await ctx.getSandbox(),
       state,
     });
+    const sourceAssessment = await reviewAppliedProductSource({
+      abortSignal: ctx.abortSignal,
+      appSpec: state.appSpec,
+      applyReceipt: state.applyReceipt,
+      getSandbox: async () => await ctx.getSandbox(),
+    });
+    ctx.abortSignal?.throwIfAborted();
     if (state.phase === "reviewed") {
       const expectedReceipt = createReviewedChangeSetReceipt(
         changeSet,
@@ -30,8 +38,10 @@ export default defineTool({
           productAcceptance: productAcceptanceObligations(
             state.appSpec,
             currentProductBehaviorEvidence(state.appSpec.digest, state.applyReceipt.digest),
+            sourceAssessment,
           ),
           reused: true,
+          sourceAssessment,
         };
       }
     }
@@ -57,8 +67,10 @@ export default defineTool({
       productAcceptance: productAcceptanceObligations(
         state.appSpec,
         currentProductBehaviorEvidence(state.appSpec.digest, state.applyReceipt.digest),
+        sourceAssessment,
       ),
       reused: false,
+      sourceAssessment,
     };
   },
   inputSchema: z.strictObject({}),

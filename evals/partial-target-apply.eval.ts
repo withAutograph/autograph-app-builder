@@ -29,12 +29,17 @@ export default defineEval({
     t.check(t.reply, includes('"phase":"apply_failed"'));
     t.check(t.reply, includes('"recoveryRequired":true'));
 
-    await t.send("Retry target apply after a lost response.");
-    t.requireInputRequest({ toolName: "apply_app_creation" });
-    await t.respondAll("approve");
+    const retryApply = await t.send("Retry target apply after a lost response.");
     t.succeeded();
+    retryApply.notEvent("input.requested");
+    retryApply.calledTool("apply_app_creation", { count: 1, status: "failed" });
     t.check(t.reply, includes("couldn't finish preparing the app safely"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
+
+    await t.send("Report artifact workflow status.");
+    t.succeeded();
+    t.check(t.reply, includes('"phase":"apply_failed"'));
+    t.check(t.reply, includes('"recoveryRequired":true'));
   },
 });

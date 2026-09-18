@@ -1,7 +1,10 @@
 import { stageImplementationFiles } from "@/lib/agent/staged-implementation";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
-import { always } from "eve/tools/approval";
+import {
+  recordApprovedPrivateApply,
+  requestPrivateApplyApproval,
+} from "@/lib/agent/private-apply-authority";
 import { z } from "zod";
 
 import {
@@ -24,9 +27,24 @@ import {
 import { clearProductBehaviorEvidence } from "@/lib/agent/product-behavior-state";
 
 export default defineTool({
-  approval: always(),
+  approval(ctx) {
+    const current = appBuilderWorkflowState.get();
+    if (!("proposal" in current) || !("appSpec" in current)) {
+      throw new Error("Derive a canonical proposal before requesting build approval.");
+    }
+    return requestPrivateApplyApproval(
+      {
+        appId: current.proposal.target.contract.appId,
+        appSpecDigest: current.appSpec.digest,
+        proposalDigest: current.proposal.digest,
+        sessionId: ctx.session.id,
+        workspaceId: current.workspace.workspaceId,
+      },
+      ctx.callId,
+    );
+  },
   description:
-    "Build this app in the private preview checkout, then validate it for review. For a retry of the same proposal, send only repaired files: paths omitted from the retry retain their previously approved contents, and supplied paths replace them. A new proposal starts a fresh submission. This does not publish, deploy, provision resources, or change the user's repository.",
+    "Build this app in the private preview checkout, then validate it for review. For a retry of the same proposal, send only repaired files: paths omitted from the retry retain their previously approved contents, and supplied paths replace them. A new proposal starts a fresh submission and requires its own approval. Repairing the same approved private build does not ask for the same approval again. This does not publish, deploy, provision resources, or change the user's repository.",
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
     if (
@@ -36,6 +54,16 @@ export default defineTool({
     ) {
       throw new Error("Derive an exact canonical proposal before requesting target apply.");
     }
+    recordApprovedPrivateApply(
+      {
+        appId: current.proposal.target.contract.appId,
+        appSpecDigest: current.appSpec.digest,
+        proposalDigest: current.proposal.digest,
+        sessionId: ctx.session.id,
+        workspaceId: current.workspace.workspaceId,
+      },
+      ctx.callId,
+    );
     if (current.phase === "applied") {
       return {
         appId: current.proposal.target.contract.appId,

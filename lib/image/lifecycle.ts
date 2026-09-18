@@ -356,7 +356,10 @@ interface ImageInspect {
   };
 }
 
-const hasExactKeys = (value: object, expected: readonly string[]): boolean => {
+const hasExactKeys = <Value extends object>(
+  value: Value,
+  expected: readonly string[] & readonly (keyof Value | string)[],
+): boolean => {
   const actual = Object.keys(value).toSorted();
   const wanted = [...expected].toSorted();
   return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);

@@ -257,23 +257,6 @@ const existingFindingOverrides: { files: string[]; rules: Record<string, "off"> 
   },
   {
     files: [
-      "**/lib/image/lifecycle.ts",
-      "**/lib/image/node-lifecycle.ts",
-      "**/lib/repository/fresh-bootstrap.ts",
-      "**/lib/sandbox/working-preview-ownership.test.ts",
-    ],
-    rules: {
-      "anti-slop/no-object-parameters": "off",
-    },
-  },
-  {
-    files: ["**/lib/eve/public-events.ts", "**/lib/github/octokit.ts"],
-    rules: {
-      "anti-slop/no-reflect-get": "off",
-    },
-  },
-  {
-    files: [
       "**/.config/mise/scripts/repository/build-hosted-arrusted-artifact.mts",
       "**/.config/mise/scripts/repository/prove-hosted-starter-clone.mts",
       "**/agent/agent.ts",
@@ -3860,26 +3843,6 @@ const existingFindingOverrides: { files: string[]; rules: Record<string, "off"> 
 ];
 
 const followupFindingOverrides: { files: string[]; rules: Record<string, "off"> }[] = [
-  {
-    files: ["**/evals/g2-provider-brief-first-attempt.model.test.ts"],
-    rules: { "typescript/no-deprecated": "off" },
-  },
-  {
-    files: ["**/evals/support/self-reproduction-candidate-navigation.ts"],
-    rules: { "typescript/no-unnecessary-type-conversion": "off" },
-  },
-  {
-    files: ["**/evals/support/self-reproduction-candidate-workflows.test.ts"],
-    rules: { "typescript/strict-boolean-expressions": "off" },
-  },
-  {
-    files: ["**/evals/support/self-reproduction-candidate-workflows.ts"],
-    rules: { "typescript/no-unsafe-type-assertion": "off" },
-  },
-  {
-    files: ["**/evals/support/self-reproduction-evidence.test.ts"],
-    rules: { "typescript/no-unsafe-assignment": "off" },
-  },
   {
     files: ["**/evals/support/self-reproduction-reference-runtime.ts"],
     rules: {

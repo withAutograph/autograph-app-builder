@@ -69,9 +69,12 @@ describe("direct app creation", () => {
         ReturnType<typeof sandboxApplyCommandExecutor>
       >[0]["sandbox"],
     });
-    expect(calls).toEqual([
+    expect(calls.slice(0, 2)).toEqual([
       "repository/.config/app-specs/inventory.cue",
       "bun install",
+    ]);
+    expect(calls[2]).toContain("mise install --locked cue");
+    expect(calls.slice(3)).toEqual([
       "mise run create:app inventory",
       "repository/apps/inventory/app/page.tsx",
     ]);

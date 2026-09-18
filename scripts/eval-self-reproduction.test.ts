@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function run(script: string) {
+function run(script: string, reportOnly = false) {
   const output = mkdtempSync(nodePath.join(tmpdir(), "self-reproduction-report-test-"));
   outputs.push(output);
   const result = spawnSync(
@@ -30,6 +30,7 @@ function run(script: string) {
       process.execPath,
       "--generator-arg=-e",
       `--generator-arg=${script}`,
+      ...(reportOnly ? ["--report-only"] : []),
     ],
     {
       cwd: nodePath.resolve(import.meta.dirname, ".."),
@@ -83,6 +84,22 @@ function emit(records: unknown[], verdict = "passed") {
 }
 
 describe("native self-reproduction report orchestration", () => {
+  it("labels report-only configuration without inventing generation evidence", () => {
+    const { result, report, output } = run("throw new Error('GENERATOR_MUST_NOT_RUN')", true);
+    expect(result.status).toBe(0);
+    expect(report.generation.status).toBe("not-run");
+    expect(report.candidateRuntime.status).toBe("not-run");
+    expect(report.settings).toMatchObject({
+      modelInvocation: "unverified: report-only does not run generation",
+      status: "source-config-only",
+    });
+    expect(report.settings.configuredModel).toBeTypeOf("string");
+    expect(report.settings).not.toHaveProperty("runtimeIdentity");
+    expect(report.settings.publication).not.toContain("sandbox eval profile");
+    expect(readFileSync(nodePath.join(output, "generation-transcript.jsonl"), "utf-8")).toBe("");
+    expect(JSON.stringify(report)).not.toContain("GENERATOR_MUST_NOT_RUN");
+  });
+
   it("writes partial reports and unavailable markers when the launcher emits nothing", () => {
     const { result, report } = run("");
     expect(result.status).toBe(1);
@@ -92,9 +109,28 @@ describe("native self-reproduction report orchestration", () => {
     expect(report.requirements).toHaveLength(76);
     expect(
       report.requirements
-        .filter((item: { side: string }) => item.side === "candidate")
+        .filter(
+          (item: { side: string; requirementId: string }) =>
+            item.side === "candidate" && item.requirementId !== "anonymous-entry",
+        )
         .every((item: { status: string }) => item.status === "failed"),
     ).toBe(true);
+    expect(
+      report.requirements.filter(
+        (item: { requirementId: string }) => item.requirementId === "anonymous-entry",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        reasonCode: "excluded-from-scope",
+        side: "reference",
+        status: "unassessed",
+      }),
+      expect.objectContaining({
+        reasonCode: "excluded-from-scope",
+        side: "candidate",
+        status: "unassessed",
+      }),
+    ]);
     expect(report.diagnostics.note).toContain("never award parity credit");
   });
 

@@ -998,9 +998,9 @@ export const ghcrCredentialEnvironment = function ghcrCredentialEnvironment(
   return environment;
 };
 
-export const hasExactKeys = function hasExactKeys(
-  value: object,
-  expected: readonly string[],
+export const hasExactKeys = function hasExactKeys<Value extends object>(
+  value: Value,
+  expected: readonly string[] & readonly (keyof Value | string)[],
 ): boolean {
   const actual = Object.keys(value).toSorted();
   const wanted = [...expected].toSorted();

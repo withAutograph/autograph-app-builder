@@ -403,8 +403,9 @@ export const projectInstalledEveEvent = (
     }
     case "authorization.required": {
       const { authorization } = event.data;
+      const authorizationRecord = z.record(z.string(), z.unknown()).safeParse(authorization);
       const repositoryAccess = githubRepositoryAccessSchema.safeParse(
-        authorization === undefined ? undefined : Reflect.get(authorization, "repositoryAccess"),
+        authorizationRecord.success ? authorizationRecord.data.repositoryAccess : undefined,
       );
       const storeIn = repositoryAccess.success
         ? githubRepositoryAccessViewModel(repositoryAccess.data)

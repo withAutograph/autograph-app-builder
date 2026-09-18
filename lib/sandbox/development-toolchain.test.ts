@@ -68,6 +68,8 @@ describe("Development Vercel Sandbox dependency template", () => {
     );
     expect(command).toContain("/workspace/.app-builder/dependency-cache/cargo/config.toml");
     expect(command).toContain("bun install --frozen-lockfile --ignore-scripts --linker=hoisted");
+    expect(command).toContain("stage='mise-tools'");
+    expect(command).toContain("mise install --locked cue");
     expect(command).toContain('node - "$work/source"');
     expect(command).not.toContain('readlink -f -- "$link"');
     expect(command).toContain(
@@ -94,7 +96,6 @@ describe("Development Vercel Sandbox dependency template", () => {
     const install = command.indexOf(
       "bun install --frozen-lockfile --ignore-scripts --linker=hoisted --silent",
     );
-
     expect(cacheHit).toBeGreaterThan(-1);
     expect(cacheHit).toBeLessThan(staging);
     expect(cacheHit).toBeLessThan(install);
@@ -106,6 +107,7 @@ describe("Development Vercel Sandbox dependency template", () => {
     );
     expect(command).toContain('"$cache_root/cargo/config.toml"');
     expect(command).toContain('unlink "$source_archive"');
+    expect(command).toContain("mise install --locked cue");
   });
 
   it("accepts validated Bun symlinks while rejecting writable cache entries", () => {
@@ -113,6 +115,8 @@ describe("Development Vercel Sandbox dependency template", () => {
     expect(command).toContain('find "$cache_root" \\( -type f -o -type d \\) -perm /022');
     expect(command).not.toContain('find "$cache_root" -perm /022');
     expect(command).toContain(developmentDependencySymlinkScript);
+    expect(command).toContain("stage='mise-tools'");
+    expect(command).toContain("mise install --locked cue");
   });
 
   it("keeps Bun links inside the closure and rebinds only workspace links", async () => {
@@ -189,8 +193,19 @@ describe("Development Vercel Sandbox dependency template", () => {
     }
   });
 
-  it("installs pinned tools only inside the disposable Vercel workspace", () => {
+  it("installs the complete development toolchain in the disposable Vercel Sandbox", () => {
     const command = developmentPinnedToolchainCommand();
+    const nativeToolchain = command.indexOf("sudo dnf install -y gcc");
+    const rustInstallation = command.indexOf(
+      '"$work/$rustc_directory/install.sh" --prefix="$root/rust" --disable-ldconfig',
+    );
+    expect(nativeToolchain).toBeGreaterThan(-1);
+    expect(nativeToolchain).toBeLessThan(rustInstallation);
+    expect(command).toContain("stage='native-toolchain'");
+    expect(command).toContain("command -v cc >/dev/null");
+    expect(command).toContain("cc --version >/dev/null");
+    expect(command).toContain("sudo apt-get update");
+    expect(command).toContain("sudo apt-get install -y build-essential");
     expect(command).toContain("root='/workspace/.app-builder/toolchain'");
     expect(command).toContain("command -v python3 >/dev/null");
     expect(command).toContain("extract_verified_archive() {");
@@ -202,7 +217,6 @@ describe("Development Vercel Sandbox dependency template", () => {
     expect(command).toContain("bun --version");
     expect(command).toContain("cargo --version");
     expect(command).not.toContain("/usr/local");
-    expect(command).not.toContain("sudo");
     expect(command).not.toContain("hosted-seed");
   });
 });

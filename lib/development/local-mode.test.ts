@@ -287,3 +287,22 @@ describe("development CLI", () => {
     });
   });
 });
+
+it("opts into emulated web without changing default development", () => {
+  expect(
+    parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted"]).emulatedWeb,
+  ).toBeUndefined();
+  expect(
+    parseDevelopmentArguments([
+      "--arrusted-root",
+      "/tmp/arrusted",
+      "--emulated-web",
+      "true",
+      "--web-ca",
+      "/tmp/ca.pem",
+    ]),
+  ).toMatchObject({ emulatedWeb: true, webCa: "/tmp/ca.pem" });
+  expect(() =>
+    parseDevelopmentArguments(["--arrusted-root", "/tmp/arrusted", "--emulated-web", "yes"]),
+  ).toThrow("true or false");
+});

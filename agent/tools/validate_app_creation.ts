@@ -1,3 +1,4 @@
+import { reviewAppliedProductSource } from "@/lib/agent/review-applied-product-source";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
@@ -18,7 +19,7 @@ import {
 
 export default defineTool({
   description:
-    "Run the repository's normal validation commands against the current applied app. Command exit status is the validation result. This does not publish or otherwise change an external repository.",
+    "Run the repository's normal validation commands against the current applied app. Command exit status is the technical validation result; successful checks also return an independent source assessment against the original product request. Neither proves runtime behavior. This does not publish or otherwise change an external repository.",
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
     if (
@@ -38,11 +39,23 @@ export default defineTool({
         current.appSpec.digest,
         current.applyReceipt.digest,
       );
+      const sourceAssessment = await reviewAppliedProductSource({
+        abortSignal: ctx.abortSignal,
+        appSpec: current.appSpec,
+        applyReceipt: current.applyReceipt,
+        getSandbox: async () => await ctx.getSandbox(),
+      });
+      ctx.abortSignal?.throwIfAborted();
       return {
         commandCount: current.validationReceipt.commands.length,
-        productAcceptance: productAcceptanceObligations(current.appSpec, evidence),
+        productAcceptance: productAcceptanceObligations(
+          current.appSpec,
+          evidence,
+          sourceAssessment,
+        ),
         productBehaviorEvidence: evidence,
         reused: true,
+        sourceAssessment,
         status: "validated" as const,
         technicalStatus: "passed" as const,
       };
@@ -116,11 +129,18 @@ export default defineTool({
       current.appSpec.digest,
       current.applyReceipt.digest,
     );
+    const sourceAssessment = await reviewAppliedProductSource({
+      abortSignal: ctx.abortSignal,
+      appSpec: current.appSpec,
+      applyReceipt: current.applyReceipt,
+      getSandbox: async () => await ctx.getSandbox(),
+    });
     return {
       commandCount: result.receipt.commands.length,
-      productAcceptance: productAcceptanceObligations(current.appSpec, evidence),
+      productAcceptance: productAcceptanceObligations(current.appSpec, evidence, sourceAssessment),
       productBehaviorEvidence: evidence,
       reused: false,
+      sourceAssessment,
       status: "validated" as const,
       technicalStatus: "passed" as const,
     };

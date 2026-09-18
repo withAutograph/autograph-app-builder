@@ -9,7 +9,7 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const USER_AGENT = "autograph-app-builder";
 const silentConsole = new Proxy(console, {
-  get(target, property, receiver) {
+  get(target, property) {
     if (
       property === "debug" ||
       property === "info" ||
@@ -21,7 +21,8 @@ const silentConsole = new Proxy(console, {
         // The mocked request has no teardown.
       };
     }
-    return Reflect.get(target, property, receiver) as unknown;
+    const value: unknown = Object.getOwnPropertyDescriptor(target, property)?.value;
+    return value;
   },
 });
 

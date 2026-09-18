@@ -10,11 +10,11 @@ own its authentication, durable data, orchestration, previews, retries, and
 recovery. Ordinary open-source dependencies and local development services are
 allowed.
 
-The initial anonymous screen is a calm, focused "New App" page. It has a small
-Autograph mark, Docs, Sign in, Sign up, one clear prompt asking what to build,
+Provide working Sign in and Sign up flows leading to a calm, focused "New App"
+page. It has a small Autograph mark, Docs, one clear prompt asking what to build,
 a multiline brief, useful example prompts, and a disabled-until-valid Continue
-button. Carry an anonymous brief safely into sign-in and into the authenticated
-workspace.
+button. Anonymous app creation and anonymous-draft carryover are outside this
+request; authenticated creation and tenant isolation are required.
 
 Authenticated users work in an app-creation canvas with a compact header,
 back navigation, account controls, a clear product brief, generated name and
@@ -37,6 +37,14 @@ and explain unavailable provider operations. Include account settings and a
 small public documentation area that explains the journey for a new user.
 Protect tenant data. Keep request-specific identity and data separate from any
 shared cache, and never expose credentials in client code or progress records.
+
+Also expose the same app-building journey through an authenticated Streamable
+HTTP MCP endpoint at `/mcp`, with `autograph_start`, `autograph_get`,
+`autograph_send`, `autograph_respond`, and `autograph_cancel`. These tools must
+use this independent application's own durable sessions and backend. Support
+starting and resuming a build, tenant-scoped recent sessions, progress cursors,
+ordinary messages, complete question/approval batches, safe repeated requests,
+and cooperative cancellation. Explain this interface in the documentation.
 
 Use Next.js 16.3 App Router practices: server-render the initial page wherever
 possible, keep browser islands narrow, use Server Actions or route handlers for

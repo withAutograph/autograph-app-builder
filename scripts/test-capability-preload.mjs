@@ -57,6 +57,7 @@ const allowedWorkerEnvironment = new Set([
   "VERCEL_OIDC_TOKEN",
   "VERCEL_TEAM_ID",
   "VERCEL_PROJECT_ID",
+  "APP_BUILDER_EVAL_BROWSER_EXECUTABLE",
 ]);
 delete process.env.NODE_OPTIONS;
 

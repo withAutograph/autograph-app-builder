@@ -26,7 +26,8 @@ const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 const repositoryPath = z.string().regex(/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._/@:-]+$/u);
-export const targetIdentitySchema = z.strictObject({
+// Project only identity fields consumed here; producer metadata grants no authority.
+export const targetIdentitySchema = z.object({
   appId,
   appSpecPath: repositoryPath,
   appSpecSourcePath: repositoryPath,

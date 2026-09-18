@@ -8,7 +8,6 @@ import { safeSourcePath } from "./source-path";
 import { planningOverlayRoot } from "./dependency-cache";
 import type { ExecutionDependencyLayout } from "./dependency-cache";
 import type { TargetProposal } from "./target-planning";
-import { runSequentially } from "../async-sequential";
 
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
 const repositoryPath = z
@@ -560,57 +559,57 @@ function parseTargetReceipt(
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function sourceDeclaredCueActivationCommand() {
+  return String.raw`set -euo pipefail
+config_file="$PWD/.config/mise/config.toml"
+runtime_bin="$(dirname "$(command -v bun)")"
+test -f "$config_file"
+test -x "$runtime_bin/bun"
+export MISE_CONFIG_FILE="$config_file"
+mise trust --yes "$config_file"
+mise install --locked cue
+cue_bin="$(mise which cue)"
+test -x "$cue_bin"
+ln -sfn "$cue_bin" "$runtime_bin/cue"
+"$runtime_bin/cue" version >/dev/null`;
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
   return async ({ sandbox, appId, applyRoot, proposal }) => {
     if ("operation" in proposal) {
       const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
-      let stale = false;
-      await runSequentially(proposal.iteration.changes, async (change) => {
-        if (stale) {
-          return;
-        }
+      for (const change of proposal.iteration.changes) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const current = await sandbox.readBinaryFile({
           path: `${relativeRoot}/${change.path}`,
         });
-        stale =
+        if (
           (change.before === undefined
             ? current !== null
             : current === null || sha256(current) !== change.before.digest) ||
-          change.after.digest !== sha256(change.after.content);
-      });
-      if (stale) {
-        return {
-          exitCode: 2,
-          stderr: "stale iteration preimage",
-          stdout: "",
-        };
+          change.after.digest !== sha256(change.after.content)
+        ) {
+          return {
+            exitCode: 2,
+            stderr: "stale iteration preimage",
+            stdout: "",
+          };
+        }
       }
-      await runSequentially(proposal.iteration.changes, async (change) => {
+      for (const change of proposal.iteration.changes) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await sandbox.writeTextFile({
           content: change.after.content,
           path: `${relativeRoot}/${change.path}`,
         });
-      });
-      const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
-      const receipt: TargetApplyCommandReceipt = {
-        appId: proposal.contract.appId,
-        mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
-        omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
-        recovered: false,
-        topology: {
-          newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
-          oldDigest,
-          path: "microfrontends.json",
-        },
-        version: 1,
-        workspacePath: proposal.plan.source.workspacePath,
-      };
-      return { exitCode: 0, stderr: "", stdout: JSON.stringify(receipt) };
+      }
     }
     // The writable checkout is the execution environment. Prepared dependency
     // roots are only a cache optimization; a checkout-backed flow can have no
     // roots at all. Let Bun establish the repository's actual dependency state
-    // before invoking its generator, and treat Bun's real result as authority.
+    // after iteration writes or before invoking its generator, and treat Bun's
+    // real result as authority. Failed installs retain partial-apply evidence.
     await sandbox.setNetworkPolicy("allow-all");
     const install = await sandbox.run({
       command: "bun install",
@@ -637,6 +636,30 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
         reason,
       });
       return install;
+    }
+    const cue = await sandbox.run({
+      command: sourceDeclaredCueActivationCommand(),
+      workingDirectory: applyRoot,
+    });
+    if (cue.exitCode !== 0) {
+      return cue;
+    }
+    if ("operation" in proposal) {
+      const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
+      const receipt: TargetApplyCommandReceipt = {
+        appId: proposal.contract.appId,
+        mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
+        omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
+        recovered: false,
+        topology: {
+          newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
+          oldDigest,
+          path: "microfrontends.json",
+        },
+        version: 1,
+        workspacePath: proposal.plan.source.workspacePath,
+      };
+      return { exitCode: 0, stderr: "", stdout: JSON.stringify(receipt) };
     }
     const generated = await sandbox.run({
       command: `mise run create:app ${appId}`,
@@ -672,12 +695,13 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
   return async ({ sandbox, appId, applyRoot, proposal }) => {
     const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
     if ("operation" in proposal) {
-      await runSequentially(proposal.iteration.changes, async (change) => {
+      for (const change of proposal.iteration.changes) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         await sandbox.writeTextFile({
           content: change.after.content,
           path: `${relativeRoot}/${change.path}`,
         });
-      });
+      }
       const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
       const receipt: TargetApplyCommandReceipt = {
         appId,

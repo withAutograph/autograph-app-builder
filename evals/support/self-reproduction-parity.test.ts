@@ -68,7 +68,7 @@ describe("evaluator-owned parity assessment", () => {
     input.candidate.output = "infrastructure-unavailable";
     expect(await status(input, "app-creation")).toBe("blocked");
   });
-  it.each(["anonymous-entry", "durable-draft", "independent-child"])(
+  it.each(["app-creation", "durable-draft", "independent-child"])(
     "fails observed inert controls, persistence loss or reference leakage: %s",
     async (id) => {
       const input = fixture();
@@ -81,6 +81,24 @@ describe("evaluator-owned parity assessment", () => {
       expect(await status(input, id)).toBe("failed");
     },
   );
+  it("retains excluded anonymous entry without awarding or failing parity credit", async () => {
+    const input = fixture();
+    input.candidate.output = "missing";
+    const report = await assessParity(input, () => Promise.resolve(true));
+    const excluded = report.rows.filter((row) => row.requirementId === "anonymous-entry");
+    expect(excluded).toHaveLength(2);
+    expect(
+      excluded.every(
+        (row) => row.status === "unassessed" && row.reasonCode === "excluded-from-scope",
+      ),
+    ).toBe(true);
+    expect(
+      report.rows
+        .filter((row) => row.side === "candidate" && row.requirementId !== "anonymous-entry")
+        .every((row) => row.status === "failed"),
+    ).toBe(true);
+  });
+
   it("requires every assertion and retained evidence before passing", async () => {
     const input = fixture();
     const observation = observed(input, "durable-draft");

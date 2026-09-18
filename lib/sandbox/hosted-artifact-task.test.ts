@@ -13,9 +13,10 @@ function createTaskFixture() {
   const bin = path.join(root, "bin");
   const launcher = path.join(root, ".config/mise/scripts/trusted-node-launcher");
   const calls = path.join(root, "mise-calls");
+  const launcherCalls = path.join(root, "launcher-calls");
   mkdirSync(bin, { recursive: true });
   mkdirSync(path.join(root, ".config/mise/scripts"), { recursive: true });
-  writeFileSync(launcher, "#!/bin/sh\nexit 0\n");
+  writeFileSync(launcher, '#!/bin/sh\nprintf "%s\\n" "$@" > "$LAUNCHER_CALLS"\n');
   chmodSync(launcher, 0o700);
   writeFileSync(
     path.join(bin, "mise"),
@@ -23,6 +24,10 @@ function createTaskFixture() {
 set -eu
 if [ "$#" -eq 2 ] && [ "$1" = "which" ] && [ "$2" = "node" ]; then
   printf '%s\\n' /usr/bin/node
+  exit 0
+fi
+if [ "$#" -eq 2 ] && [ "$1" = "which" ] && [ "$2" = "vercel" ]; then
+  printf '%s\\n' /managed/vercel
   exit 0
 fi
 printf '%s\\n' CALL >> "$MISE_CALLS"
@@ -34,10 +39,12 @@ printf '%s\\n' "$@" >> "$MISE_CALLS"
     calls,
     environment: {
       LANG: "C",
+      LAUNCHER_CALLS: launcherCalls,
       MISE_CALLS: calls,
       NODE_ENV: "test" as const,
       PATH: `${bin}:/usr/bin:/bin`,
     },
+    launcherCalls,
     root,
   };
 }
@@ -118,6 +125,25 @@ describe("hosted artifact mise task contract", () => {
         "/fixture/dependencies.tar.gz",
         "--artifact-sha256",
         "b".repeat(64),
+      ]);
+      expect(readCalls(fixture.launcherCalls)).toEqual([
+        "/usr/bin/node",
+        "--import",
+        "tsx",
+        "scripts/run-eve-eval.mts",
+        "--gate-a-profile",
+        "hosted-artifact",
+        "--gate-a-mise-executable",
+        path.join(fixture.root, "bin/mise"),
+        "--gate-a-vercel-executable",
+        "/managed/vercel",
+        "--gate-a-image",
+        "example.invalid/eve@sha256:digest",
+        "--gate-a-source-root",
+        "/fixture/arrusted",
+        "sandbox-identity-planning",
+        "--strict",
+        "--skip-report",
       ]);
     } finally {
       rmSync(fixture.root, { force: true, recursive: true });

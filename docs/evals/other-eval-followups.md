@@ -12,7 +12,9 @@ The same 26 additional scenarios on pre-repair `04dbe04823b95c975d5483b635c8d8ed
 
 Local evidence is `/private/tmp/other-evals-20260914/{index.html,assessment.md,assessment.json,comparison.json}`. Raw logs: `/private/tmp/eval-other-main-agent-20260914.log`, `/private/tmp/eval-other-extra-main-20260914.log`, and `/private/tmp/eval-other-toolchain-20260914.log`. Before-repair results combine `/private/tmp/eval-other-extra-before-20260914.log`, `/private/tmp/eval-extra-before-failed-target-validation.log`, and `/private/tmp/eval-extra-before-remaining-20260914.log`. The initial interrupted case is not counted as failed; its completed rerun supplies the terminal result. These machine-local paths may disappear; this document preserves the findings and reproduction scope without credentials or private preview authority.
 
-## Open work
+## Frozen findings from the audit
+
+These statuses describe the starting audit. Current repairs and closure evidence are recorded in the repair ledger below.
 
 ### EVAL-01 — Branch publication rejects unchanged reviewed source
 
@@ -105,7 +107,7 @@ The deterministic repair is based on main `84ae04988cb7d70e352fe674ce6c7205f0abd
 | EVAL-02                   | `7847175f`: mock review results are scoped after current validation; obsolete `expectedValidationDigest` is removed from the strict `change_set_status` request. | Mock-history regressions pass; integrated `accept-app-spec` passes 108/108, including intentional stale-proposal negatives. Production review routing is unchanged.                                                                                                        |
 | EVAL-03                   | `7847175f`, `acd951e2`, `5d5450d5`: answer ordinary apply approvals, scope subsequent approval assertions, and inject an actual fixture command timeout.         | Failure, interruption and partial-apply cases reach their actual states. The timeout case records `validation_failed` / `command-timeout` and recovery required; this proves honest failure and explicit retry behavior, not successful recovery from a timed-out command. |
 | EVAL-05                   | `7847175f`, `acd951e2`: explicit dependency-state assertions.                                                                                                    | Verify a recorded dependency digest, unchanged workflow state, no extra approval, and no apply/planning mutation. Incidental response wording is not the acceptance criterion.                                                                                             |
-| EVAL-04, EVAL-06, EVAL-07 | Separate Sandbox/coverage PR.                                                                                                                                    | Remain open until real Sandbox execution, design browser interaction, and all five supported integration scenarios pass.                                                                                                                                                   |
+| EVAL-04, EVAL-06, EVAL-07 | Sandbox/coverage PR #446; see closure below.                                                                                                                     | All five integration scenarios passed; final revision CI and green landing are required as recorded below.                                                                                                                                                                 |
 
 The original EVAL-01 eight-versus-twelve-path diagnosis was incomplete. Inspection of the actual V3 receipt producer showed that it uses the source SHA/tree identity, so the repair shares that producer rather than introducing another file-list digest.
 
@@ -117,4 +119,72 @@ Do not interpret this integration milestone as autonomous self-reproduction. The
 
 `mise run test:agent` on `45fca4b40` passed all **39 scenarios / 547 gates**, plus 11 product unit checks and two browser fixtures. All 28 formerly passing cases and all seven improvements remain passing. The subsequent explicit-state follow-up passed dependency preparation; its first interruption assertion incorrectly counted the entire run. The corrected turn-scoped interruption case passed **23/23 gates**, and the event trace proves one dispatch before the explicit user retry and one afterward. The initial failed assertion is retained as harness evidence, not a product regression.
 
-The integrated TypeScript check and five focused source-contract, mock-review, and inventory tests passed. Local artifacts: `/private/tmp/cross-eval-milestone-20260914/`, `/private/tmp/cross-eval-deterministic-acceptance.log`, `/private/tmp/cross-eval-state-assertions.log`, and `/private/tmp/cross-eval-interruption-scope.log`. Earlier concurrent branch attempts and externally interrupted processes remain recorded in `/private/tmp/cross-eval-branch-contract*.log`; a sequential integrated run passed every branch scenario. Exact-head CI and merge evidence will be linked from the repair PR. These local results do not close the five pending real-Sandbox cases.
+The integrated TypeScript check and five focused source-contract, mock-review, and inventory tests passed. Local artifacts: `/private/tmp/cross-eval-milestone-20260914/`, `/private/tmp/cross-eval-deterministic-acceptance.log`, `/private/tmp/cross-eval-state-assertions.log`, and `/private/tmp/cross-eval-interruption-scope.log`. Earlier concurrent branch attempts and externally interrupted processes remain recorded in `/private/tmp/cross-eval-branch-contract*.log`; a sequential integrated run passed every branch scenario. [PR #444](https://github.com/withAutograph/autograph-app-builder/pull/444) merged as `e68b28f7f965bc1d4353d82aa965af042b1023c4` after [exact-head CI](https://github.com/withAutograph/autograph-app-builder/actions/runs/34867595052) passed at `81098aaccaf439ed44e706cb309b62b24d1fab0c`. Post-merge auth CI initially failed one session readback; its retry and the stronger same-user/workspace polling regression are tracked in [PR #446](https://github.com/withAutograph/autograph-app-builder/pull/446). These deterministic results do not establish real-Sandbox or self-reproduction success.
+
+### Sandbox acceptance and closure
+
+[PR #446](https://github.com/withAutograph/autograph-app-builder/pull/446) closes the remaining supported integration groups. The five cases use the mock model with actual Vercel Sandbox execution, project-scoped Development OIDC, synthetic data, and no external publication. The Arrusted source remained clean at `f992cee2f301c57fe3289a26f26e36b15b683d2f`.
+
+| Group   | Repair commits                                                                                                                                                                                                                                                                           | Closure evidence                                                                                                                                                                                                                   |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| EVAL-04 | `542dfbca`, `26fea68f`, `b22f7132`: shared setup, managed browser executable resolution, and current Arrusted PageTabs fixture API.                                                                                                                                                      | Design **17/17**: real preview compilation; browser All renewals action reveals Mercury Labs at 1440×900 with no browser errors.                                                                                                   |
+| EVAL-06 | `34dfd6d9`, `542dfbca`, `1e7288a7`, `0a44d530`: validated managed OIDC in real profiles, trusted-launcher executable forwarding, and preserved hosted-artifact source-reader mode.                                                                                                       | Toolchain **10/10**: actual bash, git, mise, Bun, and Node commands succeed. Retired image/cache flags and absent pnpm remain diagnostics, not readiness credit.                                                                   |
+| EVAL-07 | `a1a8a46c`, `6cb0e3e9`, `34d5a248`, `911aae92`, `677ccba9`, `3b3fb144`, `a3504e47`, `f279f8c3`: persisted receipts, user-request-bound source inspection, installation after iteration writes, honest mock failure termination, native compiler setup, and active-path CUE installation. | Identity/planning **23/23**, reviewed changes **38/38**, existing iteration **40/40**. Existing iteration reaches validated and reviewed state and binds the requested Vendor tax-verification text to the reviewed source digest. |
+
+The four non-iteration cases passed at clean `f279f8c30e541a7599b49a2dff81e9ce39313286`. Existing iteration passed at `a9545c611daacc61c6e648801c0f902787f39851` in 8m16s; its only change from that revision is the integration timeout, with identical product code and assertions. Summaries are dated 2026-09-14 at 19:46:16 (design), 19:51:26 (identity), 19:54:06 (existing iteration), 19:56:34 (reviewed changes), and 19:57:37 (toolchain), UTC.
+
+Actual existing-app execution exposed a sequence of shared setup gaps. The iteration apply branch returned before Bun installation, despite the manifest and lock declaring path-to-regexp. Apply now installs against the resulting source before issuing a receipt. Rust validation then exposed missing `cc`; shared runtime setup installs the compiler with the image's supported package manager. The first dnf-only attempt failed on Ubuntu and remains recorded. Finally, CUE was missing. `a3504e47` installs locked, source-declared CUE in the active approved apply path, links the resolved executable into the shared runtime PATH, and verifies it. `f279f8c3` proves activation failure retains stderr/stdout and prevents a success receipt or generator dispatch. Final compatibility repair `576f8ad2` also installs pinned Mise beside Bun in the hosted runtime and resolves the CUE link directory from the active Bun executable. Behavioral regressions execute the activation command in both development and hosted layouts. Stale preimages still prevent writes and installation; failed installs preserve partial-apply recovery evidence.
+
+The initial CUE repair mistakenly targeted unused legacy dependency helpers. Provider readback and the next real failure proved the helpers had not run; those additions were removed. The current planning dependency helper remains metadata-only. Before repairing setup, trace its live caller and add a regression through that caller. A passing helper unit test does not prove workflow integration.
+
+Earlier failures, interrupted attempts, and diagnostic-only commands remain in the evidence. The old mock review loop after validation failure was repaired; raising its timeout was not a fix. Later cold setup took 223 seconds, and the active-path run reached successful apply only after 368 seconds before its full build exceeded the ten-minute evaluation window. Existing iteration now permits fifteen minutes for cold setup, validation, and review; the other dependency-preparing integration cases permit ten. Failed validation still aborts immediately. The provider file-write retry, per-call overhead, and quarantined historical local workflow deliveries are recorded observations, not extra passing claims. Arrusted's compiler wrapper can omit captured stderr on failure; a direct retained-Sandbox diagnostic supplied the missing CUE error and did not count as an eval pass or repair candidate source.
+
+The final comparison contains **44 supported passes**, one separately retired diagnostic, no supported failures/blockers/unassessed cases, and all seven preserved improvements. Completed CI runner lines at `a9545c61` confirm all **39 deterministic cases / 553 gates**, matching the retained repaired-run counts and preserving all 28 frozen passes. All required checks passed in [CI run 34888872410](https://github.com/withAutograph/autograph-app-builder/actions/runs/34888872410). The final documentation revision and merge must also pass their required checks; their immutable links belong in the PR and local landing notes.
+
+Sanitized HTML, Markdown, JSON, ordered summaries, CI scenario counts, and historical notes are retained at `/private/tmp/cross-eval-milestone-20260914/`. The real runs are recorded in `/private/tmp/cross-eval-active-path-all-five.log` and `/private/tmp/cross-eval-existing-final-15min.log`. The first batch's raw exit remains failed because its existing-app attempt timed out; the separately completed 40/40 rerun supplies that case's final acceptance. Earlier evolving-checkout results retain their unresolved provenance instead of being relabeled with a final revision.
+
+Post-merge auth CI exposed an intermittent session readback and a real pre-hydration reciprocal callback defect. `457b5c20` checks the same established user/workspace after callbacks; the earlier missing read's cause remains unconfirmed. `46a0395e` resolves reciprocal auth callbacks on the server and adds raw HTML coverage. `f6cc7ed4` restores the full loading shell under Suspense. Original browser assertions remain, and auth CI passes.
+
+This closes the cross-eval integration milestone after green landing; it does not establish autonomous self-reproduction. A new live public-entrypoint generation remains the next milestone.
+
+## Identity compatibility rerun — 2026-09-15
+
+After the shared target-identity compatibility repair, all five supported real
+Sandbox cases passed again: design **17/17**, existing iteration **40/40**,
+identity/planning **23/23**, reviewed changes **38/38**, and toolchain **10/10**
+(**128 gates total**). Retained execution is
+`/private/tmp/builder458-real-sandbox-evals.log`; each case has its own completed
+runner result. Earlier failed and interrupted attempts remain historical evidence.
+These cases execute the real shared Sandbox workflow with a mocked model; they do
+not establish public-entrypoint autonomous self-reproduction or improve the frozen
+replica's quality verdict.
+
+[Builder PR #458](https://github.com/withAutograph/autograph-app-builder/pull/458)
+merged as `014e5e688e7c0d0fdb8b6320366d175059d7f767`, with green
+[main CI 34914189856](https://github.com/withAutograph/autograph-app-builder/actions/runs/34914189856).
+The integration run's source declaration is separate from that merge revision;
+its exact provenance belongs to the retained report, not an inferred main SHA.
+The failed `b2e25707` public baseline and outstanding replica quality gaps remain
+in [the self-reproduction handoff](self-reproduction-handoff.md).
+
+Arrusted #1382 separately passed required PR CI and normal Preview materialization
+and merged as `a24c87eb97bd138446ed425030c0522e0075206e`. Its post-merge main CI
+`34915728778` has Kernel Workspace, Rust, and Kernel failures under investigation.
+Do not treat successful Preview materialization or this Builder rerun as a green
+Arrusted main or closure of the full setup milestone. No new full self-reproduction
+baseline is included here.
+
+The five-case rerun used coordinator checkout
+`06bc0df47989b759a5f81e178d3f32a1f7e854d3`. Toolchain assertions verify their
+declared command-execution scope: raw diagnostics still reported
+`toolchainReady: false`, pnpm unavailable, and legacy image/cache evidence
+unconfigured or unverified. The 10 passing assertions do not make those
+configuration diagnostics true or establish broader readiness.
+
+The post-merge failure was traced to a Vendor Rust test embedding the deleted
+root `vercel.json` after the independent typed-configuration migration.
+[Arrusted PR #1390](https://github.com/withAutograph/arrusted-development/pull/1390)
+repairs that test integration while retaining callback-only routing coverage and
+an explicit token-route negative test. Its required checks and post-merge main
+verification remain the landing gate; the normal deployment and template-readiness
+check at `a24c87eb` passed. This failure does not change the frozen replica verdict.

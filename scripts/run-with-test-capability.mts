@@ -34,7 +34,7 @@ const evalFetchPreload = pathToFileURL(
 ).href;
 const maximumFrameBytes = 4096;
 const launcher = path.resolve(repositoryRoot, ".config/mise/scripts/trusted-node-launcher");
-const launcherDigest = "4b0dc2998432cb006eabfaf3f9660e19ca97cd44e34f133330c12087155d1379";
+const launcherDigest = "49e0179485b73816b09f70b0d387e92672171c467960e649c04e4b7d72cd1c8a";
 const allowedEnvironment = [
   "HOME",
   "TMPDIR",
@@ -50,6 +50,7 @@ const allowedEnvironment = [
   "VERCEL_OIDC_TOKEN",
   "VERCEL_TEAM_ID",
   "VERCEL_PROJECT_ID",
+  "APP_BUILDER_EVAL_BROWSER_EXECUTABLE",
 ] as const;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

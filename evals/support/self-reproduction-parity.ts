@@ -233,6 +233,7 @@ export type Observation = z.infer<typeof observationSchema>;
 export type Status = "passed" | "failed" | "blocked" | "unassessed";
 export const parityReasonCodes = [
   "observed-complete",
+  "excluded-from-scope",
   "output-missing",
   "output-infrastructure-unavailable",
   "missing-functionality",
@@ -287,7 +288,11 @@ export async function assessParity(
           ...(observation?.assertions.flatMap((item) => item.artifacts) ?? []),
         ]),
       ];
-      if (bundle.output !== "available") {
+      if (requirement.id === "anonymous-entry") {
+        reasonCode = "excluded-from-scope";
+        reason =
+          "Anonymous entry and anonymous draft carryover are explicitly excluded by the current self-reproduction brief.";
+      } else if (bundle.output !== "available") {
         status = bundle.output === "missing" ? "failed" : "blocked";
         reasonCode =
           bundle.output === "missing" ? "output-missing" : "output-infrastructure-unavailable";
