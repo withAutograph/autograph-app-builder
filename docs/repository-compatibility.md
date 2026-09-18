@@ -4,9 +4,9 @@ App Builder read-only design and implementation planning use one closed,
 builder-owned minimum contract. A repository is planning-compatible only when
 all of the following are true:
 
-- contract version `1` and runtime `nextjs` are supported;
+- contract version `4` and runtime `nextjs` are supported;
 - the declared repository paths exist and are safe repository-relative paths;
-- the repository exposes the fixed identity, planning, apply, preflight, and
+- the repository exposes the fixed identity, apply, preflight, and
   validation command names through mise;
 - `microfrontends.json` is the valid repository-owned topology document; and
 - the root package manifest declares Next.js.
@@ -15,8 +15,7 @@ The current normalized commands are:
 
 ```text
 mise run repository:exec -- app-identity.ts --app <app-id>
-mise run repository:exec -- app-contract.ts --contract <contract-file>
-mise run create:app -- --proposal <proposal-file>
+mise run create:app <app-id>
 mise run repository:preflight
 mise run app:check-build <app-id>
 mise run app:test <app-id> <shard>
@@ -64,3 +63,11 @@ merge readiness. At merge, the coordinator MUST re-read the default branch,
 rebase or regenerate, rerun relevant validation, present the reconciled diff,
 and obtain final effect-based approval before a clean-current-base merge.
 Release-candidate byte immutability applies only to build/publish promotion.
+
+Creation preparation is internal durable Builder state. Apply stages the accepted
+Markdown at `.config/app-specs/<id>.md` and invokes the direct creation command.
+The generator derives identity and default routes from the id and current catalog;
+additional public routes are separately reviewed topology edits. A conventional
+`.config/app-specs/<id>.cue` selects CUE generation and is copied into the app.
+Without CUE, creation stays static. Markdown is an opaque snapshot at
+`apps/<id>/.config/app-spec.md`, never backend or provider authority.

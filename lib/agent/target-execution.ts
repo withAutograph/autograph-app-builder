@@ -1,4 +1,4 @@
-import type { AppBuilderWorkflowState, AppCreationProposal } from "./workflow-state";
+import type { AppBuilderWorkflowState, PreparedAppCreation } from "./workflow-state";
 import type { SandboxSession } from "eve/sandbox";
 import { hasTestCapability } from "../testing/test-capability";
 
@@ -33,7 +33,7 @@ export type ProposalWorkflowState = Extract<
 export function plannedProposalForExecution(
   state: AppBuilderWorkflowState,
   expectedProposalDigest: string,
-): AppCreationProposal {
+): PreparedAppCreation {
   if (
     state.phase !== "planned" &&
     state.phase !== "apply_failed" &&

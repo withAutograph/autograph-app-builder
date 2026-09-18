@@ -53,7 +53,11 @@ export default defineTool({
     });
     assertImplementationArchitecture(
       implementationFiles,
-      current.proposal.target.plan.source.schema.kind,
+      implementationFiles.some(
+        (file) => file.path === `.config/app-specs/${current.appSpec.appId}.cue`,
+      )
+        ? "kernel"
+        : current.proposal.target.plan.source.schema.kind,
     );
     const sandbox = await ctx.getSandbox();
     const fixture = hasTestCapability("simulated-target");

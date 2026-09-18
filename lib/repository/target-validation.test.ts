@@ -47,7 +47,6 @@ const apply: TargetApplyReceipt = {
   status: "applied",
   targetReceipt: {
     appId: "example",
-    contractPath: "apps/example/app.contract.json",
     mutations: ["apps/example", "microfrontends.json"],
     omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
     recovered: false,

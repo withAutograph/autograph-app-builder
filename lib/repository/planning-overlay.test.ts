@@ -23,7 +23,7 @@ describe("planning from the current checkout", () => {
       removePath: vi.fn(async () => {}),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       run: vi.fn(async ({ command }: { command: string }) => ({
-        exitCode: command.startsWith("test -d") ? 1 : 0,
+        exitCode: command.startsWith("test -") ? 1 : 0,
         stderr: "",
         stdout: "",
       })),
@@ -39,10 +39,7 @@ describe("planning from the current checkout", () => {
       sandbox,
     });
     expect(result.proposal.contract.appId).toBe("stock-exceptions");
-    expect(executor.mock.calls.map(([request]) => request.command)).toEqual([
-      "identity",
-      "planning",
-    ]);
+    expect(executor.mock.calls.map(([request]) => request.command)).toEqual(["identity"]);
   });
 
   it("runs creation planning when new-app drafts are supplied", async () => {
@@ -52,7 +49,7 @@ describe("planning from the current checkout", () => {
       removePath: vi.fn(async () => {}),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       run: vi.fn(async ({ command }: { command: string }) => ({
-        exitCode: command.startsWith("test -d") ? 1 : 0,
+        exitCode: command.startsWith("test -") ? 1 : 0,
         stderr: "",
         stdout: "",
       })),
@@ -76,10 +73,7 @@ describe("planning from the current checkout", () => {
     });
 
     expect(result.proposal).not.toHaveProperty("operation");
-    expect(executor.mock.calls.map(([request]) => request.command)).toEqual([
-      "identity",
-      "planning",
-    ]);
+    expect(executor.mock.calls.map(([request]) => request.command)).toEqual(["identity"]);
   });
 
   it("plans explicit existing-app edits from the actual checkout", async () => {

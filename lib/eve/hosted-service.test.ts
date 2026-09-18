@@ -388,35 +388,6 @@ describe("hosted Eve service core", () => {
     });
   });
 
-  it("keeps the verified implementation plan outside cursor pagination", () => {
-    const implementationPlan = {
-      appId: "vendor-onboarding",
-      packageName: "@autograph/vendor-onboarding",
-      projectName: "apps-vendor-onboarding",
-      readOnly: true as const,
-      routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
-      runtime: "nextjs" as const,
-    };
-    expect(
-      hostedEveProjectionForTesting(
-        "session_1",
-        {
-          events: [{ index: 0, status: "completed", type: "status" }],
-          implementationPlan,
-          status: "completed",
-        },
-        1,
-        100,
-      ),
-    ).toEqual({
-      cursor: 1,
-      events: [],
-      implementationPlan,
-      sessionId: "session_1",
-      status: "completed",
-    });
-  });
-
   it("keeps the latest prototype outside cursor pagination", () => {
     const prototype = {
       content: "<!doctype html><html><body>Vendor queue</body></html>",
@@ -1006,14 +977,6 @@ describe("hosted Eve service core", () => {
         },
         type: "input.requested",
       })),
-      implementationPlan: {
-        appId: "stock-exceptions",
-        packageName: "@autograph/stock-exceptions",
-        projectName: "apps-stock-exceptions",
-        readOnly: true,
-        routes: Array.from({ length: 48 }, (_, index) => `/${index}-${"r".repeat(1024)}`),
-        runtime: "nextjs",
-      },
       prototype: {
         content: "P".repeat(262_144),
         digest: "a".repeat(64),
@@ -1045,7 +1008,6 @@ describe("hosted Eve service core", () => {
       new TextEncoder().encode(JSON.stringify(record.checkpoint)).byteLength,
     ).toBeLessThanOrEqual(512 * 1024);
     expect(record.checkpoint?.prototype).toBeDefined();
-    expect(record.checkpoint?.implementationPlan).toBeDefined();
     expect(record.checkpoint?.inputRequests?.map(({ requestId }) => requestId)).toEqual(requestIds);
     expect(record.checkpoint?.inputRequests?.[0]?.title.length).toBeLessThan(oversized.length);
     expect(record.checkpoint?.inputRequests?.[0]?.description?.length).toBeLessThan(

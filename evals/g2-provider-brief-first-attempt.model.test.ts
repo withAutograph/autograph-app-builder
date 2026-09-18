@@ -40,28 +40,14 @@ async function productionAppSpecInstructions(): Promise<string> {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function terminalBuildHandoff(raw: string): {
-  integrations: string[];
-  hostedResources: string[];
-} {
+function assertTerminalBuildHandoff(raw: string): void {
   const match = /\n## Build handoff\n\n```json\n(?<handoff>[\s\S]+)\n```\s*$/u.exec(raw);
   expect(match, "raw output ends with the exact Build handoff block").not.toBeNull();
-  const parsed = JSON.parse(match?.groups?.handoff ?? "null") as {
-    optionalCapabilities?: {
-      integrations?: unknown;
-      hostedResources?: unknown;
-    };
-  };
-  expect(parsed.optionalCapabilities?.integrations).toEqual(expect.any(Array));
-  expect(parsed.optionalCapabilities?.hostedResources).toEqual(expect.any(Array));
-  return {
-    hostedResources: parsed.optionalCapabilities?.hostedResources as string[],
-    integrations: parsed.optionalCapabilities?.integrations as string[],
-  };
+  expect(JSON.parse(match?.groups?.handoff ?? "null")).toEqual({ status: "build-ready" });
 }
 
 describe.skipIf(!optIn)("G2 provider-named product brief", () => {
-  test("authors a valid provider-neutral AppSpec on the first model attempt", async () => {
+  test("authors a valid status-only AppSpec handoff on the first model attempt", async () => {
     if (modelId === undefined || modelId.length === 0) {
       throw new Error("Set APP_BUILDER_G2_MODEL_ID when APP_BUILDER_G2_MODEL_EVAL=1.");
     }
@@ -111,11 +97,7 @@ ${productBrief}`,
     });
     expect(headings).toEqual(REQUIRED_APP_SPEC_HEADINGS);
 
-    const capabilities = terminalBuildHandoff(rawFirstOutput);
-    expect(capabilities.integrations.length).toBeGreaterThanOrEqual(2);
-    expect([...capabilities.integrations, ...capabilities.hostedResources]).toEqual(
-      expect.not.arrayContaining([expect.stringMatching(/github|vercel/iu)]),
-    );
+    assertTerminalBuildHandoff(rawFirstOutput);
     const productProse = rawFirstOutput.slice(0, rawFirstOutput.lastIndexOf("## Build handoff"));
     expect(productProse).toMatch(/\bGitHub\b/u);
     expect(productProse).toMatch(/\bVercel\b/u);

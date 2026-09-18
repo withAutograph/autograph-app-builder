@@ -62,7 +62,6 @@ ${renewalReviewDesignPrompt}`);
     t.notCalledTool("record_prototype_artifact");
     t.notCalledTool("record_prototype_bundle");
     t.notCalledTool("accept_ui_preview");
-    t.notCalledTool("plan_app_creation");
     t.notCalledTool("apply_app_creation");
     t.notCalledTool("validate_app_creation");
     t.notCalledTool("prepare_target_dependencies");

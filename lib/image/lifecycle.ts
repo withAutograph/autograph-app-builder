@@ -202,7 +202,7 @@ export const createExactImageProvenance = (input: ExactProvenanceInput): ImagePr
     a.localeCompare(b),
   );
   if (
-    targetFileEntries.length !== 11 ||
+    targetFileEntries.length !== 10 ||
     targetFileEntries.some(([, digest]) => !sha256.test(digest))
   ) {
     throw new Error("The exact target-file digest set is incomplete.");

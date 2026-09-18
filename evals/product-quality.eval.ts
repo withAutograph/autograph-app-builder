@@ -93,11 +93,7 @@ Confirmed.
 
 \`\`\`json
 {
-  "status": "build-ready",
-  "owner": "operations",
-  "schema": { "kind": "kernel" },
-  "additionalPublicRoutes": [],
-  "optionalCapabilities": { "integrations": [], "hostedResources": [] }
+  "status": "build-ready"
 }
 \`\`\``,
             html: value,

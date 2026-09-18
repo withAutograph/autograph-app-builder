@@ -5,7 +5,6 @@ import {
   eveRespondInputSchema,
   eveStartInputSchema,
   publicInputRequestSchema,
-  publicImplementationPlanSchema,
   publicPrototypeSchema,
 } from "./contracts";
 
@@ -252,38 +251,5 @@ describe("publicPrototypeSchema", () => {
     ]) {
       expect(publicPrototypeSchema.safeParse({ ...prototype, previewUrl }).success).toBe(false);
     }
-  });
-});
-
-describe("publicImplementationPlanSchema", () => {
-  const plan = {
-    appId: "vendor-onboarding",
-    packageName: "@autograph/vendor-onboarding",
-    projectName: "apps-vendor-onboarding",
-    readOnly: true as const,
-    routes: ["/vendor-onboarding", "/vendor-onboarding/:path*"],
-    runtime: "nextjs" as const,
-  };
-
-  it("accepts only the closed sanitized target-plan shape", () => {
-    expect(publicImplementationPlanSchema.parse(plan)).toEqual(plan);
-    expect(
-      publicImplementationPlanSchema.safeParse({
-        ...plan,
-        internalAppSpec: "private",
-      }).success,
-    ).toBe(false);
-    expect(
-      publicImplementationPlanSchema.safeParse({
-        ...plan,
-        sourceSha: "d".repeat(40),
-      }).success,
-    ).toBe(false);
-    expect(
-      publicImplementationPlanSchema.safeParse({
-        ...plan,
-        proposalDigest: "private",
-      }).success,
-    ).toBe(false);
   });
 });

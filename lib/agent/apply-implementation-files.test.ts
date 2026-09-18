@@ -38,7 +38,6 @@ describe("approval-bound implementation files", () => {
         appId: "stock-exceptions",
         applyRoot: "/workspace/repository",
         proposal: {} as never,
-        proposalPath: "/workspace/proposal.json",
         sandbox: { writeTextFile } as never,
       }),
     ).resolves.toEqual({ exitCode: 0, stderr: "", stdout: "receipt" });

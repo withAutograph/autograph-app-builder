@@ -21,7 +21,6 @@ const repositoryPath = z
 
 export const targetApplyCommandReceiptSchema = z.strictObject({
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-  contractPath: repositoryPath,
   mutations: z.tuple([repositoryPath, z.literal("microfrontends.json")]),
   omittedAuthorities: z.tuple([
     z.literal("provider-provisioning"),
@@ -80,7 +79,6 @@ export type ApplyCommandExecutor = (input: {
   sandbox: SandboxSession;
   appId: string;
   applyRoot: string;
-  proposalPath: string;
   proposal: TargetProposal;
 }) => Promise<ApplyCommandResult>;
 
@@ -269,7 +267,6 @@ export async function materializeFreshApplyOverlay(input: {
   environment?: Readonly<Record<string, string | undefined>>;
 }): Promise<{
   applyRoot: string;
-  proposalPath: string;
   appSpecPath: string;
   acceptedAppSpec: Uint8Array;
 }> {
@@ -278,11 +275,6 @@ export async function materializeFreshApplyOverlay(input: {
   await ensureSandboxDirectories(input.sandbox, [parent]);
   const planningRoot = `/workspace/${planningOverlayRoot(input.artifactRevision)}`;
   try {
-    const proposalPath = `.app-builder/apply/${input.proposalDigest}/proposal.json`;
-    await input.sandbox.writeTextFile({
-      content: `${JSON.stringify(input.proposal, null, 2)}\n`,
-      path: proposalPath,
-    });
     const appSpecPath = input.proposal.contract.appSpec.path;
     const acceptedAppSpec = await input.sandbox.readBinaryFile({
       path: `${planningRoot.replace(/^\/workspace\//u, "")}/${appSpecPath}`,
@@ -297,7 +289,6 @@ export async function materializeFreshApplyOverlay(input: {
       acceptedAppSpec,
       appSpecPath,
       applyRoot: "/workspace/repository",
-      proposalPath: `/workspace/${proposalPath}`,
     };
   } catch (error) {
     await input.sandbox.removePath({
@@ -333,6 +324,9 @@ async function stageAcceptedAppSpec(input: {
   appSpecPath: string;
   acceptedAppSpec: Uint8Array;
 }): Promise<void> {
+  await ensureSandboxDirectories(input.sandbox, [
+    `${input.applyRoot.replace(/^\/workspace\//u, "")}/.config/app-specs`,
+  ]);
   await input.sandbox.writeBinaryFile({
     content: input.acceptedAppSpec,
     path: `${input.applyRoot.replace(/^\/workspace\//u, "")}/${input.appSpecPath}`,
@@ -462,7 +456,10 @@ export async function inspectFixtureApplyOverlay(
   const candidates = [
     ...sourceFiles,
     { mode: "644", path: `prototype/${appId}/app-spec.md` },
-    { mode: "644", path: `apps/${appId}/app.contract.json` },
+    { mode: "644", path: `.config/app-specs/${appId}.md` },
+    { mode: "644", path: `.config/app-specs/${appId}.cue` },
+    { mode: "644", path: `apps/${appId}/.config/app-spec.md` },
+    { mode: "644", path: `apps/${appId}/schema/${appId}.cue` },
     { mode: "644", path: `apps/${appId}/app/page.tsx` },
     { mode: "644", path: `apps/${appId}/package.json` },
   ];
@@ -549,8 +546,6 @@ function parseTargetReceipt(
   const receipt = parsed.data;
   if (
     receipt.appId !== proposal.contract.appId ||
-    receipt.recovered ||
-    receipt.contractPath !== proposal.futurePath ||
     receipt.workspacePath !== proposal.plan.source.workspacePath ||
     receipt.topology.path !== proposal.plan.topology.configPath ||
     (proposal.plan.topology.currentDigest !== undefined &&
@@ -565,27 +560,8 @@ function parseTargetReceipt(
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function observedTargetReceipt(proposal: TargetProposal): TargetApplyCommandReceipt {
-  const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
-  return {
-    appId: proposal.contract.appId,
-    contractPath: proposal.futurePath,
-    mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
-    omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
-    recovered: false,
-    topology: {
-      newDigest: proposal.plan.topology.proposedDigest ?? oldDigest,
-      oldDigest,
-      path: "microfrontends.json",
-    },
-    version: 1,
-    workspacePath: proposal.plan.source.workspacePath,
-  };
-}
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
-  return async ({ sandbox, applyRoot, proposalPath, proposal }) => {
+  return async ({ sandbox, appId, applyRoot, proposal }) => {
     if ("operation" in proposal) {
       const relativeRoot = applyRoot.replace(/^\/workspace\//u, "");
       let stale = false;
@@ -618,7 +594,6 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
       const receipt: TargetApplyCommandReceipt = {
         appId: proposal.contract.appId,
-        contractPath: proposal.futurePath,
         mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
         omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
         recovered: false,
@@ -664,7 +639,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       return install;
     }
     const generated = await sandbox.run({
-      command: `bun .config/turbo/generators/create-app.ts --proposal ${proposalPath}`,
+      command: `mise run create:app ${appId}`,
       workingDirectory: applyRoot,
     });
     if (generated.exitCode !== 0) {
@@ -706,7 +681,6 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
       const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
       const receipt: TargetApplyCommandReceipt = {
         appId,
-        contractPath: proposal.futurePath,
         mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
         omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
         recovered: false,
@@ -723,11 +697,14 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
     await ensureSandboxDirectories(sandbox, [
       `${relativeRoot}/apps/${appId}`,
       `${relativeRoot}/apps/${appId}/app`,
+      `${relativeRoot}/apps/${appId}/.config`,
       `${relativeRoot}/apps/shell`,
     ]);
     await sandbox.writeTextFile({
-      content: `${JSON.stringify(proposal.contract, null, 2)}\n`,
-      path: `${relativeRoot}/apps/${appId}/app.contract.json`,
+      content:
+        (await sandbox.readTextFile({ path: `${relativeRoot}/.config/app-specs/${appId}.md` })) ??
+        "",
+      path: `${relativeRoot}/apps/${appId}/.config/app-spec.md`,
     });
     await sandbox.writeTextFile({
       content: `${JSON.stringify({ name: `@autograph/${appId}` }, null, 2)}\n`,
@@ -749,7 +726,6 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
     const newDigest = proposal.plan.topology.proposedDigest ?? "1".repeat(64);
     const receipt: TargetApplyCommandReceipt = {
       appId,
-      contractPath: proposal.futurePath,
       mutations: [proposal.plan.source.workspacePath, "microfrontends.json"],
       omittedAuthorities: ["provider-provisioning", "deployment", "production-readiness"],
       recovered: false,
@@ -824,14 +800,14 @@ export async function executeProposalBoundApply(input: {
     planning = await snapshotter(input.sandbox, overlay.applyRoot);
     prepared = await snapshotter(input.sandbox, "/workspace/repository");
     await restorePreparedAppSpecBaseline({
-      appSpecPath: overlay.appSpecPath,
+      appSpecPath: `.config/app-specs/${input.proposal.contract.appId}.md`,
       applyRoot: overlay.applyRoot,
       sandbox: input.sandbox,
     });
     before = await snapshotter(input.sandbox, overlay.applyRoot);
     await stageAcceptedAppSpec({
       acceptedAppSpec: overlay.acceptedAppSpec,
-      appSpecPath: overlay.appSpecPath,
+      appSpecPath: `.config/app-specs/${input.proposal.contract.appId}.md`,
       applyRoot: overlay.applyRoot,
       sandbox: input.sandbox,
     });
@@ -849,7 +825,6 @@ export async function executeProposalBoundApply(input: {
       appId: input.proposal.contract.appId,
       applyRoot: overlay.applyRoot,
       proposal: input.proposal,
-      proposalPath: overlay.proposalPath,
       sandbox: input.sandbox,
     });
   } catch (error) {
@@ -897,8 +872,7 @@ export async function executeProposalBoundApply(input: {
     };
   }
   const changes = overlayChanges(before, after);
-  const targetReceipt =
-    parseTargetReceipt(command, input.proposal) ?? observedTargetReceipt(input.proposal);
+  const targetReceipt = parseTargetReceipt(command, input.proposal);
   const base = {
     ...attemptBase,
     changedContentDigest: sha256(JSON.stringify(changes)),
@@ -906,12 +880,12 @@ export async function executeProposalBoundApply(input: {
     postTree: after.files,
     postTreeDigest: after.treeDigest,
   };
-  if (command.exitCode !== 0) {
+  if (command.exitCode !== 0 || targetReceipt === undefined) {
     const commandOutput = `${command.stderr}\n${command.stdout}`;
     const unsigned = {
       ...base,
       commandFailureKind: commandFailureKind(commandOutput),
-      reason: "command-failed" as const,
+      reason: command.exitCode === 0 ? ("invalid-receipt" as const) : ("command-failed" as const),
       recoveryRequired: true as const,
       status: "partial-failure" as const,
       ...(missingDependency(commandOutput) === undefined

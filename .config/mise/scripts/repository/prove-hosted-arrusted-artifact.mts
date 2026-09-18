@@ -15,8 +15,6 @@ import path from "node:path";
 
 import { extract } from "tar";
 
-import { BUILD_READY_APP_SPEC } from "../../../../evals/support/app-spec.ts";
-
 const { basename, dirname, isAbsolute, join } = path;
 
 const TARGET_SHA = "d378904a05e1bc2c0896886e6fbd3b816babaee2";
@@ -116,24 +114,6 @@ try {
     file: join(seed, "dependency-cache", "node-modules.tar.gz"),
     sync: true,
   });
-  const appSpecPath = join(repository, "prototype", "builder-proof", "app-spec.md");
-  mkdirSync(join(repository, "prototype", "builder-proof"), {
-    recursive: true,
-  });
-  writeFileSync(appSpecPath, BUILD_READY_APP_SPEC);
-  const appSpecDigest = sha256(readFileSync(appSpecPath));
-  const contractPath = join(root, "contract.json");
-  writeFileSync(
-    contractPath,
-    `${JSON.stringify({
-      appId: "builder-proof",
-      appSpec: {
-        path: "prototype/builder-proof/app-spec.md",
-        sha256: appSpecDigest,
-      },
-      version: 1,
-    })}\n`,
-  );
   const run = (args: readonly string[]) =>
     JSON.parse(
       execFileSync(
@@ -162,28 +142,20 @@ try {
       ),
     ) as Record<string, unknown>;
   const identity = run(["app-identity.ts", "--app", "builder-proof"]);
-  const proposal = run(["app-contract.ts", "--contract", contractPath]);
   if (
     identity.appId !== "builder-proof" ||
     identity.workspacePath !== "apps/builder-proof" ||
-    identity.packageName !== "@autograph/builder-proof" ||
-    proposal.futurePath !== "apps/builder-proof/app.contract.json" ||
-    !Array.isArray(proposal.blockers) ||
-    proposal.blockers.length !== 0 ||
-    !Array.isArray(proposal.mutations) ||
-    proposal.mutations.length !== 0
+    identity.packageName !== "@autograph/builder-proof"
   )
     throw new Error("The hosted dependency artifact returned an unexpected planning result.");
   process.stdout.write(
     `${JSON.stringify({
       appId: identity.appId,
       artifactSha256: input.artifactSha256,
-      blockers: proposal.blockers,
-      futurePath: proposal.futurePath,
-      mutations: proposal.mutations,
       sourceSha: TARGET_SHA,
       sourceTree: TARGET_TREE,
       version: 2,
+      workspacePath: identity.workspacePath,
     })}\n`,
   );
 } finally {

@@ -62,6 +62,7 @@ ARG MISE_LOCK_SHA256=415008336ed45882fce91f681fdce7648583ce6744372beb4d5212ab644
 ARG BUN_LOCK_SHA256=e313e11efc00e7439a6e91f832c80508a6b15cacda267b86a152f76aa5ad4dd0
 ARG CARGO_LOCK_SHA256=8ba85741c6021d44cb8f211939f3b0488db22a7b0e11a1d703eccb2d31e259cb
 ARG APP_IDENTITY_SHA256=10d474a28cb941686e768cf642f0e0466a6ac1c359ef5d3c2737c5548606ff6c
+# Legacy cache-manifest identity only; creation uses the live checkout command.
 ARG APP_CONTRACT_SHA256=03889bce16d5368da287ae4215056ed786ba8c161b3bb4a0e10c9e17cb70994e
 ARG APP_VALIDATION_SHA256=db6cac93c5a89ba26db8274312959114d674ec1901ee9fcd93ab9d6ef2c503a5
 ARG CREATE_APP_SHA256=357d18e3cb355736638ed087355739858da59cf7c43dc09755ac1c589a4397ff
@@ -80,7 +81,6 @@ RUN set -eux; \
     echo "${BUN_LOCK_SHA256}  /tmp/arrusted-target/bun.lock" | sha256sum --check --strict; \
     echo "${CARGO_LOCK_SHA256}  /tmp/arrusted-target/Cargo.lock" | sha256sum --check --strict; \
     echo "${APP_IDENTITY_SHA256}  /tmp/arrusted-target/.config/mise/scripts/repository/app-identity.ts" | sha256sum --check --strict; \
-    echo "${APP_CONTRACT_SHA256}  /tmp/arrusted-target/.config/mise/scripts/repository/app-contract.ts" | sha256sum --check --strict; \
     echo "${APP_VALIDATION_SHA256}  /tmp/arrusted-target/.config/mise/scripts/repository/app-validation.ts" | sha256sum --check --strict; \
     echo "${CREATE_APP_SHA256}  /tmp/arrusted-target/.config/turbo/generators/create-app.ts" | sha256sum --check --strict; \
     echo "${APP_TEMPLATE_PACKAGE_SHA256}  /tmp/arrusted-target/.config/turbo/generators/templates/app/package.json.hbs" | sha256sum --check --strict; \

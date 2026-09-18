@@ -18,14 +18,13 @@ export const SUPPORTED_TEMPLATE_ADAPTER = "arrusted-development-v0";
 export const SUPPORTED_REPOSITORY_CONTRACT = {
   commands: {
     appIdentity: "mise run repository:exec -- app-identity.ts --app <app-id>",
-    apply: "mise run create:app -- --proposal <proposal-file>",
-    planning: "mise run repository:exec -- app-contract.ts --contract <contract-file>",
+    apply: "mise run create:app <app-id>",
     repositoryPreflight: "mise run repository:preflight",
   },
   requiredPaths: [
     ".config/mise/config.toml",
     ".config/mise/tasks/repository/exec",
-    ".config/mise/scripts/repository/app-contract.ts",
+    ".config/mise/scripts/repository/resolved-app-creation.ts",
     ".config/mise/scripts/repository/app-identity.ts",
     ".config/mise/scripts/repository/app-validation.ts",
     ".config/mise/scripts/repository/repository-preflight.ts",
@@ -35,7 +34,7 @@ export const SUPPORTED_REPOSITORY_CONTRACT = {
   runtime: "nextjs",
   topologyOwner: "microfrontends.json",
   validationCommands: ["mise run app:check-build <app-id>", "mise run app:test <app-id> <shard>"],
-  version: 1,
+  version: 4,
 } as const;
 
 export const SUPPORTED_TEMPLATE_INPUT_PATHS = [
@@ -75,7 +74,6 @@ export const SUPPORTED_VALIDATION_TEST_SHARDS = ["1/1"] as const;
 const expectedCommands = {
   appIdentity: SUPPORTED_REPOSITORY_CONTRACT.commands.appIdentity,
   apply: SUPPORTED_REPOSITORY_CONTRACT.commands.apply,
-  planning: SUPPORTED_REPOSITORY_CONTRACT.commands.planning,
   preflight: SUPPORTED_REPOSITORY_CONTRACT.commands.repositoryPreflight,
   scaffold: "mise run generate:app <app-id>",
   validation: SUPPORTED_REPOSITORY_CONTRACT.validationCommands,
@@ -126,7 +124,6 @@ export interface EligibilityResult {
     requiredPaths: readonly string[];
     packageScope: "@autograph" | "unsupported";
     appIdentityCommand: string;
-    planningCommand: string;
     scaffoldCommand: string;
     applyCommand: string;
     repositoryPreflightCommand: string;
@@ -485,7 +482,7 @@ const inspectPlanningCompatibility = function inspectPlanningCompatibility(
   if (
     contents[".config/mise/tasks/repository/exec"] === undefined ||
     contents[".config/mise/scripts/repository/app-identity.ts"] === undefined ||
-    contents[".config/mise/scripts/repository/app-contract.ts"] === undefined
+    contents[".config/mise/scripts/repository/resolved-app-creation.ts"] === undefined
   ) {
     failures.push("repository:exec command is unavailable");
   }
@@ -496,7 +493,6 @@ const inspectPlanningCompatibility = function inspectPlanningCompatibility(
     appIdentityCommand: SUPPORTED_REPOSITORY_CONTRACT.commands.appIdentity,
     applyCommand: SUPPORTED_REPOSITORY_CONTRACT.commands.apply,
     contractVersion: SUPPORTED_REPOSITORY_CONTRACT.version,
-    planningCommand: SUPPORTED_REPOSITORY_CONTRACT.commands.planning,
     repositoryPreflightCommand: SUPPORTED_REPOSITORY_CONTRACT.commands.repositoryPreflight,
     requiredPaths: [...SUPPORTED_REPOSITORY_CONTRACT.requiredPaths],
     runtime,
@@ -533,10 +529,11 @@ export const inspectSupportedTemplateSnapshot = function inspectSupportedTemplat
     failures.push("V0 does not accept a repository-template manifest");
   }
 
-  const appContract = contents[".config/mise/scripts/repository/app-contract.ts"] ?? "";
-  const adapterRuntime = /runtime:\s*"nextjs"/u.test(appContract) ? "nextjs" : "unsupported";
+  const resolvedCreation =
+    contents[".config/mise/scripts/repository/resolved-app-creation.ts"] ?? "";
+  const adapterRuntime = /runtime:\s*"nextjs"/u.test(resolvedCreation) ? "nextjs" : "unsupported";
   if (adapterRuntime === "unsupported") {
-    failures.push("app planner does not declare the Next.js runtime");
+    failures.push("app generator does not declare the Next.js runtime");
   }
 
   const generator = contents[".config/turbo/generators/config.ts"] ?? "";
@@ -585,7 +582,6 @@ export const inspectSupportedTemplateSnapshot = function inspectSupportedTemplat
       applyCommand: expectedCommands.apply,
       contractVersion: planningCompatibility.observed.contractVersion,
       packageScope,
-      planningCommand: expectedCommands.planning,
       releaseGate: "REPOSITORY_RELEASE_ENABLED",
       repositoryPreflightCommand: expectedCommands.preflight,
       requiredPaths: planningCompatibility.observed.requiredPaths,

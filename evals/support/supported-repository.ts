@@ -78,7 +78,7 @@ export function createSupportedRepositoryFixture(): string {
   const files: Record<string, string> = {
     ".config/mise/config.toml": [
       '[tasks."create:app"]',
-      "run = 'mise exec -- bun .config/turbo/generators/create-app.ts --proposal \"$usage_proposal\"'",
+      "run = 'mise exec --no-deps -- bun .config/turbo/generators/create-app.ts \"$usage_app\"'",
       "",
       '[tasks."repository:preflight"]',
       'run = "mise run repository:exec -- repository-preflight.ts"',
@@ -92,17 +92,17 @@ export function createSupportedRepositoryFixture(): string {
       '[tasks."app:test"]',
       'run = \'bun .config/mise/scripts/repository/app-validation.ts test "$usage_app" "$usage_shard"\'',
     ].join("\n"),
-    ".config/mise/scripts/repository/app-contract.ts": 'const source = { runtime: "nextjs" };\n',
     ".config/mise/scripts/repository/app-identity.ts": `const scope = "@autograph/\${appId}";\n`,
     ".config/mise/scripts/repository/app-validation.ts": "export {};\n",
     ".config/mise/scripts/repository/repository-preflight.ts": [
       'const observed = { runtime: "nextjs" };',
       'const appIdentity = "mise run repository:exec -- app-identity.ts --app <app-id>";',
-      'const appPlan = "mise run repository:exec -- app-contract.ts --contract <contract-file>";',
-      'const appApply = "mise run create:app -- --proposal <proposal-file>";',
+      'const appApply = "mise run create:app <app-id>";',
       'const preflight = "mise run repository:preflight";',
       'const validation = ["mise run app:check-build <app-id>", "mise run app:test <app-id> <shard>"];',
     ].join("\n"),
+    ".config/mise/scripts/repository/resolved-app-creation.ts":
+      'const source = { runtime: "nextjs" };\n',
     ".config/mise/tasks/repository/exec": [
       "#!/usr/bin/env bash",
       `exec mise exec -- bun ".config/mise/scripts/repository/$1" "\${@:2}"`,

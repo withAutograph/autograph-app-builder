@@ -84,7 +84,6 @@ export default defineEval({
           "record_prototype_artifact",
           "accept_app_spec",
           "prepare_target_dependencies",
-          "plan_app_creation",
           "apply_app_creation",
           "validate_app_creation",
           "change_set_status",

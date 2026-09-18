@@ -22,9 +22,6 @@ export function recoveryPromptForSession(record: DurableHostedSessionRecord): st
     checkpoint.prototype === undefined
       ? undefined
       : `Prototype: ${checkpoint.prototype.path} (${checkpoint.prototype.digest})`,
-    checkpoint.implementationPlan === undefined
-      ? undefined
-      : `Implementation plan: ${JSON.stringify(checkpoint.implementationPlan)}`,
     checkpoint.inputRequests === undefined
       ? undefined
       : `Outstanding unresolved product requests from the prior runtime (the exact prior request IDs are retained for reconciliation): ${JSON.stringify(checkpoint.inputRequests)}`,

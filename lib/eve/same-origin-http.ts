@@ -13,7 +13,6 @@ import {
 import type { HostedEngineSnapshot, HostedEveTransport } from "./hosted-service";
 import {
   deriveInstalledEveStatus,
-  latestInstalledImplementationPlan,
   latestInstalledPrototype,
   latestInstalledUiPreview,
   latestInstalledWorkingPreview,
@@ -319,7 +318,6 @@ async function readInstalledSnapshot(input: {
   const prototype = latestInstalledPrototype(events);
   const uiPreview = latestInstalledUiPreview(events);
   const workingPreview = latestInstalledWorkingPreview(events);
-  const implementationPlan = latestInstalledImplementationPlan(events);
   return {
     installed: events,
     snapshot: {
@@ -328,7 +326,6 @@ async function readInstalledSnapshot(input: {
       ...(prototype === undefined ? {} : { prototype }),
       ...(uiPreview === undefined ? {} : { uiPreview }),
       ...(workingPreview === undefined ? {} : { workingPreview }),
-      ...(implementationPlan === undefined ? {} : { implementationPlan }),
     },
   };
 }

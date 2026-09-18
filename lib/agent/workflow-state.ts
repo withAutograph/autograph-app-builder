@@ -127,7 +127,7 @@ export type TargetIdentityReceipt = TargetExecutionBinding & {
   digest: string;
 };
 
-export type AppCreationProposal = TargetExecutionBinding & {
+export type PreparedAppCreation = TargetExecutionBinding & {
   version: 1;
   identityDigest: string;
   contractDigest: string;
@@ -156,7 +156,7 @@ type ReviewedPhase = WorkspacePhase & {
   appSpec: AcceptedAppSpec;
   dependencyReceipt: DependencyPreparationReceipt;
   identityReceipt: TargetIdentityReceipt;
-  proposal: AppCreationProposal;
+  proposal: PreparedAppCreation;
   applyReceipt: TargetApplyReceipt;
   validationReceipt: TargetValidationReceipt;
   reviewReceipt: ReviewedChangeSetReceipt;
@@ -202,7 +202,7 @@ export type AppBuilderWorkflowState =
       appSpec: AcceptedAppSpec;
       dependencyReceipt: DependencyPreparationReceipt;
       identityReceipt: TargetIdentityReceipt;
-      proposal: AppCreationProposal;
+      proposal: PreparedAppCreation;
     } & WorkspacePhase)
   | ({
       version: typeof APP_BUILDER_WORKFLOW_VERSION;
@@ -210,7 +210,7 @@ export type AppBuilderWorkflowState =
       appSpec: AcceptedAppSpec;
       dependencyReceipt: DependencyPreparationReceipt;
       identityReceipt: TargetIdentityReceipt;
-      proposal: AppCreationProposal;
+      proposal: PreparedAppCreation;
       applyFailure: TargetApplyFailureReceipt;
     } & WorkspacePhase)
   | ({
@@ -219,7 +219,7 @@ export type AppBuilderWorkflowState =
       appSpec: AcceptedAppSpec;
       dependencyReceipt: DependencyPreparationReceipt;
       identityReceipt: TargetIdentityReceipt;
-      proposal: AppCreationProposal;
+      proposal: PreparedAppCreation;
       applyReceipt: TargetApplyReceipt;
     } & WorkspacePhase)
   | ({
@@ -228,7 +228,7 @@ export type AppBuilderWorkflowState =
       appSpec: AcceptedAppSpec;
       dependencyReceipt: DependencyPreparationReceipt;
       identityReceipt: TargetIdentityReceipt;
-      proposal: AppCreationProposal;
+      proposal: PreparedAppCreation;
       applyReceipt: TargetApplyReceipt;
       validationAttempt: TargetValidationAttemptReceipt;
     } & WorkspacePhase)
@@ -238,7 +238,7 @@ export type AppBuilderWorkflowState =
       appSpec: AcceptedAppSpec;
       dependencyReceipt: DependencyPreparationReceipt;
       identityReceipt: TargetIdentityReceipt;
-      proposal: AppCreationProposal;
+      proposal: PreparedAppCreation;
       applyReceipt: TargetApplyReceipt;
       validationFailure: TargetValidationFailureReceipt;
     } & WorkspacePhase)
@@ -248,7 +248,7 @@ export type AppBuilderWorkflowState =
       appSpec: AcceptedAppSpec;
       dependencyReceipt: DependencyPreparationReceipt;
       identityReceipt: TargetIdentityReceipt;
-      proposal: AppCreationProposal;
+      proposal: PreparedAppCreation;
       applyReceipt: TargetApplyReceipt;
       validationReceipt: TargetValidationReceipt;
     } & WorkspacePhase)

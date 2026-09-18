@@ -30,8 +30,5 @@ export function resultFromHostedCheckpoint(
               ? null
               : currentWorkingPreview(checkpoint.workingPreview),
         }),
-    ...(checkpoint.implementationPlan === undefined
-      ? {}
-      : { implementationPlan: checkpoint.implementationPlan }),
   });
 }

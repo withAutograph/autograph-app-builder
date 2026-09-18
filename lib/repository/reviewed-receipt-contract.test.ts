@@ -34,7 +34,6 @@ const producedReceipt = () => {
     sourceSha: "a".repeat(40),
     sourceTree: "b".repeat(40),
     targetReceipt: {
-      contractPath: "apps/demo/app.contract.json",
       topology: { newDigest: hash, oldDigest: hash, path: "microfrontends.json" },
       version: 1 as const,
     },

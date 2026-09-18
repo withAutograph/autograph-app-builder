@@ -63,14 +63,7 @@ Confirmed.
 
 \`\`\`json
 {
-  "status": "build-ready",
-  "owner": "operations",
-  "schema": { "kind": "none" },
-  "additionalPublicRoutes": [],
-  "optionalCapabilities": {
-    "integrations": [],
-    "hostedResources": []
-  }
+  "status": "build-ready"
 }
 \`\`\``;
 
