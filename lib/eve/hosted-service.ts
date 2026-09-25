@@ -887,8 +887,9 @@ export function createHostedEveSessionService(input: {
             before.events.filter(
               (event): event is InternalEveEvent => event !== null && typeof event === "object",
             ),
-          ).map(({ requestId }) => requestId);
+          ).flatMap((pending) => (pending.kind === "authorization" ? [] : [pending.requestId]));
           if (
+            expected.length !== request.responses.length ||
             expected.some((requestId, index) => request.responses[index]?.requestId !== requestId)
           ) {
             throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");

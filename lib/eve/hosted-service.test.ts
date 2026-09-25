@@ -1278,6 +1278,50 @@ describe("hosted Eve service core", () => {
     expect(adapter.respond).not.toHaveBeenCalled();
   });
 
+  it("answers questions while an authorization card remains visible", async () => {
+    const pending: HostedEngineSnapshot = {
+      events: [
+        {
+          index: 0,
+          request: {
+            allowFreeform: false,
+            kind: "authorization",
+            requestId: "expired-access",
+            title: "Update GitHub access",
+          },
+          type: "input.requested",
+        },
+        {
+          index: 1,
+          request: {
+            allowFreeform: true,
+            kind: "question",
+            requestId: "repository-choice",
+            title: "Which connected repository?",
+          },
+          type: "input.requested",
+        },
+      ],
+      status: "input_required",
+    };
+    const adapter = transport({
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      get: vi.fn(async () => pending),
+    });
+    const { service, result } = await started({ transport: adapter });
+    const responses = [
+      { requestId: "repository-choice", response: { kind: "answer" as const, value: "connected" } },
+    ];
+
+    await service.respond({
+      clientRequestId: "answer_after_access",
+      responses,
+      sessionId: result.sessionId,
+    });
+
+    expect(adapter.respond).toHaveBeenCalledWith(expect.objectContaining({ responses }));
+  });
+
   it("never redispatches an operation whose submission outcome is unknown", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const start = vi.fn(async () => {
