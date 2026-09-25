@@ -454,6 +454,27 @@ describe("GitHub App installation routes", () => {
     );
   });
 
+  it("explains when the GitHub user cannot access the selected installation", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { route, complete } = handlers();
+    complete.mockRejectedValueOnce(
+      new GitHubInstallationAuthorizationError(
+        "installation-identity-validation",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "requested-installation-unavailable",
+      ),
+    );
+    const response = await route.callback(
+      new Request("https://builder.example/github/installations/callback?code=one&state=opaque"),
+    );
+    expect(response.headers.get("location")).toBe(
+      "https://builder.example/?github=failed&githubReason=installation-not-accessible",
+    );
+  });
+
   it("passes an opaque draft-resume key through a successful callback", async () => {
     const { route, beginExisting, complete } = handlers();
     const response = await route.start(

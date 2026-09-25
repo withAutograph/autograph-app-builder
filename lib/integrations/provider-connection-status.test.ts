@@ -10,6 +10,9 @@ describe("provider connection status", () => {
     expect(parseProviderConnectionFailureReason("workspace-unavailable")).toBeUndefined();
     expect(parseProviderConnectionFailureReason("secret=do-not-render")).toBe(undefined);
     expect(parseProviderConnectionFailureReason(["request-invalid"])).toBe(undefined);
+    expect(parseProviderConnectionFailureReason("installation-not-accessible")).toBe(
+      "installation-not-accessible",
+    );
   });
 
   it("renders actionable provider copy without reflecting arbitrary input", () => {
@@ -18,6 +21,9 @@ describe("provider connection status", () => {
     );
     expect(providerConnectionFailureMessage("GitHub")).not.toContain(
       "active App Builder workspace",
+    );
+    expect(providerConnectionFailureMessage("GitHub", "installation-not-accessible")).toContain(
+      "GitHub account",
     );
   });
 });

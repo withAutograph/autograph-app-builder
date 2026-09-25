@@ -10,6 +10,7 @@ export const providerConnectionFailureReasonSchema = z.enum([
   "provider-unavailable",
   "account-choice-required",
   "access-denied",
+  "installation-not-accessible",
 ]);
 
 export type ProviderConnectionFailureReason = z.infer<typeof providerConnectionFailureReasonSchema>;
@@ -54,6 +55,9 @@ export function providerConnectionFailureMessage(
   }
   if (provider === "GitHub" && reason === "access-denied") {
     return "GitHub access was not approved. Continue with GitHub when you are ready to grant access.";
+  }
+  if (provider === "GitHub" && reason === "installation-not-accessible") {
+    return "This GitHub account cannot access the selected App installation. Use the GitHub account with repository access, then try again.";
   }
   return `${provider} could not be connected. Try again, or contact support if the problem continues.`;
 }

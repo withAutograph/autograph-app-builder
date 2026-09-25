@@ -530,6 +530,23 @@ describe("public GitHub App installation authorization", () => {
     ).resolves.toMatchObject({ status: "bound", via: "existing" });
   });
 
+  it("identifies an installation the GitHub user token cannot access", async () => {
+    const requests: { url: string; init?: RequestInit }[] = [];
+    const { authorization, bind } = harness({ fetch: successfulFetch(requests) });
+    const begun = await authorization.beginExisting(authority, DEFAULT_RETURN_STATE, {
+      accountLogin: "withAutograph",
+      installationId: "99999",
+    });
+    const state = requiredSearchParam(new URL(begun.redirectUrl), "state");
+    await expect(
+      authorization.complete(authorizationCallbackUrl(state), authority),
+    ).rejects.toMatchObject({
+      installationValidation: "requested-installation-unavailable",
+      stage: "installation-identity-validation",
+    });
+    expect(bind).not.toHaveBeenCalled();
+  });
+
   it("uses GitHub's installation choice to resolve multiple accessible accounts", async () => {
     const requests: { url: string; init?: RequestInit }[] = [];
     const { authorization, bind } = harness({
