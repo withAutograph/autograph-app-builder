@@ -11,6 +11,7 @@ import {
 
 describe("planning from the current checkout", () => {
   it("uses the planning mise profile for target identity commands", async () => {
+    // oxlint-disable-next-line eslint/require-await -- model the sandbox's async command API
     const run = vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: "{}" }));
     const sandbox = { run } as unknown as SandboxSession;
 
