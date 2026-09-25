@@ -315,6 +315,7 @@ export const sandboxTargetCommandExecutor =
     const abortSignal = AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS);
     const request = {
       command: `mise run repository:exec -- app-identity.ts --app ${requestedAppId}`,
+      env: { MISE_ENV: "app-builder" },
       workingDirectory: planningRoot,
     };
     const result = await sandbox.run({ ...request, abortSignal });

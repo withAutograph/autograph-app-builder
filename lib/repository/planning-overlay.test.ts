@@ -5,10 +5,31 @@ import {
   executeTargetIdentityAndPlanning,
   fixtureTargetCommandExecutor,
   materializePlanningOverlay,
+  sandboxTargetCommandExecutor,
   targetIdentitySchema,
 } from "./target-planning";
 
 describe("planning from the current checkout", () => {
+  it("uses the planning mise profile for target identity commands", async () => {
+    const run = vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: "{}" }));
+    const sandbox = { run } as unknown as SandboxSession;
+
+    await sandboxTargetCommandExecutor(sandbox)({
+      appId: "spend-review",
+      appSpecDigest: "b".repeat(64),
+      command: "identity",
+      planningRoot: "/workspace/planning",
+    });
+
+    expect(run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "mise run repository:exec -- app-identity.ts --app spend-review",
+        env: { MISE_ENV: "app-builder" },
+        workingDirectory: "/workspace/planning",
+      }),
+    );
+  });
+
   it("completes identity and planning without a source inventory", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const readTextFile = vi.fn(async ({ path }: { path: string }) => {
