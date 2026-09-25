@@ -43,7 +43,7 @@ for (const { path, title, region } of [
   {
     path: "/github/installations",
     region: "Provider connection loading",
-    title: "Connect a GitHub App installation",
+    title: "Connect GitHub",
   },
   {
     path: "/vercel/installations",

@@ -24,7 +24,7 @@ for (const { path, title, region, button } of [
     button: "Continue with GitHub",
     path: "/github/installations",
     region: "Provider connection loading",
-    title: "Connect a GitHub App installation",
+    title: "Connect GitHub",
   },
   {
     button: "Connect to Vercel",
