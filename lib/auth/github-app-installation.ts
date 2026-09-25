@@ -74,7 +74,8 @@ export type GitHubInstallationValidationSubstage =
   | "requested-installation-unavailable"
   | "installation-ambiguous"
   | "installation-suspended"
-  | "personal-installation-mismatch";
+  | "personal-installation-mismatch"
+  | "installation-handoff";
 
 export const githubInstallationAuthorizationDiagnostic = (error: unknown) => {
   if (!(error instanceof GitHubInstallationAuthorizationError)) {
@@ -1113,7 +1114,11 @@ export const createGitHubAppInstallationAuthorization = (input: {
                   : "installation-ambiguous",
               );
             }
-            return await beginInstall(authority, state.returnState);
+            try {
+              return await beginInstall(authority, state.returnState);
+            } catch {
+              throw new GitHubInstallationValidationError("installation-handoff");
+            }
           }
           ({ installation } = selection);
           if (installation.suspendedAt !== null) {
