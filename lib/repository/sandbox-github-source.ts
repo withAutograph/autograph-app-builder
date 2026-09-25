@@ -339,11 +339,8 @@ export const readSandboxGitHubSourceSnapshot = async function readSandboxGitHubS
     if (occupied.exitCode === 0) {
       throw new Error("The selected GitHub checkout is not available.");
     }
-    const repositoryName = new URL(parseRemote(expected.repository)).pathname.split("/").at(-1);
-    if (repositoryName === undefined) {
-      throw new Error("The GitHub source remote is invalid.");
-    }
-    const providerPath = `/vercel/sandbox/${repositoryName.slice(0, -4)}`;
+    // Vercel places a Git source at the sandbox's working-directory root.
+    const providerPath = "/vercel/sandbox";
     const providerCheckout = await sandbox.run({
       command: checkoutCommand(providerPath),
       workingDirectory: "/workspace",
