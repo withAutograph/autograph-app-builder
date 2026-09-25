@@ -160,8 +160,19 @@ describe("planning from the current checkout", () => {
     expect(executor.mock.calls.map(([request]) => request.command)).toEqual(["identity"]);
   });
 
-  it("plans explicit existing-app edits from the actual checkout", async () => {
+  it("plans existing-app edits with the repository's project name", async () => {
     const before = Buffer.from("old component");
+    const fixture = fixtureTargetCommandExecutor();
+    const executor = async (request: Parameters<typeof fixture>[0]) => {
+      const result = await fixture(request);
+      return {
+        ...result,
+        stdout: JSON.stringify({
+          ...targetIdentitySchema.parse(JSON.parse(result.stdout)),
+          projectName: "inventory-queue",
+        }),
+      };
+    };
     const sandbox = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       readBinaryFile: vi.fn(async () => before),
@@ -179,12 +190,12 @@ describe("planning from the current checkout", () => {
       writeTextFile: vi.fn(async () => {}),
     } as unknown as SandboxSession;
     const result = await executeTargetIdentityAndPlanning({
-      appId: "vendor",
-      appSpecContent: "Improve Vendor",
+      appId: "inventory-queue",
+      appSpecContent: "Improve Inventory Queue",
       appSpecDigest: "b".repeat(64),
       artifactRevision: "a".repeat(64),
-      executor: fixtureTargetCommandExecutor(),
-      existingAppChanges: [{ content: "new component", path: "apps/vendor/app/page.tsx" }],
+      executor,
+      existingAppChanges: [{ content: "new component", path: "apps/inventory-queue/app/page.tsx" }],
       sandbox,
     });
     expect(result.proposal).toMatchObject({
@@ -197,9 +208,10 @@ describe("planning from the current checkout", () => {
         ],
       },
       operation: "iterate-existing-app",
+      plan: { topology: { projectName: "inventory-queue" } },
     });
     expect(sandbox.readBinaryFile).toHaveBeenCalledWith({
-      path: "repository/apps/vendor/app/page.tsx",
+      path: "repository/apps/inventory-queue/app/page.tsx",
     });
     expect(sandbox.readBinaryFile).not.toHaveBeenCalledWith({
       path: "repository/microfrontends.json",

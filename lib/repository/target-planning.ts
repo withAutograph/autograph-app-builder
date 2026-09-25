@@ -34,7 +34,7 @@ export const targetIdentitySchema = z.object({
   baseRoutes: z.tuple([z.string().startsWith("/"), z.string().startsWith("/")]),
   cueSourcePath: repositoryPath,
   packageName: z.string().regex(/^@autograph\/[a-z][a-z0-9-]*$/u),
-  projectName: z.string().regex(/^apps-[a-z][a-z0-9-]*$/u),
+  projectName: appId,
   schemaCuePath: repositoryPath,
   title: z.string().min(1),
   workspacePath: repositoryPath,
@@ -74,7 +74,7 @@ const targetCreationProposalSchemaForTopology = (topologyOwner: string) =>
         configPath: z.literal(topologyOwner),
         currentDigest: digest.optional(),
         packageName: z.string().regex(/^@autograph\/[a-z][a-z0-9-]*$/u),
-        projectName: z.string().regex(/^apps-[a-z][a-z0-9-]*$/u),
+        projectName: appId,
         proposedDigest: digest.optional(),
         routes: z.array(z.string().startsWith("/")),
       }),
@@ -423,6 +423,11 @@ export const executeTargetIdentityAndPlanning = async (input: {
   );
   const expectedIdentity = conventionalIdentity(input.appId);
   for (const key of Object.keys(expectedIdentity) as (keyof TargetIdentity)[]) {
+    // The target repository owns its provider project name. It need only be a
+    // safe identifier; the Builder's fixture convention is not authoritative.
+    if (key === "projectName") {
+      continue;
+    }
     if (JSON.stringify(identity[key]) !== JSON.stringify(expectedIdentity[key])) {
       throw new Error("Target identity did not match the accepted app id.");
     }
