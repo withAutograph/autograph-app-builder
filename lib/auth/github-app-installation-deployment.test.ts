@@ -258,6 +258,8 @@ describe("GitHub App installation routes", () => {
         .mockRejectedValue(new Error("authorization was not expected")),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       classify: vi.fn(async () => readyAccess),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      hasBuilderDraft: vi.fn(async () => false),
       // oxlint-disable-next-line unicorn/no-useless-undefined -- Model an expired continuation.
       inspect: vi.fn<() => Promise<typeof target | undefined>>().mockResolvedValue(undefined),
     };
@@ -277,6 +279,41 @@ describe("GitHub App installation routes", () => {
     );
     expect(begin).not.toHaveBeenCalled();
     expect(beginExisting).not.toHaveBeenCalled();
+    expect(repositoryAccess.hasBuilderDraft).toHaveBeenCalledWith({
+      authority,
+      draftId: resumeKey,
+    });
+  });
+
+  it("keeps a tenant-authorized Builder draft on the ordinary GitHub connection path", async () => {
+    const repositoryAccess = {
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Model no repository continuation callback.
+      authorize: vi.fn<() => Promise<string | undefined>>().mockResolvedValue(undefined),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      classify: vi.fn(async () => readyAccess),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      hasBuilderDraft: vi.fn(async () => true),
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- No repository continuation exists for a Builder draft.
+      inspect: vi.fn<() => Promise<typeof target | undefined>>().mockResolvedValue(undefined),
+    };
+    const { route, beginExisting } = handlers(undefined, repositoryAccess);
+    const response = await route.start(
+      new Request("https://builder.example/github/installations/start", {
+        body: new URLSearchParams({ resumeKey, returnTo: "/" }),
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Origin: "https://builder.example",
+        },
+        method: "POST",
+      }),
+    );
+    expect(response.headers.get("location")).toContain("github.com/login/oauth/authorize");
+    expect(repositoryAccess.hasBuilderDraft).toHaveBeenCalledWith({
+      authority,
+      draftId: resumeKey,
+    });
+    expect(repositoryAccess.classify).not.toHaveBeenCalled();
+    expect(beginExisting).toHaveBeenCalledWith(authority, { resumeKey, returnTo: "/" }, undefined);
   });
   it("accepts only a same-origin form POST before leaving Preview", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});

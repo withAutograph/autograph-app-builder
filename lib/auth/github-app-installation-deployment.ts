@@ -22,6 +22,8 @@ import { providerEmulationFetch } from "../integrations/provider-emulation-fetch
 import { createPostgresGitHubInstallationAuthorizationStateStore } from "./postgres-github-installation-state";
 import { createPostgresRepositoryAccessContinuationStore } from "../integrations/postgres-repository-access-continuation";
 import { createRepositoryAccessContinuationService } from "../integrations/repository-access-continuation";
+import { createBuilderDraftStore } from "../db/builder-drafts";
+import { createBuilderDraftService } from "../builder-drafts/service";
 import { logProviderConnectionFailure } from "../integrations/provider-connection-logging";
 import { readGitHubUserCredentialEnvironment } from "../provisioning/github-user-credential";
 import { createPostgresGitHubUserCredentialStore } from "../provisioning/postgres-github-user-credential";
@@ -44,6 +46,7 @@ interface Authority {
 type InstallationAuthorization = ReturnType<typeof createGitHubAppInstallationAuthorization>;
 
 interface GuidedRepositoryAccess {
+  hasBuilderDraft?: (input: { authority: Authority; draftId: string }) => Promise<boolean>;
   inspect: (input: {
     authority: Authority;
     continuationId: string;
@@ -131,7 +134,11 @@ export function createGitHubAppInstallationRouteHandlers(input: {
     const continuationId = returnState.resumeKey;
     const target = await input.repositoryAccess.inspect({ authority, continuationId });
     if (target === undefined) {
-      return { kind: AUTHORIZATION_EXPIRED } as const;
+      const builderDraft = await input.repositoryAccess.hasBuilderDraft?.({
+        authority,
+        draftId: continuationId,
+      });
+      return { kind: builderDraft ? "none" : AUTHORIZATION_EXPIRED } as const;
     }
     const access = await input.repositoryAccess.classify({
       authority,
@@ -416,6 +423,9 @@ export function getGitHubAppInstallationDeploymentHandlers(
   const repositoryAccessContinuations = createRepositoryAccessContinuationService({
     store: createPostgresRepositoryAccessContinuationStore(database),
   });
+  const builderDrafts = createBuilderDraftService({
+    store: createBuilderDraftStore(database),
+  });
   const classify = (value: {
     authority: Authority;
     repository: string;
@@ -469,6 +479,8 @@ export function getGitHubAppInstallationDeploymentHandlers(
     repositoryAccess: {
       authorize: (value) => repositoryAccessContinuations.authorize(value),
       classify,
+      hasBuilderDraft: async ({ authority, draftId }) =>
+        (await builderDrafts.read(authority, draftId)) !== undefined,
       inspect: (value) => repositoryAccessContinuations.inspect(value),
     },
   });
