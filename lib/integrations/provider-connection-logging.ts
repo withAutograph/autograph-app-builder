@@ -23,6 +23,7 @@ export function logProviderConnectionFailure(input: {
       error?: string;
     };
     stateValidation?: { substage: string; stateDigest?: string };
+    installationValidation?: string;
   };
 }) {
   console.error(
