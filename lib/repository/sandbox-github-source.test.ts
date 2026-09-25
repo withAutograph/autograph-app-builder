@@ -42,7 +42,7 @@ describe("provider-created sandbox GitHub source", () => {
     await expect(
       readSandboxGitHubSourceSnapshot({ run } as never, expected),
     ).resolves.toMatchObject({ sourcePath: "/workspace/repository", sourceSha: sha });
-    expect(run.mock.calls[2]?.[0].command).toContain("/vercel/sandbox/private");
+    expect(run.mock.calls[2]?.[0].command).toContain("git -C '/vercel/sandbox' rev-parse HEAD");
     expect(run.mock.calls[3]?.[0].command).toContain("ln -s");
     for (const call of run.mock.calls) {
       expect(call[0].command).not.toContain("git clone");
