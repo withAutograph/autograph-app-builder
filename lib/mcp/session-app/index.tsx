@@ -127,7 +127,6 @@ function SessionAppContainer() {
       onOpenLink={async (url) => {
         await app.openLink({ url });
       }}
-      onRefresh={refresh}
       onRespond={respond}
     />
   );

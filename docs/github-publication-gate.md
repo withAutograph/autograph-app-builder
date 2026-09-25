@@ -89,11 +89,21 @@ operation-scoped installation tokens: metadata read, contents read/write,
 workflows read/write, pull requests read/write, administration read/write, and
 variables read. The App Builder narrows these permissions again for each
 operation and performs no repository mutation during the connection flow.
-When an installation already has the needed repository access, the connection
-page offers a separate existing-installation action. It sends the signed-in user
-directly through GitHub App OAuth, then binds exactly one provider-verified
-installation to the current workspace without requiring a repository settings
-change. Ambiguous installations fail closed.
+The connection page offers one **Continue with GitHub** action. When the
+requested repository is already accessible, Builder resumes without a GitHub
+trip. Otherwise it sends the signed-in user through GitHub App OAuth and binds
+the verified installation to the current workspace. GitHub requests installation
+or repository selection only when needed. Ambiguous installations fail closed.
+The deployment-owned Arrusted starter reader uses a separate fixed installation
+ID and mints a token restricted to that one repository with read-only Contents
+and Checks permissions. Existing-app source and publication use the tenant-bound
+installation and verify the selected repository; the starter reader never
+supplies their credential.
+For a repository owned by Autograph, these paths may refer to the same
+underlying GitHub App installation. The installation's “All repositories”
+setting is the outer GitHub grant, not a tenant authorization or the permissions
+of every minted token. Each Builder operation still uses its own bounded token
+and verifies its tenant, requested repository, and permitted action.
 
 The separate web handoff provisioning path is gated by
 `builder-resource-provisioning`. It journals intent before provider calls,
