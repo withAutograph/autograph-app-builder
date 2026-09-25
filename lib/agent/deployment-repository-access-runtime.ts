@@ -33,10 +33,7 @@ import {
   resolveImmutableExistingSource,
 } from "../repository/github-publication";
 import type { ImmutableGitHubSourceReceipt } from "../repository/github-publication";
-import {
-  cloneGitHubSource,
-  readSandboxGitHubSourceSnapshot,
-} from "../repository/sandbox-github-source";
+import { readSandboxGitHubSourceSnapshot } from "../repository/sandbox-github-source";
 import { inspectExistingRepositorySnapshotReceipt } from "../repository/source-receipt";
 import type { SourceReceipt } from "../repository/source-receipt";
 import { recordPreparedSandboxWorkspace } from "../repository/supported-template";
@@ -394,18 +391,16 @@ export function createRepositoryAccessRuntime(input: {
           url: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
         },
       });
-      // The Vercel backend now supplies this source directly to
-      // `Sandbox.create({ source: { type: "git", ... } })`. No shell clone,
-      // manifest, or predicted checkout shape sits between provider access and
-      // the repository's own commands.
+      // The Vercel backend supplies this source directly to Sandbox.create.
+      // A second shell clone would collide with the provider-created checkout.
       const sandbox = typeof value.sandbox === "function" ? await value.sandbox() : value.sandbox;
-      await cloneGitHubSource({
-        sandbox,
-        token: credential.token,
-        url: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
+      const snapshot = await readSandboxGitHubSourceSnapshot(sandbox, {
+        repository: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
+        sourceSha: githubSource.resolvedSha,
+        sourceTree: githubSource.resolvedTree,
       });
       const cloned = {
-        snapshot: await readSandboxGitHubSourceSnapshot(sandbox),
+        snapshot,
         workspaceDigest: value.access.repository.headTree,
       };
       const sourceReceipt = inspectExistingRepositorySnapshotReceipt(cloned.snapshot);

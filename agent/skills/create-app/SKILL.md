@@ -46,8 +46,10 @@ app-owned files and reuse the same component-backed preview flow.
    The selected adapter's builder-owned identity operation remains authoritative
    for target planning; never construct or guess a repository script path.
 
-3. Resolve the available source and prepare a writable builder workspace
-   automatically. Use source discovery and repository commands as context, not
+3. Select the source before any hosted sandbox inspection or preview. Call
+   `source_status` with `sourceKind: "fresh-template"` for a new app's canonical starter, or
+   `resolve_github_source` for an existing GitHub app. Then prepare a writable
+   builder workspace automatically. Use source discovery and repository commands as context, not
    as approval gates. Do not require separate inspection or source-acquisition
    questions, and do not ask the user for internal paths or setup details. Use
    the runtime's local or hosted source directly without asking for internal

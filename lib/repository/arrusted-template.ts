@@ -24,7 +24,6 @@ import type { PreparedSandboxWorkspace } from "./supported-template";
 import { deploymentArrustedTemplateReader } from "./arrusted-template-reader";
 import type { ArrustedTemplateReader } from "./arrusted-template-reader";
 import {
-  cloneGitHubSource,
   inspectGitHubSourceSandboxWorkspace,
   readSandboxGitHubSourceSnapshot,
 } from "./sandbox-github-source";
@@ -420,13 +419,10 @@ export async function acquireCanonicalArrustedTemplate(input: {
     });
   }
   const sandbox = typeof input.sandbox === "function" ? await input.sandbox() : input.sandbox;
-  await cloneGitHubSource({
-    sandbox,
-    token: access.token,
-    url: ARRUSTED_TEMPLATE_REPOSITORY,
-  });
   const snapshot = await acquisitionStage("sandbox_clone", () =>
-    readSandboxGitHubSourceSnapshot(sandbox),
+    readSandboxGitHubSourceSnapshot(sandbox, {
+      repository: ARRUSTED_TEMPLATE_REPOSITORY,
+    }),
   );
   const workspaceDigest = receiptReadinessDigest({
     sourceSha: snapshot.sourceSha,

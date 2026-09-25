@@ -22,30 +22,8 @@ const SANDBOX_OPERATION_OUTPUT_BYTES = 262_144;
 const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
 export const SANDBOX_GITHUB_SOURCE_INSPECTION = ".app-builder/canonical-clone-inspection.json";
 
-/** Clone a private GitHub source through the writable Vercel Sandbox. */
 const shellQuote = function shellQuote(value: string) {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
-};
-
-export const cloneGitHubSource = async function cloneGitHubSource(input: {
-  sandbox: SandboxSession;
-  url: string;
-  token: string;
-}) {
-  const basic = Buffer.from(`x-access-token:${input.token}`).toString("base64");
-  const result = await input.sandbox.run({
-    command: `git clone --depth 1 ${shellQuote(input.url)} /workspace/repository`,
-    env: {
-      GIT_CONFIG_COUNT: "1",
-      GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
-      GIT_CONFIG_VALUE_0: `Authorization: Basic ${basic}`,
-      GIT_TERMINAL_PROMPT: "0",
-    },
-    workingDirectory: "/workspace",
-  });
-  if (result.exitCode !== 0) {
-    throw new Error(result.stderr.trim() || "The GitHub checkout is not available.");
-  }
 };
 
 const parseRemote = function parseRemote(input: string) {
@@ -320,23 +298,32 @@ const sandboxGitHubSourceReinspectionCommand =
 
 export const readSandboxGitHubSourceSnapshot = async function readSandboxGitHubSourceSnapshot(
   sandbox: SandboxSession,
+  expected: { repository: string; sourceSha?: string; sourceTree?: string },
 ): Promise<CanonicalTemplateSnapshot> {
   const result = await sandbox.run({
     command:
-      "git -C /workspace/repository rev-parse HEAD && git -C /workspace/repository rev-parse HEAD^{tree}",
+      "git -C /workspace/repository rev-parse HEAD && git -C /workspace/repository rev-parse HEAD^{tree} && git -C /workspace/repository remote get-url origin",
     workingDirectory: "/workspace",
   });
   if (result.exitCode !== 0) {
-    throw new Error(result.stderr.trim() || "The GitHub checkout is not available.");
+    throw new Error("The selected GitHub checkout is not available.");
   }
-  const [sourceSha, sourceTree] = result.stdout.trim().split(/\s+/u);
+  const [sourceSha, sourceTree, remote] = result.stdout.trim().split(/\s+/u);
   if (
     sourceSha === undefined ||
     sourceTree === undefined ||
+    remote === undefined ||
     !SHA.test(sourceSha) ||
     !SHA.test(sourceTree)
   ) {
     throw new Error("GitHub did not return a repository revision.");
+  }
+  if (
+    parseRemote(remote) !== parseRemote(expected.repository) ||
+    (expected.sourceSha !== undefined && sourceSha !== expected.sourceSha) ||
+    (expected.sourceTree !== undefined && sourceTree !== expected.sourceTree)
+  ) {
+    throw new Error("The sandbox checkout does not match the selected GitHub source.");
   }
   return {
     contents: {},
@@ -365,7 +352,11 @@ const reinspectGitHubSourceWorkspace = async function reinspectGitHubSourceWorks
   if (prepared.state !== "prepared") {
     throw new Error("The prepared GitHub source workspace is missing.");
   }
-  const storedSnapshot = await readSandboxGitHubSourceSnapshot(input.sandbox);
+  const storedSnapshot = await readSandboxGitHubSourceSnapshot(input.sandbox, {
+    repository: input.remote,
+    sourceSha: input.expectedSha,
+    sourceTree: input.expectedTree,
+  });
   if (
     storedSnapshot.sourceSha !== input.expectedSha ||
     storedSnapshot.sourceTree !== input.expectedTree
@@ -426,7 +417,9 @@ export const inspectGitHubSourceSandboxWorkspace =
     // A sandbox checkout is deliberately writable. Inspecting it is best-effort
     // discovery for the next repository command, not a second authorization
     // boundary over source shape, file modes, receipts, or normal edits.
-    const snapshot = await readSandboxGitHubSourceSnapshot(input.sandbox);
+    const snapshot = await readSandboxGitHubSourceSnapshot(input.sandbox, {
+      repository: `https://github.com/${input.githubSource.repository.owner}/${input.githubSource.repository.name}.git`,
+    });
     const workspaceDigest = createHash("sha256")
       .update(`${snapshot.sourceSha}:${snapshot.sourceTree}`)
       .digest("hex");

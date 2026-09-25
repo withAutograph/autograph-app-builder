@@ -24,6 +24,11 @@ export default defineTool({
   description:
     "Inspect the current repository. With paths, read repository-relative text files, including public component exports, implementations, stories, and documentation. Read actual component props before composing a preview; do not guess APIs. Without paths, return the repository overview. Never writes or publishes.",
   async execute({ path, paths }, ctx) {
+    if (!canAutoSelectDevelopmentSource() && sourceWorkflowState.get().phase === "empty") {
+      throw new Error(
+        "Select the app source before repository inspection: source_status for a new app or resolve_github_source for an existing GitHub app.",
+      );
+    }
     if (paths?.length) {
       const sandbox = await ctx.getSandbox();
       const files: { content: string; path: string }[] = [];

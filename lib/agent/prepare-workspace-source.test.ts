@@ -54,10 +54,10 @@ describe("hosted workspace source acquisition", () => {
       return Promise.resolve(mocks.source);
     });
   });
-  it("acquires the normal starter automatically when preparation is the first operation", async () => {
-    await expect(execute()).resolves.toEqual(mocks.workspace);
-    expect(mocks.acquire).toHaveBeenCalledOnce();
-    expect(mocks.update).toHaveBeenCalledOnce();
+  it("requires hosted source selection before preparing a workspace", async () => {
+    await expect(execute()).rejects.toThrow("Select the app source first");
+    expect(mocks.acquire).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
   });
   it("preserves an already selected source without reacquiring the starter", async () => {
     const selected = selectedSource();

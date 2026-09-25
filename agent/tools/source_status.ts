@@ -9,8 +9,8 @@ import { acquireCanonicalArrustedTemplate } from "@/lib/repository/arrusted-temp
 
 export default defineTool({
   description:
-    "Return the durable source-review phase. An empty local development flow binds its configured source, while an empty hosted new-app flow automatically acquires the canonical Arrusted starter.",
-  async execute(_input, ctx) {
+    "Return the durable source-review phase. To start a new hosted app, explicitly pass sourceKind=fresh-template to acquire the canonical Arrusted starter. Existing hosted apps use resolve_github_source instead.",
+  async execute(input, ctx) {
     let state = sourceWorkflowState.get();
     if (state.phase === "empty") {
       if (canAutoSelectDevelopmentSource()) {
@@ -22,7 +22,7 @@ export default defineTool({
             version: APP_BUILDER_SOURCE_VERSION,
           }));
         }
-      } else {
+      } else if (input.sourceKind === "fresh-template") {
         const receipt = await acquireCanonicalArrustedTemplate({
           callId: ctx.callId,
           sandbox: () => ctx.getSandbox(),
@@ -41,5 +41,7 @@ export default defineTool({
       ? state
       : { phase: state.phase, receipt: state.receipt, version: state.version };
   },
-  inputSchema: z.object({}),
+  inputSchema: z.strictObject({
+    sourceKind: z.literal("fresh-template").optional(),
+  }),
 });

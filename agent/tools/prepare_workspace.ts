@@ -27,12 +27,14 @@ export default defineTool({
     const development = canAutoSelectDevelopmentSource();
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "workspace preparation");
-    if (sourceWorkflowState.get().phase === "empty") {
+    if (sourceWorkflowState.get().phase === "empty" && development) {
       await sourceStatus.execute({}, ctx);
     }
     const source = sourceWorkflowState.get();
     if (source.phase === "empty") {
-      throw new Error("No source was reviewed.");
+      throw new Error(
+        "Select the app source first: source_status for a new app or resolve_github_source for an existing GitHub app.",
+      );
     }
     if (!development && source.githubSource !== undefined) {
       assertExactImmutableGitHubSourceReceipt(source.githubSource);

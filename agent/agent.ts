@@ -1751,7 +1751,7 @@ const testModel = mockModel(({ lastUserMessage, toolResults }) => {
     if (acquisitionResult?.isError) {
       const sourceStatus = toolResults.find(({ name }) => name === "source_status");
       if (sourceStatus === undefined) {
-        return { toolCalls: [{ input: {}, name: "source_status" }] };
+        return { toolCalls: [{ input: { sourceKind: "fresh-template" }, name: "source_status" }] };
       }
       return "Fresh-template acquisition was canceled or became stale; no workspace was materialized.";
     }
