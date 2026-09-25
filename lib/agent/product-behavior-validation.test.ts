@@ -38,7 +38,12 @@ const workflow = (phase: "validated" | "reviewed") => ({
   identityReceipt: {},
   phase,
   preparedByCallId: "prepare",
-  proposal: {},
+  proposal: {
+    target: {
+      operation: "iterate-existing-app",
+      plan: { source: { workspacePath: "apps/app" } },
+    },
+  },
   sourceReceipt: {},
   validationReceipt: { commands: [] },
   version: 1,
@@ -122,6 +127,26 @@ describe("behavior evidence invalidation during validation repair", () => {
     ).rejects.toThrow("write failed");
     expect(mocks.clear).toHaveBeenCalledBefore(writeTextFile);
     expect(mocks.execute).not.toHaveBeenCalled();
+  });
+  it("rejects a platform-owned repair before changing validation state or files", async () => {
+    mocks.state.current = workflow("validated");
+    const writeTextFile = vi.fn();
+    await expect(
+      validateAppCreation.execute(
+        {
+          implementationFiles: [
+            { content: "out of scope", path: "packages/platform/src/change.ts" },
+          ],
+        },
+        {
+          callId: "repair",
+          getSandbox: () => Promise.resolve({ writeTextFile }),
+        } as never,
+      ),
+    ).rejects.toThrow("Existing-app implementation files must stay inside the app workspace.");
+    expect(mocks.state.current.phase).toBe("validated");
+    expect(mocks.state.update).not.toHaveBeenCalled();
+    expect(writeTextFile).not.toHaveBeenCalled();
   });
   it.each(["validated", "reviewed"] as const)(
     "keeps failed partial repair pending from %s and reruns validation",
