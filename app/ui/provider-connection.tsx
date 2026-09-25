@@ -11,8 +11,8 @@ interface ProviderConnectionProps {
   buttonLabel: string;
   children: ReactNode;
   description: string;
+  headerLabel?: string;
   icon: ReactNode;
-  secondaryAction?: { buttonLabel: string; mode: string };
   returnTo: string;
   resumeKey?: string;
   title: string;
@@ -24,8 +24,8 @@ export function ProviderConnection({
   buttonLabel,
   children,
   description,
+  headerLabel = "New App",
   icon,
-  secondaryAction,
   returnTo,
   resumeKey,
   title,
@@ -40,7 +40,7 @@ export function ProviderConnection({
         >
           <ArrowLeft size={17} aria-hidden="true" /> Back
         </Link>
-        <span className="mx-auto font-medium">New App</span>
+        <span className="mx-auto font-medium">{headerLabel}</span>
         <span aria-hidden="true" className="w-12" />
       </header>
       <Card className="mx-auto mt-8 w-[calc(100%-2rem)] max-w-md sm:mt-12">
@@ -63,16 +63,6 @@ export function ProviderConnection({
               {buttonLabel}
             </Button>
           </form>
-          {secondaryAction ? (
-            <form className="flex flex-col gap-4" method="post" action={action}>
-              <input name="returnTo" type="hidden" value={returnTo} />
-              {resumeKey ? <input name="resumeKey" type="hidden" value={resumeKey} /> : null}
-              <input name="connectionMode" type="hidden" value={secondaryAction.mode} />
-              <Button className="w-full" type="submit" variant="outline">
-                {secondaryAction.buttonLabel}
-              </Button>
-            </form>
-          ) : null}
         </CardContent>
       </Card>
     </main>

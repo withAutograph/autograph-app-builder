@@ -28,13 +28,13 @@ async function GitHubInstallationsContent({ searchParams }: Props) {
   return (
     <ProviderConnection
       action="/github/installations/start"
-      buttonLabel="Install or update GitHub access"
-      description="Choose repository access for a new installation, or connect an existing installation that already has access."
+      buttonLabel="Continue with GitHub"
+      description="Connect GitHub so Autograph can access the repository for this app. GitHub will ask you to approve access if needed."
+      headerLabel="Connect GitHub"
       icon={<FaGithub size={23} />}
-      secondaryAction={{ buttonLabel: "Connect existing installation", mode: "existing" }}
       returnTo={returnState.returnTo}
       resumeKey={returnState.resumeKey}
-      title="Connect a GitHub App installation"
+      title="Connect GitHub"
     >
       {status === "connected" ? (
         <ProviderConnectionNotice status="success">
@@ -55,8 +55,9 @@ export default function GitHubInstallationsPage(props: Props) {
     <Suspense
       fallback={
         <ProviderConnectionLoadingShell
-          title="Connect a GitHub App installation"
-          description="Choose the repositories this workspace may inspect or update."
+          title="Connect GitHub"
+          headerLabel="Connect GitHub"
+          description="Prepare the GitHub connection for this app."
         />
       }
     >
