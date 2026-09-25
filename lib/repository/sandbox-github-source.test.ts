@@ -28,6 +28,66 @@ describe("provider-created sandbox GitHub source", () => {
     expect(run.mock.calls[0]?.[0].command).not.toContain("git clone");
   });
 
+  it("links a verified provider-created checkout into the Builder workspace", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: `${sha}\n${tree}\n${expected.repository}\n`,
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" });
+    await expect(
+      readSandboxGitHubSourceSnapshot({ run } as never, expected),
+    ).resolves.toMatchObject({ sourcePath: "/workspace/repository", sourceSha: sha });
+    expect(run.mock.calls[2]?.[0].command).toContain("/vercel/sandbox/private");
+    expect(run.mock.calls[3]?.[0].command).toContain("ln -s");
+    for (const call of run.mock.calls) {
+      expect(call[0].command).not.toContain("git clone");
+    }
+  });
+
+  it("does not alter an occupied workspace that is not a Git checkout", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" });
+    await expect(readSandboxGitHubSourceSnapshot({ run } as never, expected)).rejects.toThrow(
+      "checkout is not available",
+    );
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports when Vercel did not create the selected Git checkout", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" });
+    await expect(readSandboxGitHubSourceSnapshot({ run } as never, expected)).rejects.toThrow(
+      "Vercel did not materialize the selected GitHub source",
+    );
+    expect(run).toHaveBeenCalledTimes(3);
+  });
+
+  it("rejects a mismatched provider checkout before linking it", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: `${sha}\n${tree}\nhttps://github.com/acme/other.git\n`,
+      });
+    await expect(readSandboxGitHubSourceSnapshot({ run } as never, expected)).rejects.toThrow(
+      "does not match the selected GitHub source",
+    );
+    expect(run).toHaveBeenCalledTimes(3);
+  });
+
   it("rejects an occupied checkout from a different repository", async () => {
     const run = vi.fn().mockResolvedValue({
       exitCode: 0,

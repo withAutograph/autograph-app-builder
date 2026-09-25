@@ -147,9 +147,16 @@ function createRuntimeRecoveringBackend<BO, SO>(input: {
     input.providerTemplateKey?.(authoredTemplateKey) ?? authoredTemplateKey;
   return {
     async create(createInput) {
+      const selectedGitSource = readVercelSessionGitSource(
+        createInput.tags?.sessionId ?? createInput.sessionKey,
+      );
       const providerCreateInput = {
         ...createInput,
-        templateKey: providerTemplateKey(createInput.templateKey),
+        // Eve replaces a session source with the template snapshot when a
+        // template key is present. A selected Git source needs a fresh
+        // provider create so Vercel can clone it exactly once.
+        templateKey:
+          selectedGitSource === undefined ? providerTemplateKey(createInput.templateKey) : null,
       };
       try {
         return await input.backend.create(providerCreateInput);
