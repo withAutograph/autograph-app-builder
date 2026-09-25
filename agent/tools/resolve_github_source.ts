@@ -15,7 +15,7 @@ import {
 } from "@/lib/agent/workflow-state";
 import { assertExactImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
 
-const inputSchema = z.strictObject({
+export const inputSchema = z.strictObject({
   repository: z
     .string()
     .min(3)
@@ -24,13 +24,14 @@ const inputSchema = z.strictObject({
   selectedInstallationId: z
     .string()
     .regex(/^[1-9][0-9]*$/u)
-    .optional(),
+    .nullable()
+    .transform((value) => value ?? undefined),
 });
 
 export default defineTool({
   approval: never(),
   description:
-    "Automatically resolve and prepare one supported existing GitHub repository. It independently confirms tenant-bound GitHub access, parks on the Store In authorization flow when access is missing, re-reads the selected installation and exact default-branch SHA/tree, and materializes the eligible source in the isolated workspace. It never creates, pushes, branches, opens a PR, or alters a release gate.",
+    "Automatically resolve and prepare one supported existing GitHub repository. Pass selectedInstallationId=null to use the single verified installation; provide an ID only after scope-selection-required. It independently confirms tenant-bound GitHub access, parks on the Store In authorization flow when access is missing, re-reads the selected installation and exact default-branch SHA/tree, and materializes the eligible source in the isolated workspace. It never creates, pushes, branches, opens a PR, or alters a release gate.",
   async execute(input, ctx) {
     const initialWorkflow = appBuilderWorkflowState.get();
     const initialSource = sourceWorkflowState.get();

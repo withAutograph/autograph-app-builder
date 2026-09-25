@@ -57,8 +57,9 @@ app-owned files and reuse the same component-backed preview flow.
    approval for source inspection, workspace preparation, or prototypes.
    Preserve unrelated changes.
    For a hosted existing repository named as `owner/name`, use only
-   `resolve_github_source`; it owns the current access readback, source
-   inspection, and isolated preparation without a preceding access tool. When
+   `resolve_github_source` with `selectedInstallationId: null`; it owns the
+   current access readback, source inspection, and isolated preparation without
+   a preceding access tool. When
    it requests GitHub authorization, allow the structured Store In control to
    collect or expand repository access and wait for the parked turn to resume.
    Never ask “Repository selected?” or request installation ids, SHAs, trees,
