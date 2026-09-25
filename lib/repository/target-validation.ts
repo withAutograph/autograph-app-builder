@@ -11,8 +11,8 @@ import type { ExecutionDependencyLayout } from "./dependency-cache";
 import type { ApplyCommandResult, TargetApplyReceipt } from "./target-apply";
 
 export type TargetValidationCommand =
-  | `mise run app:check-build ${string}`
-  | `mise run app:test ${string} ${string}`;
+  | `mise run --skip-tools app:check ${string}`
+  | `mise run --skip-tools app:test ${string} ${string}`;
 export type TargetValidationCommandName = "check-build" | "test";
 
 export type ValidationCommandExecutor = (input: {
@@ -341,49 +341,25 @@ const attemptBinding = (attempt: TargetValidationAttemptReceipt): TargetValidati
 export const sandboxValidationCommandExecutor =
   (): ValidationCommandExecutor =>
   async ({ sandbox, appId, command, validationRoot }) => {
-    const run = (script: "check" | "build" | "test", args = "") =>
-      sandbox.run({
-        command:
-          script === "test"
-            ? `bun run --cwd apps/${appId} test -- --shard=1/1`
-            : `bun run --cwd apps/${appId} ${script}${args}`,
-        workingDirectory: validationRoot,
-      });
-    if (command.startsWith("mise run app:check-build ")) {
-      let checked = await run("check");
-      if (
-        checked.exitCode !== 0 &&
-        /Formatting issues found/u.test(`${checked.stderr}\n${checked.stdout}`)
-      ) {
-        const formatted = await run("check", " -- --fix");
-        if (formatted.exitCode !== 0) {
-          return formatted;
-        }
-        checked = await run("check");
-      }
-      if (checked.exitCode !== 0) {
-        return checked;
-      }
-      const built = await run("build");
-      return {
-        exitCode: built.exitCode,
-        stderr: `${checked.stderr}\n${built.stderr}`,
-        stdout: `${checked.stdout}\n${built.stdout}`,
-      };
+    if (!supportedValidationCommands(appId).some((planned) => planned.command === command)) {
+      throw new Error("The repository validation command is not supported.");
     }
-    return await run("test");
+    return await sandbox.run({ command, workingDirectory: validationRoot });
   };
 
 export const fixtureValidationCommandExecutor =
   (): ValidationCommandExecutor =>
   ({ appId, command }) => {
-    if (appId === "validation-interruption" && command.startsWith("mise run app:check-build ")) {
+    if (
+      appId === "validation-interruption" &&
+      command.startsWith("mise run --skip-tools app:check ")
+    ) {
       const error = new Error("fixture validation interruption");
       error.name = "TimeoutError";
       return Promise.reject(error);
     }
     return Promise.resolve(
-      appId === "validation-failure" && command.startsWith("mise run app:check-build ")
+      appId === "validation-failure" && command.startsWith("mise run --skip-tools app:check ")
         ? { exitCode: 1, stderr: "fixture validation failure", stdout: "" }
         : { exitCode: 0, stderr: "", stdout: `${command} passed` },
     );
@@ -477,9 +453,11 @@ export const executeProposalBoundValidation = (input: {
           {
             exitCode: result.exitCode,
             name: planned.name,
-            ...(/(?:script not found|missing script)/iu.test(`${result.stderr}\n${result.stdout}`)
+            ...(/(?:script not found|missing script|task .* not found)/iu.test(
+              `${result.stderr}\n${result.stdout}`,
+            )
               ? {
-                  hint: "The requested package script is missing. Inspect the app package and finish its runnable setup before retrying.",
+                  hint: "The repository app task is unavailable. Check the supported mise task and app package scripts before retrying.",
                 }
               : {}),
           },

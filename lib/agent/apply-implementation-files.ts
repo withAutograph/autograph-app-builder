@@ -92,6 +92,13 @@ export function withImplementationFiles(
   files: readonly ImplementationFile[],
 ): ApplyCommandExecutor {
   return async (input) => {
+    if (
+      "operation" in input.proposal &&
+      input.proposal.operation === "iterate-existing-app" &&
+      files.some((file) => !file.path.startsWith(`${input.proposal.plan.source.workspacePath}/`))
+    ) {
+      throw new Error("Existing-app implementation files must stay inside the app workspace.");
+    }
     const relativeApplyRoot = input.applyRoot.replace(/^\/workspace\//u, "");
     const cuePath = `.config/app-specs/${input.appId}.cue`;
     const cue = files.find((file) => file.path === cuePath);

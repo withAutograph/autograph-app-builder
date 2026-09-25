@@ -78,7 +78,7 @@ function sandboxFixture() {
 }
 
 describe("target validation", () => {
-  it("reports a missing package script with bounded sanitized command output", async () => {
+  it("reports a missing repository task with bounded sanitized command output", async () => {
     const { sandbox } = sandboxFixture();
     const result = await executeProposalBoundValidation({
       appId: "example",
@@ -87,7 +87,7 @@ describe("target validation", () => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       executor: async () => ({
         exitCode: 1,
-        stderr: 'error: Script not found "check"\nsecret-test-value',
+        stderr: "error: task app:check not found\nsecret-test-value",
         stdout: "",
       }),
       sandbox,
@@ -98,7 +98,7 @@ describe("target validation", () => {
     }
     expect(result.receipt.commandFailure).toMatchObject({
       exitCode: 1,
-      hint: "The requested package script is missing. Inspect the app package and finish its runnable setup before retrying.",
+      hint: "The repository app task is unavailable. Check the supported mise task and app package scripts before retrying.",
     });
     expect(JSON.stringify(result)).not.toContain("secret-test-value");
   });
@@ -206,34 +206,25 @@ describe("target validation", () => {
     ]);
   });
 
-  it("repairs only the reported formatter failure before rerunning check and build", async () => {
-    const run = vi
-      .fn()
-      .mockResolvedValueOnce({
-        exitCode: 1,
-        stderr: "Formatting issues found",
-        stdout: "package.json Formatting issues found",
-      })
-      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "fixed" })
-      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "checked" })
-      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "built" });
+  it.each([
+    "mise run --skip-tools app:check example",
+    "mise run --skip-tools app:test example 1/1",
+  ] as const)("runs the repository-owned validation task once: %s", async (command) => {
+    // oxlint-disable-next-line eslint/require-await -- model the sandbox's async command API
+    const run = vi.fn(async () => ({ exitCode: 1, stderr: "Formatting issues found", stdout: "" }));
     const sandbox = { run } as unknown as SandboxSession;
-    const executor = sandboxValidationCommandExecutor();
 
-    const result = await executor({
+    const result = await sandboxValidationCommandExecutor()({
       appId: "example",
-      command: "mise run app:check-build example",
+      command,
       sandbox,
       validationRoot: "/workspace/repository",
     });
 
-    expect(result.exitCode).toBe(0);
-    expect(run.mock.calls.every(([input]) => input.abortSignal === undefined)).toBe(true);
-    expect(run.mock.calls.map(([input]) => input.command)).toEqual([
-      "bun run --cwd apps/example check",
-      "bun run --cwd apps/example check -- --fix",
-      "bun run --cwd apps/example check",
-      "bun run --cwd apps/example build",
-    ]);
+    expect(result.exitCode).toBe(1);
+    expect(run).toHaveBeenCalledExactlyOnceWith({
+      command,
+      workingDirectory: "/workspace/repository",
+    });
   });
 });
