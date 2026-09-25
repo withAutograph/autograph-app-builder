@@ -6,6 +6,7 @@ import { sourceWorkflowState } from "@/lib/agent/source-state";
 import { safeSourcePath } from "@/lib/repository/source-path";
 import sourceStatus from "./source_status";
 import prepareWorkspace from "./prepare_workspace";
+import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
 
 const maximumFileBytes = 262_144;
 const maximumTotalBytes = 1_048_576;
@@ -15,15 +16,17 @@ export default defineDynamic({
     "step.started": () =>
       defineTool({
         description:
-          "Read regular text files from one existing application. A fresh canonical-source flow prepares itself automatically. First call with no paths to list app-owned files, then request the smallest relevant set, normally one to six files at a time. Missing new-file candidates and files omitted from one response are reported without failing the whole read. This is a read-only implementation-planning operation and never writes or publishes.",
+          "Read regular text files from one existing application after selecting its source. First call with no paths to list app-owned files, then request the smallest relevant set, normally one to six files at a time. Missing new-file candidates and files omitted from one response are reported without failing the whole read. This is a read-only implementation-planning operation and never writes or publishes.",
         async execute({ appId, paths }, ctx) {
           let state = appBuilderWorkflowState.get();
-          // The canonical Arrusted starter is already the supported transport
-          // for its built-in applications. Make inspection self-starting so a
-          // fresh existing-app conversation does not need to know the internal
-          // source/setup sequence. Arbitrary repositories still require the
-          // explicit source resolution path.
+          // Local development can use its configured checkout. Hosted
+          // inspection must wait for the source selected for this run.
           if (state.phase === "empty") {
+            if (!canAutoSelectDevelopmentSource()) {
+              throw new Error(
+                "Select the app source before inspection: resolve_github_source for an existing GitHub app.",
+              );
+            }
             try {
               await sourceStatus.execute({}, ctx);
               const source = sourceWorkflowState.get();

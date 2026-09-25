@@ -3,7 +3,10 @@ import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import { implementationFilesSchema } from "@/lib/agent/apply-implementation-files";
+import {
+  assertExistingAppImplementationFiles,
+  implementationFilesSchema,
+} from "@/lib/agent/apply-implementation-files";
 import { APP_BUILDER_WORKFLOW_VERSION, appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import {
   createTargetValidationAttempt,
@@ -31,6 +34,7 @@ export default defineTool({
     ) {
       throw new Error("Apply the requested changes before running the repository checks.");
     }
+    assertExistingAppImplementationFiles(input.implementationFiles, current.proposal.target);
     if (
       (current.phase === "validated" || current.phase === "reviewed") &&
       input.implementationFiles.length === 0

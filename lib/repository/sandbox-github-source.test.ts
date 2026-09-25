@@ -1,25 +1,52 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { cloneGitHubSource } from "./sandbox-github-source";
+import { readSandboxGitHubSourceSnapshot } from "./sandbox-github-source";
 
-describe("sandbox GitHub source", () => {
-  it("passes the installation credential through git config without putting it in the command", async () => {
-    const run = vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "" });
-    await cloneGitHubSource({
-      sandbox: { run } as never,
-      token: "secret-installation-token",
-      url: "https://github.com/acme/private.git",
+const sha = "a".repeat(40);
+const tree = "b".repeat(40);
+const expected = {
+  repository: "https://github.com/acme/private.git",
+  sourceSha: sha,
+  sourceTree: tree,
+};
+
+describe("provider-created sandbox GitHub source", () => {
+  it("reads the selected checkout without cloning it again", async () => {
+    const run = vi.fn().mockResolvedValue({
+      exitCode: 0,
+      stderr: "",
+      stdout: `${sha}\n${tree}\n${expected.repository}\n`,
     });
-    expect(run).toHaveBeenCalledWith(
-      expect.objectContaining({
-        env: expect.objectContaining({
-          GIT_CONFIG_VALUE_0: expect.stringContaining("Authorization: Basic "),
-        }),
-      }),
+    await expect(
+      readSandboxGitHubSourceSnapshot({ run } as never, expected),
+    ).resolves.toMatchObject({
+      sourcePath: "/workspace/repository",
+      sourceSha: sha,
+      sourceTree: tree,
+    });
+    expect(run).toHaveBeenCalledOnce();
+    expect(run.mock.calls[0]?.[0].command).not.toContain("git clone");
+  });
+
+  it("rejects an occupied checkout from a different repository", async () => {
+    const run = vi.fn().mockResolvedValue({
+      exitCode: 0,
+      stderr: "",
+      stdout: `${sha}\n${tree}\nhttps://github.com/acme/other.git\n`,
+    });
+    await expect(readSandboxGitHubSourceSnapshot({ run } as never, expected)).rejects.toThrow(
+      "does not match the selected GitHub source",
     );
-    expect(run.mock.calls[0]?.[0].command).not.toContain("secret-installation-token");
-    expect(run.mock.calls[0]?.[0].env.GIT_CONFIG_VALUE_0).toBe(
-      `Authorization: Basic ${Buffer.from("x-access-token:secret-installation-token").toString("base64")}`,
+  });
+
+  it("rejects a checkout at a different revision", async () => {
+    const run = vi.fn().mockResolvedValue({
+      exitCode: 0,
+      stderr: "",
+      stdout: `${"c".repeat(40)}\n${tree}\n${expected.repository}\n`,
+    });
+    await expect(readSandboxGitHubSourceSnapshot({ run } as never, expected)).rejects.toThrow(
+      "does not match the selected GitHub source",
     );
   });
 });

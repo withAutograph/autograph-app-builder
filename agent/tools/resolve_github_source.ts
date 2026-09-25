@@ -35,6 +35,22 @@ export default defineTool({
     const initialWorkflow = appBuilderWorkflowState.get();
     const initialSource = sourceWorkflowState.get();
     assertUpstreamMutationAllowed(initialWorkflow, "GitHub source preparation");
+    if (
+      (initialSource.phase !== "empty" && initialSource.githubSource === undefined) ||
+      (initialWorkflow.phase !== "empty" && initialWorkflow.githubSource === undefined)
+    ) {
+      throw new Error(
+        "This app build already uses the starter source. Start a new app build to select an existing GitHub repository.",
+      );
+    }
+    if (
+      initialSource.phase !== "empty" &&
+      initialSource.githubSource !== undefined &&
+      `${initialSource.githubSource.repository.owner}/${initialSource.githubSource.repository.name}` !==
+        input.repository
+    ) {
+      throw new Error("This app build already uses a different GitHub repository.");
+    }
     const runtime = await repositoryAccessRuntimeForSession(ctx.session.auth);
     const access = await resolveRepositoryAccessForTool(input, ctx, runtime);
     if (access.kind === "selection") {

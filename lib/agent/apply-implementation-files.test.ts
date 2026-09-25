@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  assertExistingAppImplementationFiles,
   assertImplementationArchitecture,
   implementationFilesSchema,
   withImplementationFiles,
@@ -80,6 +81,25 @@ describe("approval-bound implementation files", () => {
     ).rejects.toThrow("Existing-app implementation files must stay inside the app workspace.");
     expect(executor).not.toHaveBeenCalled();
     expect(writeTextFile).not.toHaveBeenCalled();
+  });
+
+  it("rejects an out-of-app validation repair before it can write", () => {
+    const proposal = {
+      operation: "iterate-existing-app",
+      plan: { source: { workspacePath: "apps/inventory-queue" } },
+    } as never;
+    expect(() =>
+      assertExistingAppImplementationFiles(
+        [{ content: "out of scope", path: "packages/platform/src/change.ts" }],
+        proposal,
+      ),
+    ).toThrow("Existing-app implementation files must stay inside the app workspace.");
+    expect(() =>
+      assertExistingAppImplementationFiles(
+        [{ content: "in scope", path: "apps/inventory-queue/app/page.tsx" }],
+        proposal,
+      ),
+    ).not.toThrow();
   });
 
   it("rejects client-only persistence for apps that own kernel data", () => {

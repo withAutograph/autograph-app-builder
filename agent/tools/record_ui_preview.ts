@@ -16,6 +16,7 @@ import {
 } from "@/lib/agent/workflow-state";
 import sourceStatus from "./source_status";
 import prepareWorkspace from "./prepare_workspace";
+import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
 
 export default defineTool({
   description:
@@ -23,7 +24,9 @@ export default defineTool({
   async execute(input, ctx) {
     validateUiPreview(input);
     if (appBuilderWorkflowState.get().phase === "empty") {
-      await sourceStatus.execute({}, ctx);
+      if (canAutoSelectDevelopmentSource()) {
+        await sourceStatus.execute({}, ctx);
+      }
       await prepareWorkspace.execute({}, ctx);
     }
     const current = appBuilderWorkflowState.get();
