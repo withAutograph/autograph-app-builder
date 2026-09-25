@@ -37,6 +37,11 @@ export type RepositoryAccessContinuation = z.infer<typeof repositoryAccessContin
 
 export interface RepositoryAccessContinuationStore {
   create: (record: RepositoryAccessContinuation) => Promise<void>;
+  inspect: (input: {
+    continuationDigest: string;
+    authority: z.infer<typeof hostedTenantAuthoritySchema>;
+    now: Date;
+  }) => Promise<RepositoryAccessContinuation | undefined>;
   authorize: (input: {
     continuationDigest: string;
     authority: z.infer<typeof hostedTenantAuthoritySchema>;
@@ -223,6 +228,27 @@ export function createRepositoryAccessContinuationService(input: {
       });
       await input.store.create(record);
       return { continuationId, expiresAt };
+    },
+
+    async inspect(value: {
+      authority: z.infer<typeof hostedTenantAuthoritySchema>;
+      continuationId: string;
+    }) {
+      const continuationId = continuationIdSchema.parse(value.continuationId);
+      const record = await input.store.inspect({
+        authority: hostedTenantAuthoritySchema.parse(value.authority),
+        continuationDigest: continuationDigest(continuationId),
+        now: now(),
+      });
+      if (!record) {
+        return;
+      }
+      return {
+        repository: record.repository,
+        ...(record.selectedInstallationId
+          ? { selectedInstallationId: record.selectedInstallationId }
+          : {}),
+      };
     },
   };
 }

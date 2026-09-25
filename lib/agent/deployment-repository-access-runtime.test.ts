@@ -84,6 +84,16 @@ function memoryContinuationStore(): RepositoryAccessContinuationStore & {
       records.push(record);
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async inspect(input) {
+      return records.find(
+        (candidate) =>
+          candidate.continuationDigest === input.continuationDigest &&
+          sameAuthority(candidate.authority, input.authority) &&
+          candidate.consumedAt === undefined &&
+          candidate.expiresAt > input.now,
+      );
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async listAuthorizedForSession(input) {
       return records.filter(
         (candidate) =>
