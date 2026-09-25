@@ -227,7 +227,11 @@ export async function selectProviderIdentity(page: Page, provider: EmulatedProvi
   for (const scope of descriptor.seededScopes)
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     await expect(page.getByText(scope, { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: descriptor.approvalButton }).click();
+  const directGitHubAuthorization =
+    provider === "GitHub" && new URL(page.url()).searchParams.get("phase") === "authorize";
+  if (!directGitHubAuthorization) {
+    await page.getByRole("button", { name: descriptor.approvalButton }).click();
+  }
   if (provider === "GitHub") {
     await expect(page).toHaveURL(/\/local-connections\/github\?.*phase=authorize/u);
     await expect(page.getByText("Authorize GitHub connection")).toBeVisible();

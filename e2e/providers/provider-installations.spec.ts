@@ -388,7 +388,12 @@ for (const provider of emulatedProviders) {
     } finally {
       await sql.end();
     }
-    await page.getByRole("button", { name: localApprovalButtonName(provider) }).click();
+    await page
+      .getByRole("button", {
+        name:
+          provider === "GitHub" ? "Authorize emulated GitHub" : localApprovalButtonName(provider),
+      })
+      .click();
     if (new URL(page.url()).origin === descriptor.emulatorOrigin)
       await page.getByRole("button", { name: /autograph-dev/u }).click();
 
