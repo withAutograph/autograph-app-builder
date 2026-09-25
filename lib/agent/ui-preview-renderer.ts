@@ -53,16 +53,21 @@ import postcss from "postcss";
 import tailwind from "@tailwindcss/postcss";
 const root = import.meta.dir;
 const repository = process.cwd();
-const config = JSON.parse(await readFile(path.join(repository, "tsconfig.json"), "utf-8"));
-const aliases = config.compilerOptions?.paths ?? {};
+// These imports are the public App Builder catalog boundary. Arrusted's root
+// tsconfig can change without changing the catalog or its component sources.
+const publicModules = {
+  "@autograph/components": path.join(repository, "packages/design-systems/core/components/index.ts"),
+  "@autograph/compositions": path.join(repository, "packages/design-systems/core/compositions/index.ts"),
+  "@autograph/icons": path.join(repository, "packages/design-systems/core/icons/index.ts"),
+};
 const result = await Bun.build({
   entrypoints: [path.join(root, "entry.tsx")],
   target: "browser", format: "iife", minify: true,
   tsconfig: path.join(repository, "tsconfig.json"),
-  plugins: [{ name: "repository-public-aliases", setup(build) {
-    build.onResolve({ filter: /^@autograph\\// }, args => {
-      const target = aliases[args.path]?.[0];
-      return target ? { path: path.resolve(repository, target) } : undefined;
+  plugins: [{ name: "repository-public-imports", setup(build) {
+    build.onResolve({ filter: new RegExp("^@autograph/(?:components|compositions|icons)$") }, args => {
+      const target = publicModules[args.path];
+      return target ? { path: target } : undefined;
     });
   } }],
 });
