@@ -4,6 +4,7 @@ import type {
   GitHubInstallationAuthorizationFailureStage,
   GitHubOAuthCallbackError,
   GitHubOAuthErrorCategory,
+  GitHubInstallationValidationSubstage,
   GitHubStateValidationDiagnostic,
 } from "./github-app-installation";
 
@@ -13,6 +14,7 @@ export class GitHubInstallationAuthorizationError extends Error {
   readonly returnState?: ProviderConnectionReturn;
   readonly callback?: GitHubCallbackDiagnostic;
   readonly stateValidation?: GitHubStateValidationDiagnostic;
+  readonly installationValidation?: GitHubInstallationValidationSubstage;
 
   constructor(
     stage: GitHubInstallationAuthorizationFailureStage,
@@ -20,6 +22,7 @@ export class GitHubInstallationAuthorizationError extends Error {
     returnState?: ProviderConnectionReturn,
     callback?: GitHubCallbackDiagnostic,
     stateValidation?: GitHubStateValidationDiagnostic,
+    installationValidation?: GitHubInstallationValidationSubstage,
   ) {
     super("GitHub App installation authorization failed.");
     this.name = "GitHubInstallationAuthorizationError";
@@ -28,5 +31,6 @@ export class GitHubInstallationAuthorizationError extends Error {
     this.returnState = returnState;
     this.callback = callback;
     this.stateValidation = stateValidation;
+    this.installationValidation = installationValidation;
   }
 }

@@ -147,6 +147,7 @@ function successfulFetch(
   accounts: { accountId: number; installationId: number; login: string }[] = [
     { accountId: 149_546_148, installationId: 98_765, login: "withAutograph" },
   ],
+  otherInstallations: unknown[] = [],
 ) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   return vi.fn<typeof fetch>(async (resource, init) => {
@@ -164,20 +165,23 @@ function successfulFetch(
     }
     if (url === "https://api.github.com/user/installations?per_page=100&page=1") {
       return Response.json({
-        installations: accounts.map((account) => ({
-          account: {
-            id: account.accountId,
-            login: account.login,
-            type: "Organization",
-          },
-          app_id: 12_345,
-          app_slug: "autograph-app-builder",
-          id: account.installationId,
-          repository_selection: repositorySelection,
-          suspended_at: null,
-          target_type: "Organization",
-        })),
-        total_count: accounts.length,
+        installations: [
+          ...otherInstallations,
+          ...accounts.map((account) => ({
+            account: {
+              id: account.accountId,
+              login: account.login,
+              type: "Organization",
+            },
+            app_id: 12_345,
+            app_slug: "autograph-app-builder",
+            id: account.installationId,
+            repository_selection: repositorySelection,
+            suspended_at: null,
+            target_type: "Organization",
+          })),
+        ],
+        total_count: accounts.length + otherInstallations.length,
       });
     }
     throw new Error(`unexpected ${url}`);
@@ -269,6 +273,20 @@ describe("public GitHub App installation authorization", () => {
       code_verifier: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/u),
     });
     expect(String(requests[1]?.init?.headers)).not.toContain("github-user-token-sentinel-value");
+  });
+
+  it("ignores malformed installations belonging to other GitHub Apps", async () => {
+    const seen: { url: string; init?: RequestInit }[] = [];
+    const { authorization, bind } = harness({
+      fetch: successfulFetch(seen, "selected", undefined, [{ app_id: 99_999, id: 1 }]),
+    });
+    const { authorizeState } = await prepareAuthorization(authorization);
+    const receipt = await authorization.complete(
+      authorizationCallbackUrl(authorizeState),
+      authority,
+    );
+    expect(receipt.status).toBe("bound");
+    expect(bind).toHaveBeenCalledOnce();
   });
 
   it("preserves the embedded Preview emulator route for authorization and API requests", async () => {

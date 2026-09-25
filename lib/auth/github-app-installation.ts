@@ -66,6 +66,12 @@ export interface GitHubStateValidationDiagnostic {
   callbackParseReason?: "duplicate-key" | "state-format" | "callback-shape" | "code-format";
 }
 
+export type GitHubInstallationValidationSubstage =
+  | "provider-request"
+  | "response-shape"
+  | "matching-installation-shape"
+  | "selection";
+
 export const githubInstallationAuthorizationDiagnostic = (error: unknown) => {
   if (!(error instanceof GitHubInstallationAuthorizationError)) {
     return;
@@ -75,6 +81,9 @@ export const githubInstallationAuthorizationDiagnostic = (error: unknown) => {
     ...(error.category === undefined ? {} : { category: error.category }),
     ...(error.callback === undefined ? {} : { callback: error.callback }),
     ...(error.stateValidation === undefined ? {} : { stateValidation: error.stateValidation }),
+    ...(error.installationValidation === undefined
+      ? {}
+      : { installationValidation: error.installationValidation }),
   };
 };
 
@@ -596,6 +605,16 @@ const codeVerifier = (stateSecret: string, nonce: string): string =>
 const codeChallenge = (verifier: string): string =>
   createHash("sha256").update(verifier).digest("base64url");
 
+class GitHubInstallationValidationError extends Error {
+  readonly substage: GitHubInstallationValidationSubstage;
+
+  constructor(substage: GitHubInstallationValidationSubstage) {
+    super("GitHub installation validation failed.");
+    this.name = "GitHubInstallationValidationError";
+    this.substage = substage;
+  }
+}
+
 const accessibleInstallation = async (input: {
   octokit: ReturnType<typeof createGitHubTokenOctokit>;
   appId: string;
@@ -605,14 +624,19 @@ const accessibleInstallation = async (input: {
 }) => {
   const candidates: ReturnType<typeof installationIdentity>[] = [];
   for (let page = 1; page <= 10; page += 1) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const { data: body } = await input.octokit.request(
-      "GET /user/installations",
-      Object.fromEntries([
-        ["per_page", 100],
-        ["page", page],
-      ]),
-    );
+    let body: unknown;
+    try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      ({ data: body } = await input.octokit.request(
+        "GET /user/installations",
+        Object.fromEntries([
+          ["per_page", 100],
+          ["page", page],
+        ]),
+      ));
+    } catch {
+      throw new GitHubInstallationValidationError("provider-request");
+    }
     const totalCount = property(body, "total_count");
     const installations = property(body, "installations");
     if (
@@ -623,10 +647,26 @@ const accessibleInstallation = async (input: {
       !Array.isArray(installations) ||
       installations.length > 100
     ) {
-      throw new Error("invalid-response");
+      throw new GitHubInstallationValidationError("response-shape");
     }
     for (const value of installations) {
-      const installation = installationIdentity(value);
+      // GitHub returns installations for every app the user can access. Only
+      // validate the shape of the app this connection is trying to bind.
+      const candidateAppId = propertyOrUndefined(value, "app_id");
+      if (
+        candidateAppId !== input.appId &&
+        (typeof candidateAppId !== "number" ||
+          !Number.isSafeInteger(candidateAppId) ||
+          String(candidateAppId) !== input.appId)
+      ) {
+        continue;
+      }
+      let installation: ReturnType<typeof installationIdentity>;
+      try {
+        installation = installationIdentity(value);
+      } catch {
+        throw new GitHubInstallationValidationError("matching-installation-shape");
+      }
       if (
         installation.appId === input.appId &&
         installation.appSlug === input.appSlug &&
@@ -643,7 +683,7 @@ const accessibleInstallation = async (input: {
       break;
     }
     if (page === 10) {
-      throw new Error("too-many-installations");
+      throw new GitHubInstallationValidationError("selection");
     }
   }
   if (candidates.length === 1) {
@@ -1074,8 +1114,15 @@ export const createGitHubAppInstallationAuthorization = (input: {
           if (installation.accountType === "User" && installation.accountId !== providerUserId) {
             throw new Error("GitHub installation belongs to another provider user.");
           }
-        } catch {
-          throw new GitHubInstallationAuthorizationError("installation-identity-validation");
+        } catch (error) {
+          throw new GitHubInstallationAuthorizationError(
+            "installation-identity-validation",
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            error instanceof GitHubInstallationValidationError ? error.substage : "selection",
+          );
         }
         try {
           if (!(await input.membership.isActiveMember(authority))) {
