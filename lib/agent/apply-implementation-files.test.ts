@@ -37,7 +37,10 @@ describe("approval-bound implementation files", () => {
       wrapped({
         appId: "stock-exceptions",
         applyRoot: "/workspace/repository",
-        proposal: {} as never,
+        proposal: {
+          operation: "iterate-existing-app",
+          plan: { source: { workspacePath: "apps/stock-exceptions" } },
+        } as never,
         sandbox: { writeTextFile } as never,
       }),
     ).resolves.toEqual({ exitCode: 0, stderr: "", stdout: "receipt" });
@@ -55,6 +58,28 @@ describe("approval-bound implementation files", () => {
     expect(
       implementationFilesSchema.safeParse([{ content: "nope", path: "../outside.ts" }]).success,
     ).toBe(false);
+  });
+
+  it("rejects out-of-app implementation files before applying an existing-app change", async () => {
+    const writeTextFile = vi.fn(() => Promise.resolve());
+    const executor = vi.fn(() => Promise.resolve({ exitCode: 0, stderr: "", stdout: "" }));
+    const wrapped = withImplementationFiles(executor, [
+      { content: "out of scope", path: "packages/platform/src/change.ts" },
+    ]);
+
+    await expect(
+      wrapped({
+        appId: "inventory-queue",
+        applyRoot: "/workspace/repository",
+        proposal: {
+          operation: "iterate-existing-app",
+          plan: { source: { workspacePath: "apps/inventory-queue" } },
+        } as never,
+        sandbox: { writeTextFile } as never,
+      }),
+    ).rejects.toThrow("Existing-app implementation files must stay inside the app workspace.");
+    expect(executor).not.toHaveBeenCalled();
+    expect(writeTextFile).not.toHaveBeenCalled();
   });
 
   it("rejects client-only persistence for apps that own kernel data", () => {

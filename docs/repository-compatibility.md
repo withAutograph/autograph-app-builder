@@ -17,8 +17,8 @@ The current normalized commands are:
 mise run repository:exec -- app-identity.ts --app <app-id>
 mise run create:app <app-id>
 mise run repository:preflight
-mise run app:check-build <app-id>
-mise run app:test <app-id> <shard>
+mise run --skip-tools app:check <app-id>
+mise run --skip-tools app:test <app-id> <shard>
 ```
 
 Compatibility MUST NOT depend on the source code implementing those commands,
