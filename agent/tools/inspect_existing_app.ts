@@ -2,9 +2,7 @@ import { defineDynamic, defineTool } from "eve/tools";
 import { z } from "zod";
 
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
-import { assertExistingAppSourceSelected } from "@/lib/agent/existing-app-source";
 import { sourceWorkflowState } from "@/lib/agent/source-state";
-import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
 import { safeSourcePath } from "@/lib/repository/source-path";
 import sourceStatus from "./source_status";
 import prepareWorkspace from "./prepare_workspace";
@@ -17,31 +15,27 @@ export default defineDynamic({
     "step.started": () =>
       defineTool({
         description:
-          "Read regular text files from one existing application. For a hosted existing GitHub repository, resolve_github_source must select that repository before this tool prepares or reads its app. Local development can prepare its configured source automatically. First call with no paths to list app-owned files, then request the smallest relevant set, normally one to six files at a time. Missing new-file candidates and files omitted from one response are reported without failing the whole read. This is a read-only implementation-planning operation and never writes or publishes.",
+          "Read regular text files from one existing application. A fresh canonical-source flow prepares itself automatically. First call with no paths to list app-owned files, then request the smallest relevant set, normally one to six files at a time. Missing new-file candidates and files omitted from one response are reported without failing the whole read. This is a read-only implementation-planning operation and never writes or publishes.",
         async execute({ appId, paths }, ctx) {
-          const state = appBuilderWorkflowState.get();
+          let state = appBuilderWorkflowState.get();
+          // The canonical Arrusted starter is already the supported transport
+          // for its built-in applications. Make inspection self-starting so a
+          // fresh existing-app conversation does not need to know the internal
+          // source/setup sequence. Arbitrary repositories still require the
+          // explicit source resolution path.
           if (state.phase === "empty") {
-            const source = sourceWorkflowState.get();
-            const development = canAutoSelectDevelopmentSource();
-            assertExistingAppSourceSelected({
-              development,
-              githubSourceSelected: source.phase !== "empty" && source.githubSource !== undefined,
-            });
-            if (development) {
-              try {
-                if (source.phase === "empty") {
-                  await sourceStatus.execute({}, ctx);
-                }
-                if (sourceWorkflowState.get().phase !== "empty") {
-                  await prepareWorkspace.execute({}, ctx);
-                }
-              } catch {
-                // A local generated file may be readable before its source
-                // state catches up; the sandbox remains the read authority.
+            try {
+              await sourceStatus.execute({}, ctx);
+              const source = sourceWorkflowState.get();
+              if (source.phase !== "empty") {
+                await prepareWorkspace.execute({}, ctx);
               }
-            } else {
-              await prepareWorkspace.execute({}, ctx);
+            } catch {
+              // The session sandbox remains the authority for a best-effort
+              // read of newly generated files, even before its workflow state
+              // has caught up.
             }
+            state = appBuilderWorkflowState.get();
           }
           const prefix = `apps/${appId}/`;
           if (!safeSourcePath(appId) || appId.includes("/")) {

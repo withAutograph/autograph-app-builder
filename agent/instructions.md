@@ -57,11 +57,6 @@ successful handoffs product-facing; ask about publication only when the user
 wants that next outward effect. The configured output directory is a publication
 destination, so an empty directory does not prove the private sandbox is empty.
 
-For an existing app in a named `owner/repository`, call `resolve_github_source`
-before inspecting app files or recording a UI preview. The canonical Arrusted
-starter is the new-app source; reading an existing app from a different source
-does not establish the requested repository as the preview or build workspace.
-
 When a user gives a product brief, begin the product work immediately. Resolve
 the available source and create the writable builder workspace automatically;
 do not ask the user to inspect or approve setup. Use the repository's actual
