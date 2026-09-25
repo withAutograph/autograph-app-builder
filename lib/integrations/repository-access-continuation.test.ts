@@ -233,4 +233,48 @@ describe("GitHub repository access continuation", () => {
       ).rejects.toThrow("repository-access-callback-invalid");
     }
   });
+
+  it("accepts the trusted Vercel production callback origin and its exact protection query", async () => {
+    const store = memoryStore();
+    const service = createRepositoryAccessContinuationService({
+      callbackOrigin: "https://builder-production.vercel.app",
+      createId: () => continuationId,
+      protectionBypassSecret: "test-bypass",
+      store,
+    });
+    const callbackUrl =
+      "https://builder-production.vercel.app/eve/v1/connections/github-repository-access/callback/attempt/token?x-vercel-protection-bypass=test-bypass";
+    await expect(
+      service.create({
+        authority,
+        callbackUrl,
+        repository: "withAutograph/app-builder-dogfood",
+        requestId: "call_one",
+        sessionId: "ses_one",
+      }),
+    ).resolves.toHaveProperty("continuationId", continuationId);
+    expect(store.records[0]?.callbackUrl).not.toContain("test-bypass");
+    await expect(service.authorize({ authority, continuationId })).resolves.toBe(
+      `${callbackUrl}&provider=github&status=connected`,
+    );
+    await expect(
+      service.authorizedForSession({ authority, sessionId: "ses_one" }),
+    ).resolves.toMatchObject([{ callbackUrl }]);
+    for (const rejected of [
+      callbackUrl.replace("builder-production.vercel.app", "attacker.example"),
+      callbackUrl.replace("test-bypass", "wrong-bypass"),
+      `${callbackUrl}&extra=1`,
+    ]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- exercise each independent rejection.
+      await expect(
+        service.create({
+          authority,
+          callbackUrl: rejected,
+          repository: "withAutograph/app-builder-dogfood",
+          requestId: "call_one",
+          sessionId: "ses_one",
+        }),
+      ).rejects.toThrow("repository-access-callback-invalid");
+    }
+  });
 });

@@ -160,6 +160,7 @@ function mutableProvider(input: { repositoryAvailable: () => boolean }) {
 function runtimeFixture(input?: {
   bindings?: HostedGitHubInstallationBinding[];
   available?: boolean;
+  protectionBypassSecret?: string;
 }) {
   let available = input?.available ?? false;
   const continuationStore = memoryContinuationStore();
@@ -173,6 +174,7 @@ function runtimeFixture(input?: {
     continuations,
     installations: installationStore(input?.bindings ?? [installation]),
     origin: "https://builder.example",
+    protectionBypassSecret: input?.protectionBypassSecret,
     providerFactory: mutableProvider({
       repositoryAvailable: () => available,
     }),
@@ -336,6 +338,39 @@ describe("deployment repository access authorization", () => {
       token: expect.stringMatching(/^[0-9a-f]{64}$/u),
     });
     expect(fixture.continuationStore.records[0]?.consumedAt).toBeInstanceOf(Date);
+  });
+
+  it("accepts only the configured protection query on a GitHub callback", async () => {
+    const fixture = runtimeFixture({ protectionBypassSecret: "test-bypass" });
+    const authorization = fixture.runtime.authorization({
+      repository,
+      requestId: "call_one",
+      sessionId: "ses_one",
+    });
+    const started = await authorization.startAuthorization({
+      callbackUrl,
+      connection,
+      principal,
+    });
+    await fixture.continuations.authorize({ authority, continuationId });
+    fixture.makeAvailable();
+    const complete = (bypass: string) =>
+      authorization.completeAuthorization({
+        callback: {
+          method: "GET",
+          params: {
+            provider: "github",
+            status: "connected",
+            "x-vercel-protection-bypass": bypass,
+          },
+        },
+        callbackUrl,
+        connection,
+        principal,
+        resume: started.resume,
+      });
+    await expect(complete("wrong-bypass")).rejects.toMatchObject({ reason: "callback_invalid" });
+    await expect(complete("test-bypass")).resolves.toHaveProperty("token");
   });
 
   it("re-reads access before Check access wakes a parked Eve callback", async () => {

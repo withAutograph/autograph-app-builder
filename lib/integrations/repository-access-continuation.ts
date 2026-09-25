@@ -7,6 +7,7 @@ import { parseRepositoryReference } from "./repository-access";
 import type { RepositoryReference } from "./repository-access";
 
 const decimal = z.string().regex(/^[1-9][0-9]*$/u);
+const VERCEL_PROTECTION_BYPASS_QUERY = "x-vercel-protection-bypass";
 const continuationIdSchema = z.string().uuid();
 const opaqueRuntimeId = z.string().min(1).max(255);
 
@@ -61,19 +62,32 @@ const continuationDigest = (continuationId: string) =>
   createHash("sha256").update(continuationId).digest("hex");
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function exactEveAuthorizationCallback(input: { callbackUrl: string; issuer: string }) {
+function exactEveAuthorizationCallback(input: {
+  callbackUrl: string;
+  issuer: string;
+  callbackOrigin?: string;
+  protectionBypassSecret?: string;
+}) {
   const callback = new URL(input.callbackUrl);
   const issuer = new URL(input.issuer);
   const loopback = new Set(["127.0.0.1", "localhost", "[::1]"]);
   const allowedOrigin =
     callback.origin === issuer.origin ||
+    callback.origin === input.callbackOrigin ||
     (callback.protocol === "http:" && loopback.has(callback.hostname));
+  const bypass = callback.searchParams.getAll(VERCEL_PROTECTION_BYPASS_QUERY);
+  const allowedQuery =
+    callback.search === "" ||
+    (input.protectionBypassSecret !== undefined &&
+      bypass.length === 1 &&
+      bypass[0] === input.protectionBypassSecret &&
+      [...callback.searchParams.keys()].length === 1);
   if (
     !allowedOrigin ||
     callback.username ||
     callback.password ||
     callback.hash ||
-    callback.search ||
+    !allowedQuery ||
     !/^\/eve\/v1\/connections\/[^/]+\/callback\/[^/]+\/[^/]+$/u.test(callback.pathname)
   ) {
     throw new Error("repository-access-callback-invalid");
@@ -84,6 +98,8 @@ function exactEveAuthorizationCallback(input: { callbackUrl: string; issuer: str
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createRepositoryAccessContinuationService(input: {
   store: RepositoryAccessContinuationStore;
+  callbackOrigin?: string;
+  protectionBypassSecret?: string;
   now?: () => Date;
   createId?: () => string;
   lifetimeMs?: number;
@@ -110,6 +126,9 @@ export function createRepositoryAccessContinuationService(input: {
         return;
       }
       const callback = new URL(record.callbackUrl);
+      if (input.protectionBypassSecret) {
+        callback.searchParams.set(VERCEL_PROTECTION_BYPASS_QUERY, input.protectionBypassSecret);
+      }
       callback.searchParams.set("provider", "github");
       callback.searchParams.set("status", "connected");
       return callback.toString();
@@ -125,13 +144,21 @@ export function createRepositoryAccessContinuationService(input: {
         now: now(),
         sessionId: opaqueRuntimeId.parse(value.sessionId),
       });
-      return records.map((candidate) => ({
-        callbackUrl: exactEveAuthorizationCallback({
+      return records.map((candidate) => {
+        const callback = exactEveAuthorizationCallback({
+          callbackOrigin: input.callbackOrigin,
           callbackUrl: candidate.callbackUrl,
           issuer: authority.issuer,
-        }).toString(),
-        record: repositoryAccessContinuationSchema.parse(candidate),
-      }));
+          protectionBypassSecret: input.protectionBypassSecret,
+        });
+        if (input.protectionBypassSecret) {
+          callback.searchParams.set(VERCEL_PROTECTION_BYPASS_QUERY, input.protectionBypassSecret);
+        }
+        return {
+          callbackUrl: callback.toString(),
+          record: repositoryAccessContinuationSchema.parse(candidate),
+        };
+      });
     },
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
@@ -170,9 +197,12 @@ export function createRepositoryAccessContinuationService(input: {
       const authority = hostedTenantAuthoritySchema.parse(value.authority);
       const repository = parseRepositoryReference(value.repository);
       const callback = exactEveAuthorizationCallback({
+        callbackOrigin: input.callbackOrigin,
         callbackUrl: value.callbackUrl,
         issuer: authority.issuer,
+        protectionBypassSecret: input.protectionBypassSecret,
       });
+      callback.searchParams.delete(VERCEL_PROTECTION_BYPASS_QUERY);
       const continuationId = continuationIdSchema.parse(createId());
       const createdAt = now();
       const expiresAt = new Date(createdAt.getTime() + lifetimeMs);
