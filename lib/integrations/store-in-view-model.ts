@@ -68,6 +68,11 @@ export interface GitHubStoreInViewModel {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function githubConnectionPrompt(repository?: string) {
+  return `Connect GitHub so Autograph can access ${repository || "the repository for this app"}. GitHub will ask you to approve access if needed.`;
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function githubStoreInViewModel(input: {
   action: "connect" | "update";
   desiredRepository?: string;

@@ -6,6 +6,7 @@ import { safeProviderConnectionReturn } from "@/lib/integrations/provider-connec
 import { ProviderConnection, ProviderConnectionNotice } from "@/app/ui/provider-connection";
 import { ProviderConnectionLoadingShell } from "@/app/ui/route-loading-shell";
 import { verifiedGitHubConnectionTarget } from "@/lib/auth/github-app-installation-deployment";
+import { githubConnectionPrompt } from "@/lib/integrations/store-in-view-model";
 import { headers } from "next/headers";
 import { connection } from "next/server";
 import { Suspense } from "react";
@@ -41,11 +42,7 @@ async function GitHubInstallationsContent({ searchParams }: Props) {
     <ProviderConnection
       action="/github/installations/start"
       buttonLabel="Continue with GitHub"
-      description={
-        target
-          ? `Connect GitHub so Autograph can access ${target.repository.fullName}. GitHub will ask you to approve access if needed.`
-          : "Connect GitHub so Autograph can access the repository for this app. GitHub will ask you to approve access if needed."
-      }
+      description={githubConnectionPrompt(target?.repository.fullName)}
       headerLabel="Connect GitHub"
       icon={<FaGithub size={23} />}
       returnTo={returnState.returnTo}

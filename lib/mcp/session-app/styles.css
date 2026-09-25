@@ -251,77 +251,41 @@
 
 .mcpApp .authorization-card {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 12px;
+  gap: 18px;
+  padding: 18px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 16px;
   background: var(--surface);
 }
 
 .mcpApp .provider-icon {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
   place-items: center;
-  border-radius: 6px;
-  background: var(--soft);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
   font-weight: 700;
 }
 
-.mcpApp .authorization-card p {
-  margin: 2px 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.mcpApp .authorization-card .repository-name {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.mcpApp .authorization-card .repository-name > span {
-  color: var(--muted);
-}
-
-.mcpApp .authorization-card .repository-name code {
-  margin-top: 0;
-  color: var(--text);
-}
-
-.mcpApp .scope-summary {
+.mcpApp .authorization-content {
   display: grid;
-  gap: 5px;
-  margin-top: 8px;
-  color: var(--muted);
-  font-size: 12px;
+  gap: 8px;
 }
 
-.mcpApp .scope-summary ul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
+.mcpApp .authorization-content strong {
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+
+.mcpApp .authorization-card p {
   margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.mcpApp .scope-summary li {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 6px;
-  border-radius: 5px;
-  background: var(--soft);
-  color: var(--text);
-}
-
-.mcpApp .scope-summary small {
   color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .mcpApp .authorization-card code {
@@ -333,14 +297,29 @@
   font-size: 12px;
 }
 
-.mcpApp .authorization-card .secondary {
-  grid-column: 3;
+.mcpApp .authorization-card .authorization-action {
+  width: 100%;
+  border-color: #171717;
+  background: #171717;
+  color: #fff;
 }
 
-.mcpApp .authorization-card .fallback,
-.mcpApp .authorization-card .error,
-.mcpApp .authorization-card .refresh-guidance {
-  grid-column: 2 / -1;
+.mcpApp .authorization-card .authorization-action:hover:not(:disabled) {
+  background: #333;
+}
+
+.mcpApp .authorization-card .error {
+  color: var(--danger);
+}
+
+.mcpApp.authorization-shell {
+  width: min(450px, calc(100% - 48px));
+  border: 0;
+  box-shadow: none;
+}
+
+.mcpApp.authorization-shell .request-list {
+  padding: 0;
 }
 
 .mcpApp button {

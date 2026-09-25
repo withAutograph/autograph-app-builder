@@ -7,11 +7,7 @@ import { AuthorizationControl } from "./view";
 const meta = {
   args: {
     canOpen: true,
-    canRefresh: true,
     onOpenLink: fn(async () => {
-      // Story fixture callback.
-    }),
-    onRefresh: fn(async () => {
       // Story fixture callback.
     }),
     request: authorizationRequest,
@@ -59,18 +55,19 @@ export const CodeOnly: Story = {
   },
 };
 export const UnsupportedLink: Story = { args: { canOpen: false } };
-export const OpenAndRefresh: Story = {
+export const ContinueWithGitHub: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText("Update GitHub access", { selector: "strong" })).toBeVisible();
-    await expect(canvas.getByText("withAutograph/app-builder-dogfood")).toBeVisible();
-    await expect(canvas.getByText("Connected to withAutograph")).toBeVisible();
-    await userEvent.click(canvas.getByRole("button", { name: "Update GitHub access" }));
+    await expect(canvas.getByText("Connect GitHub", { selector: "strong" })).toBeVisible();
+    await expect(canvas.getByText(/withAutograph\/app-builder-dogfood/u)).toBeVisible();
+    await expect(canvas.getAllByRole("button")).toHaveLength(1);
+    await userEvent.click(canvas.getByRole("button", { name: "Continue with GitHub" }));
     await expect(args.onOpenLink).toHaveBeenCalledWith(
       "https://builder.example.test/github/installations?continuation=opaque",
     );
-    await userEvent.click(await canvas.findByRole("button", { name: "Check access" }));
-    await expect(args.onRefresh).toHaveBeenCalledOnce();
+    await expect(await canvas.findByRole("status")).toHaveTextContent(
+      "Autograph will show whether access was confirmed",
+    );
   },
 };
 export const ActionableFailure: Story = {
@@ -82,9 +79,9 @@ export const ActionableFailure: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole("button", { name: "Update GitHub access" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Continue with GitHub" }));
     await expect(
-      await canvas.findByText("The authorization page could not be opened. Continue in chat."),
+      await canvas.findByText("The GitHub page could not be opened. Try again."),
     ).toBeVisible();
   },
 };

@@ -23,9 +23,6 @@ const meta = {
     onOpenLink: fn(async () => {
       // Story fixture callback.
     }),
-    onRefresh: fn(async () => {
-      // Story fixture callback.
-    }),
     onRespond: fn(async () => {
       // Story fixture callback.
     }),
@@ -48,6 +45,33 @@ export const HostToolsUnavailable: Story = { args: { canCallTools: false } };
 export const Submitted: Story = {
   args: {
     result: { ...mixedResult, inputRequests: undefined, status: "working" },
+  },
+};
+export const GitHubConnection: Story = {
+  args: { result: sessionResult([authorizationRequest]) },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getAllByRole("button")).toHaveLength(1);
+    await expect(canvas.getByRole("button", { name: "Continue with GitHub" })).toBeVisible();
+    await expect(canvas.queryByText("Complete the requested details")).not.toBeInTheDocument();
+  },
+};
+export const GitHubFailure: Story = {
+  args: {
+    result: {
+      ...sessionResult([]),
+      error: {
+        code: "repository_access_missing",
+        message: "GitHub did not grant this repository.",
+      },
+      status: "failed",
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("alert")).toHaveTextContent(
+      "GitHub did not grant this repository.",
+    );
   },
 };
 export const CompleteBatchAction: Story = {

@@ -1,6 +1,6 @@
 ---
 name: create-app
-description: Guide complete creation of a route-owned Next.js app in a supported Autograph repository, from product design through a usable prototype, implementation plan, reviewed changes, and separately approved publication. Use as the primary entry point when a user asks to create, build, or start a new app. Route explicitly bare/local-only Next.js workspace requests to $scaffold-app-workspace.
+description: Guide creation or revision of a route-owned Next.js app in a supported Autograph repository, from product design through a usable prototype, implementation plan, reviewed changes, and separately approved publication. Use as the primary entry point when a user asks to create a new app or improve an existing app. Route explicitly bare/local-only Next.js workspace requests to $scaffold-app-workspace.
 ---
 
 # Create App
@@ -57,7 +57,7 @@ app-owned files and reuse the same component-backed preview flow.
    approval for source inspection, workspace preparation, or prototypes.
    Preserve unrelated changes.
    For a hosted existing repository named as `owner/name`, use only
-   `resolve-github-source`; it owns the current access readback, source
+   `resolve_github_source`; it owns the current access readback, source
    inspection, and isolated preparation without a preceding access tool. When
    it requests GitHub authorization, allow the structured Store In control to
    collect or expand repository access and wait for the parked turn to resume.
@@ -65,7 +65,7 @@ app-owned files and reuse the same component-backed preview flow.
    settings changes, or other access mechanics in chat. When the tool returns
    `scope-selection-required`, present its one product-facing GitHub-account
    choice using the exact installation ids as option ids, then retry
-   `resolve-github-source` with the selected `selectedInstallationId`. Do not
+   `resolve_github_source` with the selected `selectedInstallationId`. Do not
    make scopes selectable inside an authorization request.
 4. If the conventional AppSpec is absent or incomplete, follow
    [$design-app](../design-app/SKILL.md) in this same task. Synthesize its
