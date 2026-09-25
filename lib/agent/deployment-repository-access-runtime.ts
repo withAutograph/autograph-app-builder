@@ -33,7 +33,10 @@ import {
   resolveImmutableExistingSource,
 } from "../repository/github-publication";
 import type { ImmutableGitHubSourceReceipt } from "../repository/github-publication";
-import { readSandboxGitHubSourceSnapshot } from "../repository/sandbox-github-source";
+import {
+  readSandboxGitHubSourceSnapshot,
+  writeSandboxGitHubSourceManifest,
+} from "../repository/sandbox-github-source";
 import { inspectExistingRepositorySnapshotReceipt } from "../repository/source-receipt";
 import type { SourceReceipt } from "../repository/source-receipt";
 import { recordPreparedSandboxWorkspace } from "../repository/supported-template";
@@ -399,9 +402,13 @@ export function createRepositoryAccessRuntime(input: {
         sourceSha: githubSource.resolvedSha,
         sourceTree: githubSource.resolvedTree,
       });
+      const workspaceDigest = await writeSandboxGitHubSourceManifest(sandbox, {
+        sourceSha: snapshot.sourceSha,
+        sourceTree: snapshot.sourceTree,
+      });
       const cloned = {
         snapshot,
-        workspaceDigest: value.access.repository.headTree,
+        workspaceDigest,
       };
       const sourceReceipt = inspectExistingRepositorySnapshotReceipt(cloned.snapshot);
       // GitHub already authorized the clone. Do not repeat a speculative
