@@ -12,11 +12,14 @@ const expected = {
 
 describe("provider-created sandbox GitHub source", () => {
   it("reads the selected checkout without cloning it again", async () => {
-    const run = vi.fn().mockResolvedValue({
-      exitCode: 0,
-      stderr: "",
-      stdout: `${sha}\n${tree}\n${expected.repository}\n`,
-    });
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: `${sha}\n${tree}\n${expected.repository}\n`,
+      })
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" });
     await expect(
       readSandboxGitHubSourceSnapshot({ run } as never, expected),
     ).resolves.toMatchObject({
@@ -24,11 +27,11 @@ describe("provider-created sandbox GitHub source", () => {
       sourceSha: sha,
       sourceTree: tree,
     });
-    expect(run).toHaveBeenCalledOnce();
+    expect(run).toHaveBeenCalledTimes(2);
     expect(run.mock.calls[0]?.[0].command).not.toContain("git clone");
   });
 
-  it("links a verified provider-created checkout into the Builder workspace", async () => {
+  it("moves a verified provider-created checkout into the Builder workspace", async () => {
     const run = vi
       .fn()
       .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" })
@@ -38,12 +41,17 @@ describe("provider-created sandbox GitHub source", () => {
         stderr: "",
         stdout: `${sha}\n${tree}\n${expected.repository}\n`,
       })
-      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" });
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: `${sha}\n${tree}\n${expected.repository}\n`,
+      });
     await expect(
       readSandboxGitHubSourceSnapshot({ run } as never, expected),
     ).resolves.toMatchObject({ sourcePath: "/workspace/repository", sourceSha: sha });
     expect(run.mock.calls[2]?.[0].command).toContain("git -C '/workspace/private' rev-parse HEAD");
-    expect(run.mock.calls[3]?.[0].command).toContain("ln -s");
+    expect(run.mock.calls[3]?.[0].command).toContain("renameSync");
     for (const call of run.mock.calls) {
       expect(call[0].command).not.toContain("git clone");
     }
@@ -60,12 +68,17 @@ describe("provider-created sandbox GitHub source", () => {
         stderr: "",
         stdout: `${sha}\n${tree}\n${expected.repository}\n`,
       })
-      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" });
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: `${sha}\n${tree}\n${expected.repository}\n`,
+      });
     await expect(
       readSandboxGitHubSourceSnapshot({ run } as never, expected),
     ).resolves.toMatchObject({ sourcePath: "/workspace/repository", sourceSha: sha });
     expect(run.mock.calls[3]?.[0].command).toContain("git -C '/vercel/sandbox' rev-parse HEAD");
-    expect(run.mock.calls[4]?.[0].command).toContain("ln -s");
+    expect(run.mock.calls[4]?.[0].command).toContain("renameSync");
   });
 
   it("does not alter an occupied workspace that is not a Git checkout", async () => {
@@ -109,24 +122,45 @@ describe("provider-created sandbox GitHub source", () => {
   });
 
   it("rejects an occupied checkout from a different repository", async () => {
-    const run = vi.fn().mockResolvedValue({
-      exitCode: 0,
-      stderr: "",
-      stdout: `${sha}\n${tree}\nhttps://github.com/acme/other.git\n`,
-    });
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: `${sha}\n${tree}\nhttps://github.com/acme/other.git\n`,
+      })
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" });
     await expect(readSandboxGitHubSourceSnapshot({ run } as never, expected)).rejects.toThrow(
       "does not match the selected GitHub source",
     );
   });
 
   it("rejects a checkout at a different revision", async () => {
-    const run = vi.fn().mockResolvedValue({
-      exitCode: 0,
-      stderr: "",
-      stdout: `${"c".repeat(40)}\n${tree}\n${expected.repository}\n`,
-    });
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: `${"c".repeat(40)}\n${tree}\n${expected.repository}\n`,
+      })
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" });
     await expect(readSandboxGitHubSourceSnapshot({ run } as never, expected)).rejects.toThrow(
       "does not match the selected GitHub source",
     );
+  });
+
+  it("does not change a linked checkout left by an older Builder session", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: `${sha}\n${tree}\n${expected.repository}\n`,
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" });
+    await expect(readSandboxGitHubSourceSnapshot({ run } as never, expected)).rejects.toThrow(
+      "Start a new Builder session",
+    );
+    expect(run).toHaveBeenCalledTimes(2);
   });
 });

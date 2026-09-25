@@ -314,6 +314,17 @@ export const readSandboxGitHubSourceSnapshot = async function readSandboxGitHubS
   });
   let observed: ReturnType<typeof inspect>;
   if (canonical.exitCode === 0) {
+    // Provider file uploads cannot traverse a linked checkout. An older
+    // session may still have the previous link layout; leave it untouched.
+    const linked = await sandbox.run({
+      command: `test -L ${shellQuote(SANDBOX_WORKSPACE)}`,
+      workingDirectory: "/workspace",
+    });
+    if (linked.exitCode === 0) {
+      throw new Error(
+        "The selected GitHub checkout uses a linked workspace. Start a new Builder session.",
+      );
+    }
     observed = inspect(canonical.stdout);
   } else {
     // Never replace an occupied workspace, even if it is not a valid Git
@@ -332,7 +343,7 @@ export const readSandboxGitHubSourceSnapshot = async function readSandboxGitHubS
     // The Eve image places Vercel's Git source below /workspace. The
     // standard Vercel image uses its working-directory root instead.
     const providerPaths = [`/workspace/${repositoryName.slice(0, -4)}`, "/vercel/sandbox"];
-    let providerCheckout: { path: string; observation: ReturnType<typeof inspect> } | undefined;
+    let providerCheckout: string | undefined;
     for (const candidate of providerPaths) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- inspect provider locations in order.
       const result = await sandbox.run({
@@ -340,28 +351,33 @@ export const readSandboxGitHubSourceSnapshot = async function readSandboxGitHubS
         workingDirectory: "/workspace",
       });
       if (result.exitCode === 0) {
-        providerCheckout = { observation: inspect(result.stdout), path: candidate };
+        inspect(result.stdout);
+        providerCheckout = candidate;
         break;
       }
     }
     if (providerCheckout === undefined) {
       throw new Error("Vercel did not materialize the selected GitHub source.");
     }
-    observed = providerCheckout.observation;
-    const linked = await sandbox.run({
-      command: `mkdir -p /workspace && ln -s -- ${shellQuote(providerCheckout.path)} ${shellQuote(SANDBOX_WORKSPACE)}`,
+    // Keep the provider's one checkout, but put that directory at the
+    // canonical working path. The sandbox file API rejects writes through a
+    // symlink even when Git and shell reads through it succeed.
+    const moved = await sandbox.run({
+      command: `node -e ${shellQuote('require("node:fs").renameSync(process.argv[1], process.argv[2])')} ${shellQuote(providerCheckout)} ${shellQuote(SANDBOX_WORKSPACE)}`,
       workingDirectory: "/workspace",
     });
-    if (linked.exitCode !== 0) {
-      const concurrent = await sandbox.run({
-        command: checkoutCommand(SANDBOX_WORKSPACE),
-        workingDirectory: "/workspace",
-      });
-      if (concurrent.exitCode !== 0) {
-        throw new Error("The selected GitHub checkout is not available.");
-      }
-      observed = inspect(concurrent.stdout);
+    const placed = await sandbox.run({
+      command: checkoutCommand(SANDBOX_WORKSPACE),
+      workingDirectory: "/workspace",
+    });
+    if (placed.exitCode !== 0) {
+      throw new Error(
+        moved.exitCode === 0
+          ? "The selected GitHub checkout is not available."
+          : "The selected GitHub checkout could not be placed in the Builder workspace.",
+      );
     }
+    observed = inspect(placed.stdout);
   }
   return {
     contents: {},

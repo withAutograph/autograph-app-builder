@@ -16,7 +16,7 @@ describe("canonical Arrusted source preparation", () => {
       await Promise.resolve();
       commands.push(command);
       return {
-        exitCode: 0,
+        exitCode: command.startsWith("test -L ") ? 1 : 0,
         stderr: "",
         stdout: command.includes("rev-parse")
           ? `${sourceSha}\n${sourceTree}\nhttps://github.com/withAutograph/arrusted-development.git\n`
