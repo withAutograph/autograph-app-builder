@@ -2,6 +2,11 @@ import { createPostgresPreviewOrganizationAuthority } from "./postgres-organizat
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import { createPostgresHostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 import {
+  createGitHubAppHttpProvider,
+  parseGitHubAppHttpProviderCredentials,
+} from "../repository/github-app-http-provider";
+import { classifyGitHubRepositoryAccess } from "../integrations/repository-access";
+import {
   createGitHubAppInstallationAuthorization,
   githubInstallationAuthorizationDiagnostic,
   GitHubInstallationAuthorizationError,
@@ -21,6 +26,7 @@ import { logProviderConnectionFailure } from "../integrations/provider-connectio
 import { readGitHubUserCredentialEnvironment } from "../provisioning/github-user-credential";
 import { createPostgresGitHubUserCredentialStore } from "../provisioning/postgres-github-user-credential";
 import type { ProviderConnectionFailureReason } from "../integrations/provider-connection-status";
+import type { RepositoryAccessResult } from "../integrations/repository-access";
 import {
   providerConnectionRedirect,
   providerConnectionReturnFromFormData,
@@ -37,18 +43,55 @@ interface Authority {
 
 type InstallationAuthorization = ReturnType<typeof createGitHubAppInstallationAuthorization>;
 
+interface GuidedRepositoryAccess {
+  inspect: (input: {
+    authority: Authority;
+    continuationId: string;
+  }) => Promise<
+    { repository: { fullName: string; owner: string }; selectedInstallationId?: string } | undefined
+  >;
+  classify: (input: {
+    authority: Authority;
+    repository: string;
+    selectedInstallationId?: string;
+  }) => Promise<RepositoryAccessResult>;
+  authorize: (input: {
+    authority: Authority;
+    continuationId: string;
+  }) => Promise<string | undefined>;
+}
+
 const noStoreHeaders = {
   "Cache-Control": "no-store",
   "Referrer-Policy": "no-referrer",
 } as const;
 const EXISTING_CONNECTION_MODE = "existing";
 const REQUEST_INVALID = "request-invalid";
+const AUTHORIZATION_EXPIRED = "authorization-expired";
+const PROVIDER_UNAVAILABLE = "provider-unavailable";
+const ACCOUNT_CHOICE_REQUIRED = "account-choice-required";
+const REPOSITORY_ACCESS_MISSING = "repository-access-missing";
+const GITHUB_ORIGIN = "https://github.com";
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function installationSettingsUrl(input: {
+  accountLogin: string;
+  accountType: "Organization" | "User";
+  installationId: string;
+}) {
+  const path =
+    input.accountType === "Organization"
+      ? `/organizations/${encodeURIComponent(input.accountLogin)}/settings/installations/${input.installationId}`
+      : `/settings/installations/${input.installationId}`;
+  return new URL(path, GITHUB_ORIGIN).toString();
+}
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubAppInstallationRouteHandlers(input: {
   origin: string;
   authorityForRequest: (request: Request) => Promise<Authority | undefined>;
   authorization: InstallationAuthorization;
+  repositoryAccess?: GuidedRepositoryAccess;
   onConnected?: (input: {
     authority: Authority;
     returnState: ProviderConnectionReturn;
@@ -73,6 +116,83 @@ export function createGitHubAppInstallationRouteHandlers(input: {
       },
       status: 303,
     });
+  const redirectLocation = (location: string) =>
+    new Response(null, {
+      headers: { ...noStoreHeaders, Location: location },
+      status: 303,
+    });
+  const checkRepositoryAccess = async (
+    authority: Authority,
+    returnState: ProviderConnectionReturn,
+  ) => {
+    if (returnState.resumeKey === undefined || input.repositoryAccess === undefined) {
+      return { kind: "none" } as const;
+    }
+    const continuationId = returnState.resumeKey;
+    const target = await input.repositoryAccess.inspect({ authority, continuationId });
+    if (target === undefined) {
+      return { kind: AUTHORIZATION_EXPIRED } as const;
+    }
+    const access = await input.repositoryAccess.classify({
+      authority,
+      repository: target.repository.fullName,
+      selectedInstallationId: target.selectedInstallationId,
+    });
+    if (access.status === "ready") {
+      const callback = await input.repositoryAccess.authorize({ authority, continuationId });
+      return callback === undefined
+        ? ({ kind: AUTHORIZATION_EXPIRED } as const)
+        : ({ callback, kind: "ready" } as const);
+    }
+    if (access.status === "provider-unavailable") {
+      return { kind: PROVIDER_UNAVAILABLE } as const;
+    }
+    if (access.status === "scope-selection-required") {
+      return { kind: ACCOUNT_CHOICE_REQUIRED } as const;
+    }
+    const matchingScopes = access.scopes.filter(
+      (scope) =>
+        scope.accountLogin.toLowerCase() === target.repository.owner.toLowerCase() &&
+        (target.selectedInstallationId === undefined ||
+          scope.installationId === target.selectedInstallationId),
+    );
+    const configurationUrl =
+      matchingScopes.length === 1 && matchingScopes[0]
+        ? installationSettingsUrl(matchingScopes[0])
+        : undefined;
+    return { configurationUrl, kind: "missing", target } as const;
+  };
+  const finishConnection = async (
+    authority: Authority,
+    returnState: ProviderConnectionReturn,
+    via: "existing" | "installation",
+    fail: (reason: ProviderConnectionFailureReason) => Response,
+  ): Promise<Response> => {
+    const access = await checkRepositoryAccess(authority, returnState);
+    if (access.kind === "ready") {
+      return redirectLocation(access.callback);
+    }
+    if (access.kind === AUTHORIZATION_EXPIRED || access.kind === PROVIDER_UNAVAILABLE) {
+      return fail(access.kind);
+    }
+    if (access.kind === ACCOUNT_CHOICE_REQUIRED) {
+      return fail(ACCOUNT_CHOICE_REQUIRED);
+    }
+    if (access.kind === "missing") {
+      if (access.configurationUrl !== undefined) {
+        return redirectLocation(access.configurationUrl);
+      }
+      if (via === "existing") {
+        const setup = await input.authorization.begin(authority, returnState);
+        return redirectLocation(setup.redirectUrl);
+      }
+      return fail(REPOSITORY_ACCESS_MISSING);
+    }
+    const continuationRedirect = await input.onConnected?.({ authority, returnState });
+    return continuationRedirect === undefined
+      ? redirect("connected", undefined, returnState)
+      : redirectLocation(continuationRedirect);
+  };
 
   return {
     async callback(request: Request): Promise<Response> {
@@ -121,31 +241,26 @@ export function createGitHubAppInstallationRouteHandlers(input: {
       try {
         const result = await input.authorization.complete(request.url, authority);
         if (result.status === "redirect") {
-          return new Response(null, {
-            headers: { ...noStoreHeaders, Location: result.redirectUrl },
-            status: 303,
-          });
+          return redirectLocation(result.redirectUrl);
         }
-        const continuationRedirect = await input.onConnected?.({
-          authority,
-          returnState: result.returnState,
-        });
-        if (continuationRedirect) {
-          return new Response(null, {
-            headers: { ...noStoreHeaders, Location: continuationRedirect },
-            status: 303,
-          });
-        }
-        return redirect("connected", undefined, result.returnState);
+        return await finishConnection(authority, result.returnState, result.via, (reason) =>
+          fail(reason, undefined, result.returnState),
+        );
       } catch (error) {
+        let reason: ProviderConnectionFailureReason = "callback-invalid";
+        if (
+          error instanceof GitHubInstallationAuthorizationError &&
+          error.category === "access_denied"
+        ) {
+          reason = "access-denied";
+        }
         return fail(
-          "callback-invalid",
+          reason,
           githubInstallationAuthorizationDiagnostic(error),
           error instanceof GitHubInstallationAuthorizationError ? error.returnState : undefined,
         );
       }
     },
-
     async start(request: Request): Promise<Response> {
       const startedAt = Date.now();
       const fail = (
@@ -201,10 +316,31 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         if (mode !== null && mode !== EXISTING_CONNECTION_MODE) {
           return fail(REQUEST_INVALID, undefined, returnState);
         }
-        const result =
-          mode === EXISTING_CONNECTION_MODE
-            ? await input.authorization.beginExisting(authority, returnState)
-            : await input.authorization.begin(authority, returnState);
+        const access = await checkRepositoryAccess(authority, returnState);
+        if (access.kind === "ready") {
+          return redirectLocation(access.callback);
+        }
+        if (access.kind === AUTHORIZATION_EXPIRED || access.kind === PROVIDER_UNAVAILABLE) {
+          return fail(access.kind, undefined, returnState);
+        }
+        if (access.kind === ACCOUNT_CHOICE_REQUIRED) {
+          return fail(ACCOUNT_CHOICE_REQUIRED, undefined, returnState);
+        }
+        if (access.kind === "missing" && access.configurationUrl !== undefined) {
+          return redirectLocation(access.configurationUrl);
+        }
+        const target = access.kind === "missing" ? access.target : undefined;
+        const authorizationTarget = target
+          ? { accountLogin: target.repository.owner, installationId: target.selectedInstallationId }
+          : undefined;
+        if (authorizationTarget !== undefined && authorizationTarget.installationId === undefined) {
+          delete authorizationTarget.installationId;
+        }
+        const result = await input.authorization.beginExisting(
+          authority,
+          returnState,
+          authorizationTarget,
+        );
         return new Response(null, {
           headers: {
             ...noStoreHeaders,
@@ -215,6 +351,13 @@ export function createGitHubAppInstallationRouteHandlers(input: {
       } catch {
         return fail("authorization-failed");
       }
+    },
+    async target(request: Request, continuationId: string) {
+      const authority = await input.authorityForRequest(request);
+      if (!authority || !input.repositoryAccess) {
+        return;
+      }
+      return input.repositoryAccess.inspect({ authority, continuationId });
     },
   };
 }
@@ -246,6 +389,21 @@ export function getGitHubAppInstallationDeploymentHandlers(
     issuer: previewConfig.issuer,
   });
   const emulation = readProviderEmulation(resolvedEnvironment);
+  const installations = createPostgresHostedGitHubInstallationStore(database);
+  const providerFetch = emulation
+    ? (resource: string | URL | Request, init?: RequestInit) => {
+        const url = new URL(resource instanceof Request ? resource.url : resource);
+        return providerEmulationFetch(
+          `${emulation.githubOrigin}${url.pathname}${url.search}`,
+          init,
+          emulation,
+        );
+      }
+    : undefined;
+  const providerCredentials = parseGitHubAppHttpProviderCredentials({
+    appId: config.appId,
+    privateKey: resolvedEnvironment.GITHUB_APP_PRIVATE_KEY,
+  });
   const authorization = createGitHubAppInstallationAuthorization({
     config,
     credentialStore,
@@ -253,7 +411,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
     fetch: emulation
       ? (resource, init) => providerEmulationFetch(resource as string | URL, init, emulation)
       : undefined,
-    installationStore: createPostgresHostedGitHubInstallationStore(database),
+    installationStore: installations,
     membership: {
       isActiveMember: (authority) => membership.isActiveMember(authority),
     },
@@ -262,6 +420,24 @@ export function getGitHubAppInstallationDeploymentHandlers(
   const repositoryAccessContinuations = createRepositoryAccessContinuationService({
     store: createPostgresRepositoryAccessContinuationStore(database),
   });
+  const classify = (value: {
+    authority: Authority;
+    repository: string;
+    selectedInstallationId?: string;
+  }) => {
+    const options = {
+      authority: value.authority,
+      installations,
+      providerFactory: ({ installation }: { installation: { installationId: string } }) =>
+        createGitHubAppHttpProvider({
+          config: { ...providerCredentials, installationId: installation.installationId },
+          fetch: providerFetch,
+        }),
+      repository: value.repository,
+      selectedInstallationId: value.selectedInstallationId,
+    };
+    return classifyGitHubRepositoryAccess(options);
+  };
   deploymentHandlers = createGitHubAppInstallationRouteHandlers({
     async authorityForRequest(request) {
       const session = await ensurePreviewOAuthDeploymentSessionOrganization({
@@ -290,6 +466,11 @@ export function getGitHubAppInstallationDeploymentHandlers(
       });
     },
     origin: new URL(config.issuer).origin,
+    repositoryAccess: {
+      authorize: (value) => repositoryAccessContinuations.authorize(value),
+      classify,
+      inspect: (value) => repositoryAccessContinuations.inspect(value),
+    },
   });
   return deploymentHandlers;
 }
@@ -320,4 +501,23 @@ export function createGitHubAppInstallationDeploymentHandler(
       });
     }
   };
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export async function verifiedGitHubConnectionTarget(input: {
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
+  headers: Headers;
+  resumeKey: string;
+}) {
+  try {
+    const config = readGitHubAppInstallationEnvironment(
+      providerEmulationEnvironment(input.environment),
+    );
+    return await getGitHubAppInstallationDeploymentHandlers(input.environment).target(
+      new Request(new URL("/github/installations", config.issuer), { headers: input.headers }),
+      input.resumeKey,
+    );
+  } catch {
+    // No verified target is available for this page load.
+  }
 }

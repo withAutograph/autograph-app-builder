@@ -116,7 +116,7 @@ test("a real provider back link exposes the labelled builder shell immediately",
   page,
 }) => {
   await page.goto("/github/installations");
-  await expect(page.getByRole("button", { name: "Install or update GitHub access" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue with GitHub" })).toBeVisible();
 
   await instant(page, async () => {
     await page.getByRole("link", { name: "Back" }).click();

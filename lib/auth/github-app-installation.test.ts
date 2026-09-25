@@ -144,6 +144,9 @@ async function prepareAuthorization(
 function successfulFetch(
   seen: { url: string; init?: RequestInit }[],
   repositorySelection: "all" | "selected" = "selected",
+  accounts: { accountId: number; installationId: number; login: string }[] = [
+    { accountId: 149_546_148, installationId: 98_765, login: "withAutograph" },
+  ],
 ) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   return vi.fn<typeof fetch>(async (resource, init) => {
@@ -161,22 +164,20 @@ function successfulFetch(
     }
     if (url === "https://api.github.com/user/installations?per_page=100&page=1") {
       return Response.json({
-        installations: [
-          {
-            account: {
-              id: 149_546_148,
-              login: "withAutograph",
-              type: "Organization",
-            },
-            app_id: 12_345,
-            app_slug: "autograph-app-builder",
-            id: 98_765,
-            repository_selection: repositorySelection,
-            suspended_at: null,
-            target_type: "Organization",
+        installations: accounts.map((account) => ({
+          account: {
+            id: account.accountId,
+            login: account.login,
+            type: "Organization",
           },
-        ],
-        total_count: 1,
+          app_id: 12_345,
+          app_slug: "autograph-app-builder",
+          id: account.installationId,
+          repository_selection: repositorySelection,
+          suspended_at: null,
+          target_type: "Organization",
+        })),
+        total_count: accounts.length,
       });
     }
     throw new Error(`unexpected ${url}`);
@@ -457,6 +458,90 @@ describe("public GitHub App installation authorization", () => {
     await expect(
       authorization.complete(authorizationCallbackUrl(state), authority),
     ).rejects.toThrow("GitHub App installation authorization failed.");
+    expect(bind).toHaveBeenCalledOnce();
+  });
+
+  it("guides a user with no installation to GitHub setup", async () => {
+    const requests: { url: string; init?: RequestInit }[] = [];
+    const { authorization, bind } = harness({
+      fetch: successfulFetch(requests, "selected", []),
+    });
+    const begun = await authorization.beginExisting(authority, DEFAULT_RETURN_STATE);
+    const state = requiredSearchParam(new URL(begun.redirectUrl), "state");
+    const next = await authorization.complete(authorizationCallbackUrl(state), authority);
+    expect(next.status).toBe("redirect");
+    if (next.status !== "redirect") {
+      throw new Error("expected GitHub setup redirect");
+    }
+    expect(next.redirectUrl).toContain(
+      "https://github.com/apps/autograph-app-builder/installations/new",
+    );
+    expect(bind).not.toHaveBeenCalled();
+  });
+
+  it("selects the installation matching the verified repository account", async () => {
+    const requests: { url: string; init?: RequestInit }[] = [];
+    const { authorization, bind } = harness({
+      fetch: successfulFetch(requests, "all", [
+        { accountId: 10, installationId: 11, login: "otherOrg" },
+        { accountId: 149_546_148, installationId: 98_765, login: "withAutograph" },
+      ]),
+    });
+    const begun = await authorization.beginExisting(authority, DEFAULT_RETURN_STATE, {
+      accountLogin: "withAutograph",
+    });
+    const state = requiredSearchParam(new URL(begun.redirectUrl), "state");
+    await expect(
+      authorization.complete(authorizationCallbackUrl(state), authority),
+    ).resolves.toMatchObject({ status: "bound", via: "existing" });
+    expect(bind).toHaveBeenCalledWith(
+      expect.objectContaining({ binding: expect.objectContaining({ installationId: "98765" }) }),
+    );
+  });
+
+  it("keeps an explicitly selected installation on the existing-connection path", async () => {
+    const requests: { url: string; init?: RequestInit }[] = [];
+    const { authorization } = harness({ fetch: successfulFetch(requests) });
+    const begun = await authorization.beginExisting(authority, DEFAULT_RETURN_STATE, {
+      accountLogin: "withAutograph",
+      installationId: "98765",
+    });
+    const state = requiredSearchParam(new URL(begun.redirectUrl), "state");
+    await expect(
+      authorization.complete(authorizationCallbackUrl(state), authority),
+    ).resolves.toMatchObject({ status: "bound", via: "existing" });
+  });
+
+  it("uses GitHub's installation choice to resolve multiple accessible accounts", async () => {
+    const requests: { url: string; init?: RequestInit }[] = [];
+    const { authorization, bind } = harness({
+      fetch: successfulFetch(requests, "all", [
+        { accountId: 10, installationId: 11, login: "otherOrg" },
+        { accountId: 149_546_148, installationId: 98_765, login: "withAutograph" },
+      ]),
+    });
+    const begun = await authorization.beginExisting(authority);
+    const state = requiredSearchParam(new URL(begun.redirectUrl), "state");
+    const accountChoice = await authorization.complete(authorizationCallbackUrl(state), authority);
+    expect(accountChoice.status).toBe("redirect");
+    if (accountChoice.status !== "redirect") {
+      throw new Error("expected GitHub account choice");
+    }
+    expect(accountChoice.redirectUrl).toContain("/apps/autograph-app-builder/installations/new");
+    const selectedState = requiredSearchParam(new URL(accountChoice.redirectUrl), "state");
+    const selected = await authorization.complete(
+      setupCallbackUrl(selectedState, "update"),
+      authority,
+    );
+    if (selected.status !== "redirect") {
+      throw new Error("expected selected installation authorization");
+    }
+    await expect(
+      authorization.complete(
+        authorizationCallbackUrl(requiredSearchParam(new URL(selected.redirectUrl), "state")),
+        authority,
+      ),
+    ).resolves.toMatchObject({ status: "bound", via: "installation" });
     expect(bind).toHaveBeenCalledOnce();
   });
 

@@ -56,8 +56,8 @@ export const Vercel: Story = {
     buttonLabel: "Connect to Vercel",
     description:
       "Choose the Vercel account Autograph may use for projects and deployments. Connecting it does not create or deploy anything yet.",
-    icon: <SiVercel size={22} />,
     headerLabel: "New App",
+    icon: <SiVercel size={22} />,
     title: "Connect a Vercel team",
   },
 };
@@ -72,8 +72,8 @@ export const VercelFailed: Story = {
     ),
     description:
       "Choose the Vercel account Autograph may use for projects and deployments. Connecting it does not create or deploy anything yet.",
-    icon: <SiVercel size={22} />,
     headerLabel: "New App",
+    icon: <SiVercel size={22} />,
     title: "Connect a Vercel team",
   },
   play: async ({ canvasElement }) => {

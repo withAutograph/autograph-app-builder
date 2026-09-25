@@ -5,6 +5,8 @@ import {
 import { safeProviderConnectionReturn } from "@/lib/integrations/provider-connection-return";
 import { ProviderConnection, ProviderConnectionNotice } from "@/app/ui/provider-connection";
 import { ProviderConnectionLoadingShell } from "@/app/ui/route-loading-shell";
+import { verifiedGitHubConnectionTarget } from "@/lib/auth/github-app-installation-deployment";
+import { headers } from "next/headers";
 import { Suspense } from "react";
 import { FaGithub } from "react-icons/fa";
 
@@ -25,11 +27,23 @@ async function GitHubInstallationsContent({ searchParams }: Props) {
     resumeKey: resume,
     returnTo,
   });
+  let target;
+  if (returnState.resumeKey !== undefined) {
+    target = await verifiedGitHubConnectionTarget({
+      environment: process.env,
+      headers: await headers(),
+      resumeKey: returnState.resumeKey,
+    });
+  }
   return (
     <ProviderConnection
       action="/github/installations/start"
       buttonLabel="Continue with GitHub"
-      description="Connect GitHub so Autograph can access the repository for this app. GitHub will ask you to approve access if needed."
+      description={
+        target
+          ? `Connect GitHub so Autograph can access ${target.repository.fullName}. GitHub will ask you to approve access if needed.`
+          : "Connect GitHub so Autograph can access the repository for this app. GitHub will ask you to approve access if needed."
+      }
       headerLabel="Connect GitHub"
       icon={<FaGithub size={23} />}
       returnTo={returnState.returnTo}

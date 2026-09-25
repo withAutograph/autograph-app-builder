@@ -23,7 +23,7 @@ const providerDescriptors = {
     bindingCount: "githubInstallations",
     callbackPath: "/github/installations/callback",
     emulatorOrigin: githubEmulatorOrigin,
-    installationButton: "Install or update GitHub access",
+    installationButton: "Continue with GitHub",
     reconnectButton: "Update GitHub access",
     seededScopes: ["autograph-local/demo-app"],
     selectedControl: "Git Scope",

@@ -321,7 +321,7 @@ test("provider substitution and malformed callback fail without a binding", asyn
   await openBuilderPage(page);
   await page.getByRole("checkbox", { name: /GitHub/u }).check();
   await page.getByRole("button", { name: "Connect GitHub" }).click();
-  await page.getByRole("button", { name: "Install or update GitHub access" }).click();
+  await page.getByRole("button", { name: "Continue with GitHub" }).click();
   const state = new URL(page.url()).searchParams.get("state");
   expect(state).toBeTruthy();
   if (!state) throw new Error("Expected GitHub callback state");
