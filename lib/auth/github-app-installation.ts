@@ -710,6 +710,77 @@ export const createGitHubAppInstallationAuthorization = (input: {
     }
   };
 
+  const beginUserAuthorization = async (details: {
+    authority: HostedTenantAuthority;
+    returnState: ProviderConnectionReturn;
+    installationId?: string;
+    setupAction: "install" | "update";
+  }) => {
+    const issuedAt = now();
+    const authorizationState = signedState({
+      authority: details.authority,
+      installationId: details.installationId,
+      nonce: nonce(),
+      now: issuedAt,
+      phase: "authorize",
+      returnState: details.returnState,
+      setupAction: details.setupAction,
+      stateSecret: config.stateSecret,
+    });
+    await input.stateStore.create({
+      authority: details.authority,
+      authorityDigest: authorizationState.authorityDigest,
+      createdAt: new Date(issuedAt),
+      expiresAt: authorizationState.expiresAt,
+      returnState: details.returnState,
+      stateDigest: authorizationState.stateDigest,
+    });
+    const verifier = codeVerifier(
+      config.stateSecret,
+      verifyState({
+        authority: details.authority,
+        now: issuedAt,
+        state: authorizationState.state,
+        stateSecret: config.stateSecret,
+      }).nonce,
+    );
+    const authorization = createGitHubOAuthApp({
+      clientId: config.clientId,
+      clientSecret: config.clientSecret,
+      fetch: providerFetch,
+      redirectUrl: callbackUrl,
+    }).getWebFlowAuthorizationUrl({
+      redirectUrl: callbackUrl,
+      state: authorizationState.state,
+    });
+    const authorizeUrl = input.emulation
+      ? emulatedGitHubUrl(authorization.url)
+      : new URL(authorization.url);
+    authorizeUrl.searchParams.set("code_challenge", codeChallenge(verifier));
+    authorizeUrl.searchParams.set("code_challenge_method", "S256");
+    const approvalUrl = input.emulation
+      ? new URL("/local-connections/github", input.emulation.canonicalOrigin)
+      : authorizeUrl;
+    if (input.emulation) {
+      for (const [key, value] of authorizeUrl.searchParams) {
+        approvalUrl.searchParams.append(key, value);
+      }
+      approvalUrl.searchParams.set("phase", "authorize");
+      if (details.returnState.resumeKey) {
+        approvalUrl.searchParams.set("resume", details.returnState.resumeKey);
+      }
+    }
+    return {
+      action: "github-app.installation.authorize" as const,
+      authorityDigest: authorizationState.authorityDigest,
+      expiresAt: authorizationState.expiresAt.toISOString(),
+      redirectUrl: approvalUrl.toString(),
+      stateDigest: authorizationState.stateDigest,
+      status: "redirect" as const,
+      version: 1 as const,
+    };
+  };
+
   return {
     async begin(
       authorityInput: HostedTenantAuthority,
@@ -753,6 +824,24 @@ export const createGitHubAppInstallationAuthorization = (input: {
           status: "redirect" as const,
           version: 1 as const,
         };
+      } catch {
+        throw new Error(FAILURE_MESSAGE);
+      }
+    },
+    async beginExisting(
+      authorityInput: HostedTenantAuthority,
+      returnState: ProviderConnectionReturn = defaultReturnState,
+    ) {
+      try {
+        const authority = hostedTenantAuthoritySchema.parse(authorityInput);
+        if (!(await input.membership.isActiveMember(authority))) {
+          throw new Error("membership-inactive");
+        }
+        return await beginUserAuthorization({
+          authority,
+          returnState,
+          setupAction: "update",
+        });
       } catch {
         throw new Error(FAILURE_MESSAGE);
       }
@@ -854,80 +943,24 @@ export const createGitHubAppInstallationAuthorization = (input: {
           ) {
             throw new Error("state-phase-mismatch");
           }
-          const issuedAt = now();
-          const authorizationState = signedState({
+          return await beginUserAuthorization({
             authority,
             installationId: callback.installationId,
-            nonce: nonce(),
-            now: issuedAt,
-            phase: "authorize",
             returnState: state.returnState,
             setupAction: callback.setupAction,
-            stateSecret: config.stateSecret,
           });
-          await input.stateStore.create({
-            authority,
-            authorityDigest: authorizationState.authorityDigest,
-            createdAt: new Date(issuedAt),
-            expiresAt: authorizationState.expiresAt,
-            returnState: state.returnState,
-            stateDigest: authorizationState.stateDigest,
-          });
-          const verifier = codeVerifier(
-            config.stateSecret,
-            verifyState({
-              authority,
-              now: issuedAt,
-              state: authorizationState.state,
-              stateSecret: config.stateSecret,
-            }).nonce,
-          );
-          const authorization = createGitHubOAuthApp({
-            clientId: config.clientId,
-            clientSecret: config.clientSecret,
-            fetch: providerFetch,
-            redirectUrl: callbackUrl,
-          }).getWebFlowAuthorizationUrl({
-            redirectUrl: callbackUrl,
-            state: authorizationState.state,
-          });
-          const authorizeUrl = input.emulation
-            ? emulatedGitHubUrl(authorization.url)
-            : new URL(authorization.url);
-          authorizeUrl.searchParams.set("code_challenge", codeChallenge(verifier));
-          authorizeUrl.searchParams.set("code_challenge_method", "S256");
-          const approvalUrl = input.emulation
-            ? new URL("/local-connections/github", input.emulation.canonicalOrigin)
-            : authorizeUrl;
-          if (input.emulation) {
-            for (const [key, value] of authorizeUrl.searchParams) {
-              approvalUrl.searchParams.append(key, value);
-            }
-            approvalUrl.searchParams.set("phase", "authorize");
-            if (state.returnState.resumeKey) {
-              approvalUrl.searchParams.set("resume", state.returnState.resumeKey);
-            }
-          }
-          return {
-            action: "github-app.installation.authorize" as const,
-            authorityDigest: authorizationState.authorityDigest,
-            expiresAt: authorizationState.expiresAt.toISOString(),
-            redirectUrl: approvalUrl.toString(),
-            stateDigest: authorizationState.stateDigest,
-            status: "redirect" as const,
-            version: 1 as const,
-          };
         }
         if (
           state.phase !== "authorize" ||
-          state.installationId === undefined ||
-          state.setupAction === undefined
+          state.setupAction === undefined ||
+          (state.installationId === undefined && state.setupAction !== "update")
         ) {
           throw new Error("state-phase-mismatch");
         }
         if (
           callback.installationId !== undefined &&
-          (callback.installationId !== state.installationId ||
+          (state.installationId === undefined ||
+            callback.installationId !== state.installationId ||
             callback.setupAction !== state.setupAction)
         ) {
           throw new Error("installation-mismatch");
@@ -986,7 +1019,11 @@ export const createGitHubAppInstallationAuthorization = (input: {
                   { owner, repo },
                 );
                 const value = installationIdentity(data);
-                if (value.installationId !== state.installationId || value.appId !== config.appId) {
+                if (
+                  (state.installationId !== undefined &&
+                    value.installationId !== state.installationId) ||
+                  value.appId !== config.appId
+                ) {
                   throw new Error("installation-mismatch");
                 }
                 return value;

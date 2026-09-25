@@ -29,6 +29,16 @@ function handlers(
     version: 1 as const,
   }));
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+  const beginExisting = vi.fn(async () => ({
+    action: "github-app.installation.authorize" as const,
+    authorityDigest: "b".repeat(64),
+    expiresAt: "2026-08-28T12:10:00.000Z",
+    redirectUrl: "https://github.com/login/oauth/authorize?state=opaque",
+    stateDigest: "a".repeat(64),
+    status: "redirect" as const,
+    version: 1 as const,
+  }));
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const complete = vi.fn(async () => ({
     accountType: "Organization" as const,
     action: "github-app.installation.complete" as const,
@@ -45,10 +55,10 @@ function handlers(
   }));
   const route = createGitHubAppInstallationRouteHandlers({
     authorityForRequest,
-    authorization: { begin, complete },
+    authorization: { begin, beginExisting, complete },
     origin: "https://builder.example",
   });
-  return { begin, complete, route };
+  return { begin, beginExisting, complete, route };
 }
 
 describe("GitHub App installation routes", () => {
@@ -84,6 +94,24 @@ describe("GitHub App installation routes", () => {
       "https://builder.example/?github=failed&githubReason=request-invalid",
     );
     expect(begin).toHaveBeenCalledOnce();
+  });
+
+  it("starts direct authorization for an existing installation without changing GitHub access", async () => {
+    const { route, begin, beginExisting } = handlers();
+    const resumeKey = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
+    const response = await route.start(
+      new Request("https://builder.example/github/installations/start", {
+        body: new URLSearchParams({ connectionMode: "existing", resumeKey, returnTo: "/" }),
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Origin: "https://builder.example",
+        },
+        method: "POST",
+      }),
+    );
+    expect(response.headers.get("location")).toContain("github.com/login/oauth/authorize");
+    expect(beginExisting).toHaveBeenCalledWith(authority, { resumeKey, returnTo: "/" });
+    expect(begin).not.toHaveBeenCalled();
   });
 
   it("returns unauthenticated users to sign-in instead of a provider workspace error", async () => {

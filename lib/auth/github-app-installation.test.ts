@@ -420,6 +420,62 @@ describe("public GitHub App installation authorization", () => {
     expect(bind).toHaveBeenCalledWith(expect.objectContaining({ authority }));
   });
 
+  it("connects an already installed app without requiring a repository settings update", async () => {
+    const requests: { url: string; init?: RequestInit }[] = [];
+    const { authorization, bind, events } = harness({
+      fetch: successfulFetch(requests, "all"),
+    });
+    const returnState = {
+      resumeKey: "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0",
+      returnTo: "/" as const,
+    };
+    const authorize = await authorization.beginExisting(authority, returnState);
+    const authorizeUrl = new URL(authorize.redirectUrl);
+    expect(authorizeUrl.origin + authorizeUrl.pathname).toBe(
+      "https://github.com/login/oauth/authorize",
+    );
+    expect(authorizeUrl.searchParams.get("code_challenge_method")).toBe("S256");
+    const state = requiredSearchParam(authorizeUrl, "state");
+
+    await expect(
+      authorization.complete(authorizationCallbackUrl(state), authority),
+    ).resolves.toMatchObject({
+      repositorySelection: "all",
+      returnState,
+      setupAction: "update",
+      status: "bound",
+    });
+    expect(bind).toHaveBeenCalledOnce();
+    expect(events).toEqual([
+      "membership",
+      "state:create",
+      "membership",
+      "state:consume",
+      "membership",
+      "installation:bind",
+    ]);
+    await expect(
+      authorization.complete(authorizationCallbackUrl(state), authority),
+    ).rejects.toThrow("GitHub App installation authorization failed.");
+    expect(bind).toHaveBeenCalledOnce();
+  });
+
+  it("rejects installation metadata on a direct existing-installation callback", async () => {
+    const requests: { url: string; init?: RequestInit }[] = [];
+    const { authorization, bind } = harness({ fetch: successfulFetch(requests) });
+    const authorize = await authorization.beginExisting(authority);
+    const callback = new URL(
+      authorizationCallbackUrl(requiredSearchParam(new URL(authorize.redirectUrl), "state")),
+    );
+    callback.searchParams.set("installation_id", "98765");
+    callback.searchParams.set("setup_action", "update");
+    await expect(authorization.complete(callback.toString(), authority)).rejects.toThrow(
+      "GitHub App installation authorization failed.",
+    );
+    expect(requests).toHaveLength(0);
+    expect(bind).not.toHaveBeenCalled();
+  });
+
   it("rebinds an existing installation after a signed GitHub update callback", async () => {
     const requests: { url: string; init?: RequestInit }[] = [];
     const { authorization, bind } = harness({

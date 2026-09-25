@@ -11,10 +11,11 @@ const meta = {
     buttonLabel: "Install or update GitHub access",
     children: null,
     description:
-      "Choose the repositories this workspace may inspect or update, or allow all repositories. For an existing installation, GitHub must have Redirect on update enabled to return here.",
+      "Choose repository access for a new installation, or connect an existing installation that already has access.",
     icon: <FaGithub size={23} />,
     resumeKey: "resume-123",
     returnTo: "/",
+    secondaryAction: { buttonLabel: "Connect existing installation", mode: "existing" },
     title: "Connect a GitHub App installation",
   },
   component: ProviderConnection,

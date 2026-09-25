@@ -33,6 +33,8 @@ SHA, or tree as caller authority.
 4. If no installation exists, park the session on **Connect GitHub**.
 5. If installations exist but none includes the repository, park the session
    on **Update GitHub access**.
+   An already installed app with no workspace binding can be connected through
+   GitHub user authorization without changing its repository selection.
 6. If several scopes can satisfy the request, ask the user to select a scope.
    If no repository was named, ask the user to select a repository.
 7. After any callback or **Check access** action, repeat the provider readback.
