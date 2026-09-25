@@ -339,18 +339,31 @@ export const readSandboxGitHubSourceSnapshot = async function readSandboxGitHubS
     if (occupied.exitCode === 0) {
       throw new Error("The selected GitHub checkout is not available.");
     }
-    // Vercel places a Git source at the sandbox's working-directory root.
-    const providerPath = "/vercel/sandbox";
-    const providerCheckout = await sandbox.run({
-      command: checkoutCommand(providerPath),
-      workingDirectory: "/workspace",
-    });
-    if (providerCheckout.exitCode !== 0) {
+    const repositoryName = new URL(parseRemote(expected.repository)).pathname.split("/").at(-1);
+    if (repositoryName === undefined) {
+      throw new Error("The GitHub source remote is invalid.");
+    }
+    // The Eve image places Vercel's Git source below /workspace. The
+    // standard Vercel image uses its working-directory root instead.
+    const providerPaths = [`/workspace/${repositoryName.slice(0, -4)}`, "/vercel/sandbox"];
+    let providerCheckout: { path: string; observation: ReturnType<typeof inspect> } | undefined;
+    for (const candidate of providerPaths) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- inspect provider locations in order.
+      const result = await sandbox.run({
+        command: checkoutCommand(candidate),
+        workingDirectory: "/workspace",
+      });
+      if (result.exitCode === 0) {
+        providerCheckout = { observation: inspect(result.stdout), path: candidate };
+        break;
+      }
+    }
+    if (providerCheckout === undefined) {
       throw new Error("Vercel did not materialize the selected GitHub source.");
     }
-    observed = inspect(providerCheckout.stdout);
+    observed = providerCheckout.observation;
     const linked = await sandbox.run({
-      command: `mkdir -p /workspace && ln -s -- ${shellQuote(providerPath)} ${shellQuote(SANDBOX_WORKSPACE)}`,
+      command: `mkdir -p /workspace && ln -s -- ${shellQuote(providerCheckout.path)} ${shellQuote(SANDBOX_WORKSPACE)}`,
       workingDirectory: "/workspace",
     });
     if (linked.exitCode !== 0) {

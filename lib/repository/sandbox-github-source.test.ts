@@ -42,11 +42,30 @@ describe("provider-created sandbox GitHub source", () => {
     await expect(
       readSandboxGitHubSourceSnapshot({ run } as never, expected),
     ).resolves.toMatchObject({ sourcePath: "/workspace/repository", sourceSha: sha });
-    expect(run.mock.calls[2]?.[0].command).toContain("git -C '/vercel/sandbox' rev-parse HEAD");
+    expect(run.mock.calls[2]?.[0].command).toContain("git -C '/workspace/private' rev-parse HEAD");
     expect(run.mock.calls[3]?.[0].command).toContain("ln -s");
     for (const call of run.mock.calls) {
       expect(call[0].command).not.toContain("git clone");
     }
+  });
+
+  it("uses the standard Vercel working directory when the Eve image path is absent", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: `${sha}\n${tree}\n${expected.repository}\n`,
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" });
+    await expect(
+      readSandboxGitHubSourceSnapshot({ run } as never, expected),
+    ).resolves.toMatchObject({ sourcePath: "/workspace/repository", sourceSha: sha });
+    expect(run.mock.calls[3]?.[0].command).toContain("git -C '/vercel/sandbox' rev-parse HEAD");
+    expect(run.mock.calls[4]?.[0].command).toContain("ln -s");
   });
 
   it("does not alter an occupied workspace that is not a Git checkout", async () => {
@@ -65,11 +84,12 @@ describe("provider-created sandbox GitHub source", () => {
       .fn()
       .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" });
     await expect(readSandboxGitHubSourceSnapshot({ run } as never, expected)).rejects.toThrow(
       "Vercel did not materialize the selected GitHub source",
     );
-    expect(run).toHaveBeenCalledTimes(3);
+    expect(run).toHaveBeenCalledTimes(4);
   });
 
   it("rejects a mismatched provider checkout before linking it", async () => {
