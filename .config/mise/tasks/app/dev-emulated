@@ -109,6 +109,7 @@ export FLAGS_SECRET="$(tr -d '\n' < "$state_dir/flags-secret")"
 export GITHUB_CLIENT_ID=Iv1_local_app_client
 export GITHUB_CLIENT_SECRET=local-github-client-secret-value
 export GITHUB_APP_ID=12345
+export GITHUB_APP_PRIVATE_KEY="$(cat "$state_dir/github-app-private-key.pem")"
 export GITHUB_APP_SLUG=autograph-app-builder-local
 export GITHUB_APP_CLIENT_ID=Iv1_local_app_client
 export GITHUB_APP_CLIENT_SECRET=local-github-client-secret-value

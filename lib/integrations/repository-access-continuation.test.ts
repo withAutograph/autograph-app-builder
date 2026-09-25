@@ -66,6 +66,16 @@ function memoryStore(): RepositoryAccessContinuationStore & {
       records.push(record);
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async inspect(input) {
+      return records.find(
+        (candidate) =>
+          candidate.continuationDigest === input.continuationDigest &&
+          sameAuthority(candidate.authority, input.authority) &&
+          candidate.consumedAt === undefined &&
+          candidate.expiresAt > input.now,
+      );
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async listAuthorizedForSession(input) {
       return records.filter(
         (candidate) =>
@@ -81,6 +91,73 @@ function memoryStore(): RepositoryAccessContinuationStore & {
 }
 
 describe("GitHub repository access continuation", () => {
+  it("inspects only the exact tenant's active target without exposing callback credentials or changing state", async () => {
+    const store = memoryStore();
+    let current = new Date("2026-09-01T12:00:00.000Z");
+    const service = createRepositoryAccessContinuationService({
+      createId: () => continuationId,
+      lifetimeMs: 60_000,
+      now: () => current,
+      store,
+    });
+    await service.create({
+      authority,
+      callbackUrl:
+        "https://builder.example/eve/v1/connections/github-repository-access/callback/attempt/secret-token",
+      repository: "withAutograph/app-builder-dogfood",
+      requestId: "call_one",
+      selectedInstallationId: "10",
+      sessionId: "ses_one",
+    });
+    const expected = {
+      repository: {
+        fullName: "withAutograph/app-builder-dogfood",
+        name: "app-builder-dogfood",
+        owner: "withAutograph",
+      },
+      selectedInstallationId: "10",
+    };
+    await expect(service.inspect({ authority, continuationId })).resolves.toEqual(expected);
+    expect(store.records[0]?.authorizedAt).toBeUndefined();
+    expect(store.records[0]?.consumedAt).toBeUndefined();
+    await expect(
+      service.inspect({
+        authority: { ...authority, workspaceId: "workspace-2" },
+        continuationId,
+      }),
+    ).resolves.toBeUndefined();
+    await service.authorize({ authority, continuationId });
+    await expect(service.inspect({ authority, continuationId })).resolves.toEqual(expected);
+    current = new Date("2026-09-01T12:01:00.000Z");
+    await expect(service.inspect({ authority, continuationId })).resolves.toBeUndefined();
+  });
+
+  it("hides a consumed continuation from inspection", async () => {
+    const store = memoryStore();
+    const service = createRepositoryAccessContinuationService({
+      createId: () => continuationId,
+      now: () => new Date("2026-09-01T12:00:00.000Z"),
+      store,
+    });
+    await service.create({
+      authority,
+      callbackUrl:
+        "https://builder.example/eve/v1/connections/github-repository-access/callback/attempt/token",
+      repository: "withAutograph/app-builder-dogfood",
+      requestId: "call_one",
+      sessionId: "ses_one",
+    });
+    await service.authorize({ authority, continuationId });
+    await service.consume({
+      authority,
+      continuationId,
+      repository: "withAutograph/app-builder-dogfood",
+      requestId: "call_one",
+      sessionId: "ses_one",
+    });
+    await expect(service.inspect({ authority, continuationId })).resolves.toBeUndefined();
+  });
+
   it("binds one callback to the exact tenant, session, request, and repository", async () => {
     const store = memoryStore();
     let current = new Date("2026-09-01T12:00:00.000Z");

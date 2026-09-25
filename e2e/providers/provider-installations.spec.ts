@@ -321,7 +321,7 @@ test("provider substitution and malformed callback fail without a binding", asyn
   await openBuilderPage(page);
   await page.getByRole("checkbox", { name: /GitHub/u }).check();
   await page.getByRole("button", { name: "Connect GitHub" }).click();
-  await page.getByRole("button", { name: "Install or update GitHub access" }).click();
+  await page.getByRole("button", { name: "Continue with GitHub" }).click();
   const state = new URL(page.url()).searchParams.get("state");
   expect(state).toBeTruthy();
   if (!state) throw new Error("Expected GitHub callback state");
@@ -388,7 +388,12 @@ for (const provider of emulatedProviders) {
     } finally {
       await sql.end();
     }
-    await page.getByRole("button", { name: localApprovalButtonName(provider) }).click();
+    await page
+      .getByRole("button", {
+        name:
+          provider === "GitHub" ? "Authorize emulated GitHub" : localApprovalButtonName(provider),
+      })
+      .click();
     if (new URL(page.url()).origin === descriptor.emulatorOrigin)
       await page.getByRole("button", { name: /autograph-dev/u }).click();
 

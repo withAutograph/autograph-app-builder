@@ -38,19 +38,21 @@ export function AuthLoadingShell({
 
 interface ProviderConnectionLoadingShellProps {
   description: string;
+  headerLabel?: string;
   title: string;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function ProviderConnectionLoadingShell({
   description,
+  headerLabel = "New App",
   title,
 }: ProviderConnectionLoadingShellProps) {
   return (
     <main className="min-h-svh bg-background text-foreground" aria-busy="true">
       <header className="flex h-14 items-center border-b bg-background px-4 text-sm sm:px-8">
         <span className="text-muted-foreground">Back</span>
-        <span className="mx-auto font-medium">New App</span>
+        <span className="mx-auto font-medium">{headerLabel}</span>
         <span aria-hidden="true" className="w-12" />
       </header>
       <section

@@ -134,6 +134,22 @@ export function createPostgresRepositoryAccessContinuationStore(
       });
     },
 
+    async inspect(value) {
+      const rows = await database
+        .select(columns)
+        .from(githubRepositoryAccessContinuations)
+        .where(
+          and(
+            tenant(value.authority),
+            eq(githubRepositoryAccessContinuations.continuationDigest, value.continuationDigest),
+            isNull(githubRepositoryAccessContinuations.consumedAt),
+            gt(githubRepositoryAccessContinuations.expiresAt, value.now),
+          ),
+        )
+        .limit(1);
+      return rows[0] ? record(rows[0]) : undefined;
+    },
+
     async listAuthorizedForSession(value) {
       const rows = await database
         .select(columns)

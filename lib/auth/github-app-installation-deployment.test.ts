@@ -10,6 +10,34 @@ const authority = {
   ownerUserId: "user_one",
   workspaceId: "workspace_one",
 };
+const resumeKey = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
+const target = {
+  repository: {
+    fullName: "withAutograph/arrusted-development",
+    name: "arrusted-development",
+    owner: "withAutograph",
+  },
+};
+const readyAccess = {
+  accessDigest: "a".repeat(64),
+  repository: {
+    archived: false as const,
+    defaultBranch: "main",
+    headSha: "b".repeat(40),
+    headTree: "c".repeat(40),
+    name: target.repository.name,
+    owner: target.repository.owner,
+    repositoryId: "42",
+    repositoryVariableNames: [],
+    visibility: "private" as const,
+  },
+  scope: {
+    accountLogin: "withAutograph",
+    accountType: "Organization" as const,
+    installationId: "98765",
+  },
+  status: "ready" as const,
+};
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -17,6 +45,9 @@ afterEach(() => vi.restoreAllMocks());
 function handlers(
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   authorityForRequest: () => Promise<typeof authority | undefined> = async () => authority,
+  repositoryAccess?: Parameters<
+    typeof createGitHubAppInstallationRouteHandlers
+  >[0]["repositoryAccess"],
 ) {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const begin = vi.fn(async () => ({
@@ -39,7 +70,7 @@ function handlers(
     version: 1 as const,
   }));
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  const complete = vi.fn(async () => ({
+  const complete = vi.fn(async (_inputUrl: string, _authority: typeof authority) => ({
     accountType: "Organization" as const,
     action: "github-app.installation.complete" as const,
     appliedAt: "2026-08-28T12:00:00.000Z",
@@ -52,19 +83,241 @@ function handlers(
     stateDigest: "b".repeat(64),
     status: "bound" as const,
     version: 1 as const,
+    via: "installation" as "installation" | "existing",
   }));
-  const route = createGitHubAppInstallationRouteHandlers({
+  const routeInput: Parameters<typeof createGitHubAppInstallationRouteHandlers>[0] = {
     authorityForRequest,
     authorization: { begin, beginExisting, complete },
     origin: "https://builder.example",
-  });
+  };
+  if (repositoryAccess !== undefined) {
+    routeInput.repositoryAccess = repositoryAccess;
+  }
+  const route = createGitHubAppInstallationRouteHandlers(routeInput);
   return { begin, beginExisting, complete, route };
 }
 
 describe("GitHub App installation routes", () => {
+  it("resumes a verified repository without another GitHub authorization", async () => {
+    const repositoryAccess = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      authorize: vi.fn(async () => "https://builder.example/eve/v1/connections/callback"),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      classify: vi.fn(async () => readyAccess),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      inspect: vi.fn(async () => target),
+    };
+    const { route, begin, beginExisting } = handlers(undefined, repositoryAccess);
+    const response = await route.start(
+      new Request("https://builder.example/github/installations/start", {
+        body: new URLSearchParams({ resumeKey, returnTo: "/" }),
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Origin: "https://builder.example",
+        },
+        method: "POST",
+      }),
+    );
+    expect(response.headers.get("location")).toBe(
+      "https://builder.example/eve/v1/connections/callback",
+    );
+    expect(repositoryAccess.classify).toHaveBeenCalledWith({
+      authority,
+      repository: target.repository.fullName,
+    });
+    expect(begin).not.toHaveBeenCalled();
+    expect(beginExisting).not.toHaveBeenCalled();
+  });
+
+  it("discovers an existing installation, then requests missing repository access", async () => {
+    const repositoryAccess = {
+      authorize: vi
+        .fn<() => Promise<string | undefined>>()
+        .mockRejectedValue(new Error("authorization was not expected")),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      classify: vi
+        .fn()
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        .mockImplementationOnce(async () => ({
+          action: "update" as const,
+          repository: target.repository,
+          scopes: [],
+          status: "authorization-required" as const,
+        }))
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        .mockImplementationOnce(async () => ({
+          action: "update" as const,
+          repository: target.repository,
+          scopes: [readyAccess.scope],
+          status: "authorization-required" as const,
+        })),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      inspect: vi.fn(async () => target),
+    };
+    const { route, begin, beginExisting, complete } = handlers(undefined, repositoryAccess);
+    const response = await route.start(
+      new Request("https://builder.example/github/installations/start", {
+        body: new URLSearchParams({ resumeKey, returnTo: "/" }),
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Origin: "https://builder.example",
+        },
+        method: "POST",
+      }),
+    );
+    expect(response.headers.get("location")).toContain("github.com/login/oauth/authorize");
+    expect(beginExisting).toHaveBeenCalledWith(
+      authority,
+      { resumeKey, returnTo: "/" },
+      { accountLogin: "withAutograph" },
+    );
+    complete.mockResolvedValueOnce({
+      ...(await complete("https://builder.example/github/installations/callback", authority)),
+      returnState: { resumeKey, returnTo: "/" },
+      via: "existing" as const,
+    });
+    const callback = await route.callback(
+      new Request("https://builder.example/github/installations/callback?code=one&state=opaque"),
+    );
+    expect(callback.headers.get("location")).toBe(
+      "https://github.com/organizations/withAutograph/settings/installations/98765",
+    );
+    expect(begin).not.toHaveBeenCalled();
+    expect(repositoryAccess.authorize).not.toHaveBeenCalled();
+  });
+
+  it("opens the verified installation settings when it already lacks the repository", async () => {
+    const repositoryAccess = {
+      authorize: vi
+        .fn<() => Promise<string | undefined>>()
+        .mockRejectedValue(new Error("authorization was not expected")),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      classify: vi.fn(async () => ({
+        action: "update" as const,
+        repository: target.repository,
+        scopes: [readyAccess.scope],
+        status: "authorization-required" as const,
+      })),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      inspect: vi.fn(async () => target),
+    };
+    const { route, begin, beginExisting } = handlers(undefined, repositoryAccess);
+    const response = await route.start(
+      new Request("https://builder.example/github/installations/start", {
+        body: new URLSearchParams({ resumeKey, returnTo: "/" }),
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Origin: "https://builder.example",
+        },
+        method: "POST",
+      }),
+    );
+    expect(response.headers.get("location")).toBe(
+      "https://github.com/organizations/withAutograph/settings/installations/98765",
+    );
+    expect(begin).not.toHaveBeenCalled();
+    expect(beginExisting).not.toHaveBeenCalled();
+    expect(repositoryAccess.authorize).not.toHaveBeenCalled();
+  });
+
+  it("reports a missing repository after installation setup instead of claiming success", async () => {
+    const repositoryAccess = {
+      authorize: vi
+        .fn<() => Promise<string | undefined>>()
+        .mockRejectedValue(new Error("authorization was not expected")),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      classify: vi.fn(async () => ({
+        action: "update" as const,
+        repository: target.repository,
+        scopes: [],
+        status: "authorization-required" as const,
+      })),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      inspect: vi.fn(async () => target),
+    };
+    const { route, begin, complete } = handlers(undefined, repositoryAccess);
+    complete.mockResolvedValueOnce({
+      ...(await complete("https://builder.example/github/installations/callback", authority)),
+      returnState: { resumeKey, returnTo: "/" },
+      via: "installation" as const,
+    });
+    const response = await route.callback(
+      new Request("https://builder.example/github/installations/callback?code=one&state=opaque"),
+    );
+    expect(response.headers.get("location")).toBe(
+      `https://builder.example/?github=failed&githubReason=repository-access-missing&resume=${resumeKey}`,
+    );
+    expect(begin).not.toHaveBeenCalled();
+    expect(repositoryAccess.authorize).not.toHaveBeenCalled();
+  });
+
+  it("rejects an expired repository continuation before contacting GitHub", async () => {
+    const repositoryAccess = {
+      authorize: vi
+        .fn<() => Promise<string | undefined>>()
+        .mockRejectedValue(new Error("authorization was not expected")),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      classify: vi.fn(async () => readyAccess),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      hasBuilderDraft: vi.fn(async () => false),
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Model an expired continuation.
+      inspect: vi.fn<() => Promise<typeof target | undefined>>().mockResolvedValue(undefined),
+    };
+    const { route, begin, beginExisting } = handlers(undefined, repositoryAccess);
+    const response = await route.start(
+      new Request("https://builder.example/github/installations/start", {
+        body: new URLSearchParams({ resumeKey, returnTo: "/" }),
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Origin: "https://builder.example",
+        },
+        method: "POST",
+      }),
+    );
+    expect(response.headers.get("location")).toBe(
+      `https://builder.example/?github=failed&githubReason=authorization-expired&resume=${resumeKey}`,
+    );
+    expect(begin).not.toHaveBeenCalled();
+    expect(beginExisting).not.toHaveBeenCalled();
+    expect(repositoryAccess.hasBuilderDraft).toHaveBeenCalledWith({
+      authority,
+      draftId: resumeKey,
+    });
+  });
+
+  it("keeps a tenant-authorized Builder draft on the ordinary GitHub connection path", async () => {
+    const repositoryAccess = {
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Model no repository continuation callback.
+      authorize: vi.fn<() => Promise<string | undefined>>().mockResolvedValue(undefined),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      classify: vi.fn(async () => readyAccess),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      hasBuilderDraft: vi.fn(async () => true),
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- No repository continuation exists for a Builder draft.
+      inspect: vi.fn<() => Promise<typeof target | undefined>>().mockResolvedValue(undefined),
+    };
+    const { route, beginExisting } = handlers(undefined, repositoryAccess);
+    const response = await route.start(
+      new Request("https://builder.example/github/installations/start", {
+        body: new URLSearchParams({ resumeKey, returnTo: "/" }),
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Origin: "https://builder.example",
+        },
+        method: "POST",
+      }),
+    );
+    expect(response.headers.get("location")).toContain("github.com/login/oauth/authorize");
+    expect(repositoryAccess.hasBuilderDraft).toHaveBeenCalledWith({
+      authority,
+      draftId: resumeKey,
+    });
+    expect(repositoryAccess.classify).not.toHaveBeenCalled();
+    expect(beginExisting).toHaveBeenCalledWith(authority, { resumeKey, returnTo: "/" }, undefined);
+  });
   it("accepts only a same-origin form POST before leaving Preview", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const { route, begin } = handlers();
+    const { route, begin, beginExisting } = handlers();
     const response = await route.start(
       new Request("https://builder.example/github/installations/start", {
         body: "",
@@ -76,9 +329,10 @@ describe("GitHub App installation routes", () => {
       }),
     );
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toContain("github.com/apps/");
+    expect(response.headers.get("location")).toContain("github.com/login/oauth/authorize");
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(begin).toHaveBeenCalledWith(authority, { returnTo: "/" });
+    expect(beginExisting).toHaveBeenCalledWith(authority, { returnTo: "/" }, undefined);
+    expect(begin).not.toHaveBeenCalled();
 
     const denied = await route.start(
       new Request("https://builder.example/github/installations/start", {
@@ -93,12 +347,11 @@ describe("GitHub App installation routes", () => {
     expect(denied.headers.get("location")).toBe(
       "https://builder.example/?github=failed&githubReason=request-invalid",
     );
-    expect(begin).toHaveBeenCalledOnce();
+    expect(beginExisting).toHaveBeenCalledOnce();
   });
 
   it("starts direct authorization for an existing installation without changing GitHub access", async () => {
     const { route, begin, beginExisting } = handlers();
-    const resumeKey = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
     const response = await route.start(
       new Request("https://builder.example/github/installations/start", {
         body: new URLSearchParams({ connectionMode: "existing", resumeKey, returnTo: "/" }),
@@ -110,7 +363,7 @@ describe("GitHub App installation routes", () => {
       }),
     );
     expect(response.headers.get("location")).toContain("github.com/login/oauth/authorize");
-    expect(beginExisting).toHaveBeenCalledWith(authority, { resumeKey, returnTo: "/" });
+    expect(beginExisting).toHaveBeenCalledWith(authority, { resumeKey, returnTo: "/" }, undefined);
     expect(begin).not.toHaveBeenCalled();
   });
 
@@ -185,9 +438,24 @@ describe("GitHub App installation routes", () => {
     expect(logged).not.toContain("secret-code");
   });
 
+  it("reports a denied GitHub authorization without claiming a connection", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { route, complete } = handlers();
+    complete.mockRejectedValueOnce(
+      new GitHubInstallationAuthorizationError("oauth-callback-error", "access_denied"),
+    );
+    const response = await route.callback(
+      new Request(
+        "https://builder.example/github/installations/callback?error=access_denied&state=opaque",
+      ),
+    );
+    expect(response.headers.get("location")).toBe(
+      "https://builder.example/?github=failed&githubReason=access-denied",
+    );
+  });
+
   it("passes an opaque draft-resume key through a successful callback", async () => {
-    const { route, begin, complete } = handlers();
-    const resumeKey = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
+    const { route, beginExisting, complete } = handlers();
     const response = await route.start(
       new Request("https://builder.example/github/installations/start", {
         body: new URLSearchParams({ resumeKey, returnTo: "/" }),
@@ -199,7 +467,7 @@ describe("GitHub App installation routes", () => {
       }),
     );
     expect(response.status).toBe(303);
-    expect(begin).toHaveBeenCalledWith(authority, { resumeKey, returnTo: "/" });
+    expect(beginExisting).toHaveBeenCalledWith(authority, { resumeKey, returnTo: "/" }, undefined);
     complete.mockResolvedValueOnce({
       accountType: "Organization" as const,
       action: "github-app.installation.complete" as const,
@@ -213,6 +481,7 @@ describe("GitHub App installation routes", () => {
       stateDigest: "b".repeat(64),
       status: "bound" as const,
       version: 1 as const,
+      via: "installation" as const,
     });
     const callback = await route.callback(
       new Request("https://builder.example/github/installations/callback?state=opaque"),
@@ -240,6 +509,7 @@ describe("GitHub App installation routes", () => {
       stateDigest: "b".repeat(64),
       status: "bound" as const,
       version: 1 as const,
+      via: "installation" as const,
     }));
     const onConnected = vi.fn(
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double

@@ -248,6 +248,8 @@ const signedState = (input: {
   nonce: string;
   phase: "install" | "authorize";
   installationId?: string;
+  targetAccountLogin?: string;
+  via?: "existing" | "installation";
   setupAction?: "install" | "update";
   returnState: ProviderConnectionReturn;
 }) => {
@@ -260,6 +262,10 @@ const signedState = (input: {
         ["authorityDigest", binding],
         ["phase", input.phase],
         ...(input.installationId === undefined ? [] : [["installationId", input.installationId]]),
+        ...(input.targetAccountLogin === undefined
+          ? []
+          : [["targetAccountLogin", input.targetAccountLogin]]),
+        ...(input.via === undefined ? [] : [["via", input.via]]),
         ...(input.setupAction === undefined ? [] : [["setupAction", input.setupAction]]),
         ["returnTo", input.returnState.returnTo],
         ...(input.returnState.resumeKey === undefined
@@ -293,7 +299,9 @@ const statePayloadSchema = z
     resumeKey: z.string().uuid().optional(),
     returnTo: providerConnectionReturnToSchema,
     setupAction: z.enum(["install", "update"]).optional(),
+    targetAccountLogin: githubLoginSchema.optional(),
     version: z.literal(1),
+    via: z.enum(["existing", "installation"]).optional(),
   })
   .strict();
 
@@ -386,6 +394,8 @@ const verifyState = (input: {
     },
     setupAction: parsed.setupAction,
     stateDigest: sha256(input.state),
+    targetAccountLogin: parsed.targetAccountLogin,
+    via: parsed.via,
   };
 };
 
@@ -591,6 +601,7 @@ const accessibleInstallation = async (input: {
   appId: string;
   appSlug: string;
   requestedInstallationId?: string;
+  targetAccountLogin?: string;
 }) => {
   const candidates: ReturnType<typeof installationIdentity>[] = [];
   for (let page = 1; page <= 10; page += 1) {
@@ -621,7 +632,9 @@ const accessibleInstallation = async (input: {
         installation.appSlug === input.appSlug &&
         installation.targetType === installation.accountType &&
         (input.requestedInstallationId === undefined ||
-          installation.installationId === input.requestedInstallationId)
+          installation.installationId === input.requestedInstallationId) &&
+        (input.targetAccountLogin === undefined ||
+          installation.accountLogin.toLowerCase() === input.targetAccountLogin.toLowerCase())
       ) {
         candidates.push(installation);
       }
@@ -633,14 +646,10 @@ const accessibleInstallation = async (input: {
       throw new Error("too-many-installations");
     }
   }
-  if (candidates.length !== 1) {
-    throw new Error("ambiguous-installation");
+  if (candidates.length === 1) {
+    return { installation: candidates[0], kind: "selected" } as const;
   }
-  const [candidate] = candidates;
-  if (candidate === undefined) {
-    throw new Error("ambiguous-installation");
-  }
-  return candidate;
+  return { kind: candidates.length === 0 ? "none" : "ambiguous" } as const;
 };
 
 export const createGitHubAppInstallationAuthorization = (input: {
@@ -714,6 +723,8 @@ export const createGitHubAppInstallationAuthorization = (input: {
     authority: HostedTenantAuthority;
     returnState: ProviderConnectionReturn;
     installationId?: string;
+    targetAccountLogin?: string;
+    via: "existing" | "installation";
     setupAction: "install" | "update";
   }) => {
     const issuedAt = now();
@@ -726,6 +737,8 @@ export const createGitHubAppInstallationAuthorization = (input: {
       returnState: details.returnState,
       setupAction: details.setupAction,
       stateSecret: config.stateSecret,
+      targetAccountLogin: details.targetAccountLogin,
+      via: details.via,
     });
     await input.stateStore.create({
       authority: details.authority,
@@ -781,56 +794,59 @@ export const createGitHubAppInstallationAuthorization = (input: {
     };
   };
 
-  return {
-    async begin(
-      authorityInput: HostedTenantAuthority,
-      returnState: ProviderConnectionReturn = defaultReturnState,
-    ) {
-      try {
-        const authority = hostedTenantAuthoritySchema.parse(authorityInput);
-        if (!(await input.membership.isActiveMember(authority))) {
-          throw new Error("membership-inactive");
-        }
-        const issuedAt = now();
-        const state = signedState({
-          authority,
-          nonce: nonce(),
-          now: issuedAt,
-          phase: "install",
-          returnState,
-          stateSecret: config.stateSecret,
-        });
-        await input.stateStore.create({
-          authority,
-          authorityDigest: state.authorityDigest,
-          createdAt: new Date(issuedAt),
-          expiresAt: state.expiresAt,
-          returnState,
-          stateDigest: state.stateDigest,
-        });
-        const redirect = input.emulation
-          ? new URL("/local-connections/github", config.issuer)
-          : new URL(`/apps/${config.appSlug}/installations/new`, GITHUB_ORIGIN);
-        redirect.searchParams.set("state", state.state);
-        if (input.emulation && returnState.resumeKey) {
-          redirect.searchParams.set("resume", returnState.resumeKey);
-        }
-        return {
-          action: "github-app.installation.begin" as const,
-          authorityDigest: state.authorityDigest,
-          expiresAt: state.expiresAt.toISOString(),
-          redirectUrl: redirect.toString(),
-          stateDigest: state.stateDigest,
-          status: "redirect" as const,
-          version: 1 as const,
-        };
-      } catch {
-        throw new Error(FAILURE_MESSAGE);
+  const beginInstall = async (
+    authorityInput: HostedTenantAuthority,
+    returnState: ProviderConnectionReturn = defaultReturnState,
+  ) => {
+    try {
+      const authority = hostedTenantAuthoritySchema.parse(authorityInput);
+      if (!(await input.membership.isActiveMember(authority))) {
+        throw new Error("membership-inactive");
       }
-    },
+      const issuedAt = now();
+      const state = signedState({
+        authority,
+        nonce: nonce(),
+        now: issuedAt,
+        phase: "install",
+        returnState,
+        stateSecret: config.stateSecret,
+      });
+      await input.stateStore.create({
+        authority,
+        authorityDigest: state.authorityDigest,
+        createdAt: new Date(issuedAt),
+        expiresAt: state.expiresAt,
+        returnState,
+        stateDigest: state.stateDigest,
+      });
+      const redirect = input.emulation
+        ? new URL("/local-connections/github", config.issuer)
+        : new URL(`/apps/${config.appSlug}/installations/new`, GITHUB_ORIGIN);
+      redirect.searchParams.set("state", state.state);
+      if (input.emulation && returnState.resumeKey) {
+        redirect.searchParams.set("resume", returnState.resumeKey);
+      }
+      return {
+        action: "github-app.installation.begin" as const,
+        authorityDigest: state.authorityDigest,
+        expiresAt: state.expiresAt.toISOString(),
+        redirectUrl: redirect.toString(),
+        stateDigest: state.stateDigest,
+        status: "redirect" as const,
+        version: 1 as const,
+      };
+    } catch {
+      throw new Error(FAILURE_MESSAGE);
+    }
+  };
+
+  return {
+    begin: beginInstall,
     async beginExisting(
       authorityInput: HostedTenantAuthority,
       returnState: ProviderConnectionReturn = defaultReturnState,
+      target?: { accountLogin?: string; installationId?: string },
     ) {
       try {
         const authority = hostedTenantAuthoritySchema.parse(authorityInput);
@@ -841,6 +857,13 @@ export const createGitHubAppInstallationAuthorization = (input: {
           authority,
           returnState,
           setupAction: "update",
+          via: "existing",
+          ...(target?.accountLogin
+            ? { targetAccountLogin: githubLoginSchema.parse(target.accountLogin) }
+            : {}),
+          ...(target?.installationId
+            ? { installationId: decimalSchema.parse(target.installationId) }
+            : {}),
         });
       } catch {
         throw new Error(FAILURE_MESSAGE);
@@ -948,6 +971,7 @@ export const createGitHubAppInstallationAuthorization = (input: {
             installationId: callback.installationId,
             returnState: state.returnState,
             setupAction: callback.setupAction,
+            via: "installation",
           });
         }
         if (
@@ -1006,9 +1030,9 @@ export const createGitHubAppInstallationAuthorization = (input: {
         } catch {
           throw new GitHubInstallationAuthorizationError("github-user-verification");
         }
-        let installation: ReturnType<typeof installationIdentity>;
+        let installation: ReturnType<typeof installationIdentity> | undefined;
         try {
-          installation = emulation
+          const selection = emulation
             ? await (async () => {
                 const [owner, repo] = emulation.githubRepository.split("/");
                 if (!owner || !repo) {
@@ -1022,18 +1046,28 @@ export const createGitHubAppInstallationAuthorization = (input: {
                 if (
                   (state.installationId !== undefined &&
                     value.installationId !== state.installationId) ||
+                  (state.targetAccountLogin !== undefined &&
+                    value.accountLogin.toLowerCase() !== state.targetAccountLogin.toLowerCase()) ||
                   value.appId !== config.appId
                 ) {
                   throw new Error("installation-mismatch");
                 }
-                return value;
+                return { installation: value, kind: "selected" } as const;
               })()
             : await accessibleInstallation({
                 appId: config.appId,
                 appSlug: config.appSlug,
                 octokit: userOctokit,
                 requestedInstallationId: state.installationId,
+                targetAccountLogin: state.targetAccountLogin,
               });
+          if (selection.kind !== "selected") {
+            if (state.installationId !== undefined) {
+              throw new Error("The selected installation is unavailable.");
+            }
+            return await beginInstall(authority, state.returnState);
+          }
+          ({ installation } = selection);
           if (installation.suspendedAt !== null) {
             throw new Error("GitHub installation is suspended.");
           }
@@ -1082,6 +1116,7 @@ export const createGitHubAppInstallationAuthorization = (input: {
           stateDigest: state.stateDigest,
           status: "bound" as const,
           version: 1 as const,
+          via: state.via ?? (state.installationId === undefined ? "existing" : "installation"),
         };
       } catch (error) {
         if (error instanceof GitHubInstallationAuthorizationError) {

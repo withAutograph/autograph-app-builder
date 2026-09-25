@@ -21,10 +21,10 @@ for (const { path, title, region, button } of [
     title: "Create your Autograph account",
   },
   {
-    button: "Install or update GitHub access",
+    button: "Continue with GitHub",
     path: "/github/installations",
     region: "Provider connection loading",
-    title: "Connect a GitHub App installation",
+    title: "Connect GitHub",
   },
   {
     button: "Connect to Vercel",
@@ -99,7 +99,7 @@ for (const { label, pathname } of [
 
 test("provider Back Link commits the builder before deferred content", async ({ page }) => {
   await page.goto("/github/installations");
-  await expect(page.getByRole("button", { name: "Install or update GitHub access" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Continue with GitHub" })).toBeEnabled();
   await instant(page, async () => {
     await page.getByRole("link", { exact: true, name: "Back" }).click();
     await page.waitForURL((url) => url.pathname === "/");

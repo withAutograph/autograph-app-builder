@@ -8,15 +8,14 @@ import { ProviderConnection, ProviderConnectionNotice } from "./provider-connect
 const meta = {
   args: {
     action: "/github/installations/start",
-    buttonLabel: "Install or update GitHub access",
+    buttonLabel: "Continue with GitHub",
     children: null,
-    description:
-      "Choose repository access for a new installation, or connect an existing installation that already has access.",
+    description: "Connect GitHub so Autograph can access the repository for this app.",
+    headerLabel: "Connect GitHub",
     icon: <FaGithub size={23} />,
     resumeKey: "resume-123",
     returnTo: "/",
-    secondaryAction: { buttonLabel: "Connect existing installation", mode: "existing" },
-    title: "Connect a GitHub App installation",
+    title: "Connect GitHub",
   },
   component: ProviderConnection,
   parameters: { layout: "fullscreen" },
@@ -26,7 +25,13 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const GitHub: Story = {};
+export const GitHub: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("button", { name: "Continue with GitHub" })).toBeVisible();
+    await expect(canvas.getAllByRole("button")).toHaveLength(1);
+  },
+};
 export const GitHubConnected: Story = {
   args: {
     children: (
@@ -51,6 +56,7 @@ export const Vercel: Story = {
     buttonLabel: "Connect to Vercel",
     description:
       "Choose the Vercel account Autograph may use for projects and deployments. Connecting it does not create or deploy anything yet.",
+    headerLabel: "New App",
     icon: <SiVercel size={22} />,
     title: "Connect a Vercel team",
   },
@@ -66,6 +72,7 @@ export const VercelFailed: Story = {
     ),
     description:
       "Choose the Vercel account Autograph may use for projects and deployments. Connecting it does not create or deploy anything yet.",
+    headerLabel: "New App",
     icon: <SiVercel size={22} />,
     title: "Connect a Vercel team",
   },
