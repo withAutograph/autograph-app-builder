@@ -10,11 +10,11 @@ import {
   HOSTED_DEPENDENCY_MANIFEST_SHA256,
 } from "./hosted-artifact";
 
-export const HOSTED_MISE_VERSION = "2026.8.12";
+export const HOSTED_MISE_VERSION = "2026.9.12";
 export const HOSTED_BUN_VERSION = "1.3.14";
 export const HOSTED_NODE_VERSION = "24.18.0";
 export const HOSTED_RUST_VERSION = "1.97.1";
-export const HOSTED_TOOLCHAIN_CONTRACT_VERSION = 5;
+export const HOSTED_TOOLCHAIN_CONTRACT_VERSION = 6;
 export const HOSTED_TOOLCHAIN_PREWARM_TIMEOUT_MS = 900_000;
 
 export const hostedToolchainArtifacts = {
@@ -22,8 +22,8 @@ export const hostedToolchainArtifacts = {
     bunDirectory: "bun-linux-aarch64",
     bunSha256: "a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b",
     bunUrl: "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-aarch64.zip",
-    miseSha256: "071e2d16905360fa04762422a2a889692bb3a4d30f27650de50bc1ac0564840b",
-    miseUrl: "https://github.com/jdx/mise/releases/download/v2026.8.12/mise-v2026.8.12-linux-arm64",
+    miseSha256: "f344c6961190ed2f68e595ed7cb4f03c36c17812bd608886bec799a3082180ff",
+    miseUrl: "https://github.com/jdx/mise/releases/download/v2026.9.12/mise-v2026.9.12-linux-arm64",
     nodeDirectory: "node-v24.18.0-linux-arm64",
     nodeSha256: "6b4484c2190274175df9aa8f28e2d758a819cb1c1fe6ab481e2f95b463ab8508",
     nodeUrl: "https://nodejs.org/dist/v24.18.0/node-v24.18.0-linux-arm64.tar.gz",
@@ -46,8 +46,8 @@ export const hostedToolchainArtifacts = {
     bunDirectory: "bun-linux-x64",
     bunSha256: "951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f",
     bunUrl: "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64.zip",
-    miseSha256: "f2092b1e67f0abc8803d3be120dd2bc5b656dd99680ba3159f710e149da10d05",
-    miseUrl: "https://github.com/jdx/mise/releases/download/v2026.8.12/mise-v2026.8.12-linux-x64",
+    miseSha256: "e79ae57945034903aee8aa2ea66b4c7ca9cd4f4edd5a8a78a589cbae6d0f428a",
+    miseUrl: "https://github.com/jdx/mise/releases/download/v2026.9.12/mise-v2026.9.12-linux-x64",
     nodeDirectory: "node-v24.18.0-linux-x64",
     nodeSha256: "783130984963db7ba9cbd01089eaf2c2efb055c7c1693c943174b967b3050cb8",
     nodeUrl: "https://nodejs.org/dist/v24.18.0/node-v24.18.0-linux-x64.tar.gz",
@@ -222,7 +222,7 @@ sudo install --owner=root --group=root --mode=0444 "$artifact/dependency-cache/m
 sudo install --owner=root --group=root --mode=0444 "$artifact/dependency-cache/node-modules.tar.gz" /opt/app-builder/dependency-cache/node-modules.tar.gz
 stage='toolchain-readback'
 git --version
-mise --version | grep -E '^2026[.]8[.]12($| )'
+mise --version | grep -E '^2026[.]9[.]12($| )'
 bun --version | grep -E '^1[.]3[.]14$'
 node --version | grep -E '^v24[.]18[.]0$'
 cargo --version | grep -E '^cargo 1[.]97[.]1 '

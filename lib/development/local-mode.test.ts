@@ -227,7 +227,7 @@ describe("development dependency key", () => {
     const source = await fixture();
     const tools = {
       bun: "1.3.14",
-      mise: "2026.8.12",
+      mise: "2026.9.12",
       node: "24.18.0",
       rust: "1.97.1",
     };

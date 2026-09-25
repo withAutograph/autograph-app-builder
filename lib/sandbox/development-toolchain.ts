@@ -340,7 +340,7 @@ LD_LIBRARY_PATH="$root/rust/lib"
 export LD_LIBRARY_PATH
 TERM='xterm-256color'
 export TERM
-mise --version | grep -E '^2026[.]8[.]12($| )'
+mise --version | grep -E '^2026[.]9[.]12($| )'
 bun --version | grep -E '^1[.]3[.]14$'
 node --version | grep -E '^v24[.]18[.]0$'
 cargo --version | grep -E '^cargo 1[.]97[.]1 '

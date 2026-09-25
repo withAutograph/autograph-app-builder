@@ -4,8 +4,8 @@ FROM ghcr.io/vercel/eve@sha256:56e1da284465b012c5476c3b67d78f7365ffaa1a7d4997775
 
 USER root
 
-ARG MISE_VERSION=2026.8.12
-ARG MISE_SHA256=071e2d16905360fa04762422a2a889692bb3a4d30f27650de50bc1ac0564840b
+ARG MISE_VERSION=2026.9.12
+ARG MISE_SHA256=f344c6961190ed2f68e595ed7cb4f03c36c17812bd608886bec799a3082180ff
 ARG BUN_VERSION=1.3.14
 ARG BUN_SHA256=a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b
 ARG RUST_VERSION=1.97.1
@@ -50,7 +50,7 @@ RUN set -eux; \
 
 RUN set -eux; \
     git --version; \
-    mise --version | grep -E '^2026[.]8[.]12($| )'; \
+    mise --version | grep -E '^2026[.]9[.]12($| )'; \
     bun --version | grep -E '^1[.]3[.]14$'
 
 FROM toolchain AS dependency-cache

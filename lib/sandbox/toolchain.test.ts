@@ -44,7 +44,7 @@ describe("sandbox toolchain contract", () => {
 
   it("requires the pinned mise and Bun versions", () => {
     expect(toolVersionMatches("git", "git version 2.50.1")).toBe(true);
-    expect(toolVersionMatches("mise", "2026.8.12 macos-arm64")).toBe(true);
+    expect(toolVersionMatches("mise", "2026.9.12 macos-arm64")).toBe(true);
     expect(toolVersionMatches("bun", "1.3.14")).toBe(true);
     expect(toolVersionMatches("mise", "2026.8.13")).toBe(false);
     expect(toolVersionMatches("bun", "1.3.15")).toBe(false);
