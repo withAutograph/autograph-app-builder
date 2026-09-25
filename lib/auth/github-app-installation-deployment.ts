@@ -260,6 +260,11 @@ export function createGitHubAppInstallationRouteHandlers(input: {
           error.category === "access_denied"
         ) {
           reason = "access-denied";
+        } else if (
+          error instanceof GitHubInstallationAuthorizationError &&
+          error.installationValidation === "requested-installation-unavailable"
+        ) {
+          reason = "installation-not-accessible";
         }
         return fail(
           reason,

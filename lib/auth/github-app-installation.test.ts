@@ -31,6 +31,7 @@ function harness(input?: {
   membership?: () => boolean;
   fetch?: typeof fetch;
   emulation?: ProviderEmulation;
+  failInstallState?: boolean;
 }) {
   const states = new Map<string, { authorityDigest: string; consumed: boolean }>();
   const events: string[] = [];
@@ -52,6 +53,12 @@ function harness(input?: {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     async create(value) {
       events.push("state:create");
+      if (
+        input?.failInstallState === true &&
+        events.filter((event) => event === "state:create").length > 1
+      ) {
+        throw new Error("state store unavailable");
+      }
       states.set(value.stateDigest, {
         authorityDigest: value.authorityDigest,
         consumed: false,
@@ -497,6 +504,22 @@ describe("public GitHub App installation authorization", () => {
     expect(bind).not.toHaveBeenCalled();
   });
 
+  it("identifies a failed handoff to GitHub installation setup", async () => {
+    const requests: { url: string; init?: RequestInit }[] = [];
+    const { authorization } = harness({
+      failInstallState: true,
+      fetch: successfulFetch(requests, "selected", []),
+    });
+    const begun = await authorization.beginExisting(authority, DEFAULT_RETURN_STATE);
+    const state = requiredSearchParam(new URL(begun.redirectUrl), "state");
+    await expect(
+      authorization.complete(authorizationCallbackUrl(state), authority),
+    ).rejects.toMatchObject({
+      installationValidation: "installation-handoff",
+      stage: "installation-identity-validation",
+    });
+  });
+
   it("selects the installation matching the verified repository account", async () => {
     const requests: { url: string; init?: RequestInit }[] = [];
     const { authorization, bind } = harness({
@@ -528,6 +551,23 @@ describe("public GitHub App installation authorization", () => {
     await expect(
       authorization.complete(authorizationCallbackUrl(state), authority),
     ).resolves.toMatchObject({ status: "bound", via: "existing" });
+  });
+
+  it("identifies an installation the GitHub user token cannot access", async () => {
+    const requests: { url: string; init?: RequestInit }[] = [];
+    const { authorization, bind } = harness({ fetch: successfulFetch(requests) });
+    const begun = await authorization.beginExisting(authority, DEFAULT_RETURN_STATE, {
+      accountLogin: "withAutograph",
+      installationId: "99999",
+    });
+    const state = requiredSearchParam(new URL(begun.redirectUrl), "state");
+    await expect(
+      authorization.complete(authorizationCallbackUrl(state), authority),
+    ).rejects.toMatchObject({
+      installationValidation: "requested-installation-unavailable",
+      stage: "installation-identity-validation",
+    });
+    expect(bind).not.toHaveBeenCalled();
   });
 
   it("uses GitHub's installation choice to resolve multiple accessible accounts", async () => {

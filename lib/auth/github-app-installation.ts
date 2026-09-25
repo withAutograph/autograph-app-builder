@@ -70,7 +70,12 @@ export type GitHubInstallationValidationSubstage =
   | "provider-request"
   | "response-shape"
   | "matching-installation-shape"
-  | "selection";
+  | "selection"
+  | "requested-installation-unavailable"
+  | "installation-ambiguous"
+  | "installation-suspended"
+  | "personal-installation-mismatch"
+  | "installation-handoff";
 
 export const githubInstallationAuthorizationDiagnostic = (error: unknown) => {
   if (!(error instanceof GitHubInstallationAuthorizationError)) {
@@ -1103,16 +1108,24 @@ export const createGitHubAppInstallationAuthorization = (input: {
               });
           if (selection.kind !== "selected") {
             if (state.installationId !== undefined) {
-              throw new Error("The selected installation is unavailable.");
+              throw new GitHubInstallationValidationError(
+                selection.kind === "none"
+                  ? "requested-installation-unavailable"
+                  : "installation-ambiguous",
+              );
             }
-            return await beginInstall(authority, state.returnState);
+            try {
+              return await beginInstall(authority, state.returnState);
+            } catch {
+              throw new GitHubInstallationValidationError("installation-handoff");
+            }
           }
           ({ installation } = selection);
           if (installation.suspendedAt !== null) {
-            throw new Error("GitHub installation is suspended.");
+            throw new GitHubInstallationValidationError("installation-suspended");
           }
           if (installation.accountType === "User" && installation.accountId !== providerUserId) {
-            throw new Error("GitHub installation belongs to another provider user.");
+            throw new GitHubInstallationValidationError("personal-installation-mismatch");
           }
         } catch (error) {
           throw new GitHubInstallationAuthorizationError(
