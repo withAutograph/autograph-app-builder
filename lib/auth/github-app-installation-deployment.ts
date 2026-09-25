@@ -400,10 +400,6 @@ export function getGitHubAppInstallationDeploymentHandlers(
         );
       }
     : undefined;
-  const providerCredentials = parseGitHubAppHttpProviderCredentials({
-    appId: config.appId,
-    privateKey: resolvedEnvironment.GITHUB_APP_PRIVATE_KEY,
-  });
   const authorization = createGitHubAppInstallationAuthorization({
     config,
     credentialStore,
@@ -425,6 +421,10 @@ export function getGitHubAppInstallationDeploymentHandlers(
     repository: string;
     selectedInstallationId?: string;
   }) => {
+    const providerCredentials = parseGitHubAppHttpProviderCredentials({
+      appId: config.appId,
+      privateKey: resolvedEnvironment.GITHUB_APP_PRIVATE_KEY,
+    });
     const options = {
       authority: value.authority,
       installations,

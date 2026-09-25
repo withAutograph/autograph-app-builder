@@ -7,6 +7,7 @@ import { ProviderConnection, ProviderConnectionNotice } from "@/app/ui/provider-
 import { ProviderConnectionLoadingShell } from "@/app/ui/route-loading-shell";
 import { verifiedGitHubConnectionTarget } from "@/lib/auth/github-app-installation-deployment";
 import { headers } from "next/headers";
+import { connection } from "next/server";
 import { Suspense } from "react";
 import { FaGithub } from "react-icons/fa";
 
@@ -21,6 +22,7 @@ interface Props {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function GitHubInstallationsContent({ searchParams }: Props) {
+  await connection();
   const { status, reason, returnTo, resume } = await searchParams;
   const failureReason = parseProviderConnectionFailureReason(reason);
   const returnState = safeProviderConnectionReturn({
