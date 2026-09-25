@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { SandboxSession } from "eve/sandbox";
+import { z } from "zod";
 
 import type { CanonicalTemplateSnapshot, SourceReceipt } from "./source-receipt";
 import {
@@ -58,16 +59,17 @@ const parseBranch = function parseBranch(input: string) {
   return input;
 };
 
-// Kept temporarily for stored receipt parsing while the legacy inspection
-// writer is removed from the active source path.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const sandboxCloneInspectionProgram = String.raw`
+export const sandboxGitHubSourceManifestProgram = (
+  rootPath: string,
+  manifestDirectory: string,
+) => String.raw`
 const { execFileSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
-const { mkdirSync, readFileSync, writeFileSync } = require("node:fs");
+const { lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } = require("node:fs");
 const { isAbsolute, resolve } = require("node:path");
 
-const root = "/workspace/repository";
+const root = ${JSON.stringify(rootPath)};
+const actualRoot = realpathSync(root);
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const git = (args, encoding = "utf-8") => execFileSync(
   "git",
@@ -96,23 +98,30 @@ const files = output
   .toString("utf-8")
   .split("\0")
   .filter(Boolean)
-  .map((entry) => {
+  .flatMap((entry) => {
     const match = /^(100644|100755) blob ([0-9a-f]{40})\t([^\r\n]+)$/.exec(entry);
-    if (match === null || !safeSourcePath(match[3]))
+    if (match === null) {
+      if (/^(120000 blob|160000 commit) [0-9a-f]{40}\t[^\r\n]+$/.test(entry)) return [];
       throw new Error("unsupported cloned source entry");
+    }
+    if (!safeSourcePath(match[3])) throw new Error("unsafe cloned source entry");
     const path = match[3];
     const file = resolve(root, path);
-    if (!file.startsWith(root + "/"))
+    if (
+      !file.startsWith(root + "/") ||
+      !lstatSync(file).isFile() ||
+      !realpathSync(file).startsWith(actualRoot + "/")
+    )
       throw new Error("cloned source path escaped its workspace");
-    return {
+    return [{
       mode: match[1],
       objectId: match[2],
       path,
       sha256: sha256(readFileSync(file)),
-    };
+    }];
   });
 if (files.length === 0) throw new Error("cloned source tree is empty");
-const appBuilder = "/workspace/.app-builder";
+const appBuilder = ${JSON.stringify(manifestDirectory)};
 mkdirSync(appBuilder, { recursive: true });
 writeFileSync(
   appBuilder + "/source-files.json",
@@ -122,29 +131,6 @@ writeFileSync(
   appBuilder + "/source-checksums.sha256",
   files.map((file) => file.sha256 + "  repository/" + file.path).join("\n") + "\n",
 );
-const inputPaths = ${JSON.stringify(SUPPORTED_TEMPLATE_INPUT_PATHS)};
-const contents = {};
-for (const path of [...inputPaths, ".config/repository-template.json"]) {
-  const file = resolve(root, path);
-  try {
-    contents[path] = readFileSync(file, "utf-8");
-  } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
-  }
-}
-const filesByPath = new Map(files.map((file) => [file.path, file]));
-const contractPaths = ${JSON.stringify(SUPPORTED_REPOSITORY_CONTRACT.requiredPaths)};
-const contract = contractPaths.map((path) => {
-  const file = filesByPath.get(path);
-  if (file === undefined)
-    throw new Error("source contract path is not a regular blob");
-  return {
-    path,
-    mode: file.mode,
-    objectId: file.objectId,
-    sha256: sha256(git(["show", sourceSha + ":" + path], "buffer")),
-  };
-});
 const dirtyPaths = git(["status", "--porcelain=v1"])
   .split("\n")
   .filter(Boolean)
@@ -156,8 +142,8 @@ writeFileSync(
     sourceSha,
     sourceTree,
     dirtyPaths,
-    contents,
-    contract,
+    contents: {},
+    contract: [],
   }),
 );
 console.log(JSON.stringify({ sourceSha, sourceTree, workspaceDigest: sha256(JSON.stringify(files)) }));
@@ -385,6 +371,46 @@ export const readSandboxGitHubSourceSnapshot = async function readSandboxGitHubS
     sourceSha: observed.sourceSha,
     sourceTree: observed.sourceTree,
   };
+};
+
+/** Record the provider checkout's regular tracked files for app inspection and dependency setup. */
+export const writeSandboxGitHubSourceManifest = async function writeSandboxGitHubSourceManifest(
+  sandbox: SandboxSession,
+  expected: { sourceSha: string; sourceTree: string },
+): Promise<string> {
+  const result = await sandbox.run({
+    abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
+    command: `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 node -e ${shellQuote(sandboxGitHubSourceManifestProgram(SANDBOX_WORKSPACE, "/workspace/.app-builder"))}`,
+    workingDirectory: "/workspace",
+  });
+  if (
+    result.exitCode !== 0 ||
+    Buffer.byteLength(result.stdout) > SANDBOX_INSPECTION_BYTES ||
+    Buffer.byteLength(result.stderr) > SANDBOX_OPERATION_OUTPUT_BYTES
+  ) {
+    throw new Error("The selected GitHub source manifest could not be prepared.");
+  }
+  let observation: unknown;
+  try {
+    observation = JSON.parse(result.stdout) as unknown;
+  } catch {
+    throw new Error("The selected GitHub source manifest is invalid.");
+  }
+  const parsed = z
+    .strictObject({
+      sourceSha: z.string().regex(SHA),
+      sourceTree: z.string().regex(SHA),
+      workspaceDigest: z.string().regex(/^[0-9a-f]{64}$/u),
+    })
+    .safeParse(observation);
+  if (
+    !parsed.success ||
+    parsed.data.sourceSha !== expected.sourceSha ||
+    parsed.data.sourceTree !== expected.sourceTree
+  ) {
+    throw new Error("The selected GitHub source manifest does not match its revision.");
+  }
+  return parsed.data.workspaceDigest;
 };
 
 // Kept temporarily for stored receipt parsing while the legacy inspection
