@@ -148,6 +148,7 @@ export function createRepositoryAccessRuntime(input: {
   installations: Parameters<typeof classifyGitHubRepositoryAccess>[0]["installations"];
   providerFactory: Parameters<typeof classifyGitHubRepositoryAccess>[0]["providerFactory"];
   continuations: ReturnType<typeof createRepositoryAccessContinuationService>;
+  protectionBypassSecret?: string;
   preparedIntent?: BuilderHandoffIntent;
   returnTo?: ProviderConnectionReturn["returnTo"];
 }): RepositoryAccessRuntime {
@@ -225,11 +226,20 @@ export function createRepositoryAccessRuntime(input: {
       return defineInteractiveAuthorization<{ continuationId: string }>({
         async completeAuthorization({ callback, principal, resume }) {
           exactPrincipal(principal, input.authority);
+          const extraParams = Object.keys(callback.params).filter(
+            (key) => key !== "provider" && key !== "status",
+          );
+          let validBypass = extraParams.length === 0;
+          if (extraParams.length === 1 && extraParams[0] === "x-vercel-protection-bypass") {
+            validBypass =
+              input.protectionBypassSecret !== undefined &&
+              callback.params["x-vercel-protection-bypass"] === input.protectionBypassSecret;
+          }
           if (
             callback.method !== "GET" ||
             callback.params.provider !== "github" ||
             callback.params.status !== "connected" ||
-            Object.keys(callback.params).some((key) => key !== "provider" && key !== "status")
+            !validBypass
           ) {
             throw failed("callback_invalid", "GitHub access confirmation was invalid or expired.");
           }
@@ -521,10 +531,19 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
   return createRepositoryAccessRuntime({
     authority,
     continuations: createRepositoryAccessContinuationService({
+      ...(process.env.VERCEL_ENV === "production" && process.env.VERCEL_PROJECT_PRODUCTION_URL
+        ? { callbackOrigin: `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` }
+        : {}),
+      ...(process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+        ? { protectionBypassSecret: process.env.VERCEL_AUTOMATION_BYPASS_SECRET.trim() }
+        : {}),
       store: createPostgresRepositoryAccessContinuationStore(runtimeInput.database),
     }),
     installations,
     origin: input.origin,
+    ...(process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+      ? { protectionBypassSecret: process.env.VERCEL_AUTOMATION_BYPASS_SECRET.trim() }
+      : {}),
     preparedIntent,
     providerFactory: ({ installation }) =>
       createGitHubAppHttpProvider({
