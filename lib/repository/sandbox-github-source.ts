@@ -300,38 +300,80 @@ export const readSandboxGitHubSourceSnapshot = async function readSandboxGitHubS
   sandbox: SandboxSession,
   expected: { repository: string; sourceSha?: string; sourceTree?: string },
 ): Promise<CanonicalTemplateSnapshot> {
-  const result = await sandbox.run({
-    command:
-      "git -C /workspace/repository rev-parse HEAD && git -C /workspace/repository rev-parse HEAD^{tree} && git -C /workspace/repository remote get-url origin",
+  const checkoutCommand = (path: string) =>
+    `git -C ${shellQuote(path)} rev-parse HEAD && git -C ${shellQuote(path)} rev-parse HEAD^{tree} && git -C ${shellQuote(path)} remote get-url origin`;
+  const inspect = (stdout: string) => {
+    const [sourceSha, sourceTree, remote] = stdout.trim().split(/\s+/u);
+    if (
+      sourceSha === undefined ||
+      sourceTree === undefined ||
+      remote === undefined ||
+      !SHA.test(sourceSha) ||
+      !SHA.test(sourceTree)
+    ) {
+      throw new Error("GitHub did not return a repository revision.");
+    }
+    if (
+      parseRemote(remote) !== parseRemote(expected.repository) ||
+      (expected.sourceSha !== undefined && sourceSha !== expected.sourceSha) ||
+      (expected.sourceTree !== undefined && sourceTree !== expected.sourceTree)
+    ) {
+      throw new Error("The sandbox checkout does not match the selected GitHub source.");
+    }
+    return { sourceSha, sourceTree };
+  };
+  const canonical = await sandbox.run({
+    command: checkoutCommand(SANDBOX_WORKSPACE),
     workingDirectory: "/workspace",
   });
-  if (result.exitCode !== 0) {
-    throw new Error("The selected GitHub checkout is not available.");
-  }
-  const [sourceSha, sourceTree, remote] = result.stdout.trim().split(/\s+/u);
-  if (
-    sourceSha === undefined ||
-    sourceTree === undefined ||
-    remote === undefined ||
-    !SHA.test(sourceSha) ||
-    !SHA.test(sourceTree)
-  ) {
-    throw new Error("GitHub did not return a repository revision.");
-  }
-  if (
-    parseRemote(remote) !== parseRemote(expected.repository) ||
-    (expected.sourceSha !== undefined && sourceSha !== expected.sourceSha) ||
-    (expected.sourceTree !== undefined && sourceTree !== expected.sourceTree)
-  ) {
-    throw new Error("The sandbox checkout does not match the selected GitHub source.");
+  let observed: ReturnType<typeof inspect>;
+  if (canonical.exitCode === 0) {
+    observed = inspect(canonical.stdout);
+  } else {
+    // Never replace an occupied workspace, even if it is not a valid Git
+    // checkout. Vercel's Git source lives below its own working directory.
+    const occupied = await sandbox.run({
+      command: `test -e ${shellQuote(SANDBOX_WORKSPACE)} || test -L ${shellQuote(SANDBOX_WORKSPACE)}`,
+      workingDirectory: "/workspace",
+    });
+    if (occupied.exitCode === 0) {
+      throw new Error("The selected GitHub checkout is not available.");
+    }
+    const repositoryName = new URL(parseRemote(expected.repository)).pathname.split("/").at(-1);
+    if (repositoryName === undefined) {
+      throw new Error("The GitHub source remote is invalid.");
+    }
+    const providerPath = `/vercel/sandbox/${repositoryName.slice(0, -4)}`;
+    const providerCheckout = await sandbox.run({
+      command: checkoutCommand(providerPath),
+      workingDirectory: "/workspace",
+    });
+    if (providerCheckout.exitCode !== 0) {
+      throw new Error("Vercel did not materialize the selected GitHub source.");
+    }
+    observed = inspect(providerCheckout.stdout);
+    const linked = await sandbox.run({
+      command: `mkdir -p /workspace && ln -s -- ${shellQuote(providerPath)} ${shellQuote(SANDBOX_WORKSPACE)}`,
+      workingDirectory: "/workspace",
+    });
+    if (linked.exitCode !== 0) {
+      const concurrent = await sandbox.run({
+        command: checkoutCommand(SANDBOX_WORKSPACE),
+        workingDirectory: "/workspace",
+      });
+      if (concurrent.exitCode !== 0) {
+        throw new Error("The selected GitHub checkout is not available.");
+      }
+      observed = inspect(concurrent.stdout);
+    }
   }
   return {
     contents: {},
     contract: [],
     dirtyPaths: [],
     sourcePath: SANDBOX_WORKSPACE,
-    sourceSha,
-    sourceTree,
+    sourceSha: observed.sourceSha,
+    sourceTree: observed.sourceTree,
   };
 };
 
