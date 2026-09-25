@@ -29,8 +29,9 @@ async function GitHubInstallationsContent({ searchParams }: Props) {
     <ProviderConnection
       action="/github/installations/start"
       buttonLabel="Install or update GitHub access"
-      description="Choose the repositories this workspace may inspect or update, or allow all repositories. For an existing installation, GitHub must have Redirect on update enabled to return here."
+      description="Choose repository access for a new installation, or connect an existing installation that already has access."
       icon={<FaGithub size={23} />}
+      secondaryAction={{ buttonLabel: "Connect existing installation", mode: "existing" }}
       returnTo={returnState.returnTo}
       resumeKey={returnState.resumeKey}
       title="Connect a GitHub App installation"

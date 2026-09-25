@@ -89,6 +89,11 @@ operation-scoped installation tokens: metadata read, contents read/write,
 workflows read/write, pull requests read/write, administration read/write, and
 variables read. The App Builder narrows these permissions again for each
 operation and performs no repository mutation during the connection flow.
+When an installation already has the needed repository access, the connection
+page offers a separate existing-installation action. It sends the signed-in user
+directly through GitHub App OAuth, then binds exactly one provider-verified
+installation to the current workspace without requiring a repository settings
+change. Ambiguous installations fail closed.
 
 The separate web handoff provisioning path is gated by
 `builder-resource-provisioning`. It journals intent before provider calls,

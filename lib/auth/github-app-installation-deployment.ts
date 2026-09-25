@@ -41,6 +41,8 @@ const noStoreHeaders = {
   "Cache-Control": "no-store",
   "Referrer-Policy": "no-referrer",
 } as const;
+const EXISTING_CONNECTION_MODE = "existing";
+const REQUEST_INVALID = "request-invalid";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGitHubAppInstallationRouteHandlers(input: {
@@ -91,7 +93,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         return redirect("failed", reason, returnState);
       };
       if (request.method !== "GET") {
-        return fail("request-invalid");
+        return fail(REQUEST_INVALID);
       }
 
       let authority: Authority | undefined;
@@ -167,7 +169,7 @@ export function createGitHubAppInstallationRouteHandlers(input: {
         request.headers.get("content-type")?.split(";", 1)[0] !==
           "application/x-www-form-urlencoded"
       ) {
-        return fail("request-invalid");
+        return fail(REQUEST_INVALID);
       }
 
       let authority: Authority | undefined;
@@ -193,8 +195,16 @@ export function createGitHubAppInstallationRouteHandlers(input: {
       }
 
       try {
-        const returnState = providerConnectionReturnFromFormData(await request.formData());
-        const result = await input.authorization.begin(authority, returnState);
+        const formData = await request.formData();
+        const returnState = providerConnectionReturnFromFormData(formData);
+        const mode = formData.get("connectionMode");
+        if (mode !== null && mode !== EXISTING_CONNECTION_MODE) {
+          return fail(REQUEST_INVALID, undefined, returnState);
+        }
+        const result =
+          mode === EXISTING_CONNECTION_MODE
+            ? await input.authorization.beginExisting(authority, returnState)
+            : await input.authorization.begin(authority, returnState);
         return new Response(null, {
           headers: {
             ...noStoreHeaders,

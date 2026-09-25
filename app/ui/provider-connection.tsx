@@ -12,6 +12,7 @@ interface ProviderConnectionProps {
   children: ReactNode;
   description: string;
   icon: ReactNode;
+  secondaryAction?: { buttonLabel: string; mode: string };
   returnTo: string;
   resumeKey?: string;
   title: string;
@@ -24,6 +25,7 @@ export function ProviderConnection({
   children,
   description,
   icon,
+  secondaryAction,
   returnTo,
   resumeKey,
   title,
@@ -61,6 +63,16 @@ export function ProviderConnection({
               {buttonLabel}
             </Button>
           </form>
+          {secondaryAction ? (
+            <form className="flex flex-col gap-4" method="post" action={action}>
+              <input name="returnTo" type="hidden" value={returnTo} />
+              {resumeKey ? <input name="resumeKey" type="hidden" value={resumeKey} /> : null}
+              <input name="connectionMode" type="hidden" value={secondaryAction.mode} />
+              <Button className="w-full" type="submit" variant="outline">
+                {secondaryAction.buttonLabel}
+              </Button>
+            </form>
+          ) : null}
         </CardContent>
       </Card>
     </main>
