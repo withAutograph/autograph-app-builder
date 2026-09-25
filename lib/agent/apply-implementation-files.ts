@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { ApplyCommandExecutor } from "@/lib/repository/target-apply";
+import type { TargetProposal } from "@/lib/repository/target-planning";
 import { runSequentially } from "@/lib/async-sequential";
 
 const implementationFilePathSchema = z
@@ -44,6 +45,20 @@ export const implementationFilesSchema = z
   });
 
 export type ImplementationFile = z.infer<typeof implementationFilesSchema>[number];
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function assertExistingAppImplementationFiles(
+  files: readonly ImplementationFile[],
+  proposal: TargetProposal,
+) {
+  if (
+    "operation" in proposal &&
+    proposal.operation === "iterate-existing-app" &&
+    files.some((file) => !file.path.startsWith(`${proposal.plan.source.workspacePath}/`))
+  ) {
+    throw new Error("Existing-app implementation files must stay inside the app workspace.");
+  }
+}
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertImplementationArchitecture(
@@ -92,13 +107,7 @@ export function withImplementationFiles(
   files: readonly ImplementationFile[],
 ): ApplyCommandExecutor {
   return async (input) => {
-    if (
-      "operation" in input.proposal &&
-      input.proposal.operation === "iterate-existing-app" &&
-      files.some((file) => !file.path.startsWith(`${input.proposal.plan.source.workspacePath}/`))
-    ) {
-      throw new Error("Existing-app implementation files must stay inside the app workspace.");
-    }
+    assertExistingAppImplementationFiles(files, input.proposal);
     const relativeApplyRoot = input.applyRoot.replace(/^\/workspace\//u, "");
     const cuePath = `.config/app-specs/${input.appId}.cue`;
     const cue = files.find((file) => file.path === cuePath);
