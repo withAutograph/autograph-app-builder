@@ -65,7 +65,7 @@ RUN set -eux; \
       "    \"bun.lock\": \"${BUN_LOCK_SHA256}\"," \
       "    \"Cargo.lock\": \"${CARGO_LOCK_SHA256}\"" \
       '  },' \
-      '  "runtime": { "node": "24.18.0", "bun": "1.3.14", "mise": "2026.8.12", "rust": "1.97.1" },' \
+      '  "runtime": { "node": "24.18.0", "bun": "1.3.14", "mise": "2026.9.12", "rust": "1.97.1" },' \
       '  "closure": {' \
       '    "package": "@vercel/microfrontends",' \
       '    "version": "2.4.0",' \

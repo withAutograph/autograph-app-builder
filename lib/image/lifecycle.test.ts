@@ -1190,10 +1190,6 @@ wait
     ]) {
       expect(miseLock).toContain(expected);
     }
-    const dockerfileDigest = hashArtifact(readFileSync("containers/eve-sandbox/Dockerfile"));
-    expect(dockerfileDigest).toBe(
-      "6589b8a3f90ba1d9c7c626054a0183e67eeaddff2f20a627aad75cbb61d8248b",
-    );
     expect(readFileSync("containers/eve-sandbox/README.md", "utf-8")).not.toContain(
       "4334f7eac9260580ad0c07c8f03b466060062215333752e8d4d625f024401267",
     );

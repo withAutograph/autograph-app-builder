@@ -126,7 +126,7 @@ const developmentManifest = {
   platform: "linux/amd64",
   runtime: {
     bun: "1.3.14",
-    mise: "2026.8.12",
+    mise: "2026.9.12",
     node: "24.18.0",
     rust: "1.97.1",
   },
@@ -357,7 +357,7 @@ describe("offline dependency cache", () => {
       platform: "linux/x86_64",
       runtime: {
         bun: "1.3.14",
-        mise: "2026.8.12",
+        mise: "2026.9.12",
         node: "24.18.0",
         rust: "1.97.1",
       },
@@ -729,7 +729,7 @@ describe("offline dependency cache", () => {
         platform: "linux/arm64",
         runtime: {
           bun: "1.3.14",
-          mise: "2026.8.12",
+          mise: "2026.9.12",
           node: "24.18.0",
           rust: "1.97.1",
         },

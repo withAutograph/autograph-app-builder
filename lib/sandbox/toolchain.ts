@@ -5,7 +5,7 @@ export const TOOLCHAIN_IMAGE_ENV = "APP_BUILDER_SANDBOX_IMAGE";
 export const requiredToolVersions = {
   bun: /^1\.3\.14(?:\s|$)/u,
   git: /^git version \d+\.\d+\.\d+/u,
-  mise: /^2026\.8\.12(?:\s|$)/u,
+  mise: /^2026\.9\.12(?:\s|$)/u,
 } as const;
 
 export type RequiredTool = keyof typeof requiredToolVersions;

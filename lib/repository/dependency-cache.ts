@@ -170,7 +170,7 @@ export const developmentDependencyCacheManifestSchema = z.strictObject({
   platform: z.union([z.literal("linux/arm64"), z.literal("linux/amd64")]),
   runtime: z.strictObject({
     bun: z.literal(ARRUSTED_BUN_VERSION),
-    mise: z.literal("2026.8.12"),
+    mise: z.literal("2026.9.12"),
     node: z.literal("24.18.0"),
     rust: z.literal(ARRUSTED_RUST_VERSION),
   }),
