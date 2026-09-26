@@ -128,7 +128,7 @@ const sensitiveAssignmentPattern =
   /(?<name>authorization|cookie|password|passwd|secret|token|api[-_]?key)(?<separator>\s*[:=]\s*)(?<value>[^\s,;]+)/giu;
 const bearerPattern = /Bearer\s+[^\s,;]+/giu;
 const repairLinePattern =
-  /(?:^|\s)(?:apps\/|error(?:\s+TS\d+|:)|typescript\(TS\d+\)|FAIL\s|Build failed|Failed to compile|Module not found|Cannot find (?:module|name)|Script not found|Formatting issues found|schema-compiler:|Schema compilation failed|Schema release generation failed|ToolNotFound:|linker\s+[`"']?cc|cue:|cargo:|rustc:|mise(?:\s+ERROR|:)|The compiler produced no diagnostic output|The compiler returned no output|No CUE source location was reported|Install a native C compiler|Install the repository's locked mise tools|Read the compiler error and its CUE file location|Retry:)/iu;
+  /(?:^|\s)(?:apps\/|error(?:\s+TS\d+|:)|typescript\(TS\d+\)|FAIL\s|Build failed|Failed to compile|Module not found|Cannot find (?:module|name)|Script not found|Formatting issues found|schema-compiler:|Schema compilation failed|Schema release generation failed|The schema compiler produced invalid JSON|Compiler output excerpt:|ToolNotFound:|linker\s+[`"']?cc|cue:|cargo:|rustc:|mise(?:\s+ERROR|:)|The compiler produced no diagnostic output|The compiler returned no output|No CUE source location was reported|Install a native C compiler|Install the repository's locked mise tools|Read the compiler error and its CUE file location|Retry:)/iu;
 const diagnosticContinuationPattern = /^(?:\s+\S|\s*\^|\s*\||\s*(?:caused by|help|note|retry):)/iu;
 
 // Keep enough compiler/build output for an agent to repair its own candidate,
@@ -141,7 +141,9 @@ export const validationOutputExcerpt = (
   const sanitize = (value: string) => {
     const lines = value
       .replaceAll(ansiPattern, "")
-      .replaceAll(/[^\t\n\r\u0020-\u007E]/gu, "")
+      .replaceAll(/\p{Cc}/gu, (character) =>
+        character === "\t" || character === "\n" || character === "\r" ? character : "",
+      )
       .replaceAll(bearerPattern, "Bearer [REDACTED]")
       .replaceAll(sensitiveAssignmentPattern, "$<name>$<separator>[REDACTED]")
       .replaceAll(/(?:\/workspace\/repository\/)?(?=apps\/)/gu, "")
