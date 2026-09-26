@@ -4,7 +4,17 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
 
-import { OVERLAY_SNAPSHOT_SCRIPT } from "./target-apply";
+import { inspectApplyOverlay, OVERLAY_SNAPSHOT_SCRIPT } from "./target-apply";
+
+it("reports the source snapshot operation, cause, and repair when sandbox execution fails", async () => {
+  const sandbox = {
+    run: async () =>
+      await Promise.resolve({ exitCode: 127, stderr: "bun: command not found", stdout: "" }),
+  };
+  await expect(inspectApplyOverlay(sandbox, "/workspace/repository")).rejects.toThrow(
+    "Builder's source snapshot failed in /workspace/repository with exit 127. Cause: bun: command not found. Check the checkout, file permissions, and Bun runtime, then retry.",
+  );
+});
 
 it("keeps Next runtime output out of reviewed changes while retaining application source", () => {
   const root = mkdtempSync(path.join(tmpdir(), "app-builder-source-snapshot-"));
@@ -16,6 +26,11 @@ it("keeps Next runtime output out of reviewed changes while retaining applicatio
       ".next/cache/state.json",
       "apps/example/next.config.ts",
       "apps/example/.next-guide.md",
+      ".git/index",
+      ".turbo/cache/state.json",
+      "apps/example/.turbo/turbo-test.log",
+      "apps/example/node_modules/.vite/results.json",
+      "apps/example/next-env.d.ts",
     ];
     for (const file of files) {
       mkdirSync(path.join(root, file, ".."), { recursive: true });

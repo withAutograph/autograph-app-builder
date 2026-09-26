@@ -9,6 +9,7 @@ import {
   inspectFixtureApplyOverlay,
   overlayChanges,
 } from "@/lib/repository/target-apply";
+import type { OverlayChange } from "@/lib/repository/target-apply";
 import { deriveNormalizedChangeSet } from "@/lib/repository/reviewed-change-set";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
@@ -23,11 +24,9 @@ export const isCandidateExportTextPath = (path: string): boolean => {
 
 const MAX_EXPORT_FILE_BYTES = 512 * 1024;
 const MAX_EXPORT_TOTAL_BYTES = 2 * 1024 * 1024;
+type ChangePath = Pick<OverlayChange, "path" | "kind">;
 
-export const changedAppTextPaths = (
-  changes: readonly { path: string; kind: "added" | "modified" | "deleted" }[],
-  appId: string,
-): string[] =>
+export const changedAppTextPaths = (changes: readonly ChangePath[], appId: string): string[] =>
   changes
     .filter(
       ({ path, kind }) =>
@@ -35,8 +34,28 @@ export const changedAppTextPaths = (
     )
     .map(({ path }) => path);
 
+// An existing-app iteration can stage planning metadata in the overlay. Its
+// publication is restricted to the selected app and excludes tooling output
+// left by validation or preview. Apply the same scope to review and export.
+export const reviewableChanges = <T extends ChangePath>(
+  changes: readonly T[],
+  appId: string,
+  existingApp: boolean,
+) =>
+  changes.filter(({ path }) => {
+    if (
+      /(?:^|\/)(?:\.git|\.scratch|\.next|\.turbo|node_modules|dist|coverage|storybook-static)(?:\/|$)/u.test(
+        path,
+      ) ||
+      /(?:^|\/)next-env\.d\.ts$/u.test(path)
+    ) {
+      return false;
+    }
+    return !existingApp || path.startsWith(`apps/${appId}/`);
+  });
+
 export const boundedChangedAppTextExport = async (
-  changes: readonly { path: string; kind: "added" | "modified" | "deleted" }[],
+  changes: readonly ChangePath[],
   appId: string,
   readText: (path: string) => PromiseLike<string | null>,
 ) => {
@@ -90,12 +109,16 @@ export const exactNormalizedChangeSet = async (input: {
         input.state.appSpec.appId,
       )
     : await inspectApplyOverlay(input.sandbox, input.state.applyReceipt.applyRoot);
-  const changes = overlayChanges(
-    {
-      files: input.state.applyReceipt.preTree,
-      treeDigest: input.state.applyReceipt.preTreeDigest,
-    },
-    observed,
+  const changes = reviewableChanges(
+    overlayChanges(
+      {
+        files: input.state.applyReceipt.preTree,
+        treeDigest: input.state.applyReceipt.preTreeDigest,
+      },
+      observed,
+    ),
+    input.state.appSpec.appId,
+    "operation" in input.state.proposal,
   );
   return deriveNormalizedChangeSet(
     {
@@ -125,12 +148,16 @@ const exportAppliedTextFiles = async (input: {
         input.state.appSpec.appId,
       )
     : await inspectApplyOverlay(input.sandbox, input.state.applyReceipt.applyRoot);
-  const changes = overlayChanges(
-    {
-      files: input.state.applyReceipt.preTree,
-      treeDigest: input.state.applyReceipt.preTreeDigest,
-    },
-    observed,
+  const changes = reviewableChanges(
+    overlayChanges(
+      {
+        files: input.state.applyReceipt.preTree,
+        treeDigest: input.state.applyReceipt.preTreeDigest,
+      },
+      observed,
+    ),
+    input.state.appSpec.appId,
+    "operation" in input.state.proposal,
   );
   // A complete app checkout can include tens of megabytes of unchanged schema history.
   const bounded = await boundedChangedAppTextExport(changes, input.state.appSpec.appId, (path) =>

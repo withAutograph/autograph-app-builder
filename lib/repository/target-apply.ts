@@ -345,13 +345,13 @@ const visit = (directory, relativeDirectory) => {
     const relativePath = relativeDirectory
       ? relativeDirectory + "/" + entry.name
       : entry.name;
+    // Tooling state can appear anywhere in a prepared repository. None of it
+    // belongs in a source review or a published change set.
     if (
-      relativeDirectory === "" &&
-      (relativePath === "node_modules" || relativePath === ".scratch")
-    )
-      continue;
-    // Next build output is runtime state, never a reviewable source change.
-    if (entry.isDirectory() && entry.name === ".next") continue;
+      entry.isDirectory() &&
+      [".git", ".scratch", ".next", ".turbo", "node_modules", "dist", "coverage", "storybook-static"].includes(entry.name)
+    ) continue;
+    if (entry.isFile() && entry.name === "next-env.d.ts") continue;
     const absolutePath = join(directory, entry.name);
     if (entry.isDirectory()) {
       visit(absolutePath, relativePath);
@@ -383,17 +383,48 @@ export function overlaySnapshotCommand(): string {
   return `bun -e '${OVERLAY_SNAPSHOT_SCRIPT}'`;
 }
 
+const snapshotFailureDetail = (value: string): string =>
+  value
+    .replaceAll(/\p{Cc}/gu, (character) =>
+      character === "\n" || character === "\t" ? character : "",
+    )
+    .replaceAll(/Bearer\s+[^\s,;]+/giu, "Bearer [REDACTED]")
+    .replaceAll(
+      /\b(?<key>authorization|cookie|password|passwd|secret|token|api[-_]?key)\s*[:=]\s*[^\s,;]+/giu,
+      "$<key>=[REDACTED]",
+    )
+    .replaceAll(
+      /\b(?:gh[oprsu]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,})\b/gu,
+      "[REDACTED]",
+    )
+    .trim()
+    .slice(0, 1200);
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function inspectApplyOverlay(
-  sandbox: SandboxSession,
+  sandbox: {
+    run: (input: { command: string; workingDirectory: string }) => PromiseLike<ApplyCommandResult>;
+  },
   applyRoot: string,
 ): Promise<OverlaySnapshot> {
-  const result = await sandbox.run({
-    command: overlaySnapshotCommand(),
-    workingDirectory: applyRoot,
-  });
+  let result: ApplyCommandResult;
+  try {
+    result = await sandbox.run({
+      command: overlaySnapshotCommand(),
+      workingDirectory: applyRoot,
+    });
+  } catch (error) {
+    const cause = snapshotFailureDetail(error instanceof Error ? error.message : String(error));
+    throw new Error(
+      `Builder could not run the source snapshot in ${applyRoot}. Cause: ${cause || "The sandbox returned no cause"}. Check that the checkout and Bun runtime are available, then retry.`,
+      { cause: error },
+    );
+  }
   if (result.exitCode !== 0) {
-    throw new Error("The proposal apply overlay could not be inspected.");
+    const cause = snapshotFailureDetail(`${result.stderr}\n${result.stdout}`);
+    throw new Error(
+      `Builder's source snapshot failed in ${applyRoot} with exit ${result.exitCode}. Cause: ${cause || "The command returned no output"}. Check the checkout, file permissions, and Bun runtime, then retry.`,
+    );
   }
   const files = result.stdout
     .split("\n")
@@ -769,7 +800,7 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
 export async function executeProposalBoundApply(input: {
   sandbox: SandboxSession;
   executor: ApplyCommandExecutor;
-  snapshotter?: typeof inspectApplyOverlay;
+  snapshotter?: (sandbox: SandboxSession, applyRoot: string) => Promise<OverlaySnapshot>;
   binding: TargetApplyBinding;
   artifactRevision: string;
   dependencyLayout?: ExecutionDependencyLayout;
