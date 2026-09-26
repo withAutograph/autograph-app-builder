@@ -41,7 +41,8 @@ const silentInternalApprovalTools = new Set([
   "validate-app-creation",
   "accept_change_set",
 ]);
-const unavailableConfirmationMessage = "I couldn't verify this action, so it was not run.";
+const unavailableConfirmationMessage =
+  "Builder could not read the requested confirmation, so no action was run. Refresh this saved session and retry the confirmation; if it repeats, report the session ID and request title.";
 const publicFailureLimit = 700;
 const publicErrorCode = (value: string) =>
   /^[A-Za-z][A-Za-z0-9_]{0,79}$/u.test(value) ? value : "unknown_error";
@@ -79,12 +80,15 @@ const publicSessionFailure = (
   }
   const code = publicErrorCode(event.data.code);
   const detail = publicFailureDetail(event.data.message);
-  let cause = "The provider returned no cause.";
-  if (detail.length > 0) {
-    cause = `Cause: ${detail}`;
-    if (!/[.!?]$/u.test(detail)) {
-      cause += ".";
-    }
+  if (detail.length === 0) {
+    return {
+      code,
+      message: `Builder could not complete ${name} (${code}). The provider returned no diagnostic cause, so Builder cannot identify a file or setting to change. Retry this saved session once; if it repeats, report this operation, error code, and session ID as a missing-provider-diagnostic defect.`,
+    };
+  }
+  let cause = `Cause: ${detail}`;
+  if (!/[.!?]$/u.test(detail)) {
+    cause += ".";
   }
   return {
     code,

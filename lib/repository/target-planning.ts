@@ -183,26 +183,47 @@ const planningMarker = (marker: string, phase: "start" | "finish") => {
   }
 };
 
+const planningFailureDetail = (value: string): string =>
+  value
+    .replaceAll(/https?:\/\/[^\s]+/giu, "[URL REDACTED]")
+    .replaceAll(/Bearer\s+[^\s,;]+/giu, "Bearer [REDACTED]")
+    .replaceAll(
+      /\b(?:gh[oprsu]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,})\b/gu,
+      "[REDACTED]",
+    )
+    .replaceAll(
+      /\b(?<key>authorization|cookie|password|passwd|secret|token|api[-_]?key)\s*[:=]\s*[^\s,;]+/giu,
+      "$<key>=[REDACTED]",
+    )
+    .replaceAll(/\s+/gu, " ")
+    .trim()
+    .slice(0, 500);
+
 const parseOutput = <T>(result: TargetCommandResult, schema: z.ZodType<T>, label: string): T => {
   const stdout = result.stdout
     .replaceAll(new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu"), "")
     .replaceAll("\r", "")
     .trim();
   if (result.exitCode !== 0) {
-    const diagnostic = result.stderr.trim() || result.stdout.trim();
+    const diagnostic = planningFailureDetail(result.stderr || result.stdout);
     throw new Error(
-      `${label} failed with exit code ${result.exitCode}${diagnostic.length === 0 ? "." : `: ${diagnostic.slice(0, 2000)}`}`,
+      `${label} failed with exit code ${result.exitCode}. Check the named repository task and its dependencies, then retry planning. Cause: ${diagnostic || "The command returned no diagnostic output."}`,
     );
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(stdout) as unknown;
-  } catch {
-    throw new Error(`${label} returned invalid JSON.`);
+  } catch (error) {
+    throw new Error(
+      `${label} returned invalid JSON. Check that the repository task writes one JSON result to stdout and diagnostics to stderr, then retry planning. Cause: ${planningFailureDetail(error instanceof Error ? error.message : String(error))}`,
+      { cause: error },
+    );
   }
   const validated = schema.safeParse(parsed);
   if (!validated.success) {
-    throw new Error(`${label} returned an invalid shape.`);
+    throw new Error(
+      `${label} returned JSON that does not match Builder's expected result. Check the repository task output contract, then retry planning. Cause: ${planningFailureDetail(validated.error.issues.map((issue) => `${issue.path.join(".") || "result"}: ${issue.message}`).join("; "))}`,
+    );
   }
   return validated.data;
 };
@@ -274,18 +295,28 @@ export const materializePlanningOverlay = async (input: {
   // Copy the current writable checkout in one operation. Let the filesystem
   // report a real missing-checkout or copy failure instead of predicting one
   // from a stale or absent inventory.
-  const copy = await input.sandbox.run({
-    abortSignal: AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS),
-    command: `cp -R /workspace/repository/. /workspace/${root}/`,
-    workingDirectory: "/workspace",
-  });
+  let copy: Awaited<ReturnType<SandboxSession["run"]>>;
+  try {
+    copy = await input.sandbox.run({
+      abortSignal: AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS),
+      command: `cp -R /workspace/repository/. /workspace/${root}/`,
+      workingDirectory: "/workspace",
+    });
+  } catch (error) {
+    throw new Error(
+      `The source copy into the planning overlay could not run. Check sandbox availability and /workspace/repository, then retry. Cause: ${planningFailureDetail(error instanceof Error ? error.message : String(error)) || "The sandbox provider returned no diagnostic output."}`,
+      { cause: error },
+    );
+  }
   if (copy.exitCode !== 0) {
     await input.sandbox.removePath({
       force: true,
       path: root,
       recursive: true,
     });
-    throw new Error("Prepared source copy into the planning overlay failed.");
+    throw new Error(
+      `Prepared source copy into the planning overlay failed with exit ${copy.exitCode}. Check that /workspace/repository exists and is readable and that the sandbox has enough space, then retry. Cause: ${planningFailureDetail(copy.stderr || copy.stdout) || "The copy command returned no diagnostic output."}`,
+    );
   }
   const appSpecPath = `prototype/${input.appId}/app-spec.md`;
   await input.sandbox.writeTextFile({

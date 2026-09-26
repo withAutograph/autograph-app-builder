@@ -224,7 +224,8 @@ describe("installed Eve 0.43 projection", () => {
       {
         code: "confirmation_unavailable",
         index: 3,
-        message: "I couldn't verify this action, so it was not run.",
+        message:
+          "Builder could not read the requested confirmation, so no action was run. Refresh this saved session and retry the confirmation; if it repeats, report the session ID and request title.",
         type: "error.public",
       },
       { index: 3, status: "failed", type: "status" },
@@ -265,7 +266,8 @@ describe("installed Eve 0.43 projection", () => {
       {
         code: "confirmation_unavailable",
         index: 3,
-        message: "I couldn't verify this action, so it was not run.",
+        message:
+          "Builder could not read the requested confirmation, so no action was run. Refresh this saved session and retry the confirmation; if it repeats, report the session ID and request title.",
         type: "error.public",
       },
       { index: 3, status: "failed", type: "status" },
@@ -329,7 +331,8 @@ describe("installed Eve 0.43 projection", () => {
         {
           code: "confirmation_unavailable",
           index: 4,
-          message: "I couldn't verify this action, so it was not run.",
+          message:
+            "Builder could not read the requested confirmation, so no action was run. Refresh this saved session and retry the confirmation; if it repeats, report the session ID and request title.",
           type: "error.public",
         },
         { index: 4, status: "failed", type: "status" },
@@ -408,7 +411,8 @@ describe("installed Eve 0.43 projection", () => {
       {
         code: "confirmation_unavailable",
         index: 4,
-        message: "I couldn't verify this action, so it was not run.",
+        message:
+          "Builder could not read the requested confirmation, so no action was run. Refresh this saved session and retry the confirmation; if it repeats, report the session ID and request title.",
         type: "error.public",
       },
       { index: 4, status: "failed", type: "status" },
@@ -417,7 +421,8 @@ describe("installed Eve 0.43 projection", () => {
       {
         code: "confirmation_unavailable",
         index: 0,
-        message: "I couldn't verify this action, so it was not run.",
+        message:
+          "Builder could not read the requested confirmation, so no action was run. Refresh this saved session and retry the confirmation; if it repeats, report the session ID and request title.",
         type: "error",
       },
       { index: 1, status: "failed", type: "status" },
@@ -476,7 +481,8 @@ describe("installed Eve 0.43 projection", () => {
       {
         code: "confirmation_unavailable",
         index: 4,
-        message: "I couldn't verify this action, so it was not run.",
+        message:
+          "Builder could not read the requested confirmation, so no action was run. Refresh this saved session and retry the confirmation; if it repeats, report the session ID and request title.",
         type: "error.public",
       },
       { index: 4, status: "failed", type: "status" },
@@ -740,6 +746,19 @@ describe("installed Eve 0.43 projection", () => {
       },
       { index: 1, status: "failed", type: "status" },
     ]);
+  });
+
+  it("identifies missing provider diagnostics instead of telling the user to fix an unknown cause", () => {
+    const projected = projectInstalledEveEvents([
+      installedEvent({
+        data: { code: "execution_error", message: "" },
+        type: "session.failed",
+      }),
+    ]);
+    const message = projected[0]?.type === "error" ? projected[0].message : "";
+    expect(message).toContain("provider returned no diagnostic cause");
+    expect(message).toContain("operation, error code, and session ID");
+    expect(message).not.toContain("correct the cause");
   });
 
   it("names the failed operation and workflow size limit without exposing URLs or tokens", () => {

@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { readSandboxGitHubSourceSnapshot } from "./sandbox-github-source";
+import {
+  readSandboxGitHubSourceSnapshot,
+  writeSandboxGitHubSourceManifest,
+} from "./sandbox-github-source";
 
 const sha = "a".repeat(40);
 const tree = "b".repeat(40);
@@ -87,7 +90,7 @@ describe("provider-created sandbox GitHub source", () => {
       .mockResolvedValueOnce({ exitCode: 128, stderr: "", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" });
     await expect(readSandboxGitHubSourceSnapshot({ run } as never, expected)).rejects.toThrow(
-      "checkout is not available",
+      "occupied by a non-Git directory",
     );
     expect(run).toHaveBeenCalledTimes(2);
   });
@@ -103,6 +106,41 @@ describe("provider-created sandbox GitHub source", () => {
       "Vercel did not materialize the selected GitHub source",
     );
     expect(run).toHaveBeenCalledTimes(4);
+  });
+
+  it("includes provider stderr and a recovery action when source discovery fails", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 128, stderr: "not a git repository", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 128, stderr: "permission denied", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 128, stderr: "directory missing", stdout: "" });
+    await expect(readSandboxGitHubSourceSnapshot({ run } as never, expected)).rejects.toThrow(
+      /Check the selected repository access.*permission denied.*directory missing/u,
+    );
+  });
+
+  it("names a sandbox failure and redacts credentials while inspecting the checkout", async () => {
+    const run = vi
+      .fn()
+      .mockRejectedValue(new Error("token=github_pat_12345678901234567890 timeout"));
+    const operation = readSandboxGitHubSourceSnapshot({ run } as never, expected);
+    await expect(operation).rejects.toThrow("could not inspect the Builder checkout");
+    await expect(operation).rejects.toThrow("token=[REDACTED]");
+  });
+
+  it("reports manifest command stderr, its exit code, and a recovery action", async () => {
+    const run = vi.fn().mockResolvedValue({
+      exitCode: 127,
+      stderr: "node: command not found",
+      stdout: "",
+    });
+    await expect(
+      writeSandboxGitHubSourceManifest({ run } as never, {
+        sourceSha: sha,
+        sourceTree: tree,
+      }),
+    ).rejects.toThrow(/manifest \(exit 127\).*Check that Git and Node.*node: command not found/u);
   });
 
   it("rejects a mismatched provider checkout before linking it", async () => {
