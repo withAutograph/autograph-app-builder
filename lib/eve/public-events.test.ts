@@ -795,4 +795,21 @@ describe("installed Eve 0.43 projection", () => {
     expect(JSON.stringify(projected)).not.toContain("github_pat_123456789");
     expect(JSON.stringify(projected)).not.toContain("private.example");
   });
+
+  it("keeps the source location and repair from a multiline compiler failure", () => {
+    const projected = projectInstalledEveEvents([
+      installedEvent({
+        data: {
+          code: "schema_compilation_failed",
+          message:
+            "Schema compilation failed for review-app (exit 1).\nschema-compiler: apps/review-app/schema/review-app.cue:12:4: conflicting values\nRetry: correct the named CUE field and rerun schema:release. token=private",
+        },
+        type: "session.failed",
+      }),
+    ]);
+    const message = projected[0]?.type === "error" ? projected[0].message : "";
+    expect(message).toContain("apps/review-app/schema/review-app.cue:12:4");
+    expect(message).toContain("correct the named CUE field");
+    expect(message).not.toContain("token=private");
+  });
 });

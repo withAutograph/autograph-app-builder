@@ -46,7 +46,8 @@ const publicFailureLimit = 700;
 const publicErrorCode = (value: string) =>
   /^[A-Za-z][A-Za-z0-9_]{0,79}$/u.test(value) ? value : "unknown_error";
 const publicFailureDetail = (value: string) =>
-  (value.split("\n", 1)[0] ?? "")
+  value
+    .replaceAll(/\s*\r?\n\s*/gu, " | ")
     .replaceAll(/\p{Cc}/gu, " ")
     .replaceAll(/https?:\/\/[^\s]+/giu, "[URL REDACTED]")
     .replaceAll(/Bearer\s+[^\s,;]+/giu, "Bearer [REDACTED]")
