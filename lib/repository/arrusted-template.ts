@@ -514,18 +514,18 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
     }
     return observed;
   }
+  if (input.githubSource !== undefined) {
+    // The selected repository stays bound to this session, while its checkout
+    // is normal writable planning input. Re-observe that checkout on every
+    // call instead of comparing it with the source-selection snapshot.
+    return await inspectGitHubSourceSandboxWorkspace({
+      githubSource: input.githubSource,
+      sandbox: input.sandbox,
+    });
+  }
   const receipt = parseSourceReceipt(input.receipt);
   let observed: PreparedSandboxWorkspace;
-  if (input.githubSource !== undefined) {
-    observed = await inspectGitHubSourceSandboxWorkspace({
-      githubSource: input.githubSource,
-      receipt,
-      sandbox: input.sandbox,
-      ...(input.expectedWorkspace === undefined
-        ? {}
-        : { expectedWorkspace: input.expectedWorkspace }),
-    });
-  } else if (receipt.version === SOURCE_RECEIPT_VERSION) {
+  if (receipt.version === SOURCE_RECEIPT_VERSION) {
     observed = await inspectCanonicalArrustedSandboxWorkspace({
       receipt,
       sandbox: input.sandbox,

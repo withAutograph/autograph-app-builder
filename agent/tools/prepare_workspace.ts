@@ -54,7 +54,6 @@ export default defineTool({
     if (!development && source.githubSource !== undefined) {
       githubWorkspace = await inspectGitHubSourceSandboxWorkspace({
         githubSource: source.githubSource,
-        receipt: source.receipt,
         sandbox,
       });
     }
@@ -74,6 +73,7 @@ export default defineTool({
     }
     if (
       !development &&
+      source.githubSource === undefined &&
       currentWorkspace !== undefined &&
       currentWorkspace.workspaceId !== sandbox.id
     ) {

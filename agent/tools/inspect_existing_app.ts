@@ -4,12 +4,40 @@ import { z } from "zod";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { sourceWorkflowState } from "@/lib/agent/source-state";
 import { safeSourcePath } from "@/lib/repository/source-path";
+import type { SandboxSession } from "eve/sandbox";
 import sourceStatus from "./source_status";
 import prepareWorkspace from "./prepare_workspace";
 import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
 
 const maximumFileBytes = 262_144;
 const maximumTotalBytes = 1_048_576;
+
+// The source checkout is writable. An initial clone manifest cannot describe
+// files added or removed during an existing-app session.
+type AppSourceFileRunner = Pick<SandboxSession, "run">;
+
+export const listCurrentAppSourcePaths = async function listCurrentAppSourcePaths(
+  sandbox: AppSourceFileRunner,
+  appId: string,
+) {
+  const prefix = `apps/${appId}/`;
+  const escaped = prefix.replaceAll("'", "'\"'\"'");
+  const quoted = `'${escaped}'`;
+  const listed = await sandbox.run({
+    abortSignal: AbortSignal.timeout(30_000),
+    command: `git -C /workspace/repository ls-files -z --cached --others --exclude-standard -- ${quoted}`,
+    workingDirectory: "/workspace",
+  });
+  if (listed.exitCode !== 0) {
+    const detail = listed.stderr.trim().slice(0, 1000) || `git exited ${listed.exitCode}`;
+    throw new Error(`Could not list current ${appId} source files: ${detail}`);
+  }
+  return listed.stdout
+    .split("\0")
+    .filter((path) => path.startsWith(prefix) && safeSourcePath(path))
+    .toSorted()
+    .slice(0, 512);
+};
 
 export default defineDynamic({
   events: {
@@ -50,29 +78,36 @@ export default defineDynamic({
           const sandbox = await ctx.getSandbox();
           // The signed-in session supplies this sandbox. Read its current
           // files; source receipts are not prerequisites for inspection.
-          const manifestSource = await sandbox.readTextFile({
-            path: ".app-builder/source-files.json",
-          });
-          let manifest: unknown = [];
-          try {
-            manifest = manifestSource === null ? [] : JSON.parse(manifestSource);
-          } catch {
-            manifest = [];
+          let availablePaths: string[];
+          if (state.phase === "empty") {
+            // Keep best-effort local inspection available while automatic
+            // source setup is still catching up with the sandbox.
+            const manifestSource = await sandbox.readTextFile({
+              path: ".app-builder/source-files.json",
+            });
+            let manifest: unknown = [];
+            try {
+              manifest = manifestSource === null ? [] : JSON.parse(manifestSource);
+            } catch {
+              manifest = [];
+            }
+            const allowed = new Set(
+              (Array.isArray(manifest) ? manifest : []).flatMap((candidate): string[] =>
+                typeof candidate === "object" &&
+                candidate !== null &&
+                "path" in candidate &&
+                typeof candidate.path === "string"
+                  ? [candidate.path]
+                  : [],
+              ),
+            );
+            availablePaths = [...allowed]
+              .filter((path) => path.startsWith(prefix))
+              .toSorted()
+              .slice(0, 512);
+          } else {
+            availablePaths = await listCurrentAppSourcePaths(sandbox, appId);
           }
-          const allowed = new Set(
-            (Array.isArray(manifest) ? manifest : []).flatMap((candidate): string[] =>
-              typeof candidate === "object" &&
-              candidate !== null &&
-              "path" in candidate &&
-              typeof candidate.path === "string"
-                ? [candidate.path]
-                : [],
-            ),
-          );
-          const availablePaths = [...allowed]
-            .filter((path) => path.startsWith(prefix))
-            .toSorted()
-            .slice(0, 512);
           let total = 0;
           const files: { content: string; path: string }[] = [];
           const missingPaths: string[] = [];
