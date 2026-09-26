@@ -244,8 +244,11 @@ export function composeGitHubPublicationRuntime(input: {
         review: request.review,
         title: request.title,
       });
-      await proposals.save(proposal);
-      return proposal;
+      const sealed = await proposals.save(proposal);
+      if (sealed.intendedOutcome !== "publish-reviewed-change-set-as-draft-pull-request") {
+        throw new Error("The saved draft proposal has the wrong publication outcome.");
+      }
+      return sealed;
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async status() {

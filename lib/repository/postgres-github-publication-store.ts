@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
@@ -22,7 +23,7 @@ export type GitHubPublicationProposal = FreshRepositoryProposal | DraftPullReque
 
 export interface GitHubPublicationProposalStore {
   read: (proposalDigest: string) => Promise<GitHubPublicationProposal | undefined>;
-  save: (proposal: GitHubPublicationProposal) => Promise<void>;
+  save: (proposal: GitHubPublicationProposal) => Promise<GitHubPublicationProposal>;
 }
 
 const proposalRowSchema = z
@@ -93,6 +94,21 @@ function proposalValues(proposal: GitHubPublicationProposal, now: Date) {
   };
 }
 
+// A title change does not alter the proposal's idempotency key. Reuse the
+// already sealed proposal only when every publication-relevant field agrees.
+export const sameProposalExceptTitle = (
+  left: DraftPullRequestProposal,
+  right: DraftPullRequestProposal,
+): boolean => {
+  const { title: _leftTitle, digest: _leftDigest, ...leftContent } = left;
+  const { title: _rightTitle, digest: _rightDigest, ...rightContent } = right;
+  void _leftTitle;
+  void _leftDigest;
+  void _rightTitle;
+  void _rightDigest;
+  return isDeepStrictEqual(leftContent, rightContent);
+};
+
 /**
  * PostgreSQL owns both immutable sealed proposals and the compare-and-set
  * mutation journal. Indexed columns are redundant query aids and are rebound to
@@ -133,13 +149,34 @@ export function createPostgresGitHubPublicationStores(
         .onConflictDoNothing()
         .returning(proposalRowSelection);
       if (inserted.length === 1) {
-        parseGitHubPublicationProposalRow(inserted[0]);
-        return;
+        return parseGitHubPublicationProposalRow(inserted[0]);
       }
       const existing = await proposals.read(proposal.digest);
-      if (JSON.stringify(existing) !== JSON.stringify(proposal)) {
-        throw new Error("GitHub publication proposal collided in storage.");
+      if (existing !== undefined && isDeepStrictEqual(existing, proposal)) {
+        return existing;
       }
+      const rows = await database
+        .select(proposalRowSelection)
+        .from(hostedGitHubPublicationProposals)
+        .where(
+          and(
+            tenantPredicate,
+            eq(hostedGitHubPublicationProposals.kind, proposalKind(proposal)),
+            eq(hostedGitHubPublicationProposals.idempotencyKey, proposal.idempotencyKey),
+          ),
+        )
+        .limit(1);
+      const prior = rows[0] === undefined ? undefined : parseGitHubPublicationProposalRow(rows[0]);
+      if (
+        prior?.intendedOutcome === "publish-reviewed-change-set-as-draft-pull-request" &&
+        proposal.intendedOutcome === "publish-reviewed-change-set-as-draft-pull-request" &&
+        sameProposalExceptTitle(prior, proposal)
+      ) {
+        return prior;
+      }
+      throw new Error(
+        "GitHub publication proposal collided with different reviewed content. Refresh the current change review and prepare a new draft proposal.",
+      );
     },
   };
 
