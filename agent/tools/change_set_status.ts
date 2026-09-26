@@ -21,6 +21,61 @@ export const isCandidateExportTextPath = (path: string): boolean => {
   );
 };
 
+const MAX_EXPORT_FILE_BYTES = 512 * 1024;
+const MAX_EXPORT_TOTAL_BYTES = 2 * 1024 * 1024;
+
+export const changedAppTextPaths = (
+  changes: readonly { path: string; kind: "added" | "modified" | "deleted" }[],
+  appId: string,
+): string[] =>
+  changes
+    .filter(
+      ({ path, kind }) =>
+        kind !== "deleted" && path.startsWith(`apps/${appId}/`) && isCandidateExportTextPath(path),
+    )
+    .map(({ path }) => path);
+
+export const boundedChangedAppTextExport = async (
+  changes: readonly { path: string; kind: "added" | "modified" | "deleted" }[],
+  appId: string,
+  readText: (path: string) => PromiseLike<string | null>,
+) => {
+  const appChanges = changes.filter(({ path }) => path.startsWith(`apps/${appId}/`));
+  const exportFiles: { content: string; path: string }[] = [];
+  const exportOmissions: { path: string; reason: string }[] = [];
+  let totalBytes = 0;
+  for (const path of changedAppTextPaths(changes, appId)) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- bound the total export in path order.
+    const content = await readText(path);
+    const size = content === null ? 0 : Buffer.byteLength(content, "utf-8");
+    if (
+      content === null ||
+      size > MAX_EXPORT_FILE_BYTES ||
+      totalBytes + size > MAX_EXPORT_TOTAL_BYTES
+    ) {
+      exportOmissions.push({
+        path,
+        reason:
+          content === null
+            ? "changed text file could not be read"
+            : `changed text file exceeds the bounded review export (${size} bytes); inspect it separately before publication`,
+      });
+      continue;
+    }
+    totalBytes += size;
+    exportFiles.push({ content, path });
+  }
+  return {
+    exportFiles,
+    exportOmissions: [
+      ...exportOmissions,
+      ...appChanges
+        .filter(({ path, kind }) => kind !== "deleted" && !isCandidateExportTextPath(path))
+        .map(({ path }) => ({ path, reason: "changed non-text artifact" })),
+    ],
+  };
+};
+
 export const exactNormalizedChangeSet = async (input: {
   state: Extract<
     ReturnType<typeof appBuilderWorkflowState.get>,
@@ -77,22 +132,15 @@ const exportAppliedTextFiles = async (input: {
     },
     observed,
   );
-  const appPrefix = `apps/${input.state.appSpec.appId}/`;
-  const appFiles = observed.files.filter((file) => file.path.startsWith(appPrefix));
-  const textFiles = appFiles.filter((file) => isCandidateExportTextPath(file.path));
+  // A complete app checkout can include tens of megabytes of unchanged schema history.
+  const bounded = await boundedChangedAppTextExport(changes, input.state.appSpec.appId, (path) =>
+    input.sandbox.readTextFile({
+      path: `${input.state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "")}/${path}`,
+    }),
+  );
   return {
     changes,
-    exportFiles: await Promise.all(
-      textFiles.map(async (file) => ({
-        content: await input.sandbox.readTextFile({
-          path: `${input.state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "")}/${file.path}`,
-        }),
-        path: file.path,
-      })),
-    ),
-    exportOmissions: appFiles
-      .filter((file) => !textFiles.includes(file))
-      .map((file) => ({ path: file.path, reason: "non-text artifact" })),
+    ...bounded,
   };
 };
 

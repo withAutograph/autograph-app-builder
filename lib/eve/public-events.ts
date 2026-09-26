@@ -42,8 +42,54 @@ const silentInternalApprovalTools = new Set([
   "accept_change_set",
 ]);
 const unavailableConfirmationMessage = "I couldn't verify this action, so it was not run.";
-const unavailableContinuationMessage =
-  "I couldn't finish preparing your app. Your progress is saved, so you can try again.";
+const publicFailureLimit = 700;
+const publicErrorCode = (value: string) =>
+  /^[A-Za-z][A-Za-z0-9_]{0,79}$/u.test(value) ? value : "unknown_error";
+const publicFailureDetail = (value: string) =>
+  (value.split("\n", 1)[0] ?? "")
+    .replaceAll(/\p{Cc}/gu, " ")
+    .replaceAll(/https?:\/\/[^\s]+/giu, "[URL REDACTED]")
+    .replaceAll(/Bearer\s+[^\s,;]+/giu, "Bearer [REDACTED]")
+    .replaceAll(
+      /\b(?:gh[oprsu]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,})\b/gu,
+      "[REDACTED]",
+    )
+    .replaceAll(
+      /\b(?<key>authorization|cookie|password|passwd|secret|token|api[-_]?key)\s*[:=]\s*[^\s,;]+/giu,
+      "$<key>=[REDACTED]",
+    )
+    .trim()
+    .slice(0, publicFailureLimit);
+
+const publicSessionFailure = (
+  event: Extract<MessageStreamEvent, { type: "session.failed" }>,
+  operation?: string,
+) => {
+  const name = operation === undefined ? "the current Builder operation" : `\`${operation}\``;
+  const size =
+    /Chunk size (?<actual>\d+) exceeds maximum allowed size of (?<maximum>\d+) bytes/u.exec(
+      event.data.message,
+    );
+  if (size?.groups !== undefined) {
+    return {
+      code: "result_too_large",
+      message: `Builder could not save the result of ${name}: its output was ${size.groups.actual} bytes, above the workflow limit of ${size.groups.maximum} bytes. Review only changed files or split the result into smaller parts, then resume this saved session.`,
+    };
+  }
+  const code = publicErrorCode(event.data.code);
+  const detail = publicFailureDetail(event.data.message);
+  let cause = "The provider returned no cause.";
+  if (detail.length > 0) {
+    cause = `Cause: ${detail}`;
+    if (!/[.!?]$/u.test(detail)) {
+      cause += ".";
+    }
+  }
+  return {
+    code,
+    message: `Builder could not complete ${name} (${code}). ${cause} Your progress is saved; correct the cause and resume this session.`,
+  };
+};
 const maximumPrototypeBytes = 8 * 1024 * 1024;
 const prototypePathPattern = /^prototype\/(?<appId>[a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/index\.html$/u;
 const lowercaseSha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -330,6 +376,7 @@ const inputRequest = (request: {
 export const projectInstalledEveEvent = (
   event: MessageStreamEvent,
   index: number,
+  operation?: string,
 ): InternalEveEvent[] => {
   switch (event.type) {
     case "message.completed": {
@@ -467,11 +514,12 @@ export const projectInstalledEveEvent = (
       return [{ index, status: "completed", type: "status" }];
     }
     case "session.failed": {
+      const failure = publicSessionFailure(event, operation);
       return [
         {
-          code: "unable_to_continue",
+          code: failure.code,
           index,
-          message: unavailableContinuationMessage,
+          message: failure.message,
           type: "error.public",
         },
         { index, status: "failed", type: "status" },
@@ -629,13 +677,21 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
 
 export const projectInstalledEveEvents = (
   events: readonly MessageStreamEvent[],
-): PublicEveEvent[] =>
-  events
-    .flatMap((event) => projectInstalledEveEvent(event, 0))
+): PublicEveEvent[] => {
+  let operation: string | undefined;
+  return events
+    .flatMap((event) => {
+      if (event.type === "actions.requested") {
+        const requested = event.data.actions.filter((action) => action.kind === "tool-call");
+        operation = requested.at(-1)?.toolName ?? operation;
+      }
+      return projectInstalledEveEvent(event, 0, operation);
+    })
     .flatMap((event) => {
       const projected = toPublicEvent(event);
       return projected === null ? [] : [projected];
     })
     .map((event, index) => ({ ...event, index }));
+};
 
 /** Allowlist an internal event. Unknown, reasoning, and raw tool events are dropped. */
