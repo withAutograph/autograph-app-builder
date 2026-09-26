@@ -24,6 +24,17 @@ const journalRowSchema = z
   })
   .strict();
 
+const journalRowSelection = {
+  createdAt: hostedGitHubPublicationJournals.createdAt,
+  idempotencyKey: hostedGitHubPublicationJournals.idempotencyKey,
+  kind: hostedGitHubPublicationJournals.kind,
+  proposalDigest: hostedGitHubPublicationJournals.proposalDigest,
+  receiptDigest: hostedGitHubPublicationJournals.receiptDigest,
+  record: hostedGitHubPublicationJournals.record,
+  status: hostedGitHubPublicationJournals.status,
+  updatedAt: hostedGitHubPublicationJournals.updatedAt,
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseGitHubPublicationJournalRow(input: unknown): GitHubMutationReceipt {
   const row = journalRowSchema.parse(input);
@@ -127,7 +138,7 @@ export function createPostgresGitHubPublicationReceiptStore(
         throw new Error("GitHub proposal digest is invalid.");
       }
       const rows = await database
-        .select()
+        .select(journalRowSelection)
         .from(hostedGitHubPublicationJournals)
         .where(
           and(tenantPredicate, eq(hostedGitHubPublicationJournals.proposalDigest, proposalDigest)),

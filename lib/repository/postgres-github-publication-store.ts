@@ -35,6 +35,16 @@ const proposalRowSchema = z
   })
   .strict();
 
+// Project exactly the closed receipt fields. The database row also contains
+// tenant columns used by the SQL predicate, but those are not proposal data.
+const proposalRowSelection = {
+  createdAt: hostedGitHubPublicationProposals.createdAt,
+  idempotencyKey: hostedGitHubPublicationProposals.idempotencyKey,
+  kind: hostedGitHubPublicationProposals.kind,
+  proposal: hostedGitHubPublicationProposals.proposal,
+  proposalDigest: hostedGitHubPublicationProposals.proposalDigest,
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function proposalKind(
   proposal: GitHubPublicationProposal,
@@ -107,7 +117,7 @@ export function createPostgresGitHubPublicationStores(
   const proposals: GitHubPublicationProposalStore = {
     async read(proposalDigest) {
       const rows = await database
-        .select()
+        .select(proposalRowSelection)
         .from(hostedGitHubPublicationProposals)
         .where(
           and(tenantPredicate, eq(hostedGitHubPublicationProposals.proposalDigest, proposalDigest)),
@@ -121,7 +131,7 @@ export function createPostgresGitHubPublicationStores(
         .insert(hostedGitHubPublicationProposals)
         .values({ ...authority, ...proposalValues(proposal, now()) })
         .onConflictDoNothing()
-        .returning();
+        .returning(proposalRowSelection);
       if (inserted.length === 1) {
         parseGitHubPublicationProposalRow(inserted[0]);
         return;

@@ -5,12 +5,14 @@ import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { describe, expect, it, vi } from "vitest";
 
 import type * as databaseSchema from "../db/schema";
+import { hostedGitHubPublicationJournals, hostedGitHubPublicationProposals } from "../db/schema";
 import type { GitHubMutationReceipt } from "./github-publication";
 import { GITHUB_PUBLICATION_VERSION } from "./github-publication";
 import {
   createPostgresGitHubPublicationReceiptStore,
   parseGitHubPublicationJournalRow,
 } from "./postgres-github-publication-receipt-store";
+import { createPostgresGitHubPublicationStores } from "./postgres-github-publication-store";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 const authority = {
@@ -119,8 +121,43 @@ describe("PostgreSQL GitHub publication receipt journal", () => {
     const store = createPostgresGitHubPublicationReceiptStore(fixture.database, authority);
     await expect(store.read(receipt.proposalDigest)).resolves.toEqual(receipt);
     expect(fixture.select).toHaveBeenCalledTimes(1);
+    expect(fixture.select).toHaveBeenCalledWith({
+      createdAt: hostedGitHubPublicationJournals.createdAt,
+      idempotencyKey: hostedGitHubPublicationJournals.idempotencyKey,
+      kind: hostedGitHubPublicationJournals.kind,
+      proposalDigest: hostedGitHubPublicationJournals.proposalDigest,
+      receiptDigest: hostedGitHubPublicationJournals.receiptDigest,
+      record: hostedGitHubPublicationJournals.record,
+      status: hostedGitHubPublicationJournals.status,
+      updatedAt: hostedGitHubPublicationJournals.updatedAt,
+    });
     expect(fixture.limit).toHaveBeenCalledWith(1);
     await expect(store.read("not-a-digest")).rejects.toThrow("proposal digest");
+  });
+
+  it("projects a closed proposal row without tenant metadata", async () => {
+    const fixture = databaseFixture({
+      selected: [
+        {
+          createdAt: new Date("2026-08-27T00:00:00.000Z"),
+          idempotencyKey: "b".repeat(64),
+          kind: "draft-pull-request",
+          proposal: null,
+          proposalDigest: "a".repeat(64),
+        },
+      ],
+    });
+    const stores = createPostgresGitHubPublicationStores(fixture.database, authority);
+    await expect(stores.proposals.read("a".repeat(64))).rejects.toThrow(
+      "GitHub publication proposal JSON is malformed",
+    );
+    expect(fixture.select).toHaveBeenCalledWith({
+      createdAt: hostedGitHubPublicationProposals.createdAt,
+      idempotencyKey: hostedGitHubPublicationProposals.idempotencyKey,
+      kind: hostedGitHubPublicationProposals.kind,
+      proposal: hostedGitHubPublicationProposals.proposal,
+      proposalDigest: hostedGitHubPublicationProposals.proposalDigest,
+    });
   });
 
   it("claims absent intent with insert-only conflict handling", async () => {
