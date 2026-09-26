@@ -149,6 +149,23 @@ describe("provider-created sandbox GitHub source", () => {
     );
   });
 
+  it("uses an occupied checkout at a newer revision of the selected repository", async () => {
+    const newerSha = "c".repeat(40);
+    const newerTree = "d".repeat(40);
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stderr: "",
+        stdout: `${newerSha}\n${newerTree}\n${expected.repository}\n`,
+      })
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" });
+    await expect(
+      readSandboxGitHubSourceSnapshot({ run } as never, { repository: expected.repository }),
+    ).resolves.toMatchObject({ sourceSha: newerSha, sourceTree: newerTree });
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
   it("does not change a linked checkout left by an older Builder session", async () => {
     const run = vi
       .fn()

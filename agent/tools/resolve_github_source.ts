@@ -14,6 +14,7 @@ import {
   workflowWorkspace,
 } from "@/lib/agent/workflow-state";
 import { assertExactImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
+import { inspectGitHubSourceSandboxWorkspace } from "@/lib/repository/sandbox-github-source";
 
 export const inputSchema = z.strictObject({
   repository: z
@@ -31,7 +32,7 @@ export const inputSchema = z.strictObject({
 export default defineTool({
   approval: never(),
   description:
-    "Automatically resolve and prepare one supported existing GitHub repository. Pass selectedInstallationId=null to use the single verified installation; provide an ID only after scope-selection-required. It independently confirms tenant-bound GitHub access, parks on the Store In authorization flow when access is missing, re-reads the selected installation and exact default-branch SHA/tree, and materializes the eligible source in the isolated workspace. It never creates, pushes, branches, opens a PR, or alters a release gate.",
+    "Automatically resolve and prepare one supported existing GitHub repository. Pass selectedInstallationId=null to use the single verified installation; provide an ID only after scope-selection-required. It confirms tenant-bound GitHub access, parks on the Store In authorization flow when access is missing, and uses the current checkout in the isolated workspace for the selected repository. It never creates, pushes, branches, opens a PR, or alters a release gate.",
   async execute(input, ctx) {
     const initialWorkflow = appBuilderWorkflowState.get();
     const initialSource = sourceWorkflowState.get();
@@ -56,6 +57,34 @@ export default defineTool({
     const access = await resolveRepositoryAccessForTool(input, ctx, runtime);
     if (access.kind === "selection") {
       return access.access;
+    }
+
+    if (
+      initialSource.phase !== "empty" &&
+      initialWorkflow.phase !== "empty" &&
+      initialSource.githubSource !== undefined &&
+      initialWorkflow.githubSource !== undefined
+    ) {
+      // A retry keeps the selected repository binding and observes the live
+      // checkout. GitHub's default branch may have advanced since selection.
+      if (
+        initialWorkflow.githubSource.digest !== initialSource.githubSource.digest ||
+        initialSource.githubSource.repository.repositoryId !== access.access.repository.repositoryId
+      ) {
+        throw new Error("This app build already owns a different GitHub repository.");
+      }
+      const workspace = await inspectGitHubSourceSandboxWorkspace({
+        githubSource: initialSource.githubSource,
+        sandbox: await ctx.getSandbox(),
+      });
+      return {
+        githubSource: initialSource.githubSource,
+        repository: access.access.repository,
+        repositoryAccessReceiptDigest: access.receipt.digest,
+        scope: access.access.scope,
+        sourceReceipt: initialSource.receipt,
+        workspace,
+      };
     }
 
     const prepared = await runtime.prepareExistingSource({

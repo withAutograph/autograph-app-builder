@@ -399,8 +399,6 @@ export function createRepositoryAccessRuntime(input: {
       const sandbox = typeof value.sandbox === "function" ? await value.sandbox() : value.sandbox;
       const snapshot = await readSandboxGitHubSourceSnapshot(sandbox, {
         repository: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
-        sourceSha: githubSource.resolvedSha,
-        sourceTree: githubSource.resolvedTree,
       });
       const workspaceDigest = await writeSandboxGitHubSourceManifest(sandbox, {
         sourceSha: snapshot.sourceSha,
