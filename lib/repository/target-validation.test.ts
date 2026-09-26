@@ -108,7 +108,7 @@ describe("target validation", () => {
       "Authorization: Bearer abc123\nAPI_KEY=super-secret\nCookie: session=private",
     );
     expect(excerpt.stdout).toContain("TS2304: MissingThing");
-    expect(excerpt.stdout).toContain("[output truncated]");
+    expect(excerpt.stdout).toContain("[output truncated; showing beginning and end]");
     expect(excerpt.stderr).not.toContain("abc123");
     expect(excerpt.stderr).not.toContain("super-secret");
     expect(excerpt.stderr).not.toContain("session=private");
@@ -123,6 +123,31 @@ describe("target validation", () => {
     expect(excerpt.stderr).toContain("schema-compiler:");
     expect(excerpt.stderr).toContain("conflicting values");
     expect(excerpt.stderr).toContain("rerun the app's schema check");
+  });
+
+  it("keeps multiline CUE context and the final cause of long compiler output", () => {
+    const excerpt = validationOutputExcerpt(
+      "",
+      `schema-compiler: apps/example/schema/example.cue:12:4: conflicting values\n` +
+        `    amount: string\n` +
+        `            ^\n` +
+        `caused by: amount must be numeric\n` +
+        `cargo: ${"x".repeat(7000)}\n` +
+        `apps/example/schema/example.cue:22:1: final constraint failure`,
+    );
+    expect(excerpt.stderr).toContain("amount must be numeric");
+    expect(excerpt.stderr).toContain("final constraint failure");
+    expect(excerpt.truncated).toBe(true);
+  });
+
+  it("retains native toolchain repair steps when the failure has no CUE location", () => {
+    const excerpt = validationOutputExcerpt(
+      "",
+      'Schema compilation failed for example during --app-artifact (exit 1).\nToolNotFound: failed to find tool "cc"\nInstall a native C compiler in the build environment and verify `cc --version` succeeds before rerunning the schema check.\nRetry: mise exec --locked --no-deps -- bun .config/mise/scripts/repository/schema-release.ts check --app example',
+    );
+    expect(excerpt.stderr).toContain('ToolNotFound: failed to find tool "cc"');
+    expect(excerpt.stderr).toContain("Install a native C compiler");
+    expect(excerpt.stderr).toContain("Retry: mise exec");
   });
 
   it("runs repository commands without receipt or source preflight", async () => {
