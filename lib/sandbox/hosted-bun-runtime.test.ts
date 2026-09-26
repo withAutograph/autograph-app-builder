@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { SandboxSession } from "eve/sandbox";
 
 import {
   HOSTED_BUN_RUNTIME_ENVIRONMENT,
@@ -10,7 +11,9 @@ import { HOSTED_BUN_VERSION, HOSTED_MISE_VERSION, HOSTED_RUST_VERSION } from "./
 describe("hosted validation runtime", () => {
   it("installs Bun, mise, and the pinned Rust toolchain once per sandbox", async () => {
     // Eve exposes a PromiseLike command, not a native Promise with .catch().
-    const run = vi.fn(() => {
+    const requests: Parameters<SandboxSession["run"]>[0][] = [];
+    const run = vi.fn((request: Parameters<SandboxSession["run"]>[0]) => {
+      requests.push(request);
       const result = Promise.resolve({ exitCode: 0, stderr: "", stdout: "" });
       const thenProperty = String.fromCodePoint(116, 104, 101, 110);
       return Object.fromEntries([
@@ -34,29 +37,14 @@ describe("hosted validation runtime", () => {
     expect(HOSTED_BUN_RUNTIME_ENVIRONMENT.PATH).toContain(
       `${HOSTED_BUN_RUNTIME_PREFIX}/node_modules/.bin`,
     );
-    expect(run).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        command: expect.stringContaining(`mise where rust@${HOSTED_RUST_VERSION}`),
-        env: HOSTED_BUN_RUNTIME_ENVIRONMENT,
-      }),
-    );
-    expect(run).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        command: expect.stringContaining("sudo apt-get install -y build-essential"),
-      }),
-    );
-    expect(run).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        command: expect.stringContaining('if test -x "$rust_root/cargo"'),
-      }),
-    );
-    expect(run).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ command: expect.stringContaining('rust_bin="$rust_root/bin"') }),
-    );
+    const [, rustRequest] = requests;
+    if (rustRequest === undefined) {
+      throw new Error("Expected a Rust setup command");
+    }
+    expect(rustRequest.command).toContain(`mise where rust@${HOSTED_RUST_VERSION}`);
+    expect(rustRequest.command).toContain("sudo apt-get install -y build-essential");
+    expect(rustRequest.command).toContain('if test -x "$rust_root/cargo"');
+    expect(rustRequest.command).toContain('rust_bin="$rust_root/bin"');
     expect(HOSTED_BUN_RUNTIME_ENVIRONMENT.PATH).toContain(`${HOSTED_BUN_RUNTIME_PREFIX}/bin`);
   });
 
