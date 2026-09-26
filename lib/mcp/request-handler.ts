@@ -259,7 +259,7 @@ export function createAutographMcpHandler(
             "Autograph App Builder started the app build.",
           );
         } catch (error) {
-          return safeToolError(error);
+          return safeToolError(error, "", "autograph_start");
         }
       },
     );
@@ -291,7 +291,7 @@ export function createAutographMcpHandler(
                 });
           return toolResult(present(result), "Autograph App Builder returned the latest progress.");
         } catch (error) {
-          return safeToolError(error, input.sessionId ?? "");
+          return safeToolError(error, input.sessionId ?? "", "autograph_get");
         }
       },
     );
@@ -318,7 +318,7 @@ export function createAutographMcpHandler(
             "Autograph App Builder received the feedback.",
           );
         } catch (error) {
-          return safeToolError(error, input.sessionId);
+          return safeToolError(error, input.sessionId, "autograph_send");
         }
       },
     );
@@ -347,7 +347,7 @@ export function createAutographMcpHandler(
             "Autograph App Builder recorded the answers.",
           );
         } catch (error) {
-          return safeToolError(error, input.sessionId);
+          return safeToolError(error, input.sessionId, "autograph_respond");
         }
       },
     );
@@ -374,7 +374,7 @@ export function createAutographMcpHandler(
             "Autograph App Builder received the stop request.",
           );
         } catch (error) {
-          return safeToolError(error, input.sessionId);
+          return safeToolError(error, input.sessionId, "autograph_cancel");
         }
       },
     );

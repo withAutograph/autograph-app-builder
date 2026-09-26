@@ -30,27 +30,58 @@ describe("safe MCP tool errors", () => {
     [new HostedRejectedOperationError(), "operation_rejected"],
     [new HostedSessionBusyError(), "already_continuing"],
     [new HostedSessionRecoveryUnavailableError(), "restart_required"],
-    [new Error("secret provider detail"), "internal_error"],
+    [new Error("workflow result exceeded stream size"), "internal_error"],
     // Vitest's table test API is callback-based.
     // oxlint-disable-next-line promise/prefer-await-to-callbacks
   ])("projects %s without exposing internal details", (error, code) => {
     const result = safeToolError(error, "session-one");
     expect(result.structuredContent.error?.code).toBe(code);
-    expect(JSON.stringify(result)).not.toContain("secret provider detail");
+    expect(result.structuredContent.error?.message).toBeTruthy();
     expect(result.isError).toBe(true);
   });
 
-  it("brands the public disconnected-state message", () => {
+  it("explains missing hosted session configuration", () => {
     const result = safeToolError(new AdapterNotConfiguredError());
     expect(result.content).toEqual([
       {
-        text: "Autograph App Builder is not connected to its production service yet.",
+        text: "Autograph App Builder's session service is not configured. An operator must connect the hosted session adapter before this action can run.",
         type: "text",
       },
     ]);
     expect(result.structuredContent.error?.message).toBe(
-      "Autograph App Builder is not connected to its production service yet.",
+      "Autograph App Builder's session service is not configured. An operator must connect the hosted session adapter before this action can run.",
     );
+  });
+
+  it("names the failing MCP operation and redacts provider credentials", () => {
+    const result = safeToolError(
+      new Error("Stream write failed at https://provider.example/path?token=secret: token=private"),
+      "session-one",
+      "autograph_get",
+    );
+    expect(result.structuredContent.error?.code).toBe("internal_error");
+    expect(result.structuredContent.error?.message).toContain("autograph_get");
+    expect(result.structuredContent.error?.message).toContain("Stream write failed");
+    expect(JSON.stringify(result)).not.toContain("provider.example");
+    expect(JSON.stringify(result)).not.toContain("private");
+  });
+
+  it("still identifies a failure when the provider returned no message", () => {
+    const result = safeToolError(null, "session-one", "autograph_send");
+    expect(result.structuredContent.error?.message).toContain("autograph_send");
+    expect(result.structuredContent.error?.message).toContain("no error detail");
+  });
+
+  it.each([
+    [new HostedSessionNotFoundError(), "Check the session ID"],
+    [new HostedAuthorizationError("insufficient_scope"), "Sign in with the account"],
+    [new HostedIdempotencyConflictError(), "new clientRequestId"],
+    [new HostedSubmissionUnknownError(), "autograph_get before sending"],
+    [new HostedRejectedOperationError(), "retry only if the action was not applied"],
+    // Vitest's table test API is callback-based.
+    // oxlint-disable-next-line promise/prefer-await-to-callbacks
+  ])("gives a recovery action for %s", (error, nextStep) => {
+    expect(safeToolError(error).structuredContent.error?.message).toContain(nextStep);
   });
 
   it("makes a provider outage retryable without a new OAuth challenge", () => {

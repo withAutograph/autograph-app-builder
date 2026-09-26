@@ -47,7 +47,7 @@ Public messages MUST NOT name or narrate:
 - receipts, digests, source bindings, or contract versions
 - exact source commits, trees, or source SHA values
 - isolated workspaces or workspace preparation
-- protocol operation names or internal runtime routes
+- protocol operation names or internal runtime routes during ordinary progress
 - retry, reconciliation, or state-machine mechanics
 - authorization boilerplate or lists of actions that lack authority
 - routine disclaimers such as “nothing was published” when no outward action was requested
@@ -94,6 +94,14 @@ The builder MUST attempt bounded automatic repair before interrupting the person
 6. If no product answer can resolve the problem, name the outcome that cannot be delivered and offer a useful product-level alternative.
 
 The builder MUST NOT turn an implementation defect into a request for technical direction. It MUST NOT disclose validator output, internal identifiers, or orchestration state in place of a product question.
+
+For a terminal operational failure that Builder cannot repair, the error must
+identify the failed operation or command, status or error code, specific file and
+cause when known, and a concrete next repair action. Sanitize credentials,
+private URLs, and unbounded provider output. If a provider supplies no cause,
+say that explicitly and identify the operation and session needed for support.
+This failure report is separate from normal product progress and does not ask
+the user to solve Builder's internal implementation defect.
 
 ## Follow these conversation patterns
 
