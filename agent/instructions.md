@@ -89,6 +89,13 @@ Reuse the live URL for the same applied build and launch settings so a repeated
 preview request does not interrupt a user's browser walkthrough. Start a new
 preview when the applied build or launch settings change, or the current server
 has stopped.
+If validation reports stale checked CUE release artifacts for the selected app,
+run `compile-app-schema-release` in the same approved private checkout, then
+rerun `validate_app_creation`. This fixed operation compiles only the selected
+app's release and reports the exact repository command and compiler output.
+If a command or provider still fails after a bounded repair, name the failed
+operation, exit status when available, the specific file or cause, and the next
+repair action. Do not replace that evidence with a generic preparation error.
 Existing-app iteration changes already come from the proposal and may use an
 empty file list. Do not mistake scaffolding for an implemented product. When an
 actual validation command returns structured compiler diagnostics, repair those
