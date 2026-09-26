@@ -90,6 +90,14 @@ setTimeout(close, Math.max(0, launch.expiresAt - Date.now()));
 const requestSignal = (signal?: AbortSignal) =>
   signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000);
 
+const sandboxPreviewExpiry = (provider: Sandbox): number => {
+  const expiresAt = provider.expiresAt?.getTime();
+  if (expiresAt === undefined || expiresAt <= Date.now()) {
+    throw new Error("The private Sandbox has no remaining lifetime for a working preview.");
+  }
+  return expiresAt;
+};
+
 // This jar follows same-origin HTTP readiness redirects. Browser authentication
 // and cookie behavior still require the separate product acceptance walkthrough.
 const absorbCookies = (cookies: Map<string, string>, response: Response) => {
@@ -431,10 +439,7 @@ export const startWorkingPreview = async (input: {
 }): Promise<WorkingPreviewRuntime> => {
   input.signal?.throwIfAborted();
   const { provider } = input;
-  const expiresAt = provider.expiresAt?.getTime();
-  if (expiresAt === undefined || expiresAt <= Date.now()) {
-    throw new Error("The private Sandbox has no remaining lifetime for a working preview.");
-  }
+  const expiresAt = sandboxPreviewExpiry(provider);
   const signal = AbortSignal.any([
     AbortSignal.timeout(expiresAt - Date.now()),
     ...(input.signal === undefined ? [] : [input.signal]),
@@ -559,10 +564,9 @@ export const startWorkingPreview = async (input: {
       signal,
     );
     input.onAttempt?.(null);
-    return {
+    const runtime: WorkingPreviewRuntime = {
       commandId: command.cmdId,
       providerSessionId,
-      ...(input.requestDigest === undefined ? {} : { requestDigest: input.requestDigest }),
       receipt: {
         appId: input.appId,
         expiresAt: new Date(expiresAt).toISOString(),
@@ -572,6 +576,10 @@ export const startWorkingPreview = async (input: {
       },
       sandboxId: input.sandboxId,
     };
+    if (input.requestDigest !== undefined) {
+      runtime.requestDigest = input.requestDigest;
+    }
+    return runtime;
   } catch (error) {
     return cleanupPreviewAttempt({
       attempt,

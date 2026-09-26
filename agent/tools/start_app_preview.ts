@@ -21,6 +21,21 @@ import { assertHostedSandboxCommandAuthority } from "@/lib/sandbox/deployment-ex
 import { getVercelPreviewProvider } from "@/lib/sandbox/vercel-preview-provider";
 import { startWorkingPreview } from "@/lib/sandbox/working-preview-runtime";
 
+const validationAttemptDigest = (
+  state: ReturnType<typeof appBuilderWorkflowState.get>,
+): string | undefined => {
+  if ("validationReceipt" in state) {
+    return state.validationReceipt.digest;
+  }
+  if ("validationFailure" in state) {
+    return state.validationFailure.attemptDigest;
+  }
+  if ("validationAttempt" in state) {
+    return state.validationAttempt.digest;
+  }
+  return undefined;
+};
+
 export default defineTool({
   description:
     "Open the implemented app in its private Sandbox and return an actual working browser URL. Repeating the same request for the same applied build reuses its live preview instead of interrupting it. Use the repository's discovered development command as executable plus argument array (no shell wrappers), in workingDirectory relative to the applied repository root (default .). Use the discovered app package directory for a nested package; landingPath is an HTTP route, not a filesystem directory. Configure that command to listen on the supplied port; use landingPath for a nested app route. This uses the already-approved implementation, does not publish or provision app resources, and can reopen an expired preview. A reachable page is not proof of backend product behavior.",
@@ -40,14 +55,7 @@ export default defineTool({
     await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
     const provider = await getVercelPreviewProvider(sandbox.id, ctx.abortSignal);
     const previous = workingPreviewState.get();
-    const validationDigest =
-      "validationReceipt" in current
-        ? current.validationReceipt.digest
-        : "validationFailure" in current
-          ? current.validationFailure.attemptDigest
-          : "validationAttempt" in current
-            ? current.validationAttempt.digest
-            : undefined;
+    const validationDigest = validationAttemptDigest(current);
     const requestDigest = createHash("sha256")
       .update(
         JSON.stringify({
