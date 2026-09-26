@@ -143,11 +143,21 @@ describe("target validation", () => {
   it("retains native toolchain repair steps when the failure has no CUE location", () => {
     const excerpt = validationOutputExcerpt(
       "",
-      'Schema compilation failed for example during --app-artifact (exit 1).\nToolNotFound: failed to find tool "cc"\nInstall a native C compiler in the build environment and verify `cc --version` succeeds before rerunning the schema check.\nRetry: mise exec --locked --no-deps -- bun .config/mise/scripts/repository/schema-release.ts check --app example',
+      'Schema compilation failed for example during --app-artifact (exit 1).\nToolNotFound: failed to find tool "cc"\nInstall a native C compiler in the build environment and verify `cc --version` succeeds before rerunning the schema check.\nRetry: mise run schema:release -- check --app example',
     );
     expect(excerpt.stderr).toContain('ToolNotFound: failed to find tool "cc"');
     expect(excerpt.stderr).toContain("Install a native C compiler");
-    expect(excerpt.stderr).toContain("Retry: mise exec");
+    expect(excerpt.stderr).toContain("Retry: mise run schema:release");
+  });
+
+  it("preserves Unicode CUE names and malformed-JSON output without control characters", () => {
+    const excerpt = validationOutputExcerpt(
+      "",
+      "Schema release generation failed for example.\nThe schema compiler produced invalid JSON for example during SQL manifest.\nCompiler output excerpt:\napps/example/schema/example.cue:8:2: conflicting value for coût\u0000",
+    );
+    expect(excerpt.stderr).toContain("coût");
+    expect(excerpt.stderr).toContain("Compiler output excerpt:");
+    expect(excerpt.stderr).not.toContain("\u0000");
   });
 
   it("runs repository commands without receipt or source preflight", async () => {
