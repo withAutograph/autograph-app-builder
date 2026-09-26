@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
-import type { CanonicalTemplateSnapshot, SourceReceipt } from "./source-receipt";
+import type { CanonicalTemplateSnapshot } from "./source-receipt";
 import {
   inspectPreparedSandboxWorkspace,
   SUPPORTED_REPOSITORY_CONTRACT,
@@ -504,9 +504,7 @@ const reinspectGitHubSourceWorkspace = async function reinspectGitHubSourceWorks
 export const inspectGitHubSourceSandboxWorkspace =
   async function inspectGitHubSourceSandboxWorkspace(input: {
     sandbox: SandboxSession;
-    receipt: SourceReceipt;
     githubSource: ImmutableGitHubSourceReceipt;
-    expectedWorkspace?: PreparedSandboxWorkspace;
   }): Promise<PreparedSandboxWorkspace> {
     // A sandbox checkout is deliberately writable. Inspecting it is best-effort
     // discovery for the next repository command, not a second authorization

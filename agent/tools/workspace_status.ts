@@ -175,6 +175,7 @@ export default defineTool({
     });
     if (
       !canAutoSelectDevelopmentSource() &&
+      durable.githubSource === undefined &&
       JSON.stringify(workflowWorkspace(durable)) !== JSON.stringify(observed)
     ) {
       throw new Error("The durable workflow receipt does not match the sandbox workspace.");

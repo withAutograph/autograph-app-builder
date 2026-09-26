@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { SandboxSession } from "eve/sandbox";
+import { z } from "zod";
 
 import {
   supportedValidationCommands,
@@ -97,6 +98,7 @@ export type TargetValidationFailureReceipt = ValidationReceiptBase & {
   commandFailure?: {
     name: TargetValidationCommandName;
     exitCode: number;
+    operation?: "run-validation-command";
     hint?: string;
   };
   digest: string;
@@ -123,10 +125,14 @@ export type TargetValidationResult =
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
 const VALIDATION_OUTPUT_LIMIT = 6000;
+const EXECUTION_ERROR_LIMIT = 1200;
 const ansiPattern = new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu");
 const sensitiveAssignmentPattern =
   /(?<name>authorization|cookie|password|passwd|secret|token|api[-_]?key)(?<separator>\s*[:=]\s*)(?<value>[^\s,;]+)/giu;
 const bearerPattern = /Bearer\s+[^\s,;]+/giu;
+const credentialUrlPattern = /(?<scheme>https?:\/\/)[^\s/@]+:[^\s/@]+@/giu;
+const credentialPrefixPattern =
+  /\b(?:gh[oprsu]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,})\b/gu;
 const repairLinePattern =
   /(?:^|\s)(?:apps\/|error(?:\s+TS\d+|:)|typescript\(TS\d+\)|FAIL\s|Build failed|Failed to compile|Module not found|Cannot find (?:module|name)|Script not found|Formatting issues found|schema-compiler:|Schema compilation failed|Schema release generation failed|The schema compiler produced invalid JSON|Compiler output excerpt:|ToolNotFound:|linker\s+[`"']?cc|cue:|cargo:|rustc:|mise(?:\s+ERROR|:)|The compiler produced no diagnostic output|The compiler returned no output|No CUE source location was reported|Install a native C compiler|Install the repository's locked mise tools|Read the compiler error and its CUE file location|Retry:)/iu;
 const diagnosticContinuationPattern = /^(?:\s+\S|\s*\^|\s*\||\s*(?:caused by|help|note|retry):)/iu;
@@ -171,6 +177,44 @@ export const validationOutputExcerpt = (
     return `${cleaned.slice(0, portion)}\n[output truncated; showing beginning and end]\n${cleaned.slice(-portion)}`;
   };
   return { stderr: sanitize(stderr), stdout: sanitize(stdout), truncated };
+};
+
+// A provider can throw before it returns a command result. Keep its useful
+// message in the durable receipt, without persisting a raw stack or object.
+const executionErrorDetail = (error: Error): string => {
+  const messages: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (current instanceof Error) {
+      if (current.message.trim().length > 0) {
+        messages.push(current.message);
+      }
+      current = current.cause;
+    } else {
+      const causeMessage = z.string().safeParse(current);
+      if (causeMessage.success) {
+        messages.push(causeMessage.data);
+      }
+      break;
+    }
+  }
+  const cleaned = messages
+    .join("; caused by: ")
+    .replaceAll(ansiPattern, "")
+    .replaceAll(/\p{Cc}/gu, " ")
+    .replaceAll(credentialUrlPattern, "$<scheme>[REDACTED]@")
+    .replaceAll(bearerPattern, "Bearer [REDACTED]")
+    .replaceAll(sensitiveAssignmentPattern, "$<name>$<separator>[REDACTED]")
+    .replaceAll(credentialPrefixPattern, "[REDACTED]")
+    .replaceAll(/\s+/gu, " ")
+    .trim();
+  if (cleaned.length === 0) {
+    return "The execution provider returned no error detail.";
+  }
+  if (cleaned.length <= EXECUTION_ERROR_LIMIT) {
+    return cleaned;
+  }
+  return `${cleaned.slice(0, EXECUTION_ERROR_LIMIT)} [error detail truncated]`;
 };
 
 const compilerDiagnosticPatterns = [
@@ -440,14 +484,28 @@ export const executeProposalBoundValidation = (input: {
         validationRoot: planned.validationRoot,
       });
     } catch (error) {
+      const timedOut = error instanceof Error && error.name === "TimeoutError";
+      const rejection = z.string().safeParse(error);
+      let providerError: Error;
+      if (error instanceof Error) {
+        providerError = error;
+      } else if (rejection.success) {
+        providerError = new Error(rejection.data);
+      } else {
+        providerError = new Error("The provider returned a non-Error rejection.");
+      }
       return {
         ok: false,
         receipt: failureReceipt(
           input.attempt,
           commands,
-          error instanceof Error && error.name === "TimeoutError"
-            ? "command-timeout"
-            : "execution-error",
+          timedOut ? "command-timeout" : "execution-error",
+          {
+            exitCode: -1,
+            hint: `The execution provider ${timedOut ? "timed out while running" : "could not run"} ${planned.name} (${planned.command}). Cause: ${executionErrorDetail(providerError)} Check the sandbox and command working directory, then retry validation.`,
+            name: planned.name,
+            operation: "run-validation-command",
+          },
         ),
       };
     }

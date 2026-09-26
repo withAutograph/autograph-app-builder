@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
 
 import type { TargetApplyReceipt } from "./target-apply";
+import type { ValidationCommandExecutor } from "./target-validation";
 import {
   createTargetValidationAttempt,
   compilerDiagnostics,
@@ -219,6 +220,117 @@ describe("target validation", () => {
         reason: "command-failed",
       },
     });
+  });
+
+  it("identifies a provider failure before the first validation command returns", async () => {
+    const { sandbox } = sandboxFixture();
+    const failure = new Error("Sandbox command launch failed", {
+      cause: new Error("workspace unavailable for apps/example; token=private-value"),
+    });
+    const result = await executeProposalBoundValidation({
+      appId: "example",
+      apply,
+      attempt: createTargetValidationAttempt(apply, "provider-error"),
+      // oxlint-disable-next-line eslint/require-await -- model the provider's rejected promise
+      executor: async () => {
+        throw failure;
+      },
+      sandbox,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      receipt: {
+        commandFailure: {
+          exitCode: -1,
+          name: "check-build",
+          operation: "run-validation-command",
+        },
+        commands: [],
+        reason: "execution-error",
+      },
+    });
+    if (result.ok) {
+      throw new Error("Expected a provider failure");
+    }
+    expect(result.receipt.commandFailure?.hint).toContain("Sandbox command launch failed");
+    expect(result.receipt.commandFailure?.hint).toContain("workspace unavailable for apps/example");
+    expect(result.receipt.commandFailure?.hint).toContain(
+      "mise run --skip-tools app:check example",
+    );
+    expect(JSON.stringify(result)).not.toContain("private-value");
+  });
+
+  it("keeps timeout stage and safely bounds provider error details", async () => {
+    const { sandbox } = sandboxFixture();
+    const timeout = new Error(
+      `Authorization: Bearer private-bearer https://user:password@example.test/path ghp_privatekey ${"x".repeat(3000)}`,
+    );
+    timeout.name = "TimeoutError";
+    const result = await executeProposalBoundValidation({
+      appId: "example",
+      apply,
+      attempt: createTargetValidationAttempt(apply, "provider-timeout"),
+      // oxlint-disable-next-line eslint/require-await -- model the provider's rejected promise
+      executor: async () => {
+        throw timeout;
+      },
+      sandbox,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      receipt: {
+        commandFailure: {
+          exitCode: -1,
+          name: "check-build",
+          operation: "run-validation-command",
+        },
+        reason: "command-timeout",
+      },
+    });
+    if (result.ok) {
+      throw new Error("Expected a provider timeout");
+    }
+    const hint = result.receipt.commandFailure?.hint ?? "";
+    expect(hint).toContain("timed out while running");
+    expect(hint).toContain("[error detail truncated]");
+    expect(hint).not.toContain("private-bearer");
+    expect(hint).not.toContain("password");
+    expect(hint).not.toContain("ghp_privatekey");
+    expect(hint.length).toBeLessThan(1500);
+  });
+
+  it("identifies the failing validation command after an earlier command passed", async () => {
+    const { sandbox } = sandboxFixture();
+    const executor = vi
+      .fn<ValidationCommandExecutor>()
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "passed" })
+      .mockRejectedValueOnce("provider unavailable");
+    const result = await executeProposalBoundValidation({
+      appId: "example",
+      apply,
+      attempt: createTargetValidationAttempt(apply, "second-command-error"),
+      executor,
+      sandbox,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      receipt: {
+        commandFailure: {
+          exitCode: -1,
+          name: "test",
+          operation: "run-validation-command",
+        },
+        commands: [{ exitCode: 0, name: "check-build" }],
+        reason: "execution-error",
+      },
+    });
+    if (result.ok) {
+      throw new Error("Expected a provider failure");
+    }
+    expect(result.receipt.commandFailure?.hint).toContain("provider unavailable");
   });
 
   it("returns only safe structured TypeScript diagnostics from a failed command", () => {
