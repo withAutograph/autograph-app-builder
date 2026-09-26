@@ -4,7 +4,11 @@ import { createHash } from "node:crypto";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 import type { GitHubPublicationContentSource } from "../repository/github-publication";
 import { inspectSourceBoundSandboxWorkspace } from "../repository/arrusted-template";
-import { inspectApplyOverlay, inspectFixtureApplyOverlay } from "../repository/target-apply";
+import {
+  inspectApplyOverlay,
+  inspectFixtureApplyOverlay,
+  reviewedOverlayTreeDigest,
+} from "../repository/target-apply";
 import { readPreparedSandboxSourceManifest } from "../repository/supported-template";
 import { hasTestCapability } from "../testing/test-capability";
 
@@ -33,8 +37,16 @@ export function publicationContentSourceForReviewedWorkflow(input: {
             input.state.appSpec.appId,
           )
         : await inspectApplyOverlay(input.sandbox, input.state.applyReceipt.applyRoot);
-      if (observed.treeDigest !== input.state.reviewReceipt.postTreeDigest) {
-        throw new Error("The reviewed apply overlay changed before GitHub publication.");
+      if (
+        reviewedOverlayTreeDigest(
+          observed,
+          input.state.appSpec.appId,
+          "operation" in input.state.proposal,
+        ) !== input.state.reviewReceipt.postTreeDigest
+      ) {
+        throw new Error(
+          "The selected app changed after review. Review its current files again before publishing the draft pull request.",
+        );
       }
       return new Map(observed.files.map((file) => [file.path, file]));
     })());

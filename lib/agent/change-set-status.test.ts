@@ -4,9 +4,32 @@ import {
   boundedChangedAppTextExport,
   changedAppTextPaths,
   isCandidateExportTextPath,
+  reviewableChanges,
 } from "../../agent/tools/change_set_status";
 
 describe("reviewed candidate export", () => {
+  it("reviews only selected existing-app source and omits tooling output", () => {
+    const changes = [
+      { kind: "modified" as const, path: "apps/replica/app/page.tsx" },
+      { kind: "modified" as const, path: "apps/other/app/page.tsx" },
+      { kind: "modified" as const, path: ".config/app-specs/replica.md" },
+      { kind: "modified" as const, path: ".git/index" },
+      { kind: "added" as const, path: "apps/replica/.turbo/turbo-test.log" },
+      { kind: "added" as const, path: "apps/replica/node_modules/.vite/results.json" },
+      { kind: "modified" as const, path: "apps/replica/next-env.d.ts" },
+      { kind: "modified" as const, path: "apps/replica/schema/release/release-manifest.json" },
+    ];
+    expect(reviewableChanges(changes, "replica", true).map(({ path }) => path)).toEqual([
+      "apps/replica/app/page.tsx",
+      "apps/replica/schema/release/release-manifest.json",
+    ]);
+    expect(reviewableChanges(changes, "replica", false).map(({ path }) => path)).toEqual([
+      "apps/replica/app/page.tsx",
+      "apps/other/app/page.tsx",
+      ".config/app-specs/replica.md",
+      "apps/replica/schema/release/release-manifest.json",
+    ]);
+  });
   it("exports only changed app-owned text files, not the entire schema history", () => {
     expect(
       changedAppTextPaths(
