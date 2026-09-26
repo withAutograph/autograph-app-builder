@@ -99,6 +99,7 @@ const launchResponse = () =>
 describe("shared working preview startup", () => {
   it("binds with closed ingress and returns only an HTTP-verified implementation URL", async () => {
     const { events, options, provider } = setup();
+    const sandboxExpiresAt = provider.expiresAt;
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(launchResponse())
@@ -111,6 +112,8 @@ describe("shared working preview startup", () => {
       /^https:\/\/preview\.example\/__autograph_preview_launch\?token=/u,
     );
     expect(result.receipt.status).toBe("ready");
+    expect(result.receipt.expiresAt).toBe(sandboxExpiresAt.toISOString());
+    expect(provider.extendTimeout).not.toHaveBeenCalled();
     expect(provider.update).not.toHaveBeenCalledWith(
       expect.objectContaining({ ports: [3000] }),
       expect.anything(),
@@ -118,6 +121,17 @@ describe("shared working preview startup", () => {
     expect(provider.runCommand).toHaveBeenCalledWith(
       expect.objectContaining({ cmd: "node", detached: true }),
     );
+  });
+
+  it("does not start a preview when the Sandbox has already expired", async () => {
+    const { options, provider } = setup();
+    provider.expiresAt = new Date(Date.now() - 1);
+
+    await expect(startWorkingPreview(options)).rejects.toThrow(
+      "The private Sandbox has no remaining lifetime for a working preview.",
+    );
+    expect(provider.update).not.toHaveBeenCalled();
+    expect(provider.runCommand).not.toHaveBeenCalled();
   });
 
   it("carries application cookies across its authentication redirect before readiness", async () => {

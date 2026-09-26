@@ -25,8 +25,6 @@ export interface WorkingPreviewRuntime {
   receipt: PublicWorkingPreview;
 }
 
-const previewLifetimeMs = 10 * 60_000;
-
 const missingRuntimeFile = (error: unknown): null => {
   if (error instanceof Error && "code" in error && error.code === "ENOENT") {
     return null;
@@ -433,9 +431,12 @@ export const startWorkingPreview = async (input: {
 }): Promise<WorkingPreviewRuntime> => {
   input.signal?.throwIfAborted();
   const { provider } = input;
-  const expiresAt = Date.now() + previewLifetimeMs;
+  const expiresAt = provider.expiresAt?.getTime();
+  if (expiresAt === undefined || expiresAt <= Date.now()) {
+    throw new Error("The private Sandbox has no remaining lifetime for a working preview.");
+  }
   const signal = AbortSignal.any([
-    AbortSignal.timeout(previewLifetimeMs),
+    AbortSignal.timeout(expiresAt - Date.now()),
     ...(input.signal === undefined ? [] : [input.signal]),
   ]);
   const providerSessionId = provider.currentSession().sessionId;
@@ -468,10 +469,6 @@ export const startWorkingPreview = async (input: {
     diagnosticsPath = `${directory}/diagnostics.json`;
     const supervisorPath = `${directory}/server.mjs`;
     const configurationPath = `${directory}/access.json`;
-    const remaining = (provider.expiresAt?.getTime() ?? Date.now()) - Date.now();
-    if (remaining < previewLifetimeMs + 120_000) {
-      await provider.extendTimeout(previewLifetimeMs + 120_000 - remaining, { signal });
-    }
     const accessInput = {
       appPort: input.port,
       configurationPath,

@@ -170,7 +170,7 @@ export const publicUiPreviewSchema = z
 
 export type PublicUiPreview = z.infer<typeof publicUiPreviewSchema>;
 
-/** A working app verified by the shared preview runtime; expiresAt bounds readiness. */
+/** A working app verified by the shared preview runtime; expiresAt follows its Sandbox lifetime. */
 export const publicWorkingPreviewSchema = z
   .object({
     appId: z.string().min(1),
