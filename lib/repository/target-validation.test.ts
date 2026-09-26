@@ -115,6 +115,16 @@ describe("target validation", () => {
     expect(excerpt.truncated).toBe(true);
   });
 
+  it("retains schema compiler failures and their repair guidance", () => {
+    const excerpt = validationOutputExcerpt(
+      "",
+      "Schema compilation failed for spend-review (exit 1).\nschema-compiler: apps/spend-review/schema/spend-review.cue:12:4: conflicting values\nRead the compiler error and its CUE file location above, correct the app-owned schema or its inputs, then rerun the app's schema check.",
+    );
+    expect(excerpt.stderr).toContain("schema-compiler:");
+    expect(excerpt.stderr).toContain("conflicting values");
+    expect(excerpt.stderr).toContain("rerun the app's schema check");
+  });
+
   it("runs repository commands without receipt or source preflight", async () => {
     const { sandbox } = sandboxFixture();
     const currentApply = { ...apply, digest: "current-worktree" };
