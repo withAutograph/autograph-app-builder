@@ -22,6 +22,14 @@ describe("shared app delivery guidance", () => {
     );
   });
 
+  it("requires operation, cause, impact, and repair in failure reports", () => {
+    const guidance = completionGuidance({ phase: "apply_failed" });
+    expect(guidance).toContain("report the exact operation");
+    expect(guidance).toContain("concrete error or command diagnostic");
+    expect(guidance).toContain("supported next repair action");
+    expect(guidance).toContain("Never replace a specific failure with a generic statement");
+  });
+
   it("does not promote fixture previews or publication state into working product proof", () => {
     expect(completionGuidance({ phase: "ui_previewed" })).toContain(
       "Fixture interactions do not prove",
