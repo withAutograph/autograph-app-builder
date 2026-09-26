@@ -143,11 +143,11 @@ describe("target validation", () => {
   it("retains native toolchain repair steps when the failure has no CUE location", () => {
     const excerpt = validationOutputExcerpt(
       "",
-      'Schema compilation failed for example during --app-artifact (exit 1).\nToolNotFound: failed to find tool "cc"\nInstall a native C compiler in the build environment and verify `cc --version` succeeds before rerunning the schema check.\nRetry: mise exec --locked --no-deps -- bun .config/mise/scripts/repository/schema-release.ts check --app example',
+      'Schema compilation failed for example during --app-artifact (exit 1).\nToolNotFound: failed to find tool "cc"\nInstall a native C compiler in the build environment and verify `cc --version` succeeds before rerunning the schema check.\nRetry: mise run schema:release -- check --app example',
     );
     expect(excerpt.stderr).toContain('ToolNotFound: failed to find tool "cc"');
     expect(excerpt.stderr).toContain("Install a native C compiler");
-    expect(excerpt.stderr).toContain("Retry: mise exec");
+    expect(excerpt.stderr).toContain("Retry: mise run schema:release");
   });
 
   it("runs repository commands without receipt or source preflight", async () => {
