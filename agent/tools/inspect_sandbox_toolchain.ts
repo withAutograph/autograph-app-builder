@@ -15,7 +15,7 @@ import {
 } from "@/lib/repository/dependency-cache";
 import { targetExecutionBinding } from "@/lib/repository/target-planning";
 
-const commands = ["bash", "git", "mise", "bun", "node", "pnpm"] as const;
+const commands = ["bash", "git", "mise", "bun", "node", "pnpm", "cargo", "rustc"] as const;
 
 export const inspectSandboxCommand = async (
   sandbox: Pick<SandboxSession, "run">,
