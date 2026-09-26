@@ -128,7 +128,8 @@ const sensitiveAssignmentPattern =
   /(?<name>authorization|cookie|password|passwd|secret|token|api[-_]?key)(?<separator>\s*[:=]\s*)(?<value>[^\s,;]+)/giu;
 const bearerPattern = /Bearer\s+[^\s,;]+/giu;
 const repairLinePattern =
-  /(?:^|\s)(?:apps\/|error(?:\s+TS\d+|:)|typescript\(TS\d+\)|FAIL\s|Build failed|Failed to compile|Module not found|Cannot find (?:module|name)|Script not found|Formatting issues found|schema-compiler:|Schema compilation failed|cue:|cargo:|rustc:|mise(?:\s+ERROR|:)|The compiler produced no diagnostic output|Install the repository's locked mise tools|Read the compiler error and its CUE file location)/iu;
+  /(?:^|\s)(?:apps\/|error(?:\s+TS\d+|:)|typescript\(TS\d+\)|FAIL\s|Build failed|Failed to compile|Module not found|Cannot find (?:module|name)|Script not found|Formatting issues found|schema-compiler:|Schema compilation failed|Schema release generation failed|ToolNotFound:|linker\s+[`"']?cc|cue:|cargo:|rustc:|mise(?:\s+ERROR|:)|The compiler produced no diagnostic output|The compiler returned no output|No CUE source location was reported|Install a native C compiler|Install the repository's locked mise tools|Read the compiler error and its CUE file location|Retry:)/iu;
+const diagnosticContinuationPattern = /^(?:\s+\S|\s*\^|\s*\||\s*(?:caused by|help|note|retry):)/iu;
 
 // Keep enough compiler/build output for an agent to repair its own candidate,
 // while excluding control bytes and common credential forms from durable state.
@@ -138,21 +139,34 @@ export const validationOutputExcerpt = (
 ): TargetValidationOutputExcerpt => {
   let truncated = false;
   const sanitize = (value: string) => {
-    const cleaned = value
+    const lines = value
       .replaceAll(ansiPattern, "")
       .replaceAll(/[^\t\n\r\u0020-\u007E]/gu, "")
       .replaceAll(bearerPattern, "Bearer [REDACTED]")
       .replaceAll(sensitiveAssignmentPattern, "$<name>$<separator>[REDACTED]")
       .replaceAll(/(?:\/workspace\/repository\/)?(?=apps\/)/gu, "")
-      .split("\n")
-      .filter((line) => repairLinePattern.test(line))
+      .split("\n");
+    const retained = new Set<number>();
+    for (const [index, line] of lines.entries()) {
+      if (!repairLinePattern.test(line)) continue;
+      retained.add(index);
+      // CUE and Rust often put the source excerpt or the underlying cause on
+      // following lines that do not repeat the error prefix.
+      for (let next = index + 1; next < Math.min(index + 4, lines.length); next += 1) {
+        if (!diagnosticContinuationPattern.test(lines[next] ?? "")) break;
+        retained.add(next);
+      }
+    }
+    const cleaned = lines
+      .filter((_line, index) => retained.has(index))
       .join("\n")
       .trim();
     if (cleaned.length <= VALIDATION_OUTPUT_LIMIT) {
       return cleaned;
     }
     truncated = true;
-    return `${cleaned.slice(0, VALIDATION_OUTPUT_LIMIT)}\n[output truncated]`;
+    const portion = Math.floor(VALIDATION_OUTPUT_LIMIT / 2);
+    return `${cleaned.slice(0, portion)}\n[output truncated; showing beginning and end]\n${cleaned.slice(-portion)}`;
   };
   return { stderr: sanitize(stderr), stdout: sanitize(stdout), truncated };
 };

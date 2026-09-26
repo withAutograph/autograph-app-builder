@@ -20,10 +20,10 @@ export interface WorkingPreviewRuntime {
   sandboxId: string;
   providerSessionId: string;
   commandId: string;
+  /** Hash of the accepted app build and launch settings; avoids restarting the same live preview. */
+  requestDigest?: string;
   receipt: PublicWorkingPreview;
 }
-
-const previewLifetimeMs = 10 * 60_000;
 
 const missingRuntimeFile = (error: unknown): null => {
   if (error instanceof Error && "code" in error && error.code === "ENOENT") {
@@ -89,6 +89,14 @@ setTimeout(close, Math.max(0, launch.expiresAt - Date.now()));
 
 const requestSignal = (signal?: AbortSignal) =>
   signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000);
+
+const sandboxPreviewExpiry = (provider: Sandbox): number => {
+  const expiresAt = provider.expiresAt?.getTime();
+  if (expiresAt === undefined || expiresAt <= Date.now()) {
+    throw new Error("The private Sandbox has no remaining lifetime for a working preview.");
+  }
+  return expiresAt;
+};
 
 // This jar follows same-origin HTTP readiness redirects. Browser authentication
 // and cookie behavior still require the separate product acceptance walkthrough.
@@ -422,6 +430,7 @@ export const startWorkingPreview = async (input: {
   command: WorkingPreviewCommand;
   port: number;
   landingPath: string;
+  requestDigest?: string;
   previous?: WorkingPreviewRuntime | null;
   fetch?: typeof fetch;
   readinessTimeoutMs?: number;
@@ -430,9 +439,9 @@ export const startWorkingPreview = async (input: {
 }): Promise<WorkingPreviewRuntime> => {
   input.signal?.throwIfAborted();
   const { provider } = input;
-  const expiresAt = Date.now() + previewLifetimeMs;
+  const expiresAt = sandboxPreviewExpiry(provider);
   const signal = AbortSignal.any([
-    AbortSignal.timeout(previewLifetimeMs),
+    AbortSignal.timeout(expiresAt - Date.now()),
     ...(input.signal === undefined ? [] : [input.signal]),
   ]);
   const providerSessionId = provider.currentSession().sessionId;
@@ -465,10 +474,6 @@ export const startWorkingPreview = async (input: {
     diagnosticsPath = `${directory}/diagnostics.json`;
     const supervisorPath = `${directory}/server.mjs`;
     const configurationPath = `${directory}/access.json`;
-    const remaining = (provider.expiresAt?.getTime() ?? Date.now()) - Date.now();
-    if (remaining < previewLifetimeMs + 120_000) {
-      await provider.extendTimeout(previewLifetimeMs + 120_000 - remaining, { signal });
-    }
     const accessInput = {
       appPort: input.port,
       configurationPath,
@@ -559,7 +564,7 @@ export const startWorkingPreview = async (input: {
       signal,
     );
     input.onAttempt?.(null);
-    return {
+    const runtime: WorkingPreviewRuntime = {
       commandId: command.cmdId,
       providerSessionId,
       receipt: {
@@ -571,6 +576,10 @@ export const startWorkingPreview = async (input: {
       },
       sandboxId: input.sandboxId,
     };
+    if (input.requestDigest !== undefined) {
+      runtime.requestDigest = input.requestDigest;
+    }
+    return runtime;
   } catch (error) {
     return cleanupPreviewAttempt({
       attempt,
