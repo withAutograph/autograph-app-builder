@@ -7,12 +7,12 @@ import {
 } from "@/lib/sandbox/development-toolchain";
 import {
   HOSTED_BUN_RUNTIME_ENVIRONMENT,
-  createHostedBunRuntimeInstaller,
+  createHostedRuntimeInstaller,
 } from "@/lib/sandbox/hosted-bun-runtime";
 import { createHostedVercelBackend } from "@/lib/sandbox/vercel-backend";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
-const installHostedBunRuntime = createHostedBunRuntimeInstaller();
+const installHostedRuntime = createHostedRuntimeInstaller();
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function createVercelDefinition() {
@@ -42,7 +42,7 @@ function createVercelDefinition() {
           );
         }
       } else {
-        await installHostedBunRuntime(sandbox);
+        await installHostedRuntime(sandbox);
       }
     },
   });
