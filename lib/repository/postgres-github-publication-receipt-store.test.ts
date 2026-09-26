@@ -6,13 +6,16 @@ import { describe, expect, it, vi } from "vitest";
 
 import type * as databaseSchema from "../db/schema";
 import { hostedGitHubPublicationJournals, hostedGitHubPublicationProposals } from "../db/schema";
-import type { GitHubMutationReceipt } from "./github-publication";
+import type { DraftPullRequestProposal, GitHubMutationReceipt } from "./github-publication";
 import { GITHUB_PUBLICATION_VERSION } from "./github-publication";
 import {
   createPostgresGitHubPublicationReceiptStore,
   parseGitHubPublicationJournalRow,
 } from "./postgres-github-publication-receipt-store";
-import { createPostgresGitHubPublicationStores } from "./postgres-github-publication-store";
+import {
+  createPostgresGitHubPublicationStores,
+  sameProposalExceptTitle,
+} from "./postgres-github-publication-store";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 const authority = {
@@ -92,6 +95,42 @@ function databaseFixture(input: {
 }
 
 describe("PostgreSQL GitHub publication receipt journal", () => {
+  it("reuses an identical sealed proposal when only its requested title changes", () => {
+    const proposal: DraftPullRequestProposal = {
+      approvedPaths: ["apps/example/app/page.tsx"],
+      baseBranch: "main",
+      baseSha: "a".repeat(40),
+      baseTree: "b".repeat(40),
+      branchName: "app-builder/review-test",
+      changeSetDigest: "c".repeat(64),
+      changedContentDigest: "d".repeat(64),
+      digest: "e".repeat(64),
+      draft: true,
+      idempotencyKey: "f".repeat(64),
+      installationIdentityDigest: "1".repeat(64),
+      intendedOutcome: "publish-reviewed-change-set-as-draft-pull-request",
+      name: "example",
+      owner: "withAutograph",
+      releaseGate: { configured: false, name: "REPOSITORY_RELEASE_ENABLED" },
+      repositoryId: "100",
+      repositoryObservationDigest: "2".repeat(64),
+      reviewDigest: "3".repeat(64),
+      title: "Original title",
+      version: GITHUB_PUBLICATION_VERSION,
+      visibility: "private",
+    };
+    expect(
+      sameProposalExceptTitle(proposal, {
+        ...proposal,
+        digest: "4".repeat(64),
+        title: "Revised title",
+      }),
+    ).toBe(true);
+    expect(
+      sameProposalExceptTitle(proposal, { ...proposal, approvedPaths: ["apps/other/page.tsx"] }),
+    ).toBe(false);
+    expect(sameProposalExceptTitle(proposal, { ...proposal, baseSha: "5".repeat(40) })).toBe(false);
+  });
   it("accepts only a canonically rebound closed receipt row", () => {
     const receipt = pendingReceipt();
     expect(parseGitHubPublicationJournalRow(journalRow(receipt))).toEqual(receipt);

@@ -53,7 +53,10 @@ const installation = {
 const proposals: GitHubPublicationProposalStore = {
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   async read() {},
-  async save() {},
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+  async save(proposal) {
+    return proposal;
+  },
 };
 
 const receipts: GitHubPublicationReceiptStore = {
