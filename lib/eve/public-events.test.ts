@@ -715,10 +715,11 @@ describe("installed Eve 0.43 projection", () => {
       "error",
       "status",
     ]);
-    expect(JSON.stringify(projected)).not.toContain("Stopped");
+    expect(projected[3]).toMatchObject({ code: "failed" });
+    expect(projected[3]?.type === "error" ? projected[3].message : "").toContain("Cause: Stopped");
   });
 
-  it("keeps source and planning diagnostics out of public failures", () => {
+  it("explains a source failure with its safe cause", () => {
     const projected = projectInstalledEveEvents([
       installedEvent({
         data: {
@@ -731,16 +732,67 @@ describe("installed Eve 0.43 projection", () => {
     ]);
     expect(projected).toEqual([
       {
-        code: "unable_to_continue",
+        code: "source_workspace_invalid",
         index: 0,
         message:
-          "I couldn't finish preparing your app. Your progress is saved, so you can try again.",
+          "Builder could not complete the current Builder operation (source_workspace_invalid). Cause: The GitHub source workspace could not be verified after dependency cache validation of the AppSpec receipt digest. Your progress is saved; correct the cause and resume this session.",
         type: "error",
       },
       { index: 1, status: "failed", type: "status" },
     ]);
-    expect(JSON.stringify(projected)).not.toMatch(
-      /AppSpec|cache|dependency|digest|receipt|source workspace|validation/iu,
+  });
+
+  it("names the failed operation and workflow size limit without exposing URLs or tokens", () => {
+    const projected = projectInstalledEveEvents([
+      installedEvent({
+        data: {
+          actions: [
+            {
+              callId: "call_review",
+              input: { includeContent: true, token: "private" },
+              kind: "tool-call",
+              toolName: "change_set_status",
+            },
+          ],
+        },
+        type: "actions.requested",
+      }),
+      installedEvent({
+        data: {
+          code: "FatalError",
+          message:
+            "Stream write failed: HTTP 400 (PUT https://provider.example/secret?token=private): Chunk size 89847765 exceeds maximum allowed size of 10485760 bytes",
+        },
+        type: "session.failed",
+      }),
+    ]);
+    expect(projected[0]).toEqual({
+      code: "result_too_large",
+      index: 0,
+      message:
+        "Builder could not save the result of `change_set_status`: its output was 89847765 bytes, above the workflow limit of 10485760 bytes. Review only changed files or split the result into smaller parts, then resume this saved session.",
+      type: "error",
+    });
+    expect(JSON.stringify(projected)).not.toContain("private");
+    expect(JSON.stringify(projected)).not.toContain("provider.example");
+  });
+
+  it("redacts credentials in an otherwise useful provider cause", () => {
+    const projected = projectInstalledEveEvents([
+      installedEvent({
+        data: {
+          code: "ProviderError",
+          message:
+            "GitHub operation failed: token=github_pat_123456789 and https://private.example/a",
+        },
+        type: "session.failed",
+      }),
+    ]);
+    expect(projected[0]).toMatchObject({ code: "ProviderError" });
+    expect(projected[0]?.type === "error" ? projected[0].message : "").toContain(
+      "GitHub operation failed",
     );
+    expect(JSON.stringify(projected)).not.toContain("github_pat_123456789");
+    expect(JSON.stringify(projected)).not.toContain("private.example");
   });
 });
