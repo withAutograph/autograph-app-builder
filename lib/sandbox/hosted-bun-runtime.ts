@@ -18,11 +18,16 @@ const hostedRustInstallRequest = {
   command: `set -eu
 mise install rust@${HOSTED_RUST_VERSION}
 rust_root="$(mise where rust@${HOSTED_RUST_VERSION})"
-test -x "$rust_root/bin/cargo"
-test -x "$rust_root/bin/rustc"
+if test -x "$rust_root/cargo" && test -x "$rust_root/rustc"; then
+  rust_bin="$rust_root"
+else
+  rust_bin="$rust_root/bin"
+fi
+test -x "$rust_bin/cargo"
+test -x "$rust_bin/rustc"
 install -d ${HOSTED_BUN_RUNTIME_PREFIX}/bin
-ln -sfn "$rust_root/bin/cargo" ${HOSTED_BUN_RUNTIME_PREFIX}/bin/cargo
-ln -sfn "$rust_root/bin/rustc" ${HOSTED_BUN_RUNTIME_PREFIX}/bin/rustc
+ln -sfn "$rust_bin/cargo" ${HOSTED_BUN_RUNTIME_PREFIX}/bin/cargo
+ln -sfn "$rust_bin/rustc" ${HOSTED_BUN_RUNTIME_PREFIX}/bin/rustc
 cargo --version
 rustc --version
 if ! command -v cc >/dev/null; then

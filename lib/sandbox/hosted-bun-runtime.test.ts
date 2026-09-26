@@ -47,6 +47,16 @@ describe("hosted validation runtime", () => {
         command: expect.stringContaining("sudo apt-get install -y build-essential"),
       }),
     );
+    expect(run).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        command: expect.stringContaining('if test -x "$rust_root/cargo"'),
+      }),
+    );
+    expect(run).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ command: expect.stringContaining('rust_bin="$rust_root/bin"') }),
+    );
     expect(HOSTED_BUN_RUNTIME_ENVIRONMENT.PATH).toContain(`${HOSTED_BUN_RUNTIME_PREFIX}/bin`);
   });
 
