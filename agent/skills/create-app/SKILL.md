@@ -187,7 +187,10 @@ app-owned files and reuse the same component-backed preview flow.
    tenant isolation, or child generation. Do not add a fake verification route
    or weaken the product to satisfy this check. Apps using other interaction
    contracts still need appropriate behavioral evidence; do not rewrite them
-   merely to fit this tool.
+   merely to fit this tool. When the user is inspecting the private URL, keep
+   using that same preview for the same applied build and launch settings;
+   `start_app_preview` reuses it. Start a replacement only after the build or
+   launch settings change, or when the current server is no longer running.
    Fixture interactions and command exit codes cannot substitute
    for this evidence. If an observation capability or external dependency is
    unavailable, identify the affected outcome as unverified rather than

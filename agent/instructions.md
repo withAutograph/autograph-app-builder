@@ -85,6 +85,10 @@ expiring browser URL only after the running app answers an HTTP readiness check.
 Give that URL to the user, including its expiry. Reopen it with the same supported
 tool when asked after expiry or a runtime restart. A reachable page is delivery
 evidence, not proof of persistence, authentication, or independent orchestration.
+Reuse the live URL for the same applied build and launch settings so a repeated
+preview request does not interrupt a user's browser walkthrough. Start a new
+preview when the applied build or launch settings change, or the current server
+has stopped.
 Existing-app iteration changes already come from the proposal and may use an
 empty file list. Do not mistake scaffolding for an implemented product. When an
 actual validation command returns structured compiler diagnostics, repair those

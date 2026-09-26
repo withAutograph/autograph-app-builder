@@ -20,6 +20,8 @@ export interface WorkingPreviewRuntime {
   sandboxId: string;
   providerSessionId: string;
   commandId: string;
+  /** Hash of the accepted app build and launch settings; avoids restarting the same live preview. */
+  requestDigest?: string;
   receipt: PublicWorkingPreview;
 }
 
@@ -422,6 +424,7 @@ export const startWorkingPreview = async (input: {
   command: WorkingPreviewCommand;
   port: number;
   landingPath: string;
+  requestDigest?: string;
   previous?: WorkingPreviewRuntime | null;
   fetch?: typeof fetch;
   readinessTimeoutMs?: number;
@@ -562,6 +565,7 @@ export const startWorkingPreview = async (input: {
     return {
       commandId: command.cmdId,
       providerSessionId,
+      ...(input.requestDigest === undefined ? {} : { requestDigest: input.requestDigest }),
       receipt: {
         appId: input.appId,
         expiresAt: new Date(expiresAt).toISOString(),
