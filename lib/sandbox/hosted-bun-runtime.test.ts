@@ -34,10 +34,20 @@ describe("hosted validation runtime", () => {
     expect(HOSTED_BUN_RUNTIME_ENVIRONMENT.PATH).toContain(
       `${HOSTED_BUN_RUNTIME_PREFIX}/node_modules/.bin`,
     );
-    expect(run).toHaveBeenCalledWith({
-      command: `mise install rust@${HOSTED_RUST_VERSION} && cargo --version && rustc --version`,
-      env: HOSTED_BUN_RUNTIME_ENVIRONMENT,
-    });
+    expect(run).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        command: expect.stringContaining(`mise where rust@${HOSTED_RUST_VERSION}`),
+        env: HOSTED_BUN_RUNTIME_ENVIRONMENT,
+      }),
+    );
+    expect(run).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        command: expect.stringContaining("sudo apt-get install -y build-essential"),
+      }),
+    );
+    expect(HOSTED_BUN_RUNTIME_ENVIRONMENT.PATH).toContain(`${HOSTED_BUN_RUNTIME_PREFIX}/bin`);
   });
 
   it("reports Rust setup failure and permits a retry", async () => {
