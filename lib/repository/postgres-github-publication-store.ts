@@ -9,6 +9,8 @@ import { hostedGitHubPublicationProposals } from "../db/schema";
 import {
   assertExactDraftPullRequestProposal,
   assertExactFreshRepositoryProposal,
+  draftProposalKeys,
+  freshProposalKeys,
 } from "./github-publication";
 import type {
   DraftPullRequestProposal,
@@ -55,18 +57,86 @@ function proposalKind(
     : "draft-pull-request";
 }
 
+const releaseGateSchema = z
+  .object({ configured: z.boolean(), name: z.literal("REPOSITORY_RELEASE_ENABLED") })
+  .strict();
+
+const hasExactStoredKeys = (value: GitHubPublicationProposal, keys: readonly string[]): boolean =>
+  JSON.stringify(Object.keys(value).toSorted()) === JSON.stringify([...keys].toSorted());
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function parseProposal(input: unknown): GitHubPublicationProposal {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     throw new Error("GitHub publication proposal JSON is malformed.");
   }
-  const proposal = input as GitHubPublicationProposal;
-  if (proposal.intendedOutcome === "create-private-fresh-history-repository") {
+  const stored = input as GitHubPublicationProposal;
+  // PostgreSQL jsonb reorders object keys. Publication v2 digests use the
+  // constructor's JSON.stringify order, so restore that exact order after
+  // checking the stored object has no missing or extra fields.
+  if (stored.intendedOutcome === "create-private-fresh-history-repository") {
+    if (
+      !hasExactStoredKeys(stored, freshProposalKeys) ||
+      !releaseGateSchema.safeParse(stored.releaseGate).success
+    ) {
+      throw new Error("Stored fresh-repository proposal fields are missing or unexpected.");
+    }
+    // oxlint-disable-next-line eslint/sort-keys -- legacy digest depends on constructor field order.
+    const proposal: FreshRepositoryProposal = {
+      changeSetDigest: stored.changeSetDigest,
+      contractDigest: stored.contractDigest,
+      defaultBranch: stored.defaultBranch,
+      destinationName: stored.destinationName,
+      destinationOwner: stored.destinationOwner,
+      eligibilityDigest: stored.eligibilityDigest,
+      idempotencyKey: stored.idempotencyKey,
+      initialCommitMessage: stored.initialCommitMessage,
+      installationIdentityDigest: stored.installationIdentityDigest,
+      intendedOutcome: stored.intendedOutcome,
+      releaseGate: { configured: false, name: stored.releaseGate.name },
+      reviewDigest: stored.reviewDigest,
+      sourceReceiptDigest: stored.sourceReceiptDigest,
+      sourceSha: stored.sourceSha,
+      sourceTree: stored.sourceTree,
+      version: stored.version,
+      visibility: stored.visibility,
+      digest: stored.digest,
+    };
     assertExactFreshRepositoryProposal(proposal);
     return proposal;
   }
-  assertExactDraftPullRequestProposal(proposal as DraftPullRequestProposal);
-  return proposal as DraftPullRequestProposal;
+  if (
+    !hasExactStoredKeys(stored, draftProposalKeys) ||
+    !releaseGateSchema.safeParse(stored.releaseGate).success
+  ) {
+    throw new Error("Stored draft pull-request proposal fields are missing or unexpected.");
+  }
+  const draft = stored as DraftPullRequestProposal;
+  // oxlint-disable-next-line eslint/sort-keys -- legacy digest depends on constructor field order.
+  const proposal: DraftPullRequestProposal = {
+    approvedPaths: draft.approvedPaths,
+    baseBranch: draft.baseBranch,
+    baseSha: draft.baseSha,
+    baseTree: draft.baseTree,
+    branchName: draft.branchName,
+    changeSetDigest: draft.changeSetDigest,
+    changedContentDigest: draft.changedContentDigest,
+    draft: draft.draft,
+    idempotencyKey: draft.idempotencyKey,
+    installationIdentityDigest: draft.installationIdentityDigest,
+    intendedOutcome: draft.intendedOutcome,
+    name: draft.name,
+    owner: draft.owner,
+    releaseGate: { configured: draft.releaseGate.configured, name: draft.releaseGate.name },
+    repositoryId: draft.repositoryId,
+    repositoryObservationDigest: draft.repositoryObservationDigest,
+    reviewDigest: draft.reviewDigest,
+    title: draft.title,
+    version: draft.version,
+    visibility: draft.visibility,
+    digest: draft.digest,
+  };
+  assertExactDraftPullRequestProposal(proposal);
+  return proposal;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
