@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { listCurrentAppSourcePaths } from "./inspect_existing_app";
+import { listCurrentAppSourcePaths } from "../../agent/tools/inspect_existing_app";
 
 describe("existing app source listing", () => {
   it("re-reads tracked and newly added app files from the live checkout", async () => {
