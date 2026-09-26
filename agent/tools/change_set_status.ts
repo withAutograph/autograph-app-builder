@@ -8,6 +8,7 @@ import {
   inspectApplyOverlay,
   inspectFixtureApplyOverlay,
   overlayChanges,
+  reviewedOverlayTreeDigest,
 } from "@/lib/repository/target-apply";
 import type { OverlayChange } from "@/lib/repository/target-apply";
 import { deriveNormalizedChangeSet } from "@/lib/repository/reviewed-change-set";
@@ -126,7 +127,11 @@ export const exactNormalizedChangeSet = async (input: {
       changedContentDigest: createHash("sha256").update(JSON.stringify(changes)).digest("hex"),
       changes,
       postTree: observed.files,
-      postTreeDigest: observed.treeDigest,
+      postTreeDigest: reviewedOverlayTreeDigest(
+        observed,
+        input.state.appSpec.appId,
+        "operation" in input.state.proposal,
+      ),
     },
     input.state.validationReceipt,
     input.state.proposal.contractDigest,

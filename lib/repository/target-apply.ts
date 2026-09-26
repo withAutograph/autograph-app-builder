@@ -61,6 +61,22 @@ export function canonicalOverlayFiles(files: readonly OverlayFile[]): OverlayFil
     .toSorted((left, right) => compareOverlayPaths(left.path, right.path));
 }
 
+// Existing-app review follows the selected app. Unrelated repository or
+// planning-file edits must not invalidate a reviewed app change set.
+export const reviewedOverlayTreeDigest = (
+  snapshot: OverlaySnapshot,
+  appId: string,
+  existingApp: boolean,
+): string => {
+  if (!existingApp) {
+    return snapshot.treeDigest;
+  }
+  const files = snapshot.files.filter(({ path }) => path.startsWith(`apps/${appId}/`));
+  return createHash("sha256")
+    .update(JSON.stringify(canonicalOverlayFiles(files)))
+    .digest("hex");
+};
+
 export interface OverlayChange {
   path: string;
   kind: "added" | "modified" | "deleted";

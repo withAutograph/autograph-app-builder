@@ -4,7 +4,29 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
 
-import { inspectApplyOverlay, OVERLAY_SNAPSHOT_SCRIPT } from "./target-apply";
+import {
+  inspectApplyOverlay,
+  OVERLAY_SNAPSHOT_SCRIPT,
+  reviewedOverlayTreeDigest,
+} from "./target-apply";
+
+it("keeps existing-app review stable across unrelated repository edits", () => {
+  const appFile = { digest: "a".repeat(64), mode: "644", path: "apps/example/app/page.tsx" };
+  const before = {
+    files: [appFile, { digest: "b".repeat(64), mode: "644", path: ".config/app-specs/example.md" }],
+    treeDigest: "before",
+  };
+  const after = {
+    files: [appFile, { digest: "c".repeat(64), mode: "644", path: ".config/app-specs/example.md" }],
+    treeDigest: "after",
+  };
+  expect(reviewedOverlayTreeDigest(before, "example", true)).toBe(
+    reviewedOverlayTreeDigest(after, "example", true),
+  );
+  expect(reviewedOverlayTreeDigest(before, "example", false)).not.toBe(
+    reviewedOverlayTreeDigest(after, "example", false),
+  );
+});
 
 it("reports the source snapshot operation, cause, and repair when sandbox execution fails", async () => {
   const sandbox = {
