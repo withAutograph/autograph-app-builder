@@ -6,7 +6,7 @@ const hostedMiseData = `${HOSTED_BUN_RUNTIME_PREFIX}/mise-data`;
 
 export const HOSTED_BUN_RUNTIME_ENVIRONMENT = {
   MISE_DATA_DIR: hostedMiseData,
-  PATH: `${HOSTED_BUN_RUNTIME_PREFIX}/node_modules/.bin:${hostedMiseData}/installs/rust/${HOSTED_RUST_VERSION}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
+  PATH: `${HOSTED_BUN_RUNTIME_PREFIX}/bin:${HOSTED_BUN_RUNTIME_PREFIX}/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
 } as const;
 
 const hostedBunRuntimeInstallRequest = {
@@ -15,7 +15,29 @@ const hostedBunRuntimeInstallRequest = {
 } as const;
 
 const hostedRustInstallRequest = {
-  command: `mise install rust@${HOSTED_RUST_VERSION} && cargo --version && rustc --version`,
+  command: `set -eu
+mise install rust@${HOSTED_RUST_VERSION}
+rust_root="$(mise where rust@${HOSTED_RUST_VERSION})"
+test -x "$rust_root/bin/cargo"
+test -x "$rust_root/bin/rustc"
+install -d ${HOSTED_BUN_RUNTIME_PREFIX}/bin
+ln -sfn "$rust_root/bin/cargo" ${HOSTED_BUN_RUNTIME_PREFIX}/bin/cargo
+ln -sfn "$rust_root/bin/rustc" ${HOSTED_BUN_RUNTIME_PREFIX}/bin/rustc
+cargo --version
+rustc --version
+if ! command -v cc >/dev/null; then
+  if command -v apt-get >/dev/null; then
+    sudo apt-get update
+    sudo apt-get install -y build-essential
+  elif command -v dnf >/dev/null; then
+    sudo dnf install -y gcc
+  else
+    echo 'A C compiler is required for Rust schema compilation; this sandbox has neither cc nor a supported package manager.' >&2
+    exit 1
+  fi
+fi
+command -v cc
+cc --version`,
   env: HOSTED_BUN_RUNTIME_ENVIRONMENT,
 } as const;
 
