@@ -994,7 +994,7 @@ export function assertExactInstallationIdentity(identity: GitHubInstallationIden
   }
 }
 
-const repositoryKeys = [
+export const repositoryKeys = [
   "version",
   "repositoryId",
   "owner",

@@ -5,17 +5,22 @@ import { z } from "zod";
 import type * as databaseSchema from "../db/schema";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { hostedGitHubPublicationJournals } from "../db/schema";
-import { assertCanonicalGitHubMutationReceipt } from "./github-publication";
+import {
+  assertCanonicalGitHubMutationReceipt,
+  createRepositoryObservation,
+  repositoryKeys,
+} from "./github-publication";
 import type { GitHubMutationReceipt, GitHubPublicationReceiptStore } from "./github-publication";
 import type { HostedGitHubTenantAuthority } from "./postgres-github-installation-store";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
+const freshRepositoryKind = "fresh-repository" as const;
 
 const journalRowSchema = z
   .object({
     createdAt: z.date(),
     idempotencyKey: z.string().regex(/^[0-9a-f]{64}$/u),
-    kind: z.enum(["fresh-repository", "draft-pull-request"]),
+    kind: z.enum([freshRepositoryKind, "draft-pull-request"]),
     proposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     receiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     record: z.unknown(),
@@ -35,10 +40,127 @@ const journalRowSelection = {
   updatedAt: hostedGitHubPublicationJournals.updatedAt,
 };
 
+const pendingOrder = [
+  "approvedByCallId",
+  "idempotencyKey",
+  "kind",
+  "proposalDigest",
+  "status",
+  "version",
+  "digest",
+] as const;
+const failureOrder = [
+  "approvedByCallId",
+  "failureCode",
+  "idempotencyKey",
+  "kind",
+  "proposalDigest",
+  "providerCode",
+  "recoveryRequired",
+  "status",
+  "version",
+  "digest",
+] as const;
+const freshSuccessOrder = [
+  "approvedByCallId",
+  "freshHistory",
+  "idempotencyKey",
+  "initialCommitSha",
+  "initialCommitTree",
+  "installationIdentityDigest",
+  "kind",
+  "parentCount",
+  "proposalDigest",
+  "providerReadBackDigest",
+  "recoveredFromPending",
+  "releaseGateAbsent",
+  "repository",
+  "status",
+  "version",
+  "digest",
+] as const;
+const draftSuccessOrder = [
+  "approvedByCallId",
+  "baseBranch",
+  "baseSha",
+  "branchName",
+  "branchSha",
+  "branchTree",
+  "changeSetDigest",
+  "changedContentDigest",
+  "draft",
+  "idempotencyKey",
+  "installationIdentityDigest",
+  "kind",
+  "normalizedChangedPaths",
+  "proposalDigest",
+  "providerReadBackDigest",
+  "pullRequestId",
+  "pullRequestNumber",
+  "recoveredFromPending",
+  "releaseGateUnchanged",
+  "repositoryId",
+  "status",
+  "version",
+  "digest",
+] as const;
+
+// JSONB reorders keys. These orders match the receipt constructors used when
+// calculating publication v2 digests. Check the field set before rebuilding.
+const restoreReceiptOrder = (record: GitHubMutationReceipt): GitHubMutationReceipt => {
+  let order: readonly string[];
+  if (record.status === "pending") {
+    order = pendingOrder;
+  } else if (record.status === "failed") {
+    order = failureOrder;
+  } else if (record.kind === freshRepositoryKind) {
+    order = freshSuccessOrder;
+  } else {
+    order = draftSuccessOrder;
+  }
+  if (JSON.stringify(Object.keys(record).toSorted()) !== JSON.stringify([...order].toSorted())) {
+    throw new Error("Stored GitHub publication receipt fields are missing or unexpected.");
+  }
+  let repository =
+    record.status === "succeeded" && record.kind === freshRepositoryKind
+      ? record.repository
+      : undefined;
+  if (repository !== undefined) {
+    if (
+      JSON.stringify(Object.keys(repository).toSorted()) !==
+      JSON.stringify([...repositoryKeys].toSorted())
+    ) {
+      throw new Error("Stored GitHub repository observation fields are missing or unexpected.");
+    }
+    const restored = createRepositoryObservation({
+      defaultBranch: repository.defaultBranch,
+      headSha: repository.headSha,
+      headTree: repository.headTree,
+      installationIdentityDigest: repository.installationIdentityDigest,
+      name: repository.name,
+      owner: repository.owner,
+      releaseGate: {
+        configured: repository.releaseGate.configured,
+        name: repository.releaseGate.name,
+      },
+      repositoryId: repository.repositoryId,
+      visibility: repository.visibility,
+    });
+    if (restored.digest !== repository.digest) {
+      throw new Error("Stored GitHub repository observation digest does not match its fields.");
+    }
+    repository = restored;
+  }
+  const orderedFields = Object.entries(record)
+    .map(([key, value]) => [key, key === "repository" ? repository : value] as const)
+    .toSorted(([left], [right]) => order.indexOf(left) - order.indexOf(right));
+  return Object.fromEntries(orderedFields) as GitHubMutationReceipt;
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function parseGitHubPublicationJournalRow(input: unknown): GitHubMutationReceipt {
   const row = journalRowSchema.parse(input);
-  const receipt = row.record as GitHubMutationReceipt;
+  const receipt = restoreReceiptOrder(row.record as GitHubMutationReceipt);
   assertCanonicalGitHubMutationReceipt(receipt);
   if (
     row.proposalDigest !== receipt.proposalDigest ||
