@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import type * as databaseSchema from "../db/schema";
 import { hostedGitHubPublicationJournals, hostedGitHubPublicationProposals } from "../db/schema";
 import type { DraftPullRequestProposal, GitHubMutationReceipt } from "./github-publication";
-import { GITHUB_PUBLICATION_VERSION } from "./github-publication";
+import { GITHUB_PUBLICATION_VERSION, createRepositoryObservation } from "./github-publication";
 import {
   createPostgresGitHubPublicationReceiptStore,
   parseGitHubPublicationJournalRow,
@@ -151,7 +151,99 @@ describe("PostgreSQL GitHub publication receipt journal", () => {
         ...journalRow(receipt),
         record: { ...receipt, ambientToken: "forbidden" },
       }),
-    ).toThrow("schema is not closed");
+    ).toThrow("fields are missing or unexpected");
+  });
+
+  it("restores JSONB key order for pending and terminal publication receipts", () => {
+    const pending = pendingReceipt();
+    const failedUnsigned = {
+      approvedByCallId: "approval-call",
+      failureCode: "provider-rejected" as const,
+      idempotencyKey: pending.idempotencyKey,
+      kind: "draft-pull-request" as const,
+      proposalDigest: pending.proposalDigest,
+      providerCode: "missing-access",
+      recoveryRequired: true as const,
+      status: "failed" as const,
+      version: GITHUB_PUBLICATION_VERSION,
+    };
+    const failed = { ...failedUnsigned, digest: sha256(failedUnsigned) };
+    const base = {
+      approvedByCallId: "approval-call",
+      baseBranch: "main",
+      baseSha: "a".repeat(40),
+      branchName: "app-builder/review-test",
+      branchSha: "b".repeat(40),
+      branchTree: "c".repeat(40),
+      changeSetDigest: "d".repeat(64),
+      changedContentDigest: "e".repeat(64),
+      draft: true as const,
+      idempotencyKey: pending.idempotencyKey,
+      installationIdentityDigest: "f".repeat(64),
+      kind: "draft-pull-request" as const,
+      normalizedChangedPaths: ["apps/example/app/page.tsx"],
+      proposalDigest: pending.proposalDigest,
+      providerReadBackDigest: "1".repeat(64),
+      pullRequestId: "400",
+      pullRequestNumber: 7,
+      recoveredFromPending: false,
+      releaseGateUnchanged: true as const,
+      repositoryId: "100",
+      status: "succeeded" as const,
+      version: GITHUB_PUBLICATION_VERSION,
+    };
+    const draft = { ...base, digest: sha256(base) };
+    const repository = createRepositoryObservation({
+      defaultBranch: "main",
+      headSha: "b".repeat(40),
+      headTree: "c".repeat(40),
+      installationIdentityDigest: "f".repeat(64),
+      name: "example",
+      owner: "withAutograph",
+      releaseGate: { configured: false, name: "REPOSITORY_RELEASE_ENABLED" },
+      repositoryId: "100",
+      visibility: "private",
+    });
+    const freshUnsigned = {
+      approvedByCallId: "approval-call",
+      freshHistory: true as const,
+      idempotencyKey: pending.idempotencyKey,
+      initialCommitSha: repository.headSha,
+      initialCommitTree: repository.headTree,
+      installationIdentityDigest: repository.installationIdentityDigest,
+      kind: "fresh-repository" as const,
+      parentCount: 0 as const,
+      proposalDigest: pending.proposalDigest,
+      providerReadBackDigest: "1".repeat(64),
+      recoveredFromPending: false,
+      releaseGateAbsent: true as const,
+      repository,
+      status: "succeeded" as const,
+      version: GITHUB_PUBLICATION_VERSION,
+    };
+    const fresh = { ...freshUnsigned, digest: sha256(freshUnsigned) };
+    for (const receipt of [pending, failed, draft, fresh]) {
+      const reordered = Object.fromEntries(Object.entries(receipt).toReversed());
+      if (receipt.kind === "fresh-repository" && receipt.status === "succeeded") {
+        reordered.repository = {
+          ...Object.fromEntries(Object.entries(receipt.repository).toReversed()),
+          releaseGate: Object.fromEntries(
+            Object.entries(receipt.repository.releaseGate).toReversed(),
+          ),
+        };
+      }
+      expect(
+        parseGitHubPublicationJournalRow({
+          ...journalRow(),
+          idempotencyKey: receipt.idempotencyKey,
+          kind: receipt.kind,
+          proposalDigest: receipt.proposalDigest,
+          receiptDigest: receipt.digest,
+          record: reordered,
+          status: receipt.status,
+        }),
+      ).toEqual(receipt);
+    }
   });
 
   it("reads only one exact proposal-digest row", async () => {
