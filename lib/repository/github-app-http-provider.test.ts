@@ -740,4 +740,80 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       true,
     );
   });
+
+  it("reads back only the approved multi-path branch delta after an unrelated base advance", async () => {
+    const currentHead = "a".repeat(40);
+    const branchSha = "c".repeat(40);
+    const currentTree = "d".repeat(40);
+    const branchTree = "e".repeat(40);
+    const calls: string[] = [];
+    const { proposal, content } = unicodeDraftMaterial();
+    const branchPaths = [...content.approvedPaths].reverse();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    const implementation: typeof fetch = async (request, init = {}) => {
+      const url = String(request);
+      calls.push(url);
+      const method = init.method ?? "GET";
+      if (url.endsWith("/app/installations/456/access_tokens")) {
+        const body = JSON.parse(String(init.body)) as { permissions: Record<string, string> };
+        return json(
+          { permissions: body.permissions, token: "ghs_operation_scoped_installation_token" },
+          201,
+        );
+      }
+      if (url.endsWith("/repositories/100")) {
+        return json({
+          default_branch: "main",
+          id: 100,
+          name: "example-app",
+          owner: { login: "withAutograph" },
+          private: true,
+        });
+      }
+      if (url.endsWith("/repos/withAutograph/example-app/commits/main")) {
+        return json({ commit: { tree: { sha: currentTree } }, sha: currentHead });
+      }
+      if (url.endsWith("/repos/withAutograph/example-app/actions/variables?per_page=100&page=1")) {
+        return json({ variables: [] });
+      }
+      if (url.endsWith(`/compare/${sourceSha}...${currentHead}`)) {
+        return json({ files: [{ filename: "README.md" }] });
+      }
+      if (url.includes("/branches/")) {
+        return json({ commit: { sha: branchSha } });
+      }
+      if (url.endsWith(`/commits/${branchSha}`)) {
+        return json({
+          commit: {
+            message: `Add demo\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}`,
+            tree: { sha: branchTree },
+          },
+          parents: [{ sha: sourceSha }],
+          sha: branchSha,
+        });
+      }
+      if (url.endsWith(`/compare/${sourceSha}...${branchSha}`)) {
+        return json({ files: branchPaths.map((filename) => ({ filename })) });
+      }
+      if (url.includes("/pulls?state=open&")) {
+        return json([]);
+      }
+      throw new Error(`Unexpected ${method} URL: ${url}`);
+    };
+    const provider = createProvider(implementation);
+
+    const result = await provider.inspectDraftPublication(proposal);
+    expect(result).toMatchObject({
+      branch: {
+        branchSha,
+        branchTree,
+        normalizedChangedPaths: content.approvedPaths,
+        status: "present",
+      },
+      changedPathsSinceBase: ["README.md"],
+      repository: { headSha: currentHead, headTree: currentTree },
+    });
+    expect(calls.some((url) => url.endsWith(`/compare/${sourceSha}...${branchSha}`))).toBe(true);
+    expect(calls.some((url) => url.endsWith(`/compare/${currentHead}...${branchSha}`))).toBe(false);
+  });
 });

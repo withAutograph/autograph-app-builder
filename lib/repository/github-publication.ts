@@ -1870,6 +1870,7 @@ async function reclaimRejectedDraftPending(
     throw new Error("The GitHub journal changed during approved recovery.");
   }
   return pending;
+}
 
 function publicationRejectionMessage(
   acknowledgement: Extract<GitHubMutationAcknowledgement, { status: "rejected" }>,
@@ -1877,7 +1878,7 @@ function publicationRejectionMessage(
   if (acknowledgement.code === "reviewed-path-changed" && "path" in acknowledgement) {
     return `Reviewed content changed at ${acknowledgement.path}. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.`;
   }
-  return "GitHub rejected draft pull-request publication; sanitized receipt recorded.";
+  return `GitHub rejected draft pull-request publication with ${acknowledgement.code}; sanitized receipt recorded.`;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
