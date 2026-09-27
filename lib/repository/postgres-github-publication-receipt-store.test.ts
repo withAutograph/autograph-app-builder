@@ -44,7 +44,7 @@ function pendingReceipt(
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function journalRow(receipt = pendingReceipt()) {
+function journalRow(receipt: GitHubMutationReceipt = pendingReceipt()) {
   return {
     createdAt: new Date("2026-08-27T00:00:00.000Z"),
     idempotencyKey: receipt.idempotencyKey,
@@ -95,6 +95,48 @@ function databaseFixture(input: {
 }
 
 describe("PostgreSQL GitHub publication receipt journal", () => {
+  it("finds one tenant-scoped successful draft receipt by repository and PR number", async () => {
+    const unsigned = {
+      approvedByCallId: "approval-call",
+      baseBranch: "main",
+      baseSha: "a".repeat(40),
+      branchName: "app-builder/review-test",
+      branchSha: "b".repeat(40),
+      branchTree: "c".repeat(40),
+      changeSetDigest: "d".repeat(64),
+      changedContentDigest: "e".repeat(64),
+      draft: true as const,
+      idempotencyKey: "f".repeat(64),
+      installationIdentityDigest: "1".repeat(64),
+      kind: "draft-pull-request" as const,
+      normalizedChangedPaths: ["apps/example/app/page.tsx"],
+      proposalDigest: "2".repeat(64),
+      providerReadBackDigest: "3".repeat(64),
+      pullRequestId: "400",
+      pullRequestNumber: 7,
+      recoveredFromPending: false,
+      releaseGateUnchanged: true as const,
+      repositoryId: "100",
+      status: "succeeded" as const,
+      version: GITHUB_PUBLICATION_VERSION,
+    };
+    const receipt = { ...unsigned, digest: sha256(unsigned) };
+    const fixture = databaseFixture({ selected: [journalRow(receipt)] });
+    const store = createPostgresGitHubPublicationReceiptStore(fixture.database, authority);
+    await expect(store.findDraftByPullRequest?.("100", 7)).resolves.toEqual(receipt);
+    expect(fixture.limit).toHaveBeenCalledWith(2);
+    await expect(store.findDraftByPullRequest?.("100", 0)).rejects.toThrow(
+      "verified repository ID and positive PR number",
+    );
+    const ambiguous = databaseFixture({ selected: [journalRow(receipt), journalRow(receipt)] });
+    await expect(
+      createPostgresGitHubPublicationReceiptStore(
+        ambiguous.database,
+        authority,
+      ).findDraftByPullRequest?.("100", 7),
+    ).rejects.toThrow("Multiple Builder publication receipts");
+  });
+
   it("reuses an identical sealed proposal when only its requested title changes", () => {
     const proposal: DraftPullRequestProposal = {
       approvedPaths: ["apps/example/app/page.tsx"],

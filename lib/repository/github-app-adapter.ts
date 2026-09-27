@@ -22,6 +22,7 @@ import type {
   GitHubRepositoryObservation,
 } from "./github-publication";
 import { safeSourcePath } from "./source-path";
+import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
 
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -123,6 +124,24 @@ const draftReadBackSchema = z
   })
   .strict();
 
+const existingDraftSchema = z
+  .object({
+    baseBranch: z.string().min(1),
+    baseRepositoryId: decimal,
+    draft: z.boolean(),
+    headBranch: z.string().min(1),
+    headRepositoryId: decimal,
+    headSha: objectId,
+    headTree: objectId,
+    name: z.string().min(1),
+    number: z.number().int().positive(),
+    owner: z.string().min(1),
+    pullRequestId: decimal,
+    repositoryId: decimal,
+    state: z.enum(["open", "closed"]),
+  })
+  .strict();
+
 const acknowledgementSchema = z.discriminatedUnion("status", [
   z
     .object({
@@ -143,6 +162,16 @@ const acknowledgementSchema = z.discriminatedUnion("status", [
 type RequestedPermissions = z.infer<typeof permissionSnapshotSchema>;
 
 export interface GitHubAppInstallationProvider {
+  inspectExistingDraft: (input: {
+    repositoryId: string;
+    owner: string;
+    name: string;
+    number: number;
+  }) => Promise<unknown>;
+  updateExistingDraft: (
+    proposal: ExistingDraftUpdateProposal,
+    content: GitHubDraftPullRequestContent,
+  ) => Promise<unknown>;
   inspectInstallation: (input: {
     operation: GitHubOperation;
     requestedPermissions: RequestedPermissions;
@@ -282,6 +311,12 @@ export function createGitHubAppPublicationAdapter(
         digest: hash(unsigned),
       } as DraftPublicationReadBack;
     },
+    async inspectExistingDraft(input) {
+      return parseProviderResponse(
+        existingDraftSchema,
+        await sanitizedProviderCall(() => provider.inspectExistingDraft(input)),
+      ) as ExistingDraftObservation;
+    },
     async inspectFreshRepositoryOutcome(proposal) {
       const raw = await sanitizedProviderCall(() =>
         provider.inspectFreshRepositoryOutcome(proposal),
@@ -316,6 +351,12 @@ export function createGitHubAppPublicationAdapter(
       return parseProviderResponse(
         acknowledgementSchema,
         await sanitizedProviderCall(() => provider.publishDraftPullRequest(proposal, content)),
+      ) as GitHubMutationAcknowledgement;
+    },
+    async updateExistingDraft(proposal, content) {
+      return parseProviderResponse(
+        acknowledgementSchema,
+        await sanitizedProviderCall(() => provider.updateExistingDraft(proposal, content)),
       ) as GitHubMutationAcknowledgement;
     },
   };

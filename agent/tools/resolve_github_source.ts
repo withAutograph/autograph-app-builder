@@ -1,6 +1,7 @@
 import { defineTool } from "eve/tools";
 import { never } from "eve/tools/approval";
 import { z } from "zod";
+import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 
 import { repositoryAccessRuntimeForSession } from "@/lib/agent/deployment-repository-access-runtime";
 import { resolveRepositoryAccessForTool } from "@/lib/agent/repository-access-tool";
@@ -16,7 +17,51 @@ import {
 import { assertExactImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
 import { inspectGitHubSourceSandboxWorkspace } from "@/lib/repository/sandbox-github-source";
 
+const inspectDraftRevision = async (input: {
+  sessionAuth: unknown;
+  repository: { name: string; owner: string; repositoryId: string };
+  pullRequestNumber: number | undefined;
+}) => {
+  if (input.pullRequestNumber === undefined) {
+    return input.pullRequestNumber;
+  }
+  const publicationRuntime = await githubPublicationRuntimeForSession(input.sessionAuth);
+  return await publicationRuntime.inspectExistingDraftSource({
+    name: input.repository.name,
+    owner: input.repository.owner,
+    pullRequestNumber: input.pullRequestNumber,
+    repositoryId: input.repository.repositoryId,
+  });
+};
+
+const assertRetryDraftBranch = async (input: {
+  draftPullRequestNumber: number | undefined;
+  repository: { defaultBranch: string; name: string; owner: string; repositoryId: string };
+  resolvedRef: string;
+  sessionAuth: unknown;
+}) => {
+  if (input.draftPullRequestNumber === undefined) {
+    return;
+  }
+  if (input.resolvedRef === `refs/heads/${input.repository.defaultBranch}`) {
+    throw new Error(
+      "This Builder session already uses the repository's default branch. Start a new Builder session and select the draft PR number before preparing its source; the occupied checkout will not be replaced.",
+    );
+  }
+  const draft = await inspectDraftRevision({
+    pullRequestNumber: input.draftPullRequestNumber,
+    repository: input.repository,
+    sessionAuth: input.sessionAuth,
+  });
+  if (draft === undefined || input.resolvedRef !== `refs/heads/${draft.headBranch}`) {
+    throw new Error(
+      "This Builder session is bound to a different draft PR branch. Start a new Builder session and select the intended draft PR before preparing its source.",
+    );
+  }
+};
+
 export const inputSchema = z.strictObject({
+  draftPullRequestNumber: z.number().int().positive().optional(),
   repository: z
     .string()
     .min(3)
@@ -32,7 +77,7 @@ export const inputSchema = z.strictObject({
 export default defineTool({
   approval: never(),
   description:
-    "Automatically resolve and prepare one supported existing GitHub repository. Pass selectedInstallationId=null to use the single verified installation; provide an ID only after scope-selection-required. It confirms tenant-bound GitHub access, parks on the Store In authorization flow when access is missing, and uses the current checkout in the isolated workspace for the selected repository. It never creates, pushes, branches, opens a PR, or alters a release gate.",
+    "Resolve and prepare an existing connected GitHub repository. To revise an existing draft PR, provide its number in a new Builder session; Builder verifies the open draft and uses its current branch as the writable source. Pass selectedInstallationId=null for the single verified installation. This operation never pushes, branches, opens a PR, or alters a release gate.",
   async execute(input, ctx) {
     const initialWorkflow = appBuilderWorkflowState.get();
     const initialSource = sourceWorkflowState.get();
@@ -65,6 +110,12 @@ export default defineTool({
       initialSource.githubSource !== undefined &&
       initialWorkflow.githubSource !== undefined
     ) {
+      await assertRetryDraftBranch({
+        draftPullRequestNumber: input.draftPullRequestNumber,
+        repository: access.access.repository,
+        resolvedRef: initialSource.githubSource.resolvedRef,
+        sessionAuth: ctx.session.auth,
+      });
       // A retry keeps the selected repository binding and observes the live
       // checkout. GitHub's default branch may have advanced since selection.
       if (
@@ -87,11 +138,26 @@ export default defineTool({
       };
     }
 
+    const draftRevision = await inspectDraftRevision({
+      pullRequestNumber: input.draftPullRequestNumber,
+      repository: access.access.repository,
+      sessionAuth: ctx.session.auth,
+    });
+
     const prepared = await runtime.prepareExistingSource({
       ...input,
       access: access.access,
       callId: ctx.callId,
       currentAccessReceipt: access.receipt,
+      ...(draftRevision === undefined
+        ? {}
+        : {
+            revision: {
+              branch: draftRevision.headBranch,
+              headSha: draftRevision.headSha,
+              headTree: draftRevision.headTree,
+            },
+          }),
       // Source credentials are resolved first. The backend consumes the
       // server-owned context while `getSandbox()` creates the provider
       // session, so Vercel performs the Git clone itself.

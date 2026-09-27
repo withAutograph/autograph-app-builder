@@ -50,6 +50,9 @@ export default defineTool({
       appSpec: state.appSpec,
       applyReceipt: state.applyReceipt,
       artifacts: state.artifacts,
+      ...(state.publishedGitHubDraftProposalDigest === undefined
+        ? {}
+        : { publishedGitHubDraftProposalDigest: state.publishedGitHubDraftProposalDigest }),
       dependencyReceipt: state.dependencyReceipt,
       ...(state.githubSource === undefined ? {} : { githubSource: state.githubSource }),
       identityReceipt: state.identityReceipt,

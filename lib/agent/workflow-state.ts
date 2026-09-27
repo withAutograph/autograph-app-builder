@@ -12,6 +12,7 @@ import type {
   TargetValidationReceipt,
 } from "@/lib/repository/target-validation";
 import type { ReviewedChangeSetReceipt } from "@/lib/repository/reviewed-change-set";
+import type { ExistingDraftUpdateProposal } from "@/lib/repository/github-draft-update";
 import type { SourceReceipt } from "@/lib/repository/source-receipt";
 import type {
   LocalPublicationFailureReceipt,
@@ -142,6 +143,7 @@ interface WorkspacePhase {
   githubSource?: ImmutableGitHubSourceReceipt;
   preparedByCallId: string;
   artifacts: readonly PrototypeArtifact[];
+  publishedGitHubDraftProposalDigest?: string;
 }
 
 type UiPreviewPhase = WorkspacePhase & { uiPreview: UiPreviewRevision };
@@ -150,6 +152,12 @@ export interface GitHubDraftProposalBinding {
   proposal: DraftPullRequestProposal;
   sourceReceiptDigest: string;
   githubSourceDigest: string;
+}
+
+export interface ExistingDraftUpdateBinding {
+  proposal: ExistingDraftUpdateProposal;
+  githubSourceDigest: string;
+  reviewDigest: string;
 }
 
 type ReviewedPhase = WorkspacePhase & {
@@ -161,6 +169,7 @@ type ReviewedPhase = WorkspacePhase & {
   validationReceipt: TargetValidationReceipt;
   reviewReceipt: ReviewedChangeSetReceipt;
   githubDraftProposal?: GitHubDraftProposalBinding;
+  existingDraftUpdate?: ExistingDraftUpdateBinding;
 };
 
 export type AppBuilderWorkflowState =
