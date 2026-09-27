@@ -87,6 +87,30 @@ function pendingApprovalEvents(requestId: string) {
 }
 
 describe("same-origin canonical Eve transport", () => {
+  it("lets durable session snapshots finish while keeping mutation requests bounded", async () => {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning fetch test double
+    const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
+      String(url).includes("/stream?") ? stream() : accepted(),
+    );
+    const transport = createSameOriginEveTransport({
+      config,
+      fetchImplementation,
+      workloadIdentity: identity(),
+    });
+
+    await transport.get({ adapterSessionId: "wrun_1", principal });
+    expect(fetchImplementation.mock.calls[0]?.[1]?.signal).toBeUndefined();
+
+    await transport.send({
+      adapterSessionId: "wrun_1",
+      message: "Continue",
+      operationId: "send_1",
+      principal,
+    });
+    expect(fetchImplementation.mock.calls[1]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+    expect(fetchImplementation.mock.calls[1]?.[1]?.signal?.aborted).toBe(false);
+  });
+
   it("forwards the prepared reference on start and every mutating continuation without putting it in messages", async () => {
     const sourceHandoffId = "123e4567-e89b-42d3-a456-426614174001";
     const bodies: Record<string, unknown>[] = [];
