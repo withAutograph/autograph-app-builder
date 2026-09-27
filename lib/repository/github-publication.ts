@@ -1003,7 +1003,7 @@ export function assertExactInstallationIdentity(identity: GitHubInstallationIden
   }
 }
 
-export const repositoryKeys = [
+const repositoryKeys = [
   "version",
   "repositoryId",
   "owner",
@@ -1150,7 +1150,7 @@ export function assertExactImmutableGitHubSourceReceipt(
   }
 }
 
-export const freshProposalKeys = [
+const freshProposalKeys = [
   "version",
   "installationIdentityDigest",
   "destinationOwner",
@@ -1257,7 +1257,7 @@ export function assertExactFreshRepositoryProposal(proposal: FreshRepositoryProp
   }
 }
 
-export const draftProposalKeys = [
+const draftProposalKeys = [
   "version",
   "installationIdentityDigest",
   "repositoryId",
@@ -1962,7 +1962,9 @@ export async function publishApprovedDraftPullRequest(input: {
   if (acknowledgement.status === "rejected") {
     const failure = rejectionReceipt("draft-pull-request", pending, acknowledgement.code);
     await storeTerminal(input.store, pending, failure);
-    throw new Error("GitHub rejected draft pull-request publication; sanitized receipt recorded.");
+    throw new Error(
+      `GitHub rejected draft pull-request publication (${failure.providerCode}); sanitized receipt recorded. Resolve the reported provider condition, then seal a new proposal before retrying.`,
+    );
   }
   if (!/^[-A-Za-z0-9_]{1,128}$/u.test(acknowledgement.requestId)) {
     throw new GitHubOutcomeUnknownError();

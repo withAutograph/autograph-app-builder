@@ -894,46 +894,31 @@ export const createGitHubAppHttpProvider = (input: {
           throw new Error("invalid-material");
         }
         let totalBytes = 0;
-        const receiptChanges: {
-          path: string;
-          kind: "added" | "modified" | "deleted";
-          before?: { mode: string; digest: string };
-          after?: { mode: string; digest: string };
-        }[] = changes
-          .map((change) => {
-            if (change.after !== undefined) {
-              validateFile(change.after);
-            }
-            totalBytes += change.after?.content.byteLength ?? 0;
-            if (change.after !== undefined && change.after.path !== change.path) {
-              throw new Error("invalid-material");
-            }
-            const after =
-              change.after === undefined
-                ? undefined
-                : Object.fromEntries([
-                    ["mode", change.after.mode === "100755" ? "755" : "644"],
-                    ["digest", sha256(change.after.content)],
-                  ]);
-            if (
-              (change.kind === "added" && (change.before !== undefined || after === undefined)) ||
-              (change.kind === "deleted" && (change.before === undefined || after !== undefined)) ||
-              (change.kind === "modified" && (change.before === undefined || after === undefined))
-            ) {
-              throw new Error("invalid-material");
-            }
-            return Object.fromEntries([
-              ["path", change.path],
-              ["kind", change.kind],
-              ...(change.before === undefined ? [] : [["before", change.before]]),
-              ...(after === undefined ? [] : [["after", after]]),
-            ]) as (typeof receiptChanges)[number];
-          })
-          .toSorted((left, right) => compareOverlayPaths(left.path, right.path));
+        changes = changes.map((change) => {
+          if (change.after !== undefined) {
+            validateFile(change.after);
+          }
+          totalBytes += change.after?.content.byteLength ?? 0;
+          if (change.after !== undefined && change.after.path !== change.path) {
+            throw new Error("invalid-material");
+          }
+          const after =
+            change.after === undefined
+              ? undefined
+              : Object.fromEntries([
+                  ["mode", change.after.mode === "100755" ? "755" : "644"],
+                  ["digest", sha256(change.after.content)],
+                ]);
+          if (
+            (change.kind === "added" && (change.before !== undefined || after === undefined)) ||
+            (change.kind === "deleted" && (change.before === undefined || after !== undefined)) ||
+            (change.kind === "modified" && (change.before === undefined || after === undefined))
+          ) {
+            throw new Error("invalid-material");
+          }
+          return change;
+        });
         if (totalBytes > MAX_TOTAL_MATERIAL_BYTES) {
-          throw new Error("invalid-material");
-        }
-        if (sha256(JSON.stringify(receiptChanges)) !== proposal.changedContentDigest) {
           throw new Error("invalid-material");
         }
       } catch {

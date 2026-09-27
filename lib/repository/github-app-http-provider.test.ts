@@ -28,7 +28,7 @@ const sourceSha = "1".repeat(40);
 const sourceTree = "2".repeat(40);
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function unicodeDraftMaterial() {
+function unicodeDraftMaterial(preserveOverlayOrder = false) {
   const bytes = new TextEncoder().encode("export default null;\n");
   const digest = createHash("sha256").update(bytes).digest("hex");
   const changes = [
@@ -43,17 +43,19 @@ function unicodeDraftMaterial() {
         kind: "added" as const,
         path,
       };
-      return Object.fromEntries([
-        ["path", change.path],
-        ["kind", change.kind],
-        [
-          "after",
-          Object.fromEntries([
-            ["mode", change.after.mode],
-            ["digest", change.after.digest],
-          ]),
-        ],
-      ]) as typeof change;
+      return preserveOverlayOrder
+        ? change
+        : (Object.fromEntries([
+            ["path", change.path],
+            ["kind", change.kind],
+            [
+              "after",
+              Object.fromEntries([
+                ["mode", change.after.mode],
+                ["digest", change.after.digest],
+              ]),
+            ],
+          ]) as typeof change);
     })
     .toSorted((left, right) => compareOverlayPaths(left.path, right.path));
   const unsigned = {
@@ -519,7 +521,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       throw new Error(`Unexpected URL: ${url}`);
     };
     const provider = createProvider(implementation);
-    const { proposal, content } = unicodeDraftMaterial();
+    const { proposal, content } = unicodeDraftMaterial(true);
 
     await expect(provider.publishDraftPullRequest(proposal, content)).resolves.toEqual({
       code: "stale-base",
