@@ -28,7 +28,7 @@ const sourceSha = "1".repeat(40);
 const sourceTree = "2".repeat(40);
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function unicodeDraftMaterial(preserveOverlayOrder = false) {
+function unicodeDraftMaterial(preserveOverlayOrder = false, includePreimages = false) {
   const bytes = new TextEncoder().encode("export default null;\n");
   const digest = createHash("sha256").update(bytes).digest("hex");
   const changes = [
@@ -40,7 +40,15 @@ function unicodeDraftMaterial(preserveOverlayOrder = false) {
     .map((path) => {
       const change = {
         after: { digest, mode: "644" },
-        kind: "added" as const,
+        ...(includePreimages
+          ? {
+              before: {
+                digest: createHash("sha256").update("reviewed original").digest("hex"),
+                mode: "644",
+              },
+            }
+          : {}),
+        kind: includePreimages ? ("modified" as const) : ("added" as const),
         path,
       };
       return preserveOverlayOrder
@@ -48,6 +56,7 @@ function unicodeDraftMaterial(preserveOverlayOrder = false) {
         : (Object.fromEntries([
             ["path", change.path],
             ["kind", change.kind],
+            ...(change.before === undefined ? [] : [["before", change.before]]),
             [
               "after",
               Object.fromEntries([
@@ -518,15 +527,97 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       if (url.endsWith("/repos/withAutograph/example-app/actions/variables?per_page=100&page=1")) {
         return json({ variables: [] });
       }
+      if (url.endsWith(`/compare/${sourceSha}...${"a".repeat(40)}`)) {
+        return json({ files: [{ filename: ".codex/skills/example/SKILL.md" }] });
+      }
       throw new Error(`Unexpected URL: ${url}`);
     };
     const provider = createProvider(implementation);
     const { proposal, content } = unicodeDraftMaterial(true);
 
     await expect(provider.publishDraftPullRequest(proposal, content)).resolves.toEqual({
-      code: "stale-base",
+      code: "reviewed-path-changed",
+      path: ".codex/skills/example/SKILL.md",
       status: "rejected",
     });
-    expect(calls).toHaveLength(4);
+    expect(calls).toHaveLength(5);
   });
+
+  it.each(["modified", "added"] as const)(
+    "rejects a changed reviewed %s path before creating any GitHub object",
+    async (scenario) => {
+      const calls: { url: string; method: string }[] = [];
+      const { proposal, content } = unicodeDraftMaterial(false, scenario === "modified");
+      const pathSegments = content.changes[0]!.path.split("/");
+      let treeDepth = 0;
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      const implementation: typeof fetch = async (request, init = {}) => {
+        const url = String(request);
+        calls.push({ method: init.method ?? "GET", url });
+        if (url.endsWith("/app/installations/456/access_tokens")) {
+          const body = JSON.parse(String(init.body)) as { permissions: Record<string, string> };
+          return json(
+            { permissions: body.permissions, token: "ghs_operation_scoped_installation_token" },
+            201,
+          );
+        }
+        if (url.endsWith("/repositories/100")) {
+          return json({
+            default_branch: "main",
+            id: 100,
+            name: "example-app",
+            owner: { login: "withAutograph" },
+            private: true,
+          });
+        }
+        if (url.endsWith("/repos/withAutograph/example-app/commits/main")) {
+          return json({ commit: { tree: { sha: "b".repeat(40) } }, sha: sourceSha });
+        }
+        if (
+          url.endsWith("/repos/withAutograph/example-app/actions/variables?per_page=100&page=1")
+        ) {
+          return json({ variables: [] });
+        }
+        if (url.endsWith(`/compare/${sourceSha}...${sourceSha}`)) {
+          return json({ files: [] });
+        }
+        if (url.includes("/git/trees/")) {
+          const segment = pathSegments[treeDepth]!;
+          const final = treeDepth === pathSegments.length - 1;
+          treeDepth += 1;
+          return json({
+            truncated: false,
+            tree: [
+              {
+                mode: final ? "100644" : "040000",
+                path: segment,
+                sha: final ? "c".repeat(40) : `${treeDepth}`.repeat(40),
+                type: final ? "blob" : "tree",
+              },
+            ],
+          });
+        }
+        if (url.endsWith(`/git/blobs/${"c".repeat(40)}`)) {
+          return json({
+            content: Buffer.from("intervening edit").toString("base64"),
+            encoding: "base64",
+          });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      };
+      const provider = createProvider(implementation);
+
+      await expect(provider.publishDraftPullRequest(proposal, content)).resolves.toEqual({
+        code: "reviewed-path-changed",
+        path: content.changes[0]?.path,
+        status: "rejected",
+      });
+      expect(
+        calls
+          .filter(({ method }) => method === "POST")
+          .every(({ url }) => url.endsWith("/access_tokens")),
+      ).toBe(true);
+      expect(calls.some(({ url }) => url.includes("/git/blobs/"))).toBe(scenario === "modified");
+    },
+  );
 });

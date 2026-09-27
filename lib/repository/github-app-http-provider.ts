@@ -541,6 +541,62 @@ export const createGitHubAppHttpProvider = (input: {
     return objectId.parse(stringProperty(response.body, "sha"));
   };
 
+  const reviewedPreimageMatches = async (input: {
+    accessToken: string;
+    owner: string;
+    repositoryName: string;
+    headSha: string;
+    headTree: string;
+    change: { path: string; before?: { mode: string; digest: string } };
+  }): Promise<boolean> => {
+    const segments = input.change.path.split("/");
+    let treeSha = input.headTree;
+    let entry: unknown;
+    for (const [index, segment] of segments.entries()) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- walk the exact Git tree path before mutation
+      const treeResponse = await github({
+        authorization: input.accessToken,
+        expected: [200],
+        path: `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repositoryName)}/git/trees/${encodeURIComponent(treeSha)}`,
+      });
+      if (booleanProperty(treeResponse.body, "truncated")) {
+        throw new Error("invalid-response");
+      }
+      const entries = arrayProperty(treeResponse.body, "tree");
+      entry = entries.find((candidate) => stringProperty(candidate, "path") === segment);
+      if (entry === undefined) {
+        return input.change.before === undefined;
+      }
+      if (index < segments.length - 1) {
+        if (stringProperty(entry, "type") !== "tree") {
+          return false;
+        }
+        treeSha = objectId.parse(stringProperty(entry, "sha"));
+      }
+    }
+    if (entry === undefined || stringProperty(entry, "type") !== "blob") {
+      return false;
+    }
+    if (input.change.before === undefined) {
+      return false;
+    }
+    const mode = stringProperty(entry, "mode");
+    const blobSha = objectId.parse(stringProperty(entry, "sha"));
+    const blobResponse = await github({
+      authorization: input.accessToken,
+      expected: [200],
+      path: `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repositoryName)}/git/blobs/${encodeURIComponent(blobSha)}`,
+    });
+    if (stringProperty(blobResponse.body, "encoding") !== "base64") {
+      throw new Error("invalid-response");
+    }
+    const encoded = stringProperty(blobResponse.body, "content").replaceAll(/\\s/gu, "");
+    const bytes = Buffer.from(encoded, "base64");
+    return (
+      mode === `100${input.change.before.mode}` && sha256(bytes) === input.change.before.digest
+    );
+  };
+
   // Keep the repository projection local to this provider.
   // oxlint-disable-next-line unicorn/consistent-function-scoping
   const publicRepositorySnapshot = (snapshot: Awaited<ReturnType<typeof repositoryById>>) => ({
@@ -684,7 +740,7 @@ export const createGitHubAppHttpProvider = (input: {
       });
       const changedPathsSinceBase = arrayProperty(compare.body, "files")
         .map((file) => stringProperty(file, "filename"))
-        .toSorted();
+        .toSorted(compareOverlayPaths);
       let branch: unknown = { status: "absent" };
       let branchSha: string | undefined;
       try {
@@ -701,6 +757,9 @@ export const createGitHubAppHttpProvider = (input: {
             expected: [200],
             path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/commits/${branchSha}`,
           });
+          const firstParentSha = objectId.parse(
+            stringProperty(arrayProperty(branchCommit.body, "parents")[0], "sha"),
+          );
           const tree = property(property(branchCommit.body, "commit"), "tree");
           const markerMatches = stringProperty(
             property(branchCommit.body, "commit"),
@@ -709,11 +768,11 @@ export const createGitHubAppHttpProvider = (input: {
           const branchCompare = await github({
             authorization: accessToken,
             expected: [200],
-            path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/compare/${encodeURIComponent(proposal.baseSha)}...${encodeURIComponent(branchSha)}`,
+            path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/compare/${encodeURIComponent(firstParentSha)}...${encodeURIComponent(branchSha)}`,
           });
           const normalizedChangedPaths = arrayProperty(branchCompare.body, "files")
             .map((file) => stringProperty(file, "filename"))
-            .toSorted();
+            .toSorted(compareOverlayPaths);
           branch = {
             branchName: proposal.branchName,
             branchSha,
@@ -936,8 +995,48 @@ export const createGitHubAppHttpProvider = (input: {
         workflows: "write",
       };
       const { snapshot, accessToken } = await repositorySnapshotForProposal(proposal, permissions);
-      if (snapshot.headSha !== proposal.baseSha || snapshot.headTree !== proposal.baseTree) {
-        return { code: "stale-base", status: "rejected" };
+      if (
+        snapshot.repositoryId !== proposal.repositoryId ||
+        snapshot.owner !== proposal.owner ||
+        snapshot.name !== proposal.name ||
+        snapshot.visibility !== proposal.visibility ||
+        snapshot.defaultBranch !== proposal.baseBranch
+      ) {
+        return { code: "repository-identity-changed", status: "rejected" };
+      }
+      const upstreamCompare = await github({
+        authorization: accessToken,
+        expected: [200],
+        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/compare/${encodeURIComponent(proposal.baseSha)}...${encodeURIComponent(snapshot.headSha)}`,
+      });
+      const upstreamPaths = arrayProperty(upstreamCompare.body, "files")
+        .map((file) => stringProperty(file, "filename"))
+        .toSorted(compareOverlayPaths);
+      const conflicts = upstreamPaths.filter((path) =>
+        proposal.approvedPaths.some(
+          (approved) =>
+            path === approved || path.startsWith(`${approved}/`) || approved.startsWith(`${path}/`),
+        ),
+      );
+      if (conflicts.length > 0) {
+        return { code: "reviewed-path-changed", path: conflicts[0]!, status: "rejected" };
+      }
+      for (const change of changes) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- each live preimage is checked before any mutation
+        const matches = await reviewedPreimageMatches({
+          accessToken,
+          change: {
+            ...(change.before === undefined ? {} : { before: change.before }),
+            path: change.path,
+          },
+          headSha: snapshot.headSha,
+          headTree: snapshot.headTree,
+          owner: proposal.owner,
+          repositoryName: proposal.name,
+        });
+        if (!matches) {
+          return { code: "reviewed-path-changed", path: change.path, status: "rejected" };
+        }
       }
       const files = changes.flatMap((change) => (change.after === undefined ? [] : [change.after]));
       const deletions = changes.flatMap((change) =>
@@ -945,7 +1044,7 @@ export const createGitHubAppHttpProvider = (input: {
       );
       const tree = await createTree({
         accessToken,
-        baseTree: proposal.baseTree,
+        baseTree: snapshot.headTree,
         deletions,
         files,
         owner: proposal.owner,
@@ -956,7 +1055,7 @@ export const createGitHubAppHttpProvider = (input: {
         authorization: accessToken,
         body: {
           message: `${proposal.title}\n\n${marker}`,
-          parents: [proposal.baseSha],
+          parents: [snapshot.headSha],
           tree,
         },
         expected: [201],
