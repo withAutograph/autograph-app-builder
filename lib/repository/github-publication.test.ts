@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 import { runSequentially } from "../async-sequential";
-import { overlayChanges } from "./target-apply";
+import { compareOverlayPaths, overlayChanges } from "./target-apply";
 
 import {
   GITHUB_PUBLICATION_VERSION,
@@ -41,7 +41,6 @@ import { createReviewedChangeSetReceipt } from "./reviewed-change-set";
 import type { NormalizedChangeSet } from "./reviewed-change-set";
 import type { SourceReceiptEvidence } from "./source-receipt";
 import { SUPPORTED_TEMPLATE_ADAPTER } from "./supported-template";
-import { compareOverlayPaths } from "./target-apply";
 import { GitHubPublicationTestStore as Store } from "./github-publication-test-store";
 import { parseGitHubPublicationProposalRow } from "./postgres-github-publication-store";
 
@@ -550,9 +549,9 @@ describe("closed GitHub publication contract", () => {
 
     expect(identity.repositorySelection).toBe("all");
     expect(() => assertExactInstallationIdentity(identity)).not.toThrow();
-    const reordered = Object.fromEntries(Object.entries(identity).reverse()) as typeof identity;
+    const reordered = Object.fromEntries(Object.entries(identity).toReversed()) as typeof identity;
     reordered.permissions = Object.fromEntries(
-      Object.entries(identity.permissions).reverse(),
+      Object.entries(identity.permissions).toReversed(),
     ) as typeof identity.permissions;
     expect(() => assertExactInstallationIdentity(reordered)).not.toThrow();
   });
@@ -627,9 +626,9 @@ describe("closed GitHub publication contract", () => {
     });
     expect(active.releaseGate.configured).toBe(true);
     expect(() => assertExactRepositoryObservation(active)).not.toThrow();
-    const reordered = Object.fromEntries(Object.entries(active).reverse()) as typeof active;
+    const reordered = Object.fromEntries(Object.entries(active).toReversed()) as typeof active;
     reordered.releaseGate = Object.fromEntries(
-      Object.entries(active.releaseGate).reverse(),
+      Object.entries(active.releaseGate).toReversed(),
     ) as typeof active.releaseGate;
     expect(() => assertExactRepositoryObservation(reordered)).not.toThrow();
   });
@@ -683,15 +682,17 @@ describe("closed GitHub publication contract", () => {
     const reordered = {
       ...canonicalReview,
       changes: canonicalReview.changes.map((change) => ({
-        ...Object.fromEntries(Object.entries(change).reverse()),
+        kind: change.kind,
+        path: change.path,
+        ...Object.fromEntries(Object.entries(change).toReversed()),
         ...(change.before === undefined
           ? {}
-          : { before: Object.fromEntries(Object.entries(change.before).reverse()) }),
+          : { before: Object.fromEntries(Object.entries(change.before).toReversed()) }),
         ...(change.after === undefined
           ? {}
-          : { after: Object.fromEntries(Object.entries(change.after).reverse()) }),
+          : { after: Object.fromEntries(Object.entries(change.after).toReversed()) }),
       })),
-    } as unknown as typeof canonicalReview;
+    } as typeof canonicalReview;
 
     expect(changes[0]).toEqual({
       after: { digest: reviewedBytesDigest, mode: "100644" },
@@ -1065,7 +1066,7 @@ describe("closed GitHub publication contract", () => {
         review: review(),
         store: new Store(),
       }),
-    ).resolves.toMatchObject({ status: "succeeded", proposalDigest: proposal.digest });
+    ).resolves.toMatchObject({ proposalDigest: proposal.digest, status: "succeeded" });
     expect(adapter.draftCalls).toBe(1);
   });
 
@@ -1077,7 +1078,7 @@ describe("closed GitHub publication contract", () => {
       headTree: "8".repeat(40),
     });
     adapter.draftOutcome = draftReadBack(proposal, advancedRepo, "absent", [
-      proposal.approvedPaths[0]!,
+      proposal.approvedPaths[0] ?? "",
     ]);
 
     await expect(
@@ -1291,7 +1292,7 @@ describe("closed GitHub publication contract", () => {
           headSha: "9".repeat(40),
         });
         adapter.draftOutcome = draftReadBack(proposal, staleRepo, "absent", [
-          proposal.approvedPaths[0]!,
+          proposal.approvedPaths[0] ?? "",
         ]);
       },
       (adapter, proposal) => {

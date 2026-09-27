@@ -370,8 +370,13 @@ const bytesDigest = (value: Uint8Array) => createHash("sha256").update(value).di
 
 // Boundary equality should ignore object property insertion order. Digest
 // construction remains schema-ordered through the existing digest().
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+const record = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const canonicalJson = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
   if (record(value)) {
     return `{${Object.keys(value)
       .toSorted()
@@ -379,37 +384,40 @@ function canonicalJson(value: unknown): string {
       .join(",")}}`;
   }
   return JSON.stringify(value);
-}
+};
 
-function canonicalReviewedChanges(changes: ReviewedChangeSetReceipt["changes"]) {
-  return changes.map((change) => {
+const canonicalReviewedChanges = (changes: ReviewedChangeSetReceipt["changes"]) =>
+  changes.map((change) => {
     if (change.kind === "added") {
+      if (change.after === undefined) {
+        throw new Error("An added change requires after content.");
+      }
       return {
-        after: { digest: change.after!.digest, mode: change.after!.mode },
+        after: { digest: change.after.digest, mode: change.after.mode },
         kind: change.kind,
         path: change.path,
       };
     }
     if (change.kind === "modified") {
+      if (change.after === undefined || change.before === undefined) {
+        throw new Error("A modified change requires before and after content.");
+      }
       return {
-        after: { digest: change.after!.digest, mode: change.after!.mode },
-        before: { digest: change.before!.digest, mode: change.before!.mode },
+        after: { digest: change.after.digest, mode: change.after.mode },
+        before: { digest: change.before.digest, mode: change.before.mode },
         kind: change.kind,
         path: change.path,
       };
     }
+    if (change.kind !== "deleted" || change.before === undefined) {
+      throw new Error("A deleted change requires before content.");
+    }
     return {
-      before: { digest: change.before!.digest, mode: change.before!.mode },
+      before: { digest: change.before.digest, mode: change.before.mode },
       kind: change.kind,
       path: change.path,
     };
   });
-}
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactKeys(value: unknown, keys: readonly string[]): boolean {
@@ -1872,14 +1880,14 @@ async function reclaimRejectedDraftPending(
   return pending;
 }
 
-function publicationRejectionMessage(
+const publicationRejectionMessage = (
   acknowledgement: Extract<GitHubMutationAcknowledgement, { status: "rejected" }>,
-): string {
+): string => {
   if (acknowledgement.code === "reviewed-path-changed" && "path" in acknowledgement) {
     return `Reviewed content changed at ${acknowledgement.path}. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.`;
   }
   return `GitHub rejected draft pull-request publication with ${acknowledgement.code}; sanitized receipt recorded.`;
-}
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function createApprovedFreshRepository(input: {

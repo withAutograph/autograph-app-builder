@@ -554,7 +554,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     async (scenario) => {
       const calls: { url: string; method: string }[] = [];
       const { proposal, content } = unicodeDraftMaterial(false, scenario === "modified");
-      const pathSegments = content.changes[0]!.path.split("/");
+      const [firstChange] = content.changes;
+      if (firstChange === undefined) throw new Error("Expected a reviewed change.");
+      const pathSegments = firstChange.path.split("/");
       let treeDepth = 0;
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       const implementation: typeof fetch = async (request, init = {}) => {
@@ -588,11 +590,10 @@ describe("GitHub App fixed-origin HTTP provider", () => {
           return json({ files: [] });
         }
         if (url.includes("/git/trees/")) {
-          const segment = pathSegments[treeDepth]!;
+          const segment = pathSegments[treeDepth] ?? "";
           const final = treeDepth === pathSegments.length - 1;
           treeDepth += 1;
           return json({
-            truncated: false,
             tree: [
               {
                 mode: final ? "100644" : "040000",
@@ -601,6 +602,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
                 type: final ? "blob" : "tree",
               },
             ],
+            truncated: false,
           });
         }
         if (url.endsWith(`/git/blobs/${"c".repeat(40)}`)) {
@@ -631,11 +633,10 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const currentHead = "a".repeat(40);
     const currentTree = "d".repeat(40);
     const calls: { body: unknown; method: string; url: string }[] = [];
-    let treeDepth = 0;
-    let createdTreeBody: Record<string, unknown> | undefined;
-    let createdCommitBody: Record<string, unknown> | undefined;
+    let createdTreeBody: { base_tree?: string } | undefined;
+    let createdCommitBody: { parents: string[]; tree: string } | undefined;
     const { proposal, content } = unicodeDraftMaterial(false, true, ["README.md"]);
-    const changedFile = content.changes[0];
+    const [changedFile] = content.changes;
     if (changedFile?.kind !== "modified") {
       throw new Error("Expected the reviewed file to be modified.");
     }
@@ -643,9 +644,8 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       digest: createHash("sha256").update("reviewed original").digest("hex"),
       mode: "644",
     });
-    const pathSegments = content.changes[0]!.path.split("/");
     const beforeMode = changedFile.before.mode;
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    // oxlint-disable-next-line eslint/complexity, eslint/require-await -- one focused HTTP test double
     const implementation: typeof fetch = async (request, init = {}) => {
       const url = String(request);
       const method = init.method ?? "GET";
@@ -679,23 +679,12 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       if (url.endsWith(`/compare/${sourceSha}...${currentHead}`)) {
         return json({ files: [{ filename: "CHANGELOG.md" }] });
       }
-      if (url.includes("/git/trees/") && method === "GET") {
-        if (url.endsWith(`/git/trees/${currentTree}`)) {
-          treeDepth = 0;
-        }
-        const segment = pathSegments[treeDepth]!;
-        const final = treeDepth === pathSegments.length - 1;
-        treeDepth += 1;
+      if (url.endsWith(`/git/trees/${currentTree}`) && method === "GET") {
         return json({
-          truncated: false,
           tree: [
-            {
-              mode: final ? `100${beforeMode}` : "040000",
-              path: segment,
-              sha: final ? "c".repeat(40) : `${treeDepth}`.repeat(40),
-              type: final ? "blob" : "tree",
-            },
+            { mode: `100${beforeMode}`, path: changedFile.path, sha: "c".repeat(40), type: "blob" },
           ],
+          truncated: false,
         });
       }
       if (url.endsWith(`/git/blobs/${"c".repeat(40)}`) && method === "GET") {
@@ -708,11 +697,11 @@ describe("GitHub App fixed-origin HTTP provider", () => {
         return json({ sha: "f".repeat(40) }, 201);
       }
       if (url.endsWith("/git/trees") && method === "POST") {
-        createdTreeBody = body as Record<string, unknown>;
+        createdTreeBody = body as { base_tree?: string };
         return json({ sha: "e".repeat(40) }, 201);
       }
       if (url.endsWith("/git/commits") && method === "POST") {
-        createdCommitBody = body as Record<string, unknown>;
+        createdCommitBody = body as { parents: string[]; tree: string };
         return json({ sha: "9".repeat(40) }, 201);
       }
       if (url.endsWith("/git/refs") && method === "POST") {
@@ -726,7 +715,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const provider = createProvider(implementation);
 
     const publication = await provider.publishDraftPullRequest(proposal, content);
-    expect(calls.filter(({ url }) => url.includes("/git/trees/")).length).toBeGreaterThan(0);
+    expect(calls.some(({ url }) => url.endsWith(`/git/trees/${currentTree}`))).toBe(true);
     expect(calls.some(({ url }) => url.endsWith(`/git/trees/${currentTree}`))).toBe(true);
     expect(calls.some(({ url }) => url.endsWith(`/git/blobs/${"c".repeat(40)}`))).toBe(true);
     expect(publication).toEqual({
@@ -748,7 +737,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     const branchTree = "e".repeat(40);
     const calls: string[] = [];
     const { proposal, content } = unicodeDraftMaterial();
-    const branchPaths = [...content.approvedPaths].reverse();
+    const branchPaths = content.approvedPaths.toReversed();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const implementation: typeof fetch = async (request, init = {}) => {
       const url = String(request);

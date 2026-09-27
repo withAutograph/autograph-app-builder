@@ -541,7 +541,7 @@ export const createGitHubAppHttpProvider = (input: {
     return objectId.parse(stringProperty(response.body, "sha"));
   };
 
-  const reviewedPreimageMatches = async (input: {
+  const reviewedPreimageMatches = async (preimage: {
     accessToken: string;
     owner: string;
     repositoryName: string;
@@ -549,15 +549,15 @@ export const createGitHubAppHttpProvider = (input: {
     headTree: string;
     change: { path: string; before?: { mode: string; digest: string } };
   }): Promise<boolean> => {
-    const segments = input.change.path.split("/");
-    let treeSha = input.headTree;
+    const segments = preimage.change.path.split("/");
+    let treeSha = preimage.headTree;
     let entry: unknown;
     for (const [index, segment] of segments.entries()) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- walk the exact Git tree path before mutation
       const treeResponse = await github({
-        authorization: input.accessToken,
+        authorization: preimage.accessToken,
         expected: [200],
-        path: `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repositoryName)}/git/trees/${encodeURIComponent(treeSha)}`,
+        path: `/repos/${encodeURIComponent(preimage.owner)}/${encodeURIComponent(preimage.repositoryName)}/git/trees/${encodeURIComponent(treeSha)}`,
       });
       if (booleanProperty(treeResponse.body, "truncated")) {
         throw new Error("invalid-response");
@@ -565,7 +565,7 @@ export const createGitHubAppHttpProvider = (input: {
       const entries = arrayProperty(treeResponse.body, "tree");
       entry = entries.find((candidate) => stringProperty(candidate, "path") === segment);
       if (entry === undefined) {
-        return input.change.before === undefined;
+        return preimage.change.before === undefined;
       }
       if (index < segments.length - 1) {
         if (stringProperty(entry, "type") !== "tree") {
@@ -577,15 +577,15 @@ export const createGitHubAppHttpProvider = (input: {
     if (entry === undefined || stringProperty(entry, "type") !== "blob") {
       return false;
     }
-    if (input.change.before === undefined) {
+    if (preimage.change.before === undefined) {
       return false;
     }
     const mode = stringProperty(entry, "mode");
     const blobSha = objectId.parse(stringProperty(entry, "sha"));
     const blobResponse = await github({
-      authorization: input.accessToken,
+      authorization: preimage.accessToken,
       expected: [200],
-      path: `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repositoryName)}/git/blobs/${encodeURIComponent(blobSha)}`,
+      path: `/repos/${encodeURIComponent(preimage.owner)}/${encodeURIComponent(preimage.repositoryName)}/git/blobs/${encodeURIComponent(blobSha)}`,
     });
     if (stringProperty(blobResponse.body, "encoding") !== "base64") {
       throw new Error("invalid-response");
@@ -593,7 +593,8 @@ export const createGitHubAppHttpProvider = (input: {
     const encoded = stringProperty(blobResponse.body, "content").replaceAll(/\s/gu, "");
     const bytes = Buffer.from(encoded, "base64");
     return (
-      mode === `100${input.change.before.mode}` && sha256(bytes) === input.change.before.digest
+      mode === `100${preimage.change.before.mode}` &&
+      sha256(bytes) === preimage.change.before.digest
     );
   };
 
@@ -1019,7 +1020,7 @@ export const createGitHubAppHttpProvider = (input: {
         ),
       );
       if (conflicts.length > 0) {
-        return { code: "reviewed-path-changed", path: conflicts[0]!, status: "rejected" };
+        return { code: "reviewed-path-changed", path: conflicts.at(0) ?? "", status: "rejected" };
       }
       for (const change of changes) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- each live preimage is checked before any mutation
