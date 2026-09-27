@@ -9,6 +9,7 @@ import {
   GitHubOutcomeUnknownError,
   assertCanonicalGitHubMutationReceipt,
   assertExactDraftPullRequestProposal,
+  assertExactGitHubDraftPullRequestContent,
   assertExactFreshRepositoryProposal,
   assertExactGitHubPublicationContent,
   assertExactInstallationIdentity,
@@ -798,6 +799,22 @@ describe("closed GitHub publication contract", () => {
         review: review(),
       }),
     ).toThrow(/schema is not closed/u);
+  });
+
+  it("names the reviewed content field that differs from the sealed proposal", async () => {
+    const adapter = new Adapter();
+    const proposal = draftProposal(adapter);
+    const content = await readExactGitHubPublicationContent({
+      proposal,
+      review: review(),
+      source: publicationContentSource(reviewedBytes),
+    });
+    expect(() =>
+      assertExactGitHubDraftPullRequestContent({
+        content: { ...content, changedContentDigest: "f".repeat(64) },
+        proposal,
+      }),
+    ).toThrow(/changedContentDigest/u);
   });
 
   it("publishes a sealed overlay with its original property insertion order", async () => {
