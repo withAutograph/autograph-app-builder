@@ -15,6 +15,7 @@ import {
   hostedSessionCreationDigest,
   hostedSessionRecordSchema,
   toDurableHostedSessionRecord,
+  withoutHostedOperationError,
 } from "./hosted-store";
 import type { HostedEveStore, HostedOperationRecord, HostedSessionRecord } from "./hosted-store";
 
@@ -508,12 +509,12 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       const principal = hostedPrincipalSchema.parse(input.principal);
       return database.transaction(async (transaction) => {
         const operation = await operationById(transaction, principal, input.operationId, true);
-        if (
-          operation === null ||
-          operation.requestDigest !== input.requestDigest ||
-          (operation.state !== "reserved" &&
-            !(operation.kind === "start" && operation.state === "submission_unknown"))
-        ) {
+        if (operation === null || operation.requestDigest !== input.requestDigest) {
+          throw new Error("Hosted operation cannot settle at this digest.");
+        }
+        const replayableStart =
+          operation.kind === "start" && operation.state === "submission_unknown";
+        if (operation.state !== "reserved" && !replayableStart) {
           throw new Error("Hosted operation cannot settle at this digest.");
         }
         const result = eveSessionResultSchema.parse(input.result);
@@ -532,10 +533,8 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         if (expectedSessionId === undefined || result.sessionId !== expectedSessionId) {
           throw new Error("Hosted operation result session mismatch.");
         }
-        const cleanOperation: Record<string, unknown> = { ...operation };
-        delete cleanOperation.safeErrorCode;
         const settled = hostedOperationRecordSchema.parse({
-          ...cleanOperation,
+          ...withoutHostedOperationError(operation),
           result,
           sessionId: result.sessionId,
           state: "succeeded",

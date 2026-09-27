@@ -113,9 +113,18 @@ age-based deletion path.
 The client request ID is bound to a canonical request digest. A completed retry
 returns the stored public result. Reusing the ID for different request bytes is
 an error. If the adapter cannot prove whether Eve received the operation, the
-store records `submission_unknown`; the same operation is never dispatched
-again automatically. A still-`reserved` operation is also treated as unknown
-after recovery because the process may have stopped after dispatch.
+store records `submission_unknown`. An exact `start` retry may call Eve with
+the same authenticated operation ID; Eve returns the original run while that
+operation remains resumable. A `reserved` start becomes eligible for the same
+recovery after the 300-second hosting request deadline. Eve can expire its
+operation ownership once the run is no longer resumable, so an exact retry at
+that point may start a new run. `send` and `respond` remain non-replayable when
+their outcome is unknown. An accepted start persists a provisional `working`
+session immediately; `get` observes the live event stream afterward.
+This relies on the pinned `eve@0.44.4` authenticated create-once contract in
+`node_modules/eve/docs/channels/eve.mdx` (lines 48-52). The local test proves
+that Builder reuses the exact operation ID; it does not substitute for Eve's
+provider-owned deduplication guarantee.
 Reservation responses and unsuccessful settlements are parsed as closed
 runtime discriminated unions and rebound to the exact principal, kind, client
 request ID, request digest, state, and session before they grant any authority.
@@ -140,7 +149,8 @@ verification, redirects, issued-at/expiry/not-before time, the 300-second
 lifetime ceiling, exact claims, negative issuer/audience
 and per-operation scope cases, cross-tenant access, malicious store responses,
 all five operations, event disclosure, idempotent retry, request-ID conflict,
-lost-response non-redispatch, and substituted success result/session rejection.
+start-only lost-response recovery, send/respond non-redispatch, and substituted
+success result/session rejection.
 Missing and digest-mismatched session retry cases are also rejected without
 redispatch. Route tests cover 401/403/indistinguishable-404 behavior,
 request-scoped principals, no hosted-to-local fallback, and exact five-tool

@@ -1363,14 +1363,14 @@ describe("hosted Eve service core", () => {
     const store = new InMemoryHostedEveStore();
     const acceptedOperations = new Map<string, string>();
     let responseLost = true;
-    const start = vi.fn<HostedEveTransport["start"]>(async ({ operationId }) => {
+    const start = vi.fn<HostedEveTransport["start"]>(({ operationId }) => {
       const adapterSessionId = acceptedOperations.get(operationId) ?? "eve_original";
       acceptedOperations.set(operationId, adapterSessionId);
       if (responseLost) {
         responseLost = false;
         throw new SubmissionOutcomeUnknownError();
       }
-      return { adapterSessionId, snapshot: { events: [], status: "working" } };
+      return Promise.resolve({ adapterSessionId, snapshot: { events: [], status: "working" } });
     });
     const service = createHostedEveSessionService({
       principal,
@@ -1384,7 +1384,8 @@ describe("hosted Eve service core", () => {
     expect(await service.start(request)).toEqual(recovered);
     expect(start).toHaveBeenCalledTimes(2);
     expect(acceptedOperations.size).toBe(1);
-    expect((await service.list({ cursor: 0, limit: 100 })).sessions).toHaveLength(1);
+    const listed = await service.list({ cursor: 0, limit: 100 });
+    expect(listed.sessions).toHaveLength(1);
   });
 
   it("recovers a reserved start after the hosting request deadline", async () => {
@@ -1393,14 +1394,16 @@ describe("hosted Eve service core", () => {
       adapterSessionId: string;
       snapshot: HostedEngineSnapshot;
     }>();
-    let currentTime = 1_000;
+    let currentTime = 1000;
     const start = vi
       .fn<HostedEveTransport["start"]>()
       .mockImplementationOnce(() => pending.promise)
-      .mockImplementationOnce(async () => ({
-        adapterSessionId: "eve_original",
-        snapshot: { events: [], status: "working" },
-      }));
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          adapterSessionId: "eve_original",
+          snapshot: { events: [], status: "working" },
+        }),
+      );
     const service = createHostedEveSessionService({
       now: () => currentTime,
       principal,
@@ -1408,7 +1411,9 @@ describe("hosted Eve service core", () => {
       transport: transport({ start }),
     });
     const request = { clientRequestId: "reserved_timeout", prompt: "Build" };
-    const first = service.start(request).catch((error: unknown) => error);
+    const firstRejected = expect(service.start(request)).rejects.toBeInstanceOf(
+      HostedSubmissionUnknownError,
+    );
     await vi.waitFor(() => expect(start).toHaveBeenCalledOnce());
     await expect(service.start(request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     currentTime += 300_001;
@@ -1418,9 +1423,10 @@ describe("hosted Eve service core", () => {
       adapterSessionId: "eve_original",
       snapshot: { events: [], status: "working" },
     });
-    expect(await first).toBeInstanceOf(HostedSubmissionUnknownError);
+    await firstRejected;
     expect(start).toHaveBeenCalledTimes(2);
-    expect((await service.list({ cursor: 0, limit: 100 })).sessions).toHaveLength(1);
+    const listed = await service.list({ cursor: 0, limit: 100 });
+    expect(listed.sessions).toHaveLength(1);
   });
 
   it("records a proven pre-dispatch rejection without exposing transport text", async () => {

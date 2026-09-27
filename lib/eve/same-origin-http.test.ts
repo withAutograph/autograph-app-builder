@@ -286,10 +286,9 @@ describe("same-origin canonical Eve transport", () => {
   });
 
   it("persists a start receipt even when the canonical stream never settles", async () => {
-    const fetchImplementation = vi.fn<typeof fetch>((url) =>
-      String(url).includes("/stream?")
-        ? new Promise<Response>(() => {})
-        : Promise.resolve(accepted()),
+    const pendingStream = Promise.withResolvers<Response>();
+    const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
+      String(url).includes("/stream?") ? await pendingStream.promise : accepted(),
     );
     const transport = createSameOriginEveTransport({
       config,
