@@ -19,7 +19,7 @@ import type { GitHubDraftPullRequestContent, FreshRepositoryProposal } from "./g
 import { createReviewedChangeSetReceipt } from "./reviewed-change-set";
 import type { NormalizedChangeSet } from "./reviewed-change-set";
 import { compareOverlayPaths } from "./target-apply";
-import type { ExistingDraftUpdateProposal } from "./github-draft-update";
+import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
@@ -813,6 +813,8 @@ describe("existing draft update provider", () => {
     const head = "3".repeat(40);
     const headTree = "4".repeat(40);
     const newCommit = "5".repeat(40);
+    let observedHead = head;
+    let recoveredMessage = `Update draft pull request #1500\n\nApp-Builder-Idempotency: ${"b".repeat(64)}`;
     const { content } = unicodeDraftMaterial(false, false, ["apps/demo/page.tsx"]);
     const proposal = {
       approvedPaths: content.approvedPaths,
@@ -836,7 +838,7 @@ describe("existing draft update provider", () => {
       version: 1 as const,
     } satisfies ExistingDraftUpdateProposal;
     const calls: { url: string; body: unknown }[] = [];
-    // oxlint-disable-next-line eslint/complexity, eslint/require-await -- focused GitHub HTTP double
+    // oxlint-disable-next-line eslint/complexity, eslint/require-await, sonarjs/cognitive-complexity -- focused GitHub HTTP double
     const implementation: typeof fetch = async (request, init = {}) => {
       const url = String(request);
       const method = init.method ?? "GET";
@@ -870,17 +872,27 @@ describe("existing draft update provider", () => {
         return json({
           base: { ref: "main", repo: { id: 100 } },
           draft: true,
-          head: { ref: proposal.branchName, repo: { id: 100 }, sha: head },
+          head: { ref: proposal.branchName, repo: { id: 100 }, sha: observedHead },
           id: 150_000,
           number: 1500,
           state: "open",
         });
       }
       if (url.endsWith(`/git/ref/heads/${proposal.branchName}`)) {
-        return json({ node_id: "REF_NODE", object: { sha: head } });
+        return json({ node_id: "REF_NODE", object: { sha: observedHead } });
       }
       if (url.endsWith(`/commits/${head}`)) {
         return json({ commit: { tree: { sha: headTree } }, sha: head });
+      }
+      if (url.endsWith(`/git/commits/${newCommit}`)) {
+        return json({
+          message: recoveredMessage,
+          parents: [{ sha: head }],
+          tree: { sha: "7".repeat(40) },
+        });
+      }
+      if (url.endsWith(`/commits/${newCommit}`)) {
+        return json({ commit: { tree: { sha: "7".repeat(40) } }, sha: newCommit });
       }
       if (url.endsWith(`/git/trees/${headTree}`) && method === "GET") {
         return json({ tree: [], truncated: false });
@@ -918,5 +930,19 @@ describe("existing draft update provider", () => {
       name: `refs/heads/${proposal.branchName}`,
       repositoryId: "REPO_NODE",
     });
+    observedHead = newCommit;
+    const observed = (await provider.inspectExistingDraft({
+      name: proposal.name,
+      number: proposal.pullRequestNumber,
+      owner: proposal.owner,
+      repositoryId: proposal.repositoryId,
+    })) as ExistingDraftObservation;
+    await expect(provider.inspectAppliedDraftUpdate(proposal, content, observed)).resolves.toBe(
+      true,
+    );
+    recoveredMessage = "A same-content commit from elsewhere";
+    await expect(provider.inspectAppliedDraftUpdate(proposal, content, observed)).resolves.toBe(
+      false,
+    );
   });
 });

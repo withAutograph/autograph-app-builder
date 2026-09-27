@@ -10,7 +10,7 @@ import {
   assertExactDraftPullRequestProposal,
   assertExactFreshRepositoryProposal,
 } from "./github-publication";
-import type { DraftPullRequestProposal } from "./github-publication";
+import type { DraftPullRequestProposal, GitHubDraftPullRequestContent } from "./github-publication";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
 import type { ExistingDraftUpdateProposal } from "./github-draft-update";
@@ -686,6 +686,35 @@ export const createGitHubAppHttpProvider = (input: {
     };
   };
 
+  const inspectedUpdateTree = async (
+    proposal: ExistingDraftUpdateProposal,
+    content: GitHubDraftPullRequestContent,
+    accessToken: string,
+  ) => {
+    const files = content.changes.flatMap((change) =>
+      change.kind === "deleted"
+        ? []
+        : [
+            {
+              content: change.after.bytes,
+              mode: change.after.mode === "755" ? ("100755" as const) : ("100644" as const),
+              path: change.path,
+            },
+          ],
+    );
+    const deletions = content.changes.flatMap((change) =>
+      change.kind === "deleted" ? [change.path] : [],
+    );
+    return await createTree({
+      accessToken,
+      baseTree: proposal.expectedHeadTree,
+      deletions,
+      files,
+      owner: proposal.owner,
+      repositoryName: proposal.name,
+    });
+  };
+
   return {
     async acquireRepositoryReadCredential({ repositoryId }) {
       try {
@@ -771,6 +800,47 @@ export const createGitHubAppHttpProvider = (input: {
         path: `/repos/${encodeURIComponent(proposal.destinationOwner)}/${encodeURIComponent(proposal.destinationName)}/git/refs`,
       });
       return { requestId: reference.requestId, status: "accepted" };
+    },
+    async inspectAppliedDraftUpdate(proposal, content, observed) {
+      try {
+        assertExactGitHubDraftPullRequestContent({ content, proposal });
+      } catch {
+        return false;
+      }
+      if (
+        observed.headSha === proposal.expectedHeadSha ||
+        observed.headRepositoryId !== proposal.repositoryId
+      ) {
+        return false;
+      }
+      const current = await inspectExistingDraft({
+        name: proposal.name,
+        number: proposal.pullRequestNumber,
+        owner: proposal.owner,
+        repositoryId: proposal.repositoryId,
+      });
+      if (current.headSha !== observed.headSha || current.headTree !== observed.headTree) {
+        return false;
+      }
+      const accessToken = await token(draftPermissions, [proposal.repositoryId]);
+      const expectedTree = await inspectedUpdateTree(proposal, content, accessToken);
+      if (observed.headTree !== expectedTree) {
+        return false;
+      }
+      const response = await github({
+        authorization: accessToken,
+        expected: [200],
+        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/commits/${observed.headSha}`,
+      });
+      const parents = property(response.body, "parents");
+      const expectedMessage = `Update draft pull request #${proposal.pullRequestNumber}\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}`;
+      return (
+        Array.isArray(parents) &&
+        parents.length === 1 &&
+        stringProperty(parents[0], "sha") === proposal.expectedHeadSha &&
+        stringProperty(property(response.body, "tree"), "sha") === expectedTree &&
+        stringProperty(response.body, "message") === expectedMessage
+      );
     },
     async inspectDestination({ owner, name: repositoryName }) {
       const permissions: PermissionSnapshot = {

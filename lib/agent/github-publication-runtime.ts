@@ -94,6 +94,8 @@ export interface GitHubPublicationRuntime {
     review: ReviewedChangeSetReceipt;
     pullRequestNumber: number;
     priorPublishedProposalDigest?: string;
+    selectedCheckoutHeadSha: string;
+    selectedCheckoutHeadTree: string;
   }) => Promise<ExistingDraftUpdateProposal>;
   updateExistingDraft: (input: {
     proposal: ExistingDraftUpdateProposal;
@@ -209,6 +211,14 @@ export function composeGitHubPublicationRuntime(input: {
   const { proposals } = input;
   const { receipts } = input;
   const draftUpdateAdapter: ExistingDraftUpdateAdapter = {
+    async inspectAppliedUpdate(proposal, content, observed) {
+      if (adapter.inspectAppliedDraftUpdate === undefined) {
+        throw new Error(
+          "GitHub draft update verification is unavailable. Upgrade the GitHub provider before updating this PR.",
+        );
+      }
+      return await adapter.inspectAppliedDraftUpdate(proposal, content, observed);
+    },
     async inspectDraft(request) {
       return await adapter.inspectExistingDraft(request);
     },
@@ -366,6 +376,9 @@ export function composeGitHubPublicationRuntime(input: {
         pullRequestNumber: request.pullRequestNumber,
         repository,
         review: request.review,
+        selectedCheckoutHeadSha: request.selectedCheckoutHeadSha,
+        selectedCheckoutHeadTree: request.selectedCheckoutHeadTree,
+        selectedSourceRef: request.githubSource.resolvedRef,
       });
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract

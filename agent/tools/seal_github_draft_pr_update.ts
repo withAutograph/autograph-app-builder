@@ -4,6 +4,7 @@ import { z } from "zod";
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import { appBuilderWorkflowState, updateExactWorkflow } from "@/lib/agent/workflow-state";
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
+import { inspectGitHubSourceSandboxWorkspace } from "@/lib/repository/sandbox-github-source";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 
@@ -30,6 +31,10 @@ export default defineTool({
       state.appSpec.appId,
       state.sourceReceipt.sourceKind,
     );
+    const checkout = await inspectGitHubSourceSandboxWorkspace({
+      githubSource: state.githubSource,
+      sandbox: await ctx.getSandbox(),
+    });
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
     const priorPublishedProposalDigest =
       state.publishedGitHubDraftProposalDigest ?? state.githubDraftProposal?.proposal.digest;
@@ -37,6 +42,8 @@ export default defineTool({
       githubSource: state.githubSource,
       pullRequestNumber: input.pullRequestNumber,
       review: state.reviewReceipt,
+      selectedCheckoutHeadSha: checkout.sourceSha,
+      selectedCheckoutHeadTree: checkout.sourceTree,
     };
     const proposal =
       priorPublishedProposalDigest === undefined

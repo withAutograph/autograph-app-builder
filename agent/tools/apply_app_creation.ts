@@ -30,7 +30,9 @@ export default defineTool({
   approval(ctx) {
     const current = appBuilderWorkflowState.get();
     if (!("proposal" in current) || !("appSpec" in current)) {
-      throw new Error("Derive a canonical proposal before requesting build approval.");
+      throw new Error(
+        `Build approval cannot start in workflow phase ${current.phase}: no canonical implementation proposal is recorded. If the UI preview was revised, accept the current preview, record or reuse its build-ready AppSpec, then call accept_app_spec with existingAppChanges for an existing app. Supply the complete replacement content of each app-owned file to change. Wait for accept_app_spec to return a planned proposal before calling apply_app_creation.`,
+      );
     }
     return requestPrivateApplyApproval(
       {

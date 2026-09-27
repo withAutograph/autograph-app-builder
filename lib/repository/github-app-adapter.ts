@@ -172,6 +172,11 @@ export interface GitHubAppInstallationProvider {
     proposal: ExistingDraftUpdateProposal,
     content: GitHubDraftPullRequestContent,
   ) => Promise<unknown>;
+  inspectAppliedDraftUpdate: (
+    proposal: ExistingDraftUpdateProposal,
+    content: GitHubDraftPullRequestContent,
+    observed: ExistingDraftObservation,
+  ) => Promise<unknown>;
   inspectInstallation: (input: {
     operation: GitHubOperation;
     requestedPermissions: RequestedPermissions;
@@ -283,6 +288,15 @@ export function createGitHubAppPublicationAdapter(
           provider.createPrivateFreshHistoryRepository(proposal, content),
         ),
       ) as GitHubMutationAcknowledgement;
+    },
+    async inspectAppliedDraftUpdate(proposal, content, observed) {
+      return z
+        .boolean()
+        .parse(
+          await sanitizedProviderCall(() =>
+            provider.inspectAppliedDraftUpdate(proposal, content, observed),
+          ),
+        );
     },
     async inspectDestination(input) {
       const raw = await sanitizedProviderCall(() => provider.inspectDestination(input));

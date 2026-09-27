@@ -346,6 +346,11 @@ export interface GitHubPublicationAdapter extends GitHubSourceResolutionAdapter 
     proposal: ExistingDraftUpdateProposal,
     content: GitHubDraftPullRequestContent,
   ) => Promise<GitHubMutationAcknowledgement>;
+  inspectAppliedDraftUpdate?: (
+    proposal: ExistingDraftUpdateProposal,
+    content: GitHubDraftPullRequestContent,
+    observed: ExistingDraftObservation,
+  ) => Promise<boolean>;
   inspectDestination: (input: {
     owner: string;
     name: string;
@@ -828,8 +833,9 @@ export function assertExactGitHubDraftPullRequestContent(input: {
   proposal: ReviewedPublicationBinding;
   content: GitHubDraftPullRequestContent;
 }): void {
+  const { content, proposal } = input;
   if (
-    !exactKeys(input.content, [
+    !exactKeys(content, [
       "version",
       "kind",
       "reviewDigest",
@@ -838,25 +844,41 @@ export function assertExactGitHubDraftPullRequestContent(input: {
       "approvedPaths",
       "changes",
     ]) ||
-    !Array.isArray(input.content.approvedPaths) ||
-    !Array.isArray(input.content.changes) ||
-    input.content.changes.some((change) => !exactContentChange(change))
+    !Array.isArray(content.approvedPaths) ||
+    !Array.isArray(content.changes) ||
+    content.changes.some((change) => !exactContentChange(change))
   ) {
     throw new Error("The publication content schema is not closed.");
   }
-  if (
-    input.content.version !== 1 ||
-    input.content.kind !== "draft-reviewed-change-set" ||
-    input.content.reviewDigest !== input.proposal.reviewDigest ||
-    input.content.changeSetDigest !== input.proposal.changeSetDigest ||
-    input.content.changedContentDigest !== input.proposal.changedContentDigest ||
-    JSON.stringify(input.content.approvedPaths) !== JSON.stringify(input.proposal.approvedPaths) ||
-    input.content.changes.some(
-      (change) =>
-        change.kind !== "deleted" && bytesDigest(change.after.bytes) !== change.after.digest,
-    )
-  ) {
-    throw new Error("The publication content does not match the approved reviewed overlay.");
+  const refreshInstructions =
+    "Refresh the change-set review, seal a new proposal, and request approval for that exact proposal.";
+  let mismatchedField: string | undefined;
+  if (content.version !== 1) {
+    mismatchedField = "version";
+  } else if (content.kind !== "draft-reviewed-change-set") {
+    mismatchedField = "kind";
+  } else if (content.reviewDigest !== proposal.reviewDigest) {
+    mismatchedField = "reviewDigest";
+  } else if (content.changeSetDigest !== proposal.changeSetDigest) {
+    mismatchedField = "changeSetDigest";
+  } else if (content.changedContentDigest !== proposal.changedContentDigest) {
+    mismatchedField = "changedContentDigest";
+  } else if (JSON.stringify(content.approvedPaths) !== JSON.stringify(proposal.approvedPaths)) {
+    mismatchedField = "approvedPaths";
+  }
+  if (mismatchedField !== undefined) {
+    throw new Error(
+      `The publication content field ${mismatchedField} does not match the sealed reviewed proposal. ${refreshInstructions}`,
+    );
+  }
+  const mismatchedBytes = content.changes.find(
+    (change) =>
+      change.kind !== "deleted" && bytesDigest(change.after.bytes) !== change.after.digest,
+  );
+  if (mismatchedBytes !== undefined && mismatchedBytes.kind !== "deleted") {
+    throw new Error(
+      `The reviewed after-bytes digest does not match the approved content for ${mismatchedBytes.path}. ${refreshInstructions}`,
+    );
   }
 }
 

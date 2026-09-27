@@ -70,6 +70,11 @@ export interface ExistingDraftUpdateAdapter {
     proposal: ExistingDraftUpdateProposal,
     content: GitHubDraftPullRequestContent,
   ) => Promise<GitHubMutationAcknowledgement>;
+  inspectAppliedUpdate: (
+    proposal: ExistingDraftUpdateProposal,
+    content: GitHubDraftPullRequestContent,
+    observed: ExistingDraftObservation,
+  ) => Promise<boolean>;
 }
 
 const sameDraft = (proposal: ExistingDraftUpdateProposal, observed: ExistingDraftObservation) =>
@@ -109,6 +114,9 @@ export const sealExistingDraftUpdate = async (input: {
   review: ReviewedChangeSetReceipt;
   pullRequestNumber: number;
   priorPublication: DraftPullRequestSuccessReceipt;
+  selectedSourceRef: string;
+  selectedCheckoutHeadSha: string;
+  selectedCheckoutHeadTree: string;
 }): Promise<ExistingDraftUpdateProposal> => {
   if (!Number.isSafeInteger(input.pullRequestNumber) || input.pullRequestNumber < 1) {
     throw new Error("Choose a positive pull request number for the draft update.");
@@ -126,24 +134,35 @@ export const sealExistingDraftUpdate = async (input: {
     owner: input.repository.owner,
     repositoryId: input.repository.repositoryId,
   });
+  if (input.selectedSourceRef !== `refs/heads/${observed.headBranch}`) {
+    throw new Error(
+      "The reviewed Builder source is not this draft PR branch. Start a new Builder session, select the draft PR as the source, and review its current app diff before updating it.",
+    );
+  }
+  if (
+    input.selectedCheckoutHeadSha !== observed.headSha ||
+    input.selectedCheckoutHeadTree !== observed.headTree
+  ) {
+    throw new Error(
+      "The draft PR branch moved since Builder prepared this checkout. Reopen the current PR branch as the app source, review the resulting diff, and seal the update again.",
+    );
+  }
   if (
     !isDeepStrictEqual(
       {
         branchName: observed.headBranch,
-        branchSha: observed.headSha,
         pullRequestNumber: observed.number,
         repositoryId: observed.repositoryId,
       },
       {
         branchName: input.priorPublication.branchName,
-        branchSha: input.priorPublication.branchSha,
         pullRequestNumber: input.priorPublication.pullRequestNumber,
         repositoryId: input.priorPublication.repositoryId,
       },
     )
   ) {
     throw new Error(
-      "The draft PR branch no longer matches Builder's previously approved publication. Inspect the current PR diff before any update.",
+      "The draft PR is not Builder's previously approved publication. Inspect its origin and select the correct PR before updating.",
     );
   }
   if (
@@ -199,6 +218,7 @@ export const sealExistingDraftUpdate = async (input: {
   return { ...unsigned, digest: hash({ ...unsigned, idempotencyKey }), idempotencyKey };
 };
 
+// oxlint-disable-next-line eslint/complexity -- verifies sealed review, current PR, and uncertain-result recovery in one operation
 export const updateExistingDraft = async (input: {
   adapter: ExistingDraftUpdateAdapter;
   proposal: ExistingDraftUpdateProposal;
@@ -250,20 +270,40 @@ export const updateExistingDraft = async (input: {
       "The pull request changed or is no longer an open draft in the selected repository. Review it again.",
     );
   }
-  if (
-    current.headSha !== proposal.expectedHeadSha ||
-    current.headTree !== proposal.expectedHeadTree
-  ) {
-    throw new Error(
-      "The draft PR branch moved after review. Refresh the branch, review the current diff, and request update approval again.",
-    );
-  }
   const content = await readExactGitHubPublicationContent({
     proposal,
     review: input.review,
     source: input.contentSource,
   });
-  const result = await input.adapter.updateDraft(proposal, content);
+  if (
+    current.headSha !== proposal.expectedHeadSha ||
+    current.headTree !== proposal.expectedHeadTree
+  ) {
+    if (await input.adapter.inspectAppliedUpdate(proposal, content, current)) {
+      return current;
+    }
+    throw new Error(
+      "The draft PR branch moved after review and does not contain the exact approved update. Reopen its current branch, review the diff, and request update approval again.",
+    );
+  }
+  let result: GitHubMutationAcknowledgement;
+  try {
+    result = await input.adapter.updateDraft(proposal, content);
+  } catch (error) {
+    const latest = await input.adapter.inspectDraft({
+      name: proposal.name,
+      number: proposal.pullRequestNumber,
+      owner: proposal.owner,
+      repositoryId: proposal.repositoryId,
+    });
+    if (
+      sameDraft(proposal, latest) &&
+      (await input.adapter.inspectAppliedUpdate(proposal, content, latest))
+    ) {
+      return latest;
+    }
+    throw error;
+  }
   if (result.status === "rejected") {
     if (result.code === "reviewed-path-changed") {
       throw new Error(
@@ -281,7 +321,10 @@ export const updateExistingDraft = async (input: {
     owner: proposal.owner,
     repositoryId: proposal.repositoryId,
   });
-  if (!sameDraft(proposal, updated) || updated.headSha === proposal.expectedHeadSha) {
+  if (
+    !sameDraft(proposal, updated) ||
+    !(await input.adapter.inspectAppliedUpdate(proposal, content, updated))
+  ) {
     throw new Error(
       "GitHub accepted the draft update, but its new branch head could not be verified. Inspect the PR before retrying.",
     );
