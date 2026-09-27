@@ -43,12 +43,6 @@ export interface HostedVercelBackendInput {
   readonly runtimeRecoveryPrewarmInput?: () => RuntimeRecoveryPrewarmInput;
 }
 
-// Provider command responses may legitimately remain open for the full
-// repository-operation window. Keep the transport deadline above that window
-// so the HTTP wrapper does not discard a successful sandbox operation.
-const PROVIDER_REQUEST_TIMEOUT_MS = Number(
-  process.env.APP_BUILDER_SANDBOX_REQUEST_TIMEOUT_MS ?? "150000",
-);
 const PROVIDER_RETRY_DELAY_MS = 250;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -81,21 +75,13 @@ function providerDiagnostic(error: unknown): string {
 type ProviderFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function createProviderFetch(
-  fetchImpl: typeof fetch = fetch,
-  requestTimeoutMs = PROVIDER_REQUEST_TIMEOUT_MS,
-): ProviderFetch {
+export function createProviderFetch(fetchImpl: typeof fetch = fetch): ProviderFetch {
   return async (input, init) => {
     const original = new Request(input, init);
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const timeout = new AbortController();
-      const timer = setTimeout(() => timeout.abort(), requestTimeoutMs);
-      const signal = original.signal.aborted
-        ? original.signal
-        : AbortSignal.any([original.signal, timeout.signal]);
       try {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        const response = await fetchImpl(original.clone(), { signal });
+        const response = await fetchImpl(original.clone(), { signal: original.signal });
         if (attempt === 0 && (response.status === 429 || response.status >= 500)) {
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           await response.body?.cancel();
@@ -109,12 +95,7 @@ export function createProviderFetch(
         return response;
       } catch (error) {
         const callerCancelled = original.signal.aborted;
-        const providerRequestTimedOut = timeout.signal.aborted && !callerCancelled;
-        if (
-          attempt === 0 &&
-          !callerCancelled &&
-          (providerRequestTimedOut || retryableProviderFailure(error))
-        ) {
+        if (attempt === 0 && !callerCancelled && retryableProviderFailure(error)) {
           console.warn(
             `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: ${providerDiagnostic(error)}; retrying once`,
           );
@@ -126,8 +107,6 @@ export function createProviderFetch(
           `[sandbox] ${original.method} ${new URL(original.url).origin}${new URL(original.url).pathname}: ${providerDiagnostic(error)}`,
         );
         throw error;
-      } finally {
-        clearTimeout(timer);
       }
     }
     throw new Error("unreachable");

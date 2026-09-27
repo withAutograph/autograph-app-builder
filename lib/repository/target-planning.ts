@@ -154,7 +154,6 @@ export type TargetIterationChange = z.infer<typeof iterationChangeSchema>;
 export const targetContractDigest = (contract: TargetProposal["contract"]): string =>
   sha256(JSON.stringify(contract));
 
-export const TARGET_COMMAND_TIMEOUT_MS = 30_000;
 export const TARGET_PLANNING_MISE_PROFILE = `[settings]
 exec_auto_install = false
 not_found_auto_install = false
@@ -298,7 +297,6 @@ export const materializePlanningOverlay = async (input: {
   let copy: Awaited<ReturnType<SandboxSession["run"]>>;
   try {
     copy = await input.sandbox.run({
-      abortSignal: AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS),
       command: `cp -R /workspace/repository/. /workspace/${root}/`,
       workingDirectory: "/workspace",
     });
@@ -343,13 +341,12 @@ export const materializePlanningOverlay = async (input: {
 export const sandboxTargetCommandExecutor =
   (sandbox: SandboxSession): TargetCommandExecutor =>
   async ({ appId: requestedAppId, planningRoot }) => {
-    const abortSignal = AbortSignal.timeout(TARGET_COMMAND_TIMEOUT_MS);
     const request = {
       command: `mise run repository:exec -- app-identity.ts --app ${requestedAppId}`,
       env: { MISE_ENV: "app-builder" },
       workingDirectory: planningRoot,
     };
-    const result = await sandbox.run({ ...request, abortSignal });
+    const result = await sandbox.run(request);
     if (
       result.exitCode === 0 ||
       !/(?:cannot find module|module_not_found|node_modules|dependencies? (?:are )?missing)/iu.test(
@@ -361,14 +358,13 @@ export const sandboxTargetCommandExecutor =
 
     await sandbox.setNetworkPolicy("allow-all");
     const setup = await sandbox.run({
-      abortSignal: AbortSignal.timeout(300_000),
       command: "bun install --ignore-scripts --filter @autograph/platform-microfrontends",
       workingDirectory: planningRoot,
     });
     if (setup.exitCode !== 0) {
       return setup;
     }
-    return sandbox.run({ ...request, abortSignal });
+    return sandbox.run(request);
   };
 
 const creationPlan = (

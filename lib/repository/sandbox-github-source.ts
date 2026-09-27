@@ -18,9 +18,6 @@ const REPOSITORY = /^[A-Za-z0-9_.-]{1,100}$/u;
 const BRANCH =
   /^(?![./])(?!.*(?:\.\.|@\{))(?!.*(?:[/.]|\.lock)$)[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/u;
 const SANDBOX_WORKSPACE = "/workspace/repository";
-const SANDBOX_OPERATION_TIMEOUT_MS = 120_000;
-const SANDBOX_OPERATION_OUTPUT_BYTES = 262_144;
-const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
 export const SANDBOX_GITHUB_SOURCE_INSPECTION = ".app-builder/canonical-clone-inspection.json";
 
 const sandboxFailureDetail = (value: string): string =>
@@ -475,7 +472,6 @@ export const writeSandboxGitHubSourceManifest = async function writeSandboxGitHu
   let result: Awaited<ReturnType<SandboxSession["run"]>>;
   try {
     result = await sandbox.run({
-      abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
       command: `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 node -e ${shellQuote(sandboxGitHubSourceManifestProgram(SANDBOX_WORKSPACE, "/workspace/.app-builder"))}`,
       workingDirectory: "/workspace",
     });
@@ -491,14 +487,6 @@ export const writeSandboxGitHubSourceManifest = async function writeSandboxGitHu
       "prepare the selected GitHub source manifest",
       result,
       "Check that Git and Node can read the selected checkout and that the sandbox has enough space, then retry this session.",
-    );
-  }
-  if (
-    Buffer.byteLength(result.stdout) > SANDBOX_INSPECTION_BYTES ||
-    Buffer.byteLength(result.stderr) > SANDBOX_OPERATION_OUTPUT_BYTES
-  ) {
-    throw new Error(
-      `Builder could not save the selected GitHub source manifest: command output exceeded its limit (${Buffer.byteLength(result.stdout)} stdout bytes, ${Buffer.byteLength(result.stderr)} stderr bytes). Inspect the checkout for unexpectedly large generated content or verbose tool output, then retry.`,
     );
   }
   let observation: unknown;
@@ -558,15 +546,10 @@ const reinspectGitHubSourceWorkspace = async function reinspectGitHubSourceWorks
     throw new Error("The stored GitHub source inspection drifted.");
   }
   const result = await input.sandbox.run({
-    abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
     command: sandboxGitHubSourceReinspectionCommand(input),
     workingDirectory: "/workspace",
   });
-  if (
-    Buffer.byteLength(result.stdout) > SANDBOX_INSPECTION_BYTES ||
-    Buffer.byteLength(result.stderr) > SANDBOX_OPERATION_OUTPUT_BYTES ||
-    result.exitCode !== 0
-  ) {
+  if (result.exitCode !== 0) {
     throw new Error("The GitHub source workspace could not be verified.");
   }
   const inspection = JSON.parse(result.stdout) as {

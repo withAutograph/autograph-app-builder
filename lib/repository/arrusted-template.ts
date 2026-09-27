@@ -34,8 +34,6 @@ const SHA = /^[0-9a-f]{40}$/u;
 const DIGEST = /^[0-9a-f]{64}$/u;
 const TEMPLATE_READINESS_CHECK = "Template readiness";
 const SANDBOX_WORKSPACE = "/workspace/repository";
-const SANDBOX_OPERATION_TIMEOUT_MS = 120_000;
-const SANDBOX_OPERATION_OUTPUT_BYTES = 262_144;
 const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
 const SANDBOX_CLONE_INSPECTION = ".app-builder/canonical-clone-inspection.json";
 const SANDBOX_CLONE_INSPECTOR = ".arrusted-template-inspect.cjs";
@@ -313,7 +311,6 @@ async function cloneCanonicalArrustedWorkspace(input: { sandbox: SandboxSession;
     });
     await input.sandbox.setNetworkPolicy("allow-all");
     result = await input.sandbox.run({
-      abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
       command: sandboxCloneCommand(),
       env: { TERM: "dumb" },
       workingDirectory: "/workspace",
@@ -324,26 +321,6 @@ async function cloneCanonicalArrustedWorkspace(input: { sandbox: SandboxSession;
     // Sandbox can report a nonzero terminal status after a command has
     // completed and written that receipt, so do not discard valid work solely
     // because of that auxiliary status.
-    if (
-      Buffer.byteLength(result.stdout) > SANDBOX_OPERATION_OUTPUT_BYTES ||
-      Buffer.byteLength(result.stderr) > SANDBOX_OPERATION_OUTPUT_BYTES
-    ) {
-      console.warn(
-        JSON.stringify({
-          category: classifySandboxCloneFailure(`${result.stderr}\n${result.stdout}`.toLowerCase()),
-          errorSummary: sanitizeSandboxCloneError(
-            `${result.stderr}\n${result.stdout}`,
-            input.token,
-          ),
-          event: "autograph.template-clone-command.failed",
-          exitCode: result.exitCode,
-          outputWithinLimit:
-            Buffer.byteLength(result.stdout) <= SANDBOX_OPERATION_OUTPUT_BYTES &&
-            Buffer.byteLength(result.stderr) <= SANDBOX_OPERATION_OUTPUT_BYTES,
-        }),
-      );
-      throw new Error("The canonical Arrusted workspace clone could not be prepared.");
-    }
   } catch (error) {
     cloneError = error;
   }
