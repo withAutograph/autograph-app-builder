@@ -1086,6 +1086,48 @@ describe("closed GitHub publication contract", () => {
     }
   });
 
+  it("retries a proven pre-mutation draft rejection only after a new approval", async () => {
+    const adapter = new Adapter();
+    const store = new Store();
+    const proposal = draftProposal(adapter);
+    adapter.draftAcknowledgement = { code: "invalid-publication-material", status: "rejected" };
+    await expect(
+      publishApprovedDraftPullRequest({
+        adapter,
+        approvedByCallId: "first-approval",
+        contentSource: publicationContentSource(),
+        proposal,
+        review: review(),
+        store,
+      }),
+    ).rejects.toThrow(/invalid-publication-material/u);
+    const failedReceipt = await store.read(proposal.digest);
+    expect(failedReceipt?.status).toBe("failed");
+
+    await expect(
+      publishApprovedDraftPullRequest({
+        adapter,
+        approvedByCallId: "first-approval",
+        contentSource: publicationContentSource(),
+        proposal,
+        review: review(),
+        store,
+      }),
+    ).rejects.toThrow(/new approved recovery call/u);
+
+    adapter.draftAcknowledgement = { requestId: "retry-accepted", status: "accepted" };
+    const recovered = await publishApprovedDraftPullRequest({
+      adapter,
+      approvedByCallId: "second-approval",
+      contentSource: publicationContentSource(),
+      proposal,
+      review: review(),
+      store,
+    });
+    expect(recovered.status).toBe("succeeded");
+    expect(adapter.draftCalls).toBe(2);
+  });
+
   it("refuses stale, overlapping, and branch-collision read-back before mutation", async () => {
     const mutations: ((adapter: Adapter, proposal: DraftPullRequestProposal) => void)[] = [
       (adapter, proposal) => {
