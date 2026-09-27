@@ -13,6 +13,10 @@ import {
 import type { OverlayChange } from "@/lib/repository/target-apply";
 import { deriveNormalizedChangeSet } from "@/lib/repository/reviewed-change-set";
 import { hasTestCapability } from "@/lib/testing/test-capability";
+import type { SourceKind } from "@/lib/repository/source-receipt";
+
+const isExistingRepositorySource = (sourceKind: SourceKind): boolean =>
+  sourceKind === "existing-repository";
 
 export const isCandidateExportTextPath = (path: string): boolean => {
   if (/(?:^|\/)(?:\.next|node_modules|dist|coverage|storybook-static)(?:\/|$)/u.test(path)) {
@@ -45,7 +49,7 @@ export const reviewableChanges = <T extends ChangePath>(
 ) =>
   changes.filter(({ path }) => {
     if (
-      /(?:^|\/)(?:\.git|\.scratch|\.next|\.turbo|node_modules|dist|coverage|storybook-static)(?:\/|$)/u.test(
+      /(?:^|\/)(?:\.git|\.scratch|\.next|\.turbo|\.vite|node_modules|dist|coverage|storybook-static|target)(?:\/|$)/u.test(
         path,
       ) ||
       /(?:^|\/)next-env\.d\.ts$/u.test(path)
@@ -119,7 +123,7 @@ export const exactNormalizedChangeSet = async (input: {
       observed,
     ),
     input.state.appSpec.appId,
-    "operation" in input.state.proposal,
+    isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
   );
   return deriveNormalizedChangeSet(
     {
@@ -130,7 +134,7 @@ export const exactNormalizedChangeSet = async (input: {
       postTreeDigest: reviewedOverlayTreeDigest(
         observed,
         input.state.appSpec.appId,
-        "operation" in input.state.proposal,
+        isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
       ),
     },
     input.state.validationReceipt,
@@ -162,7 +166,7 @@ const exportAppliedTextFiles = async (input: {
       observed,
     ),
     input.state.appSpec.appId,
-    "operation" in input.state.proposal,
+    isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
   );
   // A complete app checkout can include tens of megabytes of unchanged schema history.
   const bounded = await boundedChangedAppTextExport(changes, input.state.appSpec.appId, (path) =>

@@ -1,6 +1,6 @@
 import { defineEval } from "eve/evals";
 import { includes } from "eve/evals/expect";
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { prepareReviewedWorkflow } from "./support/reviewed-workflow";
@@ -12,7 +12,9 @@ export default defineEval({
   async test(t) {
     const repository = createSupportedRepositoryFixture();
     await prepareReviewedWorkflow(t, repository, "publication-overlap");
-    await writeFile(path.join(repository, "microfrontends.json"), "concurrent overlap\n");
+    const appPath = path.join(repository, "apps/publication-overlap/app");
+    await mkdir(appPath, { recursive: true });
+    await writeFile(path.join(appPath, "page.tsx"), "concurrent overlap\n");
 
     await t.send("Publish reviewed change set locally with dirty overlap.");
     t.succeeded();

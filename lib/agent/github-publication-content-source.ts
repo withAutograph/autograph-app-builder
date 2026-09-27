@@ -41,7 +41,7 @@ export function publicationContentSourceForReviewedWorkflow(input: {
         reviewedOverlayTreeDigest(
           observed,
           input.state.appSpec.appId,
-          "operation" in input.state.proposal,
+          input.state.sourceReceipt.sourceKind === "existing-repository",
         ) !== input.state.reviewReceipt.postTreeDigest
       ) {
         throw new Error(
