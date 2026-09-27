@@ -1780,6 +1780,34 @@ function rejectionReceipt(
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+async function reclaimRejectedDraftPending(
+  store: GitHubPublicationReceiptStore,
+  failed: GitHubMutationFailureReceipt,
+  approvedByCallId: string,
+): Promise<GitHubMutationPendingReceipt> {
+  if (
+    failed.kind !== "draft-pull-request" ||
+    failed.failureCode !== "provider-rejected" ||
+    failed.providerCode !== "invalid-publication-material" ||
+    approvedByCallId === failed.approvedByCallId
+  ) {
+    throw new Error("The rejected draft publication requires a new approved recovery call.");
+  }
+  const pending = receipt({
+    approvedByCallId,
+    idempotencyKey: failed.idempotencyKey,
+    kind: "draft-pull-request" as const,
+    proposalDigest: failed.proposalDigest,
+    status: "pending" as const,
+    version: GITHUB_PUBLICATION_VERSION,
+  });
+  if (!(await store.compareAndSet(failed.proposalDigest, failed.digest, pending))) {
+    throw new Error("The GitHub journal changed during approved recovery.");
+  }
+  return pending;
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function createApprovedFreshRepository(input: {
   adapter: GitHubPublicationAdapter;
   store: GitHubPublicationReceiptStore;
@@ -1904,18 +1932,26 @@ export async function publishApprovedDraftPullRequest(input: {
     }
     return prior;
   }
-  if (prior?.status === "failed") {
-    throw new Error("The failed GitHub mutation requires explicit recovery.");
+  if (
+    prior?.status === "failed" &&
+    (prior.failureCode !== "provider-rejected" ||
+      prior.providerCode !== "invalid-publication-material")
+  ) {
+    throw new Error(
+      `The failed GitHub mutation (${prior.providerCode}) requires explicit recovery. Inspect its provider result before another publication attempt.`,
+    );
   }
   const pending =
-    prior ??
-    (await claimPending({
-      approvedByCallId: input.approvedByCallId,
-      idempotencyKey: input.proposal.idempotencyKey,
-      kind: "draft-pull-request",
-      proposalDigest: input.proposal.digest,
-      store: input.store,
-    }));
+    prior?.status === "failed"
+      ? await reclaimRejectedDraftPending(input.store, prior, input.approvedByCallId)
+      : (prior ??
+        (await claimPending({
+          approvedByCallId: input.approvedByCallId,
+          idempotencyKey: input.proposal.idempotencyKey,
+          kind: "draft-pull-request",
+          proposalDigest: input.proposal.digest,
+          store: input.store,
+        })));
   if (pending.status !== "pending") {
     throw new Error("Unreachable journal status.");
   }
