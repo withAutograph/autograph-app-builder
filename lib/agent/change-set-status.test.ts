@@ -6,14 +6,31 @@ import {
   isCandidateExportTextPath,
   reviewableChanges,
 } from "../../agent/tools/change_set_status";
+import { assertExistingAppReviewScope } from "../repository/reviewed-change-set";
 
 describe("reviewed candidate export", () => {
+  it("rejects a legacy existing-repository review that includes planning or build output", () => {
+    const review = {
+      approvedPaths: [".config/app-specs/replica.md", "apps/replica/app/page.tsx"],
+    };
+    expect(() => {
+      assertExistingAppReviewScope(review, "replica", "existing-repository");
+    }).toThrow(".config/app-specs/replica.md, outside apps/replica/");
+    expect(() => {
+      assertExistingAppReviewScope(review, "replica", "fresh-template");
+    }).not.toThrow();
+    review.approvedPaths = ["apps/replica/app/page.tsx"];
+    expect(() => {
+      assertExistingAppReviewScope(review, "replica", "existing-repository");
+    }).not.toThrow();
+  });
   it("reviews only selected existing-app source and omits tooling output", () => {
     const changes = [
       { kind: "modified" as const, path: "apps/replica/app/page.tsx" },
       { kind: "modified" as const, path: "apps/other/app/page.tsx" },
       { kind: "modified" as const, path: ".config/app-specs/replica.md" },
       { kind: "modified" as const, path: ".git/index" },
+      { kind: "added" as const, path: "target/debug/build-output" },
       { kind: "added" as const, path: "apps/replica/.turbo/turbo-test.log" },
       { kind: "added" as const, path: "apps/replica/node_modules/.vite/results.json" },
       { kind: "modified" as const, path: "apps/replica/next-env.d.ts" },

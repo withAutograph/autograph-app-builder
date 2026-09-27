@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { OverlayChange, TargetApplyReceipt } from "./target-apply";
 import type { TargetValidationReceipt } from "./target-validation";
+import type { SourceKind } from "./source-receipt";
 
 export interface NormalizedChangeSet {
   version: 2;
@@ -39,6 +40,22 @@ export type ReviewedChangeSetReceipt = NormalizedChangeSet & {
   changeSetDigest: string;
   reviewedByCallId: string;
   digest: string;
+};
+
+export const assertExistingAppReviewScope = (
+  review: Pick<ReviewedChangeSetReceipt, "approvedPaths">,
+  appId: string,
+  sourceKind: SourceKind,
+): void => {
+  if (sourceKind !== "existing-repository") {
+    return;
+  }
+  const outside = review.approvedPaths.find((path) => !path.startsWith(`apps/${appId}/`));
+  if (outside !== undefined) {
+    throw new Error(
+      `The reviewed existing-app change set includes ${outside}, outside apps/${appId}/. Refresh the change-set review and confirm its approved paths before publishing a draft pull request.`,
+    );
+  }
 };
 
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
