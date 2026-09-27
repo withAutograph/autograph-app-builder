@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
 import { parseSourceReceiptEvidence } from "./source-receipt";
@@ -768,7 +769,6 @@ export function assertExactGitHubDraftPullRequestContent(input: {
   ) {
     throw new Error("The publication content schema is not closed.");
   }
-  const manifest = contentManifest(input.content.changes);
   if (
     input.content.version !== 1 ||
     input.content.kind !== "draft-reviewed-change-set" ||
@@ -776,7 +776,6 @@ export function assertExactGitHubDraftPullRequestContent(input: {
     input.content.changeSetDigest !== input.proposal.changeSetDigest ||
     input.content.changedContentDigest !== input.proposal.changedContentDigest ||
     JSON.stringify(input.content.approvedPaths) !== JSON.stringify(input.proposal.approvedPaths) ||
-    digest(manifest) !== input.proposal.changedContentDigest ||
     input.content.changes.some(
       (change) =>
         change.kind !== "deleted" && bytesDigest(change.after.bytes) !== change.after.digest,
@@ -794,10 +793,20 @@ export function assertExactGitHubPublicationContent(input: {
 }): void {
   reviewForProposal(input.proposal, input.review);
   assertExactGitHubDraftPullRequestContent(input);
-  if (
-    JSON.stringify(contentManifest(input.content.changes)) !== JSON.stringify(input.review.changes)
-  ) {
-    throw new Error("The publication content does not match the approved reviewed overlay.");
+  if (digest(input.review.changes) !== input.proposal.changedContentDigest) {
+    throw new Error(
+      "The reviewed change-content digest does not match its sealed proposal. Refresh the change-set review and seal a new proposal before publication.",
+    );
+  }
+  const manifest = contentManifest(input.content.changes);
+  const mismatch = manifest.findIndex(
+    (change, index) => !isDeepStrictEqual(change, input.review.changes[index]),
+  );
+  if (mismatch !== -1 || manifest.length !== input.review.changes.length) {
+    const path = manifest[mismatch]?.path ?? input.review.changes[mismatch]?.path ?? "unknown path";
+    throw new Error(
+      `The publication content for ${path} does not match the approved reviewed overlay. Re-observe that file, refresh the change-set review, and seal a new proposal before publication.`,
+    );
   }
 }
 

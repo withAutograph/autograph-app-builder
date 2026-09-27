@@ -174,10 +174,11 @@ function review(
     },
   ],
   overrides: Partial<Pick<NormalizedChangeSet, "sourceReceiptDigest">> = {},
+  preserveOverlayOrder = false,
 ) {
   const changes = [...inputChanges]
     .toSorted((left, right) => compareOverlayPaths(left.path, right.path))
-    .map(reviewedChange);
+    .map((change) => (preserveOverlayOrder ? change : reviewedChange(change)));
   const unsigned = {
     appSpecDigest: "b".repeat(64),
     appSpecPath: "prototype/demo/app-spec.md",
@@ -440,12 +441,12 @@ function freshProposal(adapter: Adapter) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function draftProposal(adapter: Adapter) {
+function draftProposal(adapter: Adapter, reviewed = review()) {
   return createDraftPullRequestProposal({
     changedPathsSinceBase: [],
     installation: adapter.identities.publish,
     repository: adapter.publishRepo,
-    review: review(),
+    review: reviewed,
     title: "Add demo",
   });
 }
@@ -748,6 +749,32 @@ describe("closed GitHub publication contract", () => {
         review: review(),
       }),
     ).toThrow(/schema is not closed/u);
+  });
+
+  it("publishes a sealed overlay with its original property insertion order", async () => {
+    const adapter = new Adapter();
+    const reviewed = review(
+      [
+        {
+          after: { digest: reviewedBytesDigest, mode: "644" },
+          before: { digest: "e".repeat(64), mode: "644" },
+          kind: "modified",
+          path: "apps/demo/page.tsx",
+        },
+      ],
+      {},
+      true,
+    );
+    const proposal = draftProposal(adapter, reviewed);
+    const content = await readExactGitHubPublicationContent({
+      proposal,
+      review: reviewed,
+      source: publicationContentSource(),
+    });
+    expect(content.changes).toHaveLength(1);
+    expect(() =>
+      assertExactGitHubPublicationContent({ content, proposal, review: reviewed }),
+    ).not.toThrow();
   });
 
   it("accepts only the exact immutable source manifest and defensively copies fresh bytes", async () => {
