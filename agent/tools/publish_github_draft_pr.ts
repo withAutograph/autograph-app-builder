@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import {
   approvalReceiptSchema,
-  approvalTargetFromGitHubSource,
+  approvalTargetFromDraftProposal,
   assertApprovalReceipt,
 } from "@/lib/agent/approval-receipt";
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
@@ -27,11 +27,16 @@ export default defineTool({
         "Choose a repository and finish the implementation plan before opening a draft pull request.",
       );
     }
+    if (input.expectedProposalDigest !== state.githubDraftProposal.proposal.digest) {
+      throw new Error(
+        "The publication request names a different draft-PR proposal. Reopen the current sealed proposal before approving publication.",
+      );
+    }
     assertApprovalReceipt({
       actual: input.approvalReceipt,
       phase: "publication",
       subjectDigest: state.githubDraftProposal.proposal.digest,
-      target: approvalTargetFromGitHubSource(state.githubSource),
+      target: approvalTargetFromDraftProposal(state.githubDraftProposal.proposal),
     });
     assertExistingAppReviewScope(
       state.reviewReceipt,

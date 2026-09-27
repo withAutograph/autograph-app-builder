@@ -17,7 +17,7 @@ import type {
 import type { ReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
 import type { SourceReceiptEvidence } from "../repository/source-receipt";
 import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
-import { assertApprovalReceipt } from "./approval-receipt";
+import { approvalTargetFromDraftProposal, assertApprovalReceipt } from "./approval-receipt";
 import type { ApprovalReceipt } from "./approval-receipt";
 
 const supportedOperations = [
@@ -202,12 +202,7 @@ export function composeGitHubPublicationRuntime(input: {
         actual: request.approvalReceipt,
         phase: "publication",
         subjectDigest: proposal.digest,
-        target: {
-          baseRef: `refs/heads/${proposal.baseBranch}`,
-          baseSha: proposal.baseSha,
-          repository: `${proposal.owner}/${proposal.name}`,
-          repositoryId: proposal.repositoryId,
-        },
+        target: approvalTargetFromDraftProposal(proposal),
       });
       return publishApprovedDraftPullRequest({
         adapter,
