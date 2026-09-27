@@ -1,4 +1,4 @@
-import { and, count, desc, eq, ne, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
@@ -15,6 +15,7 @@ import {
   hostedSessionCreationDigest,
   hostedSessionRecordSchema,
   toDurableHostedSessionRecord,
+  withoutHostedOperationError,
 } from "./hosted-store";
 import type { HostedEveStore, HostedOperationRecord, HostedSessionRecord } from "./hosted-store";
 
@@ -508,7 +509,14 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       const principal = hostedPrincipalSchema.parse(input.principal);
       return database.transaction(async (transaction) => {
         const operation = await operationById(transaction, principal, input.operationId, true);
-        assertReserved(operation, input.requestDigest);
+        if (operation === null || operation.requestDigest !== input.requestDigest) {
+          throw new Error("Hosted operation cannot settle at this digest.");
+        }
+        const replayableStart =
+          operation.kind === "start" && operation.state === "submission_unknown";
+        if (operation.state !== "reserved" && !replayableStart) {
+          throw new Error("Hosted operation cannot settle at this digest.");
+        }
         const result = eveSessionResultSchema.parse(input.result);
         const session =
           input.session === undefined ? undefined : hostedSessionRecordSchema.parse(input.session);
@@ -526,7 +534,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           throw new Error("Hosted operation result session mismatch.");
         }
         const settled = hostedOperationRecordSchema.parse({
-          ...operation,
+          ...withoutHostedOperationError(operation),
           result,
           sessionId: result.sessionId,
           state: "succeeded",
@@ -554,7 +562,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
             and(
               tenantPredicate(principal),
               eq(agentOperations.operationId, input.operationId),
-              eq(agentOperations.state, "reserved"),
+              inArray(agentOperations.state, ["reserved", "submission_unknown"]),
               eq(agentOperations.requestDigest, input.requestDigest),
             ),
           )

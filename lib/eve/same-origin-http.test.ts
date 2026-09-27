@@ -228,7 +228,7 @@ describe("same-origin canonical Eve transport", () => {
     expect(snapshot.events).toEqual([{ index: 0, status: "completed", type: "status" }]);
   });
 
-  it("uses fresh project OIDC and canonical create/stream routes", async () => {
+  it("returns the accepted session without waiting for its live stream", async () => {
     const workloadIdentity = identity();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
@@ -267,17 +267,41 @@ describe("same-origin canonical Eve transport", () => {
     ).resolves.toEqual({
       adapterSessionId: "wrun_1",
       snapshot: {
-        events: [{ index: 0, status: "waiting", type: "status" }],
-        status: "waiting",
+        events: [],
+        status: "working",
       },
     });
     expect(fetchImplementation.mock.calls[0]?.[0]).toBe(
       "https://builder.example.test/eve/v1/session",
     );
+    expect(fetchImplementation).toHaveBeenCalledOnce();
+    expect(workloadIdentity.token).toHaveBeenCalledOnce();
+    await expect(transport.get({ adapterSessionId: "wrun_1", principal })).resolves.toEqual({
+      events: [{ index: 0, status: "waiting", type: "status" }],
+      status: "waiting",
+    });
     expect(fetchImplementation.mock.calls[1]?.[0]).toBe(
       "https://builder.example.test/eve/v1/session/wrun_1/stream?startIndex=0&includeTailIndex=1",
     );
-    expect(workloadIdentity.token).toHaveBeenCalledTimes(2);
+  });
+
+  it("persists a start receipt even when the canonical stream never settles", async () => {
+    const pendingStream = Promise.withResolvers<Response>();
+    const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
+      String(url).includes("/stream?") ? await pendingStream.promise : accepted(),
+    );
+    const transport = createSameOriginEveTransport({
+      config,
+      fetchImplementation,
+      workloadIdentity: identity(),
+    });
+    await expect(
+      transport.start({ operationId: "op_hung_stream", principal, prompt: "Build" }),
+    ).resolves.toMatchObject({
+      adapterSessionId: "wrun_1",
+      snapshot: { events: [], status: "working" },
+    });
+    expect(fetchImplementation).toHaveBeenCalledOnce();
   });
 
   it("uses canonical continuation and inputResponses bodies", async () => {

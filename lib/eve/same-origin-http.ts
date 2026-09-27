@@ -557,10 +557,12 @@ export function createSameOriginEveTransport(input: {
       });
       return {
         adapterSessionId: accepted.sessionId,
-        snapshot: await readSnapshot({
-          ...common,
-          sessionId: accepted.sessionId,
-        }),
+        // The create reply is the durable acceptance point. A live Eve stream
+        // can remain open while the first turn runs, so reading it here can
+        // keep autograph_start open until the hosting request times out. The
+        // public session is persisted from this provisional snapshot and the
+        // first autograph_get observes the actual stream.
+        snapshot: { events: [], status: "working" },
       };
     },
   };

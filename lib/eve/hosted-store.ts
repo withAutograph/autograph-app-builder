@@ -422,6 +422,15 @@ export const hostedOperationRecordSchema = z
 
 export type HostedOperationRecord = z.infer<typeof hostedOperationRecordSchema>;
 
+export const withoutHostedOperationError = (operation: HostedOperationRecord) => {
+  if (operation.state !== "submission_unknown") {
+    return operation;
+  }
+  const { safeErrorCode, ...record } = operation;
+  void safeErrorCode;
+  return record;
+};
+
 export const reserveOperationResultSchema = z.discriminatedUnion("disposition", [
   z
     .object({
@@ -563,7 +572,16 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   async settleSucceeded(
     input: Parameters<HostedEveStore["settleSucceeded"]>[0],
   ): Promise<HostedOperationRecord> {
-    const operation = this.requireReserved(input);
+    const operation = this.operations.get(
+      InMemoryHostedEveStore.operationKey(input.principal, input.operationId),
+    );
+    if (operation === undefined || operation.requestDigest !== input.requestDigest) {
+      throw new Error("Hosted operation cannot settle at this digest.");
+    }
+    const replayableStart = operation.kind === "start" && operation.state === "submission_unknown";
+    if (operation.state !== "reserved" && !replayableStart) {
+      throw new Error("Hosted operation cannot settle at this digest.");
+    }
     const result = eveSessionResultSchema.parse(input.result);
     const session =
       input.session === undefined ? undefined : hostedSessionRecordSchema.parse(input.session);
@@ -584,7 +602,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
       throw new Error("Hosted operation result session mismatch.");
     }
     const settled = hostedOperationRecordSchema.parse({
-      ...operation,
+      ...withoutHostedOperationError(operation),
       result,
       sessionId: result.sessionId,
       state: "succeeded",

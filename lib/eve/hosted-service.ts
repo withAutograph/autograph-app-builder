@@ -54,6 +54,7 @@ import { recoveryPromptForSession } from "./hosted-recovery-prompt";
 import { resultFromHostedCheckpoint } from "./hosted-checkpoint-result";
 
 const projectSnapshot = projectHostedSnapshot;
+const HOSTED_START_REQUEST_TIMEOUT_MS = 300_000;
 
 export {
   HostedAdapterSessionUnavailableError,
@@ -565,6 +566,7 @@ export function createHostedEveSessionService(input: {
       version: 1,
     });
     let reservation: z.infer<typeof reserveOperationResultSchema>;
+    let recoveringStart = false;
     try {
       reservation = reserveOperationResultSchema.parse(
         await input.store.reserveOperation(principal, candidate),
@@ -612,7 +614,19 @@ export function createHostedEveSessionService(input: {
           }
           case "submission_unknown":
           case "reserved": {
-            throw new HostedSubmissionUnknownError();
+            // Canonical Eve session creation is idempotent for this principal
+            // and operationId while its first run remains resumable. Once Eve
+            // expires that ownership, an exact retry may begin a new run.
+            // Only starts may retry; send/respond remain non-replayable.
+            if (
+              options.kind !== "start" ||
+              (operation.state === "reserved" &&
+                now() - operation.updatedAtEpochMs < HOSTED_START_REQUEST_TIMEOUT_MS)
+            ) {
+              throw new HostedSubmissionUnknownError();
+            }
+            recoveringStart = true;
+            break;
           }
           case "rejected": {
             throw new HostedRejectedOperationError(operation.safeErrorCode);
@@ -621,6 +635,7 @@ export function createHostedEveSessionService(input: {
             return assertNever(operation);
           }
         }
+        break;
       }
       default: {
         return assertNever(reservation);
@@ -634,6 +649,11 @@ export function createHostedEveSessionService(input: {
     try {
       dispatched = await options.dispatch(operationId);
     } catch (error) {
+      if (recoveringStart) {
+        // An earlier request may have accepted the create. Retain its
+        // uncertain record so another exact retry can adopt the same run.
+        throw new HostedSubmissionUnknownError();
+      }
       const rejected = error instanceof SubmissionRejectedBeforeDispatchError;
       let settlementVerified = false;
       try {
@@ -729,9 +749,32 @@ export function createHostedEveSessionService(input: {
       }
       return verifiedResult;
     } catch {
+      if (recoveringStart) {
+        try {
+          const replayed = reserveOperationResultSchema.parse(
+            await input.store.reserveOperation(principal, candidate),
+          );
+          if (replayed.disposition === "existing") {
+            const winner = requireOwnedOperation(replayed.operation, {
+              clientRequestId: options.request.clientRequestId,
+              kind: options.kind,
+              operationId,
+              requestDigest,
+              resumeSessionId: options.resumeSessionId,
+              sessionId: options.sessionId,
+            });
+            if (winner.state === "succeeded") {
+              await requireBoundSucceededStartSession(winner);
+              return eveSessionResultSchema.parse(winner.result);
+            }
+          }
+        } catch {
+          // The durable outcome is still unknown.
+        }
+      }
       // Eve may have accepted the mutation even if durable settlement failed.
-      // Leave the reservation non-replayable. If the transaction committed and
-      // only its response was lost, the next retry recovers the stored result.
+      // Mutations other than start remain non-replayable. If the transaction
+      // committed and only its response was lost, exact retry reads the result.
       throw new HostedSubmissionUnknownError();
     }
   }
