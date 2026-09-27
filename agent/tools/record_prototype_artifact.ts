@@ -16,6 +16,7 @@ import {
 } from "@/lib/agent/workflow-state";
 
 import acceptAppSpec from "./accept_app_spec";
+import { continuePrototypePlanning } from "@/lib/agent/existing-app-plan-recovery";
 
 export default defineTool({
   description:
@@ -75,24 +76,27 @@ export default defineTool({
       appId: recorded.artifact.appId,
       artifacts: recorded.artifacts,
     });
+    let planning = {};
     if (buildReadyAppSpec !== undefined) {
       // The model has completed the product-facing design. Continue the
       // deterministic acceptance/planning transition here so a fourth model
       // continuation is not required merely to choose internal operations.
-      await acceptAppSpec.execute(
-        {
-          appId: recorded.artifact.appId,
-          expectedArtifactDigest: buildReadyAppSpec.digest,
-          expectedArtifactRevision: buildReadyAppSpec.revision,
-        },
-        ctx,
-      );
+      planning = await continuePrototypePlanning(async () => {
+        await acceptAppSpec.execute(
+          {
+            appId: recorded.artifact.appId,
+            expectedArtifactDigest: buildReadyAppSpec.digest,
+            expectedArtifactRevision: buildReadyAppSpec.revision,
+          },
+          ctx,
+        );
+      });
     }
     return {
       ...prototypeArtifactReceipt(recorded.artifact),
       reused: recorded.reused,
       ...(recorded.reused ? {} : { invalidated: current.phase !== "prepared" }),
-      ...(buildReadyAppSpec === undefined ? {} : { implementationPlanReady: true }),
+      ...planning,
     };
   },
   inputSchema: z.object({
