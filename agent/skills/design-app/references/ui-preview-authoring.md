@@ -1,10 +1,15 @@
 # Preview authoring
 
 Use this contract before the first `record_ui_preview` call. Discover the current
-catalog with `inspect-repository({ paths: [...] })`: read `tsconfig.json` for
-`@autograph/components`, `@autograph/compositions`, and `@autograph/icons` aliases,
-or their package export entrypoints. Follow the selected barrel's re-exports
-into implementations, then read relevant stories for actual props and usage.
+catalog with `inspect-repository({ paths: [...] })`: read the repository's actual
+public import mappings before requesting a barrel. Start with `tsconfig.json`,
+workspace path maps referenced by it or the repository overview (for example,
+`.config/typescript/workspace-paths.json`), and package `exports` where present.
+Resolve `@autograph/components`, `@autograph/compositions`, and
+`@autograph/icons` from those mappings; do not assume a historical
+`packages/components`, `packages/compositions`, or `packages/icons` layout.
+Follow each selected barrel's re-exports into implementations, then read
+relevant stories for actual props and usage.
 Read only the components needed for the workflow; a directory or a barrel with
 `export *` alone does not establish a symbol's API.
 

@@ -18,11 +18,18 @@ import {
 } from "@/lib/repository/supported-template";
 
 const developmentWorkspacePath = "/workspace/repository";
-const sandboxOverviewPaths = ["README.md", "AGENTS.md", "package.json", "docs/README.md"] as const;
+const sandboxOverviewPaths = [
+  "README.md",
+  "AGENTS.md",
+  "package.json",
+  "tsconfig.json",
+  ".config/typescript/workspace-paths.json",
+  "docs/README.md",
+] as const;
 
 export default defineTool({
   description:
-    "Inspect the current repository. With paths, read repository-relative text files, including public component exports, implementations, stories, and documentation. Read actual component props before composing a preview; do not guess APIs. Without paths, return the repository overview. Never writes or publishes.",
+    "Inspect the current repository. With paths, read repository-relative text files, including public component exports, implementations, stories, and documentation. Resolve public imports from the current repository's tsconfig, workspace path maps, or package exports before requesting barrels. Read actual component props before composing a preview; do not guess APIs. Without paths, return the repository overview. Never writes or publishes.",
   async execute({ path, paths }, ctx) {
     if (!canAutoSelectDevelopmentSource() && sourceWorkflowState.get().phase === "empty") {
       throw new Error(
