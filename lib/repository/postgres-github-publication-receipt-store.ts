@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
@@ -15,12 +15,13 @@ import type { HostedGitHubTenantAuthority } from "./postgres-github-installation
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 const freshRepositoryKind = "fresh-repository" as const;
+const draftPullRequestKind = "draft-pull-request" as const;
 
 const journalRowSchema = z
   .object({
     createdAt: z.date(),
     idempotencyKey: z.string().regex(/^[0-9a-f]{64}$/u),
-    kind: z.enum([freshRepositoryKind, "draft-pull-request"]),
+    kind: z.enum([freshRepositoryKind, draftPullRequestKind]),
     proposalDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     receiptDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     record: z.unknown(),
@@ -255,6 +256,44 @@ export function createPostgresGitHubPublicationReceiptStore(
       return updated.length === 1;
     },
 
+    async findDraftByPullRequest(repositoryId, pullRequestNumber) {
+      if (
+        !/^[1-9][0-9]*$/u.test(repositoryId) ||
+        !Number.isSafeInteger(pullRequestNumber) ||
+        pullRequestNumber < 1
+      ) {
+        throw new Error(
+          "The draft PR lookup needs a verified repository ID and positive PR number.",
+        );
+      }
+      const rows = await database
+        .select(journalRowSelection)
+        .from(hostedGitHubPublicationJournals)
+        .where(
+          and(
+            tenantPredicate,
+            eq(hostedGitHubPublicationJournals.kind, draftPullRequestKind),
+            eq(hostedGitHubPublicationJournals.status, "succeeded"),
+            sql`${hostedGitHubPublicationJournals.record}->>'repositoryId' = ${repositoryId}`,
+            sql`${hostedGitHubPublicationJournals.record}->>'pullRequestNumber' = ${String(pullRequestNumber)}`,
+          ),
+        )
+        .limit(2);
+      if (rows.length > 1) {
+        throw new Error(
+          "Multiple Builder publication receipts match this draft PR. An operator must inspect the publication journal before it can be updated.",
+        );
+      }
+      const [row] = rows;
+      if (row === undefined) {
+        return row;
+      }
+      const receipt = parseGitHubPublicationJournalRow(row);
+      if (receipt.status !== "succeeded" || receipt.kind !== draftPullRequestKind) {
+        throw new Error("The draft PR publication receipt has an unexpected status.");
+      }
+      return receipt;
+    },
     async read(proposalDigest) {
       if (!/^[0-9a-f]{64}$/u.test(proposalDigest)) {
         throw new Error("GitHub proposal digest is invalid.");

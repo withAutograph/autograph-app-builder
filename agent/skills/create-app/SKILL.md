@@ -162,6 +162,10 @@ app-owned files and reuse the same component-backed preview flow.
    review again. An unavailable or clean source review never proves runtime
    success. Keep incomplete previews inspectable and report remaining checks;
    do not replace a requested backend outcome with a simulated transition.
+   When revising an existing draft pull request, inspect its current branch and
+   use `seal_github_draft_pr_update` with the current reviewed change set. Ask
+   for a separate approval of that exact PR, branch head, and reviewed diff,
+   then use `update_github_draft_pr`. If its head moves, review and seal again.
 9. Continue to the implemented app's private preview with `start_app_preview`.
    Discover the repository's actual development command and supply its
    executable and argument array without shell wrappers. For a nested app

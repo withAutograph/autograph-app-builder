@@ -53,6 +53,7 @@ import {
   withPreparedGitHubSelection,
 } from "./prepared-provider-context";
 import type { ProviderConnectionReturn } from "../integrations/provider-connection-return";
+import { isDeepStrictEqual } from "node:util";
 import {
   providerEmulationEnvironment,
   readProviderEmulation,
@@ -110,6 +111,7 @@ export interface RepositoryAccessRuntime {
     /** Resolves the Eve sandbox only after provider source is configured. */
     sandbox: SandboxSession | (() => Promise<SandboxSession>);
     currentGitHubSource?: ImmutableGitHubSourceReceipt;
+    revision?: { branch: string; headSha: string; headTree: string };
   }) => Promise<{
     accessReceipt: RepositoryAccessReceipt;
     githubSource: ImmutableGitHubSourceReceipt;
@@ -374,12 +376,12 @@ export function createRepositoryAccessRuntime(input: {
         );
       }
 
-      const ref = `refs/heads/${value.access.repository.defaultBranch}`;
+      const ref = `refs/heads/${value.revision?.branch ?? value.access.repository.defaultBranch}`;
       const observedGitHubSource = await resolveImmutableExistingSource({
         adapter: createGitHubAppSourceResolutionAdapter(provider),
         expectedInstallationId: binding.installationId,
-        expectedSha: value.access.repository.headSha,
-        expectedTree: value.access.repository.headTree,
+        expectedSha: value.revision?.headSha ?? value.access.repository.headSha,
+        expectedTree: value.revision?.headTree ?? value.access.repository.headTree,
         ref,
         repositoryId: value.access.repository.repositoryId,
         resolvedByCallId: value.callId,
@@ -396,6 +398,7 @@ export function createRepositoryAccessRuntime(input: {
         source: {
           token: credential.token,
           url: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
+          ...(value.revision === undefined ? {} : { revision: value.revision.branch }),
         },
       });
       // The Vercel backend supplies this source directly to Sandbox.create.
@@ -422,10 +425,34 @@ export function createRepositoryAccessRuntime(input: {
         current: initialAccessReceipt,
         sessionId: value.sessionId,
       });
-      assertResolvedSourceMatchesRepositoryAccess({
-        access: accessReceipt,
-        source: githubSource,
-      });
+      if (value.revision === undefined) {
+        assertResolvedSourceMatchesRepositoryAccess({
+          access: accessReceipt,
+          source: githubSource,
+        });
+      } else {
+        const matchesSelectedDraft = isDeepStrictEqual(
+          [
+            githubSource.repository.repositoryId,
+            githubSource.repository.owner,
+            githubSource.repository.name,
+            githubSource.resolvedRef,
+            githubSource.resolvedSha,
+          ],
+          [
+            accessReceipt.repository.repositoryId,
+            accessReceipt.repository.owner,
+            accessReceipt.repository.name,
+            ref,
+            value.revision.headSha,
+          ],
+        );
+        if (!matchesSelectedDraft) {
+          throw new Error(
+            "The verified draft PR branch is not the connected repository source. Refresh the PR and start a new Builder session from its current branch.",
+          );
+        }
+      }
       const workspace = await recordPreparedSandboxWorkspace({
         callId: value.callId,
         eligibilityDigest: sourceReceipt.eligibilityDigest,

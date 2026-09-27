@@ -26,6 +26,7 @@ import {
 } from "./github-publication";
 import type {
   DraftPublicationReadBack,
+  DraftPullRequestSuccessReceipt,
   DraftPullRequestProposal,
   FreshRepositoryProposal,
   FreshRepositoryReadBack,
@@ -44,6 +45,8 @@ import type { SourceReceiptEvidence } from "./source-receipt";
 import { SUPPORTED_TEMPLATE_ADAPTER } from "./supported-template";
 import { GitHubPublicationTestStore as Store } from "./github-publication-test-store";
 import { parseGitHubPublicationProposalRow } from "./postgres-github-publication-store";
+import { sealExistingDraftUpdate, updateExistingDraft } from "./github-draft-update";
+import type { ExistingDraftObservation, ExistingDraftUpdateAdapter } from "./github-draft-update";
 
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const sha = "1".repeat(40);
@@ -334,6 +337,19 @@ function draftReadBack(
 }
 
 class Adapter implements GitHubPublicationAdapter {
+  // oxlint-disable-next-line eslint/require-await -- in-memory test double
+  async inspectExistingDraft(): Promise<never> {
+    throw new Error(
+      `Existing draft inspection is not configured for ${this.identities.publish.digest}.`,
+    );
+  }
+
+  // oxlint-disable-next-line eslint/require-await -- in-memory test double
+  async updateExistingDraft(): Promise<never> {
+    throw new Error(
+      `Existing draft update is not configured for ${this.identities.publish.digest}.`,
+    );
+  }
   readonly identities = {
     create: installation("create-fresh-repository"),
     publish: installation("publish-draft-pull-request"),
@@ -1513,5 +1529,244 @@ describe("closed GitHub publication contract", () => {
       ).rejects.toThrow();
     }
     expect(adapter.draftCalls).toBe(0);
+  });
+});
+
+describe("existing draft PR updates", () => {
+  const identity = installation("publish-draft-pull-request");
+  const selectedRepository = repository(identity);
+  const reviewed = review();
+  const initial: ExistingDraftObservation = {
+    baseBranch: "main",
+    baseRepositoryId: "100",
+    draft: true,
+    headBranch: "app-builder/review-original",
+    headRepositoryId: "100",
+    headSha: branchSha,
+    headTree: branchTree,
+    name: "example-app",
+    number: 1500,
+    owner: "withAutograph",
+    pullRequestId: "150000",
+    repositoryId: "100",
+    state: "open",
+  };
+  const priorPublication = {
+    branchName: initial.headBranch,
+    branchSha: initial.headSha,
+    digest: "a".repeat(64),
+    pullRequestNumber: initial.number,
+    repositoryId: initial.repositoryId,
+  } as DraftPullRequestSuccessReceipt;
+
+  const adapter = () => {
+    let observed = initial;
+    let updates = 0;
+    let loseResponse = false;
+    const port: ExistingDraftUpdateAdapter = {
+      // oxlint-disable-next-line eslint/require-await -- in-memory test provider
+      async inspectAppliedUpdate(_proposal, _content, candidate) {
+        return candidate.headSha === "6".repeat(40) && candidate.headTree === "7".repeat(40);
+      },
+      // oxlint-disable-next-line eslint/require-await -- in-memory test provider
+      async inspectDraft() {
+        return observed;
+      },
+      // oxlint-disable-next-line eslint/require-await -- in-memory test provider
+      async inspectInstallation() {
+        return identity;
+      },
+      // oxlint-disable-next-line eslint/require-await -- in-memory test provider
+      async updateDraft() {
+        updates += 1;
+        observed = { ...observed, headSha: "6".repeat(40), headTree: "7".repeat(40) };
+        if (loseResponse) {
+          throw new Error("GitHub response was lost after ref update");
+        }
+        return { requestId: "update-request", status: "accepted" };
+      },
+    };
+    return {
+      loseNextResponse: () => {
+        loseResponse = true;
+      },
+      port,
+      setObserved: (value: ExistingDraftObservation) => {
+        observed = value;
+      },
+      get updates() {
+        return updates;
+      },
+    };
+  };
+
+  it("seals and updates only the selected open draft and reviewed bytes", async () => {
+    const mock = adapter();
+    const proposal = await sealExistingDraftUpdate({
+      adapter: mock.port,
+      installation: identity,
+      priorPublication,
+      pullRequestNumber: 1500,
+      repository: selectedRepository,
+      review: reviewed,
+      selectedCheckoutHeadSha: initial.headSha,
+      selectedCheckoutHeadTree: initial.headTree,
+      selectedSourceRef: "refs/heads/app-builder/review-original",
+    });
+    const updated = await updateExistingDraft({
+      adapter: mock.port,
+      contentSource: publicationContentSource(),
+      proposal,
+      review: reviewed,
+    });
+    expect(updated.headSha).toBe("6".repeat(40));
+    expect(mock.updates).toBe(1);
+    await expect(
+      updateExistingDraft({
+        adapter: mock.port,
+        contentSource: publicationContentSource(),
+        proposal,
+        review: reviewed,
+      }),
+    ).resolves.toEqual(updated);
+    expect(mock.updates).toBe(1);
+  });
+
+  it("recovers an approved update when GitHub moved the ref but its response was lost", async () => {
+    const mock = adapter();
+    const proposal = await sealExistingDraftUpdate({
+      adapter: mock.port,
+      installation: identity,
+      priorPublication,
+      pullRequestNumber: initial.number,
+      repository: selectedRepository,
+      review: reviewed,
+      selectedCheckoutHeadSha: initial.headSha,
+      selectedCheckoutHeadTree: initial.headTree,
+      selectedSourceRef: `refs/heads/${initial.headBranch}`,
+    });
+    mock.loseNextResponse();
+    const updated = await updateExistingDraft({
+      adapter: mock.port,
+      contentSource: publicationContentSource(),
+      proposal,
+      review: reviewed,
+    });
+    expect(updated.headSha).toBe("6".repeat(40));
+    expect(mock.updates).toBe(1);
+  });
+
+  it("seals another review from the current PR branch after an earlier update", async () => {
+    const mock = adapter();
+    const first = await sealExistingDraftUpdate({
+      adapter: mock.port,
+      installation: identity,
+      priorPublication,
+      pullRequestNumber: initial.number,
+      repository: selectedRepository,
+      review: reviewed,
+      selectedCheckoutHeadSha: initial.headSha,
+      selectedCheckoutHeadTree: initial.headTree,
+      selectedSourceRef: `refs/heads/${initial.headBranch}`,
+    });
+    await updateExistingDraft({
+      adapter: mock.port,
+      contentSource: publicationContentSource(),
+      proposal: first,
+      review: reviewed,
+    });
+    const second = await sealExistingDraftUpdate({
+      adapter: mock.port,
+      installation: identity,
+      priorPublication,
+      pullRequestNumber: initial.number,
+      repository: selectedRepository,
+      review: reviewed,
+      selectedCheckoutHeadSha: "6".repeat(40),
+      selectedCheckoutHeadTree: "7".repeat(40),
+      selectedSourceRef: `refs/heads/${initial.headBranch}`,
+    });
+    expect(second.expectedHeadSha).toBe("6".repeat(40));
+    expect(second.priorPublicationDigest).toBe(priorPublication.digest);
+  });
+
+  it("requires the selected checkout to be the current draft PR branch", async () => {
+    const mock = adapter();
+    await expect(
+      sealExistingDraftUpdate({
+        adapter: mock.port,
+        installation: identity,
+        priorPublication,
+        pullRequestNumber: initial.number,
+        repository: selectedRepository,
+        review: reviewed,
+        selectedCheckoutHeadSha: initial.headSha,
+        selectedCheckoutHeadTree: initial.headTree,
+        selectedSourceRef: "refs/heads/main",
+      }),
+    ).rejects.toThrow(/not this draft PR branch/u);
+    expect(mock.updates).toBe(0);
+  });
+
+  it("rejects a moved branch, wrong repository, or changed reviewed content before mutation", async () => {
+    const mock = adapter();
+    const proposal = await sealExistingDraftUpdate({
+      adapter: mock.port,
+      installation: identity,
+      priorPublication,
+      pullRequestNumber: 1500,
+      repository: selectedRepository,
+      review: reviewed,
+      selectedCheckoutHeadSha: initial.headSha,
+      selectedCheckoutHeadTree: initial.headTree,
+      selectedSourceRef: "refs/heads/app-builder/review-original",
+    });
+    mock.setObserved({ ...initial, headSha: "8".repeat(40) });
+    await expect(
+      updateExistingDraft({
+        adapter: mock.port,
+        contentSource: publicationContentSource(),
+        proposal,
+        review: reviewed,
+      }),
+    ).rejects.toThrow(/branch moved/u);
+    mock.setObserved({ ...initial, repositoryId: "200" });
+    await expect(
+      updateExistingDraft({
+        adapter: mock.port,
+        contentSource: publicationContentSource(),
+        proposal,
+        review: reviewed,
+      }),
+    ).rejects.toThrow(/pull request changed/u);
+    mock.setObserved(initial);
+    await expect(
+      updateExistingDraft({
+        adapter: mock.port,
+        contentSource: publicationContentSource(new TextEncoder().encode("different")),
+        proposal,
+        review: reviewed,
+      }),
+    ).rejects.toThrow(/postimage changed/u);
+    expect(mock.updates).toBe(0);
+  });
+
+  it("will not seal an update for a branch changed since Builder's prior publication", async () => {
+    const mock = adapter();
+    mock.setObserved({ ...initial, headSha: "8".repeat(40) });
+    await expect(
+      sealExistingDraftUpdate({
+        adapter: mock.port,
+        installation: identity,
+        priorPublication,
+        pullRequestNumber: initial.number,
+        repository: selectedRepository,
+        review: reviewed,
+        selectedCheckoutHeadSha: initial.headSha,
+        selectedCheckoutHeadTree: initial.headTree,
+        selectedSourceRef: "refs/heads/app-builder/review-original",
+      }),
+    ).rejects.toThrow(/branch moved since Builder prepared/u);
+    expect(mock.updates).toBe(0);
   });
 });

@@ -505,7 +505,11 @@ describe("provider-native Vercel source", () => {
     const token = "short_lived_installation_token";
     configureVercelSessionGitSource({
       sessionId: "session-source",
-      source: { token, url: "https://github.com/acme/private.git" },
+      source: {
+        revision: "app-builder/review-original",
+        token,
+        url: "https://github.com/acme/private.git",
+      },
     });
     try {
       createHostedVercelBackend({ factory });
@@ -516,6 +520,7 @@ describe("provider-native Vercel source", () => {
         networkPolicy: "allow-all",
         source: {
           password: token,
+          revision: "app-builder/review-original",
           type: "git",
           url: "https://github.com/acme/private.git",
           username: "x-access-token",

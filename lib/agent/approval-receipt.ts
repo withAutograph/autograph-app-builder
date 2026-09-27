@@ -3,6 +3,7 @@ import type {
   DraftPullRequestProposal,
   ImmutableGitHubSourceReceipt,
 } from "@/lib/repository/github-publication";
+import type { ExistingDraftUpdateProposal } from "@/lib/repository/github-draft-update";
 
 export const gitObjectIdSchema = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -13,8 +14,8 @@ export const approvalReceiptSchema = z
     baseRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]+$/u),
     baseSha: gitObjectIdSchema,
     format: z.literal("autograph-eve-approval-receipt-v2"),
-    outcome: z.enum(["accept-appspec", "accept_change_set", "create-draft-pr"]),
-    phase: z.enum(["appspec", "change_set", "publication"]),
+    outcome: z.enum(["accept-appspec", "accept_change_set", "create-draft-pr", "update-draft-pr"]),
+    phase: z.enum(["appspec", "change_set", "publication", "draft_update"]),
     repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u),
     repositoryId: z.string().regex(/^\d+$/u),
     subjectDigest: digest,
@@ -25,6 +26,8 @@ export const approvalReceiptSchema = z
       expectedOutcome = "accept-appspec";
     } else if (receipt.phase === "change_set") {
       expectedOutcome = "accept_change_set";
+    } else if (receipt.phase === "draft_update") {
+      expectedOutcome = "update-draft-pr";
     }
     if (receipt.outcome !== expectedOutcome) {
       context.addIssue({
@@ -80,6 +83,15 @@ export const approvalTargetFromDraftProposal = (
   repositoryId: proposal.repositoryId,
 });
 
+export const approvalTargetFromExistingDraftUpdate = (
+  proposal: ExistingDraftUpdateProposal,
+): ApprovalTarget => ({
+  baseRef: `refs/heads/${proposal.branchName}`,
+  baseSha: proposal.expectedHeadSha,
+  repository: `${proposal.owner}/${proposal.name}`,
+  repositoryId: proposal.repositoryId,
+});
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertApprovalReceipt(input: {
   actual: ApprovalReceipt;
@@ -93,6 +105,8 @@ export function assertApprovalReceipt(input: {
     expectedOutcome = "accept-appspec";
   } else if (input.phase === "change_set") {
     expectedOutcome = "accept_change_set";
+  } else if (input.phase === "draft_update") {
+    expectedOutcome = "update-draft-pr";
   }
   const fields: readonly (readonly [string, string, string])[] = [
     ["phase", actual.phase, input.phase],
@@ -129,6 +143,8 @@ export function publicApprovalDescription(input: unknown, toolName?: string): st
       expectedPhase = "change_set";
     } else if (toolName === "publish_github_draft_pr") {
       expectedPhase = "publication";
+    } else if (toolName === "update_github_draft_pr") {
+      expectedPhase = "draft_update";
     }
     return parsed.success && (expectedPhase === undefined || parsed.data.phase === expectedPhase)
       ? JSON.stringify(parsed.data)

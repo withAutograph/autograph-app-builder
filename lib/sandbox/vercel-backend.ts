@@ -283,6 +283,7 @@ export function createHostedVercelBackend(
               // present. The installation token remains provider-only.
               source: {
                 password: source.token,
+                ...(source.revision === undefined ? {} : { revision: source.revision }),
                 type: "git" as const,
                 url: source.url,
                 username: "x-access-token" as const,

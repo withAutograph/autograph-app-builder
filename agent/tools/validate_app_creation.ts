@@ -79,10 +79,16 @@ export default defineTool({
     };
     const fixture = hasTestCapability("simulated-target");
     const attempt = createTargetValidationAttempt(current.applyReceipt, ctx.callId);
+    const priorPublishedGitHubDraftProposalDigest =
+      current.publishedGitHubDraftProposalDigest ??
+      (current.phase === "reviewed" ? current.githubDraftProposal?.proposal.digest : undefined);
     const base = {
       appSpec: current.appSpec,
       applyReceipt: current.applyReceipt,
       artifacts: current.artifacts,
+      ...(priorPublishedGitHubDraftProposalDigest === undefined
+        ? {}
+        : { publishedGitHubDraftProposalDigest: priorPublishedGitHubDraftProposalDigest }),
       dependencyReceipt: current.dependencyReceipt,
       ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
       identityReceipt: current.identityReceipt,

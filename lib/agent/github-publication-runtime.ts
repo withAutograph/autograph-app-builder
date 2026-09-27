@@ -17,6 +17,13 @@ import type {
 import type { ReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
 import type { SourceReceiptEvidence } from "../repository/source-receipt";
 import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
+import { isDeepStrictEqual } from "node:util";
+import { sealExistingDraftUpdate, updateExistingDraft } from "../repository/github-draft-update";
+import type {
+  ExistingDraftObservation,
+  ExistingDraftUpdateAdapter,
+  ExistingDraftUpdateProposal,
+} from "../repository/github-draft-update";
 import { approvalTargetFromDraftProposal, assertApprovalReceipt } from "./approval-receipt";
 import type { ApprovalReceipt } from "./approval-receipt";
 
@@ -25,8 +32,10 @@ const supportedOperations = [
   "seal-draft-pull-request-proposal",
   "create-approved-private-fresh-history-repository",
   "publish-approved-branch-and-draft-pull-request",
+  "update-approved-existing-draft-pull-request",
   "recover-lost-response-by-idempotency-key",
 ] as const;
+const draftPublicationOperation = "publish-draft-pull-request" as const;
 
 export interface GitHubPublicationRuntimeStatus {
   version: 3;
@@ -80,6 +89,25 @@ export interface GitHubPublicationRuntime {
     contentSource: GitHubDraftPullRequestContentSource;
     approvedByCallId: string;
   }) => Promise<DraftPullRequestSuccessReceipt>;
+  sealExistingDraftUpdate: (input: {
+    githubSource: ImmutableGitHubSourceReceipt;
+    review: ReviewedChangeSetReceipt;
+    pullRequestNumber: number;
+    priorPublishedProposalDigest?: string;
+    selectedCheckoutHeadSha: string;
+    selectedCheckoutHeadTree: string;
+  }) => Promise<ExistingDraftUpdateProposal>;
+  updateExistingDraft: (input: {
+    proposal: ExistingDraftUpdateProposal;
+    review: ReviewedChangeSetReceipt;
+    contentSource: GitHubDraftPullRequestContentSource;
+  }) => Promise<ExistingDraftObservation>;
+  inspectExistingDraftSource: (input: {
+    repositoryId: string;
+    owner: string;
+    name: string;
+    pullRequestNumber: number;
+  }) => Promise<ExistingDraftObservation>;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -124,6 +152,10 @@ function disabledRuntime(): GitHubPublicationRuntime {
       return unavailable();
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async inspectExistingDraftSource() {
+      return unavailable();
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async publishDraftPullRequest() {
       return unavailable();
     },
@@ -136,8 +168,16 @@ function disabledRuntime(): GitHubPublicationRuntime {
       return unavailable();
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async sealExistingDraftUpdate() {
+      return unavailable();
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async status() {
       return runtimeStatus(false);
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async updateExistingDraft() {
+      return unavailable();
     },
   };
 }
@@ -170,6 +210,25 @@ export function composeGitHubPublicationRuntime(input: {
   const { adapter } = input;
   const { proposals } = input;
   const { receipts } = input;
+  const draftUpdateAdapter: ExistingDraftUpdateAdapter = {
+    async inspectAppliedUpdate(proposal, content, observed) {
+      if (adapter.inspectAppliedDraftUpdate === undefined) {
+        throw new Error(
+          "GitHub draft update verification is unavailable. Upgrade the GitHub provider before updating this PR.",
+        );
+      }
+      return await adapter.inspectAppliedDraftUpdate(proposal, content, observed);
+    },
+    async inspectDraft(request) {
+      return await adapter.inspectExistingDraft(request);
+    },
+    async inspectInstallation() {
+      return await adapter.inspectInstallation(draftPublicationOperation);
+    },
+    async updateDraft(proposal, content) {
+      return await adapter.updateExistingDraft(proposal, content);
+    },
+  };
   return {
     async createFreshRepository(request) {
       const proposal = await proposals.read(request.expectedProposalDigest);
@@ -188,6 +247,42 @@ export function composeGitHubPublicationRuntime(input: {
         review: request.review,
         store: receipts,
       });
+    },
+    async inspectExistingDraftSource(request) {
+      const observed = await adapter.inspectExistingDraft({
+        name: request.name,
+        number: request.pullRequestNumber,
+        owner: request.owner,
+        repositoryId: request.repositoryId,
+      });
+      const matchesSelection = isDeepStrictEqual(
+        [
+          observed.repositoryId,
+          observed.owner,
+          observed.name,
+          observed.number,
+          observed.state,
+          observed.draft,
+          observed.headRepositoryId,
+          observed.baseRepositoryId,
+        ],
+        [
+          request.repositoryId,
+          request.owner,
+          request.name,
+          request.pullRequestNumber,
+          "open",
+          true,
+          request.repositoryId,
+          request.repositoryId,
+        ],
+      );
+      if (!matchesSelection) {
+        throw new Error(
+          "The selected PR is not an open draft with a branch in this connected GitHub repository. Choose the correct draft PR, then retry source selection.",
+        );
+      }
+      return observed;
     },
     async publishDraftPullRequest(request) {
       const proposal = await proposals.read(request.expectedProposalDigest);
@@ -227,11 +322,11 @@ export function composeGitHubPublicationRuntime(input: {
     },
     async sealDraftPullRequestProposal(request) {
       const repository = await adapter.inspectRepository({
-        operation: "publish-draft-pull-request",
+        operation: draftPublicationOperation,
         ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
         repositoryId: request.githubSource.repository.repositoryId,
       });
-      const installation = await adapter.inspectInstallation("publish-draft-pull-request");
+      const installation = await adapter.inspectInstallation(draftPublicationOperation);
       const proposal = createDraftPullRequestProposal({
         changedPathsSinceBase: [],
         installation,
@@ -245,9 +340,58 @@ export function composeGitHubPublicationRuntime(input: {
       }
       return sealed;
     },
+    async sealExistingDraftUpdate(request) {
+      const prior =
+        request.priorPublishedProposalDigest === undefined
+          ? await receipts.findDraftByPullRequest?.(
+              request.githubSource.repository.repositoryId,
+              request.pullRequestNumber,
+            )
+          : await receipts.read(request.priorPublishedProposalDigest);
+      const matchesOriginalPublication =
+        prior?.status === "succeeded" &&
+        prior.kind === "draft-pull-request" &&
+        isDeepStrictEqual(
+          [prior.repositoryId, prior.pullRequestNumber],
+          [request.githubSource.repository.repositoryId, request.pullRequestNumber],
+        );
+      const matchesRequestedDigest =
+        request.priorPublishedProposalDigest === undefined ||
+        prior?.proposalDigest === request.priorPublishedProposalDigest;
+      if (!matchesOriginalPublication || !matchesRequestedDigest) {
+        throw new Error(
+          "Builder has no successful, tenant-scoped publication receipt for this draft PR. Reopen its originating Builder session; do not overwrite a PR branch whose previous content cannot be verified.",
+        );
+      }
+      const repository = await adapter.inspectRepository({
+        operation: draftPublicationOperation,
+        ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
+        repositoryId: request.githubSource.repository.repositoryId,
+      });
+      const installation = await adapter.inspectInstallation(draftPublicationOperation);
+      return sealExistingDraftUpdate({
+        adapter: draftUpdateAdapter,
+        installation,
+        priorPublication: prior,
+        pullRequestNumber: request.pullRequestNumber,
+        repository,
+        review: request.review,
+        selectedCheckoutHeadSha: request.selectedCheckoutHeadSha,
+        selectedCheckoutHeadTree: request.selectedCheckoutHeadTree,
+        selectedSourceRef: request.githubSource.resolvedRef,
+      });
+    },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async status() {
       return runtimeStatus(true);
+    },
+    async updateExistingDraft(request) {
+      return await updateExistingDraft({
+        adapter: draftUpdateAdapter,
+        contentSource: request.contentSource,
+        proposal: request.proposal,
+        review: request.review,
+      });
     },
   };
 }

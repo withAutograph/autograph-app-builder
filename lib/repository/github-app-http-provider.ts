@@ -10,9 +10,10 @@ import {
   assertExactDraftPullRequestProposal,
   assertExactFreshRepositoryProposal,
 } from "./github-publication";
-import type { DraftPullRequestProposal } from "./github-publication";
+import type { DraftPullRequestProposal, GitHubDraftPullRequestContent } from "./github-publication";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
+import type { ExistingDraftUpdateProposal } from "./github-draft-update";
 
 const MAX_FILES = 10_000;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -622,6 +623,98 @@ export const createGitHubAppHttpProvider = (input: {
     };
   };
 
+  const draftPermissions: PermissionSnapshot = {
+    administration: "none",
+    contents: "write",
+    metadata: "read",
+    pullRequests: "write",
+    variables: "read",
+    workflows: "write",
+  };
+
+  const inspectExistingDraft = async (draftRequest: {
+    repositoryId: string;
+    owner: string;
+    name: string;
+    number: number;
+  }) => {
+    if (!Number.isSafeInteger(draftRequest.number) || draftRequest.number < 1) {
+      throw new Error("invalid-pull-request-number");
+    }
+    const repository = await repositoryById(draftRequest.repositoryId, "HEAD", draftPermissions);
+    if (repository.owner !== draftRequest.owner || repository.name !== draftRequest.name) {
+      throw new Error("repository-identity-changed");
+    }
+    const pull = await github({
+      authorization: repository.accessToken,
+      expected: [200],
+      path: `/repos/${encodeURIComponent(draftRequest.owner)}/${encodeURIComponent(draftRequest.name)}/pulls/${draftRequest.number}`,
+    });
+    const head = property(pull.body, "head");
+    const base = property(pull.body, "base");
+    const headBranch = stringProperty(head, "ref");
+    const headSha = objectId.parse(stringProperty(head, "sha"));
+    const reference = await github({
+      authorization: repository.accessToken,
+      expected: [200],
+      path: `/repos/${encodeURIComponent(draftRequest.owner)}/${encodeURIComponent(draftRequest.name)}/git/ref/heads/${encodePath(headBranch)}`,
+    });
+    if (objectId.parse(stringProperty(property(reference.body, "object"), "sha")) !== headSha) {
+      throw new Error("pull-request-head-out-of-date");
+    }
+    const commit = await github({
+      authorization: repository.accessToken,
+      expected: [200],
+      path: `/repos/${encodeURIComponent(draftRequest.owner)}/${encodeURIComponent(draftRequest.name)}/commits/${headSha}`,
+    });
+    return {
+      baseBranch: stringProperty(base, "ref"),
+      baseRepositoryId: decimalProperty(property(base, "repo"), "id"),
+      draft: booleanProperty(pull.body, "draft"),
+      headBranch,
+      headRepositoryId: decimalProperty(property(head, "repo"), "id"),
+      headSha,
+      headTree: objectId.parse(
+        stringProperty(property(property(commit.body, "commit"), "tree"), "sha"),
+      ),
+      name: repository.name,
+      number: Number(decimalProperty(pull.body, "number")),
+      owner: repository.owner,
+      pullRequestId: decimalProperty(pull.body, "id"),
+      repositoryId: repository.repositoryId,
+      state: z.enum(["open", "closed"]).parse(stringProperty(pull.body, "state")),
+    };
+  };
+
+  const inspectedUpdateTree = async (
+    proposal: ExistingDraftUpdateProposal,
+    content: GitHubDraftPullRequestContent,
+    accessToken: string,
+  ) => {
+    const files = content.changes.flatMap((change) =>
+      change.kind === "deleted"
+        ? []
+        : [
+            {
+              content: change.after.bytes,
+              mode: change.after.mode === "755" ? ("100755" as const) : ("100644" as const),
+              path: change.path,
+            },
+          ],
+    );
+    const deletions = content.changes.flatMap((change) =>
+      change.kind === "deleted" ? [change.path] : [],
+    );
+    return await createTree({
+      accessToken,
+      baseTree: proposal.expectedHeadTree,
+      deletions,
+      files,
+      owner: proposal.owner,
+      repositoryName: proposal.name,
+    });
+  };
+
   return {
     async acquireRepositoryReadCredential({ repositoryId }) {
       try {
@@ -707,6 +800,47 @@ export const createGitHubAppHttpProvider = (input: {
         path: `/repos/${encodeURIComponent(proposal.destinationOwner)}/${encodeURIComponent(proposal.destinationName)}/git/refs`,
       });
       return { requestId: reference.requestId, status: "accepted" };
+    },
+    async inspectAppliedDraftUpdate(proposal, content, observed) {
+      try {
+        assertExactGitHubDraftPullRequestContent({ content, proposal });
+      } catch {
+        return false;
+      }
+      if (
+        observed.headSha === proposal.expectedHeadSha ||
+        observed.headRepositoryId !== proposal.repositoryId
+      ) {
+        return false;
+      }
+      const current = await inspectExistingDraft({
+        name: proposal.name,
+        number: proposal.pullRequestNumber,
+        owner: proposal.owner,
+        repositoryId: proposal.repositoryId,
+      });
+      if (current.headSha !== observed.headSha || current.headTree !== observed.headTree) {
+        return false;
+      }
+      const accessToken = await token(draftPermissions, [proposal.repositoryId]);
+      const expectedTree = await inspectedUpdateTree(proposal, content, accessToken);
+      if (observed.headTree !== expectedTree) {
+        return false;
+      }
+      const response = await github({
+        authorization: accessToken,
+        expected: [200],
+        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/commits/${observed.headSha}`,
+      });
+      const parents = property(response.body, "parents");
+      const expectedMessage = `Update draft pull request #${proposal.pullRequestNumber}\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}`;
+      return (
+        Array.isArray(parents) &&
+        parents.length === 1 &&
+        stringProperty(parents[0], "sha") === proposal.expectedHeadSha &&
+        stringProperty(property(response.body, "tree"), "sha") === expectedTree &&
+        stringProperty(response.body, "message") === expectedMessage
+      );
     },
     async inspectDestination({ owner, name: repositoryName }) {
       const permissions: PermissionSnapshot = {
@@ -830,6 +964,7 @@ export const createGitHubAppHttpProvider = (input: {
         repository: snapshot,
       };
     },
+    inspectExistingDraft,
     async inspectFreshRepositoryOutcome(proposal) {
       assertExactFreshRepositoryProposal(proposal);
       const permissions: PermissionSnapshot = {
@@ -1085,6 +1220,131 @@ export const createGitHubAppHttpProvider = (input: {
         path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/pulls`,
       });
       return { requestId: reference.requestId, status: "accepted" };
+    },
+    async updateExistingDraft(proposal: ExistingDraftUpdateProposal, content) {
+      try {
+        assertExactGitHubDraftPullRequestContent({ content, proposal });
+      } catch {
+        return { code: "invalid-publication-material", status: "rejected" };
+      }
+      const current = await inspectExistingDraft({
+        name: proposal.name,
+        number: proposal.pullRequestNumber,
+        owner: proposal.owner,
+        repositoryId: proposal.repositoryId,
+      });
+      if (
+        current.pullRequestId !== proposal.pullRequestId ||
+        !current.draft ||
+        current.state !== "open" ||
+        current.headRepositoryId !== proposal.repositoryId ||
+        current.baseRepositoryId !== proposal.repositoryId ||
+        current.headBranch !== proposal.branchName ||
+        current.baseBranch !== proposal.baseBranch
+      ) {
+        return { code: "pull-request-changed", status: "rejected" };
+      }
+      if (
+        current.headSha !== proposal.expectedHeadSha ||
+        current.headTree !== proposal.expectedHeadTree
+      ) {
+        return { code: "branch-moved", status: "rejected" };
+      }
+      const accessToken = await token(draftPermissions, [proposal.repositoryId]);
+      for (const change of content.changes) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- inspect every reviewed preimage before any ref mutation
+        const matches = await reviewedPreimageMatches({
+          accessToken,
+          change: {
+            path: change.path,
+            ...(change.kind === "added" ? {} : { before: change.before }),
+          },
+          headSha: current.headSha,
+          headTree: current.headTree,
+          owner: proposal.owner,
+          repositoryName: proposal.name,
+        });
+        if (!matches) {
+          return { code: "reviewed-path-changed", path: change.path, status: "rejected" };
+        }
+      }
+      const files = content.changes.flatMap((change) =>
+        change.kind === "deleted"
+          ? []
+          : [
+              {
+                content: change.after.bytes,
+                mode: change.after.mode === "755" ? ("100755" as const) : ("100644" as const),
+                path: change.path,
+              },
+            ],
+      );
+      const deletions = content.changes.flatMap((change) =>
+        change.kind === "deleted" ? [change.path] : [],
+      );
+      const tree = await createTree({
+        accessToken,
+        baseTree: current.headTree,
+        deletions,
+        files,
+        owner: proposal.owner,
+        repositoryName: proposal.name,
+      });
+      const commit = await github({
+        authorization: accessToken,
+        body: {
+          message: `Update draft pull request #${proposal.pullRequestNumber}\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}`,
+          parents: [current.headSha],
+          tree,
+        },
+        expected: [201],
+        method: "POST",
+        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/commits`,
+      });
+      const reference = await github({
+        authorization: accessToken,
+        expected: [200],
+        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/ref/heads/${encodePath(proposal.branchName)}`,
+      });
+      if (
+        objectId.parse(stringProperty(property(reference.body, "object"), "sha")) !==
+        current.headSha
+      ) {
+        return { code: "branch-moved", status: "rejected" };
+      }
+      const repositoryIdentity = await github({
+        authorization: accessToken,
+        expected: [200],
+        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}`,
+      });
+      if (decimalProperty(repositoryIdentity.body, "id") !== proposal.repositoryId) {
+        return { code: "repository-identity-changed", status: "rejected" };
+      }
+      const result = await github({
+        authorization: accessToken,
+        body: {
+          query:
+            "mutation($repositoryId: ID!, $name: GitRefname!, $afterOid: GitObjectID!, $beforeOid: GitObjectID!) { updateRefs(input: {repositoryId: $repositoryId, refUpdates: [{name: $name, afterOid: $afterOid, beforeOid: $beforeOid, force: false}]}) { clientMutationId } }",
+          variables: {
+            afterOid: objectId.parse(stringProperty(commit.body, "sha")),
+            beforeOid: current.headSha,
+            name: `refs/heads/${proposal.branchName}`,
+            repositoryId: stringProperty(repositoryIdentity.body, "node_id"),
+          },
+        },
+        expected: [200],
+        method: "POST",
+        path: "/graphql",
+      });
+      if (
+        record(result.body) &&
+        Array.isArray(result.body.errors) &&
+        result.body.errors.length > 0
+      ) {
+        return { code: "branch-moved", status: "rejected" };
+      }
+      property(property(result.body, "data"), "updateRefs");
+      return { requestId: result.requestId, status: "accepted" };
     },
   };
 };

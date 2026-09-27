@@ -19,6 +19,7 @@ import type { GitHubDraftPullRequestContent, FreshRepositoryProposal } from "./g
 import { createReviewedChangeSetReceipt } from "./reviewed-change-set";
 import type { NormalizedChangeSet } from "./reviewed-change-set";
 import { compareOverlayPaths } from "./target-apply";
+import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
@@ -804,5 +805,144 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     });
     expect(calls.some((url) => url.endsWith(`/compare/${sourceSha}...${branchSha}`))).toBe(true);
     expect(calls.some((url) => url.endsWith(`/compare/${currentHead}...${branchSha}`))).toBe(false);
+  });
+});
+
+describe("existing draft update provider", () => {
+  it("uses an exact expected branch OID in GitHub's atomic updateRefs mutation", async () => {
+    const head = "3".repeat(40);
+    const headTree = "4".repeat(40);
+    const newCommit = "5".repeat(40);
+    let observedHead = head;
+    let recoveredMessage = `Update draft pull request #1500\n\nApp-Builder-Idempotency: ${"b".repeat(64)}`;
+    const { content } = unicodeDraftMaterial(false, false, ["apps/demo/page.tsx"]);
+    const proposal = {
+      approvedPaths: content.approvedPaths,
+      baseBranch: "main",
+      branchName: "app-builder/review-original",
+      changeSetDigest: content.changeSetDigest,
+      changedContentDigest: content.changedContentDigest,
+      digest: "a".repeat(64),
+      expectedHeadSha: head,
+      expectedHeadTree: headTree,
+      idempotencyKey: "b".repeat(64),
+      installationIdentityDigest: "c".repeat(64),
+      intendedOutcome: "update-existing-draft-pull-request" as const,
+      name: "example-app",
+      owner: "withAutograph",
+      priorPublicationDigest: "d".repeat(64),
+      pullRequestId: "150000",
+      pullRequestNumber: 1500,
+      repositoryId: "100",
+      reviewDigest: content.reviewDigest,
+      version: 1 as const,
+    } satisfies ExistingDraftUpdateProposal;
+    const calls: { url: string; body: unknown }[] = [];
+    // oxlint-disable-next-line eslint/complexity, eslint/require-await, sonarjs/cognitive-complexity -- focused GitHub HTTP double
+    const implementation: typeof fetch = async (request, init = {}) => {
+      const url = String(request);
+      const method = init.method ?? "GET";
+      const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
+      calls.push({ body, url });
+      if (url.endsWith("/app/installations/456/access_tokens")) {
+        return json(
+          {
+            permissions: (body as { permissions: unknown }).permissions,
+            token: "ghs_operation_scoped_installation_token",
+          },
+          201,
+        );
+      }
+      if (url.endsWith("/repositories/100")) {
+        return json({
+          default_branch: "main",
+          id: 100,
+          name: "example-app",
+          owner: { login: "withAutograph" },
+          private: true,
+        });
+      }
+      if (url.endsWith("/repos/withAutograph/example-app/commits/HEAD")) {
+        return json({ commit: { tree: { sha: sourceTree } }, sha: sourceSha });
+      }
+      if (url.endsWith("/repos/withAutograph/example-app/actions/variables?per_page=100&page=1")) {
+        return json({ variables: [] });
+      }
+      if (url.endsWith("/repos/withAutograph/example-app/pulls/1500")) {
+        return json({
+          base: { ref: "main", repo: { id: 100 } },
+          draft: true,
+          head: { ref: proposal.branchName, repo: { id: 100 }, sha: observedHead },
+          id: 150_000,
+          number: 1500,
+          state: "open",
+        });
+      }
+      if (url.endsWith(`/git/ref/heads/${proposal.branchName}`)) {
+        return json({ node_id: "REF_NODE", object: { sha: observedHead } });
+      }
+      if (url.endsWith(`/commits/${head}`)) {
+        return json({ commit: { tree: { sha: headTree } }, sha: head });
+      }
+      if (url.endsWith(`/git/commits/${newCommit}`)) {
+        return json({
+          message: recoveredMessage,
+          parents: [{ sha: head }],
+          tree: { sha: "7".repeat(40) },
+        });
+      }
+      if (url.endsWith(`/commits/${newCommit}`)) {
+        return json({ commit: { tree: { sha: "7".repeat(40) } }, sha: newCommit });
+      }
+      if (url.endsWith(`/git/trees/${headTree}`) && method === "GET") {
+        return json({ tree: [], truncated: false });
+      }
+      if (url.endsWith("/git/blobs") && method === "POST") {
+        return json({ sha: "6".repeat(40) }, 201);
+      }
+      if (url.endsWith("/git/trees") && method === "POST") {
+        return json({ sha: "7".repeat(40) }, 201);
+      }
+      if (url.endsWith("/git/commits") && method === "POST") {
+        return json({ sha: newCommit }, 201);
+      }
+      if (url.endsWith("/repos/withAutograph/example-app") && method === "GET") {
+        return json({ id: 100, node_id: "REPO_NODE" });
+      }
+      if (url.endsWith("/graphql") && method === "POST") {
+        return json({ data: { updateRefs: { clientMutationId: null } } });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    };
+    const provider = createProvider(implementation);
+    await expect(provider.updateExistingDraft(proposal, content)).resolves.toEqual({
+      requestId: "REQUEST_1",
+      status: "accepted",
+    });
+    const graphql = calls.find(({ url }) => url.endsWith("/graphql"))?.body as {
+      query: string;
+      variables: Record<string, string>;
+    };
+    expect(graphql.query).toContain("updateRefs");
+    expect(graphql.variables).toEqual({
+      afterOid: newCommit,
+      beforeOid: head,
+      name: `refs/heads/${proposal.branchName}`,
+      repositoryId: "REPO_NODE",
+    });
+    observedHead = newCommit;
+    const observed = (await provider.inspectExistingDraft({
+      name: proposal.name,
+      number: proposal.pullRequestNumber,
+      owner: proposal.owner,
+      repositoryId: proposal.repositoryId,
+    })) as ExistingDraftObservation;
+    await expect(provider.inspectAppliedDraftUpdate(proposal, content, observed)).resolves.toBe(
+      true,
+    );
+    recoveredMessage = "A same-content commit from elsewhere";
+    await expect(provider.inspectAppliedDraftUpdate(proposal, content, observed)).resolves.toBe(
+      false,
+    );
   });
 });

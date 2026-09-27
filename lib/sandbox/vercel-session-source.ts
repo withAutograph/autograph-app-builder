@@ -7,6 +7,7 @@
 export type VercelGitSessionSource = Readonly<{
   url: string;
   token: string;
+  revision?: string;
 }>;
 
 const pendingSources = new Map<string, VercelGitSessionSource>();

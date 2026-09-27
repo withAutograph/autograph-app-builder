@@ -5,6 +5,7 @@ import {
   approvalRequestDecision,
   approvalTarget,
   approvalTargetFromDraftProposal,
+  approvalTargetFromExistingDraftUpdate,
   approvalTargetFromGitHubSource,
   assertApprovalReceipt,
   publicApprovalDescription,
@@ -55,6 +56,46 @@ describe("approval receipt", () => {
     expect(
       approvalReceiptSchema.parse({ ...receipt, baseSha: "a".repeat(64) }).baseSha,
     ).toHaveLength(64);
+  });
+
+  it("requires separate approval for an existing draft PR and its exact branch head", () => {
+    const proposal = {
+      branchName: "app-builder/review-original",
+      expectedHeadSha: "c".repeat(40),
+      name: "arrusted-development",
+      owner: "withAutograph",
+      repositoryId: receipt.repositoryId,
+    } as Parameters<typeof approvalTargetFromExistingDraftUpdate>[0];
+    const target = approvalTargetFromExistingDraftUpdate(proposal);
+    const updateReceipt = {
+      ...receipt,
+      baseRef: target.baseRef,
+      baseSha: target.baseSha,
+      outcome: "update-draft-pr" as const,
+      phase: "draft_update" as const,
+    };
+    expect(() =>
+      assertApprovalReceipt({
+        actual: updateReceipt,
+        phase: "draft_update",
+        subjectDigest: receipt.subjectDigest,
+        target,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertApprovalReceipt({
+        actual: { ...updateReceipt, baseSha: "d".repeat(40) },
+        phase: "draft_update",
+        subjectDigest: receipt.subjectDigest,
+        target,
+      }),
+    ).toThrow("base commit");
+    expect(
+      publicApprovalDescription({ approvalReceipt: updateReceipt }, "update_github_draft_pr"),
+    ).toBe(JSON.stringify(updateReceipt));
+    expect(
+      publicApprovalDescription({ approvalReceipt: updateReceipt }, "publish_github_draft_pr"),
+    ).toBeUndefined();
   });
 
   it("binds draft publication approval to the proposal's current base, not the selected checkout", () => {

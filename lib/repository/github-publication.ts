@@ -6,6 +6,7 @@ import { parseSourceReceiptEvidence } from "./source-receipt";
 import type { SourceReceiptEvidence } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
+import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
 
 export const GITHUB_PUBLICATION_VERSION = 2 as const;
 export const REPOSITORY_RELEASE_GATE = "REPOSITORY_RELEASE_ENABLED" as const;
@@ -316,6 +317,12 @@ export interface GitHubDraftPullRequestContentSource {
   } | null>;
 }
 
+/** The fields shared by new-PR and existing-draft publication reviews. */
+export type ReviewedPublicationBinding = Pick<
+  DraftPullRequestProposal,
+  "reviewDigest" | "changeSetDigest" | "changedContentDigest" | "approvedPaths"
+>;
+
 export type GitHubPublicationContentSource = GitHubFreshRepositoryContentSource &
   GitHubDraftPullRequestContentSource;
 
@@ -329,6 +336,21 @@ export interface GitHubSourceResolutionAdapter {
 }
 
 export interface GitHubPublicationAdapter extends GitHubSourceResolutionAdapter {
+  inspectExistingDraft: (input: {
+    repositoryId: string;
+    owner: string;
+    name: string;
+    number: number;
+  }) => Promise<ExistingDraftObservation>;
+  updateExistingDraft: (
+    proposal: ExistingDraftUpdateProposal,
+    content: GitHubDraftPullRequestContent,
+  ) => Promise<GitHubMutationAcknowledgement>;
+  inspectAppliedDraftUpdate?: (
+    proposal: ExistingDraftUpdateProposal,
+    content: GitHubDraftPullRequestContent,
+    observed: ExistingDraftObservation,
+  ) => Promise<boolean>;
   inspectDestination: (input: {
     owner: string;
     name: string;
@@ -351,6 +373,10 @@ export interface GitHubPublicationAdapter extends GitHubSourceResolutionAdapter 
 
 export interface GitHubPublicationReceiptStore {
   read: (proposalDigest: string) => Promise<GitHubMutationReceipt | undefined>;
+  findDraftByPullRequest?: (
+    repositoryId: string,
+    pullRequestNumber: number,
+  ) => Promise<DraftPullRequestSuccessReceipt | undefined>;
   compareAndSet: (
     proposalDigest: string,
     expectedDigest: string | undefined,
@@ -605,14 +631,14 @@ function assertCanonicalReview(review: ReviewedChangeSetReceipt): void {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function reviewForProposal(
-  proposal: FreshRepositoryProposal | DraftPullRequestProposal,
+  proposal: FreshRepositoryProposal | ReviewedPublicationBinding,
   review: ReviewedChangeSetReceipt,
 ): void {
   assertCanonicalReview(review);
   if (
     proposal.reviewDigest !== review.digest ||
     proposal.changeSetDigest !== review.changeSetDigest ||
-    (proposal.intendedOutcome === "publish-reviewed-change-set-as-draft-pull-request" &&
+    ("changedContentDigest" in proposal &&
       (proposal.changedContentDigest !== review.changedContentDigest ||
         JSON.stringify(proposal.approvedPaths) !== JSON.stringify(review.approvedPaths)))
   ) {
@@ -804,7 +830,7 @@ export function assertExactGitHubFreshRepositoryContent(input: {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertExactGitHubDraftPullRequestContent(input: {
-  proposal: DraftPullRequestProposal;
+  proposal: ReviewedPublicationBinding;
   content: GitHubDraftPullRequestContent;
 }): void {
   const { content, proposal } = input;
@@ -858,7 +884,7 @@ export function assertExactGitHubDraftPullRequestContent(input: {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertExactGitHubPublicationContent(input: {
-  proposal: DraftPullRequestProposal;
+  proposal: ReviewedPublicationBinding;
   review: ReviewedChangeSetReceipt;
   content: GitHubDraftPullRequestContent;
 }): void {
@@ -911,7 +937,7 @@ export async function readExactGitHubFreshRepositoryContent(input: {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readExactGitHubPublicationContent(input: {
-  proposal: DraftPullRequestProposal;
+  proposal: ReviewedPublicationBinding;
   review: ReviewedChangeSetReceipt;
   source: GitHubDraftPullRequestContentSource;
 }): Promise<GitHubDraftPullRequestContent> {
