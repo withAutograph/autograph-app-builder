@@ -3,6 +3,18 @@ import { describe, expect, it } from "vitest";
 import { completionGuidance } from "./completion-guidance";
 
 describe("shared app delivery guidance", () => {
+  it("recovers accepted existing-app designs by planning exact edits before build approval", () => {
+    for (const phase of [
+      "app_spec_accepted",
+      "dependencies_prepared",
+      "identity_resolved",
+    ] as const) {
+      const guidance = completionGuidance({ phase });
+      expect(guidance).toContain("accept_app_spec");
+      expect(guidance).toContain("existingAppChanges");
+      expect(guidance).toContain("before requesting build approval");
+    }
+  });
   it("continues an applied implementation into validation", () => {
     const result = completionGuidance({ phase: "applied" });
     expect(result).toContain("They have not passed repository validation");

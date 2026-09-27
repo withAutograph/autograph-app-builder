@@ -47,7 +47,7 @@ const planAcceptedAppSpec = async (
 
 export default defineTool({
   description:
-    "Silently validate the complete AppSpec artifact and continue planning. Before authoring it, read design-app references/app-spec.md and use its complete canonical skeleton: every required heading and the final Build handoff status. Missing product sections must be authored, not inferred by this tool. No source, workspace, or approval receipt is required. This does not publish or change an external repository.",
+    "Silently validate the complete AppSpec artifact and continue planning. Before authoring it, read design-app references/app-spec.md and use its complete canonical skeleton: every required heading and the final Build handoff status. Missing product sections must be authored, not inferred by this tool. For an existing app, include existingAppChanges with complete replacement contents for each app-owned file to change; if recording the AppSpec said planning needs changes, call this tool with the accepted artifact and those changes before requesting build approval. No new approval receipt is required. This does not publish or change an external repository.",
   async execute(
     { appId, expectedArtifactDigest, expectedArtifactRevision, existingAppChanges },
     ctx,
