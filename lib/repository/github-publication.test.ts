@@ -42,6 +42,7 @@ import type { SourceReceiptEvidence } from "./source-receipt";
 import { SUPPORTED_TEMPLATE_ADAPTER } from "./supported-template";
 import { compareOverlayPaths } from "./target-apply";
 import { GitHubPublicationTestStore as Store } from "./github-publication-test-store";
+import { parseGitHubPublicationProposalRow } from "./postgres-github-publication-store";
 
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const sha = "1".repeat(40);
@@ -451,6 +452,27 @@ function draftProposal(adapter: Adapter, reviewed = review()) {
 }
 
 describe("closed GitHub publication contract", () => {
+  it.each(["draft", "fresh"])("verifies %s proposals after JSONB reorders their keys", (kind) => {
+    const adapter = new Adapter();
+    const proposal = kind === "draft" ? draftProposal(adapter) : freshProposal(adapter);
+    const reordered = Object.fromEntries(Object.entries(proposal).toReversed());
+    reordered.releaseGate = Object.fromEntries(Object.entries(proposal.releaseGate).toReversed());
+    const row = {
+      createdAt: new Date("2026-09-26T00:00:00.000Z"),
+      idempotencyKey: proposal.idempotencyKey,
+      kind: kind === "draft" ? "draft-pull-request" : "fresh-repository",
+      proposal: reordered,
+      proposalDigest: proposal.digest,
+    };
+    expect(parseGitHubPublicationProposalRow(row)).toEqual(proposal);
+    expect(() =>
+      parseGitHubPublicationProposalRow({
+        ...row,
+        proposal: { ...(row.proposal as object), unexpectedField: true },
+      }),
+    ).toThrow();
+  });
+
   it("round-trips UTF-8 ordered review paths into GitHub publication", () => {
     const adapter = new Adapter();
     const canonicalReview = review([

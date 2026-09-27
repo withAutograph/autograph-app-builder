@@ -1003,7 +1003,7 @@ export function assertExactInstallationIdentity(identity: GitHubInstallationIden
   }
 }
 
-const repositoryKeys = [
+export const repositoryKeys = [
   "version",
   "repositoryId",
   "owner",
@@ -1150,7 +1150,7 @@ export function assertExactImmutableGitHubSourceReceipt(
   }
 }
 
-const freshProposalKeys = [
+export const freshProposalKeys = [
   "version",
   "installationIdentityDigest",
   "destinationOwner",
@@ -1257,7 +1257,7 @@ export function assertExactFreshRepositoryProposal(proposal: FreshRepositoryProp
   }
 }
 
-const draftProposalKeys = [
+export const draftProposalKeys = [
   "version",
   "installationIdentityDigest",
   "repositoryId",
