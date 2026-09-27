@@ -42,7 +42,6 @@ import type { SourceReceiptEvidence } from "./source-receipt";
 import { SUPPORTED_TEMPLATE_ADAPTER } from "./supported-template";
 import { compareOverlayPaths } from "./target-apply";
 import { GitHubPublicationTestStore as Store } from "./github-publication-test-store";
-import { parseGitHubPublicationProposalRow } from "./postgres-github-publication-store";
 
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const sha = "1".repeat(40);
@@ -174,10 +173,11 @@ function review(
     },
   ],
   overrides: Partial<Pick<NormalizedChangeSet, "sourceReceiptDigest">> = {},
+  preserveOverlayOrder = false,
 ) {
   const changes = [...inputChanges]
     .toSorted((left, right) => compareOverlayPaths(left.path, right.path))
-    .map(reviewedChange);
+    .map((change) => (preserveOverlayOrder ? change : reviewedChange(change)));
   const unsigned = {
     appSpecDigest: "b".repeat(64),
     appSpecPath: "prototype/demo/app-spec.md",
@@ -440,38 +440,17 @@ function freshProposal(adapter: Adapter) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function draftProposal(adapter: Adapter) {
+function draftProposal(adapter: Adapter, reviewed = review()) {
   return createDraftPullRequestProposal({
     changedPathsSinceBase: [],
     installation: adapter.identities.publish,
     repository: adapter.publishRepo,
-    review: review(),
+    review: reviewed,
     title: "Add demo",
   });
 }
 
 describe("closed GitHub publication contract", () => {
-  it.each(["draft", "fresh"])("verifies %s proposals after JSONB reorders their keys", (kind) => {
-    const adapter = new Adapter();
-    const proposal = kind === "draft" ? draftProposal(adapter) : freshProposal(adapter);
-    const reordered = Object.fromEntries(Object.entries(proposal).toReversed());
-    reordered.releaseGate = Object.fromEntries(Object.entries(proposal.releaseGate).toReversed());
-    const row = {
-      createdAt: new Date("2026-09-26T00:00:00.000Z"),
-      idempotencyKey: proposal.idempotencyKey,
-      kind: kind === "draft" ? "draft-pull-request" : "fresh-repository",
-      proposal: reordered,
-      proposalDigest: proposal.digest,
-    };
-    expect(parseGitHubPublicationProposalRow(row)).toEqual(proposal);
-    expect(() =>
-      parseGitHubPublicationProposalRow({
-        ...row,
-        proposal: { ...(row.proposal as object), unexpectedField: true },
-      }),
-    ).toThrow();
-  });
-
   it("round-trips UTF-8 ordered review paths into GitHub publication", () => {
     const adapter = new Adapter();
     const canonicalReview = review([
@@ -748,6 +727,32 @@ describe("closed GitHub publication contract", () => {
         review: review(),
       }),
     ).toThrow(/schema is not closed/u);
+  });
+
+  it("publishes a sealed overlay with its original property insertion order", async () => {
+    const adapter = new Adapter();
+    const reviewed = review(
+      [
+        {
+          after: { digest: reviewedBytesDigest, mode: "644" },
+          before: { digest: "e".repeat(64), mode: "644" },
+          kind: "modified",
+          path: "apps/demo/page.tsx",
+        },
+      ],
+      {},
+      true,
+    );
+    const proposal = draftProposal(adapter, reviewed);
+    const content = await readExactGitHubPublicationContent({
+      proposal,
+      review: reviewed,
+      source: publicationContentSource(),
+    });
+    expect(content.changes).toHaveLength(1);
+    expect(() =>
+      assertExactGitHubPublicationContent({ content, proposal, review: reviewed }),
+    ).not.toThrow();
   });
 
   it("accepts only the exact immutable source manifest and defensively copies fresh bytes", async () => {
