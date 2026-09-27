@@ -1,3 +1,5 @@
+import { setTimeout as delay } from "node:timers/promises";
+
 import type { MessageStreamEvent } from "eve/client";
 import { z } from "zod";
 
@@ -21,6 +23,7 @@ import {
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 10_000;
+const SESSION_SETTLEMENT_POLL_INTERVAL_MS = 200;
 const VERCEL_TRUSTED_OIDC_HEADER = "x-vercel-trusted-oidc-idp-token";
 const EVE_STREAM_FORMAT = "ndjson";
 const EVE_STREAM_VERSION = "23";
@@ -413,7 +416,7 @@ async function readRespondSettlement(input: {
   sessionId: string;
   requestIds: readonly string[];
 }): Promise<HostedEngineSnapshot> {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
+  while (true) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const observed = await readInstalledSnapshot(input);
     const outstanding = outstandingRequestIds(observed.installed);
@@ -423,8 +426,9 @@ async function readRespondSettlement(input: {
     ) {
       return observed.snapshot;
     }
+    // oxlint-disable-next-line eslint/no-await-in-loop -- retry only after the prior durable snapshot was observed
+    await delay(SESSION_SETTLEMENT_POLL_INTERVAL_MS);
   }
-  throw new SubmissionOutcomeUnknownError();
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -482,7 +486,7 @@ export function createSameOriginEveTransport(input: {
       if (guardedTurnId === undefined) {
         throw new HostedCancellationUnsettledError();
       }
-      for (let attempt = 0; attempt < 8; attempt += 1) {
+      while (true) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const observed = await readInstalledSnapshot({
           ...common,
@@ -495,8 +499,9 @@ export function createSameOriginEveTransport(input: {
         if (newerTurn !== undefined && newerTurn !== guardedTurnId) {
           throw new SubmissionRejectedBeforeDispatchError("turn_changed");
         }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- retry only after the prior durable snapshot was observed
+        await delay(SESSION_SETTLEMENT_POLL_INTERVAL_MS);
       }
-      throw new HostedCancellationUnsettledError();
     },
     get: (request) => readSnapshot({ ...common, sessionId: request.adapterSessionId }),
     async respond(request) {
