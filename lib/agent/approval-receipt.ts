@@ -1,5 +1,8 @@
 import { z } from "zod";
-import type { ImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
+import type {
+  DraftPullRequestProposal,
+  ImmutableGitHubSourceReceipt,
+} from "@/lib/repository/github-publication";
 
 export const gitObjectIdSchema = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -65,6 +68,18 @@ export function approvalTargetFromGitHubSource(
   };
 }
 
+export const approvalTargetFromDraftProposal = (
+  proposal: Pick<
+    DraftPullRequestProposal,
+    "baseBranch" | "baseSha" | "owner" | "name" | "repositoryId"
+  >,
+): ApprovalTarget => ({
+  baseRef: `refs/heads/${proposal.baseBranch}`,
+  baseSha: proposal.baseSha,
+  repository: `${proposal.owner}/${proposal.name}`,
+  repositoryId: proposal.repositoryId,
+});
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertApprovalReceipt(input: {
   actual: ApprovalReceipt;
@@ -79,16 +94,22 @@ export function assertApprovalReceipt(input: {
   } else if (input.phase === "change_set") {
     expectedOutcome = "accept_change_set";
   }
-  if (
-    actual.phase !== input.phase ||
-    actual.outcome !== expectedOutcome ||
-    actual.repositoryId !== input.target.repositoryId ||
-    actual.repository !== input.target.repository ||
-    actual.baseRef !== input.target.baseRef ||
-    actual.baseSha !== input.target.baseSha ||
-    actual.subjectDigest !== input.subjectDigest
-  ) {
-    throw new Error("The approval receipt does not match the exact subject.");
+  const fields: readonly (readonly [string, string, string])[] = [
+    ["phase", actual.phase, input.phase],
+    ["outcome", actual.outcome, expectedOutcome],
+    ["repository ID", actual.repositoryId, input.target.repositoryId],
+    ["repository", actual.repository, input.target.repository],
+    ["base ref", actual.baseRef, input.target.baseRef],
+    ["base commit", actual.baseSha, input.target.baseSha],
+    ["proposal digest", actual.subjectDigest, input.subjectDigest],
+  ];
+  const mismatches = fields
+    .filter(([, actualValue, expectedValue]) => actualValue !== expectedValue)
+    .map(([field]) => field);
+  if (mismatches.length > 0) {
+    throw new Error(
+      `The approval receipt does not match the exact subject: ${mismatches.join(", ")}. Request approval for the current sealed proposal and its observed base commit, then retry publication.`,
+    );
   }
   return actual;
 }
@@ -106,7 +127,7 @@ export function publicApprovalDescription(input: unknown, toolName?: string): st
       expectedPhase = "appspec";
     } else if (toolName === "accept_change_set") {
       expectedPhase = "change_set";
-    } else if (toolName === "publish-github-draft-pr") {
+    } else if (toolName === "publish_github_draft_pr") {
       expectedPhase = "publication";
     }
     return parsed.success && (expectedPhase === undefined || parsed.data.phase === expectedPhase)

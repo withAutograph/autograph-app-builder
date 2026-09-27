@@ -4,6 +4,8 @@ import {
   approvalReceiptSchema,
   approvalRequestDecision,
   approvalTarget,
+  approvalTargetFromDraftProposal,
+  approvalTargetFromGitHubSource,
   assertApprovalReceipt,
   publicApprovalDescription,
 } from "./approval-receipt";
@@ -53,6 +55,45 @@ describe("approval receipt", () => {
     expect(
       approvalReceiptSchema.parse({ ...receipt, baseSha: "a".repeat(64) }).baseSha,
     ).toHaveLength(64);
+  });
+
+  it("binds draft publication approval to the proposal's current base, not the selected checkout", () => {
+    const proposalTarget = approvalTargetFromDraftProposal({
+      baseBranch: "main",
+      baseSha: "d".repeat(40),
+      name: "arrusted-development",
+      owner: "withAutograph",
+      repositoryId: receipt.repositoryId,
+    });
+    const publicationReceipt = {
+      ...receipt,
+      baseSha: proposalTarget.baseSha,
+      outcome: "create-draft-pr" as const,
+      phase: "publication" as const,
+    };
+    expect(proposalTarget.baseSha).not.toBe(githubSource.resolvedSha);
+    expect(() => {
+      assertApprovalReceipt({
+        actual: publicationReceipt,
+        phase: "publication",
+        subjectDigest: receipt.subjectDigest,
+        target: proposalTarget,
+      });
+    }).not.toThrow();
+    expect(() => {
+      assertApprovalReceipt({
+        actual: publicationReceipt,
+        phase: "publication",
+        subjectDigest: receipt.subjectDigest,
+        target: approvalTargetFromGitHubSource(githubSource),
+      });
+    }).toThrow("base commit");
+    expect(
+      publicApprovalDescription({ approvalReceipt: publicationReceipt }, "publish_github_draft_pr"),
+    ).toBe(JSON.stringify(publicationReceipt));
+    expect(
+      publicApprovalDescription({ approvalReceipt: receipt }, "publish_github_draft_pr"),
+    ).toBeUndefined();
   });
 
   it("rejects extra keys, mismatched outcomes, targets, and subjects", () => {
