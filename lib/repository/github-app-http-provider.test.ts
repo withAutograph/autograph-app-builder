@@ -28,15 +28,21 @@ const sourceSha = "1".repeat(40);
 const sourceTree = "2".repeat(40);
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function unicodeDraftMaterial(preserveOverlayOrder = false, includePreimages = false) {
+function unicodeDraftMaterial(
+  preserveOverlayOrder = false,
+  includePreimages = false,
+  inputPaths?: readonly string[],
+) {
   const bytes = new TextEncoder().encode("export default null;\n");
   const digest = createHash("sha256").update(bytes).digest("hex");
-  const changes = [
-    ".codex/skills/example/agents/openai.yaml",
-    ".codex/skills/example/SKILL.md",
-    "apps/demo/\u{E000}.tsx",
-    "apps/demo/\u{10000}.tsx",
-  ]
+  const changes = (
+    inputPaths ?? [
+      ".codex/skills/example/agents/openai.yaml",
+      ".codex/skills/example/SKILL.md",
+      "apps/demo/\u{E000}.tsx",
+      "apps/demo/\u{10000}.tsx",
+    ]
+  )
     .map((path) => {
       const change = {
         after: { digest, mode: "644" },
@@ -144,7 +150,7 @@ function unicodeDraftMaterial(preserveOverlayOrder = false, includePreimages = f
     changes: changes.map((change) => ({
       ...change,
       after: { ...change.after, bytes },
-    })),
+    })) as GitHubDraftPullRequestContent["changes"],
     kind: "draft-reviewed-change-set",
     reviewDigest: review.digest,
     version: 1,
@@ -620,4 +626,118 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       expect(calls.some(({ url }) => url.includes("/git/blobs/"))).toBe(scenario === "modified");
     },
   );
+
+  it("publishes over an unrelated upstream commit using the current head and tree", async () => {
+    const currentHead = "a".repeat(40);
+    const currentTree = "d".repeat(40);
+    const calls: { body: unknown; method: string; url: string }[] = [];
+    let treeDepth = 0;
+    let createdTreeBody: Record<string, unknown> | undefined;
+    let createdCommitBody: Record<string, unknown> | undefined;
+    const { proposal, content } = unicodeDraftMaterial(false, true, ["README.md"]);
+    const changedFile = content.changes[0];
+    if (changedFile?.kind !== "modified") {
+      throw new Error("Expected the reviewed file to be modified.");
+    }
+    expect(changedFile.before).toEqual({
+      digest: createHash("sha256").update("reviewed original").digest("hex"),
+      mode: "644",
+    });
+    const pathSegments = content.changes[0]!.path.split("/");
+    const beforeMode = changedFile.before.mode;
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    const implementation: typeof fetch = async (request, init = {}) => {
+      const url = String(request);
+      const method = init.method ?? "GET";
+      const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
+      calls.push({ body, method, url });
+      if (url.endsWith("/app/installations/456/access_tokens")) {
+        const tokenRequest = body as { permissions: Record<string, string> };
+        return json(
+          {
+            permissions: tokenRequest.permissions,
+            token: "ghs_operation_scoped_installation_token",
+          },
+          201,
+        );
+      }
+      if (url.endsWith("/repositories/100")) {
+        return json({
+          default_branch: "main",
+          id: 100,
+          name: "example-app",
+          owner: { login: "withAutograph" },
+          private: true,
+        });
+      }
+      if (url.endsWith("/repos/withAutograph/example-app/commits/main")) {
+        return json({ commit: { tree: { sha: currentTree } }, sha: currentHead });
+      }
+      if (url.endsWith("/repos/withAutograph/example-app/actions/variables?per_page=100&page=1")) {
+        return json({ variables: [] });
+      }
+      if (url.endsWith(`/compare/${sourceSha}...${currentHead}`)) {
+        return json({ files: [{ filename: "CHANGELOG.md" }] });
+      }
+      if (url.includes("/git/trees/") && method === "GET") {
+        if (url.endsWith(`/git/trees/${currentTree}`)) {
+          treeDepth = 0;
+        }
+        const segment = pathSegments[treeDepth]!;
+        const final = treeDepth === pathSegments.length - 1;
+        treeDepth += 1;
+        return json({
+          truncated: false,
+          tree: [
+            {
+              mode: final ? `100${beforeMode}` : "040000",
+              path: segment,
+              sha: final ? "c".repeat(40) : `${treeDepth}`.repeat(40),
+              type: final ? "blob" : "tree",
+            },
+          ],
+        });
+      }
+      if (url.endsWith(`/git/blobs/${"c".repeat(40)}`) && method === "GET") {
+        return json({
+          content: Buffer.from("reviewed original").toString("base64"),
+          encoding: "base64",
+        });
+      }
+      if (url.endsWith("/git/blobs") && method === "POST") {
+        return json({ sha: "f".repeat(40) }, 201);
+      }
+      if (url.endsWith("/git/trees") && method === "POST") {
+        createdTreeBody = body as Record<string, unknown>;
+        return json({ sha: "e".repeat(40) }, 201);
+      }
+      if (url.endsWith("/git/commits") && method === "POST") {
+        createdCommitBody = body as Record<string, unknown>;
+        return json({ sha: "9".repeat(40) }, 201);
+      }
+      if (url.endsWith("/git/refs") && method === "POST") {
+        return json({ ref: `refs/heads/${proposal.branchName}` }, 201);
+      }
+      if (url.endsWith("/pulls") && method === "POST") {
+        return json({ number: 1 }, 201);
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    };
+    const provider = createProvider(implementation);
+
+    const publication = await provider.publishDraftPullRequest(proposal, content);
+    expect(calls.filter(({ url }) => url.includes("/git/trees/")).length).toBeGreaterThan(0);
+    expect(calls.some(({ url }) => url.endsWith(`/git/trees/${currentTree}`))).toBe(true);
+    expect(calls.some(({ url }) => url.endsWith(`/git/blobs/${"c".repeat(40)}`))).toBe(true);
+    expect(publication).toEqual({
+      requestId: "REQUEST_1",
+      status: "accepted",
+    });
+    expect(createdTreeBody?.base_tree).toBe(currentTree);
+    expect(createdCommitBody?.parents).toEqual([currentHead]);
+    expect(createdCommitBody?.tree).toBe("e".repeat(40));
+    expect(calls.some(({ url }) => url.endsWith(`/compare/${sourceSha}...${currentHead}`))).toBe(
+      true,
+    );
+  });
 });

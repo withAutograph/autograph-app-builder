@@ -590,7 +590,7 @@ export const createGitHubAppHttpProvider = (input: {
     if (stringProperty(blobResponse.body, "encoding") !== "base64") {
       throw new Error("invalid-response");
     }
-    const encoded = stringProperty(blobResponse.body, "content").replaceAll(/\\s/gu, "");
+    const encoded = stringProperty(blobResponse.body, "content").replaceAll(/\s/gu, "");
     const bytes = Buffer.from(encoded, "base64");
     return (
       mode === `100${input.change.before.mode}` && sha256(bytes) === input.change.before.digest

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 import { runSequentially } from "../async-sequential";
+import { overlayChanges } from "./target-apply";
 
 import {
   GITHUB_PUBLICATION_VERSION,
@@ -664,6 +665,42 @@ describe("closed GitHub publication contract", () => {
         source: source(),
       }),
     ).toThrow(/exact source receipt/u);
+  });
+
+  it("accepts production overlay change objects with reordered property keys", () => {
+    const adapter = new Adapter();
+    const changes = overlayChanges(
+      {
+        files: [{ digest: "e".repeat(64), mode: "100644", path: "apps/demo/page.tsx" }],
+        treeDigest: "a".repeat(64),
+      },
+      {
+        files: [{ digest: reviewedBytesDigest, mode: "100644", path: "apps/demo/page.tsx" }],
+        treeDigest: "b".repeat(64),
+      },
+    );
+    const canonicalReview = review(changes, {}, true);
+    const reordered = {
+      ...canonicalReview,
+      changes: canonicalReview.changes.map((change) => ({
+        ...Object.fromEntries(Object.entries(change).reverse()),
+        ...(change.before === undefined
+          ? {}
+          : { before: Object.fromEntries(Object.entries(change.before).reverse()) }),
+        ...(change.after === undefined
+          ? {}
+          : { after: Object.fromEntries(Object.entries(change.after).reverse()) }),
+      })),
+    } as unknown as typeof canonicalReview;
+
+    expect(changes[0]).toEqual({
+      after: { digest: reviewedBytesDigest, mode: "100644" },
+      before: { digest: "e".repeat(64), mode: "100644" },
+      kind: "modified",
+      path: "apps/demo/page.tsx",
+    });
+    expect(() => draftProposal(adapter, canonicalReview)).not.toThrow();
+    expect(() => draftProposal(adapter, reordered)).not.toThrow();
   });
 
   it("rejects proposal unknown keys, unsafe names, titles, and paths", () => {

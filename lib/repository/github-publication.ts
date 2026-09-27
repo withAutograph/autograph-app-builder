@@ -245,7 +245,7 @@ export interface DraftPublicationReadBack {
 
 export type GitHubMutationAcknowledgement =
   | { status: "accepted"; requestId: string }
-  | { status: "rejected"; code: string };
+  | { status: "rejected"; code: string; path?: string };
 
 interface GitHubPublicationFileState {
   mode: string;
@@ -379,6 +379,31 @@ function canonicalJson(value: unknown): string {
       .join(",")}}`;
   }
   return JSON.stringify(value);
+}
+
+function canonicalReviewedChanges(changes: ReviewedChangeSetReceipt["changes"]) {
+  return changes.map((change) => {
+    if (change.kind === "added") {
+      return {
+        after: { digest: change.after!.digest, mode: change.after!.mode },
+        kind: change.kind,
+        path: change.path,
+      };
+    }
+    if (change.kind === "modified") {
+      return {
+        after: { digest: change.after!.digest, mode: change.after!.mode },
+        before: { digest: change.before!.digest, mode: change.before!.mode },
+        kind: change.kind,
+        path: change.path,
+      };
+    }
+    return {
+      before: { digest: change.before!.digest, mode: change.before!.mode },
+      kind: change.kind,
+      path: change.path,
+    };
+  });
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -546,14 +571,22 @@ function assertCanonicalReview(review: ReviewedChangeSetReceipt): void {
   const sortedChanges = [...review.changes].toSorted((left, right) =>
     compareOverlayPaths(left.path, right.path),
   );
+  const verifiedChangeSet = [review.changes, canonicalReviewedChanges(review.changes)].some(
+    (changes) => {
+      const candidate = { ...changeSet, changes, digest: review.changeSetDigest };
+      return (
+        digest(canonicalWithoutDigest(candidate)) === review.changeSetDigest &&
+        digest({
+          ...candidate,
+          changeSetDigest: review.changeSetDigest,
+          reviewedByCallId: review.reviewedByCallId,
+        }) === review.digest
+      );
+    },
+  );
   if (
     !isDigest(review.changeSetDigest) ||
-    digest(canonicalWithoutDigest(changeSet as { digest: string })) !== review.changeSetDigest ||
-    digest({
-      ...changeSet,
-      changeSetDigest: review.changeSetDigest,
-      reviewedByCallId: review.reviewedByCallId,
-    }) !== review.digest ||
+    !verifiedChangeSet ||
     canonicalJson(review.changes) !== canonicalJson(sortedChanges) ||
     JSON.stringify(canonicalPaths(review.approvedPaths)) !== JSON.stringify(review.approvedPaths) ||
     JSON.stringify(review.approvedPaths) !== JSON.stringify(review.changes.map(({ path }) => path))
@@ -806,7 +839,10 @@ export function assertExactGitHubPublicationContent(input: {
 }): void {
   reviewForProposal(input.proposal, input.review);
   assertExactGitHubDraftPullRequestContent(input);
-  if (digest(input.review.changes) !== input.proposal.changedContentDigest) {
+  if (
+    digest(input.review.changes) !== input.proposal.changedContentDigest &&
+    digest(canonicalReviewedChanges(input.review.changes)) !== input.proposal.changedContentDigest
+  ) {
     throw new Error(
       "The reviewed change-content digest does not match its sealed proposal. Refresh the change-set review and seal a new proposal before publication.",
     );
