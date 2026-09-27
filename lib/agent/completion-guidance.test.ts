@@ -12,9 +12,7 @@ describe("shared app delivery guidance", () => {
       const guidance = completionGuidance({ phase });
       expect(guidance).toContain("accept_app_spec");
       expect(guidance).toContain("existingAppChanges");
-      expect(guidance).toMatch(
-        /before (requesting build approval|planning succeeds)|only after planning succeeds/u,
-      );
+      expect(guidance).toContain("before requesting build approval");
     }
   });
   it("continues an applied implementation into validation", () => {

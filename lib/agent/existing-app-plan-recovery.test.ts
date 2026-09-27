@@ -6,6 +6,7 @@ import { continuePrototypePlanning } from "./existing-app-plan-recovery";
 describe("existing-app prototype planning", () => {
   it("returns the exact planning continuation when an existing app needs edited files", async () => {
     const result = await continuePrototypePlanning(async () => {
+      await Promise.resolve();
       throw new ExistingApplicationChangesRequiredError();
     });
     expect(result.implementationPlanReady).toBe(false);
@@ -14,7 +15,9 @@ describe("existing-app prototype planning", () => {
   });
 
   it("keeps successful automatic planning intact", async () => {
-    const plan = vi.fn(async () => undefined);
+    const plan = vi.fn(async () => {
+      await Promise.resolve();
+    });
     await expect(continuePrototypePlanning(plan)).resolves.toEqual({
       implementationPlanReady: true,
     });
@@ -25,6 +28,7 @@ describe("existing-app prototype planning", () => {
     const failure = new Error("identity command failed");
     await expect(
       continuePrototypePlanning(async () => {
+        await Promise.resolve();
         throw failure;
       }),
     ).rejects.toBe(failure);

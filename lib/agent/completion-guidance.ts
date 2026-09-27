@@ -2,15 +2,15 @@ import type { AppBuilderWorkflowState } from "@/lib/agent/workflow-state";
 
 const phaseGuidance: Partial<Record<AppBuilderWorkflowState["phase"], string>> = {
   app_spec_accepted:
-    "The AppSpec is accepted but no canonical implementation proposal exists yet. For an existing app, inspect its current app-owned files and call accept_app_spec with existingAppChanges containing complete replacement contents. Call apply_app_creation only after planning succeeds.",
-  dependencies_prepared:
-    "Dependencies are ready but no canonical implementation proposal exists yet. Retry accept_app_spec with the accepted artifact and, for an existing app, exact existingAppChanges before requesting build approval.",
-  identity_resolved:
-    "The target app was identified but no canonical implementation proposal exists yet. Retry accept_app_spec with the accepted artifact and exact existingAppChanges before requesting build approval.",
+    "The AppSpec is accepted but no canonical implementation proposal exists yet. For an existing app, inspect its current app-owned files and call accept_app_spec with existingAppChanges containing complete replacement contents before requesting build approval.",
   applied:
     "Implementation files were applied. They have not passed repository validation. Call validate_app_creation next in the approved private checkout.",
   apply_failed:
     "Applying the implementation failed. Repair the actual reported error and retry the approved operation; do not claim delivery.",
+  dependencies_prepared:
+    "Dependencies are ready but no canonical implementation proposal exists yet. Retry accept_app_spec with the accepted artifact and, for an existing app, exact existingAppChanges before requesting build approval.",
+  identity_resolved:
+    "The target app was identified but no canonical implementation proposal exists yet. Retry accept_app_spec with the accepted artifact and exact existingAppChanges before requesting build approval.",
   reviewed:
     "The change set was reviewed after repository validation. Review does not establish product behavior or a reachable app preview.",
   ui_accepted:
