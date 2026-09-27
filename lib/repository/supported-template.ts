@@ -745,8 +745,6 @@ const sandboxRecordPath = ".app-builder/prepared-workspace.json";
 const sandboxSourceFilesPath = ".app-builder/source-files.json";
 const sandboxSourceChecksumsPath = ".app-builder/source-checksums.sha256";
 const sandboxSourceArchivePath = ".app-builder/source-tree.tar.gz";
-const sandboxOperationTimeoutMs = 120_000;
-const sandboxOperationOutputBytes = 262_144;
 
 const fixtureSandboxEnabled = () => hasTestCapability("simulated-target");
 
@@ -941,16 +939,9 @@ const verifyPreparedSandboxWorkspace = async function verifyPreparedSandboxWorks
     return;
   }
   const verification = await sandbox.run({
-    abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
     command: `sha256sum -c ${sandboxSourceChecksumsPath} >/dev/null 2>&1`,
     workingDirectory: "/workspace",
   });
-  if (
-    Buffer.byteLength(verification.stdout) > sandboxOperationOutputBytes ||
-    Buffer.byteLength(verification.stderr) > sandboxOperationOutputBytes
-  ) {
-    throw new Error("Prepared workspace verification output was too large.");
-  }
   if (verification.exitCode !== 0) {
     throw new Error("A prepared workspace file drifted or is missing.");
   }
@@ -986,7 +977,6 @@ const verifyDevelopmentSandboxWorkspace = async function verifyDevelopmentSandbo
   }
   const node = fixtureSandboxEnabled() ? JSON.stringify(process.execPath) : "node";
   const inspection = await sandbox.run({
-    abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
     command: `cd /workspace && ${node} -e ${JSON.stringify(developmentWorkspaceInspectionProgram)}`,
   });
   const normalizedStdout = inspection.stdout
@@ -994,12 +984,6 @@ const verifyDevelopmentSandboxWorkspace = async function verifyDevelopmentSandbo
     .trim();
   if (inspection.exitCode !== 0) {
     throw new Error("The prepared development workspace inspection command failed.");
-  }
-  if (
-    Buffer.byteLength(inspection.stdout) > sandboxOperationOutputBytes ||
-    Buffer.byteLength(inspection.stderr) > sandboxOperationOutputBytes
-  ) {
-    throw new Error("The prepared development workspace inspection output was too large.");
   }
   let observed: unknown;
   try {
@@ -1305,15 +1289,10 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
     });
     try {
       const extraction = await sandbox.run({
-        abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
         command: `mkdir -p repository && tar --extract --gzip --file ${sandboxSourceArchivePath} --directory repository --no-same-owner --no-same-permissions`,
         workingDirectory: "/workspace",
       });
-      if (
-        Buffer.byteLength(extraction.stdout) > sandboxOperationOutputBytes ||
-        Buffer.byteLength(extraction.stderr) > sandboxOperationOutputBytes ||
-        extraction.exitCode !== 0
-      ) {
+      if (extraction.exitCode !== 0) {
         throw new Error("The reviewed source archive could not be materialized.");
       }
     } finally {
@@ -1473,15 +1452,10 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
     });
     try {
       const extraction = await sandbox.run({
-        abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
         command: `mkdir -p repository && tar --extract --gzip --file ${sandboxSourceArchivePath} --directory repository --no-same-owner --no-same-permissions`,
         workingDirectory: "/workspace",
       });
-      if (
-        Buffer.byteLength(extraction.stdout) > sandboxOperationOutputBytes ||
-        Buffer.byteLength(extraction.stderr) > sandboxOperationOutputBytes ||
-        extraction.exitCode !== 0
-      ) {
+      if (extraction.exitCode !== 0) {
         throw new Error("The development source could not be materialized.");
       }
     } finally {
@@ -1511,15 +1485,10 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
       await sandbox.writeBinaryFile({ content: archive, path: sandboxSourceArchivePath });
       try {
         const extraction = await sandbox.run({
-          abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
           command: `tar --extract --gzip --file ${sandboxSourceArchivePath} --directory repository --no-same-owner --no-same-permissions`,
           workingDirectory: "/workspace",
         });
-        if (
-          Buffer.byteLength(extraction.stdout) > sandboxOperationOutputBytes ||
-          Buffer.byteLength(extraction.stderr) > sandboxOperationOutputBytes ||
-          extraction.exitCode !== 0
-        ) {
+        if (extraction.exitCode !== 0) {
           throw new Error("The development source could not be materialized.");
         }
       } finally {
@@ -1543,7 +1512,6 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
       path: modeListPath,
     });
     const chmod = await sandbox.run({
-      abortSignal: AbortSignal.timeout(sandboxOperationTimeoutMs),
       command: `node -e ${JSON.stringify(
         `const fs=require("node:fs");const path=require("node:path");const root=path.resolve("/workspace/repository");const entries=JSON.parse(fs.readFileSync("/workspace/${modeListPath}","utf-8"));if(!Array.isArray(entries))throw new Error("invalid mode list");for(const entry of entries){if(!entry||typeof entry.path!=="string"||!entry.path.startsWith("repository/")||entry.path.includes("\\0")||(entry.mode!=="100644"&&entry.mode!=="100755"))throw new Error("invalid source mode");const target=path.resolve("/workspace",entry.path);if(target!==root&&!target.startsWith(root+path.sep))throw new Error("source path escapes repository");const info=fs.lstatSync(target);if(!info.isFile()||info.isSymbolicLink())throw new Error("source path is not a regular file");fs.chmodSync(target,entry.mode==="100755"?0o755:0o644);}`,
       )}`,

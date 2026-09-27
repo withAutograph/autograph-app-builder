@@ -34,7 +34,6 @@ import {
   ARRUSTED_TARGET_TREE,
   DEPENDENCY_CACHE_ARCHIVE_PATH,
   DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH,
-  DEPENDENCY_PREPARATION_TIMEOUT_MS,
   DependencyCacheMissingError,
   assertExactDependencyTargetBinding,
   bootstrapLiveTemplateDependencies,
@@ -178,6 +177,7 @@ const liveCargoHomeDigest = "b".repeat(64);
 function liveTemplateCacheFixture() {
   let source = liveDependencySourceFixture();
   let closureState: "cargo-tampered" | "clean" | "missing" | "node-tampered" = "clean";
+  let bootstrapStderr = "";
   const stored = new Map<string, string>();
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
   const setNetworkPolicy = vi.fn(async () => {});
@@ -196,7 +196,7 @@ function liveTemplateCacheFixture() {
       return { exitCode: 0, stderr: "", stdout: "linux/x86_64\n" };
     }
     if (command.includes("bun install")) {
-      return { exitCode: 0, stderr: "", stdout: observation() };
+      return { exitCode: 0, stderr: bootstrapStderr, stdout: observation() };
     }
     if (command.includes("function digestTree(root, allowTrackedWorkspaceLinks)")) {
       if (closureState === "missing") {
@@ -239,6 +239,9 @@ function liveTemplateCacheFixture() {
   return {
     run,
     sandbox,
+    setBootstrapStderr: (next: string) => {
+      bootstrapStderr = next;
+    },
     setClosureState: (next: typeof closureState) => {
       closureState = next;
     },
@@ -349,6 +352,15 @@ async function writeDependencyTopologyFixture(root: string) {
 }
 
 describe("offline dependency cache", () => {
+  it("accepts successful dependency setup with verbose installer logs", async () => {
+    const fixture = liveTemplateCacheFixture();
+    fixture.setBootstrapStderr("installer progress\n".repeat(20_000));
+
+    await expect(
+      bootstrapLiveTemplateDependencies({ sandbox: fixture.sandbox }),
+    ).resolves.toMatchObject({ contentDigest: expect.any(String) });
+  });
+
   it("invalidates the live cache key only for declared dependency and runtime inputs", () => {
     const source = liveDependencySourceFixture();
     const basis = {
@@ -537,11 +549,6 @@ describe("offline dependency cache", () => {
     expect(shouldPreferLiveTemplateDependencies(2, {})).toBe(true);
   });
 
-  it("keeps cold dependency preparation bounded below the sandbox session ceiling", () => {
-    expect(DEPENDENCY_PREPARATION_TIMEOUT_MS).toBe(600_000);
-    expect(DEPENDENCY_PREPARATION_TIMEOUT_MS).toBeLessThan(900_000);
-  });
-
   it("builds the hosted seed as an execution-complete Linux closure", () => {
     const producer = readFileSync(
       ".config/mise/scripts/repository/build-hosted-arrusted-artifact.mts",
@@ -593,7 +600,6 @@ describe("offline dependency cache", () => {
     expect(observed.manifest.scope).toBe("builder-execution");
     expect(observed.contentDigest).toBe(hostedArchiveDigest);
     expect(run).toHaveBeenNthCalledWith(2, {
-      abortSignal: expect.any(AbortSignal),
       command: `sha256sum -- /workspace/.app-builder/hosted-dependency-cache/node-modules.tar.gz && stat --format='%s' -- /workspace/.app-builder/hosted-dependency-cache/node-modules.tar.gz`,
       workingDirectory: "/workspace",
     });
@@ -957,12 +963,10 @@ describe("offline dependency cache", () => {
     });
     expect(result.contentDigest).toBe(archiveDigest);
     expect(run).toHaveBeenNthCalledWith(1, {
-      abortSignal: expect.any(AbortSignal),
       command: "cat -- /opt/app-builder/dependency-cache/manifest.json",
       workingDirectory: "/workspace",
     });
     expect(run).toHaveBeenNthCalledWith(2, {
-      abortSignal: expect.any(AbortSignal),
       command: `sha256sum -- ${DEPENDENCY_CACHE_ARCHIVE_PATH} && stat --format='%s' -- ${DEPENDENCY_CACHE_ARCHIVE_PATH} && sha256sum -- ${DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH} && stat --format='%s' -- ${DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH}`,
       workingDirectory: "/workspace",
     });

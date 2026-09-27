@@ -37,12 +37,6 @@ export const DEPENDENCY_CACHE_ARCHIVE_PATH =
 export const DEPENDENCY_CACHE_CARGO_ARCHIVE_PATH =
   "/opt/app-builder/dependency-cache/cargo-closure.tar.gz";
 export const DEPENDENCY_CACHE_EXTRACTED_ROOT = "/opt/app-builder/dependencies";
-export const DEPENDENCY_CACHE_TIMEOUT_MS = 30_000;
-// A cold, frozen Bun + Cargo closure can exceed two minutes in Vercel
-// Sandbox. Keep this below the backend's 15-minute session ceiling while
-// preserving a hard bound for the one-time preparation path.
-export const DEPENDENCY_PREPARATION_TIMEOUT_MS = 600_000;
-export const DEPENDENCY_CACHE_OUTPUT_BYTES = 262_144;
 export const LIVE_TEMPLATE_DEPENDENCY_CACHE_ROOT = ".app-builder/template-dependency-cache";
 export const LIVE_TEMPLATE_DEPENDENCY_BOOTSTRAP_VERSION = 3;
 const REQUIRED_EXECUTION_PACKAGES = [
@@ -604,15 +598,6 @@ for (const root of layout.roots) {
 }
 `;
 
-const boundedOutput = function boundedOutput(stdout: string, stderr: string, label: string) {
-  if (
-    Buffer.byteLength(stdout) > DEPENDENCY_CACHE_OUTPUT_BYTES ||
-    Buffer.byteLength(stderr) > DEPENDENCY_CACHE_OUTPUT_BYTES
-  ) {
-    throw new Error(`${label} output exceeded the fixed size limit.`);
-  }
-};
-
 export const materializeExecutionDependencyView =
   async function materializeExecutionDependencyView(input: {
     sandbox: SandboxSession;
@@ -642,11 +627,9 @@ export const materializeExecutionDependencyView =
       path: layoutPath,
     });
     const result = await input.sandbox.run({
-      abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
       command: `node - '/workspace/${layoutPath}' '/workspace/${input.overlayRoot}' '/workspace/${viewRoot}' '/workspace' '${input.layout.kind === "cache" && input.layout.roots.some((root) => root.cachePath.startsWith(`${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}/`)) ? "1" : "0"}' <<'NODE'\n${executionDependencyViewScript}\nNODE`,
       workingDirectory: "/workspace",
     });
-    boundedOutput(result.stdout, result.stderr, "Dependency view materialization");
     if (result.exitCode !== 0) {
       throw new Error("The dependency execution view could not be materialized.");
     }
@@ -907,12 +890,10 @@ const liveTemplatePlatform = async function liveTemplatePlatform(
   sandbox: SandboxSession,
 ): Promise<z.infer<typeof liveTemplatePlatformSchema>> {
   const result = await sandbox.run({
-    abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
     command:
       'set -eu; test "$(uname -s)" = Linux; case "$(uname -m)" in x86_64) printf "%s\\n" linux/x86_64 ;; aarch64|arm64) printf "%s\\n" linux/arm64 ;; *) exit 1 ;; esac',
     workingDirectory: "/workspace",
   });
-  boundedOutput(result.stdout, result.stderr, "Template dependency platform");
   if (result.exitCode !== 0) {
     throw new Error("The template dependency platform is unsupported.");
   }
@@ -1051,11 +1032,9 @@ const inspectLiveTemplateClosure = async function inspectLiveTemplateClosure(inp
   identity: LiveTemplateDependencyIdentity;
 }) {
   const result = await input.sandbox.run({
-    abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
     command: liveTemplateClosureInspectionCommand(input.identity),
     workingDirectory: "/workspace",
   });
-  boundedOutput(result.stdout, result.stderr, "Template dependency closure inspection");
   if (result.exitCode !== 0) {
     throw new Error("The live template dependency cache closure is missing.");
   }
@@ -1115,11 +1094,9 @@ export const bootstrapLiveTemplateDependencies =
     ]);
     await input.sandbox.setNetworkPolicy("allow-all");
     const result = await input.sandbox.run({
-      abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
       command: liveTemplateBootstrapCommand(identity),
       workingDirectory: "/workspace",
     });
-    boundedOutput(result.stdout, result.stderr, "Template dependency bootstrap");
     if (result.exitCode !== 0) {
       throw new Error("The canonical template dependencies could not be bootstrapped.");
     }
@@ -1213,15 +1190,9 @@ export const inspectDependencyCache = async function inspectDependencyCache(
   const cachePaths = dependencyCachePaths(environment);
 
   const manifestResult = await sandbox.run({
-    abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
     command: `cat -- ${cachePaths.manifest}`,
     workingDirectory: "/workspace",
   });
-  boundedOutput(
-    manifestResult.stdout,
-    manifestResult.stderr,
-    "Dependency cache manifest inspection",
-  );
   if (manifestResult.exitCode !== 0) {
     throw new DependencyCacheMissingError(
       "The fixed offline dependency cache manifest is missing.",
@@ -1264,11 +1235,9 @@ export const inspectDependencyCache = async function inspectDependencyCache(
     archiveCommand = `sha256sum -- ${cachePaths.archive} && stat --format='%s' -- ${cachePaths.archive}`;
   }
   const archiveResult = await sandbox.run({
-    abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
     command: archiveCommand,
     workingDirectory: "/workspace",
   });
-  boundedOutput(archiveResult.stdout, archiveResult.stderr, "Dependency cache content inspection");
   if (archiveResult.exitCode !== 0) {
     throw new Error("The fixed offline dependency cache archive is missing.");
   }
@@ -1365,11 +1334,9 @@ export const materializeOfflineDependencies = async function materializeOfflineD
       (path) => `test -e ${absoluteNodeModules}/${path}`,
     ).join(" && ");
     const extraction = await input.sandbox.run({
-      abortSignal: AbortSignal.timeout(DEPENDENCY_PREPARATION_TIMEOUT_MS),
       command: `${installHostedClosure}test -d ${absoluteNodeModules} && test ! -L ${absoluteNodeModules} && ${developmentExecution ? `test "$(realpath ${DEVELOPMENT_DEPENDENCY_CACHE_ROOT})" = "${DEVELOPMENT_DEPENDENCY_CACHE_ROOT}" && test "$(realpath ${absoluteNodeModules})" = "${absoluteNodeModules}" && ` : ""}${requiredExecutionClosure} && test -x ${absoluteNodeModules}/.bin/next && test -x ${absoluteNodeModules}/.bin/turbo && test -x ${absoluteNodeModules}/.bin/vp && bun ${absoluteNodeModules}/.bin/next --version >/dev/null && bun ${absoluteNodeModules}/.bin/turbo --version >/dev/null && bun ${absoluteNodeModules}/.bin/vp --version >/dev/null && ${developmentExecution ? `if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /022 -print -quit | grep -q .; then exit 1; fi && ` : `if find ${absoluteNodeModules} \\( -type f -o -type d \\) -perm /222 -print -quit | grep -q .; then exit 1; fi && `}test ! -e /workspace/repository/node_modules && test ! -L /workspace/repository/node_modules`,
       workingDirectory: "/workspace",
     });
-    boundedOutput(extraction.stdout, extraction.stderr, "Offline dependency materialization");
     if (extraction.exitCode !== 0) {
       throw new Error("The fixed offline dependency cache could not be materialized.");
     }
@@ -1407,11 +1374,9 @@ export const materializeOfflineDependencies = async function materializeOfflineD
     observed.manifest.scope !== "live-template-execution"
   ) {
     const resolution = await input.sandbox.run({
-      abortSignal: AbortSignal.timeout(DEPENDENCY_CACHE_TIMEOUT_MS),
       command: `bun -e 'const fs=require("node:fs"); const read=(path)=>JSON.parse(fs.readFileSync(path,"utf-8")).version; const {match}=require("path-to-regexp"); const result=match("/vendor")("/vendor"); if(read("../../node_modules/path-to-regexp/package.json")!=="${ARRUSTED_PATH_TO_REGEXP_VERSION}" || read("../../node_modules/@vercel/microfrontends/package.json")!=="${ARRUSTED_MICROFRONTENDS_VERSION}" || read("../../node_modules/@vercel/microfrontends/node_modules/path-to-regexp/package.json")!=="${ARRUSTED_MICROFRONTENDS_PATH_TO_REGEXP_VERSION}" || result?.path!=="/vendor") process.exit(1)'`,
       workingDirectory: `/workspace/${root}/packages/platform-microfrontends`,
     });
-    boundedOutput(resolution.stdout, resolution.stderr, "Offline dependency resolution");
     if (resolution.exitCode !== 0) {
       throw new Error("The required offline dependency closure is incomplete.");
     }

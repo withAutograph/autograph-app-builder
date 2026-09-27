@@ -1,7 +1,6 @@
 import type { SandboxSession } from "eve/sandbox";
 
 const DIRECTORY_BATCH_SIZE = 256;
-const DIRECTORY_TIMEOUT_MS = 30_000;
 
 const directoryFailureDetail = (value: string): string =>
   value
@@ -34,7 +33,6 @@ export async function ensureSandboxDirectories(
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- prepare each directory batch in order.
       result = await sandbox.run({
-        abortSignal: AbortSignal.timeout(DIRECTORY_TIMEOUT_MS),
         command: `mkdir -p ${batch.map(quoteSandboxArgument).join(" ")}`,
         workingDirectory: "/workspace",
       });

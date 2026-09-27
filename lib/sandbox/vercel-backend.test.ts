@@ -66,47 +66,6 @@ describe.skip("retired template-backed Vercel backend", () => {
     expect(fetch.mock.calls[0]?.[0]).toBeInstanceOf(Request);
   });
 
-  it("retries one provider timeout without retrying caller cancellation", async () => {
-    const timeoutResponse = Promise.withResolvers<Response>();
-    const timedOutFetch = vi
-      .fn<typeof globalThis.fetch>()
-      .mockImplementationOnce((_input, init) => {
-        init?.signal?.addEventListener("abort", () => timeoutResponse.reject(init.signal?.reason), {
-          once: true,
-        });
-        return timeoutResponse.promise;
-      })
-      .mockResolvedValueOnce(new Response("ok"));
-    await expect(
-      createProviderFetch(
-        timedOutFetch,
-        1,
-      )(
-        new Request("https://sandbox.example.test/fs/write", {
-          method: "POST",
-        }),
-      ),
-    ).resolves.toMatchObject({ status: 200 });
-    expect(timedOutFetch).toHaveBeenCalledTimes(2);
-
-    const controller = new AbortController();
-    controller.abort();
-    const cancelledFetch = vi
-      .fn<typeof globalThis.fetch>()
-      .mockRejectedValue(new DOMException("cancelled", "AbortError"));
-    await expect(
-      createProviderFetch(
-        cancelledFetch,
-        1,
-      )(
-        new Request("https://sandbox.example.test/fs/read", {
-          signal: controller.signal,
-        }),
-      ),
-    ).rejects.toThrow();
-    expect(cancelledFetch).toHaveBeenCalledOnce();
-  });
-
   it("keeps networking available for prewarm and every fresh live session", () => {
     let options: HostedVercelBackendOptions | undefined;
     const factory = vi.fn(((input: HostedVercelBackendOptions) => {
@@ -428,7 +387,26 @@ describe.skip("retired template-backed Vercel backend", () => {
 });
 
 describe("active hosted Vercel transport", () => {
-  it("supplies the bounded provider transport to the Vercel SDK factory", () => {
+  it("does not impose an operation deadline on provider requests", async () => {
+    const providerResponse = Promise.withResolvers<Response>();
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockImplementationOnce(() => providerResponse.promise);
+    const request = new Request("https://sandbox.example.test/fs/write", {
+      method: "POST",
+    });
+    const pending = createProviderFetch(fetch)(request);
+    await Promise.resolve();
+
+    expect(fetch).toHaveBeenCalledOnce();
+    const providerSignal = fetch.mock.calls[0]?.[1]?.signal;
+    expect(providerSignal).toBeInstanceOf(AbortSignal);
+    expect(providerSignal?.aborted).toBe(false);
+    providerResponse.resolve(new Response("ok"));
+    await expect(pending).resolves.toMatchObject({ status: 200 });
+  });
+
+  it("supplies the retrying provider transport to the Vercel SDK factory", () => {
     let options: HostedVercelBackendOptions | undefined;
     const factory = vi.fn(((input: HostedVercelBackendOptions) => {
       options = input;
