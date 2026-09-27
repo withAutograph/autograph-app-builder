@@ -1,4 +1,4 @@
-import { and, count, desc, eq, ne, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
@@ -508,7 +508,14 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       const principal = hostedPrincipalSchema.parse(input.principal);
       return database.transaction(async (transaction) => {
         const operation = await operationById(transaction, principal, input.operationId, true);
-        assertReserved(operation, input.requestDigest);
+        if (
+          operation === null ||
+          operation.requestDigest !== input.requestDigest ||
+          (operation.state !== "reserved" &&
+            !(operation.kind === "start" && operation.state === "submission_unknown"))
+        ) {
+          throw new Error("Hosted operation cannot settle at this digest.");
+        }
         const result = eveSessionResultSchema.parse(input.result);
         const session =
           input.session === undefined ? undefined : hostedSessionRecordSchema.parse(input.session);
@@ -525,8 +532,10 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         if (expectedSessionId === undefined || result.sessionId !== expectedSessionId) {
           throw new Error("Hosted operation result session mismatch.");
         }
+        const cleanOperation: Record<string, unknown> = { ...operation };
+        delete cleanOperation.safeErrorCode;
         const settled = hostedOperationRecordSchema.parse({
-          ...operation,
+          ...cleanOperation,
           result,
           sessionId: result.sessionId,
           state: "succeeded",
@@ -554,7 +563,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
             and(
               tenantPredicate(principal),
               eq(agentOperations.operationId, input.operationId),
-              eq(agentOperations.state, "reserved"),
+              inArray(agentOperations.state, ["reserved", "submission_unknown"]),
               eq(agentOperations.requestDigest, input.requestDigest),
             ),
           )

@@ -563,7 +563,17 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   async settleSucceeded(
     input: Parameters<HostedEveStore["settleSucceeded"]>[0],
   ): Promise<HostedOperationRecord> {
-    const operation = this.requireReserved(input);
+    const operation = this.operations.get(
+      InMemoryHostedEveStore.operationKey(input.principal, input.operationId),
+    );
+    if (
+      operation === undefined ||
+      operation.requestDigest !== input.requestDigest ||
+      (operation.state !== "reserved" &&
+        !(operation.kind === "start" && operation.state === "submission_unknown"))
+    ) {
+      throw new Error("Hosted operation cannot settle at this digest.");
+    }
     const result = eveSessionResultSchema.parse(input.result);
     const session =
       input.session === undefined ? undefined : hostedSessionRecordSchema.parse(input.session);
@@ -583,8 +593,10 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     if (expectedSessionId === undefined || result.sessionId !== expectedSessionId) {
       throw new Error("Hosted operation result session mismatch.");
     }
+    const cleanOperation: Record<string, unknown> = { ...operation };
+    delete cleanOperation.safeErrorCode;
     const settled = hostedOperationRecordSchema.parse({
-      ...operation,
+      ...cleanOperation,
       result,
       sessionId: result.sessionId,
       state: "succeeded",

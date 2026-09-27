@@ -1322,9 +1322,9 @@ describe("hosted Eve service core", () => {
     expect(adapter.respond).toHaveBeenCalledWith(expect.objectContaining({ responses }));
   });
 
-  it("never redispatches an operation whose submission outcome is unknown", async () => {
+  it("retries an uncertain start with the same canonical operation ID", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const start = vi.fn(async () => {
+    const start = vi.fn<HostedEveTransport["start"]>(async () => {
       throw new SubmissionOutcomeUnknownError();
     });
     const service = createHostedEveSessionService({
@@ -1339,10 +1339,11 @@ describe("hosted Eve service core", () => {
     };
     await expect(service.start(request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     await expect(service.start(request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
-    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledTimes(2);
+    expect(start.mock.calls[0]?.[0]?.operationId).toBe(start.mock.calls[1]?.[0]?.operationId);
   });
 
-  it("treats an unclassified transport failure as unknown, not safe to retry", async () => {
+  it("keeps an unclassified start failure uncertain on exact retry", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const start = vi.fn(async () => {
       throw new Error("socket closed");
@@ -1355,7 +1356,71 @@ describe("hosted Eve service core", () => {
     const request = { clientRequestId: "socket_closed", prompt: "Build" };
     await expect(service.start(request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
     await expect(service.start(request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
-    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledTimes(2);
+  });
+
+  it("recovers a run accepted before a lost start response without creating another session", async () => {
+    const store = new InMemoryHostedEveStore();
+    const acceptedOperations = new Map<string, string>();
+    let responseLost = true;
+    const start = vi.fn<HostedEveTransport["start"]>(async ({ operationId }) => {
+      const adapterSessionId = acceptedOperations.get(operationId) ?? "eve_original";
+      acceptedOperations.set(operationId, adapterSessionId);
+      if (responseLost) {
+        responseLost = false;
+        throw new SubmissionOutcomeUnknownError();
+      }
+      return { adapterSessionId, snapshot: { events: [], status: "working" } };
+    });
+    const service = createHostedEveSessionService({
+      principal,
+      store,
+      transport: transport({ start }),
+    });
+    const request = { clientRequestId: "accepted_lost_response", prompt: "Build" };
+    await expect(service.start(request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    const recovered = await service.start(request);
+    expect(recovered.status).toBe("working");
+    expect(await service.start(request)).toEqual(recovered);
+    expect(start).toHaveBeenCalledTimes(2);
+    expect(acceptedOperations.size).toBe(1);
+    expect((await service.list({ cursor: 0, limit: 100 })).sessions).toHaveLength(1);
+  });
+
+  it("recovers a reserved start after the hosting request deadline", async () => {
+    const store = new InMemoryHostedEveStore();
+    const pending = Promise.withResolvers<{
+      adapterSessionId: string;
+      snapshot: HostedEngineSnapshot;
+    }>();
+    let currentTime = 1_000;
+    const start = vi
+      .fn<HostedEveTransport["start"]>()
+      .mockImplementationOnce(() => pending.promise)
+      .mockImplementationOnce(async () => ({
+        adapterSessionId: "eve_original",
+        snapshot: { events: [], status: "working" },
+      }));
+    const service = createHostedEveSessionService({
+      now: () => currentTime,
+      principal,
+      store,
+      transport: transport({ start }),
+    });
+    const request = { clientRequestId: "reserved_timeout", prompt: "Build" };
+    const first = service.start(request).catch((error: unknown) => error);
+    await vi.waitFor(() => expect(start).toHaveBeenCalledOnce());
+    await expect(service.start(request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    currentTime += 300_001;
+    const recovered = await service.start(request);
+    expect(recovered.status).toBe("working");
+    pending.resolve({
+      adapterSessionId: "eve_original",
+      snapshot: { events: [], status: "working" },
+    });
+    expect(await first).toBeInstanceOf(HostedSubmissionUnknownError);
+    expect(start).toHaveBeenCalledTimes(2);
+    expect((await service.list({ cursor: 0, limit: 100 })).sessions).toHaveLength(1);
   });
 
   it("records a proven pre-dispatch rejection without exposing transport text", async () => {
