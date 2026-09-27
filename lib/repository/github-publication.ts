@@ -245,7 +245,7 @@ export interface DraftPublicationReadBack {
 
 export type GitHubMutationAcknowledgement =
   | { status: "accepted"; requestId: string }
-  | { status: "rejected"; code: string };
+  | { status: "rejected"; code: string; path?: string };
 
 interface GitHubPublicationFileState {
   mode: string;
@@ -368,10 +368,56 @@ export class GitHubOutcomeUnknownError extends Error {
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const bytesDigest = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+// Boundary equality should ignore object property insertion order. Digest
+// construction remains schema-ordered through the existing digest().
+const record = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const canonicalJson = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (record(value)) {
+    return `{${Object.keys(value)
+      .toSorted()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+};
+
+const canonicalReviewedChanges = (changes: ReviewedChangeSetReceipt["changes"]) =>
+  changes.map((change) => {
+    if (change.kind === "added") {
+      if (change.after === undefined) {
+        throw new Error("An added change requires after content.");
+      }
+      return {
+        after: { digest: change.after.digest, mode: change.after.mode },
+        kind: change.kind,
+        path: change.path,
+      };
+    }
+    if (change.kind === "modified") {
+      if (change.after === undefined || change.before === undefined) {
+        throw new Error("A modified change requires before and after content.");
+      }
+      return {
+        after: { digest: change.after.digest, mode: change.after.mode },
+        before: { digest: change.before.digest, mode: change.before.mode },
+        kind: change.kind,
+        path: change.path,
+      };
+    }
+    if (change.kind !== "deleted" || change.before === undefined) {
+      throw new Error("A deleted change requires before content.");
+    }
+    return {
+      before: { digest: change.before.digest, mode: change.before.mode },
+      kind: change.kind,
+      path: change.path,
+    };
+  });
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function exactKeys(value: unknown, keys: readonly string[]): boolean {
@@ -533,15 +579,23 @@ function assertCanonicalReview(review: ReviewedChangeSetReceipt): void {
   const sortedChanges = [...review.changes].toSorted((left, right) =>
     compareOverlayPaths(left.path, right.path),
   );
+  const verifiedChangeSet = [review.changes, canonicalReviewedChanges(review.changes)].some(
+    (changes) => {
+      const candidate = { ...changeSet, changes, digest: review.changeSetDigest };
+      return (
+        digest(canonicalWithoutDigest(candidate)) === review.changeSetDigest &&
+        digest({
+          ...candidate,
+          changeSetDigest: review.changeSetDigest,
+          reviewedByCallId: review.reviewedByCallId,
+        }) === review.digest
+      );
+    },
+  );
   if (
     !isDigest(review.changeSetDigest) ||
-    digest(canonicalWithoutDigest(changeSet as { digest: string })) !== review.changeSetDigest ||
-    digest({
-      ...changeSet,
-      changeSetDigest: review.changeSetDigest,
-      reviewedByCallId: review.reviewedByCallId,
-    }) !== review.digest ||
-    JSON.stringify(review.changes) !== JSON.stringify(sortedChanges) ||
+    !verifiedChangeSet ||
+    canonicalJson(review.changes) !== canonicalJson(sortedChanges) ||
     JSON.stringify(canonicalPaths(review.approvedPaths)) !== JSON.stringify(review.approvedPaths) ||
     JSON.stringify(review.approvedPaths) !== JSON.stringify(review.changes.map(({ path }) => path))
   ) {
@@ -793,7 +847,10 @@ export function assertExactGitHubPublicationContent(input: {
 }): void {
   reviewForProposal(input.proposal, input.review);
   assertExactGitHubDraftPullRequestContent(input);
-  if (digest(input.review.changes) !== input.proposal.changedContentDigest) {
+  if (
+    digest(input.review.changes) !== input.proposal.changedContentDigest &&
+    digest(canonicalReviewedChanges(input.review.changes)) !== input.proposal.changedContentDigest
+  ) {
     throw new Error(
       "The reviewed change-content digest does not match its sealed proposal. Refresh the change-set review and seal a new proposal before publication.",
     );
@@ -866,7 +923,9 @@ export async function readExactGitHubPublicationContent(input: {
       throw new Error("The approved publication content source failed.");
     }
     if (observed === null) {
-      throw new Error(`The approved publication postimage is missing for ${change.path}.`);
+      throw new Error(
+        `The approved publication postimage is missing for ${change.path}. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.`,
+      );
     }
     const bytes = new Uint8Array(observed.bytes);
     if (
@@ -874,7 +933,9 @@ export async function readExactGitHubPublicationContent(input: {
       observed.digest !== change.after.digest ||
       bytesDigest(bytes) !== change.after.digest
     ) {
-      throw new Error(`The approved publication postimage changed for ${change.path}.`);
+      throw new Error(
+        `The approved publication postimage changed for ${change.path}. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.`,
+      );
     }
     if (change.kind === "added") {
       changes.push({
@@ -998,7 +1059,7 @@ export function assertExactInstallationIdentity(identity: GitHubInstallationIden
     repositorySelection: identity.repositorySelection,
     selectedRepositoryIds: identity.selectedRepositoryIds,
   });
-  if (JSON.stringify(identity) !== JSON.stringify(rebuilt)) {
+  if (canonicalJson(identity) !== canonicalJson(rebuilt)) {
     throw new Error("The GitHub installation identity is non-canonical or over-privileged.");
   }
 }
@@ -1052,11 +1113,14 @@ export function assertExactRepositoryObservation(repository: GitHubRepositoryObs
     installationIdentityDigest: repository.installationIdentityDigest,
     name: repository.name,
     owner: repository.owner,
-    releaseGate: repository.releaseGate,
+    releaseGate: {
+      configured: repository.releaseGate.configured,
+      name: repository.releaseGate.name,
+    },
     repositoryId: repository.repositoryId,
     visibility: repository.visibility,
   });
-  if (JSON.stringify(repository) !== JSON.stringify(rebuilt)) {
+  if (canonicalJson(repository) !== canonicalJson(rebuilt)) {
     throw new Error("The repository observation is non-canonical.");
   }
 }
@@ -1442,19 +1506,28 @@ function assertDraftReadBack(
   if (
     readBack.version !== GITHUB_PUBLICATION_VERSION ||
     readBack.idempotencyKey !== proposal.idempotencyKey ||
-    readBack.repository.digest !== proposal.repositoryObservationDigest ||
     readBack.repository.repositoryId !== proposal.repositoryId ||
-    readBack.repository.headSha !== proposal.baseSha ||
-    readBack.repository.headTree !== proposal.baseTree ||
+    readBack.repository.owner !== proposal.owner ||
+    readBack.repository.name !== proposal.name ||
+    readBack.repository.visibility !== proposal.visibility ||
+    readBack.repository.defaultBranch !== proposal.baseBranch ||
+    readBack.repository.installationIdentityDigest !== proposal.installationIdentityDigest ||
     readBack.repository.releaseGate.name !== proposal.releaseGate.name ||
     readBack.repository.releaseGate.configured !== proposal.releaseGate.configured ||
     JSON.stringify(canonicalPathsOrEmpty(readBack.changedPathsSinceBase)) !==
-      JSON.stringify(readBack.changedPathsSinceBase) ||
-    canonicalPathsOrEmpty(readBack.changedPathsSinceBase).some((path) =>
-      proposal.approvedPaths.some((approved) => pathsOverlap(path, approved)),
-    )
+      JSON.stringify(readBack.changedPathsSinceBase)
   ) {
-    throw new Error("Draft publication provider read-back is stale or overlapping.");
+    throw new Error(
+      "Draft publication repository identity or release-gate state changed. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.",
+    );
+  }
+  const conflictingPath = canonicalPathsOrEmpty(readBack.changedPathsSinceBase).find((path) =>
+    proposal.approvedPaths.some((approved) => pathsOverlap(path, approved)),
+  );
+  if (conflictingPath !== undefined) {
+    throw new Error(
+      `Draft publication conflicts with upstream path ${conflictingPath}. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.`,
+    );
   }
   if (readBack.branch.status === "absent") {
     if (!exactKeys(readBack.branch, ["status"])) {
@@ -1507,7 +1580,7 @@ function assertDraftReadBack(
     readBack.pullRequest.headBranch !== proposal.branchName ||
     readBack.pullRequest.baseRepositoryId !== proposal.repositoryId ||
     readBack.pullRequest.baseBranch !== proposal.baseBranch ||
-    readBack.pullRequest.baseSha !== proposal.baseSha ||
+    readBack.pullRequest.baseSha !== readBack.repository.headSha ||
     readBack.pullRequest.changeSetDigest !== proposal.changeSetDigest ||
     readBack.pullRequest.idempotencyKey !== proposal.idempotencyKey ||
     (readBack.branch.status === "present" &&
@@ -1807,6 +1880,15 @@ async function reclaimRejectedDraftPending(
   return pending;
 }
 
+const publicationRejectionMessage = (
+  acknowledgement: Extract<GitHubMutationAcknowledgement, { status: "rejected" }>,
+): string => {
+  if (acknowledgement.code === "reviewed-path-changed" && "path" in acknowledgement) {
+    return `Reviewed content changed at ${acknowledgement.path}. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.`;
+  }
+  return `GitHub rejected draft pull-request publication with ${acknowledgement.code}; sanitized receipt recorded.`;
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function createApprovedFreshRepository(input: {
   adapter: GitHubPublicationAdapter;
@@ -1998,9 +2080,7 @@ export async function publishApprovedDraftPullRequest(input: {
   if (acknowledgement.status === "rejected") {
     const failure = rejectionReceipt("draft-pull-request", pending, acknowledgement.code);
     await storeTerminal(input.store, pending, failure);
-    throw new Error(
-      `GitHub rejected draft pull-request publication (${failure.providerCode}); sanitized receipt recorded. Resolve the reported provider condition, then seal a new proposal before retrying.`,
-    );
+    throw new Error(publicationRejectionMessage(acknowledgement));
   }
   if (!/^[-A-Za-z0-9_]{1,128}$/u.test(acknowledgement.requestId)) {
     throw new GitHubOutcomeUnknownError();

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 import { runSequentially } from "../async-sequential";
+import { compareOverlayPaths, overlayChanges } from "./target-apply";
 
 import {
   GITHUB_PUBLICATION_VERSION,
@@ -40,7 +41,6 @@ import { createReviewedChangeSetReceipt } from "./reviewed-change-set";
 import type { NormalizedChangeSet } from "./reviewed-change-set";
 import type { SourceReceiptEvidence } from "./source-receipt";
 import { SUPPORTED_TEMPLATE_ADAPTER } from "./supported-template";
-import { compareOverlayPaths } from "./target-apply";
 import { GitHubPublicationTestStore as Store } from "./github-publication-test-store";
 import { parseGitHubPublicationProposalRow } from "./postgres-github-publication-store";
 
@@ -290,6 +290,7 @@ function draftReadBack(
   proposal: DraftPullRequestProposal,
   repo: GitHubRepositoryObservation,
   state: "absent" | "complete" | "branch-only" = "absent",
+  changedPathsSinceBase: readonly string[] = [],
 ): DraftPublicationReadBack {
   const branch =
     state === "absent"
@@ -308,7 +309,7 @@ function draftReadBack(
       ? ({
           baseBranch: proposal.baseBranch,
           baseRepositoryId: proposal.repositoryId,
-          baseSha: proposal.baseSha,
+          baseSha: repo.headSha,
           changeSetDigest: proposal.changeSetDigest,
           draft: true,
           headBranch: proposal.branchName,
@@ -322,7 +323,7 @@ function draftReadBack(
       : ({ status: "absent" } as const);
   const unsigned = {
     branch,
-    changedPathsSinceBase: [] as readonly string[],
+    changedPathsSinceBase,
     idempotencyKey: proposal.idempotencyKey,
     pullRequest,
     repository: repo,
@@ -548,6 +549,11 @@ describe("closed GitHub publication contract", () => {
 
     expect(identity.repositorySelection).toBe("all");
     expect(() => assertExactInstallationIdentity(identity)).not.toThrow();
+    const reordered = Object.fromEntries(Object.entries(identity).toReversed()) as typeof identity;
+    reordered.permissions = Object.fromEntries(
+      Object.entries(identity.permissions).toReversed(),
+    ) as typeof identity.permissions;
+    expect(() => assertExactInstallationIdentity(reordered)).not.toThrow();
   });
 
   it("rejects unknown keys and permission escalation", () => {
@@ -620,6 +626,11 @@ describe("closed GitHub publication contract", () => {
     });
     expect(active.releaseGate.configured).toBe(true);
     expect(() => assertExactRepositoryObservation(active)).not.toThrow();
+    const reordered = Object.fromEntries(Object.entries(active).toReversed()) as typeof active;
+    reordered.releaseGate = Object.fromEntries(
+      Object.entries(active.releaseGate).toReversed(),
+    ) as typeof active.releaseGate;
+    expect(() => assertExactRepositoryObservation(reordered)).not.toThrow();
   });
 
   it("keeps fresh repositories release-disabled", () => {
@@ -653,6 +664,44 @@ describe("closed GitHub publication contract", () => {
         source: source(),
       }),
     ).toThrow(/exact source receipt/u);
+  });
+
+  it("accepts production overlay change objects with reordered property keys", () => {
+    const adapter = new Adapter();
+    const changes = overlayChanges(
+      {
+        files: [{ digest: "e".repeat(64), mode: "100644", path: "apps/demo/page.tsx" }],
+        treeDigest: "a".repeat(64),
+      },
+      {
+        files: [{ digest: reviewedBytesDigest, mode: "100644", path: "apps/demo/page.tsx" }],
+        treeDigest: "b".repeat(64),
+      },
+    );
+    const canonicalReview = review(changes, {}, true);
+    const reordered = {
+      ...canonicalReview,
+      changes: canonicalReview.changes.map((change) => ({
+        kind: change.kind,
+        path: change.path,
+        ...Object.fromEntries(Object.entries(change).toReversed()),
+        ...(change.before === undefined
+          ? {}
+          : { before: Object.fromEntries(Object.entries(change.before).toReversed()) }),
+        ...(change.after === undefined
+          ? {}
+          : { after: Object.fromEntries(Object.entries(change.after).toReversed()) }),
+      })),
+    } as typeof canonicalReview;
+
+    expect(changes[0]).toEqual({
+      after: { digest: reviewedBytesDigest, mode: "100644" },
+      before: { digest: "e".repeat(64), mode: "100644" },
+      kind: "modified",
+      path: "apps/demo/page.tsx",
+    });
+    expect(() => draftProposal(adapter, canonicalReview)).not.toThrow();
+    expect(() => draftProposal(adapter, reordered)).not.toThrow();
   });
 
   it("rejects proposal unknown keys, unsafe names, titles, and paths", () => {
@@ -945,6 +994,32 @@ describe("closed GitHub publication contract", () => {
     expect(JSON.stringify(failure)).not.toContain("secret raw provider message");
   });
 
+  it("maps a reviewed-path conflict to path-specific refreshed review recovery", async () => {
+    const adapter = new Adapter();
+    adapter.draftAcknowledgement = {
+      code: "reviewed-path-changed",
+      path: "src/app.tsx",
+      status: "rejected",
+    };
+    const proposal = draftProposal(adapter);
+    const store = new Store();
+    await expect(
+      publishApprovedDraftPullRequest({
+        adapter,
+        approvedByCallId: "approve",
+        contentSource: publicationContentSource(),
+        proposal,
+        review: review(),
+        store,
+      }),
+    ).rejects.toThrow(
+      /Reviewed content changed at src\/app\.tsx\. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again/u,
+    );
+    const failure = await store.read(proposal.digest);
+    expect(failure?.status).toBe("failed");
+    expect(JSON.stringify(failure)).not.toContain("src/app.tsx");
+  });
+
   it("proves exact branch tree/content/paths and PR head/base/draft read-back", async () => {
     const adapter = new Adapter();
     const store = new Store();
@@ -970,6 +1045,76 @@ describe("closed GitHub publication contract", () => {
       expect(draftChange.after.bytes).toEqual(reviewedBytes);
     }
     assertCanonicalGitHubMutationReceipt(result);
+  });
+
+  it("publishes over unrelated upstream commits while preserving sealed proposal approval", async () => {
+    const adapter = new Adapter();
+    const proposal = draftProposal(adapter);
+    const advancedRepo = repository(adapter.identities.publish, {
+      headSha: "9".repeat(40),
+      headTree: "8".repeat(40),
+    });
+    adapter.publishRepo = advancedRepo;
+    adapter.draftOutcome = draftReadBack(proposal, advancedRepo, "absent", ["README.md"]);
+
+    await expect(
+      publishApprovedDraftPullRequest({
+        adapter,
+        approvedByCallId: "approve-original-proposal",
+        contentSource: publicationContentSource(),
+        proposal,
+        review: review(),
+        store: new Store(),
+      }),
+    ).resolves.toMatchObject({ proposalDigest: proposal.digest, status: "succeeded" });
+    expect(adapter.draftCalls).toBe(1);
+  });
+
+  it("rejects upstream overlap with the path and recovery steps", async () => {
+    const adapter = new Adapter();
+    const proposal = draftProposal(adapter);
+    const advancedRepo = repository(adapter.identities.publish, {
+      headSha: "9".repeat(40),
+      headTree: "8".repeat(40),
+    });
+    adapter.draftOutcome = draftReadBack(proposal, advancedRepo, "absent", [
+      proposal.approvedPaths[0] ?? "",
+    ]);
+
+    await expect(
+      publishApprovedDraftPullRequest({
+        adapter,
+        approvedByCallId: "approve",
+        contentSource: publicationContentSource(),
+        proposal,
+        review: review(),
+        store: new Store(),
+      }),
+    ).rejects.toThrow(
+      /upstream path .*Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again/u,
+    );
+    expect(adapter.draftCalls).toBe(0);
+  });
+
+  it("rejects a changed repository identity with actionable recovery", async () => {
+    const adapter = new Adapter();
+    const proposal = draftProposal(adapter);
+    const changedRepo = repository(adapter.identities.publish, { repositoryId: "999" });
+    adapter.draftOutcome = draftReadBack(proposal, changedRepo);
+
+    await expect(
+      publishApprovedDraftPullRequest({
+        adapter,
+        approvedByCallId: "approve",
+        contentSource: publicationContentSource(),
+        proposal,
+        review: review(),
+        store: new Store(),
+      }),
+    ).rejects.toThrow(
+      /repository identity.*Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again/u,
+    );
+    expect(adapter.draftCalls).toBe(0);
   });
 
   it("publishes to an active repository only while the release gate remains unchanged", async () => {
@@ -1018,24 +1163,27 @@ describe("closed GitHub publication contract", () => {
         review: review(),
         store: new Store(),
       }),
-    ).rejects.toThrow(/stale or overlapping/u);
+    ).rejects.toThrow(/release-gate state changed/u);
     expect(adapter.draftCalls).toBe(0);
   });
 
   it("keeps content-source failures pending without provider dispatch and permits explicit recovery", async () => {
     const cases = [
       {
-        message: /postimage is missing/u,
+        message:
+          /postimage is missing for .*Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again/u,
         name: "missing",
         source: publicationContentSource(null),
       },
       {
-        message: /postimage changed/u,
+        message:
+          /postimage changed for .*Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again/u,
         name: "mode-drift",
         source: publicationContentSource(reviewedBytes, undefined, "755"),
       },
       {
-        message: /postimage changed/u,
+        message:
+          /postimage changed for .*Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again/u,
         name: "byte-drift",
         source: publicationContentSource(new TextEncoder().encode("stale bytes\n")),
       },
@@ -1143,7 +1291,9 @@ describe("closed GitHub publication contract", () => {
         const staleRepo = repository(adapter.identities.publish, {
           headSha: "9".repeat(40),
         });
-        adapter.draftOutcome = draftReadBack(proposal, staleRepo);
+        adapter.draftOutcome = draftReadBack(proposal, staleRepo, "absent", [
+          proposal.approvedPaths[0] ?? "",
+        ]);
       },
       (adapter, proposal) => {
         adapter.draftOutcome = draftReadBack(proposal, adapter.publishRepo, "branch-only");

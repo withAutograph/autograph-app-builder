@@ -21,6 +21,7 @@ import type {
   GitHubFreshRepositoryContent,
   GitHubRepositoryObservation,
 } from "./github-publication";
+import { safeSourcePath } from "./source-path";
 
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -129,7 +130,14 @@ const acknowledgementSchema = z.discriminatedUnion("status", [
       status: z.literal("accepted"),
     })
     .strict(),
-  z.object({ code: safeProviderCode, status: z.literal("rejected") }).strict(),
+  z
+    .object({
+      code: safeProviderCode,
+      path: z.string().refine(safeSourcePath).optional(),
+      status: z.literal("rejected"),
+    })
+    .strict()
+    .refine((value) => (value.code === "reviewed-path-changed") === (value.path !== undefined)),
 ]);
 
 type RequestedPermissions = z.infer<typeof permissionSnapshotSchema>;
