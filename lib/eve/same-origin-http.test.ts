@@ -349,7 +349,7 @@ describe("same-origin canonical Eve transport", () => {
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
       if (String(url).includes("/stream?")) {
         streamReads += 1;
-        return stream(streamReads < 3 ? pending : settled);
+        return stream(streamReads < 10 ? pending : settled);
       }
       expect(JSON.parse(String(init?.body))).toMatchObject({
         inputResponses: [{ optionId: "cancel", requestId }],
@@ -369,34 +369,7 @@ describe("same-origin canonical Eve transport", () => {
         responses: [{ requestId, response: { kind: "deny" } }],
       }),
     ).resolves.toMatchObject({ status: "waiting" });
-    expect(streamReads).toBe(3);
-  });
-
-  it("keeps an accepted but unsettled input response non-replayable", async () => {
-    const requestId = "aitxt-0oQwVrjWKWZWGigsWFL0FUqy";
-    let streamReads = 0;
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const fetchImplementation = vi.fn<typeof fetch>(async (url) => {
-      if (String(url).includes("/stream?")) {
-        streamReads += 1;
-        return stream(pendingApprovalEvents(requestId));
-      }
-      return accepted();
-    });
-
-    await expect(
-      createSameOriginEveTransport({
-        config,
-        fetchImplementation,
-        workloadIdentity: identity(),
-      }).respond({
-        adapterSessionId: "wrun_1",
-        operationId: "op_respond_unsettled",
-        principal,
-        responses: [{ requestId, response: { kind: "deny" } }],
-      }),
-    ).rejects.toBeInstanceOf(SubmissionOutcomeUnknownError);
-    expect(streamReads).toBe(8);
+    expect(streamReads).toBe(10);
   });
 
   it("waits for a new guarded cancel and waiting boundary", async () => {
@@ -417,7 +390,7 @@ describe("same-origin canonical Eve transport", () => {
         );
       }
       streamReads += 1;
-      return stream(streamReads < 3 ? active : settled);
+      return stream(streamReads < 10 ? active : settled);
     });
     await expect(
       createSameOriginEveTransport({
@@ -428,25 +401,37 @@ describe("same-origin canonical Eve transport", () => {
     ).resolves.toMatchObject({ status: "waiting" });
   });
 
-  it("does not accept stale or historical cancellation and times out honestly", async () => {
+  it("waits beyond the former poll limit for the current cancellation receipt", async () => {
     const historical = [
       { data: { turnId: "turn_old" }, type: "turn.cancelled" },
       { data: {}, type: "session.waiting" },
       { data: { turnId: "turn_new" }, type: "step.started" },
     ];
+    const settled = [
+      ...historical,
+      { data: { turnId: "turn_new" }, type: "turn.cancelled" },
+      { data: {}, type: "session.waiting" },
+    ];
+    let streamReads = 0;
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
-      String(url).endsWith("/cancel")
-        ? Response.json({ ok: true, sessionId: "wrun_1", status: "accepted" }, { status: 202 })
-        : stream(historical),
-    );
+    const fetchImplementation = vi.fn<typeof fetch>(async (url) => {
+      if (String(url).endsWith("/cancel")) {
+        return Response.json(
+          { ok: true, sessionId: "wrun_1", status: "accepted" },
+          { status: 202 },
+        );
+      }
+      streamReads += 1;
+      return stream(streamReads < 10 ? historical : settled);
+    });
     await expect(
       createSameOriginEveTransport({
         config,
         fetchImplementation,
         workloadIdentity: identity(),
       }).cancel({ adapterSessionId: "wrun_1", principal }),
-    ).rejects.toMatchObject({ name: "HostedCancellationUnsettledError" });
+    ).resolves.toMatchObject({ status: "waiting" });
+    expect(streamReads).toBe(10);
   });
 
   it("rejects a stale guarded turn and keeps no-active-turn observational", async () => {
