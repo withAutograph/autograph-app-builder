@@ -360,14 +360,18 @@ export function createRepositoryAccessRuntime(input: {
           candidate.accountType === value.access.scope.accountType,
       );
       if (binding === undefined) {
-        throw new Error("The selected GitHub installation is no longer active.");
+        throw new Error(
+          `Builder could not prepare ${value.repository}: the selected GitHub App installation is no longer active for this account. Continue with GitHub to reconnect or update repository access, then resume this same Builder session.`,
+        );
       }
       const provider = await input.providerFactory({
         authority: input.authority,
         installation: binding,
       });
       if (!repositorySourceProvider(provider)) {
-        throw new Error("GitHub source preparation is unavailable.");
+        throw new Error(
+          `Builder could not prepare ${value.repository}: the configured GitHub provider does not support repository source reads. An operator must enable the GitHub App source adapter for this installation, then retry the same session.`,
+        );
       }
 
       const ref = `refs/heads/${value.access.repository.defaultBranch}`;
@@ -525,7 +529,9 @@ export async function repositoryAccessRuntimeForSession(sessionAuth: unknown) {
       workspaceId: authority.workspaceId,
     }))
   ) {
-    throw new Error("Repository access requires an active workspace member.");
+    throw new Error(
+      "Builder could not prepare GitHub access because the signed-in account is not an active member of this Autograph workspace. Sign in with an active workspace account or ask a workspace administrator to restore membership, then retry.",
+    );
   }
   const installations = createPostgresHostedGitHubInstallationStore(input.database);
   return createRepositoryAccessRuntime({

@@ -262,7 +262,7 @@ describe("planning from the current checkout", () => {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       run: vi.fn(async ({ command }: { command: string }) => ({
         exitCode: command.startsWith("cp ") ? 1 : 0,
-        stderr: "",
+        stderr: command.startsWith("cp ") ? "cp: cannot stat /workspace/repository" : "",
         stdout: "",
       })),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -277,6 +277,51 @@ describe("planning from the current checkout", () => {
         artifactRevision: "a".repeat(64),
         sandbox,
       }),
-    ).rejects.toThrow("source copy");
+    ).rejects.toThrow(/source copy.*exit 1.*Check that.*cannot stat/u);
+  });
+
+  it("names a sandbox rejection while copying the current checkout", async () => {
+    const sandbox = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      removePath: vi.fn(async () => {}),
+      run: vi
+        .fn()
+        .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
+        .mockRejectedValueOnce(new Error("sandbox command timed out")),
+    } as unknown as SandboxSession;
+    await expect(
+      materializePlanningOverlay({
+        appId: "stock-exceptions",
+        appSpecContent: "Stock Exceptions product design",
+        appSpecDigest: "b".repeat(64),
+        artifactRevision: "a".repeat(64),
+        sandbox,
+      }),
+    ).rejects.toThrow(
+      /source copy into the planning overlay could not run.*sandbox command timed out/u,
+    );
+  });
+
+  it("includes mkdir stderr when preparing the planning workspace fails", async () => {
+    const sandbox = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      removePath: vi.fn(async () => {}),
+      run: vi.fn().mockResolvedValue({
+        exitCode: 1,
+        stderr: "mkdir: no space left on device",
+        stdout: "",
+      }),
+    } as unknown as SandboxSession;
+    await expect(
+      materializePlanningOverlay({
+        appId: "stock-exceptions",
+        appSpecContent: "Stock Exceptions product design",
+        appSpecDigest: "b".repeat(64),
+        artifactRevision: "a".repeat(64),
+        sandbox,
+      }),
+    ).rejects.toThrow(
+      /create .*workspace directory paths \(exit 1\).*Check write permissions.*no space left on device/u,
+    );
   });
 });

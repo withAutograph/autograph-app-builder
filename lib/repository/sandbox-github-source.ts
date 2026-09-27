@@ -23,6 +23,49 @@ const SANDBOX_OPERATION_OUTPUT_BYTES = 262_144;
 const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
 export const SANDBOX_GITHUB_SOURCE_INSPECTION = ".app-builder/canonical-clone-inspection.json";
 
+const sandboxFailureDetail = (value: string): string =>
+  value
+    .replaceAll(/https?:\/\/[^\s]+/giu, "[URL REDACTED]")
+    .replaceAll(/Bearer\s+[^\s,;]+/giu, "Bearer [REDACTED]")
+    .replaceAll(
+      /\b(?:gh[oprsu]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,})\b/gu,
+      "[REDACTED]",
+    )
+    .replaceAll(
+      /\b(?<key>authorization|cookie|password|passwd|secret|token|api[-_]?key)\s*[:=]\s*[^\s,;]+/giu,
+      "$<key>=[REDACTED]",
+    )
+    .replaceAll(/\s+/gu, " ")
+    .trim()
+    .slice(0, 350);
+
+const sandboxCommandFailure = (
+  operation: string,
+  result: { exitCode: number; stderr: string; stdout: string },
+  recovery: string,
+): Error => {
+  const detail = sandboxFailureDetail(`${result.stderr}\n${result.stdout}`);
+  return new Error(
+    `Builder could not ${operation} (exit ${result.exitCode}). ${recovery} Cause: ${detail || "The sandbox command returned no diagnostic output."}`,
+  );
+};
+
+const runSourceSandboxCommand = async (
+  sandbox: SandboxSession,
+  operation: string,
+  command: string,
+) => {
+  try {
+    return await sandbox.run({ command, workingDirectory: "/workspace" });
+  } catch (error) {
+    const cause = sandboxFailureDetail(error instanceof Error ? error.message : String(error));
+    throw new Error(
+      `Builder could not ${operation} in the sandbox. Check the sandbox connection and checkout, then retry this session. Cause: ${cause || "The sandbox provider returned no diagnostic output."}`,
+      { cause: error },
+    );
+  }
+};
+
 const shellQuote = function shellQuote(value: string) {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
 };
@@ -32,7 +75,9 @@ const parseRemote = function parseRemote(input: string) {
   try {
     remote = new URL(input);
   } catch {
-    throw new Error("The GitHub source remote is invalid.");
+    throw new Error(
+      "The GitHub source remote is invalid. Select a GitHub repository with an HTTPS clone URL, then retry.",
+    );
   }
   const match = /^\/(?<owner>[A-Za-z0-9_.-]{1,100})\/(?<repo>[A-Za-z0-9_.-]{1,100})\.git$/u.exec(
     remote.pathname,
@@ -47,7 +92,9 @@ const parseRemote = function parseRemote(input: string) {
     !REPOSITORY.test(match[1] ?? "") ||
     !REPOSITORY.test(match[2] ?? "")
   ) {
-    throw new Error("The GitHub source remote is invalid.");
+    throw new Error(
+      "The GitHub source remote is invalid. Select a GitHub repository with an HTTPS clone URL, then retry.",
+    );
   }
   return remote.toString();
 };
@@ -282,59 +329,101 @@ const sandboxGitHubSourceReinspectionCommand =
     return `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 node -e ${shellQuote(sandboxGitHubSourceReinspectionProgram)} ${shellQuote(expected)}`;
   };
 
+const checkoutInspectionCommand = (path: string) =>
+  `git -C ${shellQuote(path)} rev-parse HEAD && git -C ${shellQuote(path)} rev-parse HEAD^{tree} && git -C ${shellQuote(path)} remote get-url origin`;
+
+const inspectSelectedCheckout = (
+  stdout: string,
+  expected: { repository: string; sourceSha?: string; sourceTree?: string },
+) => {
+  const [sourceSha, sourceTree, remote] = stdout.trim().split(/\s+/u);
+  if (
+    sourceSha === undefined ||
+    sourceTree === undefined ||
+    remote === undefined ||
+    !SHA.test(sourceSha) ||
+    !SHA.test(sourceTree)
+  ) {
+    throw new Error(
+      "The selected GitHub checkout inspection did not return a commit and tree revision. Check that the provider created a complete Git checkout, then retry this session.",
+    );
+  }
+  if (
+    parseRemote(remote) !== parseRemote(expected.repository) ||
+    (expected.sourceSha !== undefined && sourceSha !== expected.sourceSha) ||
+    (expected.sourceTree !== undefined && sourceTree !== expected.sourceTree)
+  ) {
+    throw new Error(
+      `The sandbox checkout does not match the selected GitHub source. Expected ${parseRemote(expected.repository)}${expected.sourceSha === undefined ? "" : ` at ${expected.sourceSha}`}; observed ${parseRemote(remote)} at ${sourceSha}. Select the intended repository or start a new Builder session for this checkout.`,
+    );
+  }
+  return { sourceSha, sourceTree };
+};
+
+const findProviderCheckout = async (
+  sandbox: SandboxSession,
+  expected: { repository: string; sourceSha?: string; sourceTree?: string },
+  paths: readonly string[],
+): Promise<string> => {
+  const failures: string[] = [];
+  for (const candidate of paths) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- inspect provider locations in order.
+    const result = await runSourceSandboxCommand(
+      sandbox,
+      `inspect the provider checkout at ${candidate}`,
+      checkoutInspectionCommand(candidate),
+    );
+    if (result.exitCode === 0) {
+      inspectSelectedCheckout(result.stdout, expected);
+      return candidate;
+    }
+    failures.push(
+      `${candidate}: ${sandboxFailureDetail(result.stderr || result.stdout) || `exit ${result.exitCode} with no diagnostic output`}`,
+    );
+  }
+  throw new Error(
+    `Vercel did not materialize the selected GitHub source in either provider location. Check the selected repository access and sandbox source configuration, then retry this session. Observed: ${failures.join(" | ")}`,
+  );
+};
+
 export const readSandboxGitHubSourceSnapshot = async function readSandboxGitHubSourceSnapshot(
   sandbox: SandboxSession,
   expected: { repository: string; sourceSha?: string; sourceTree?: string },
 ): Promise<CanonicalTemplateSnapshot> {
-  const checkoutCommand = (path: string) =>
-    `git -C ${shellQuote(path)} rev-parse HEAD && git -C ${shellQuote(path)} rev-parse HEAD^{tree} && git -C ${shellQuote(path)} remote get-url origin`;
-  const inspect = (stdout: string) => {
-    const [sourceSha, sourceTree, remote] = stdout.trim().split(/\s+/u);
-    if (
-      sourceSha === undefined ||
-      sourceTree === undefined ||
-      remote === undefined ||
-      !SHA.test(sourceSha) ||
-      !SHA.test(sourceTree)
-    ) {
-      throw new Error("GitHub did not return a repository revision.");
-    }
-    if (
-      parseRemote(remote) !== parseRemote(expected.repository) ||
-      (expected.sourceSha !== undefined && sourceSha !== expected.sourceSha) ||
-      (expected.sourceTree !== undefined && sourceTree !== expected.sourceTree)
-    ) {
-      throw new Error("The sandbox checkout does not match the selected GitHub source.");
-    }
-    return { sourceSha, sourceTree };
-  };
-  const canonical = await sandbox.run({
-    command: checkoutCommand(SANDBOX_WORKSPACE),
-    workingDirectory: "/workspace",
-  });
-  let observed: ReturnType<typeof inspect>;
+  const canonical = await runSourceSandboxCommand(
+    sandbox,
+    "inspect the Builder checkout",
+    checkoutInspectionCommand(SANDBOX_WORKSPACE),
+  );
+  let observed: ReturnType<typeof inspectSelectedCheckout>;
   if (canonical.exitCode === 0) {
     // Provider file uploads cannot traverse a linked checkout. An older
     // session may still have the previous link layout; leave it untouched.
-    const linked = await sandbox.run({
-      command: `test -L ${shellQuote(SANDBOX_WORKSPACE)}`,
-      workingDirectory: "/workspace",
-    });
+    const linked = await runSourceSandboxCommand(
+      sandbox,
+      "inspect the Builder checkout layout",
+      `test -L ${shellQuote(SANDBOX_WORKSPACE)}`,
+    );
     if (linked.exitCode === 0) {
       throw new Error(
         "The selected GitHub checkout uses a linked workspace. Start a new Builder session.",
       );
     }
-    observed = inspect(canonical.stdout);
+    observed = inspectSelectedCheckout(canonical.stdout, expected);
   } else {
     // Never replace an occupied workspace, even if it is not a valid Git
     // checkout. Vercel's Git source lives below its own working directory.
-    const occupied = await sandbox.run({
-      command: `test -e ${shellQuote(SANDBOX_WORKSPACE)} || test -L ${shellQuote(SANDBOX_WORKSPACE)}`,
-      workingDirectory: "/workspace",
-    });
+    const occupied = await runSourceSandboxCommand(
+      sandbox,
+      "check whether the Builder checkout is occupied",
+      `test -e ${shellQuote(SANDBOX_WORKSPACE)} || test -L ${shellQuote(SANDBOX_WORKSPACE)}`,
+    );
     if (occupied.exitCode === 0) {
-      throw new Error("The selected GitHub checkout is not available.");
+      throw sandboxCommandFailure(
+        "use the selected GitHub checkout because /workspace/repository is occupied by a non-Git directory",
+        canonical,
+        "Use the existing session bound to this workspace, or start a new Builder session; Builder will not replace the occupied directory.",
+      );
     }
     const repositoryName = new URL(parseRemote(expected.repository)).pathname.split("/").at(-1);
     if (repositoryName === undefined) {
@@ -343,41 +432,30 @@ export const readSandboxGitHubSourceSnapshot = async function readSandboxGitHubS
     // The Eve image places Vercel's Git source below /workspace. The
     // standard Vercel image uses its working-directory root instead.
     const providerPaths = [`/workspace/${repositoryName.slice(0, -4)}`, "/vercel/sandbox"];
-    let providerCheckout: string | undefined;
-    for (const candidate of providerPaths) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- inspect provider locations in order.
-      const result = await sandbox.run({
-        command: checkoutCommand(candidate),
-        workingDirectory: "/workspace",
-      });
-      if (result.exitCode === 0) {
-        inspect(result.stdout);
-        providerCheckout = candidate;
-        break;
-      }
-    }
-    if (providerCheckout === undefined) {
-      throw new Error("Vercel did not materialize the selected GitHub source.");
-    }
+    const providerCheckout = await findProviderCheckout(sandbox, expected, providerPaths);
     // Keep the provider's one checkout, but put that directory at the
     // canonical working path. The sandbox file API rejects writes through a
     // symlink even when Git and shell reads through it succeed.
-    const moved = await sandbox.run({
-      command: `node -e ${shellQuote('require("node:fs").renameSync(process.argv[1], process.argv[2])')} ${shellQuote(providerCheckout)} ${shellQuote(SANDBOX_WORKSPACE)}`,
-      workingDirectory: "/workspace",
-    });
-    const placed = await sandbox.run({
-      command: checkoutCommand(SANDBOX_WORKSPACE),
-      workingDirectory: "/workspace",
-    });
+    const moved = await runSourceSandboxCommand(
+      sandbox,
+      "place the provider checkout in the Builder workspace",
+      `node -e ${shellQuote('require("node:fs").renameSync(process.argv[1], process.argv[2])')} ${shellQuote(providerCheckout)} ${shellQuote(SANDBOX_WORKSPACE)}`,
+    );
+    const placed = await runSourceSandboxCommand(
+      sandbox,
+      "inspect the placed Builder checkout",
+      checkoutInspectionCommand(SANDBOX_WORKSPACE),
+    );
     if (placed.exitCode !== 0) {
-      throw new Error(
+      throw sandboxCommandFailure(
         moved.exitCode === 0
-          ? "The selected GitHub checkout is not available."
-          : "The selected GitHub checkout could not be placed in the Builder workspace.",
+          ? "inspect the selected GitHub checkout after moving it into /workspace/repository"
+          : "place the selected GitHub checkout in /workspace/repository",
+        moved.exitCode === 0 ? placed : moved,
+        "Check workspace permissions and the provider-created checkout, then retry this session.",
       );
     }
-    observed = inspect(placed.stdout);
+    observed = inspectSelectedCheckout(placed.stdout, expected);
   }
   return {
     contents: {},
@@ -394,23 +472,43 @@ export const writeSandboxGitHubSourceManifest = async function writeSandboxGitHu
   sandbox: SandboxSession,
   expected: { sourceSha: string; sourceTree: string },
 ): Promise<string> {
-  const result = await sandbox.run({
-    abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
-    command: `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 node -e ${shellQuote(sandboxGitHubSourceManifestProgram(SANDBOX_WORKSPACE, "/workspace/.app-builder"))}`,
-    workingDirectory: "/workspace",
-  });
+  let result: Awaited<ReturnType<SandboxSession["run"]>>;
+  try {
+    result = await sandbox.run({
+      abortSignal: AbortSignal.timeout(SANDBOX_OPERATION_TIMEOUT_MS),
+      command: `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/dev/null XDG_CONFIG_HOME=/dev/null LANG=C.UTF-8 LC_ALL=C.UTF-8 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/false SSH_ASKPASS=/usr/bin/false GIT_LFS_SKIP_SMUDGE=1 node -e ${shellQuote(sandboxGitHubSourceManifestProgram(SANDBOX_WORKSPACE, "/workspace/.app-builder"))}`,
+      workingDirectory: "/workspace",
+    });
+  } catch (error) {
+    const cause = sandboxFailureDetail(error instanceof Error ? error.message : String(error));
+    throw new Error(
+      `Builder could not run selected-source manifest generation in the sandbox. Check that the sandbox, Git, and Node are available, then retry this session. Cause: ${cause || "The sandbox provider returned no diagnostic output."}`,
+      { cause: error },
+    );
+  }
+  if (result.exitCode !== 0) {
+    throw sandboxCommandFailure(
+      "prepare the selected GitHub source manifest",
+      result,
+      "Check that Git and Node can read the selected checkout and that the sandbox has enough space, then retry this session.",
+    );
+  }
   if (
-    result.exitCode !== 0 ||
     Buffer.byteLength(result.stdout) > SANDBOX_INSPECTION_BYTES ||
     Buffer.byteLength(result.stderr) > SANDBOX_OPERATION_OUTPUT_BYTES
   ) {
-    throw new Error("The selected GitHub source manifest could not be prepared.");
+    throw new Error(
+      `Builder could not save the selected GitHub source manifest: command output exceeded its limit (${Buffer.byteLength(result.stdout)} stdout bytes, ${Buffer.byteLength(result.stderr)} stderr bytes). Inspect the checkout for unexpectedly large generated content or verbose tool output, then retry.`,
+    );
   }
   let observation: unknown;
   try {
     observation = JSON.parse(result.stdout) as unknown;
-  } catch {
-    throw new Error("The selected GitHub source manifest is invalid.");
+  } catch (error) {
+    throw new Error(
+      `The selected GitHub source manifest is not valid JSON. Cause: ${sandboxFailureDetail(error instanceof Error ? error.message : String(error))} Check the manifest command output, then retry this session.`,
+      { cause: error },
+    );
   }
   const parsed = z
     .strictObject({
@@ -424,7 +522,9 @@ export const writeSandboxGitHubSourceManifest = async function writeSandboxGitHu
     parsed.data.sourceSha !== expected.sourceSha ||
     parsed.data.sourceTree !== expected.sourceTree
   ) {
-    throw new Error("The selected GitHub source manifest does not match its revision.");
+    throw new Error(
+      `The selected GitHub source manifest is missing a valid digest or no longer matches checkout revision ${expected.sourceSha}. Re-observe the current checkout and regenerate its manifest, then retry.`,
+    );
   }
   return parsed.data.workspaceDigest;
 };
