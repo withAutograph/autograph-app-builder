@@ -213,6 +213,7 @@ async function authenticatedFetch(input: {
   workloadIdentity: HostedWorkloadIdentity;
   fetchImplementation: typeof fetch;
   path: string;
+  timeout?: "bounded" | "unbounded";
   init?: RequestInit;
 }) {
   const headers = await workloadHeaders(input.workloadIdentity);
@@ -220,7 +221,9 @@ async function authenticatedFetch(input: {
     ...input.init,
     headers: { ...headers, ...input.init?.headers },
     redirect: "manual",
-    signal: input.init?.signal ?? AbortSignal.timeout(input.config.timeoutMs),
+    signal:
+      input.init?.signal ??
+      (input.timeout === "unbounded" ? undefined : AbortSignal.timeout(input.config.timeoutMs)),
   });
 }
 
@@ -235,7 +238,7 @@ async function readInstalledSnapshot(input: {
   installed: MessageStreamEvent[];
 }> {
   const path = `/eve/v1/session/${encodeURIComponent(input.sessionId)}/stream?startIndex=0&includeTailIndex=1`;
-  const response = await authenticatedFetch({ ...input, path });
+  const response = await authenticatedFetch({ ...input, path, timeout: "unbounded" });
   if (response.status >= 300 && response.status < 400) {
     throw new Error("Canonical Eve redirects are not allowed.");
   }
