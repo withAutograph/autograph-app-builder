@@ -1080,12 +1080,52 @@ const assertOwnedPartialWorktree = async (
   if (!rootState.isDirectory() || rootState.isSymbolicLink()) {
     throw new Error("The partial approved worktree path is unsafe.");
   }
-  const base = new Map<string, FileState>();
-  for await (const entry of exactTreeEntries(proposal.sourcePath, proposal.baseSha)) {
-    base.set(entry.path, entry.state);
-  }
-  const changes = new Map(proposal.changes.map((change) => [change.path, change]));
-  const allowedPaths = new Set([...base.keys(), ...changes.keys()]);
+  const approvedPaths = async function* approvedPaths(): AsyncGenerator<{
+    path: string;
+    baseState?: FileState;
+    afterState?: FileState;
+  }> {
+    const changes = [...proposal.changes].toSorted((left, right) =>
+      compareOverlayPaths(left.path, right.path),
+    );
+    let changeIndex = 0;
+    for await (const entry of exactTreeEntries(proposal.sourcePath, proposal.baseSha)) {
+      while (
+        changes[changeIndex] !== undefined &&
+        compareOverlayPaths(changes[changeIndex].path, entry.path) < 0
+      ) {
+        const change = changes[changeIndex];
+        yield {
+          path: change.path,
+          ...(change.after === undefined
+            ? {}
+            : { afterState: { kind: "regular" as const, ...change.after } }),
+        };
+        changeIndex += 1;
+      }
+      const change = changes[changeIndex];
+      yield {
+        baseState: entry.state,
+        path: entry.path,
+        ...(change?.path === entry.path && change.after !== undefined
+          ? { afterState: { kind: "regular" as const, ...change.after } }
+          : {}),
+      };
+      if (change?.path === entry.path) {
+        changeIndex += 1;
+      }
+    }
+    while (changeIndex < changes.length) {
+      const change = changes[changeIndex];
+      yield {
+        path: change.path,
+        ...(change.after === undefined
+          ? {}
+          : { afterState: { kind: "regular" as const, ...change.after } }),
+      };
+      changeIndex += 1;
+    }
+  };
   const commonGitDirectoryValue = await git(proposal.sourcePath, [
     "rev-parse",
     "--path-format=absolute",
@@ -1116,8 +1156,22 @@ const assertOwnedPartialWorktree = async (
     throw new Error("The partial worktree lacks one exact owned Git registration.");
   }
   let exactGitLinkSeen = false;
+  const approved = approvedPaths();
+  let nextApproved = await approved.next();
+  const advanceTo = async (path: string): Promise<void> => {
+    while (nextApproved.done !== true && compareOverlayPaths(nextApproved.value.path, path) < 0) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- consume one approved path at a time.
+      nextApproved = await approved.next();
+    }
+  };
   const visit = async (directory: string, prefix: string): Promise<void> => {
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const entries = await readdir(directory, { withFileTypes: true });
+    for (const entry of entries.toSorted((left, right) =>
+      compareOverlayPaths(
+        `${left.name}${left.isDirectory() ? "/" : ""}`,
+        `${right.name}${right.isDirectory() ? "/" : ""}`,
+      ),
+    )) {
       const path = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
       const target = pathResolve(directory, entry.name);
       if (prefix === "" && path === ".git") {
@@ -1142,7 +1196,9 @@ const assertOwnedPartialWorktree = async (
         throw new Error("The partial worktree contains an unsafe path.");
       }
       if (entry.isDirectory()) {
-        if (![...allowedPaths].some((allowed) => allowed.startsWith(`${path}/`))) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- advance the sorted approved path stream.
+        await advanceTo(`${path}/`);
+        if (nextApproved.done === true || !nextApproved.value.path.startsWith(`${path}/`)) {
           throw new Error(`The partial worktree contains unapproved directory ${path}.`);
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -1151,10 +1207,14 @@ const assertOwnedPartialWorktree = async (
       }
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const state = await fileState(target);
-      const baseState = base.get(path);
-      const after = changes.get(path)?.after;
-      const afterState: FileState | undefined =
-        after === undefined ? undefined : { kind: "regular", ...after };
+      // oxlint-disable-next-line eslint/no-await-in-loop -- advance the sorted approved path stream.
+      await advanceTo(path);
+      const approval =
+        nextApproved.done === false && nextApproved.value.path === path
+          ? nextApproved.value
+          : undefined;
+      const baseState = approval?.baseState;
+      const afterState = approval?.afterState;
       if (
         (baseState === undefined || !exactStateMatches(state, baseState)) &&
         (afterState === undefined || !exactStateMatches(state, afterState))
@@ -1163,7 +1223,12 @@ const assertOwnedPartialWorktree = async (
       }
     }
   };
-  await visit(proposal.worktreePath, "");
+  try {
+    await visit(proposal.worktreePath, "");
+  } finally {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- TypeScript generator return requires an argument.
+    await approved.return(undefined);
+  }
   if (!exactGitLinkSeen) {
     throw new Error("The partial worktree lacks its exact owned Git link.");
   }
