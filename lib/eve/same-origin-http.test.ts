@@ -187,6 +187,212 @@ describe("incremental canonical Eve stream", () => {
     expect(observed.artifactProjectionRequiresLegacyReadback).toBe(true);
   });
 
+  it("keeps verified v2 artifact, UI-preview, and chunk reads on paged history", async () => {
+    const content = "<html>Review</html>";
+    const path = "prototype/spend-review/index.html";
+    const digest = createHash("sha256").update(content).digest("hex");
+    const revision = createHash("sha256")
+      .update(JSON.stringify({ digest, mediaType: "text/html", path }))
+      .digest("hex");
+    const v2Artifact = [
+      {
+        data: {
+          actions: [
+            {
+              callId: "artifact",
+              input: { content, mediaType: "text/html", path },
+              kind: "tool-call",
+              toolName: "record_prototype_artifact",
+            },
+          ],
+        },
+        type: "actions.requested",
+      },
+      {
+        data: {
+          result: {
+            callId: "artifact",
+            kind: "tool-result",
+            output: {
+              appId: "spend-review",
+              chunkCount: 1,
+              complete: true,
+              contentBytes: Buffer.byteLength(content),
+              digest,
+              mediaType: "text/html",
+              path,
+              recordedByCallId: "artifact",
+              revision,
+              sessionId: "wrun_1",
+              version: 2,
+            },
+            toolName: "record_prototype_artifact",
+          },
+          status: "completed",
+        },
+        type: "action.result",
+      },
+    ];
+    const v2Read = [
+      {
+        data: {
+          actions: [
+            {
+              callId: "read",
+              input: { digest, offsetBytes: 0, path, revision },
+              kind: "tool-call",
+              toolName: "get_prototype_artifact",
+            },
+          ],
+        },
+        type: "actions.requested",
+      },
+      {
+        data: {
+          result: {
+            callId: "read",
+            kind: "tool-result",
+            output: {
+              byteOffset: 0,
+              chunkDigest: digest,
+              complete: true,
+              content,
+              digest,
+              mediaType: "text/html",
+              nextOffsetBytes: Buffer.byteLength(content),
+              path,
+              revision,
+              totalBytes: Buffer.byteLength(content),
+            },
+            toolName: "get_prototype_artifact",
+          },
+          status: "completed",
+        },
+        type: "action.result",
+      },
+    ];
+    const v2UiPreview = [
+      {
+        data: {
+          actions: [
+            {
+              callId: "preview",
+              input: { appId: "spend-review", sourceFiles: [] },
+              kind: "tool-call",
+              toolName: "record_ui_preview",
+            },
+          ],
+        },
+        type: "actions.requested",
+      },
+      {
+        data: {
+          result: {
+            callId: "preview",
+            kind: "tool-result",
+            output: {
+              appId: "spend-review",
+              artifactDigest: digest,
+              artifactRevision: revision,
+              chunkCount: 1,
+              complete: true,
+              contentBytes: Buffer.byteLength(content),
+              digest,
+              fidelity: "arrusted-component-catalog",
+              functionality: "fixtures-only",
+              mediaType: "text/html",
+              path,
+              recordedByCallId: "preview",
+              requiresChunkedRead: true,
+              revision: "a".repeat(64),
+              routes: ["/"],
+              sessionId: "wrun_1",
+              version: 2,
+            },
+            toolName: "record_ui_preview",
+          },
+          status: "completed",
+        },
+        type: "action.result",
+      },
+    ];
+    const v1Request = {
+      data: {
+        actions: [
+          {
+            callId: "legacy",
+            input: { content, mediaType: "text/html", path },
+            kind: "tool-call",
+            toolName: "record_prototype_artifact",
+          },
+        ],
+      },
+      type: "actions.requested",
+    };
+    const observe = async (events: unknown[]) =>
+      await observeSameOriginEveStream({
+        config: { ...config, timeoutMs: 10_000 },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double.
+        fetchImplementation: vi.fn(async () => stream(events)),
+        onEvent() {},
+        sessionId: "wrun_1",
+        workloadIdentity: identity(),
+      });
+    const v2Observed = await observe([...v2Artifact, ...v2Read, ...v2UiPreview]);
+    expect(v2Observed.artifactProjectionRequiresLegacyReadback).toBe(false);
+    const partialV2 = [
+      {
+        data: {
+          actions: [
+            {
+              callId: "partial",
+              input: { content: "<html>", expectedDigest: digest, finalChunk: false, path },
+              kind: "tool-call",
+              toolName: "record_prototype_artifact",
+            },
+          ],
+        },
+        type: "actions.requested",
+      },
+      {
+        data: {
+          result: {
+            callId: "partial",
+            kind: "tool-result",
+            output: { complete: false, path, version: 2 },
+            toolName: "record_prototype_artifact",
+          },
+          status: "completed",
+        },
+        type: "action.result",
+      },
+    ];
+    const incompleteObserved = await observe(partialV2);
+    expect(incompleteObserved.artifactProjectionRequiresLegacyReadback).toBe(true);
+    const completedAfterPartial = await observe([...partialV2, ...v2Artifact]);
+    expect(completedAfterPartial.artifactProjectionRequiresLegacyReadback).toBe(false);
+    const pendingObserved = await observe([...v2Artifact, ...v2Read, ...v2UiPreview, v1Request]);
+    expect(pendingObserved.artifactProjectionRequiresLegacyReadback).toBe(true);
+    const mixedObserved = await observe([
+      ...v2Artifact,
+      ...v2Read,
+      v1Request,
+      {
+        data: {
+          result: {
+            callId: "legacy",
+            kind: "tool-result",
+            output: { version: 1 },
+            toolName: "record_prototype_artifact",
+          },
+          status: "completed",
+        },
+        type: "action.result",
+      },
+    ]);
+    expect(mixedObserved.artifactProjectionRequiresLegacyReadback).toBe(true);
+  });
+
   it("consumes more than 100,000 events without retaining them in the transport", async () => {
     const total = 100_001;
     let produced = 0;

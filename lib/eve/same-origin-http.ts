@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
 import type { MessageStreamEvent } from "eve/client";
@@ -22,6 +23,7 @@ import type { HostedEngineSnapshot, HostedEveTransport } from "./hosted-service"
 import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
 import {
   createInstalledPrototypeProjector,
+  createInstalledPrototypeReferenceReducer,
   deriveInstalledEveStatus,
   latestInstalledPrototype,
   latestInstalledUiPreview,
@@ -365,6 +367,147 @@ export async function* streamSameOriginEveEvents(input: {
 }
 
 /** Scan the durable tail with backpressure. Artifact content must be recovered by a receipt verifier. */
+const artifactTools = new Set([
+  "record_prototype_artifact",
+  "record_ui_preview",
+  "get_prototype_artifact",
+]);
+
+const v2ReadRequestSchema = z.object({
+  digest: z.string().regex(/^[a-f0-9]{64}$/u),
+  offsetBytes: z.number().int().nonnegative(),
+  path: z.string(),
+  revision: z.string().regex(/^[a-f0-9]{64}$/u),
+});
+const v2ReadResultSchema = z.object({
+  byteOffset: z.number().int().nonnegative(),
+  chunkDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  complete: z.boolean(),
+  content: z.string().min(1),
+  digest: z.string().regex(/^[a-f0-9]{64}$/u),
+  mediaType: z.literal("text/html"),
+  nextOffsetBytes: z.number().int().positive(),
+  path: z.string(),
+  revision: z.string().regex(/^[a-f0-9]{64}$/u),
+  totalBytes: z.number().int().positive(),
+});
+
+/** A v2 receipt is sufficient for paged history; unresolved or v1 actions require legacy readback. */
+const createArtifactReadbackClassifier = (sessionId: string) => {
+  const references = createInstalledPrototypeReferenceReducer({ sessionId });
+  const pending = new Map<string, { input: unknown; toolName: string }>();
+  const incompleteArtifacts = new Set<string>();
+  const incompleteUiPreviews = new Set<string>();
+  let legacy = false;
+  return {
+    accept(event: MessageStreamEvent) {
+      references.accept(event);
+      if (event.type === "actions.requested") {
+        for (const action of event.data.actions) {
+          if (action.kind === "tool-call" && artifactTools.has(action.toolName)) {
+            if (pending.has(action.callId)) {
+              legacy = true;
+            }
+            pending.set(action.callId, { input: action.input, toolName: action.toolName });
+          }
+        }
+        return;
+      }
+      if (event.type !== "action.result" || event.data.result.kind !== "tool-result") {
+        return;
+      }
+      const { result } = event.data;
+      if (!artifactTools.has(result.toolName)) {
+        return;
+      }
+      const request = pending.get(result.callId);
+      pending.delete(result.callId);
+      if (
+        request?.toolName !== result.toolName ||
+        event.data.status !== "completed" ||
+        result.isError === true
+      ) {
+        legacy = true;
+        return;
+      }
+      const reference = references.snapshot();
+      if (result.toolName === "get_prototype_artifact") {
+        const read = v2ReadRequestSchema.safeParse(request.input);
+        const output = v2ReadResultSchema.safeParse(result.output);
+        if (
+          !read.success ||
+          !output.success ||
+          reference === undefined ||
+          read.data.path !== reference.path ||
+          read.data.digest !== reference.digest ||
+          read.data.revision !== reference.revision ||
+          read.data.offsetBytes !== output.data.byteOffset ||
+          output.data.path !== reference.path ||
+          output.data.digest !== reference.digest ||
+          output.data.revision !== reference.revision ||
+          output.data.totalBytes !== reference.contentBytes ||
+          output.data.nextOffsetBytes <= output.data.byteOffset ||
+          output.data.nextOffsetBytes > reference.contentBytes ||
+          output.data.complete !== (output.data.nextOffsetBytes === reference.contentBytes) ||
+          createHash("sha256").update(output.data.content).digest("hex") !==
+            output.data.chunkDigest ||
+          Buffer.byteLength(output.data.content, "utf-8") !==
+            output.data.nextOffsetBytes - output.data.byteOffset
+        ) {
+          legacy = true;
+        }
+        return;
+      }
+      if (result.toolName === "record_prototype_artifact") {
+        const chunk = z
+          .object({
+            expectedDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+            finalChunk: z.literal(false),
+            path: z.string(),
+          })
+          .passthrough()
+          .safeParse(request.input);
+        const incomplete = z
+          .object({ complete: z.literal(false), path: z.string(), version: z.literal(2) })
+          .passthrough()
+          .safeParse(result.output);
+        if (chunk.success && incomplete.success && chunk.data.path === incomplete.data.path) {
+          incompleteArtifacts.add(chunk.data.path);
+          return;
+        }
+      }
+      if (result.toolName === "record_ui_preview") {
+        const preview = z.object({ appId: z.string() }).passthrough().safeParse(request.input);
+        const incomplete = z
+          .object({ complete: z.literal(false), transferId: z.string() })
+          .passthrough()
+          .safeParse(result.output);
+        if (preview.success && incomplete.success) {
+          incompleteUiPreviews.add(preview.data.appId);
+          return;
+        }
+      }
+      const output = z
+        .object({ complete: z.literal(true), version: z.literal(2) })
+        .passthrough()
+        .safeParse(result.output);
+      if (
+        !output.success ||
+        reference === undefined ||
+        reference.recordedByCallId !== result.callId
+      ) {
+        legacy = true;
+      } else if (result.toolName === "record_prototype_artifact") {
+        incompleteArtifacts.delete(reference.path);
+      } else {
+        incompleteUiPreviews.delete(reference.appId);
+      }
+    },
+    requiresLegacy: () =>
+      legacy || pending.size > 0 || incompleteArtifacts.size > 0 || incompleteUiPreviews.size > 0,
+  };
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function observeSameOriginEveStream(
   input: Parameters<typeof streamSameOriginEveEvents>[0] & {
@@ -389,8 +532,9 @@ export async function observeSameOriginEveStream(
   let currentTurnId: string | undefined;
   let uiPreview: PublicUiPreview | undefined;
   let workingPreview: PublicWorkingPreview | null | undefined;
-  let artifactProjectionRequiresLegacyReadback = false;
+  const artifactReadback = createArtifactReadbackClassifier(input.sessionId);
   for await (const event of streamSameOriginEveEvents(input)) {
+    artifactReadback.accept(event);
     input.onInstalledEvent?.(event);
     installedEventCount += 1;
     const turnId =
@@ -426,22 +570,6 @@ export async function observeSameOriginEveStream(
     }
     if (event.type === "step.started") {
       boundary = "working";
-    }
-    if (event.type === "actions.requested") {
-      artifactProjectionRequiresLegacyReadback ||= event.data.actions.some(
-        (action) =>
-          action.kind === "tool-call" &&
-          ["record_prototype_artifact", "get_prototype_artifact", "record_ui_preview"].includes(
-            action.toolName,
-          ),
-      );
-    }
-    if (event.type === "action.result" && event.data.result.kind === "tool-result") {
-      artifactProjectionRequiresLegacyReadback ||= [
-        "record_prototype_artifact",
-        "get_prototype_artifact",
-        "record_ui_preview",
-      ].includes(event.data.result.toolName);
     }
     if (event.type === "approval.settled") {
       pending.delete(event.data.requestId);
@@ -483,7 +611,7 @@ export async function observeSameOriginEveStream(
     status = "input_required";
   }
   return {
-    artifactProjectionRequiresLegacyReadback,
+    artifactProjectionRequiresLegacyReadback: artifactReadback.requiresLegacy(),
     installedEventCount,
     pendingRequests: [...pending.values()],
     publicEventCount,
