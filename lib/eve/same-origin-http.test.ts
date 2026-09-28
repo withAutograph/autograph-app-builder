@@ -12,6 +12,7 @@ import {
 } from "./same-origin-http";
 import type { HostedWorkloadIdentity } from "./same-origin-http";
 import {
+  HostedCancellationUnsettledError,
   SubmissionOutcomeUnknownError,
   SubmissionRejectedBeforeDispatchError,
 } from "./hosted-service";
@@ -1068,6 +1069,37 @@ describe("same-origin canonical Eve transport", () => {
     ).resolves.toBeUndefined();
     expect(streamReads).toBe(2);
     expect(fetchImplementation).toHaveBeenCalledTimes(3);
+  });
+
+  it("reports accepted cancellation as unsettled when its durable read times out", async () => {
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+    try {
+      const active = [{ data: { turnId: "turn_1" }, type: "step.started" }];
+      // oxlint-disable-next-line eslint/require-await -- Preserve the fetch promise contract.
+      const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
+        String(url).endsWith("/cancel")
+          ? Response.json({ ok: true, sessionId: "wrun_1", status: "accepted" }, { status: 202 })
+          : stream(active),
+      );
+      const transport = createSameOriginEveTransport({
+        config,
+        fetchImplementation,
+        workloadIdentity: identity(),
+      });
+      const cancellation = transport.cancelAccepted?.({
+        adapterSessionId: "wrun_1",
+        principal,
+        turnId: "turn_1",
+      });
+      await vi.waitFor(() => {
+        expect(fetchImplementation).toHaveBeenCalledTimes(3);
+      });
+      controller.abort();
+      await expect(cancellation).rejects.toBeInstanceOf(HostedCancellationUnsettledError);
+    } finally {
+      timeout.mockRestore();
+    }
   });
 
   it("waits beyond the former poll limit for the current cancellation receipt", async () => {
