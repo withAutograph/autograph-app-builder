@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { z } from "zod";
+import { validationOutputExcerpt } from "./target-validation";
 
 import type { SandboxSession } from "eve/sandbox";
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
@@ -88,6 +89,7 @@ export interface ApplyCommandResult {
   exitCode: number;
   stdout: string;
   stderr: string;
+  failedCommand?: string;
 }
 
 export type ApplyCommandExecutor = (input: {
@@ -179,6 +181,8 @@ export type TargetApplyFailureReceipt = ApplyResultBase &
       | "projected-repository"
       | "empty-output"
       | "unknown";
+    failedCommand?: string;
+    output?: { stdout: string; stderr: string; truncated: boolean };
     missingDependency?: string;
     digest: string;
   };
@@ -213,6 +217,9 @@ const sha256 = (value: string | Uint8Array) => createHash("sha256").update(value
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function commandFailureKind(stderr: string): TargetApplyFailureReceipt["commandFailureKind"] {
+  if (/stale iteration preimage/iu.test(stderr)) {
+    return "stale-proposal";
+  }
   if (/timeout|timed out|aborted/iu.test(stderr)) {
     return "timeout";
   }
@@ -639,6 +646,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
         ) {
           return {
             exitCode: 2,
+            failedCommand: "verify current app file preimage",
             stderr: "stale iteration preimage",
             stdout: "",
           };
@@ -682,14 +690,14 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
         exitCode: install.exitCode,
         reason,
       });
-      return install;
+      return { ...install, failedCommand: "bun install" };
     }
     const cue = await sandbox.run({
       command: sourceDeclaredCueActivationCommand(),
       workingDirectory: applyRoot,
     });
     if (cue.exitCode !== 0) {
-      return cue;
+      return { ...cue, failedCommand: sourceDeclaredCueActivationCommand() };
     }
     if ("operation" in proposal) {
       const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
@@ -733,7 +741,9 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
         reason,
       });
     }
-    return generated;
+    return generated.exitCode === 0
+      ? generated
+      : { ...generated, failedCommand: `mise run create:app ${appId}` };
   };
 }
 
@@ -901,6 +911,7 @@ export async function executeProposalBoundApply(input: {
   } catch (error) {
     command = {
       exitCode: -1,
+      failedCommand: "target apply executor",
       stderr: error instanceof Error ? `${error.name}: ${error.message}` : "TargetApplyError",
       stdout: "",
     };
@@ -953,9 +964,12 @@ export async function executeProposalBoundApply(input: {
   };
   if (command.exitCode !== 0 || targetReceipt === undefined) {
     const commandOutput = `${command.stderr}\n${command.stdout}`;
+    const output = validationOutputExcerpt(command.stdout, command.stderr);
     const unsigned = {
       ...base,
       commandFailureKind: commandFailureKind(commandOutput),
+      ...(command.failedCommand === undefined ? {} : { failedCommand: command.failedCommand }),
+      ...(output.stderr === "" && output.stdout === "" ? {} : { output }),
       reason: command.exitCode === 0 ? ("invalid-receipt" as const) : ("command-failed" as const),
       recoveryRequired: true as const,
       status: "partial-failure" as const,

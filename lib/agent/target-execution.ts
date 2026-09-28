@@ -121,6 +121,7 @@ export function resolveTargetExecutionEnvironment(input: {
   environment: Readonly<Record<string, string | undefined>>;
   fixture: boolean;
   cache?: ObservedDependencyCache;
+  checkoutImageDigest?: string;
 }) {
   const localImage = configuredToolchainImage(input.environment);
   const backend = sandboxBackendPlan({
@@ -129,6 +130,7 @@ export function resolveTargetExecutionEnvironment(input: {
     localImageConfigured: localImage !== undefined,
   });
   const cacheInspectable =
+    input.checkoutImageDigest === undefined &&
     backend.blockers.length === 0 &&
     (input.fixture || localImage !== undefined || isHostedVercelSandboxBackend(backend.kind));
   const execution =
@@ -138,7 +140,7 @@ export function resolveTargetExecutionEnvironment(input: {
   return {
     backend,
     cacheInspectable,
-    imageDigest: execution?.imageDigest,
+    imageDigest: input.checkoutImageDigest ?? execution?.imageDigest,
   };
 }
 
@@ -159,6 +161,7 @@ export async function inspectTargetExecutionReadiness(input: {
     ...(input.state.githubSource === undefined ? {} : { githubSource: input.state.githubSource }),
   });
   const fixture = hasTestCapability("simulated-target", environment);
+  const checkoutBacked = input.state.dependencyReceipt.dependencyLayout.kind === "checkout";
   const tools = fixture
     ? commands.map((command) => ({
         available: true as const,
@@ -189,19 +192,22 @@ export async function inspectTargetExecutionReadiness(input: {
   const executionEnvironment = resolveTargetExecutionEnvironment({
     environment,
     fixture,
+    ...(checkoutBacked ? { checkoutImageDigest: input.state.dependencyReceipt.imageDigest } : {}),
   });
-  const cache = executionEnvironment.cacheInspectable
-    ? await inspectDependencyCache(
-        input.sandbox,
-        environment,
-        input.state.workspace,
-        shouldPreferLiveTemplateDependencies(input.state.sourceReceipt.version, environment),
-      ).catch(() => globalThis.undefined)
-    : undefined;
+  const cache =
+    !checkoutBacked && executionEnvironment.cacheInspectable
+      ? await inspectDependencyCache(
+          input.sandbox,
+          environment,
+          input.state.workspace,
+          shouldPreferLiveTemplateDependencies(input.state.sourceReceipt.version, environment),
+        ).catch(() => globalThis.undefined)
+      : undefined;
   const resolvedExecutionEnvironment = resolveTargetExecutionEnvironment({
     cache,
     environment,
     fixture,
+    ...(checkoutBacked ? { checkoutImageDigest: input.state.dependencyReceipt.imageDigest } : {}),
   });
   const image = resolvedExecutionEnvironment.imageDigest;
   const { backend } = resolvedExecutionEnvironment;
@@ -225,13 +231,26 @@ export async function inspectTargetExecutionReadiness(input: {
     imageConfigured: image !== undefined,
     toolchainReady,
   });
-  const dependencyTarget =
-    cache === undefined ? undefined : dependencyTargetForWorkspace(cache, input.state.workspace);
+  let dependencyTarget;
+  if (checkoutBacked) {
+    dependencyTarget = {
+      sha: input.state.workspace.sourceSha,
+      tree: input.state.workspace.sourceTree,
+    };
+  } else if (cache !== undefined) {
+    dependencyTarget = dependencyTargetForWorkspace(cache, input.state.workspace);
+  }
+  let dependencyCacheDigest = "unverified";
+  if (checkoutBacked) {
+    ({ dependencyCacheDigest } = input.state.dependencyReceipt);
+  } else if (cache !== undefined) {
+    dependencyCacheDigest = dependencyCacheReceiptDigest(cache);
+  }
   const readiness = {
     appSpecDigest: input.state.appSpec.digest,
     appSpecPath: input.state.appSpec.artifactPath,
     artifactRevision: input.state.appSpec.artifactRevision,
-    dependencyCacheDigest: cache === undefined ? "unverified" : dependencyCacheReceiptDigest(cache),
+    dependencyCacheDigest,
     dependencyReceiptDigest: input.state.dependencyReceipt.digest,
     eligibilityDigest: input.state.workspace.eligibilityDigest,
     identityDigest: input.state.identityReceipt.digest,
