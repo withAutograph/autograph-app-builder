@@ -34,6 +34,8 @@ export default defineTool({
     const sandbox = await ctx.getSandbox();
     const readOverlayFile = async (path: string) =>
       await sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` });
+    const readOverlayFileStream = async (path: string) =>
+      await sandbox.readFile({ path: `${relativeRoot}/${path}` });
     const sourceWorkspace = await freshBootstrapSourceWorkspace({
       receipt: workflow.sourceReceipt,
       sandbox,
@@ -45,6 +47,7 @@ export default defineTool({
       expectedPrestate: expected.destinationPrestate.kind,
       protectedPaths: [process.cwd()],
       readOverlayFile,
+      readOverlayFileStream,
       repositoryIdentity: expected.repositoryIdentity,
       review: workflow.reviewReceipt,
       sourceReceipt: workflow.sourceReceipt,
@@ -81,6 +84,7 @@ export default defineTool({
       proposal,
       publishedByCallId: ctx.callId,
       readOverlayFile,
+      readOverlayFileStream,
       review: workflow.reviewReceipt,
       sourceReceipt: workflow.sourceReceipt,
       sourceWorkspace,

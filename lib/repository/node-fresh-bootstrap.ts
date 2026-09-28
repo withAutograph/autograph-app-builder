@@ -49,12 +49,7 @@ import type {
   ExecutableIdentity,
   PathIdentity,
 } from "./fresh-bootstrap";
-import {
-  assertExactReviewedChangeSet,
-  contentDigest,
-  pathsOverlap,
-  stableDigest,
-} from "./local-publication";
+import { assertExactReviewedChangeSet, pathsOverlap, stableDigest } from "./local-publication";
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
 import { inspectSourceReceipt, parseSourceReceipt, SOURCE_RECEIPT_VERSION } from "./source-receipt";
 import type { SourceReceipt } from "./source-receipt";
@@ -99,7 +94,10 @@ export interface FreshBootstrapSourceWorkspace {
   reverify: () => Promise<void>;
 }
 
-const sourceBytes = async function* sourceBytes(
+/** Internal streaming bridge for canonical source files.
+ * @yields {Uint8Array} Exact source byte chunks.
+ */
+export const sourceBytes = async function* sourceBytes(
   workspace: FreshBootstrapSourceWorkspace,
   path: string,
 ): AsyncGenerator<Uint8Array> {
@@ -115,6 +113,12 @@ const sourceBytes = async function* sourceBytes(
   if (stream === null) {
     throw new Error(`The prepared fresh-template source changed at ${path}.`);
   }
+  // oxlint-disable-next-line eslint/no-use-before-define -- Shared reader is a hoisted function declaration.
+  yield* readableBytes(stream);
+};
+
+// eslint-disable-next-line eslint/func-style -- Shared stream reader is used by source and overlay adapters.
+async function* readableBytes(stream: ReadableStream<Uint8Array>): AsyncGenerator<Uint8Array> {
   const reader = stream.getReader();
   let completed = false;
   try {
@@ -137,6 +141,28 @@ const sourceBytes = async function* sourceBytes(
     }
     reader.releaseLock();
   }
+}
+
+const overlayBytes = async function* overlayBytes(
+  input: {
+    readOverlayFile: (path: string) => Promise<Uint8Array | null>;
+    readOverlayFileStream?: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
+  },
+  path: string,
+): AsyncGenerator<Uint8Array> {
+  if (input.readOverlayFileStream === undefined) {
+    const bytes = await input.readOverlayFile(path);
+    if (bytes === null) {
+      throw new Error(`The reviewed bootstrap overlay changed at ${path}.`);
+    }
+    yield bytes;
+    return;
+  }
+  const stream = await input.readOverlayFileStream(path);
+  if (stream === null) {
+    throw new Error(`The reviewed bootstrap overlay changed at ${path}.`);
+  }
+  yield* readableBytes(stream);
 };
 const atomicPublicationAdapter = String.raw`
 import ctypes, os, platform, stat, sys
@@ -1009,12 +1035,6 @@ const quiesceAbandonedLease = async (
   };
 };
 
-const blobId = (bytes: Uint8Array) =>
-  createHash("sha1")
-    .update(Buffer.from(`blob ${bytes.byteLength}\0`))
-    .update(bytes)
-    .digest("hex");
-
 const verifiedFileReader = (
   read: () => AsyncIterable<Uint8Array>,
   path: string,
@@ -1198,6 +1218,7 @@ const exactResultTree = async (input: {
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
   readOverlayFile: (path: string) => Promise<Uint8Array | null>;
+  readOverlayFileStream?: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<ExactFile[]> => {
   assertExactReviewedChangeSet(input.review);
@@ -1253,33 +1274,36 @@ const exactResultTree = async (input: {
       continue;
     }
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const bytes = await input.readOverlayFile(change.path);
-    if (bytes === null || contentDigest(bytes) !== change.after.digest) {
+    const contentHash = createHash("sha256");
+    let size = 0;
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Verify the reviewed overlay through bounded chunks.
+    for await (const chunk of overlayBytes(input, change.path)) {
+      contentHash.update(chunk);
+      size += chunk.byteLength;
+    }
+    if (!Number.isSafeInteger(size) || contentHash.digest("hex") !== change.after.digest) {
       throw new Error(`The reviewed bootstrap overlay is stale at ${change.path}.`);
     }
-    const buffer = Buffer.from(bytes);
+    const gitHash = createHash("sha1").update(Buffer.from(`blob ${size}\0`));
+    let verifiedSize = 0;
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Bind the reviewed bytes to Git's size-prefixed identity.
+    for await (const chunk of overlayBytes(input, change.path)) {
+      gitHash.update(chunk);
+      verifiedSize += chunk.byteLength;
+    }
+    if (verifiedSize !== size) {
+      throw new Error(`The reviewed bootstrap overlay is stale at ${change.path}.`);
+    }
     const { digest } = change.after;
-    const blob = blobId(buffer);
+    const blob = gitHash.digest("hex");
     const { path } = change;
     files.set(change.path, {
       blob,
       contentSha256: digest,
       mode: `100${change.after.mode}` as FreshBootstrapFile["mode"],
       path,
-      readStream: verifiedFileReader(
-        async function* readOverlaySource() {
-          const content = await input.readOverlayFile(path);
-          if (content === null) {
-            throw new Error(`The reviewed bootstrap overlay changed at ${path}.`);
-          }
-          yield content;
-        },
-        path,
-        digest,
-        blob,
-        buffer.byteLength,
-      ),
-      sizeBytes: buffer.byteLength,
+      readStream: verifiedFileReader(() => overlayBytes(input, path), path, digest, blob, size),
+      sizeBytes: size,
     });
   }
   return [...files.values()].toSorted((left, right) =>
@@ -1396,6 +1420,7 @@ export const deriveFreshBootstrapProposal = async (input: {
   review: ReviewedChangeSetReceipt;
   protectedPaths: readonly string[];
   readOverlayFile: (path: string) => Promise<Uint8Array | null>;
+  readOverlayFileStream?: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<FreshBootstrapProposal> => {
   const capability = await assertCapability(input.capability);
@@ -1434,6 +1459,7 @@ export const deriveFreshBootstrapProposal = async (input: {
   const files = await exactResultTree({
     capability,
     readOverlayFile: input.readOverlayFile,
+    readOverlayFileStream: input.readOverlayFileStream,
     review: input.review,
     sourceReceipt: input.sourceReceipt,
     sourceWorkspace: input.sourceWorkspace,
@@ -1490,6 +1516,7 @@ const assertExactInputs = async (input: {
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
   readOverlayFile: (path: string) => Promise<Uint8Array | null>;
+  readOverlayFileStream?: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<ExactFile[]> => {
   assertExactFreshBootstrapProposal(input.proposal);
@@ -1528,6 +1555,7 @@ const assertExactInputs = async (input: {
   const files = await exactResultTree({
     capability: input.capability,
     readOverlayFile: input.readOverlayFile,
+    readOverlayFileStream: input.readOverlayFileStream,
     review: input.review,
     sourceReceipt: input.sourceReceipt,
     sourceWorkspace: input.sourceWorkspace,
@@ -2450,6 +2478,7 @@ const executeBootstrap = async (input: {
   publishedByCallId: string;
   recoveryOfDigest?: string;
   readOverlayFile: (path: string) => Promise<Uint8Array | null>;
+  readOverlayFileStream?: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
   hooks?: FreshBootstrapFaultHooks;
 }): Promise<
@@ -2855,6 +2884,7 @@ export const verifyFreshBootstrap = async (input: {
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
   readOverlayFile: (path: string) => Promise<Uint8Array | null>;
+  readOverlayFileStream?: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<void> => {
   const capability = await assertCapability(input.capability);
@@ -2863,6 +2893,7 @@ export const verifyFreshBootstrap = async (input: {
     capability,
     proposal: proposalFromFreshBootstrapJournal(input.receipt),
     readOverlayFile: input.readOverlayFile,
+    readOverlayFileStream: input.readOverlayFileStream,
     review: input.review,
     sourceReceipt: input.sourceReceipt,
     sourceWorkspace: input.sourceWorkspace,

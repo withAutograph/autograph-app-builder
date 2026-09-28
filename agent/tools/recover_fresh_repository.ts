@@ -53,6 +53,8 @@ export default defineTool({
       publishedByCallId: ctx.callId,
       readOverlayFile: async (path) =>
         await sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` }),
+      readOverlayFileStream: async (path) =>
+        await sandbox.readFile({ path: `${relativeRoot}/${path}` }),
       review: workflow.reviewReceipt,
       sourceReceipt: workflow.sourceReceipt,
       sourceWorkspace,
