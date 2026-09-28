@@ -64,9 +64,9 @@ it("rejects a cross-session artifact before opening a chunk stream", () => {
         sessionId: "other-session",
         version: 2,
       },
-    // SAFETY: The session mismatch throws before any database method is called.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- This test exercises pre-read validation.
-    db: {} as never,
+      // SAFETY: The session mismatch throws before any database method is called.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- This test exercises pre-read validation.
+      db: {} as never,
       principal,
       sessionId: "session-1",
     }),
