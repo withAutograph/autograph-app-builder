@@ -94,6 +94,19 @@ describe("prepared provider continuity", () => {
       }),
     ).resolves.toMatchObject({ project: { id: "prj_1" }, status: "ready" });
   });
+  it("rejects malformed trailing data after matching provider metadata", async () => {
+    const response = new Response('{"id":"prj_1","name":"stock","accountId":"team_1"} unexpected');
+    await expect(
+      readPreparedVercelAccess({
+        authority,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
+        fetch: async () => response,
+        intent,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test contract
+        readCredential: async () => credential,
+      }),
+    ).resolves.toEqual({ action: "retry", retryable: true, status: "provider-unavailable" });
+  });
   it("retries rate-limited 403s and rejects a project readback for another account", async () => {
     await Promise.all(
       [

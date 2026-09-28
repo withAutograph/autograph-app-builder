@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readJsonPointerString } from "./streaming-json-pointer";
 
 export interface ProductReadbackScenario {
   outcomeId: string;
@@ -28,46 +29,6 @@ const appUrl = (path: string, origin: string): string => {
 class InvalidApplicationReadError extends Error {
   override name = "InvalidApplicationReadError";
 }
-
-const readJson = async (response: Response): Promise<unknown> => {
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new InvalidApplicationReadError("Missing response");
-  }
-  const chunks: Uint8Array[] = [];
-  try {
-    while (true) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- Consume the response stream in order.
-      const chunk = await reader.read();
-      if (chunk.done) {
-        break;
-      }
-      chunks.push(chunk.value);
-    }
-    try {
-      return JSON.parse(Buffer.concat(chunks).toString("utf-8")) as unknown;
-    } catch {
-      throw new InvalidApplicationReadError("Invalid JSON response");
-    }
-  } finally {
-    await reader.cancel();
-  }
-};
-
-const atPointer = (value: unknown, pointer: string): unknown => {
-  if (!pointer.startsWith("/") || /~[^01]/u.test(pointer)) {
-    return undefined;
-  }
-  let current = value;
-  for (const part of pointer.slice(1).split("/")) {
-    const key = part.replaceAll("~1", "/").replaceAll("~0", "~");
-    if (typeof current !== "object" || current === null || !Object.hasOwn(current, key)) {
-      return undefined;
-    }
-    current = (current as Record<string, unknown>)[key];
-  }
-  return current;
-};
 
 const validAuthority = (launch: URL, expiresAt: number): boolean =>
   launch.protocol === "https:" &&
@@ -163,13 +124,21 @@ export const executeProductReadback = async (input: {
       }
       return result("failed", "Independent read did not succeed; redirects are not followed.");
     }
-    const observed = atPointer(await readJson(read), input.scenario.readPointer);
-    return observed === marker
+    let observed: boolean;
+    try {
+      observed = await readJsonPointerString(read.body, input.scenario.readPointer, marker);
+    } catch {
+      throw new InvalidApplicationReadError("Invalid JSON response");
+    }
+    return observed
       ? result("passed", "Independent application read returned the verifier-written value.")
       : result("failed", "Independent application read did not return the verifier-written value.");
   } catch (error) {
     if (error instanceof InvalidApplicationReadError) {
-      return result("failed", "Independent application read returned an incompatible response.");
+      return result(
+        "failed",
+        "Independent application read returned malformed JSON or a response too deeply nested to verify. Check the read endpoint and its JSON output.",
+      );
     }
     return result(
       "blocked",

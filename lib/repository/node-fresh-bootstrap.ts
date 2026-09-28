@@ -57,7 +57,7 @@ import { inspectSourceReceipt, parseSourceReceipt, SOURCE_RECEIPT_VERSION } from
 import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import type { PreparedSourceFile } from "./supported-template";
-import { captureProcessStdout } from "./captured-process-output";
+import { captureProcessStdout, digestProcessStdoutSync } from "./captured-process-output";
 
 export interface FreshBootstrapFaultHooks {
   afterLockReady?: (pid: number) => void | Promise<void>;
@@ -260,6 +260,13 @@ const gitBuffer = (
   captureProcessStdout(capability.systemGit, [...gitOptions, "-C", root, ...args], {
     env: minimalEnvironment(),
   });
+
+const gitBlobDigest = (capability: FreshBootstrapCapability, root: string, blob: string): string =>
+  digestProcessStdoutSync(
+    capability.systemGit,
+    [...gitOptions, "-C", root, "cat-file", "blob", blob],
+    { env: minimalEnvironment() },
+  );
 
 const within = (root: string, candidate: string): boolean => {
   const relativePath = nodePath.relative(root, candidate);
@@ -955,8 +962,7 @@ const exactSourceTree = (
         "Fresh bootstrap rejects submodules, symlinks, reserved names, and unsafe paths.",
       );
     }
-    const bytes = gitBuffer(capability, sourcePath, ["cat-file", "blob", blob]);
-    const digest = contentDigest(bytes);
+    const digest = gitBlobDigest(capability, sourcePath, blob);
     files.push({
       blob,
       contentSha256: digest,
