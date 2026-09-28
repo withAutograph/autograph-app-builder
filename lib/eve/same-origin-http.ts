@@ -290,7 +290,10 @@ async function readInstalledSnapshot(input: {
     throw new Error("Canonical Eve returned an invalid durable stream tail.");
   }
   if (tail === -1) {
-    await response.body.cancel().catch(() => null);
+    // Provider cancellation is best effort. Waiting for a stalled cancel
+    // would turn a completed durable read into a host-level timeout.
+    // oxlint-disable-next-line promise/prefer-await-to-then -- This cleanup must not delay the MCP response.
+    void response.body.cancel().catch(() => null);
     return {
       installed: [],
       snapshot: { events: [], status: sessionStatusSchema.parse("working") },
@@ -339,8 +342,15 @@ async function readInstalledSnapshot(input: {
     }
     throw error;
   } finally {
-    await reader.cancel().catch(() => null);
-    reader.releaseLock();
+    // The complete durable tail is already installed (or this read failed).
+    // Do not let a provider stream's cancellation handshake hold the MCP reply.
+    // oxlint-disable-next-line promise/prefer-await-to-then -- This cleanup must not delay the MCP response.
+    void reader.cancel().catch(() => null);
+    try {
+      reader.releaseLock();
+    } catch {
+      // A pending cancellation can retain the lock until the provider closes.
+    }
   }
 
   const projected = events

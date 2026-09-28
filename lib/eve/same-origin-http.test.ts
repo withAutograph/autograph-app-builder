@@ -375,6 +375,45 @@ describe("same-origin canonical Eve transport", () => {
     }
   });
 
+  it("returns the complete durable tail even if stream cancellation never settles", async () => {
+    const cancellation = Promise.withResolvers<undefined>();
+    const encoded = new TextEncoder().encode(
+      `${JSON.stringify({ data: {}, meta: { at: 1, id: "evt_1" }, type: "session.waiting" })}\n`,
+    );
+    const fetchImplementation = vi.fn<typeof fetch>(
+      // oxlint-disable-next-line eslint/require-await -- Preserve the fetch promise contract in this test double.
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            async cancel() {
+              await cancellation.promise;
+            },
+            start(controller) {
+              controller.enqueue(encoded);
+            },
+          }),
+          {
+            headers: {
+              "content-type": "application/x-ndjson",
+              "x-eve-session-id": "wrun_1",
+              "x-eve-stream-format": "ndjson",
+              "x-eve-stream-tail-index": "0",
+              "x-eve-stream-version": "23",
+            },
+            status: 200,
+          },
+        ),
+    );
+    const transport = createSameOriginEveTransport({
+      config,
+      fetchImplementation,
+      workloadIdentity: identity(),
+    });
+    await expect(transport.get({ adapterSessionId: "wrun_1", principal })).resolves.toMatchObject({
+      status: "waiting",
+    });
+  });
+
   it("bounds accepted response settlement so the caller can recover through a read", async () => {
     const controller = new AbortController();
     const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
