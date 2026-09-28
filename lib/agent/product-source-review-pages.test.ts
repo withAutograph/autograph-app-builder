@@ -190,7 +190,7 @@ it("does not complete a paged review with an invented citation", async () => {
   expect(assessment.findings).toEqual([]);
 });
 
-it("sends every large request and AppSpec excerpt through bounded model contexts", async () => {
+it("sends a large request history through bounded model contexts", async () => {
   const page = { content: "fake save", path, startColumn: 1, startLine: 3 };
   const seen: { kind: string; length: number; offset: number }[] = [];
   const requirement = "Must save durably";
@@ -198,9 +198,9 @@ it("sends every large request and AppSpec excerpt through bounded model contexts
     {
       appSpec: "p".repeat(45_000),
       appSpecDigest: "spec",
-      clarifications: [],
+      clarifications: [`${"c".repeat(45_000)}${requirement}`],
       omissions: [],
-      originalRequest: `${"r".repeat(45_000)}${requirement}`,
+      originalRequest: "r".repeat(45_000),
       sourceDigest: "tree",
     },
     (async function* pages() {
@@ -226,11 +226,72 @@ it("sends every large request and AppSpec excerpt through bounded model contexts
       },
     },
   );
-  expect(seen.some((entry) => entry.kind === "original-request" && entry.offset > 0)).toBe(true);
-  expect(seen.some((entry) => entry.kind === "app-spec" && entry.offset > 0)).toBe(true);
+  expect(seen.some((entry) => entry.kind === "request-history" && entry.offset > 0)).toBe(true);
   expect(seen.every((entry) => entry.length <= 16 * 1024)).toBe(true);
   expect(assessment.reviewCompleted).toBe(true);
   expect(assessment.findings[0]?.citations[0]?.startLine).toBe(3);
+});
+
+it("reviews ordinary chronological clarifications together for each source page", async () => {
+  const contexts: string[] = [];
+  const clarifications = Array.from({ length: 12 }, (_, index) => `Requirement ${index + 1}`);
+  const assessment = await assessProductSourcePages(
+    {
+      appSpec: "Accepted plan",
+      appSpecDigest: "spec",
+      clarifications,
+      omissions: [],
+      originalRequest: "Original requirement",
+      sourceDigest: "tree",
+    },
+    (async function* pages() {
+      yield { content: "export const value = true;", path, startColumn: 1, startLine: 1 };
+    })(),
+    {
+      generate(_page, context) {
+        contexts.push(context.text);
+        return { findings: [], remainingRuntimeChecks: [] };
+      },
+    },
+  );
+  expect(contexts).toHaveLength(1);
+  expect(contexts[0]).toContain("Original request:\nOriginal requirement");
+  for (const [index, clarification] of clarifications.entries()) {
+    expect(contexts[0]).toContain(`Clarification ${index + 1}:\n${clarification}`);
+  }
+  expect(contexts[0]).toContain("Accepted AppSpec:\nAccepted plan");
+  expect(assessment.reviewCompleted).toBe(true);
+});
+
+it("rejects a finding that quotes only a generated request-history label", async () => {
+  const assessment = await assessProductSourcePages(
+    {
+      appSpec: "Accepted plan",
+      appSpecDigest: "spec",
+      clarifications: [],
+      omissions: [],
+      originalRequest: "Original requirement",
+      sourceDigest: "tree",
+    },
+    (async function* pages() {
+      yield { content: "fake save", path, startColumn: 1, startLine: 1 };
+    })(),
+    {
+      generate: () => ({
+        findings: [
+          {
+            citations: [{ endLine: 1, excerpt: "fake save", path, startLine: 1 }],
+            explanation: "Unsupported claim",
+            repair: "Repair",
+            requirement: "Synthetic label",
+            requirementQuote: "Original request:",
+          },
+        ],
+        remainingRuntimeChecks: [],
+      }),
+    },
+  );
+  expect(assessment.reviewCompleted).toBe(false);
 });
 
 it("retries a provider context rejection with smaller source and requirement slices", async () => {
