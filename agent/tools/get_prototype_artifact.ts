@@ -8,11 +8,14 @@ import {
 } from "@/lib/agent/prototype-artifacts";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { EVE_MAX_PAYLOAD_BYTES, serializedPayloadBytes } from "@/lib/eve/payload-envelope";
+import { readVerifiedPrototypeArtifactChunk } from "@/lib/agent/prototype-artifact-stream";
+import { createHostedPrototypeChunkStore } from "@/lib/agent/hosted-prototype-chunk-store";
+import { openHostedPostgresDatabase } from "@/lib/mcp/hosted-route";
 
 export default defineTool({
   description:
     "Read one exact session-scoped prototype artifact by digest and revision. Omit offsetBytes to preserve the original full-content response when its serialized result fits one Eve event. For a larger artifact, provide the exact revision and repeatedly read with each returned nextOffsetBytes until complete is true; verify the assembled SHA-256 against digest and each chunk against chunkDigest.",
-  execute({ path, digest, revision, offsetBytes }, ctx) {
+  async execute({ path, digest, revision, offsetBytes }, ctx) {
     const current = appBuilderWorkflowState.get();
     if (current.phase === "empty") {
       throw new Error("No prototype artifact is available.");
@@ -27,9 +30,26 @@ export default defineTool({
     }
     const artifact = exactPrototypeArtifact(current.artifacts, artifactReference);
     if (isPrototypeArtifactV2(artifact)) {
-      throw new Error(
-        "This prototype artifact uses durable chunks. Use its authenticated Browser preview URL while chunked tool readback is being upgraded.",
-      );
+      if (offsetBytes === undefined || revision === undefined) {
+        throw new Error(
+          "Durable prototype artifacts require the exact revision and offsetBytes: 0, then each returned nextOffsetBytes.",
+        );
+      }
+      const store = createHostedPrototypeChunkStore({
+        db: openHostedPostgresDatabase(process.env.DATABASE_URL ?? ""),
+        sessionAuth: ctx.session.auth,
+        sessionId: ctx.session.id,
+      });
+      return await readVerifiedPrototypeArtifactChunk({
+        artifact,
+        offsetBytes,
+        readChunk: async (chunkIndex) =>
+          await store.get({
+            chunkIndex,
+            path: artifact.path,
+            transferDigest: artifact.digest,
+          }),
+      });
     }
     const output = {
       content: artifact.content,

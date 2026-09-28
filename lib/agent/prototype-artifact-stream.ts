@@ -5,6 +5,7 @@ import {
   expectedPrototypeArtifactMediaType,
   parsePrototypeArtifactPath,
 } from "./prototype-artifacts";
+import { largestUtf8PayloadChunk } from "../eve/payload-envelope";
 
 export type ReadPrototypeChunk = (index: number) => Promise<string | undefined>;
 const invalidManifest = "The prototype artifact manifest is incomplete or invalid.";
@@ -85,3 +86,57 @@ export async function* streamVerifiedPrototypeArtifact(input: {
     yield Buffer.from(content, "utf-8");
   }
 }
+
+/** Read one Eve-safe v2 chunk by global UTF-8 byte offset without materializing the artifact. */
+export const readVerifiedPrototypeArtifactChunk = async (input: {
+  artifact: PrototypeArtifactV2;
+  readChunk: ReadPrototypeChunk;
+  offsetBytes: number;
+}) => {
+  if (
+    !Number.isSafeInteger(input.offsetBytes) ||
+    input.offsetBytes < 0 ||
+    input.offsetBytes >= input.artifact.contentBytes
+  ) {
+    throw new Error("The prototype artifact byte offset is outside the recorded content.");
+  }
+  await verifyPrototypeArtifactManifest(input);
+  let start = 0;
+  for (let index = 0; index < input.artifact.chunkCount; index += 1) {
+    // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Offset lookup is ordered and bounded by one chunk.
+    const content = await input.readChunk(index);
+    if (content === undefined) {
+      throw new Error(`The prototype artifact is missing chunk ${index}.`);
+    }
+    const end = start + Buffer.byteLength(content, "utf-8");
+    if (input.offsetBytes < end) {
+      const localOffset = input.offsetBytes - start;
+      const chunkStart = start;
+      return largestUtf8PayloadChunk({
+        content,
+        makePayload(piece, nextLocalOffset) {
+          const nextOffsetBytes = chunkStart + nextLocalOffset;
+          const output = {
+            byteOffset: input.offsetBytes,
+            chunkDigest: createHash("sha256").update(piece, "utf-8").digest("hex"),
+            complete: nextOffsetBytes === input.artifact.contentBytes,
+            content: piece,
+            digest: input.artifact.digest,
+            mediaType: input.artifact.mediaType,
+            nextOffsetBytes,
+            path: input.artifact.path,
+            revision: input.artifact.revision,
+            totalBytes: input.artifact.contentBytes,
+          };
+          return {
+            data: { result: { kind: "tool-result", output, toolName: "get_prototype_artifact" } },
+            type: "action.result",
+          };
+        },
+        offsetBytes: localOffset,
+      }).payload.data.result.output;
+    }
+    start = end;
+  }
+  throw new Error("The prototype artifact byte offset is outside the recorded content.");
+};

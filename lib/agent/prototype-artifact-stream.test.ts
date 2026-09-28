@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import type { PrototypeArtifactV2 } from "./workflow-state";
 import {
+  readVerifiedPrototypeArtifactChunk,
   streamVerifiedPrototypeArtifact,
   verifyPrototypeArtifactManifest,
 } from "./prototype-artifact-stream";
@@ -63,5 +64,23 @@ describe("v2 prototype artifact streaming", () => {
         readChunk: (index) => Promise.resolve(chunks[index]),
       }),
     ).rejects.toThrow("revision");
+  });
+
+  it("reads successive pieces at exact Unicode byte boundaries", async () => {
+    const readChunk = (index: number) => Promise.resolve(chunks[index]);
+    const first = await readVerifiedPrototypeArtifactChunk({ artifact, offsetBytes: 0, readChunk });
+    expect(first.content).toBe(chunks[0]);
+    expect(first.nextOffsetBytes).toBe(Buffer.byteLength(chunks[0], "utf-8"));
+    expect(first.complete).toBe(false);
+    const second = await readVerifiedPrototypeArtifactChunk({
+      artifact,
+      offsetBytes: first.nextOffsetBytes,
+      readChunk,
+    });
+    expect(second.content).toBe(chunks[1]);
+    expect(second.complete).toBe(true);
+    await expect(
+      readVerifiedPrototypeArtifactChunk({ artifact, offsetBytes: 7, readChunk }),
+    ).rejects.toThrow("UTF-8 character boundary");
   });
 });
