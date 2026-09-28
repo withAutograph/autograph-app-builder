@@ -1073,17 +1073,6 @@ const exactTreeEntries = async function* exactTreeEntries(
   }
 };
 
-const exactTreeStateMap = async (
-  sourcePath: string,
-  sourceSha: string,
-): Promise<Map<string, FileState>> => {
-  const states = new Map<string, FileState>();
-  for await (const entry of exactTreeEntries(sourcePath, sourceSha)) {
-    states.set(entry.path, entry.state);
-  }
-  return states;
-};
-
 const assertOwnedPartialWorktree = async (
   proposal: BranchWorktreePublicationProposal,
 ): Promise<void> => {
@@ -1091,7 +1080,10 @@ const assertOwnedPartialWorktree = async (
   if (!rootState.isDirectory() || rootState.isSymbolicLink()) {
     throw new Error("The partial approved worktree path is unsafe.");
   }
-  const base = await exactTreeStateMap(proposal.sourcePath, proposal.baseSha);
+  const base = new Map<string, FileState>();
+  for await (const entry of exactTreeEntries(proposal.sourcePath, proposal.baseSha)) {
+    base.set(entry.path, entry.state);
+  }
   const changes = new Map(proposal.changes.map((change) => [change.path, change]));
   const allowedPaths = new Set([...base.keys(), ...changes.keys()]);
   const commonGitDirectoryValue = await git(proposal.sourcePath, [
@@ -1373,9 +1365,14 @@ const ensureExactBaseMaterialization = async (
   preserveReviewedPostimages: boolean,
   lock: PublicationLock,
 ): Promise<void> => {
-  const changes = new Map(proposal.changes.map((change) => [change.path, change]));
+  // Verify the complete immutable base before changing the private index.
+  for await (const entry of exactTreeEntries(proposal.sourcePath, proposal.baseSha)) {
+    void entry;
+    lock.assertHeld();
+  }
   await git(proposal.worktreePath, ["read-tree", proposal.baseSha]);
   lock.assertHeld();
+  const changes = new Map(proposal.changes.map((change) => [change.path, change]));
   for await (const entry of exactTreeEntries(proposal.sourcePath, proposal.baseSha)) {
     lock.assertHeld();
     const change = changes.get(entry.path);
@@ -1725,34 +1722,67 @@ const applyRemainingPostimages = async (input: {
   return applied;
 };
 
-const assertPostimages = async (proposal: BranchWorktreePublicationProposal): Promise<void> => {
-  const base = await exactTreeStateMap(proposal.sourcePath, proposal.baseSha);
-  const changes = new Map(proposal.changes.map((change) => [change.path, change]));
-  const expectedPaths = new Set(base.keys());
-  for (const change of proposal.changes) {
-    expectedPaths.add(change.path);
-  }
-  const observed = await worktreeFileStates(proposal);
-  if (
-    JSON.stringify(observed.map(({ path }) => path)) !==
-    JSON.stringify([...expectedPaths].toSorted(compareOverlayPaths))
-  ) {
-    throw new Error("The publication worktree contains an unapproved path.");
-  }
-  for (const { path, state } of observed) {
-    const change = changes.get(path);
-    let expected: FileState | undefined;
-    if (change === undefined) {
-      expected = base.get(path);
-    } else if (change.after === undefined) {
-      expected = { kind: "absent" };
-    } else {
-      expected = { kind: "regular", ...change.after };
-    }
-    if (expected === undefined || !exactStateMatches(state, expected)) {
+/** Compare complete path sets and exact states without retaining the base tree. */
+export const assertBranchPublicationPostimageSequence = async (input: {
+  base: AsyncIterable<{ path: string; state: FileState }>;
+  changes: BranchWorktreePublicationProposal["changes"];
+  observed: readonly { path: string; state: FileState }[];
+}): Promise<void> => {
+  const { observed } = input;
+  const changes = [...input.changes].toSorted((left, right) =>
+    compareOverlayPaths(left.path, right.path),
+  );
+  let observedIndex = 0;
+  let changeIndex = 0;
+  const expectPath = (path: string, expected: FileState) => {
+    const current = observed[observedIndex];
+    if (current?.path !== path || !exactStateMatches(current.state, expected)) {
       throw new Error(`The publication worktree changed unexpectedly at ${path}.`);
     }
+    observedIndex += 1;
+  };
+  for await (const entry of input.base) {
+    while (
+      changes[changeIndex] !== undefined &&
+      compareOverlayPaths(changes[changeIndex].path, entry.path) < 0
+    ) {
+      const change = changes[changeIndex];
+      expectPath(
+        change.path,
+        change.after === undefined ? { kind: "absent" } : { kind: "regular", ...change.after },
+      );
+      changeIndex += 1;
+    }
+    const change = changes[changeIndex];
+    if (change?.path === entry.path) {
+      expectPath(
+        entry.path,
+        change.after === undefined ? { kind: "absent" } : { kind: "regular", ...change.after },
+      );
+      changeIndex += 1;
+    } else {
+      expectPath(entry.path, entry.state);
+    }
   }
+  while (changeIndex < changes.length) {
+    const change = changes[changeIndex];
+    expectPath(
+      change.path,
+      change.after === undefined ? { kind: "absent" } : { kind: "regular", ...change.after },
+    );
+    changeIndex += 1;
+  }
+  if (observedIndex !== observed.length) {
+    throw new Error("The publication worktree contains an unapproved path.");
+  }
+};
+
+const assertPostimages = async (proposal: BranchWorktreePublicationProposal): Promise<void> => {
+  await assertBranchPublicationPostimageSequence({
+    base: exactTreeEntries(proposal.sourcePath, proposal.baseSha),
+    changes: proposal.changes,
+    observed: await worktreeFileStates(proposal),
+  });
 };
 
 const pendingReceipt = (input: {
