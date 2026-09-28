@@ -115,12 +115,15 @@ export const recordDurablePrototypeChunk = async (
   if (!Number.isSafeInteger(bytes)) {
     throw new TypeError("The prototype artifact byte count exceeds the provider's integer range.");
   }
-  await input.store.put({
+  const storedChunkDigest = await input.store.put({
     chunkIndex: input.chunkIndex,
     content: input.content,
     path: input.path,
     transferDigest: input.expectedDigest,
   });
+  if (storedChunkDigest !== chunkDigest) {
+    throw new Error("The durable prototype store returned a different chunk digest.");
+  }
   const nextChunkIndex = input.chunkIndex + 1;
   const rollingDigest = sha256(`${previous?.rollingDigest ?? ""}${chunkDigest}`);
   if (!input.finalChunk) {
