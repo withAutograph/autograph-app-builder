@@ -110,6 +110,17 @@ describe("toPublicEvent", () => {
     });
   });
 
+  it("omits an absent progress turn ID from durable public events", () => {
+    expect(
+      toPublicEvent({ index: 5, label: "Preparing", state: "started", type: "progress" }),
+    ).toEqual({
+      index: 5,
+      label: "Preparing",
+      state: "started",
+      type: "progress",
+    });
+  });
+
   it.each(["reasoning.delta", "tool.result", "system.instructions"])("drops %s", (type) => {
     expect(toPublicEvent({ index: 1, message: "secret", text: "secret", type })).toBeNull();
   });
