@@ -146,3 +146,98 @@ it("does not complete a paged review with an invented citation", async () => {
   expect(assessment.reviewCompleted).toBe(false);
   expect(assessment.findings).toEqual([]);
 });
+
+it("sends every large request and AppSpec excerpt through bounded model contexts", async () => {
+  const page = { content: "fake save", path, startColumn: 1, startLine: 3 };
+  const seen: { kind: string; length: number; offset: number }[] = [];
+  const requirement = "Must save durably";
+  const assessment = await assessProductSourcePages(
+    {
+      appSpec: "p".repeat(45_000),
+      appSpecDigest: "spec",
+      clarifications: [],
+      omissions: [],
+      originalRequest: `${"r".repeat(45_000)}${requirement}`,
+      sourceDigest: "tree",
+    },
+    (async function* pages() {
+      yield page;
+    })(),
+    {
+      generate(_page, context) {
+        seen.push({ kind: context.kind, length: context.text.length, offset: context.startOffset });
+        return {
+          findings: context.text.includes(requirement)
+            ? [
+                {
+                  citations: [{ endLine: 1, excerpt: "fake save", path, startLine: 1 }],
+                  explanation: "The save is fake.",
+                  repair: "Persist it.",
+                  requirement: "Durable save",
+                  requirementQuote: requirement,
+                },
+              ]
+            : [],
+          remainingRuntimeChecks: [],
+        };
+      },
+    },
+  );
+  expect(seen.some((entry) => entry.kind === "original-request" && entry.offset > 0)).toBe(true);
+  expect(seen.some((entry) => entry.kind === "app-spec" && entry.offset > 0)).toBe(true);
+  expect(seen.every((entry) => entry.length <= 16 * 1024)).toBe(true);
+  expect(assessment.reviewCompleted).toBe(true);
+  expect(assessment.findings[0]?.citations[0]?.startLine).toBe(3);
+});
+
+it("retries a provider context rejection with smaller source and requirement slices", async () => {
+  let attempts = 0;
+  const assessment = await assessProductSourcePages(
+    {
+      appSpec: "plan",
+      appSpecDigest: "spec",
+      clarifications: [],
+      omissions: [],
+      originalRequest: "r".repeat(1500),
+      sourceDigest: "tree",
+    },
+    (async function* pages() {
+      yield { content: "s".repeat(500), path, startColumn: 1, startLine: 1 };
+    })(),
+    {
+      generate(page, context) {
+        attempts += 1;
+        if (page.content.length + context.text.length > 1000) {
+          throw new Error("maximum context length exceeded");
+        }
+        return { findings: [], remainingRuntimeChecks: [] };
+      },
+    },
+  );
+  expect(attempts).toBeGreaterThan(3);
+  expect(assessment.reviewCompleted).toBe(true);
+});
+
+it("reports a provider boundary when even the smallest review pair is rejected", async () => {
+  const assessment = await assessProductSourcePages(
+    {
+      appSpec: "p",
+      appSpecDigest: "spec",
+      clarifications: [],
+      omissions: [],
+      originalRequest: "r",
+      sourceDigest: "tree",
+    },
+    (async function* pages() {
+      yield { content: "s", path, startColumn: 1, startLine: 7 };
+    })(),
+    {
+      generate() {
+        throw new Error("maximum context length exceeded");
+      },
+    },
+  );
+  expect(assessment).toMatchObject({ reviewCompleted: false, status: "blocked" });
+  expect(assessment.reason).toContain(`${path}:7:1`);
+  expect(assessment.reason).toContain("model provider rejected");
+});
