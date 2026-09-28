@@ -145,6 +145,49 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>) => {
 };
 
 describe("paged hosted session observation", () => {
+  it("returns a paged no-op cancellation without dispatch when no turn is active", async () => {
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async () => {
+      await Promise.resolve();
+      return {
+        artifactProjectionRequiresLegacyReadback: false,
+        installedEventCount: 0,
+        pendingRequests: [],
+        publicEventCount: 0,
+        status: "waiting",
+      };
+    });
+    const { adapter, service, sessionId } = await fixture(observe);
+    adapter.cancelAccepted = vi.fn(async () => {
+      await Promise.resolve();
+    });
+    const result = await service.cancel({ sessionId });
+    expect(result.status).toBe("waiting");
+    expect(adapter.cancelAccepted).not.toHaveBeenCalled();
+    expect(adapter.cancel).not.toHaveBeenCalled();
+  });
+
+  it("returns a cancelled session after accepted cancellation and fresh checkpoint", async () => {
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async ({ onEvent }) => {
+      await onEvent({ index: 0, text: "cancelled", turnId: "turn_1", type: "assistant.message" });
+      return {
+        activeTurnId: "turn_1",
+        artifactProjectionRequiresLegacyReadback: false,
+        installedEventCount: 1,
+        pendingRequests: [],
+        publicEventCount: 1,
+        status: "cancelled",
+      };
+    });
+    const { adapter, service, sessionId } = await fixture(observe);
+    adapter.cancelAccepted = vi.fn(async () => {
+      await Promise.resolve();
+    });
+    const result = await service.cancel({ sessionId, turnId: "turn_1" });
+    expect(result.status).toBe("cancelled");
+    expect(adapter.cancelAccepted).toHaveBeenCalledOnce();
+    expect(adapter.cancel).not.toHaveBeenCalled();
+  });
+
   it("settles an accepted send only after a fresh paged checkpoint is durable", async () => {
     const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async ({ onEvent }) => {
       await onEvent({ index: 0, text: "accepted", turnId: "turn_1", type: "assistant.message" });
@@ -157,7 +200,9 @@ describe("paged hosted session observation", () => {
       };
     });
     const { adapter, service, sessionId } = await fixture(observe);
-    adapter.sendAccepted = vi.fn(() => Promise.resolve());
+    adapter.sendAccepted = vi.fn(async () => {
+      await Promise.resolve();
+    });
     const result = await service.send({
       clientRequestId: randomUUID(),
       message: "continue",

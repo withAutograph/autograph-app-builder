@@ -152,7 +152,7 @@ export interface HostedEveTransport {
     adapterSessionId: string;
     turnId?: string;
   }) => Promise<HostedEngineSnapshot>;
-  /** Confirms a guarded cancellation without exporting the complete history. */
+  /** Resolves only after the requested cancellation is observed without exporting full history. */
   cancelAccepted?: (input: Parameters<HostedEveTransport["cancel"]>[0]) => Promise<void>;
 }
 
@@ -1184,8 +1184,40 @@ export function createHostedEveSessionService(input: {
     async cancel({ sessionId, turnId }) {
       requireHostedOperationScope(principal, "cancel");
       const session = await requireSession(sessionId);
+      const paged =
+        input.transport.observe !== undefined &&
+        input.transport.cancelAccepted !== undefined &&
+        input.store.observeSessionPaged !== undefined &&
+        input.store.readCheckpointPage !== undefined;
       let snapshot: HostedEngineSnapshot;
       try {
+        const observed = paged
+          ? await input.transport.observe?.({
+              adapterSessionId: session.adapterSessionId,
+              onEvent: (event) => {
+                void event;
+              },
+              principal,
+              sessionId,
+            })
+          : undefined;
+        if (observed && !observed.artifactProjectionRequiresLegacyReadback) {
+          if (observed.activeTurnId === undefined) {
+            if (turnId !== undefined) {
+              throw new SubmissionRejectedBeforeDispatchError("no_active_turn");
+            }
+            return readSession({ cursor: 0, limit: 100, sessionId });
+          }
+          await input.transport.cancelAccepted?.({
+            adapterSessionId: session.adapterSessionId,
+            principal,
+            ...(turnId === undefined ? {} : { turnId }),
+          });
+          return readAcceptedMutation(
+            sessionId,
+            toDurableHostedSessionRecord(session).checkpointDigest,
+          );
+        }
         snapshot = await input.transport.cancel({
           adapterSessionId: session.adapterSessionId,
           principal,
