@@ -5,7 +5,7 @@ import {
   createGitHubAppHttpProvider,
   parseGitHubAppHttpProviderCredentials,
 } from "../repository/github-app-http-provider";
-import { classifyGitHubRepositoryAccess } from "../integrations/repository-access";
+import { classifyGitHubRepositoryAccessWithTargetProof } from "../integrations/repository-access";
 import {
   createGitHubAppInstallationAuthorization,
   githubInstallationAuthorizationDiagnostic,
@@ -451,7 +451,7 @@ export function getGitHubAppInstallationDeploymentHandlers(
       repository: value.repository,
       selectedInstallationId: value.selectedInstallationId,
     };
-    return classifyGitHubRepositoryAccess(options);
+    return classifyGitHubRepositoryAccessWithTargetProof(options);
   };
   deploymentHandlers = createGitHubAppInstallationRouteHandlers({
     async authorityForRequest(request) {

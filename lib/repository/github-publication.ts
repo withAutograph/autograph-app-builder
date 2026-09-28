@@ -348,6 +348,8 @@ export interface GitHubTargetSourceResolutionAdapter {
 }
 
 export interface GitHubPublicationAdapter extends GitHubSourceResolutionAdapter {
+  /** Available when the provider can prove access to one repository without listing the installation. */
+  targetSourceAdapter?: GitHubTargetSourceResolutionAdapter;
   inspectExistingDraft: (input: {
     repositoryId: string;
     owner: string;
