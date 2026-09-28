@@ -5,12 +5,30 @@ import {
   resolvePreviewWorkingDirectory,
 } from "./preview-working-directory";
 
-const mocks = vi.hoisted(() => ({
-  bind: vi.fn(),
-  dependencies: vi.fn().mockResolvedValue({ status: "reused" }),
-  prepare: vi.fn().mockResolvedValue({ status: "prepared" }),
-  start: vi.fn().mockResolvedValue({ commandId: "preview-command", receipt: { status: "ready" } }),
-}));
+interface MockWorkflowState {
+  appSpec?: { appId: string };
+  applyReceipt?: { applyRoot: string };
+  githubSource?: { digest: string };
+  phase?: string;
+  sourceReceipt?: { sourceKind: string };
+  workspace?: { workspacePath: string };
+}
+
+const mocks = vi.hoisted(() => {
+  const workflowState: MockWorkflowState = {
+    appSpec: { appId: "app" },
+    applyReceipt: { applyRoot: "/workspace/repository" },
+  };
+  return {
+    bind: vi.fn(),
+    dependencies: vi.fn().mockResolvedValue({ status: "reused" }),
+    prepare: vi.fn().mockResolvedValue({ status: "prepared" }),
+    start: vi
+      .fn()
+      .mockResolvedValue({ commandId: "preview-command", receipt: { status: "ready" } }),
+    workflowState,
+  };
+});
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 vi.mock("./product-behavior-state", () => ({
   bindProductBehaviorPreview: mocks.bind,
@@ -18,10 +36,7 @@ vi.mock("./product-behavior-state", () => ({
 }));
 vi.mock("./workflow-state", () => ({
   appBuilderWorkflowState: {
-    get: () => ({
-      appSpec: { appId: "app" },
-      applyReceipt: { applyRoot: "/workspace/repository" },
-    }),
+    get: () => mocks.workflowState,
   },
 }));
 vi.mock("./working-preview-state", () => ({
@@ -41,6 +56,58 @@ vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
 const parseDirectory = (value?: string) => previewWorkingDirectorySchema.parse(value);
 
 describe("preview command working directory", () => {
+  it("opens an existing selected app before an implementation proposal", async () => {
+    mocks.workflowState = {
+      githubSource: { digest: "selected-source" },
+      phase: "prepared",
+      sourceReceipt: { sourceKind: "existing-repository" },
+      workspace: { workspacePath: "/workspace/repository" },
+    };
+    const readTextFile = vi.fn(({ path }: { path: string }) =>
+      Promise.resolve(path.endsWith("package.json") ? "{}" : "# App contract"),
+    );
+    try {
+      await startAppPreview.execute(
+        {
+          appId: "existing-app",
+          command: { args: ["run", "dev"], executable: "bun" },
+          landingPath: "/",
+          port: 3000,
+          workingDirectory: "apps/existing-app",
+        },
+        {
+          abortSignal: new AbortController().signal,
+          callId: "prepared-preview",
+          getSandbox: vi.fn().mockResolvedValue({ id: "sandbox", readTextFile }),
+          getSkill: vi.fn(),
+          getToken: vi.fn(),
+          requireAuth: (): never => {
+            throw new Error("Unexpected auth request");
+          },
+          session: {
+            auth: { current: null, initiator: null },
+            id: "session",
+            turn: { id: "turn", sequence: 0 },
+          },
+          toolName: "start_app_preview",
+        },
+      );
+      expect(readTextFile).toHaveBeenCalledWith({
+        path: "/workspace/repository/apps/existing-app/.config/app-spec.md",
+      });
+      expect(mocks.start).toHaveBeenCalledWith(
+        expect.objectContaining({
+          appId: "existing-app",
+          cwd: "/workspace/repository/apps/existing-app",
+        }),
+      );
+    } finally {
+      mocks.workflowState = {
+        appSpec: { appId: "app" },
+        applyReceipt: { applyRoot: "/workspace/repository" },
+      };
+    }
+  });
   it("defaults to the existing applied repository root", () => {
     expect(resolvePreviewWorkingDirectory("/workspace/repository", parseDirectory())).toBe(
       "/workspace/repository",

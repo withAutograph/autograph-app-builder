@@ -3,6 +3,7 @@ import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 
@@ -72,22 +73,16 @@ export const prepareAppLocalPreview = async (input: {
 export default defineTool({
   description:
     "Prepare the selected app's sandbox-local preview data through its repository-owned app:local setup task. Use only when that task exists and the app needs local data before browser verification. It runs in the approved private checkout, does not use a hosted database or publish source, and reports the exact command and bounded diagnostic output. Do not use this for Production resources.",
-  async execute(_input, ctx) {
+  async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
-    if (
-      state.phase !== "applied" &&
-      state.phase !== "validation_failed" &&
-      state.phase !== "validated" &&
-      state.phase !== "reviewed"
-    ) {
-      throw new Error("Apply the selected app before preparing its sandbox-local preview data.");
-    }
+    const sandbox = await ctx.getSandbox();
+    const selected = await runnableSelectedApp({ appId: input.appId, sandbox, state });
     return await prepareAppLocalPreview({
-      appId: state.appSpec.appId,
-      root: state.applyReceipt.applyRoot,
-      sandbox: await ctx.getSandbox(),
+      appId: selected.appId,
+      root: selected.root,
+      sandbox,
       signal: ctx.abortSignal,
     });
   },
-  inputSchema: z.strictObject({}),
+  inputSchema: z.strictObject({ appId: appIdSchema.optional() }),
 });
