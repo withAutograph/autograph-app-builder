@@ -30,7 +30,7 @@ type Bytes = AsyncIterable<Uint8Array>;
 
 // New checkpoint metadata lives in byte chunks. Legacy inline checkpoint
 // validation retains its size limit until every read has moved to this store.
-const pagedCheckpointMetadataSchema = z.strictObject({
+export const pagedCheckpointMetadataSchema = z.strictObject({
   capturedAtEpochMs: z.number().int().nonnegative(),
   implementationPlan: z.json().optional(),
   inputRequests: z.array(publicInputRequestSchema).optional(),

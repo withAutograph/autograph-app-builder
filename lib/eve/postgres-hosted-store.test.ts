@@ -57,6 +57,7 @@ const sessionRow = {
   adapterSessionId: sessionRecord.adapterSessionId,
   audience: principal.audience,
   checkpointDigest: null,
+  checkpointId: null,
   checkpointProgressDigest: null,
   createdAt: new Date(2000),
   issuer: principal.issuer,
@@ -89,6 +90,51 @@ describe("PostgreSQL hosted Eve row authority", () => {
   it("accepts only a session whose tenant and adapter index match its record", () => {
     expect(parseHostedSessionRow(sessionRow)).toEqual(sessionRecord);
     expect(() => parseHostedSessionRow({ ...sessionRow, adapterSessionId: "substituted" })).toThrow(
+      "canonically bound",
+    );
+  });
+
+  it("binds a paged checkpoint pointer to its tenant, digest, and row index", () => {
+    const checkpointDigest = `sha256:${"a".repeat(64)}`;
+    const checkpointId = "1c65bd6d-0558-4863-afb7-891bd0742f47";
+    const record = {
+      adapterGeneration: 1,
+      adapterSessionId: "adapter_1",
+      checkpointDigest,
+      checkpointProgressDigest: `sha256:${"b".repeat(64)}`,
+      checkpointRef: { digest: checkpointDigest, eventCount: 100_001, id: checkpointId },
+      createdAtEpochMs: 2000,
+      lastProgressAtEpochMs: 2000,
+      originAdapterSessionId: "adapter_1",
+      principal,
+      resumability: "live" as const,
+      sessionId: "session_1",
+      stage: "designing" as const,
+      status: "waiting" as const,
+      title: "Paged session",
+      updatedAtEpochMs: 2000,
+      version: 2 as const,
+    };
+    const row = {
+      ...sessionRow,
+      adapterGeneration: 1,
+      checkpointDigest,
+      checkpointId,
+      checkpointProgressDigest: record.checkpointProgressDigest,
+      lastProgressAt: new Date(2000),
+      record,
+      resumabilityState: "live",
+      stage: "designing",
+      title: "Paged session",
+    };
+    expect(parseHostedSessionRow(row)).toEqual(record);
+    expect(() => parseHostedSessionRow({ ...row, checkpointId: "other" })).toThrow(
+      "canonically bound",
+    );
+    expect(() =>
+      parseHostedSessionRow({ ...row, checkpointDigest: `sha256:${"c".repeat(64)}` }),
+    ).toThrow("canonically bound");
+    expect(() => parseHostedSessionRow({ ...row, workspaceId: "other" })).toThrow(
       "canonically bound",
     );
   });

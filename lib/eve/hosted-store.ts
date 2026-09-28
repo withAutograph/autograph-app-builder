@@ -15,6 +15,7 @@ import {
   sessionStatusSchema,
 } from "../mcp/contracts";
 import type { PublicSessionSummary } from "../mcp/contracts";
+import type { pagedCheckpointMetadataSchema } from "./postgres-hosted-checkpoint-history";
 
 export const hostedOperationKindSchema = z.enum(["start", "resume", "send", "respond"]);
 export type HostedOperationKind = z.infer<typeof hostedOperationKindSchema>;
@@ -93,6 +94,20 @@ export const hostedSessionCheckpointSchema = z
   );
 
 export type HostedSessionCheckpoint = z.infer<typeof hostedSessionCheckpointSchema>;
+export type HostedPagedCheckpointMetadata = z.infer<typeof pagedCheckpointMetadataSchema>;
+export interface HostedCheckpointPage {
+  checkpointDigest: string;
+  cursor: number;
+  events: z.infer<typeof publicEveEventSchema>[];
+  metadata: HostedPagedCheckpointMetadata;
+  totalEvents: number;
+}
+
+export const hostedCheckpointRefSchema = z.strictObject({
+  digest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  eventCount: z.number().int().nonnegative(),
+  id: z.string().uuid(),
+});
 
 const canonicalRecordValue = (value: unknown): string => {
   if (Array.isArray(value)) {
@@ -137,6 +152,7 @@ export const durableHostedSessionRecordSchema = z
       .string()
       .regex(/^sha256:[a-f0-9]{64}$/u)
       .optional(),
+    checkpointRef: hostedCheckpointRefSchema.optional(),
     createdAtEpochMs: z.number().int().nonnegative(),
     lastProgressAtEpochMs: z.number().int().nonnegative(),
     originAdapterSessionId: z.string().min(1).max(500),
@@ -153,6 +169,21 @@ export const durableHostedSessionRecordSchema = z
   })
   .strict()
   .superRefine((record, context) => {
+    if (record.checkpoint !== undefined && record.checkpointRef !== undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "Hosted session has two active checkpoint formats.",
+      });
+    }
+    if (
+      record.checkpointRef !== undefined &&
+      record.checkpointDigest !== record.checkpointRef.digest
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Hosted session checkpoint reference digest mismatch.",
+      });
+    }
     if (record.updatedAtEpochMs < record.createdAtEpochMs) {
       context.addIssue({
         code: "custom",
@@ -168,13 +199,19 @@ export const durableHostedSessionRecordSchema = z
         message: "Hosted session progress must be within its durable lifetime.",
       });
     }
-    if ((record.checkpoint === undefined) !== (record.checkpointDigest === undefined)) {
+    if (
+      (record.checkpoint === undefined && record.checkpointRef === undefined) !==
+      (record.checkpointDigest === undefined)
+    ) {
       context.addIssue({
         code: "custom",
         message: "Hosted session checkpoints require their exact digest.",
       });
     }
-    if ((record.checkpoint === undefined) !== (record.checkpointProgressDigest === undefined)) {
+    if (
+      (record.checkpoint === undefined && record.checkpointRef === undefined) !==
+      (record.checkpointProgressDigest === undefined)
+    ) {
       context.addIssue({
         code: "custom",
         message: "Hosted session checkpoints require their progress digest.",
@@ -261,10 +298,11 @@ export const toDurableHostedSessionRecord = (
 
 export const hostedSessionSummary = (input: HostedSessionRecord): PublicSessionSummary => {
   const record = toDurableHostedSessionRecord(input);
+  const hasCheckpoint = record.checkpoint !== undefined || record.checkpointRef !== undefined;
   return publicSessionSummarySchema.parse({
     ...(record.appId === undefined ? {} : { appId: record.appId }),
     resumability:
-      record.version === 2 && record.checkpoint === undefined && record.resumability !== "terminal"
+      record.version === 2 && !hasCheckpoint && record.resumability !== "terminal"
         ? "restart_required"
         : record.resumability,
     sessionId: record.sessionId,
@@ -503,6 +541,24 @@ export interface HostedEveStore {
     appId?: string;
     nowEpochMs: number;
   }) => Promise<HostedSessionRecord>;
+  observeSessionPaged?: (input: {
+    principal: z.infer<typeof hostedPrincipalSchema>;
+    sessionId: string;
+    expectedCheckpointDigest: string | undefined;
+    metadata: HostedPagedCheckpointMetadata;
+    events: AsyncIterable<z.infer<typeof publicEveEventSchema>>;
+    stage: z.infer<typeof publicSessionStageSchema>;
+    resumability: z.infer<typeof publicSessionResumabilitySchema>;
+    appId?: string;
+    nowEpochMs: number;
+  }) => Promise<HostedSessionRecord>;
+  readCheckpointPage?: (input: {
+    principal: z.infer<typeof hostedPrincipalSchema>;
+    sessionId: string;
+    checkpointRef: z.infer<typeof hostedCheckpointRefSchema>;
+    cursor: number;
+    limit: number;
+  }) => Promise<HostedCheckpointPage>;
   replaceSessionAdapter?: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     sessionId: string;
