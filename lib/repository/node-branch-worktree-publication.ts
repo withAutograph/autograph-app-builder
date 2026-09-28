@@ -1,10 +1,12 @@
-import { randomUUID } from "node:crypto";
-import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
+import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import {
   chmod,
   lstat,
   link,
   mkdir,
+  mkdtemp,
   open,
   readFile,
   readdir,
@@ -19,6 +21,8 @@ import {
 import {
   chmodSync,
   constants as fsConstants,
+  createReadStream,
+  createWriteStream,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -26,6 +30,8 @@ import {
 } from "node:fs";
 import nodePath from "node:path";
 import { tmpdir } from "node:os";
+import { createInterface } from "node:readline";
+import { finished } from "node:stream/promises";
 
 import {
   assertCanonicalBranchWorktreeJournal,
@@ -192,21 +198,144 @@ const gitArguments = (root: string, args: readonly string[]): string[] => [
   ...args,
 ];
 
-const git = (root: string, args: readonly string[]): string =>
-  execFileSync(gitExecutable(), gitArguments(root, args), {
-    encoding: "utf-8",
-    env: gitEnvironment(),
-    maxBuffer: 8 * 1024 * 1024,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+interface GitDiagnosticCapture {
+  directory: string;
+  rawPath: string;
+  writer: ReturnType<typeof createWriteStream>;
+}
 
-const gitBuffer = (root: string, args: readonly string[]): Buffer =>
-  execFileSync(gitExecutable(), gitArguments(root, args), {
-    encoding: "buffer",
+const startGitDiagnosticCapture = async (): Promise<GitDiagnosticCapture> => {
+  const directory = await mkdtemp(pathResolve(tmpdir(), "app-builder-git-diagnostic-"));
+  const rawPath = pathResolve(directory, "stderr.raw");
+  return {
+    directory,
+    rawPath,
+    writer: createWriteStream(rawPath, { flags: "wx", mode: 0o600 }),
+  };
+};
+
+const redactGitDiagnosticLine = (line: string): string =>
+  line
+    // oxlint-disable-next-line eslint/no-control-regex -- Strip terminal escape sequences from Git diagnostics.
+    .replaceAll(/\u001B\[[0-?]*[ -/]*[@-~]/gu, "")
+    // oxlint-disable-next-line eslint/no-control-regex -- Replace control bytes before exposing diagnostics.
+    .replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu, "?")
+    .replaceAll(/\b(?:https?|postgres(?:ql)?|redis):\/\/[^\s"'<>]+/giu, "[URL REDACTED]")
+    .replaceAll(/\bBearer\s+[^\s"',;]+/giu, "Bearer [REDACTED]")
+    .replaceAll(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu, "[JWT REDACTED]")
+    .replaceAll(
+      /\b(?<name>(?:[A-Z_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[-_]?KEY|AUTHORIZATION|COOKIE)[A-Z_]*))(?<separator>["']?\s*[:=]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s,;]+)/giu,
+      "$<name>$<separator>[REDACTED]",
+    );
+
+const finishGitDiagnosticCapture = async (
+  capture: GitDiagnosticCapture,
+  keep: boolean,
+): Promise<string | undefined> => {
+  await finished(capture.writer);
+  if (!keep) {
+    await rm(capture.directory, { force: true, recursive: true });
+    return undefined;
+  }
+  const logPath = pathResolve(capture.directory, "stderr.log");
+  const sanitizedWriter = createWriteStream(logPath, { flags: "wx", mode: 0o600 });
+  const lines = createInterface({
+    crlfDelay: Infinity,
+    input: createReadStream(capture.rawPath),
+  });
+  for await (const line of lines) {
+    const chunk = `${redactGitDiagnosticLine(line)}\n`;
+    if (!sanitizedWriter.write(chunk)) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- respect private diagnostic file backpressure.
+      await once(sanitizedWriter, "drain");
+    }
+  }
+  sanitizedWriter.end();
+  await finished(sanitizedWriter);
+  await unlink(capture.rawPath);
+  return logPath;
+};
+
+const gitOutput = async (
+  root: string,
+  args: readonly string[],
+  options: { captureStdout?: boolean; operation?: string } = {},
+): Promise<Buffer> => {
+  const diagnosticCapture = await startGitDiagnosticCapture();
+  const child = spawn(gitExecutable(), gitArguments(root, args), {
     env: gitEnvironment(),
-    maxBuffer: 16 * 1024 * 1024,
     stdio: ["ignore", "pipe", "pipe"],
   });
+  const chunks: Buffer[] = [];
+  if (options.captureStdout === false) {
+    child.stdout.resume();
+  } else {
+    child.stdout.on("data", (chunk: Buffer) => {
+      chunks.push(Buffer.from(chunk));
+    });
+  }
+  child.stderr.pipe(diagnosticCapture.writer);
+  const [status, signal] = (await once(child, "close")) as [number | null, NodeJS.Signals | null];
+  if (status !== 0) {
+    const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
+    throw new Error(
+      `Git ${options.operation ?? args[0] ?? "command"} failed for ${root} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? "an unavailable private diagnostic log"}.`,
+    );
+  }
+  await finishGitDiagnosticCapture(diagnosticCapture, false);
+  return Buffer.concat(chunks);
+};
+
+const git = async (root: string, args: readonly string[]): Promise<string> => {
+  const output = await gitOutput(root, args);
+  return output.toString("utf-8");
+};
+
+const gitBuffer = async (root: string, args: readonly string[]): Promise<Buffer> =>
+  await gitOutput(root, args);
+
+const runGitCommand = async (
+  root: string,
+  args: readonly string[],
+  operation: string,
+): Promise<void> => {
+  await gitOutput(root, args, { captureStdout: false, operation });
+};
+
+export const hashBranchPublicationSourceBlob = async (
+  root: string,
+  objectId: string,
+  collectBytes = false,
+): Promise<{ bytes?: Buffer; digest: string }> => {
+  const diagnosticCapture = await startGitDiagnosticCapture();
+  const child = spawn(gitExecutable(), gitArguments(root, ["cat-file", "blob", objectId]), {
+    env: gitEnvironment(),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const hash = createHash("sha256");
+  const chunks: Buffer[] = [];
+  const closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
+  child.stderr.pipe(diagnosticCapture.writer);
+  // oxlint-disable-next-line eslint/no-await-in-loop -- hash Git blob data incrementally
+  for await (const chunk of child.stdout as AsyncIterable<Buffer>) {
+    hash.update(chunk);
+    if (collectBytes) {
+      chunks.push(Buffer.from(chunk));
+    }
+  }
+  const [status, signal] = await closed;
+  if (status !== 0) {
+    const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
+    throw new Error(
+      `Git could not read source blob ${objectId} from ${root} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? "an unavailable private diagnostic log"}.`,
+    );
+  }
+  await finishGitDiagnosticCapture(diagnosticCapture, false);
+  return {
+    ...(collectBytes ? { bytes: Buffer.concat(chunks) } : {}),
+    digest: hash.digest("hex"),
+  };
+};
 
 const parseCanonicalPathList = (output: Buffer, message: string): string[] => {
   const paths = output.toString("utf-8").split("\0").filter(Boolean);
@@ -719,7 +848,7 @@ const branchExists = (source: string, branch: string): boolean => {
   const result = spawnSync(
     gitExecutable(),
     gitArguments(source, ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`]),
-    { env: gitEnvironment() },
+    { env: gitEnvironment(), stdio: ["ignore", "ignore", "ignore"] },
   );
   if (result.status === 0) {
     return true;
@@ -730,37 +859,34 @@ const branchExists = (source: string, branch: string): boolean => {
   throw new Error("Git could not inspect the proposed publication branch.");
 };
 
-const exactBranchSha = (proposal: BranchWorktreePublicationProposal): string | undefined => {
+const exactBranchSha = async (
+  proposal: BranchWorktreePublicationProposal,
+): Promise<string | undefined> => {
   if (!branchExists(proposal.sourcePath, proposal.branchName)) {
     return undefined;
   }
-  return git(proposal.sourcePath, ["rev-parse", `refs/heads/${proposal.branchName}`]).trim();
+  const sha = await git(proposal.sourcePath, ["rev-parse", `refs/heads/${proposal.branchName}`]);
+  return sha.trim();
 };
 
-const createExactBranch = (proposal: BranchWorktreePublicationProposal): void => {
-  const result = spawnSync(
-    gitExecutable(),
-    gitArguments(proposal.sourcePath, [
+const createExactBranch = async (proposal: BranchWorktreePublicationProposal): Promise<void> => {
+  await runGitCommand(
+    proposal.sourcePath,
+    [
       "update-ref",
       `refs/heads/${proposal.branchName}`,
       proposal.baseSha,
       "0".repeat(proposal.baseSha.length),
-    ]),
-    { encoding: "utf-8", env: gitEnvironment() },
+    ],
+    `create approved publication branch refs/heads/${proposal.branchName}`,
   );
-  if (result.status !== 0) {
-    throw new Error(
-      `Git could not create the approved publication branch: ${result.stderr.trim() || "unknown error"}`,
-    );
-  }
 };
 
-const registeredWorktreeEntries = (
+const registeredWorktreeEntries = async (
   proposal: BranchWorktreePublicationProposal,
-): readonly { path: string; branch?: string; head?: string }[] => {
-  const records = git(proposal.sourcePath, ["worktree", "list", "--porcelain"])
-    .split("\n\n")
-    .filter(Boolean);
+): Promise<readonly { path: string; branch?: string; head?: string }[]> => {
+  const listing = await git(proposal.sourcePath, ["worktree", "list", "--porcelain"]);
+  const records = listing.split("\n\n").filter(Boolean);
   return records.map((record) => {
     const fields = Object.fromEntries(
       record.split("\n").map((line) => {
@@ -781,6 +907,15 @@ const registeredWorktreeEntries = (
 const exactStateMatches = (state: FileState, expected: FileState): boolean =>
   state.kind === expected.kind && state.mode === expected.mode && state.digest === expected.digest;
 
+const fileDigest = async (path: string): Promise<string> => {
+  const hash = createHash("sha256");
+  // oxlint-disable-next-line eslint/no-await-in-loop -- hash file data incrementally
+  for await (const chunk of createReadStream(path) as AsyncIterable<Buffer>) {
+    hash.update(chunk);
+  }
+  return hash.digest("hex");
+};
+
 const fileState = async (path: string): Promise<FileState> => {
   try {
     const info = await lstat(path);
@@ -796,9 +931,8 @@ const fileState = async (path: string): Promise<FileState> => {
     if (!info.isFile()) {
       return { kind: "special" };
     }
-    const bytes = await readFile(path);
     return {
-      digest: contentDigest(bytes),
+      digest: await fileDigest(path),
       kind: "regular",
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission bitmask.
       mode: (info.mode & 0o777).toString(8),
@@ -811,8 +945,8 @@ const fileState = async (path: string): Promise<FileState> => {
   }
 };
 
-const exactTreeEntries = (sourcePath: string, sourceSha: string): TreeEntry[] => {
-  const output = gitBuffer(sourcePath, ["ls-tree", "-r", "-z", "--full-tree", sourceSha]);
+const exactTreeEntries = async (sourcePath: string, sourceSha: string): Promise<TreeEntry[]> => {
+  const output = await gitBuffer(sourcePath, ["ls-tree", "-r", "-z", "--full-tree", sourceSha]);
   const result: TreeEntry[] = [];
   for (const record of output.toString("utf-8").split("\0").filter(Boolean)) {
     const match =
@@ -829,28 +963,37 @@ const exactTreeEntries = (sourcePath: string, sourceSha: string): TreeEntry[] =>
     if (path === undefined || objectId === undefined || !safeSourcePath(path)) {
       throw new Error("The source tree contains an unsafe path.");
     }
-    const bytes = gitBuffer(sourcePath, ["cat-file", "blob", objectId]);
     if (mode === "120000") {
-      const target = bytes.toString("utf-8");
-      if (Buffer.from(target).compare(bytes) !== 0 || target.includes("\0")) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- read one blob at a time to bound streamed source memory.
+      const { bytes, digest } = await hashBranchPublicationSourceBlob(sourcePath, objectId, true);
+      if (bytes === undefined) {
+        throw new Error("The source tree symbolic-link blob is unavailable.");
+      }
+      let target: string;
+      try {
+        target = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      } catch {
+        throw new Error("The source tree contains an invalid symbolic link.");
+      }
+      if (target.includes("\0")) {
         throw new Error("The source tree contains an invalid symbolic link.");
       }
       result.push({
-        bytes,
         mode: "120000",
         objectId,
         path,
-        state: { digest: contentDigest(bytes), kind: "symlink" },
+        state: { digest, kind: "symlink" },
       });
       continue;
     }
+    // oxlint-disable-next-line eslint/no-await-in-loop -- hash one blob at a time to bound streamed source memory.
+    const { digest } = await hashBranchPublicationSourceBlob(sourcePath, objectId);
     const fileMode = mode === "100755" ? "755" : "644";
     result.push({
-      bytes,
       mode: fileMode,
       objectId,
       path,
-      state: { digest: contentDigest(bytes), kind: "regular", mode: fileMode },
+      state: { digest, kind: "regular", mode: fileMode },
     });
   }
   return result;
@@ -863,17 +1006,16 @@ const assertOwnedPartialWorktree = async (
   if (!rootState.isDirectory() || rootState.isSymbolicLink()) {
     throw new Error("The partial approved worktree path is unsafe.");
   }
-  const base = new Map(
-    exactTreeEntries(proposal.sourcePath, proposal.baseSha).map((entry) => [
-      entry.path,
-      entry.state,
-    ]),
-  );
+  const baseEntries = await exactTreeEntries(proposal.sourcePath, proposal.baseSha);
+  const base = new Map(baseEntries.map((entry) => [entry.path, entry.state]));
   const changes = new Map(proposal.changes.map((change) => [change.path, change]));
   const allowedPaths = new Set([...base.keys(), ...changes.keys()]);
-  const commonGitDirectory = await realpath(
-    git(proposal.sourcePath, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim(),
-  );
+  const commonGitDirectoryValue = await git(proposal.sourcePath, [
+    "rev-parse",
+    "--path-format=absolute",
+    "--git-common-dir",
+  ]);
+  const commonGitDirectory = await realpath(commonGitDirectoryValue.trim());
   const worktreeAdminRoot = pathResolve(commonGitDirectory, "worktrees");
   const exactAdminPaths: string[] = [];
   for (const entry of await readdir(worktreeAdminRoot, {
@@ -955,7 +1097,8 @@ const createOrRepairExactWorktree = async (
   proposal: BranchWorktreePublicationProposal,
 ): Promise<void> => {
   const expectedBranch = `refs/heads/${proposal.branchName}`;
-  const registration = registeredWorktreeEntries(proposal).find(
+  const registrations = await registeredWorktreeEntries(proposal);
+  const registration = registrations.find(
     ({ path, branch }) => path === proposal.worktreePath || branch === expectedBranch,
   );
   if (
@@ -968,12 +1111,12 @@ const createOrRepairExactWorktree = async (
   }
   if (await pathExists(proposal.worktreePath)) {
     try {
-      git(proposal.worktreePath, ["rev-parse", "--absolute-git-dir"]);
-      if (
-        registration === undefined ||
-        git(proposal.worktreePath, ["rev-parse", "--symbolic-full-name", "HEAD"]).trim() !==
-          expectedBranch
-      ) {
+      await git(proposal.worktreePath, ["rev-parse", "--absolute-git-dir"]);
+      const worktreeBranch =
+        registration === undefined
+          ? undefined
+          : await git(proposal.worktreePath, ["rev-parse", "--symbolic-full-name", "HEAD"]);
+      if (registration === undefined || worktreeBranch?.trim() !== expectedBranch) {
         throw new Error("The existing worktree does not match durable publication intent.");
       }
       await chmod(proposal.worktreePath, 0o700);
@@ -1002,23 +1145,18 @@ const createOrRepairExactWorktree = async (
     mode: 0o700,
     recursive: true,
   });
-  const result = spawnSync(
-    gitExecutable(),
-    gitArguments(proposal.sourcePath, [
+  await runGitCommand(
+    proposal.sourcePath,
+    [
       "worktree",
       "add",
       ...(registration === undefined ? [] : ["--force"]),
       "--no-checkout",
       proposal.worktreePath,
       proposal.branchName,
-    ]),
-    { encoding: "utf-8", env: gitEnvironment() },
+    ],
+    `create approved branch worktree at ${proposal.worktreePath}`,
   );
-  if (result.status !== 0) {
-    throw new Error(
-      `Git could not create the approved branch worktree: ${result.stderr.trim() || "unknown error"}`,
-    );
-  }
   await chmod(proposal.worktreePath, 0o700);
   await assertContainedNoLinkPath(proposal.worktreePath, {
     leaf: "directory",
@@ -1029,27 +1167,71 @@ interface TreeEntry {
   path: string;
   mode: "644" | "755" | "120000";
   objectId: string;
-  bytes: Buffer;
   state: FileState;
 }
 
 const materializeAtomically = async (
   proposal: BranchWorktreePublicationProposal,
   target: string,
-  bytes: Uint8Array,
-  mode: string | "120000",
+  entryOrBytes: TreeEntry | Uint8Array,
+  postimageMode?: string,
 ): Promise<void> => {
   const staging = pathResolve(publicationRoot(), "staging", proposal.publicationIdentityDigest);
   await durableDirectory(staging);
   const temporary = pathResolve(staging, randomUUID());
   try {
-    if (mode === "120000") {
-      await symlink(Buffer.from(bytes).toString("utf-8"), temporary);
+    const entry = "objectId" in entryOrBytes ? entryOrBytes : undefined;
+    const bytes = entry === undefined ? entryOrBytes : undefined;
+    const mode = entry?.mode ?? postimageMode;
+    if (mode === undefined) {
+      throw new Error("The exact materialization mode is missing.");
+    }
+    if (entry?.mode === "120000") {
+      const blob = await hashBranchPublicationSourceBlob(proposal.sourcePath, entry.objectId, true);
+      if (blob.digest !== entry.state.digest || blob.bytes === undefined) {
+        throw new Error(`The source blob changed while materializing ${entry.path}.`);
+      }
+      const targetPath = new TextDecoder("utf-8", { fatal: true }).decode(blob.bytes);
+      if (targetPath.includes("\0")) {
+        throw new Error(`The source tree contains an invalid symbolic link at ${entry.path}.`);
+      }
+      await symlink(targetPath, temporary);
       await syncDirectory(staging, true);
     } else {
       const handle = await open(temporary, "wx", Number.parseInt(mode, 8));
       try {
-        await handle.writeFile(bytes);
+        if (entry !== undefined) {
+          const diagnosticCapture = await startGitDiagnosticCapture();
+          const child = spawn(
+            gitExecutable(),
+            gitArguments(proposal.sourcePath, ["cat-file", "blob", entry.objectId]),
+            { env: gitEnvironment(), stdio: ["ignore", "pipe", "pipe"] },
+          );
+          const hash = createHash("sha256");
+          const closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
+          child.stderr.pipe(diagnosticCapture.writer);
+          // oxlint-disable-next-line eslint/no-await-in-loop -- stream Git blob bytes into the staged file
+          for await (const chunk of child.stdout as AsyncIterable<Buffer>) {
+            hash.update(chunk);
+            // oxlint-disable-next-line eslint/no-await-in-loop -- write each source chunk before reading more
+            await handle.writeFile(chunk);
+          }
+          const [status, signal] = await closed;
+          if (status !== 0) {
+            const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
+            throw new Error(
+              `Git could not materialize ${entry.path} from ${proposal.sourcePath} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? "an unavailable private diagnostic log"}.`,
+            );
+          }
+          await finishGitDiagnosticCapture(diagnosticCapture, false);
+          if (hash.digest("hex") !== entry.state.digest) {
+            throw new Error(`The source blob changed while materializing ${entry.path}.`);
+          }
+        } else if (bytes instanceof Uint8Array) {
+          await handle.writeFile(bytes);
+        } else {
+          throw new TypeError("The exact postimage bytes are unavailable.");
+        }
         await handle.chmod(Number.parseInt(mode, 8));
         await handle.sync();
       } finally {
@@ -1107,8 +1289,8 @@ const ensureExactBaseMaterialization = async (
   preserveReviewedPostimages: boolean,
   lock: PublicationLock,
 ): Promise<void> => {
-  const entries = exactTreeEntries(proposal.sourcePath, proposal.baseSha);
-  git(proposal.worktreePath, ["read-tree", proposal.baseSha]);
+  const entries = await exactTreeEntries(proposal.sourcePath, proposal.baseSha);
+  await git(proposal.worktreePath, ["read-tree", proposal.baseSha]);
   lock.assertHeld();
   for (const entry of entries) {
     lock.assertHeld();
@@ -1127,7 +1309,7 @@ const ensureExactBaseMaterialization = async (
       throw new Error(`The publication worktree conflicts with the exact base at ${entry.path}.`);
     }
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    await materializeAtomically(proposal, target, entry.bytes, entry.mode);
+    await materializeAtomically(proposal, target, entry);
     lock.assertHeld();
   }
 };
@@ -1149,23 +1331,30 @@ const inspectBranchPublicationSource = async (input: {
   if (canonicalPath !== input.sourceReceipt.sourcePath) {
     throw new Error("The source checkout changed canonical identity.");
   }
+  const [headShaValue, headTreeValue, headReferenceValue, gitDirectoryValue] = await Promise.all([
+    git(canonicalPath, ["rev-parse", "HEAD"]),
+    git(canonicalPath, ["rev-parse", "HEAD^{tree}"]),
+    git(canonicalPath, ["rev-parse", "--symbolic-full-name", "HEAD"]),
+    git(canonicalPath, ["rev-parse", "--absolute-git-dir"]),
+  ]);
   const [headSha, headTree, headReference, gitDirectoryPath] = await Promise.all([
-    Promise.resolve(git(canonicalPath, ["rev-parse", "HEAD"]).trim()),
-    Promise.resolve(git(canonicalPath, ["rev-parse", "HEAD^{tree}"]).trim()),
-    Promise.resolve(git(canonicalPath, ["rev-parse", "--symbolic-full-name", "HEAD"]).trim()),
-    realpath(git(canonicalPath, ["rev-parse", "--absolute-git-dir"]).trim()),
+    Promise.resolve(headShaValue.trim()),
+    Promise.resolve(headTreeValue.trim()),
+    Promise.resolve(headReferenceValue.trim()),
+    realpath(gitDirectoryValue.trim()),
   ]);
   const [rootStat, gitDirectoryStat] = await Promise.all([
     stat(canonicalPath),
     stat(gitDirectoryPath),
   ]);
-  const indexPath = git(canonicalPath, [
+  const indexPathValue = await git(canonicalPath, [
     "rev-parse",
     "--path-format=absolute",
     "--git-path",
     "index",
-  ]).trim();
-  const listed = gitBuffer(canonicalPath, [
+  ]);
+  const indexPath = indexPathValue.trim();
+  const listed = await gitBuffer(canonicalPath, [
     "ls-files",
     "-z",
     "--cached",
@@ -1202,8 +1391,8 @@ const inspectBranchPublicationSource = async (input: {
     headSha,
     headTree,
     index: [] as const,
-    indexFileDigest: contentDigest(await readFile(indexPath)),
-    remoteDigest: stableDigest(git(canonicalPath, ["remote", "-v"])),
+    indexFileDigest: await fileDigest(indexPath),
+    remoteDigest: stableDigest(await git(canonicalPath, ["remote", "-v"])),
     rootIdentity: {
       device: rootStat.dev.toString(),
       inode: rootStat.ino.toString(),
@@ -1224,9 +1413,12 @@ export const deriveBranchWorktreePublicationProposal = async (input: {
   const source = await inspectBranchPublicationSource(input);
   const root = publicationRoot();
   const rootState = await lstat(root);
-  const commonGitDirectory = await realpath(
-    git(source.canonicalPath, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim(),
-  );
+  const commonGitDirectoryValue = await git(source.canonicalPath, [
+    "rev-parse",
+    "--path-format=absolute",
+    "--git-common-dir",
+  ]);
+  const commonGitDirectory = await realpath(commonGitDirectoryValue.trim());
   if (
     within(root, source.canonicalPath) ||
     within(source.canonicalPath, root) ||
@@ -1313,7 +1505,7 @@ const worktreeFileStates = async (
   proposal: BranchWorktreePublicationProposal,
 ): Promise<readonly { path: string; state: FileState }[]> => {
   const cached = parseCanonicalPathList(
-    gitBuffer(proposal.worktreePath, ["ls-files", "-z", "--cached"]),
+    await gitBuffer(proposal.worktreePath, ["ls-files", "-z", "--cached"]),
     "The publication worktree contains non-canonical, non-UTF-8, or unsafe paths.",
   );
   const present: string[] = [];
@@ -1348,33 +1540,38 @@ const worktreeSnapshot = async (proposal: BranchWorktreePublicationProposal) => 
   if (root !== proposal.worktreePath) {
     throw new Error("The publication worktree path changed identity.");
   }
-  const [rootStat, gitDirectoryPath] = await Promise.all([
+  const [rootStat, gitDirectoryValue] = await Promise.all([
     stat(root),
-    realpath(git(root, ["rev-parse", "--absolute-git-dir"]).trim()),
+    git(root, ["rev-parse", "--absolute-git-dir"]),
   ]);
+  const gitDirectoryPath = await realpath(gitDirectoryValue.trim());
   const gitDirectoryStat = await stat(gitDirectoryPath);
-  const indexPath = git(root, [
+  const indexPathValue = await git(root, [
     "rev-parse",
     "--path-format=absolute",
     "--git-path",
     "index",
-  ]).trim();
+  ]);
+  const indexPath = indexPathValue.trim();
   const statusEntries = await worktreeFileStates(proposal);
+  const [headShaValue, headTreeValue, headReferenceValue, remoteValue] = await Promise.all([
+    git(root, ["rev-parse", "HEAD"]),
+    git(root, ["rev-parse", "HEAD^{tree}"]),
+    git(root, ["rev-parse", "--symbolic-full-name", "HEAD"]),
+    git(root, ["remote", "-v"]),
+  ]);
   return {
-    contractDigest: sourceIdentityDigest(
-      git(root, ["rev-parse", "HEAD"]).trim(),
-      git(root, ["rev-parse", "HEAD^{tree}"]).trim(),
-    ),
+    contractDigest: sourceIdentityDigest(headShaValue.trim(), headTreeValue.trim()),
     gitDirectoryIdentity: {
       device: gitDirectoryStat.dev.toString(),
       inode: gitDirectoryStat.ino.toString(),
     },
     gitDirectoryPath,
-    headReference: git(root, ["rev-parse", "--symbolic-full-name", "HEAD"]).trim(),
-    headSha: git(root, ["rev-parse", "HEAD"]).trim(),
-    headTree: git(root, ["rev-parse", "HEAD^{tree}"]).trim(),
-    indexFileDigest: contentDigest(await readFile(indexPath)),
-    remoteDigest: stableDigest(git(root, ["remote", "-v"])),
+    headReference: headReferenceValue.trim(),
+    headSha: headShaValue.trim(),
+    headTree: headTreeValue.trim(),
+    indexFileDigest: await fileDigest(indexPath),
+    remoteDigest: stableDigest(remoteValue),
     root,
     rootIdentity: {
       device: rootStat.dev.toString(),
@@ -1386,14 +1583,17 @@ const worktreeSnapshot = async (proposal: BranchWorktreePublicationProposal) => 
 
 const verifyWorktreeIdentity = async (proposal: BranchWorktreePublicationProposal) => {
   const snapshot = await worktreeSnapshot(proposal);
+  const sourceBranchSha = await git(proposal.sourcePath, [
+    "rev-parse",
+    `refs/heads/${proposal.branchName}`,
+  ]);
   if (
     snapshot.headSha !== proposal.baseSha ||
     snapshot.headTree !== proposal.sourceTree ||
     snapshot.headReference !== `refs/heads/${proposal.branchName}` ||
     snapshot.remoteDigest !== proposal.sourceRemoteDigest ||
     snapshot.contractDigest !== proposal.contractDigest ||
-    git(proposal.sourcePath, ["rev-parse", `refs/heads/${proposal.branchName}`]).trim() !==
-      proposal.baseSha
+    sourceBranchSha.trim() !== proposal.baseSha
   ) {
     throw new Error("The branch or worktree no longer has its exact approved identity.");
   }
@@ -1445,12 +1645,8 @@ const applyRemainingPostimages = async (input: {
 };
 
 const assertPostimages = async (proposal: BranchWorktreePublicationProposal): Promise<void> => {
-  const base = new Map(
-    exactTreeEntries(proposal.sourcePath, proposal.baseSha).map((entry) => [
-      entry.path,
-      entry.state,
-    ]),
-  );
+  const baseEntries = await exactTreeEntries(proposal.sourcePath, proposal.baseSha);
+  const base = new Map(baseEntries.map((entry) => [entry.path, entry.state]));
   const changes = new Map(proposal.changes.map((change) => [change.path, change]));
   const expectedPaths = new Set(base.keys());
   for (const change of proposal.changes) {
@@ -1602,13 +1798,13 @@ const executePublication = async (input: {
       if (worktreeCreated) {
         throw new Error("A publication worktree exists without its exact approved branch.");
       }
-      createExactBranch(input.proposal);
+      await createExactBranch(input.proposal);
       input.lock.assertHeld();
       branchCreated = true;
       await input.hooks?.afterBranchCreation?.();
       input.lock.assertHeld();
     }
-    if (exactBranchSha(input.proposal) !== input.proposal.baseSha) {
+    if ((await exactBranchSha(input.proposal)) !== input.proposal.baseSha) {
       throw new Error("The approved publication branch changed after durable intent.");
     }
     const hadWorktree = worktreeCreated;

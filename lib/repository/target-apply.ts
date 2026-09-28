@@ -413,8 +413,7 @@ const snapshotFailureDetail = (value: string): string =>
       /\b(?:gh[oprsu]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,})\b/gu,
       "[REDACTED]",
     )
-    .trim()
-    .slice(0, 1200);
+    .trim();
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function inspectApplyOverlay(

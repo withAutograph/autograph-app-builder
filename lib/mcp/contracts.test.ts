@@ -200,7 +200,7 @@ describe("publicPrototypeSchema", () => {
     revision: "b".repeat(64),
   };
 
-  it("accepts only the closed bounded HTML delivery shape", () => {
+  it("accepts the closed HTML delivery shape without an artifact-size ceiling", () => {
     expect(publicPrototypeSchema.parse(prototype)).toEqual(prototype);
     expect(publicPrototypeSchema.safeParse({ ...prototype, internalPath: "/tmp" }).success).toBe(
       false,
@@ -216,7 +216,7 @@ describe("publicPrototypeSchema", () => {
         ...prototype,
         content: "é".repeat(4 * 1024 * 1024 + 1),
       }).success,
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("accepts compiled component documents larger than the old HTML-only limit", () => {

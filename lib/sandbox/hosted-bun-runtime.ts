@@ -9,6 +9,20 @@ export const HOSTED_BUN_RUNTIME_ENVIRONMENT = {
   PATH: `${HOSTED_BUN_RUNTIME_PREFIX}/bin:${HOSTED_BUN_RUNTIME_PREFIX}/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
 } as const;
 
+export const sanitizeHostedRuntimeFailure = (value: string): string =>
+  value
+    .replaceAll(/https?:\/\/[^\s]+/giu, "[URL REDACTED]")
+    .replaceAll(/Bearer\s+[^\s,;]+/giu, "Bearer [REDACTED]")
+    .replaceAll(
+      /\b(?:gh[oprsu]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,})\b/gu,
+      "[REDACTED]",
+    )
+    .replaceAll(
+      /\b(?<key>authorization|cookie|password|passwd|secret|token|api[-_]?key)\s*[:=]\s*[^\s,;]+/giu,
+      "$<key>=[REDACTED]",
+    )
+    .trim();
+
 const hostedBunRuntimeInstallRequest = {
   command: `npm install --prefix ${HOSTED_BUN_RUNTIME_PREFIX} bun@${HOSTED_BUN_VERSION} @jdxcode/mise@${HOSTED_MISE_VERSION}`,
   env: HOSTED_BUN_RUNTIME_ENVIRONMENT,
@@ -65,13 +79,13 @@ export function createHostedRuntimeInstaller() {
       .then(async (result) => {
         if (result.exitCode !== 0) {
           throw new Error(
-            `The hosted Bun and mise runtime could not be installed: ${(result.stderr || result.stdout).trim().slice(0, 2000)}`,
+            `The hosted Bun and mise runtime could not be installed: ${sanitizeHostedRuntimeFailure(result.stderr || result.stdout)}`,
           );
         }
         const rust = await sandbox.run(hostedRustInstallRequest);
         if (rust.exitCode !== 0) {
           throw new Error(
-            `The hosted Rust toolchain could not be installed: ${(rust.stderr || rust.stdout).trim().slice(0, 2000)}`,
+            `The hosted Rust toolchain could not be installed: ${sanitizeHostedRuntimeFailure(rust.stderr || rust.stdout)}`,
           );
         }
       })

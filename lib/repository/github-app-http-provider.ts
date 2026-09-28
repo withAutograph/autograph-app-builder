@@ -15,10 +15,35 @@ import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
 import type { ExistingDraftUpdateProposal } from "./github-draft-update";
 
-const MAX_FILES = 10_000;
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
-const MAX_TOTAL_MATERIAL_BYTES = 100 * 1024 * 1024;
 const MAX_INSTALLATION_REPOSITORIES = 10_000;
+
+class GitHubBlobWriteFailureError extends Error {
+  readonly path: string;
+  readonly bytes: number;
+  readonly providerStatus?: number;
+
+  constructor(path: string, bytes: number, providerStatus?: number) {
+    super("github-blob-write-failed");
+    this.name = "GitHubBlobWriteFailureError";
+    this.path = path;
+    this.bytes = bytes;
+    this.providerStatus = providerStatus;
+  }
+}
+
+const providerHttpStatus = (error: unknown): number | undefined => {
+  if (!(error instanceof Error)) {
+    return;
+  }
+  const cause: unknown = error.cause;
+  if (cause === null || typeof cause !== "object" || !("status" in cause)) {
+    return;
+  }
+  const { status } = cause;
+  return typeof status === "number" && Number.isInteger(status) && status >= 400 && status <= 599
+    ? status
+    : undefined;
+};
 
 const decimal = z.string().regex(/^[1-9]\d*$/u);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
@@ -151,8 +176,7 @@ const validateFile = (file: GitHubPublicationFile): void => {
   if (
     !safeSourcePath(file.path) ||
     (file.mode !== "100644" && file.mode !== "100755") ||
-    !(file.content instanceof Uint8Array) ||
-    file.content.byteLength > MAX_FILE_BYTES
+    !(file.content instanceof Uint8Array)
   ) {
     throw new Error("invalid-material");
   }
@@ -161,26 +185,35 @@ const validateFile = (file: GitHubPublicationFile): void => {
 const canonicalFiles = (
   input: readonly GitHubPublicationFile[],
 ): readonly GitHubPublicationFile[] => {
-  if (input.length === 0 || input.length > MAX_FILES) {
+  if (input.length === 0) {
     throw new Error("invalid-material");
   }
-  const paths = new Set<string>();
-  let totalBytes = 0;
+  interface PathNode {
+    children: Map<string, PathNode>;
+    file: boolean;
+  }
+  const root: PathNode = {
+    children: new Map(),
+    file: false,
+  };
   for (const file of input) {
     validateFile(file);
-    totalBytes += file.content.byteLength;
-    if (
-      paths.has(file.path) ||
-      [...paths].some(
-        (path) => path.startsWith(`${file.path}/`) || file.path.startsWith(`${path}/`),
-      )
-    ) {
+    let node = root;
+    for (const segment of file.path.split("/")) {
+      if (node.file) {
+        throw new Error("invalid-material");
+      }
+      let child = node.children.get(segment);
+      if (child === undefined) {
+        child = { children: new Map(), file: false };
+        node.children.set(segment, child);
+      }
+      node = child;
+    }
+    if (node.file || node.children.size > 0) {
       throw new Error("invalid-material");
     }
-    paths.add(file.path);
-  }
-  if (totalBytes > MAX_TOTAL_MATERIAL_BYTES) {
-    throw new Error("invalid-material");
+    node.file = true;
   }
   return [...input].toSorted((left, right) => compareOverlayPaths(left.path, right.path));
 };
@@ -480,17 +513,25 @@ export const createGitHubAppHttpProvider = (input: {
     accessToken: string,
     file: GitHubPublicationFile,
   ): Promise<string> => {
-    const response = await github({
-      authorization: accessToken,
-      body: {
-        content: Buffer.from(file.content).toString("base64"),
-        encoding: "base64",
-      },
-      expected: [201],
-      method: "POST",
-      path: `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repositoryName)}/git/blobs`,
-    });
-    return objectId.parse(stringProperty(response.body, "sha"));
+    try {
+      const response = await github({
+        authorization: accessToken,
+        body: {
+          content: Buffer.from(file.content).toString("base64"),
+          encoding: "base64",
+        },
+        expected: [201],
+        method: "POST",
+        path: `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repositoryName)}/git/blobs`,
+      });
+      return objectId.parse(stringProperty(response.body, "sha"));
+    } catch (error) {
+      throw new GitHubBlobWriteFailureError(
+        file.path,
+        file.content.byteLength,
+        providerHttpStatus(error),
+      );
+    }
   };
 
   const createTree = async (treeInput: {
@@ -1077,23 +1118,17 @@ export const createGitHubAppHttpProvider = (input: {
                 ]),
               }),
         }));
-        if (
-          changes.length === 0 ||
-          changes.length > MAX_FILES ||
-          changes.some((change) => !safeSourcePath(change.path))
-        ) {
+        if (changes.length === 0 || changes.some((change) => !safeSourcePath(change.path))) {
           throw new Error("invalid-material");
         }
         const paths = changes.map(({ path }) => path).toSorted(compareOverlayPaths);
         if (JSON.stringify(paths) !== JSON.stringify(proposal.approvedPaths)) {
           throw new Error("invalid-material");
         }
-        let totalBytes = 0;
         changes = changes.map((change) => {
           if (change.after !== undefined) {
             validateFile(change.after);
           }
-          totalBytes += change.after?.content.byteLength ?? 0;
           if (change.after !== undefined && change.after.path !== change.path) {
             throw new Error("invalid-material");
           }
@@ -1113,9 +1148,6 @@ export const createGitHubAppHttpProvider = (input: {
           }
           return change;
         });
-        if (totalBytes > MAX_TOTAL_MATERIAL_BYTES) {
-          throw new Error("invalid-material");
-        }
       } catch {
         return {
           code: "invalid-publication-material",
@@ -1178,14 +1210,29 @@ export const createGitHubAppHttpProvider = (input: {
       const deletions = changes.flatMap((change) =>
         change.kind === "deleted" ? [change.path] : [],
       );
-      const tree = await createTree({
-        accessToken,
-        baseTree: snapshot.headTree,
-        deletions,
-        files,
-        owner: proposal.owner,
-        repositoryName: proposal.name,
-      });
+      let tree: string;
+      try {
+        tree = await createTree({
+          accessToken,
+          baseTree: snapshot.headTree,
+          deletions,
+          files,
+          owner: proposal.owner,
+          repositoryName: proposal.name,
+        });
+      } catch (error) {
+        if (error instanceof GitHubBlobWriteFailureError) {
+          return {
+            bytes: error.bytes,
+            code: "github-file-write-failed",
+            operation: "create-blob",
+            path: error.path,
+            ...(error.providerStatus === undefined ? {} : { providerStatus: error.providerStatus }),
+            status: "rejected",
+          };
+        }
+        throw error;
+      }
       const marker = `App-Builder-Idempotency: ${proposal.idempotencyKey}`;
       const commit = await github({
         authorization: accessToken,

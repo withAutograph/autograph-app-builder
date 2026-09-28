@@ -8,6 +8,7 @@ import {
 import {
   HOSTED_BUN_RUNTIME_ENVIRONMENT,
   createHostedRuntimeInstaller,
+  sanitizeHostedRuntimeFailure,
 } from "@/lib/sandbox/hosted-bun-runtime";
 import { createHostedVercelBackend } from "@/lib/sandbox/vercel-backend";
 import { hasTestCapability } from "@/lib/testing/test-capability";
@@ -33,12 +34,11 @@ function createVercelDefinition() {
       const sandbox = await use({ networkPolicy: "allow-all" });
       if (process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development") {
         const setup = await sandbox.run({
-          abortSignal: AbortSignal.timeout(300_000),
           command: developmentPinnedToolchainCommand(),
         });
         if (setup.exitCode !== 0) {
           throw new Error(
-            `The Vercel Sandbox runtime setup failed: ${(setup.stderr || setup.stdout).trim().slice(0, 2000)}`,
+            `The Vercel Sandbox runtime setup failed: ${sanitizeHostedRuntimeFailure(setup.stderr || setup.stdout)}`,
           );
         }
       } else {

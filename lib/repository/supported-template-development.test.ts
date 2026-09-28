@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import type { SandboxSession } from "eve/sandbox";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -148,6 +149,19 @@ describe("development Sandbox workspace refresh", () => {
         files.set(target, content);
         return Promise.resolve();
       }),
+      writeFile: vi.fn<SandboxSession["writeFile"]>(async ({ content, path: target }) => {
+        const reader = content.getReader();
+        const chunks: Uint8Array[] = [];
+        for (;;) {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Consume the file stream sequentially.
+          const item = await reader.read();
+          if (item.done) {
+            break;
+          }
+          chunks.push(item.value);
+        }
+        files.set(target, Buffer.concat(chunks));
+      }),
       writeTextFile: vi.fn(({ content, path: target }) => {
         files.set(target, content);
         return Promise.resolve();
@@ -156,12 +170,13 @@ describe("development Sandbox workspace refresh", () => {
 
     await prepareDevelopmentSandboxWorkspace(source, sandbox as never, "first");
     files.set("repository/apps/generated/page.tsx", "generated");
-    writeFileSync(path.join(source, "changed.txt"), "after");
+    const largeSourceFile = Buffer.alloc(2 * 1024 * 1024, 0x61);
+    writeFileSync(path.join(source, "changed.txt"), largeSourceFile);
     rmSync(path.join(source, "deleted.txt"));
 
     await prepareDevelopmentSandboxWorkspace(source, sandbox as never, "second");
 
-    expect(files.get("repository/changed.txt")?.toString()).toBe("after");
+    expect(files.get("repository/changed.txt")).toEqual(largeSourceFile);
     expect(files.has("repository/deleted.txt")).toBe(false);
     expect(files.get("repository/apps/generated/page.tsx")).toBe("generated");
     expect(removePath).not.toHaveBeenCalledWith(expect.objectContaining({ path: "repository" }));

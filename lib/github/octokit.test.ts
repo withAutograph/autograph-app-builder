@@ -14,37 +14,22 @@ describe("guarded Octokit GitHub transport", () => {
     expect(request.mock.calls[0]?.[1]).toMatchObject({ redirect: "error" });
   });
 
-  it("rejects declared and streamed responses above the shared bound", async () => {
-    const declared = createGuardedGitHubFetch(
+  it("passes large provider response streams through without buffering or Builder caps", async () => {
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array(2 * 1024 * 1024));
+          controller.enqueue(new Uint8Array(1));
+          controller.close();
+        },
+      }),
+    );
+    const guarded = createGuardedGitHubFetch(
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      vi.fn<typeof fetch>(async () =>
-        Response.json(
-          { private: "provider-body" },
-          { headers: { "content-length": String(2 * 1024 * 1024 + 1) } },
-        ),
-      ),
+      vi.fn<typeof fetch>(async () => response),
     );
-    await expect(declared("https://api.github.com/user")).rejects.toThrow(
-      "github-response-too-large",
-    );
-
-    const streamed = createGuardedGitHubFetch(
-      vi.fn<typeof fetch>(
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        async () =>
-          new Response(
-            new ReadableStream({
-              start(controller) {
-                controller.enqueue(new Uint8Array(2 * 1024 * 1024));
-                controller.enqueue(new Uint8Array(1));
-                controller.close();
-              },
-            }),
-          ),
-      ),
-    );
-    await expect(streamed("https://api.github.com/user")).rejects.toThrow(
-      "github-response-too-large",
-    );
+    await expect(guarded("https://api.github.com/user")).resolves.toBe(response);
+    const body = await response.arrayBuffer();
+    expect(body.byteLength).toBe(2 * 1024 * 1024 + 1);
   });
 });

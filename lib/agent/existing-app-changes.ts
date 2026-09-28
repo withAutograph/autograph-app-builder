@@ -3,9 +3,8 @@ import { z } from "zod";
 export const existingAppChangesSchema = z
   .array(
     z.strictObject({
-      content: z.string().max(262_144),
-      path: z.string().min(1).max(512),
+      content: z.string(),
+      path: z.string().min(1),
     }),
   )
-  .min(1)
-  .max(32);
+  .min(1);

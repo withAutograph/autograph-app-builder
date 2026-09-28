@@ -21,7 +21,6 @@ import {
   projectInstalledEveEvent,
 } from "./public-events";
 
-const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 10_000;
 const SESSION_SETTLEMENT_POLL_INTERVAL_MS = 200;
 const VERCEL_TRUSTED_OIDC_HEADER = "x-vercel-trusted-oidc-idp-token";
@@ -134,22 +133,12 @@ async function workloadHeaders(identity: HostedWorkloadIdentity) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function boundedJson(response: Response): Promise<unknown> {
+async function readJson(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type")?.split(";", 1)[0];
   if (contentType !== "application/json") {
     throw new Error("The canonical Eve API returned a non-JSON response.");
   }
-  const declaredLength = response.headers.get("content-length");
-  if (
-    declaredLength !== null &&
-    (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > MAX_RESPONSE_BYTES)
-  ) {
-    throw new Error("The canonical Eve API response is too large.");
-  }
   const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength > MAX_RESPONSE_BYTES) {
-    throw new Error("The canonical Eve API response is too large.");
-  }
   return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
 }
 
@@ -191,7 +180,7 @@ async function postMutation(input: {
   }
 
   try {
-    const body = await boundedJson(response);
+    const body = await readJson(response);
     if (response.status >= 400 && response.status < 500) {
       const parsed = errorResponseSchema.safeParse(body);
       throw new SubmissionRejectedBeforeDispatchError(
@@ -470,7 +459,7 @@ export function createSameOriginEveTransport(input: {
       if (response.status !== 200 && response.status !== 202) {
         throw new Error("Canonical Eve cancellation failed.");
       }
-      const cancelled = cancelResponseSchema.parse(await boundedJson(response));
+      const cancelled = cancelResponseSchema.parse(await readJson(response));
       if (
         (response.status === 202 && cancelled.status !== "accepted") ||
         (response.status === 200 && cancelled.status !== "no_active_turn")

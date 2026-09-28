@@ -66,6 +66,16 @@ describe("safe MCP tool errors", () => {
     expect(JSON.stringify(result)).not.toContain("private");
   });
 
+  it("preserves full sanitized diagnostics longer than 700 characters", () => {
+    const detail = `provider diagnostic ${"x".repeat(1200)} token=private`;
+    const result = safeToolError(new Error(detail), "session-one", "autograph_get");
+    const message = result.structuredContent.error?.message ?? "";
+
+    expect(message).toContain("x".repeat(1200));
+    expect(message).toContain("token=[REDACTED]");
+    expect(message).not.toContain("token=private");
+  });
+
   it("still identifies a failure when the provider returned no message", () => {
     const result = safeToolError(null, "session-one", "autograph_send");
     expect(result.structuredContent.error?.message).toContain("autograph_send");

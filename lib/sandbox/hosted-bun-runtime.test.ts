@@ -63,4 +63,20 @@ describe("hosted validation runtime", () => {
     await expect(install(sandbox)).resolves.toBeUndefined();
     expect(run).toHaveBeenCalledTimes(4);
   });
+
+  it("preserves full setup diagnostics while redacting credential-like values", async () => {
+    const output = `${"compiler setup detail ".repeat(120)} token=github_pat_12345678901234567890`;
+    const install = createHostedRuntimeInstaller();
+    const sandbox = {
+      id: "sandbox-long-diagnostic",
+      run: vi
+        .fn()
+        .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "" })
+        .mockResolvedValueOnce({ exitCode: 1, stderr: output, stdout: "" }),
+    };
+
+    const failure = install(sandbox);
+    await expect(failure).rejects.toThrow("token=[REDACTED]");
+    await expect(failure).rejects.toThrow("compiler setup detail ".repeat(120));
+  });
 });

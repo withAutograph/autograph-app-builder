@@ -138,14 +138,7 @@ export const publicPrototypePreviewUrlSchema = z
 
 export const publicPrototypeSchema = z
   .object({
-    content: z
-      .string()
-      .min(1)
-      .max(8 * 1024 * 1024)
-      .refine(
-        (content) => new TextEncoder().encode(content).byteLength <= 8 * 1024 * 1024,
-        "Prototype HTML must be at most 8 MiB.",
-      ),
+    content: z.string().min(1),
     digest: sha256DigestSchema,
     mediaType: z.literal("text/html"),
     path: z.string().regex(/^prototype\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/index\.html$/u),
@@ -164,7 +157,7 @@ export const publicUiPreviewSchema = z
     functionality: z.literal("fixtures-only"),
     previewUrl: publicPrototypePreviewUrlSchema.optional(),
     revision: sha256DigestSchema,
-    routes: z.array(z.string().startsWith("/")).min(1).max(16),
+    routes: z.array(z.string().startsWith("/")).min(1),
   })
   .strict();
 

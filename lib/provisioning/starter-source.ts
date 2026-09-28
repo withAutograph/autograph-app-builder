@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
-import { promisify } from "node:util";
-import { gunzipSync } from "node:zlib";
+import { Readable, Transform } from "node:stream";
+import { createGunzip } from "node:zlib";
 
 import { z } from "zod";
 
@@ -26,11 +26,7 @@ export const starterSourceManifestSchema = z
   .object({
     archive: z
       .object({
-        bytes: z
-          .number()
-          .int()
-          .positive()
-          .max(100 * 1024 * 1024),
+        bytes: z.number().int().positive(),
         sha256: digest,
         url: z.string().url().startsWith("https://"),
       })
@@ -39,19 +35,14 @@ export const starterSourceManifestSchema = z
       .array(
         z
           .object({
-            bytes: z
-              .number()
-              .int()
-              .nonnegative()
-              .max(10 * 1024 * 1024),
+            bytes: z.number().int().nonnegative(),
             mode: z.enum(["100644", "100755"]),
-            path: z.string().min(1).max(512),
+            path: z.string().min(1),
             sha256: digest,
           })
           .strict(),
       )
-      .min(1)
-      .max(10_000),
+      .min(1),
     source: z
       .object({
         repository: z.literal("https://github.com/withAutograph/arrusted-development"),
@@ -95,58 +86,62 @@ export interface StarterSource {
   files: readonly StarterSourceFile[];
 }
 
-const execFileAsync = promisify(execFile);
 const git = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
-const MAX_STARTER_FILES = 10_000;
-const MAX_STARTER_FILE_BYTES = 10 * 1024 * 1024;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function restrictedGit(
-  args: string[],
-  timeout = 30_000,
-  askpass?: { credentialFile: string; askpassFile: string },
-) {
-  return execFileAsync(
-    git,
-    [
-      "-c",
-      "protocol.allow=never",
-      "-c",
-      "protocol.https.allow=always",
-      "-c",
-      "credential.helper=",
-      "-c",
-      "core.hooksPath=/dev/null",
-      "-c",
-      "core.fsmonitor=false",
-      ...args,
-    ],
-    {
-      encoding: "utf-8",
-      env: {
-        ...(askpass === undefined
-          ? {}
-          : {
-              APP_BUILDER_TEMPLATE_ASKPASS_TOKEN_FILE: askpass.credentialFile,
-            }),
-        GIT_ASKPASS: askpass?.askpassFile ?? "/usr/bin/false",
-        GIT_ATTR_NOSYSTEM: "1",
-        GIT_CONFIG_GLOBAL: "/dev/null",
-        GIT_CONFIG_NOSYSTEM: "1",
-        GIT_CONFIG_SYSTEM: "/dev/null",
-        GIT_LFS_SKIP_SMUDGE: "1",
-        GIT_NO_LAZY_FETCH: "1",
-        GIT_TERMINAL_PROMPT: "0",
-        HOME: "/dev/null",
-        NODE_ENV: process.env.NODE_ENV ?? "production",
-        PATH: "/usr/bin:/bin",
-        SSH_ASKPASS: "/usr/bin/false",
-        XDG_CONFIG_HOME: "/dev/null",
+// oxlint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function restrictedGit(args: string[], askpass?: { credentialFile: string; askpassFile: string }) {
+  // oxlint-disable-next-line promise/avoid-new -- Spawn completion is reported through child process events.
+  return new Promise<{ stdout: string }>((resolve, reject) => {
+    const child = spawn(
+      git,
+      [
+        "-c",
+        "protocol.allow=never",
+        "-c",
+        "protocol.https.allow=always",
+        "-c",
+        "credential.helper=",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "core.fsmonitor=false",
+        ...args,
+      ],
+      {
+        env: {
+          ...(askpass === undefined
+            ? {}
+            : {
+                APP_BUILDER_TEMPLATE_ASKPASS_TOKEN_FILE: askpass.credentialFile,
+              }),
+          GIT_ASKPASS: askpass?.askpassFile ?? "/usr/bin/false",
+          GIT_ATTR_NOSYSTEM: "1",
+          GIT_CONFIG_GLOBAL: "/dev/null",
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_CONFIG_SYSTEM: "/dev/null",
+          GIT_LFS_SKIP_SMUDGE: "1",
+          GIT_NO_LAZY_FETCH: "1",
+          GIT_TERMINAL_PROMPT: "0",
+          HOME: "/dev/null",
+          NODE_ENV: process.env.NODE_ENV ?? "production",
+          PATH: "/usr/bin:/bin",
+          SSH_ASKPASS: "/usr/bin/false",
+          XDG_CONFIG_HOME: "/dev/null",
+        },
+        stdio: ["ignore", "pipe", "ignore"],
       },
-      maxBuffer: 2 * 1024 * 1024,
-      timeout,
-    },
-  );
+    );
+    const output: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => output.push(chunk));
+    child.once("error", reject);
+    child.once("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(`git-command-failed:${args[0] ?? "unknown"}:${code ?? "signal"}`));
+        return;
+      }
+      resolve({ stdout: Buffer.concat(output).toString("utf-8") });
+    });
+  });
 }
 
 const starterConfigSchema = z
@@ -172,38 +167,85 @@ function sha256(bytes: Uint8Array) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+/* eslint-disable eslint/no-await-in-loop, unicorn/no-negated-condition, eslint/no-negated-condition, sonarjs/too-many-break-or-continue-in-loop, promise/prefer-await-to-callbacks -- These loops and callbacks are required for bounded-memory stream parsing. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function boundedBytes(response: Response, maximum: number) {
-  const declared = response.headers.get("content-length");
-  if (declared !== null && (!/^\d+$/u.test(declared) || Number(declared) > maximum)) {
-    throw new Error("starter-response-too-large");
+async function responseBytes(response: Response) {
+  if (!response.body) return new Uint8Array(await response.arrayBuffer());
+  const chunks: Uint8Array[] = [];
+  const reader = response.body.getReader();
+  try {
+    for (;;) {
+      const item = await reader.read();
+      if (item.done) break;
+      chunks.push(item.value);
+    }
+  } finally {
+    reader.releaseLock();
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength > maximum) {
-    throw new Error("starter-response-too-large");
-  }
-  return bytes;
+  return Buffer.concat(chunks);
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function tarFiles(archive: Uint8Array) {
-  const tar = gunzipSync(archive);
+// oxlint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+async function tarFiles(tar: AsyncIterable<Uint8Array>) {
   const files = new Map<string, { mode: "100644" | "100755"; bytes: Uint8Array }>();
-  let offset = 0;
-  while (offset + 512 <= tar.byteLength) {
-    const header = tar.subarray(offset, offset + 512);
-    if (header.every((byte) => byte === 0)) {
-      break;
+  const iterator = tar[Symbol.asyncIterator]();
+  let pending = new Uint8Array(0);
+  let ended = false;
+  // oxlint-disable-next-line sonarjs/cognitive-complexity -- Reads consume chunks until one tar field is complete.
+  const readExact = async (size: number, allowEnd = false): Promise<Uint8Array | null> => {
+    const chunks: Uint8Array[] = [];
+    let length = 0;
+    while (length < size) {
+      if (pending.byteLength > 0) {
+        chunks.push(pending);
+        length += pending.byteLength;
+        pending = new Uint8Array(0);
+      } else if (ended) {
+        break;
+      } else {
+        const next = await iterator.next();
+        ended = next.done === true;
+        if (!ended) {
+          if (!(next.value instanceof Uint8Array)) throw new Error("starter-archive-invalid");
+          const chunk = Buffer.from(next.value);
+          if (chunk.byteLength > 0) {
+            chunks.push(chunk);
+            length += chunk.byteLength;
+          }
+        }
+      }
     }
-    const name = header.subarray(0, 100).toString("utf-8").replace(/\0.*$/u, "");
-    const prefix = header.subarray(345, 500).toString("utf-8").replace(/\0.*$/u, "");
+    if (length < size) {
+      if (length === 0 && allowEnd) return null;
+      throw new Error("starter-archive-invalid");
+    }
+    const bytes = Buffer.concat(chunks, length);
+    if (length > size) {
+      pending = bytes.subarray(size);
+      return bytes.subarray(0, size);
+    }
+    return bytes;
+  };
+  let archiveEnded = false;
+  while (!archiveEnded) {
+    const header = await readExact(512, true);
+    if (!header) {
+      archiveEnded = true;
+      continue;
+    }
+    if (header.every((byte) => byte === 0)) {
+      archiveEnded = true;
+      continue;
+    }
+    const name = Buffer.from(header.subarray(0, 100)).toString("utf-8").replace(/\0.*$/u, "");
+    const prefix = Buffer.from(header.subarray(345, 500)).toString("utf-8").replace(/\0.*$/u, "");
     const path = prefix ? `${prefix}/${name}` : name;
     const size = Number.parseInt(
-      header.subarray(124, 136).toString("ascii").replace(/\0.*$/u, "").trim(),
+      Buffer.from(header.subarray(124, 136)).toString("ascii").replace(/\0.*$/u, "").trim(),
       8,
     );
     const rawMode = Number.parseInt(
-      header.subarray(100, 108).toString("ascii").replace(/\0.*$/u, "").trim(),
+      Buffer.from(header.subarray(100, 108)).toString("ascii").replace(/\0.*$/u, "").trim(),
       8,
     );
     const [type] = header.slice(156);
@@ -216,17 +258,20 @@ function tarFiles(archive: Uint8Array) {
     ) {
       throw new Error("starter-archive-invalid");
     }
-    const start = offset + 512;
-    const end = start + size;
-    if (end > tar.byteLength) {
-      throw new Error("starter-archive-invalid");
-    }
+    if (!Number.isSafeInteger(size)) throw new Error("starter-archive-invalid");
+    const bytes = await readExact(size);
+    if (!bytes) throw new Error("starter-archive-invalid");
     files.set(path, {
-      bytes: new Uint8Array(tar.subarray(start, end)),
+      bytes,
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       mode: rawMode & 0o111 ? "100755" : "100644",
     });
-    offset = start + Math.ceil(size / 512) * 512;
+    const padding = (512 - (size % 512)) % 512;
+    if (padding > 0 && !(await readExact(padding))) throw new Error("starter-archive-invalid");
+  }
+  for await (const chunk of { [Symbol.asyncIterator]: () => iterator }) {
+    // Drain the compressed archive so its integrity digest is checked in full.
+    void chunk;
   }
   if (!files.size) {
     throw new Error("starter-archive-invalid");
@@ -234,10 +279,12 @@ function tarFiles(archive: Uint8Array) {
   return files;
 }
 
+/* eslint-enable eslint/no-await-in-loop, unicorn/no-negated-condition, eslint/no-negated-condition, sonarjs/too-many-break-or-continue-in-loop, promise/prefer-await-to-callbacks */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function loadStarterSource(input: {
   config: StarterSourceConfig;
   fetch?: typeof fetch;
+  signal?: AbortSignal;
 }): Promise<
   StarterSource & {
     manifest: StarterSourceManifest;
@@ -249,12 +296,12 @@ export async function loadStarterSource(input: {
   const request = input.fetch ?? fetch;
   const manifestResponse = await request(config.manifestUrl, {
     redirect: "error",
-    signal: AbortSignal.timeout(15_000),
+    signal: input.signal,
   });
   if (!manifestResponse.ok) {
     throw new Error("starter-manifest-unavailable");
   }
-  const manifestBytes = await boundedBytes(manifestResponse, 5 * 1024 * 1024);
+  const manifestBytes = await responseBytes(manifestResponse);
   if (sha256(manifestBytes) !== config.manifestSha256) {
     throw new Error("starter-manifest-mismatch");
   }
@@ -275,19 +322,32 @@ export async function loadStarterSource(input: {
   }
   const archiveResponse = await request(manifest.archive.url, {
     redirect: "error",
-    signal: AbortSignal.timeout(30_000),
+    signal: input.signal,
   });
   if (!archiveResponse.ok) {
     throw new Error("starter-archive-unavailable");
   }
-  const archive = await boundedBytes(archiveResponse, manifest.archive.bytes);
+  if (!archiveResponse.body) throw new Error("starter-archive-invalid");
+  let archiveBytes = 0;
+  const archiveHash = createHash("sha256");
+  /* oxlint-disable promise/prefer-await-to-callbacks -- Transform callbacks keep hashing inside the backpressured byte stream. */
+  const archiveIntegrity = new Transform({
+    transform(chunk: Uint8Array, _encoding, callback) {
+      archiveBytes += chunk.byteLength;
+      archiveHash.update(chunk);
+      callback(null, chunk);
+    },
+  });
+  /* oxlint-enable promise/prefer-await-to-callbacks */
+  const gunzip = createGunzip();
+  Readable.from(archiveResponse.body).pipe(archiveIntegrity).pipe(gunzip);
+  const files = await tarFiles(gunzip);
   if (
-    archive.byteLength !== manifest.archive.bytes ||
-    sha256(archive) !== manifest.archive.sha256
+    archiveBytes !== manifest.archive.bytes ||
+    archiveHash.digest("hex") !== manifest.archive.sha256
   ) {
     throw new Error("starter-archive-mismatch");
   }
-  const files = tarFiles(archive);
   const expectedPaths = new Set<string>();
   const result = manifest.files.map((entry) => {
     if (!safeSourcePath(entry.path) || expectedPaths.has(entry.path)) {
@@ -351,7 +411,7 @@ export async function cloneStarterSource(input?: {
       ].join("\n"),
       { mode: 0o700 },
     );
-    const clone = await restrictedGit(
+    await restrictedGit(
       [
         "clone",
         "--no-checkout",
@@ -362,12 +422,8 @@ export async function cloneStarterSource(input?: {
         ARRUSTED_TEMPLATE_REPOSITORY,
         checkout,
       ],
-      60_000,
       { askpassFile, credentialFile },
     );
-    if (clone.stderr.length > 2 * 1024 * 1024) {
-      throw new Error("starter-source-clone-output-invalid");
-    }
     await Promise.all([rm(credentialFile, { force: true }), rm(askpassFile, { force: true })]);
     const origin = await restrictedGit(["-C", checkout, "config", "--get", "remote.origin.url"]);
     if (origin.stdout.trim() !== ARRUSTED_TEMPLATE_REPOSITORY) {
@@ -407,7 +463,7 @@ export async function cloneStarterSource(input?: {
     }
     const listing = await restrictedGit(["-C", checkout, "ls-files", "-z"]);
     const paths = listing.stdout.split("\0").filter(Boolean);
-    if (paths.length === 0 || paths.length > MAX_STARTER_FILES) {
+    if (paths.length === 0) {
       throw new Error("starter-source-file-count-invalid");
     }
     const files = await Promise.all(
@@ -417,7 +473,7 @@ export async function cloneStarterSource(input?: {
         }
         const filePath = nodePath.join(checkout, path);
         const stat = await lstat(filePath);
-        if (!stat.isFile() || stat.size > MAX_STARTER_FILE_BYTES) {
+        if (!stat.isFile()) {
           throw new Error("starter-source-file-invalid");
         }
         return {

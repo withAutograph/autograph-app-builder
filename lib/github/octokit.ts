@@ -6,7 +6,6 @@ const GITHUB_ORIGIN = "https://github.com";
 const GITHUB_API_ORIGIN = "https://api.github.com";
 const GITHUB_API_VERSION = "2026-03-10";
 const REQUEST_TIMEOUT_MS = 15_000;
-const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const USER_AGENT = "autograph-app-builder";
 const silentConsole = new Proxy(console, {
   get(target, property) {
@@ -40,46 +39,6 @@ function requestUrl(resource: RequestInfo | URL): URL {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function boundedResponse(response: Response): Promise<Response> {
-  const declared = response.headers.get("content-length");
-  if (declared !== null && (!/^\d+$/u.test(declared) || Number(declared) > MAX_RESPONSE_BYTES)) {
-    await response.body?.cancel();
-    throw new Error("github-response-too-large");
-  }
-  if (response.body === null) {
-    return response;
-  }
-
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let length = 0;
-  for (;;) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-    length += value.byteLength;
-    if (length > MAX_RESPONSE_BYTES) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await reader.cancel();
-      throw new Error("github-response-too-large");
-    }
-    chunks.push(value);
-  }
-  const body = new Uint8Array(length);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new Response(body, {
-    headers: response.headers,
-    status: response.status,
-    statusText: response.statusText,
-  });
-}
-
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createGuardedGitHubFetch(request: Fetch = fetch): Fetch {
   return async (resource, init) => {
@@ -101,7 +60,7 @@ export function createGuardedGitHubFetch(request: Fetch = fetch): Fetch {
       redirect: "error",
       signal,
     });
-    return boundedResponse(response);
+    return response;
   };
 }
 

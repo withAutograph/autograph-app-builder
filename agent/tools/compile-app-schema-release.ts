@@ -5,7 +5,6 @@ import { z } from "zod";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
-const outputLimit = 6000;
 
 export const appSchemaReleaseCommand = (appId: string): string =>
   `mise run --skip-tools schema:release -- compile --app ${appIdSchema.parse(appId)}`;
@@ -25,11 +24,7 @@ const safeOutput = (value: string): string => {
       "[REDACTED]",
     )
     .trim();
-  if (cleaned.length <= outputLimit) {
-    return cleaned;
-  }
-  const portion = outputLimit / 2;
-  return `${cleaned.slice(0, portion)}\n[output truncated; showing beginning and end]\n${cleaned.slice(-portion)}`;
+  return cleaned;
 };
 
 export const compileAppSchemaRelease = async (input: {
@@ -76,7 +71,7 @@ export const compileAppSchemaRelease = async (input: {
 
 export default defineTool({
   description:
-    "Regenerate the selected existing app's checked CUE schema release in its already approved private checkout when validation reports stale schema artifacts. The fixed repository-owned `schema:release -- compile --app` task targets only the selected app. This does not publish or deploy. The result includes the exact command, exit status, and bounded compiler output; rerun validate_app_creation after compilation.",
+    "Regenerate the selected existing app's checked CUE schema release in its already approved private checkout when validation reports stale schema artifacts. The fixed repository-owned `schema:release -- compile --app` task targets only the selected app. This does not publish or deploy. The result includes the exact command, exit status, and sanitized compiler output; rerun validate_app_creation after compilation.",
   async execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "applied" && state.phase !== "validation_failed") {

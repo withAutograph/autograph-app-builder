@@ -1,13 +1,16 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { createSupportedRepositoryFixture } from "../../evals/support/supported-repository";
 import { inspectSourceReceipt } from "./source-receipt";
 import { createReviewedChangeSetReceipt } from "./reviewed-change-set";
-import { stableDigest } from "./local-publication";
-import { deriveBranchWorktreePublicationProposal } from "./node-branch-worktree-publication";
+import { contentDigest, stableDigest } from "./local-publication";
+import {
+  deriveBranchWorktreePublicationProposal,
+  hashBranchPublicationSourceBlob,
+} from "./node-branch-worktree-publication";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -85,4 +88,31 @@ it("uses the actual source receipt identity for branch snapshots and rejects a c
   await expect(deriveBranchWorktreePublicationProposal({ review, sourceReceipt })).rejects.toThrow(
     "not the exact reviewed existing repository",
   );
+});
+
+it("hashes a source blob larger than 16 MiB without buffering it", async () => {
+  const repository = mkdtempSync(path.join(tmpdir(), "branch-blob-"));
+  roots.push(repository);
+  const bytes = Buffer.alloc(17 * 1024 * 1024, 0x53);
+  writeFileSync(path.join(repository, "large.bin"), bytes);
+  execFileSync("/usr/bin/git", ["init", "-q"], { cwd: repository });
+  execFileSync(
+    "/usr/bin/git",
+    [
+      "-c",
+      "user.name=App Builder Eval",
+      "-c",
+      "user.email=app-builder-eval@example.test",
+      "add",
+      "large.bin",
+    ],
+    { cwd: repository },
+  );
+  const objectId = execFileSync("/usr/bin/git", ["hash-object", "-w", "large.bin"], {
+    cwd: repository,
+    encoding: "utf-8",
+  }).trim();
+  const hash = await hashBranchPublicationSourceBlob(repository, objectId);
+  expect(hash.bytes).toBeUndefined();
+  expect(hash.digest).toBe(contentDigest(bytes));
 });

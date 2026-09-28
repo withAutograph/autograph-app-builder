@@ -77,15 +77,9 @@ export async function provisionVercelProject(input: {
     } catch {
       throw new Error("provider-unavailable");
     }
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength > 2 * 1024 * 1024) {
-      throw new Error("invalid-response");
-    }
     let body: unknown;
     try {
-      body = bytes.byteLength
-        ? JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
-        : undefined;
+      body = response.body === null ? undefined : await response.json();
     } catch {
       throw new Error("invalid-response");
     }

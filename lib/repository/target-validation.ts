@@ -124,8 +124,6 @@ export type TargetValidationResult =
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
-const VALIDATION_OUTPUT_LIMIT = 6000;
-const EXECUTION_ERROR_LIMIT = 1200;
 const ansiPattern = new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu");
 const sensitiveAssignmentPattern =
   /(?<name>authorization|cookie|password|passwd|secret|token|api[-_]?key)(?<separator>\s*[:=]\s*)(?<value>[^\s,;]+)/giu;
@@ -143,7 +141,6 @@ export const validationOutputExcerpt = (
   stdout: string,
   stderr: string,
 ): TargetValidationOutputExcerpt => {
-  let truncated = false;
   const sanitize = (value: string) => {
     const lines = value
       .replaceAll(ansiPattern, "")
@@ -169,14 +166,9 @@ export const validationOutputExcerpt = (
       .filter((_line, index) => retained.has(index))
       .join("\n")
       .trim();
-    if (cleaned.length <= VALIDATION_OUTPUT_LIMIT) {
-      return cleaned;
-    }
-    truncated = true;
-    const portion = Math.floor(VALIDATION_OUTPUT_LIMIT / 2);
-    return `${cleaned.slice(0, portion)}\n[output truncated; showing beginning and end]\n${cleaned.slice(-portion)}`;
+    return cleaned;
   };
-  return { stderr: sanitize(stderr), stdout: sanitize(stdout), truncated };
+  return { stderr: sanitize(stderr), stdout: sanitize(stdout), truncated: false };
 };
 
 // A provider can throw before it returns a command result. Keep its useful
@@ -211,10 +203,7 @@ const executionErrorDetail = (error: Error): string => {
   if (cleaned.length === 0) {
     return "The execution provider returned no error detail.";
   }
-  if (cleaned.length <= EXECUTION_ERROR_LIMIT) {
-    return cleaned;
-  }
-  return `${cleaned.slice(0, EXECUTION_ERROR_LIMIT)} [error detail truncated]`;
+  return cleaned;
 };
 
 const compilerDiagnosticPatterns = [

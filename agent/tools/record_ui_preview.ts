@@ -2,8 +2,9 @@ import { defineTool } from "eve/tools";
 import { createHash } from "node:crypto";
 
 import {
-  uiPreviewInputSchema,
+  uiPreviewInputEnvelopeSchema,
   uiPreviewSourceDigest,
+  stageUiPreviewSourceChunk,
   validateUiPreview,
 } from "@/lib/agent/ui-preview";
 import { renderUiPreview } from "@/lib/agent/ui-preview-renderer";
@@ -13,22 +14,31 @@ import {
   appBuilderWorkflowState,
   assertUpstreamMutationAllowed,
   updateExactWorkflow,
+  uiPreviewTransferState,
 } from "@/lib/agent/workflow-state";
 import sourceStatus from "./source_status";
 import prepareWorkspace from "./prepare_workspace";
 import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
+import { EVE_MAX_PAYLOAD_BYTES, serializedPayloadBytes } from "@/lib/eve/payload-envelope";
+
+const ensurePreviewWorkspace = async (ctx: Parameters<typeof sourceStatus.execute>[1]) => {
+  if (appBuilderWorkflowState.get().phase !== "empty") {
+    return;
+  }
+  if (canAutoSelectDevelopmentSource()) {
+    await sourceStatus.execute({}, ctx);
+  }
+  if (appBuilderWorkflowState.get().phase === "empty") {
+    await prepareWorkspace.execute({}, ctx);
+  }
+};
 
 export default defineTool({
   description:
-    "Create or revise the Browser prototype from readable, formatted React source composed only from current Arrusted public components and compositions. Before the first call, inspect-repository must establish the exact public exports and props. Use capitalized component/composition/icon imports and inventory each exact name and source in the manifest; never infer an icon name (for example, use the exported ChevronLeft rather than an invented ArrowLeft). Lowercase package helpers such as buttonClassName are unsupported preview imports even when exported by the package. Use Button and its public props instead. Never author raw button, input, select, textarea, dialog, or table JSX, even inline in route files. Keep catalogGaps empty. Export a default screen component from each screen entry. Navigation must set location.hash to an exact manifest screen route (for example #/employees), preserving the preview pathname; the renderer reacts to hashchange, not pathname-only pushState. Every enabled action must produce its intended fixture-backed visible result. Follow design-app references/interactions.md and verify the rendered controls in the Browser; compilation alone does not prove they work. If this tool reports an import, syntax, or compilation error, repair the source and call record_ui_preview again; call accept-ui-preview only after this tool returns a current valid revision. When revising, set baseRevision to the prior UI preview revision returned by this tool, never an outer artifact or document digest. The renderer includes the actual Arrusted theme automatically: do not invent or import components/styles.css or components/tokens.css. It installs missing repository dependencies automatically when compilation requires them, and never replaces unavailable components with custom HTML. Use in local and hosted creation before recording the product decisions and complete app specification.",
+    "Create or revise the Browser prototype from readable, formatted React source composed only from current Arrusted public components and compositions. Before the first call, inspect-repository must establish the exact public exports and props. Use capitalized component/composition/icon imports and inventory each exact name and source in the manifest; never infer an icon name. Lowercase package helpers are unsupported preview imports. Never author raw button, input, select, textarea, dialog, or table JSX. Keep catalogGaps empty. Export a default screen component from each screen entry. Navigation must set location.hash to an exact manifest screen route. Every enabled action must produce its intended fixture-backed visible result. Follow design-app interaction guidance and verify the rendered controls in the Browser. When revising, set baseRevision to the prior UI preview revision returned by this tool. File count and content size are unrestricted. For a source bundle that does not fit one Eve event, declare sourceFiles with each file's UTF-8 byte length and SHA-256, then send one file chunk per call using sourceChunk. Start at chunkIndex 0 and byte offset 0; continue with the returned transferId, transferRevision, nextFilePath, nextFileOffsetBytes, and nextChunkIndex. Keep each serialized event within Eve's actual envelope by reducing chunk size as needed. The source bundle is validated and rendered only after every declared file digest matches. The renderer includes the actual Arrusted theme automatically and installs missing repository dependencies as needed. If the returned receipt says requiresChunkedRead, read the stored prototype with get_prototype_artifact using its artifactDigest and artifactRevision, then continue from each returned nextOffsetBytes until complete before opening the Browser preview.",
   async execute(input, ctx) {
-    validateUiPreview(input);
-    if (appBuilderWorkflowState.get().phase === "empty") {
-      if (canAutoSelectDevelopmentSource()) {
-        await sourceStatus.execute({}, ctx);
-      }
-      await prepareWorkspace.execute({}, ctx);
-    }
+    let previewInput = uiPreviewInputEnvelopeSchema.parse(input);
+    await ensurePreviewWorkspace(ctx);
     const current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "UI preview recording");
     if (current.phase === "empty") {
@@ -40,34 +50,61 @@ export default defineTool({
     const prior = "uiPreview" in current ? current.uiPreview : undefined;
     if (
       prior !== undefined &&
-      input.baseRevision !== undefined &&
-      input.baseRevision !== prior?.revision
+      previewInput.baseRevision !== undefined &&
+      previewInput.baseRevision !== prior?.revision
     ) {
       throw new Error("The UI preview revision is stale.");
     }
-    const sourceDigest = uiPreviewSourceDigest(input);
+    if (previewInput.sourceFiles !== undefined || previewInput.sourceChunk !== undefined) {
+      const existingTransfer = uiPreviewTransferState.get() ?? undefined;
+      const transfer =
+        existingTransfer?.sessionId === ctx.session.id &&
+        existingTransfer.sourceSha === current.workspace.sourceSha &&
+        existingTransfer.sourceTree === current.workspace.sourceTree
+          ? existingTransfer
+          : undefined;
+      const staged = stageUiPreviewSourceChunk({
+        callId: ctx.callId,
+        current: transfer,
+        value: previewInput,
+      });
+      const stagedTransfer = staged.transfer;
+      if (stagedTransfer !== undefined) {
+        uiPreviewTransferState.update(() => ({
+          ...stagedTransfer,
+          sessionId: ctx.session.id,
+          sourceSha: current.workspace.sourceSha,
+          sourceTree: current.workspace.sourceTree,
+        }));
+      }
+      if (staged.completeInput === undefined) {
+        return staged.receipt;
+      }
+      previewInput = staged.completeInput;
+    }
+    validateUiPreview(previewInput);
+    const sourceDigest = uiPreviewSourceDigest(previewInput);
     const revision = sourceDigest;
-    const previewHtml = await renderUiPreview(input, await ctx.getSandbox());
+    const previewHtml = await renderUiPreview(previewInput, await ctx.getSandbox());
     const recorded = recordPrototypeArtifactRevision({
       artifacts: current.artifacts,
       callId: ctx.callId,
       content: previewHtml,
       mediaType: "text/html",
-      path: `prototype/${input.appId}/index.html`,
+      path: `prototype/${previewInput.appId}/index.html`,
       sessionId: ctx.session.id,
     });
     const uiPreview = {
-      appId: input.appId,
+      appId: previewInput.appId,
       catalogDigest: current.workspace.eligibilityDigest,
-      catalogGaps: [...input.catalogGaps].toSorted((left, right) =>
+      catalogGaps: [...previewInput.catalogGaps].toSorted((left, right) =>
         left.path.localeCompare(right.path),
       ),
       createdByCallId: ctx.callId,
-      files: [...input.files].toSorted((left, right) => left.path.localeCompare(right.path)),
-      manifest: input.manifest,
-      previewHtml,
+      files: [...previewInput.files].toSorted((left, right) => left.path.localeCompare(right.path)),
+      manifest: previewInput.manifest,
       revision,
-      routes: [...input.routes].toSorted(),
+      routes: [...previewInput.routes].toSorted(),
       sourceDigest,
       sourceSha: current.workspace.sourceSha,
       sourceTree: current.workspace.sourceTree,
@@ -86,16 +123,41 @@ export default defineTool({
         workspace: current.workspace,
       }),
     });
-    return {
+    uiPreviewTransferState.update(() => null);
+    const result = {
       appId: uiPreview.appId,
-      content: uiPreview.previewHtml,
-      digest: createHash("sha256").update(uiPreview.previewHtml).digest("hex"),
+      artifactDigest: recorded.artifact.digest,
+      artifactRevision: recorded.artifact.revision,
+      content: previewHtml,
+      digest: createHash("sha256").update(previewHtml).digest("hex"),
       fidelity: "arrusted-component-catalog" as const,
       functionality: "fixtures-only" as const,
       reused: prior?.revision === revision,
       revision: uiPreview.revision,
       routes: uiPreview.routes,
     };
+    const serializedResult = {
+      data: {
+        result: { kind: "tool-result", output: result, toolName: "record_ui_preview" },
+      },
+      type: "action.result",
+    };
+    if (serializedPayloadBytes(serializedResult) <= EVE_MAX_PAYLOAD_BYTES) {
+      return result;
+    }
+    return {
+      appId: result.appId,
+      artifactDigest: result.artifactDigest,
+      artifactRevision: result.artifactRevision,
+      digest: result.digest,
+      fidelity: result.fidelity,
+      functionality: result.functionality,
+      requiresChunkedRead: true,
+      reused: result.reused,
+      revision: result.revision,
+      routes: result.routes,
+      totalBytes: Buffer.byteLength(previewHtml, "utf-8"),
+    };
   },
-  inputSchema: uiPreviewInputSchema,
+  inputSchema: uiPreviewInputEnvelopeSchema,
 });

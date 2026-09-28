@@ -246,7 +246,15 @@ export interface DraftPublicationReadBack {
 
 export type GitHubMutationAcknowledgement =
   | { status: "accepted"; requestId: string }
-  | { status: "rejected"; code: string; path?: string };
+  | { status: "rejected"; code: string; path?: string }
+  | {
+      status: "rejected";
+      code: "github-file-write-failed";
+      operation: "create-blob";
+      path: string;
+      bytes: number;
+      providerStatus?: number;
+    };
 
 interface GitHubPublicationFileState {
   mode: string;
@@ -1926,6 +1934,13 @@ async function reclaimRejectedDraftPending(
 const publicationRejectionMessage = (
   acknowledgement: Extract<GitHubMutationAcknowledgement, { status: "rejected" }>,
 ): string => {
+  if (acknowledgement.code === "github-file-write-failed" && "bytes" in acknowledgement) {
+    const providerStatus =
+      acknowledgement.providerStatus === undefined
+        ? ""
+        : ` (GitHub HTTP ${acknowledgement.providerStatus})`;
+    return `GitHub could not complete ${acknowledgement.operation} for ${acknowledgement.path} (${acknowledgement.bytes} bytes)${providerStatus}. Check the repository's current GitHub limits and retry after correcting the file or provider issue; then validate and approve the updated publication.`;
+  }
   if (acknowledgement.code === "reviewed-path-changed" && "path" in acknowledgement) {
     return `Reviewed content changed at ${acknowledgement.path}. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.`;
   }

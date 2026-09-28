@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import nodePath from "node:path";
 
@@ -9,6 +8,7 @@ import {
   SUPPORTED_TEMPLATE_INPUT_PATHS,
 } from "./supported-template";
 import type { SupportedTemplateSnapshot } from "./supported-template";
+import { captureProcessStdout, digestProcessStdout } from "./captured-process-output";
 
 export type SourceKind = "existing-repository" | "fresh-template";
 
@@ -25,7 +25,7 @@ const fixedGit = function fixedGit(
   encoding: "utf-8" | "buffer",
 ): string | Buffer {
   const executable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
-  return execFileSync(
+  const output = captureProcessStdout(
     executable,
     [
       "-c",
@@ -43,7 +43,6 @@ const fixedGit = function fixedGit(
       ...args,
     ],
     {
-      encoding,
       env: {
         GIT_ATTR_NOSYSTEM: "1",
         GIT_CONFIG_GLOBAL: "/dev/null",
@@ -60,34 +59,76 @@ const fixedGit = function fixedGit(
         TMPDIR: "/tmp",
         XDG_CONFIG_HOME: "/dev/null",
       },
-      maxBuffer: 16 * 1024 * 1024,
-      timeout: 30_000,
     },
   );
+  return encoding === "utf-8" ? output.toString("utf-8") : output;
 } as FixedGit;
 
-export const inspectSourceContractDigest = (
+export const inspectSourceContractDigest = async (
   sourcePath: string,
   sourceSha: string,
   contractPaths: readonly string[] = SUPPORTED_TEMPLATE_INPUT_PATHS,
-): string => {
-  const contract = contractPaths.map((contractPath) => {
-    const entry = fixedGit(sourcePath, ["ls-tree", sourceSha, "--", contractPath], "utf-8").trim();
-    const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
-      entry,
-    );
-    if (match === null || match[3] !== contractPath) {
-      throw new Error(
-        `Repository contract path is not a regular blob at ${sourceSha}: ${contractPath}`,
+): Promise<string> => {
+  const executable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
+  const contract = await Promise.all(
+    contractPaths.map(async (contractPath) => {
+      const entry = fixedGit(
+        sourcePath,
+        ["ls-tree", sourceSha, "--", contractPath],
+        "utf-8",
+      ).trim();
+      const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
+        entry,
       );
-    }
-    return {
-      mode: match[1],
-      objectId: match[2],
-      path: contractPath,
-      sha256: sha256(fixedGit(sourcePath, ["show", `${sourceSha}:${contractPath}`], "buffer")),
-    };
-  });
+      if (match === null || match[3] !== contractPath) {
+        throw new Error(
+          `Repository contract path is not a regular blob at ${sourceSha}: ${contractPath}`,
+        );
+      }
+      return {
+        mode: match[1],
+        objectId: match[2],
+        path: contractPath,
+        sha256: await digestProcessStdout(
+          executable,
+          [
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.attributesfile=/dev/null",
+            "-c",
+            "credential.helper=",
+            "-c",
+            "protocol.allow=never",
+            "-C",
+            sourcePath,
+            "show",
+            `${sourceSha}:${contractPath}`,
+          ],
+          {
+            env: {
+              GIT_ATTR_NOSYSTEM: "1",
+              GIT_CONFIG_GLOBAL: "/dev/null",
+              GIT_CONFIG_NOSYSTEM: "1",
+              GIT_CONFIG_SYSTEM: "/dev/null",
+              GIT_NO_LAZY_FETCH: "1",
+              GIT_TERMINAL_PROMPT: "0",
+              HOME: "/dev/null",
+              LANG: "C.UTF-8",
+              LC_ALL: "C.UTF-8",
+              NODE_ENV: process.env.NODE_ENV ?? "production",
+              PATH: "/usr/bin:/bin",
+              SSH_ASKPASS: "/usr/bin/false",
+              TMPDIR: "/tmp",
+              XDG_CONFIG_HOME: "/dev/null",
+            },
+          },
+        ),
+      };
+    }),
+  );
   return sha256(JSON.stringify(contract));
 };
 
@@ -385,7 +426,10 @@ export const inspectClonedTemplateSourceReceipt = async (input: {
   }
   const evidence = {
     adapter: SUPPORTED_TEMPLATE_ADAPTER as typeof SUPPORTED_TEMPLATE_ADAPTER,
-    contractDigest: inspectSourceContractDigest(eligibility.sourcePath, eligibility.sourceSha),
+    contractDigest: await inspectSourceContractDigest(
+      eligibility.sourcePath,
+      eligibility.sourceSha,
+    ),
     eligibilityDigest: eligibility.digest,
     provenance: {
       method: "git-clone-v1" as const,

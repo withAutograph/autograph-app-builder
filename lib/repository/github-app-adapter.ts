@@ -27,7 +27,15 @@ import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./gi
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const decimal = z.string().regex(/^[1-9]\d*$/u);
-const safeProviderCode = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u);
+const mutationRejectionCode = z.enum([
+  "branch-moved",
+  "destination-owner",
+  "github-file-write-failed",
+  "invalid-publication-material",
+  "pull-request-changed",
+  "repository-identity-changed",
+  "reviewed-path-changed",
+]);
 
 const permissionSnapshotSchema = z
   .object({
@@ -151,12 +159,27 @@ const acknowledgementSchema = z.discriminatedUnion("status", [
     .strict(),
   z
     .object({
-      code: safeProviderCode,
+      bytes: z.number().int().nonnegative().safe().optional(),
+      code: mutationRejectionCode,
+      operation: z.literal("create-blob").optional(),
       path: z.string().refine(safeSourcePath).optional(),
+      providerStatus: z.number().int().min(400).max(599).optional(),
       status: z.literal("rejected"),
     })
     .strict()
-    .refine((value) => (value.code === "reviewed-path-changed") === (value.path !== undefined)),
+    .refine((value) => {
+      if (value.code === "reviewed-path-changed") {
+        return (
+          value.path !== undefined && value.bytes === undefined && value.operation === undefined
+        );
+      }
+      if (value.code === "github-file-write-failed") {
+        return (
+          value.path !== undefined && value.bytes !== undefined && value.operation === "create-blob"
+        );
+      }
+      return value.path === undefined && value.bytes === undefined && value.operation === undefined;
+    }),
 ]);
 
 type RequestedPermissions = z.infer<typeof permissionSnapshotSchema>;

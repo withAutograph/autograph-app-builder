@@ -1,6 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
-import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { constants as fsConstants, existsSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import {
+  closeSync,
+  constants as fsConstants,
+  existsSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
 import {
   chmod,
   lstat,
@@ -14,6 +22,7 @@ import {
   unlink,
 } from "node:fs/promises";
 import nodePath from "node:path";
+import { tmpdir } from "node:os";
 
 import {
   assertCanonicalFreshBootstrapJournal,
@@ -48,6 +57,7 @@ import { inspectSourceReceipt, parseSourceReceipt, SOURCE_RECEIPT_VERSION } from
 import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import type { PreparedSourceFile } from "./supported-template";
+import { captureProcessStdout } from "./captured-process-output";
 
 export interface FreshBootstrapFaultHooks {
   afterLockReady?: (pid: number) => void | Promise<void>;
@@ -68,7 +78,10 @@ export interface FreshBootstrapFaultHooks {
   preserveNonterminalJournal?: boolean;
 }
 
-type ExactFile = FreshBootstrapFile & { bytes: Buffer };
+type ExactFile = FreshBootstrapFile & {
+  contentSha256: string;
+  readBytes: () => Promise<Uint8Array>;
+};
 
 export interface FreshBootstrapSourceWorkspace {
   files: readonly PreparedSourceFile[];
@@ -234,26 +247,18 @@ const git = (
   commitIdentity?: FreshBootstrapIdentity,
   input?: Uint8Array,
 ): string =>
-  execFileSync(capability.systemGit, [...gitOptions, "-C", root, ...args], {
-    encoding: "utf-8",
+  captureProcessStdout(capability.systemGit, [...gitOptions, "-C", root, ...args], {
     env: minimalEnvironment(commitIdentity),
-    input,
-    maxBuffer: 16 * 1024 * 1024,
-    stdio: ["pipe", "pipe", "pipe"],
-    timeout: 30_000,
-  });
+    ...(input === undefined ? {} : { input }),
+  }).toString("utf-8");
 
 const gitBuffer = (
   capability: FreshBootstrapCapability,
   root: string,
   args: readonly string[],
 ): Buffer =>
-  execFileSync(capability.systemGit, [...gitOptions, "-C", root, ...args], {
-    encoding: "buffer",
+  captureProcessStdout(capability.systemGit, [...gitOptions, "-C", root, ...args], {
     env: minimalEnvironment(),
-    maxBuffer: 32 * 1024 * 1024,
-    stdio: ["ignore", "pipe", "pipe"],
-    timeout: 30_000,
   });
 
 const within = (root: string, candidate: string): boolean => {
@@ -879,6 +884,40 @@ const blobId = (bytes: Uint8Array) =>
     .update(bytes)
     .digest("hex");
 
+const verifiedFileReader =
+  (
+    read: () => Promise<Uint8Array | null>,
+    path: string,
+    expectedDigest: string,
+    expectedBlob: string,
+  ): (() => Promise<Uint8Array>) =>
+  async () => {
+    const bytes = await read();
+    if (
+      bytes === null ||
+      contentDigest(bytes) !== expectedDigest ||
+      blobId(bytes) !== expectedBlob
+    ) {
+      throw new Error(`The fresh-bootstrap source changed at ${path}.`);
+    }
+    return bytes;
+  };
+
+const sanitizeMaterializationDiagnostic = (value: string): string =>
+  value
+    .replaceAll(/https?:\/\/[^\s]+/giu, "[URL REDACTED]")
+    .replaceAll(/Bearer\s+[^\s,;]+/giu, "Bearer [REDACTED]")
+    .replaceAll(
+      /\b(?:gh[oprsu]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,})\b/gu,
+      "[REDACTED]",
+    )
+    .replaceAll(
+      /\b(?<key>authorization|cookie|password|passwd|secret|token|api[-_]?key)\s*[:=]\s*[^\s,;]+/giu,
+      "$<key>=[REDACTED]",
+    )
+    .replaceAll(/\s+/gu, " ")
+    .trim();
+
 const exactSourceTree = (
   capability: FreshBootstrapCapability,
   sourcePath: string,
@@ -897,13 +936,18 @@ const exactSourceTree = (
       /^(?<mode>100644|100755|120000|160000) (?<type>blob|commit) (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(
         record,
       );
+    if (match === null) {
+      throw new Error(
+        "Fresh bootstrap rejects submodules, symlinks, reserved names, and unsafe paths.",
+      );
+    }
+    const [, mode, type, blob, path] = match;
     if (
-      match === null ||
-      match[1] === "120000" ||
-      match[1] === "160000" ||
-      match[2] !== "blob" ||
-      !safeSourcePath(match[4]) ||
-      match[4]
+      mode === "120000" ||
+      mode === "160000" ||
+      type !== "blob" ||
+      !safeSourcePath(path) ||
+      path
         .split("/")
         .some((part) => [".git", ".repository-bootstrap-claim"].includes(part.toLowerCase()))
     ) {
@@ -911,12 +955,20 @@ const exactSourceTree = (
         "Fresh bootstrap rejects submodules, symlinks, reserved names, and unsafe paths.",
       );
     }
-    const bytes = gitBuffer(capability, sourcePath, ["cat-file", "blob", match[3]]);
+    const bytes = gitBuffer(capability, sourcePath, ["cat-file", "blob", blob]);
+    const digest = contentDigest(bytes);
     files.push({
-      blob: match[3],
-      bytes,
-      mode: match[1] as FreshBootstrapFile["mode"],
-      path: match[4],
+      blob,
+      contentSha256: digest,
+      mode: mode as FreshBootstrapFile["mode"],
+      path,
+      readBytes: verifiedFileReader(
+        async () =>
+          await Promise.resolve(gitBuffer(capability, sourcePath, ["cat-file", "blob", blob])),
+        path,
+        digest,
+        blob,
+      ),
     });
   }
   return files.toSorted((left, right) => Buffer.from(left.path).compare(Buffer.from(right.path)));
@@ -947,11 +999,18 @@ const exactPreparedSourceTree = async (
     if (bytes === null || contentDigest(bytes) !== file.sha256 || blobId(bytes) !== file.objectId) {
       throw new Error(`The prepared fresh-template source drifted at ${file.path}.`);
     }
+    const { objectId: blob, path, sha256: digest, mode } = file;
     files.push({
-      blob: file.objectId,
-      bytes: Buffer.from(bytes),
-      mode: file.mode,
-      path: file.path,
+      blob,
+      contentSha256: digest,
+      mode,
+      path,
+      readBytes: verifiedFileReader(
+        async () => await sourceWorkspace.readSourceFile(path),
+        path,
+        digest,
+        blob,
+      ),
     });
   }
   if (files.length === 0) {
@@ -1012,7 +1071,7 @@ const exactResultTree = async (input: {
         ? before !== undefined
         : before === undefined ||
           before.mode !== `100${change.before.mode}` ||
-          contentDigest(before.bytes) !== change.before.digest
+          before.contentSha256 !== change.before.digest
     ) {
       throw new Error(`The reviewed bootstrap preimage is stale at ${change.path}.`);
     }
@@ -1026,11 +1085,20 @@ const exactResultTree = async (input: {
       throw new Error(`The reviewed bootstrap overlay is stale at ${change.path}.`);
     }
     const buffer = Buffer.from(bytes);
+    const { digest } = change.after;
+    const blob = blobId(buffer);
+    const { path } = change;
     files.set(change.path, {
-      blob: blobId(buffer),
-      bytes: buffer,
+      blob,
+      contentSha256: digest,
       mode: `100${change.after.mode}` as FreshBootstrapFile["mode"],
-      path: change.path,
+      path,
+      readBytes: verifiedFileReader(
+        async () => await input.readOverlayFile(path),
+        path,
+        digest,
+        blob,
+      ),
     });
   }
   return [...files.values()].toSorted((left, right) =>
@@ -1412,6 +1480,7 @@ const materializeFile = async (
   stageIdentity: PathIdentity,
 ): Promise<void> => {
   await assertExactExecutable(capability.systemPythonIdentity);
+  const bytes = await file.readBytes();
   // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   const stage = await open(proposal.stagingPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
@@ -1426,20 +1495,42 @@ const materializeFile = async (
     ) {
       throw new Error("The fd-bound bootstrap stage changed after its durable layout receipt.");
     }
-    const result = spawnSync(
-      capability.systemPython,
-      ["-I", "-c", materializeAdapter, file.path, file.mode, file.blob, recovery ? "1" : "0"],
-      {
-        encoding: "utf-8",
-        env: minimalEnvironment(),
-        input: file.bytes,
-        maxBuffer: Math.max(1024 * 1024, file.bytes.length + 64 * 1024),
-        stdio: ["pipe", "pipe", "pipe", stage.fd],
-        timeout: 30_000,
-      },
-    );
-    if (result.status !== 0) {
-      throw new Error(`Fd-bound materialization failed at ${file.path}.`);
+    const outputDirectory = mkdtempSync(nodePath.join(tmpdir(), "app-builder-materialize-output-"));
+    const stdoutPath = nodePath.join(outputDirectory, "stdout");
+    const stderrPath = nodePath.join(outputDirectory, "stderr");
+    const stdoutFd = openSync(stdoutPath, "w");
+    const stderrFd = openSync(stderrPath, "w");
+    let commandResult: ReturnType<typeof spawnSync>;
+    let stdout: string;
+    let stderr: string;
+    try {
+      commandResult = spawnSync(
+        capability.systemPython,
+        ["-I", "-c", materializeAdapter, file.path, file.mode, file.blob, recovery ? "1" : "0"],
+        {
+          env: minimalEnvironment(),
+          input: bytes,
+          stdio: ["pipe", stdoutFd, stderrFd, stage.fd],
+        },
+      );
+      stdout = readFileSync(stdoutPath, "utf-8");
+      stderr = readFileSync(stderrPath, "utf-8");
+    } finally {
+      closeSync(stdoutFd);
+      closeSync(stderrFd);
+      rmSync(outputDirectory, { force: true, recursive: true });
+    }
+    if (commandResult.status !== 0) {
+      const status =
+        commandResult.status === null
+          ? `signal ${commandResult.signal ?? "unknown"}`
+          : `exit ${commandResult.status}`;
+      const detail = sanitizeMaterializationDiagnostic(
+        [commandResult.error?.message, stderr, stdout].filter(Boolean).join(" "),
+      );
+      throw new Error(
+        `Fd-bound materialization failed at ${file.path} (${status}). ${detail || "The materializer returned no diagnostic output."}`,
+      );
     }
   } finally {
     await stage.close();
@@ -1556,12 +1647,14 @@ const initializeGit = async (input: {
   await input.hooks?.beforeGitAdd?.();
   const indexRecords: Buffer[] = [];
   for (const file of input.files) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Read, verify, and add one source blob at a time.
+    const bytes = await file.readBytes();
     const observed = git(
       input.capability,
       input.proposal.stagingPath,
       ["hash-object", "-w", "--stdin"],
       undefined,
-      file.bytes,
+      bytes,
     ).trim();
     if (observed !== file.blob) {
       throw new Error(`Git blob identity changed at ${file.path}.`);

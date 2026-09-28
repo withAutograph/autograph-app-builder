@@ -38,6 +38,17 @@ it("reports the source snapshot operation, cause, and repair when sandbox execut
   );
 });
 
+it("preserves full snapshot failure diagnostics while redacting secrets", async () => {
+  const detail = `${"overlay snapshot detail ".repeat(70)} token=github_pat_12345678901234567890`;
+  const sandbox = {
+    run: async () => await Promise.resolve({ exitCode: 127, stderr: detail, stdout: "" }),
+  };
+  const failure = inspectApplyOverlay(sandbox, "/workspace/repository");
+
+  await expect(failure).rejects.toThrow("token=[REDACTED]");
+  await expect(failure).rejects.toThrow("overlay snapshot detail ".repeat(70));
+});
+
 it("keeps Next runtime output out of reviewed changes while retaining application source", () => {
   const root = mkdtempSync(path.join(tmpdir(), "app-builder-source-snapshot-"));
   try {

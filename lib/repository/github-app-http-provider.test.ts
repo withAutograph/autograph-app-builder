@@ -33,8 +33,9 @@ function unicodeDraftMaterial(
   preserveOverlayOrder = false,
   includePreimages = false,
   inputPaths?: readonly string[],
+  contentBytes = new TextEncoder().encode("export default null;\n"),
 ) {
-  const bytes = new TextEncoder().encode("export default null;\n");
+  const bytes = contentBytes;
   const digest = createHash("sha256").update(bytes).digest("hex");
   const changes = (
     inputPaths ?? [
@@ -548,6 +549,149 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       status: "rejected",
     });
     expect(calls).toHaveLength(5);
+  });
+
+  it("accepts a reviewed draft file larger than the former 10 MiB Builder cap", async () => {
+    const filePath = "apps/demo/large.tsx";
+    const mock = providerFetch();
+    const provider = createGitHubAppHttpProvider({
+      config: {
+        appId: "123",
+        installationId: "456",
+        privateKey: privateKeyPem,
+      },
+      // oxlint-disable-next-line eslint/require-await -- this callback implements fetch with synchronous fixtures.
+      fetch: async (request, init = {}) => {
+        const url = String(request);
+        if (url.endsWith("/repositories/100")) {
+          return json({
+            default_branch: "main",
+            id: 100,
+            name: "example-app",
+            owner: { login: "withAutograph" },
+            private: true,
+          });
+        }
+        if (url.endsWith("/repos/withAutograph/example-app/commits/main")) {
+          return json({ commit: { tree: { sha: "b".repeat(40) } }, sha: "a".repeat(40) });
+        }
+        if (
+          url.endsWith("/repos/withAutograph/example-app/actions/variables?per_page=100&page=1")
+        ) {
+          return json({ variables: [] });
+        }
+        if (url.endsWith(`/compare/${sourceSha}...${"a".repeat(40)}`)) {
+          return json({ files: [{ filename: filePath }] });
+        }
+        return await mock.implementation(request, init);
+      },
+    });
+    const bytes = new Uint8Array(10 * 1024 * 1024 + 1);
+    const { proposal, content } = unicodeDraftMaterial(false, false, [filePath], bytes);
+
+    await expect(provider.publishDraftPullRequest(proposal, content)).resolves.toEqual({
+      code: "reviewed-path-changed",
+      path: filePath,
+      status: "rejected",
+    });
+  });
+
+  it("accepts a draft change set larger than the former 10,000-file Builder cap", async () => {
+    const filePaths = Array.from(
+      { length: 10_001 },
+      (_unused, index) => `apps/demo/file-${String(index).padStart(5, "0")}.tsx`,
+    );
+    const mock = providerFetch();
+    const provider = createGitHubAppHttpProvider({
+      config: {
+        appId: "123",
+        installationId: "456",
+        privateKey: privateKeyPem,
+      },
+      // oxlint-disable-next-line eslint/require-await -- this callback implements fetch with synchronous fixtures.
+      fetch: async (request, init = {}) => {
+        const url = String(request);
+        if (url.endsWith("/repositories/100")) {
+          return json({
+            default_branch: "main",
+            id: 100,
+            name: "example-app",
+            owner: { login: "withAutograph" },
+            private: true,
+          });
+        }
+        if (url.endsWith("/repos/withAutograph/example-app/commits/main")) {
+          return json({ commit: { tree: { sha: "b".repeat(40) } }, sha: "a".repeat(40) });
+        }
+        if (
+          url.endsWith("/repos/withAutograph/example-app/actions/variables?per_page=100&page=1")
+        ) {
+          return json({ variables: [] });
+        }
+        if (url.endsWith(`/compare/${sourceSha}...${"a".repeat(40)}`)) {
+          return json({ files: [{ filename: filePaths[0] }] });
+        }
+        return await mock.implementation(request, init);
+      },
+    });
+    const { proposal, content } = unicodeDraftMaterial(false, false, filePaths);
+
+    await expect(provider.publishDraftPullRequest(proposal, content)).resolves.toEqual({
+      code: "reviewed-path-changed",
+      path: filePaths[0],
+      status: "rejected",
+    });
+  });
+
+  it("reports a GitHub blob rejection with the reviewed path and byte count", async () => {
+    const filePath = "apps/demo/limited.tsx";
+    // oxlint-disable-next-line eslint/require-await -- this callback implements fetch with synchronous fixtures.
+    const provider = createProvider(async (request, init = {}) => {
+      const url = String(request);
+      if (url.endsWith("/app/installations/456/access_tokens")) {
+        const body = JSON.parse(String(init.body)) as { permissions: Record<string, string> };
+        return json(
+          { permissions: body.permissions, token: "ghs_operation_scoped_token_value" },
+          201,
+        );
+      }
+      if (url.endsWith("/repositories/100")) {
+        return json({
+          default_branch: "main",
+          id: 100,
+          name: "example-app",
+          owner: { login: "withAutograph" },
+          private: true,
+        });
+      }
+      if (url.endsWith("/repos/withAutograph/example-app/commits/main")) {
+        return json({ commit: { tree: { sha: "b".repeat(40) } }, sha: sourceSha });
+      }
+      if (url.endsWith("/repos/withAutograph/example-app/actions/variables?per_page=100&page=1")) {
+        return json({ variables: [] });
+      }
+      if (url.endsWith(`/compare/${sourceSha}...${sourceSha}`)) {
+        return json({ files: [] });
+      }
+      if (url.includes("/git/trees/")) {
+        return json({ tree: [], truncated: false });
+      }
+      if (url.endsWith("/git/blobs") && init.method === "POST") {
+        return json({ message: "private provider response body" }, 413);
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    const { proposal, content } = unicodeDraftMaterial(false, false, [filePath]);
+    const adapter = createGitHubAppPublicationAdapter(provider);
+
+    await expect(adapter.publishDraftPullRequest(proposal, content)).resolves.toEqual({
+      bytes: new TextEncoder().encode("export default null;\n").byteLength,
+      code: "github-file-write-failed",
+      operation: "create-blob",
+      path: filePath,
+      providerStatus: 413,
+      status: "rejected",
+    });
   });
 
   it.each(["modified", "added"] as const)(

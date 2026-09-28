@@ -29,23 +29,18 @@ class InvalidApplicationReadError extends Error {
   override name = "InvalidApplicationReadError";
 }
 
-const readBoundedJson = async (response: Response): Promise<unknown> => {
+const readJson = async (response: Response): Promise<unknown> => {
   const reader = response.body?.getReader();
   if (!reader) {
     throw new InvalidApplicationReadError("Missing response");
   }
   const chunks: Uint8Array[] = [];
-  let size = 0;
   try {
     while (true) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- Consume one bounded response stream.
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Consume the response stream in order.
       const chunk = await reader.read();
       if (chunk.done) {
         break;
-      }
-      size += chunk.value.byteLength;
-      if (size > 65_536) {
-        throw new InvalidApplicationReadError("Response exceeds limit");
       }
       chunks.push(chunk.value);
     }
@@ -130,9 +125,6 @@ export const executeProductReadback = async (input: {
     }
     const marker = randomUUID();
     const body = JSON.stringify({ ...input.scenario.body, [input.scenario.markerField]: marker });
-    if (Buffer.byteLength(body) > 65_536) {
-      return result("blocked", "Scenario body exceeds limit.");
-    }
     const request = (url: string, options: RequestInit = {}) => {
       signal.throwIfAborted();
       if (Date.now() >= input.authority.expiresAt) {
@@ -171,7 +163,7 @@ export const executeProductReadback = async (input: {
       }
       return result("failed", "Independent read did not succeed; redirects are not followed.");
     }
-    const observed = atPointer(await readBoundedJson(read), input.scenario.readPointer);
+    const observed = atPointer(await readJson(read), input.scenario.readPointer);
     return observed === marker
       ? result("passed", "Independent application read returned the verifier-written value.")
       : result("failed", "Independent application read did not return the verifier-written value.");

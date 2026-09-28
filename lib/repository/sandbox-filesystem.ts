@@ -11,8 +11,7 @@ const directoryFailureDetail = (value: string): string =>
       "$<key>=[REDACTED]",
     )
     .replaceAll(/\s+/gu, " ")
-    .trim()
-    .slice(0, 350);
+    .trim();
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function quoteSandboxArgument(value: string): string {

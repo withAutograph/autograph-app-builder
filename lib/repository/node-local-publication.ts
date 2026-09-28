@@ -1,5 +1,7 @@
-import { randomUUID } from "node:crypto";
-import { execFileSync, spawnSync } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { createReadStream, createWriteStream } from "node:fs";
 import {
   lstat,
   link,
@@ -14,7 +16,11 @@ import {
   unlink,
   writeFile,
   chmod,
+  copyFile,
 } from "node:fs/promises";
+import { finished, pipeline } from "node:stream/promises";
+import { createInterface } from "node:readline";
+import { tmpdir } from "node:os";
 import nodePath from "node:path";
 
 import {
@@ -24,9 +30,6 @@ import {
   contentDigest,
   createLocalPublicationProposal,
   exactProposalMatch,
-  LOCAL_PUBLICATION_MAX_CHANGE_BYTES,
-  LOCAL_PUBLICATION_MAX_DIRTY_BYTES,
-  LOCAL_PUBLICATION_MAX_FILE_BYTES,
   pathsOverlap,
   proposalFromJournal,
   receiptDigest,
@@ -54,7 +57,8 @@ import { compareOverlayPaths } from "./target-apply";
 interface FileState {
   kind: "absent" | "regular" | "directory" | "symlink" | "special";
   mode?: string;
-  bytes?: Uint8Array;
+  materializedPath?: string;
+  size?: number;
   digest?: string;
 }
 
@@ -87,12 +91,108 @@ const fixedGitEnvironment = function fixedGitEnvironment(): NodeJS.ProcessEnv {
   return environment;
 };
 
-const fixedGitApply = function fixedGitApply(
+interface GitDiagnosticCapture {
+  directory: string;
+  rawPath: string;
+  writer: ReturnType<typeof createWriteStream>;
+}
+
+const startGitDiagnosticCapture =
+  async function startGitDiagnosticCapture(): Promise<GitDiagnosticCapture> {
+    const directory = await mkdtemp(nodePath.join(tmpdir(), "autograph-git-diagnostic-"));
+    const rawPath = nodePath.join(directory, "stderr.raw");
+    return {
+      directory,
+      rawPath,
+      writer: createWriteStream(rawPath, { flags: "wx", mode: 0o600 }),
+    };
+  };
+
+const redactGitDiagnosticLine = function redactGitDiagnosticLine(line: string): string {
+  return (
+    line
+      // oxlint-disable-next-line eslint/no-control-regex -- Strip terminal escape sequences from Git diagnostics.
+      .replaceAll(/\u001B\[[0-?]*[ -/]*[@-~]/gu, "")
+      // oxlint-disable-next-line eslint/no-control-regex -- Replace control bytes before exposing diagnostics.
+      .replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu, "?")
+      .replaceAll(/\b(?:https?|postgres(?:ql)?|redis):\/\/[^\s"'<>]+/giu, "[URL REDACTED]")
+      .replaceAll(/\bBearer\s+[^\s"',;]+/giu, "Bearer [REDACTED]")
+      .replaceAll(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/gu, "[JWT REDACTED]")
+      .replaceAll(
+        /\b(?<name>(?:[A-Z_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[-_]?KEY|AUTHORIZATION|COOKIE)[A-Z_]*))(?<separator>["']?\s*[:=]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s,;]+)/giu,
+        "$<name>$<separator>[REDACTED]",
+      )
+  );
+};
+
+const finishGitDiagnosticCapture = async function finishGitDiagnosticCapture(
+  capture: GitDiagnosticCapture,
+  keep: boolean,
+): Promise<string | undefined> {
+  await finished(capture.writer);
+  if (!keep) {
+    await rm(capture.directory, { force: true, recursive: true });
+    return undefined;
+  }
+  const logPath = nodePath.join(capture.directory, "stderr.log");
+  const sanitizedWriter = createWriteStream(logPath, { flags: "wx", mode: 0o600 });
+  const lines = createInterface({
+    crlfDelay: Infinity,
+    input: createReadStream(capture.rawPath),
+  });
+  for await (const line of lines) {
+    const chunk = `${redactGitDiagnosticLine(line)}\n`;
+    if (!sanitizedWriter.write(chunk)) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- respect private diagnostic file backpressure.
+      await once(sanitizedWriter, "drain");
+    }
+  }
+  sanitizedWriter.end();
+  await finished(sanitizedWriter);
+  await unlink(capture.rawPath);
+  return logPath;
+};
+
+interface GitProcessResult {
+  stderrLogPath?: string;
+  status: number;
+  stdout: Buffer;
+}
+
+interface GitPatch {
+  directory: string;
+  path: string;
+}
+
+const runGitCapture = async function runGitCapture(
+  args: readonly string[],
+): Promise<GitProcessResult> {
+  const diagnosticCapture = await startGitDiagnosticCapture();
+  const child = spawn("git", [...args], {
+    env: fixedGitEnvironment(),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const output: Buffer[] = [];
+  child.stdout.on("data", (chunk: Buffer) => {
+    output.push(Buffer.from(chunk));
+  });
+  child.stderr.pipe(diagnosticCapture.writer);
+  const [code] = (await once(child, "close")) as [number | null, NodeJS.Signals | null];
+  const stderrLogPath = await finishGitDiagnosticCapture(diagnosticCapture, code !== 0);
+  return {
+    ...(stderrLogPath === undefined ? {} : { stderrLogPath }),
+    status: code ?? -1,
+    stdout: Buffer.concat(output),
+  };
+};
+
+const fixedGitApply = async function fixedGitApply(
   root: string,
-  patch: Uint8Array,
+  patchPath: string,
   options: { reverse?: boolean; check?: boolean } = {},
-): void {
-  const result = spawnSync(
+): Promise<void> {
+  const diagnosticCapture = await startGitDiagnosticCapture();
+  const child = spawn(
     "git",
     [
       "-c",
@@ -112,13 +212,29 @@ const fixedGitApply = function fixedGitApply(
     ],
     {
       env: fixedGitEnvironment(),
-      input: patch,
-      maxBuffer: 64 * 1024 * 1024,
+      stdio: ["pipe", "ignore", "pipe"],
     },
   );
-  if (result.status !== 0) {
+  child.stderr.pipe(diagnosticCapture.writer);
+  const close = once(child, "close");
+  const input = pipeline(createReadStream(patchPath), child.stdin);
+  const [inputResult, processResult] = await Promise.allSettled([input, close]);
+  if (processResult.status === "rejected") {
+    throw processResult.reason;
+  }
+  if (
+    inputResult.status === "rejected" &&
+    (inputResult.reason as NodeJS.ErrnoException).code !== "EPIPE"
+  ) {
+    throw inputResult.reason;
+  }
+  const [code, signal] = processResult.value as [number | null, NodeJS.Signals | null];
+  const stderrLogPath = await finishGitDiagnosticCapture(diagnosticCapture, code !== 0);
+  if (code !== 0) {
+    const statusDetail = signal ?? `exit ${code}`;
+    const diagnosticPath = stderrLogPath ?? "an unavailable private diagnostic log";
     throw new Error(
-      `Fixed git apply failed: ${result.stderr.toString("utf-8").trim() || "unknown error"}`,
+      `Git apply failed for ${root} using patch ${patchPath} (${statusDetail}); sanitized stderr is available at ${diagnosticPath}.`,
     );
   }
 };
@@ -127,18 +243,38 @@ const materializePatchFile = async function materializePatchFile(
   root: string,
   side: "old" | "new",
   path: string,
-  state: { bytes: Uint8Array; mode: string } | undefined,
+  state: { sourcePath: string; mode: string } | undefined,
 ): Promise<void> {
   if (state === undefined) {
     return;
   }
   const target = nodePath.resolve(root, side, path);
   await mkdir(nodePath.dirname(target), { mode: 0o755, recursive: true });
-  await writeFile(target, state.bytes, {
-    flag: "wx",
-    mode: Number.parseInt(state.mode, 8),
-  });
+  await copyFile(state.sourcePath, target);
   await chmod(target, Number.parseInt(state.mode, 8));
+};
+
+const writeStageFile = async function writeStageFile(
+  stagingRoot: string,
+  relativePath: string,
+  source: { bytes: Uint8Array } | { path: string },
+  mode: string,
+): Promise<string> {
+  const target = nodePath.resolve(stagingRoot, relativePath);
+  const relativeTarget = nodePath.relative(stagingRoot, target);
+  if (
+    relativeTarget === ".." ||
+    relativeTarget.startsWith(`..${nodePath.sep}`) ||
+    nodePath.isAbsolute(relativeTarget)
+  ) {
+    throw new Error("A staged publication path escapes its private directory.");
+  }
+  await mkdir(nodePath.dirname(target), { mode: 0o700, recursive: true });
+  await ("bytes" in source
+    ? writeFile(target, source.bytes, { flag: "wx", mode: Number.parseInt(mode, 8) })
+    : copyFile(source.path, target));
+  await chmod(target, Number.parseInt(mode, 8));
+  return target;
 };
 
 const buildExactGitPatch = async function buildExactGitPatch(input: {
@@ -146,15 +282,17 @@ const buildExactGitPatch = async function buildExactGitPatch(input: {
   executionPaths: readonly string[];
   changes: LocalPublicationProposal["changes"];
   preimages: ReadonlyMap<string, FileState>;
-  overlay: ReadonlyMap<string, Uint8Array>;
-}): Promise<Uint8Array> {
+  overlay: ReadonlyMap<string, FileState>;
+}): Promise<GitPatch> {
   const scratchParent = nodePath.resolve(input.gitDirectoryPath, "app-builder");
   await mkdir(scratchParent, { mode: 0o700, recursive: true });
   const scratch = await mkdtemp(nodePath.resolve(scratchParent, "publication-patch-"));
-  const chunks: Buffer[] = [];
+  const patchPath = nodePath.resolve(scratch, "change.patch");
+  const patchFile = await open(patchPath, "wx", 0o600);
+  const changes = new Map(input.changes.map((change) => [change.path, change]));
   try {
     for (const path of input.executionPaths) {
-      const change = input.changes.find((candidate) => candidate.path === path);
+      const change = changes.get(path);
       if (change === undefined) {
         throw new Error(`Missing approved change for ${path}.`);
       }
@@ -174,41 +312,77 @@ const buildExactGitPatch = async function buildExactGitPatch(input: {
         item,
         "old",
         path,
-        before.kind === "regular" && before.bytes !== undefined && before.mode !== undefined
-          ? { bytes: before.bytes, mode: before.mode }
+        before.kind === "regular" &&
+          before.materializedPath !== undefined &&
+          before.mode !== undefined
+          ? { mode: before.mode, sourcePath: before.materializedPath }
           : undefined,
       );
-      const afterBytes = input.overlay.get(path);
+      const after = input.overlay.get(path);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await materializePatchFile(
         item,
         "new",
         path,
-        change.after !== undefined && afterBytes !== undefined
-          ? { bytes: afterBytes, mode: change.after.mode }
+        change.after !== undefined && after?.materializedPath !== undefined
+          ? { mode: change.after.mode, sourcePath: after.materializedPath }
           : undefined,
       );
-      const result = spawnSync(
+      // oxlint-disable-next-line eslint/no-await-in-loop -- keep each private diagnostic capture scoped to one streamed patch.
+      const diagnosticCapture = await startGitDiagnosticCapture();
+      const child = spawn(
         "git",
         ["diff", "--no-index", "--binary", "--no-prefix", "--no-renames", "--", "old", "new"],
-        { cwd: item, env: fixedGitEnvironment(), maxBuffer: 64 * 1024 * 1024 },
+        { cwd: item, env: fixedGitEnvironment(), stdio: ["ignore", "pipe", "pipe"] },
       );
-      if (result.status !== 1) {
-        throw new Error(`Could not build the exact publication patch for ${path}.`);
+      child.stderr.pipe(diagnosticCapture.writer);
+      const resultPromise = once(child, "close");
+      // oxlint-disable-next-line eslint/no-await-in-loop -- consume diff output sequentially to keep memory bounded
+      for await (const chunk of child.stdout as AsyncIterable<Buffer>) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- write each streamed diff chunk before reading more
+        await patchFile.writeFile(chunk);
       }
-      chunks.push(result.stdout);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- finish each streamed diff before starting the next one
+      const [code, signal] = (await resultPromise) as [number | null, NodeJS.Signals | null];
+      // oxlint-disable-next-line eslint/no-await-in-loop -- finish each patch diagnostic before the next patch starts.
+      const stderrLogPath = await finishGitDiagnosticCapture(diagnosticCapture, code !== 1);
+      if (code !== 1) {
+        const statusDetail = signal ?? `exit ${code}`;
+        const diagnosticPath = stderrLogPath ?? "an unavailable private diagnostic log";
+        throw new Error(
+          `Could not build the exact publication patch for ${path} in ${input.gitDirectoryPath} (${statusDetail}); sanitized stderr is available at ${diagnosticPath}.`,
+        );
+      }
     }
-    return Buffer.concat(chunks);
-  } finally {
+    await patchFile.sync();
+    return { directory: scratch, path: patchPath };
+  } catch (error) {
+    await patchFile.close();
     await rm(scratch, { force: true, recursive: true });
+    throw error;
+  } finally {
+    await patchFile.close().catch(() => null);
   }
 };
 
-const git = function git(path: string, args: readonly string[]): string {
-  return execFileSync("git", ["-C", path, ...args], {
-    encoding: "utf-8",
-    maxBuffer: 4 * 1024 * 1024,
-  });
+const git = async function git(path: string, args: readonly string[]): Promise<string> {
+  const result = await runGitCapture(["-C", path, ...args]);
+  if (result.status !== 0) {
+    throw new Error(
+      `Git ${args[0] ?? "command"} failed for ${path} (${result.status}); sanitized stderr is available at ${result.stderrLogPath ?? "an unavailable private diagnostic log"}.`,
+    );
+  }
+  return result.stdout.toString("utf-8");
+};
+
+const gitBuffer = async function gitBuffer(path: string, args: readonly string[]): Promise<Buffer> {
+  const result = await runGitCapture(["-C", path, ...args]);
+  if (result.status !== 0) {
+    throw new Error(
+      `Git ${args[0] ?? "command"} failed for ${path} (${result.status}); sanitized stderr is available at ${result.stderrLogPath ?? "an unavailable private diagnostic log"}.`,
+    );
+  }
+  return result.stdout;
 };
 
 const within = function within(root: string, candidate: string): boolean {
@@ -310,7 +484,7 @@ export const parseGitStatusV2 = function parseGitStatusV2(
   return result.toSorted((left, right) => compareOverlayPaths(left.path, right.path));
 };
 
-const fileState = async function fileState(path: string, includeBytes = true): Promise<FileState> {
+const fileState = async function fileState(path: string): Promise<FileState> {
   try {
     const stat = await lstat(path);
     if (stat.isSymbolicLink()) {
@@ -322,15 +496,19 @@ const fileState = async function fileState(path: string, includeBytes = true): P
     if (!stat.isFile()) {
       return { kind: "special", mode: (stat.mode % 0o1000).toString(8) };
     }
-    if (stat.size > LOCAL_PUBLICATION_MAX_FILE_BYTES) {
-      throw new Error(`File exceeds the local-publication size limit: ${path}`);
+    const hash = createHash("sha256");
+    let size = 0;
+    // oxlint-disable-next-line eslint/no-await-in-loop -- hash file content incrementally instead of buffering it
+    for await (const chunk of createReadStream(path) as AsyncIterable<Buffer>) {
+      hash.update(chunk);
+      size += chunk.byteLength;
     }
-    const bytes = includeBytes ? await readFile(path) : undefined;
     return {
+      digest: hash.digest("hex"),
       kind: "regular",
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       mode: (stat.mode & 0o777).toString(8),
-      ...(bytes === undefined ? {} : { bytes, digest: contentDigest(bytes) }),
+      size,
     };
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -355,20 +533,18 @@ const dirtyEntry = async function dirtyEntry(
     ...parsed,
     kind: state.kind,
     ...(state.mode === undefined ? {} : { mode: state.mode }),
-    ...(state.bytes === undefined
+    ...(state.digest === undefined || state.size === undefined
       ? {}
       : {
-          contentBase64: Buffer.from(state.bytes).toString("base64"),
           contentDigest: state.digest,
-          size: state.bytes.byteLength,
+          size: state.size,
         }),
   };
 };
 
-const gitOwnedPath = function gitOwnedPath(root: string, name: string): string {
-  return nodePath.resolve(
-    git(root, ["rev-parse", "--path-format=absolute", "--git-path", name]).trim(),
-  );
+const gitOwnedPath = async function gitOwnedPath(root: string, name: string): Promise<string> {
+  const gitPath = await git(root, ["rev-parse", "--path-format=absolute", "--git-path", name]);
+  return nodePath.resolve(gitPath.trim());
 };
 
 export const inspectLocalPublicationDestination =
@@ -385,26 +561,31 @@ export const inspectLocalPublicationDestination =
     if (canonicalPath !== input.sourceReceipt.sourcePath) {
       throw new Error("The selected destination is not the exact original source checkout.");
     }
-    const [headSha, headTree] = [
-      git(canonicalPath, ["rev-parse", "HEAD"]).trim(),
-      git(canonicalPath, ["rev-parse", "HEAD^{tree}"]).trim(),
-    ];
-    const headReference = git(canonicalPath, ["rev-parse", "--symbolic-full-name", "HEAD"]).trim();
-    const gitDirectoryPath = await realpath(
-      git(canonicalPath, ["rev-parse", "--absolute-git-dir"]).trim(),
-    );
+    const [headSha, headTree, headReference, gitDirectoryValue] = await Promise.all([
+      git(canonicalPath, ["rev-parse", "HEAD"]).then((value) => value.trim()),
+      git(canonicalPath, ["rev-parse", "HEAD^{tree}"]).then((value) => value.trim()),
+      git(canonicalPath, ["rev-parse", "--symbolic-full-name", "HEAD"]).then((value) =>
+        value.trim(),
+      ),
+      git(canonicalPath, ["rev-parse", "--absolute-git-dir"]).then((value) => value.trim()),
+    ]);
+    const gitDirectoryPath = await realpath(gitDirectoryValue);
     const [rootStat, gitDirectoryStat] = await Promise.all([
       lstat(canonicalPath),
       lstat(gitDirectoryPath),
     ]);
     const indexPath = await gitOwnedPath(canonicalPath, "index");
-    const indexFileDigest = contentDigest(await readFile(indexPath));
-    const remoteDigest = stableDigest(git(canonicalPath, ["remote", "-v"]));
+    const indexState = await fileState(indexPath);
+    if (indexState.kind !== "regular" || indexState.digest === undefined) {
+      throw new Error("The Git index is not a readable regular file.");
+    }
+    const indexFileDigest = indexState.digest;
+    const remoteDigest = stableDigest(await git(canonicalPath, ["remote", "-v"]));
     if (!rootStat.isDirectory() || !gitDirectoryStat.isDirectory()) {
       throw new Error("The repository root or Git directory is not a directory.");
     }
     const parsed = parseGitStatusV2(
-      git(canonicalPath, ["status", "--porcelain=v2", "-z", "--untracked-files=all"]),
+      await git(canonicalPath, ["status", "--porcelain=v2", "-z", "--untracked-files=all"]),
     );
     const dirty = await Promise.all(parsed.map((entry) => dirtyEntry(canonicalPath, entry)));
     const indexPaths = [
@@ -414,22 +595,16 @@ export const inspectLocalPublicationDestination =
           .filter((path): path is string => path !== undefined),
       ),
     ].toSorted(compareOverlayPaths);
-    const index = indexPaths.map((path) => {
-      const entries = execFileSync(
-        "git",
-        ["-C", canonicalPath, "ls-files", "--stage", "-z", "--", path],
-        { encoding: "buffer", maxBuffer: 4 * 1024 * 1024 },
-      );
-      return {
-        digest: contentDigest(entries),
-        entriesBase64: entries.toString("base64"),
-        path,
-      };
-    });
-    const totalBytes = dirty.reduce((sum, entry) => sum + (entry.size ?? 0), 0);
-    if (totalBytes > LOCAL_PUBLICATION_MAX_DIRTY_BYTES) {
-      throw new Error("The unrelated dirty snapshot exceeds the local-publication size limit.");
-    }
+    const index = await Promise.all(
+      indexPaths.map(async (path) => {
+        const entries = await gitBuffer(canonicalPath, ["ls-files", "--stage", "-z", "--", path]);
+        return {
+          digest: contentDigest(entries),
+          entriesBase64: entries.toString("base64"),
+          path,
+        };
+      }),
+    );
     const dirtyDigest = stableDigest(dirty);
     const stable = {
       canonicalPath,
@@ -495,7 +670,7 @@ const safeTarget = async function safeTarget(
   for (const segment of segments) {
     cursor = nodePath.resolve(cursor, segment);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const state = await fileState(cursor, false);
+    const state = await fileState(cursor);
     if (state.kind === "absent" && createParents) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await mkdir(cursor, { mode: 0o755 });
@@ -506,7 +681,7 @@ const safeTarget = async function safeTarget(
       throw new Error("The approved path traverses a symlink or non-directory entry.");
     }
   }
-  const leaf = await fileState(target, false);
+  const leaf = await fileState(target);
   if (leaf.kind === "symlink" || leaf.kind === "directory" || leaf.kind === "special") {
     throw new Error("The approved path names a symlink or non-regular entry.");
   }
@@ -684,10 +859,11 @@ export const verifyPublishedChangeSet = async function verifyPublishedChangeSet(
     throw new Error("The successful publication no longer matches the exact workflow or review.");
   }
   const root = await resolveAllowedRepository(input.receipt.destinationPath);
-  if (
-    git(root, ["rev-parse", "HEAD"]).trim() !== input.receipt.baseSha ||
-    git(root, ["rev-parse", "HEAD^{tree}"]).trim() !== input.receipt.sourceTree
-  ) {
+  const [headSha, headTree] = await Promise.all([
+    git(root, ["rev-parse", "HEAD"]).then((value) => value.trim()),
+    git(root, ["rev-parse", "HEAD^{tree}"]).then((value) => value.trim()),
+  ]);
+  if (headSha !== input.receipt.baseSha || headTree !== input.receipt.sourceTree) {
     throw new Error("The destination Git identity changed after local publication.");
   }
   for (const change of input.receipt.changes) {
@@ -744,8 +920,9 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
   const { digest: proposalDigest, ...proposalFields } = input.proposal;
   let release: (() => Promise<void>) | undefined;
   const preimages = new Map<string, FileState>();
-  const overlay = new Map<string, Uint8Array>();
-  let patch: Uint8Array | undefined;
+  const overlay = new Map<string, FileState>();
+  let patch: GitPatch | undefined;
+  let stagingDirectory: string | undefined;
   let appliedPaths: string[] = [];
   let mutationDispatched = false;
   let mutationCallReturned = false;
@@ -763,7 +940,9 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
     }
     const snapshot = await verifyPreconditions(input);
     beforeStatusDigest = snapshot.statusDigest;
-    let totalBytes = 0;
+    const stagingParent = nodePath.resolve(snapshot.gitDirectoryPath, "app-builder");
+    await mkdir(stagingParent, { mode: 0o700, recursive: true });
+    stagingDirectory = await mkdtemp(nodePath.resolve(stagingParent, "publication-input-"));
     for (const change of input.proposal.changes) {
       if (change.after === undefined) {
         continue;
@@ -773,14 +952,20 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       if (bytes === null || contentDigest(bytes) !== change.after.digest) {
         throw new Error(`The immutable apply overlay is stale for ${change.path}.`);
       }
-      if (bytes.byteLength > LOCAL_PUBLICATION_MAX_FILE_BYTES) {
-        throw new Error(`The approved postimage exceeds the per-file limit for ${change.path}.`);
-      }
-      totalBytes += bytes.byteLength;
-      if (totalBytes > LOCAL_PUBLICATION_MAX_CHANGE_BYTES) {
-        throw new Error("The reviewed change set exceeds the aggregate size limit.");
-      }
-      overlay.set(change.path, bytes);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- stage reviewed material one file at a time
+      const materializedPath = await writeStageFile(
+        stagingDirectory,
+        change.path,
+        { bytes },
+        change.after.mode,
+      );
+      overlay.set(change.path, {
+        digest: change.after.digest,
+        kind: "regular",
+        materializedPath,
+        mode: change.after.mode,
+        size: bytes.byteLength,
+      });
     }
     for (const change of input.proposal.changes) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -789,6 +974,15 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
       const before = await fileState(target);
       if (!assertFileMatches(before, change.before)) {
         throw new Error(`The approved preimage changed for ${change.path}.`);
+      }
+      if (before.kind === "regular" && before.mode !== undefined) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- snapshot preimages one file at a time
+        before.materializedPath = await writeStageFile(
+          stagingDirectory,
+          `preimages/${change.path}`,
+          { path: target },
+          before.mode,
+        );
       }
       preimages.set(change.path, before);
     }
@@ -840,13 +1034,11 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
     ) {
       throw new Error("Repository filesystem identity changed before Git apply.");
     }
-    fixedGitApply(snapshot.canonicalPath, patch, { check: true });
+    await fixedGitApply(snapshot.canonicalPath, patch.path, { check: true });
     mutationDispatched = true;
-    if (input.hooks?.dispatchGitApply === undefined) {
-      fixedGitApply(snapshot.canonicalPath, patch);
-    } else {
-      await input.hooks.dispatchGitApply();
-    }
+    await (input.hooks?.dispatchGitApply === undefined
+      ? fixedGitApply(snapshot.canonicalPath, patch.path)
+      : input.hooks.dispatchGitApply());
     mutationCallReturned = true;
     appliedPaths = [...input.proposal.executionPaths];
     pending = { ...pending, appliedPaths, digest: "" };
@@ -954,13 +1146,17 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
             overlay,
             preimages,
           });
-          fixedGitApply(input.proposal.destinationPath, rollbackPatch, {
-            check: true,
-            reverse: true,
-          });
-          fixedGitApply(input.proposal.destinationPath, rollbackPatch, {
-            reverse: true,
-          });
+          try {
+            await fixedGitApply(input.proposal.destinationPath, rollbackPatch.path, {
+              check: true,
+              reverse: true,
+            });
+            await fixedGitApply(input.proposal.destinationPath, rollbackPatch.path, {
+              reverse: true,
+            });
+          } finally {
+            await rm(rollbackPatch.directory, { force: true, recursive: true });
+          }
         } catch {
           // Exact per-path readback below decides the canonical partition.
         }
@@ -1052,6 +1248,12 @@ export const publishReviewedChangeSet = async function publishReviewedChangeSet(
     }
     return { ok: false, receipt };
   } finally {
+    if (patch !== undefined) {
+      await rm(patch.directory, { force: true, recursive: true });
+    }
+    if (stagingDirectory !== undefined) {
+      await rm(stagingDirectory, { force: true, recursive: true });
+    }
     await release?.();
   }
 };

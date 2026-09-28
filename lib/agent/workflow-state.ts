@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { defineState } from "eve/context";
 
-import type { UiPreviewInput } from "@/lib/agent/ui-preview";
+import type { UiPreviewInput, UiPreviewTransfer } from "@/lib/agent/ui-preview";
 import type { PreparedSandboxWorkspace } from "@/lib/repository/supported-template";
 import type { TargetIdentity, TargetProposal } from "@/lib/repository/target-planning";
 import type { TargetApplyFailureReceipt, TargetApplyReceipt } from "@/lib/repository/target-apply";
@@ -38,6 +38,8 @@ import type { ExecutionDependencyLayout } from "@/lib/repository/dependency-cach
 
 export const APP_BUILDER_WORKFLOW_VERSION = 17 as const;
 export const APP_BUILDER_WORKFLOW_STATE_KEY = "autograph-app-builder.workflow.v17" as const;
+export const UI_PREVIEW_TRANSFER_STATE_KEY =
+  "autograph-app-builder.ui-preview-transfer.v1" as const;
 
 export interface AcceptedAppSpec {
   appId: string;
@@ -60,6 +62,22 @@ export interface PrototypeArtifact {
   revision: string;
   sessionId: string;
   recordedByCallId: string;
+  transfer?: {
+    expectedDigest: string;
+    nextChunkIndex: number;
+    lastChunkIndex: number;
+    lastChunkDigest: string;
+    lastCallId: string;
+    chunks: readonly string[];
+    receivedBytes: number;
+    rollingDigest: string;
+  };
+  lastChunkReceipt?: {
+    expectedDigest: string;
+    lastChunkIndex: number;
+    lastChunkDigest: string;
+    lastCallId: string;
+  };
 }
 
 /**
@@ -78,7 +96,6 @@ export interface UiPreviewRevision {
   files: readonly { path: string; content: string }[];
   manifest?: UiPreviewInput["manifest"];
   catalogGaps: readonly UiPreviewInput["catalogGaps"][number][];
-  previewHtml: string;
   createdByCallId: string;
 }
 
@@ -447,6 +464,17 @@ export const validAppId = (appId: string): boolean =>
 export const appBuilderWorkflowState = defineState<AppBuilderWorkflowState>(
   APP_BUILDER_WORKFLOW_STATE_KEY,
   () => ({ phase: "empty", version: APP_BUILDER_WORKFLOW_VERSION }),
+);
+
+export interface UiPreviewTransferState extends UiPreviewTransfer {
+  sessionId: string;
+  sourceSha: string;
+  sourceTree: string;
+}
+
+export const uiPreviewTransferState = defineState<UiPreviewTransferState | null>(
+  UI_PREVIEW_TRANSFER_STATE_KEY,
+  () => null,
 );
 
 /**

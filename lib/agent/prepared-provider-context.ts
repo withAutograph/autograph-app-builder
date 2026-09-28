@@ -102,24 +102,17 @@ const reconnect = (): PreparedVercelAccess => ({
 });
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function boundedJson(response: Response): Promise<unknown> {
+async function readJson(response: Response): Promise<unknown> {
   const reader = response.body?.getReader();
   if (!reader) {
     throw new Error("invalid-response");
   }
   const chunks: Uint8Array[] = [];
-  let length = 0;
   for (;;) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const { done, value } = await reader.read();
     if (done) {
       break;
-    }
-    length += value.byteLength;
-    if (length > 2 * 1024 * 1024) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await reader.cancel();
-      throw new Error("invalid-response");
     }
     chunks.push(value);
   }
@@ -211,7 +204,7 @@ export async function readPreparedVercelAccess(input: {
       await response.body?.cancel();
       return unavailable();
     }
-    const body = await boundedJson(response);
+    const body = await readJson(response);
     const scope: VercelScope = {
       id: binding.scopeId,
       installationId,
