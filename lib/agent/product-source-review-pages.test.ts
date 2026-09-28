@@ -58,6 +58,7 @@ it("reviews current changed files without rereading unchanged app source", async
 it("reviews source above the former 400 KB ceiling in bounded pages with exact original citations", async () => {
   const observed = reader();
   let pages = 0;
+  const onProgress = vi.fn();
   const assessment = await assessProductSourcePages(
     {
       appSpec: "Save the request durably.",
@@ -96,6 +97,9 @@ it("reviews source above the former 400 KB ceiling in bounded pages with exact o
           remainingRuntimeChecks: [],
         };
       },
+      onProgress(progress) {
+        onProgress(progress);
+      },
     },
   );
   expect(pages).toBeGreaterThan(5);
@@ -107,6 +111,12 @@ it("reviews source above the former 400 KB ceiling in bounded pages with exact o
     startLine: 28_001,
   });
   expect(assessment.omissions).not.toContain(`${path}: model context omitted`);
+  expect(onProgress).toHaveBeenCalledWith(
+    expect.objectContaining({ path, phase: "context_started", startLine: 1 }),
+  );
+  expect(onProgress).toHaveBeenCalledWith(
+    expect.objectContaining({ path, phase: "context_result", status: "failed" }),
+  );
 });
 
 it("rejects a changed source digest after yielding pages", async () => {

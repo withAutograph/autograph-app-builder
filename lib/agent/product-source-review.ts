@@ -456,6 +456,15 @@ export const assessProductSourcePages = async (
   options: {
     abortSignal?: AbortSignal;
     mockModel?: boolean;
+    onProgress?: (progress: {
+      phase: string;
+      path: string;
+      startLine: number;
+      contextKind?: ReviewContext["kind"];
+      contextIndex?: number;
+      contextOffset?: number;
+      status?: ProductSourceAssessment["status"];
+    }) => void;
     generate?: (
       page: ProductReviewSourcePage,
       context: ReviewContext,
@@ -478,10 +487,19 @@ export const assessProductSourcePages = async (
   let reviewed = 0;
   for await (const page of pages) {
     options.abortSignal?.throwIfAborted();
+    options.onProgress?.({ path: page.path, phase: "page_started", startLine: page.startLine });
     evidence.update(
       JSON.stringify([page.path, page.startLine, page.startColumn, hashText(page.content)]),
     );
     for (const context of reviewContexts(base)) {
+      const contextProgress = {
+        contextIndex: context.index,
+        contextKind: context.kind,
+        contextOffset: context.startOffset,
+        path: page.path,
+        startLine: page.startLine,
+      };
+      options.onProgress?.({ ...contextProgress, phase: "context_started" });
       evidence.update(
         JSON.stringify([context.kind, context.index, context.startOffset, context.digest]),
       );
@@ -492,6 +510,11 @@ export const assessProductSourcePages = async (
         context,
         options,
       )) {
+        options.onProgress?.({
+          ...contextProgress,
+          phase: "context_result",
+          status: assessment.status,
+        });
         if (!assessment.reviewCompleted) {
           return {
             ...unavailableSourceAssessment(
@@ -522,6 +545,7 @@ export const assessProductSourcePages = async (
         usage.totalTokens += assessment.usage?.totalTokens ?? 0;
       }
     }
+    options.onProgress?.({ path: page.path, phase: "page_completed", startLine: page.startLine });
   }
   if (reviewed === 0) {
     return unavailableSourceAssessment(

@@ -59,6 +59,7 @@ export default defineTool({
         abortSignal: ctx.abortSignal,
         appSpec: current.appSpec,
         applyReceipt: current.applyReceipt,
+        callId: ctx.callId,
         getSandbox: async () => await ctx.getSandbox(),
       });
       ctx.abortSignal?.throwIfAborted();
@@ -176,6 +177,7 @@ export default defineTool({
       abortSignal: ctx.abortSignal,
       appSpec: current.appSpec,
       applyReceipt: current.applyReceipt,
+      callId: ctx.callId,
       getSandbox: async () => await ctx.getSandbox(),
     });
     validationPhase(ctx.callId, "applied_source_review_finished", sourceAssessment.status);
