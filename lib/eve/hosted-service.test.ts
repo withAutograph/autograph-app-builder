@@ -18,6 +18,7 @@ import type { HostedEngineSnapshot, HostedEveTransport } from "./hosted-service"
 import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
 import { hostedOperationRecordSchema, InMemoryHostedEveStore } from "./hosted-store";
 import type {
+  HostedCheckpointPage,
   HostedEveStore,
   HostedOperationRecord,
   ReserveOperationResult,
@@ -430,6 +431,92 @@ describe("delayed durable session reads", () => {
 });
 
 describe("hosted Eve service core", () => {
+  it("resumes a failed session whose checkpoint history is stored in pages", async () => {
+    const baseStore = new InMemoryHostedEveStore();
+    const terminal: HostedEngineSnapshot = {
+      events: [
+        { index: 0, text: "The first run failed", turnId: "turn-1", type: "assistant.message" },
+      ],
+      status: "failed",
+    };
+    const adapter = transport({
+      start: vi
+        .fn()
+        .mockResolvedValueOnce({ adapterSessionId: "eve_failed", snapshot: terminal })
+        .mockResolvedValueOnce({ adapterSessionId: "eve_recovered", snapshot }),
+    });
+    const first = await started({ store: baseStore, transport: adapter });
+    const saved = await baseStore.getSession(principal, first.result.sessionId);
+    if (saved?.version !== 2 || saved.checkpointDigest === undefined) {
+      throw new Error("Expected a saved checkpoint.");
+    }
+    const checkpointRef = {
+      digest: saved.checkpointDigest,
+      eventCount: 300,
+      id: "123e4567-e89b-42d3-a456-426614174003",
+    };
+    const history: HostedCheckpointPage["events"] = Array.from({ length: 300 }, (_, index) =>
+      index === 0 || index === 299
+        ? {
+            index,
+            text: index === 0 ? "Earlier decision" : "Latest failure",
+            turnId: "turn-1",
+            type: "assistant_message",
+          }
+        : { index, label: "Validating", state: "started", type: "progress" },
+    );
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning store contract
+    const readCheckpointPage = vi.fn(async (input: { cursor: number; limit: number }) => ({
+      checkpointDigest: checkpointRef.digest,
+      cursor: Math.min(history.length, input.cursor + input.limit),
+      events: history.slice(input.cursor, input.cursor + input.limit),
+      metadata: { capturedAtEpochMs: 1000, status: "failed" as const, version: 1 as const },
+      totalEvents: history.length,
+    }));
+    const pagedStore: HostedEveStore = {
+      getSession: async (owner, sessionId) => {
+        const record = await baseStore.getSession(owner, sessionId);
+        if (sessionId !== first.result.sessionId || record?.version !== 2) {
+          return record;
+        }
+        const { checkpoint, ...withoutInlineCheckpoint } = record;
+        if (checkpoint === undefined) {
+          throw new Error("Expected an inline checkpoint before simulating paged storage.");
+        }
+        return { ...withoutInlineCheckpoint, checkpointRef };
+      },
+      listSessions: (input) => baseStore.listSessions(input),
+      readCheckpointPage,
+      reserveOperation: (owner, candidate) => baseStore.reserveOperation(owner, candidate),
+      settleSucceeded: (input) => baseStore.settleSucceeded(input),
+      settleUnsuccessful: (input) => baseStore.settleUnsuccessful(input),
+    };
+    const service = createHostedEveSessionService({
+      now: () => 2000,
+      principal,
+      store: pagedStore,
+      transport: adapter,
+    });
+
+    const recovered = await service.start({
+      clientRequestId: "resume_paged_failure",
+      resumeSessionId: first.result.sessionId,
+    });
+
+    expect(recovered.sessionId).not.toBe(first.result.sessionId);
+    expect(readCheckpointPage).toHaveBeenCalledTimes(2);
+    expect(adapter.start).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining("Earlier decision"),
+      }),
+    );
+    expect(adapter.start).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining("Latest failure"),
+      }),
+    );
+  });
+
   it("runs the repository-access recovery seam before reading Eve", async () => {
     const calls: string[] = [];
     const adapter = transport({

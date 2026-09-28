@@ -1,4 +1,4 @@
-import type { DurableHostedSessionRecord } from "./hosted-store";
+import type { DurableHostedSessionRecord, HostedPagedCheckpointMetadata } from "./hosted-store";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function recoveryPromptForSession(record: DurableHostedSessionRecord): string | undefined {
@@ -37,6 +37,39 @@ export function recoveryPromptForSession(record: DurableHostedSessionRecord): st
       : undefined,
     messages.length === 0 ? undefined : `Prior product conversation:\n${messages}`,
     checkpoint.inputRequests === undefined
+      ? undefined
+      : "Reissue every unresolved product request before later work. Do not infer that any of them was answered or approved.",
+    "Preserve the prior product decisions, revalidate current source access before any repository work, and continue from the next unfinished product step.",
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join("\n\n");
+}
+
+/** Recover a paged checkpoint without loading its complete event history into memory. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function recoveryPromptForPagedSession(input: {
+  record: DurableHostedSessionRecord;
+  metadata: HostedPagedCheckpointMetadata;
+  recentMessages: readonly string[];
+  earlierEventsRemain: boolean;
+}): string {
+  const { record, metadata } = input;
+  const messages = input.recentMessages.join("\n\n").slice(-12_000);
+  return [
+    "Continue this interrupted Autograph App Builder session from its durable checkpoint.",
+    `Product title: ${record.title}`,
+    record.appId === undefined ? undefined : `App id: ${record.appId}`,
+    metadata.prototype === undefined
+      ? undefined
+      : `Prototype: ${metadata.prototype.path} (${metadata.prototype.digest})`,
+    metadata.inputRequests === undefined
+      ? undefined
+      : `Outstanding unresolved product requests from the prior runtime (the exact prior request IDs are retained for reconciliation): ${JSON.stringify(metadata.inputRequests)}`,
+    input.earlierEventsRemain || messages.length >= 12_000
+      ? `The conversation below is an excerpt. Complete retained history is available through authenticated autograph_get for session ${record.sessionId}; read it before relying on earlier decisions.`
+      : undefined,
+    messages.length === 0 ? undefined : `Prior product conversation:\n${messages}`,
+    metadata.inputRequests === undefined
       ? undefined
       : "Reissue every unresolved product request before later work. Do not infer that any of them was answered or approved.",
     "Preserve the prior product decisions, revalidate current source access before any repository work, and continue from the next unfinished product step.",
