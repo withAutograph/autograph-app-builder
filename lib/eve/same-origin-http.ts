@@ -13,6 +13,7 @@ import {
   SubmissionRejectedBeforeDispatchError,
 } from "./hosted-service";
 import type { HostedEngineSnapshot, HostedEveTransport } from "./hosted-service";
+import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
 import {
   deriveInstalledEveStatus,
   latestInstalledPrototype,
@@ -23,6 +24,7 @@ import {
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 10_000;
+const SESSION_READ_TIMEOUT_MS = 30_000;
 const SESSION_SETTLEMENT_POLL_INTERVAL_MS = 200;
 const VERCEL_TRUSTED_OIDC_HEADER = "x-vercel-trusted-oidc-idp-token";
 const EVE_STREAM_FORMAT = "ndjson";
@@ -236,12 +238,30 @@ async function readInstalledSnapshot(input: {
   workloadIdentity: HostedWorkloadIdentity;
   fetchImplementation: typeof fetch;
   sessionId: string;
+  readDeadline?: boolean;
+  readSignal?: AbortSignal;
 }): Promise<{
   snapshot: HostedEngineSnapshot;
   installed: MessageStreamEvent[];
 }> {
   const path = `/eve/v1/session/${encodeURIComponent(input.sessionId)}/stream?startIndex=0&includeTailIndex=1`;
-  const response = await authenticatedFetch({ ...input, path, timeout: "unbounded" });
+  const signal =
+    input.readSignal ??
+    (input.readDeadline === true ? AbortSignal.timeout(SESSION_READ_TIMEOUT_MS) : undefined);
+  let response: Response;
+  try {
+    response = await authenticatedFetch({
+      ...input,
+      path,
+      timeout: "unbounded",
+      ...(signal === undefined ? {} : { init: { signal } }),
+    });
+  } catch (error) {
+    if (signal?.aborted === true) {
+      throw new HostedSessionReadTimeoutError();
+    }
+    throw error;
+  }
   if (response.status >= 300 && response.status < 400) {
     throw new Error("Canonical Eve redirects are not allowed.");
   }
@@ -313,6 +333,11 @@ async function readInstalledSnapshot(input: {
     if (events.length !== tail + 1) {
       throw new Error("Canonical Eve stream ended before its durable tail.");
     }
+  } catch (error) {
+    if (signal?.aborted === true) {
+      throw new HostedSessionReadTimeoutError();
+    }
+    throw error;
   } finally {
     await reader.cancel().catch(() => null);
     reader.releaseLock();
@@ -416,9 +441,13 @@ async function readRespondSettlement(input: {
   sessionId: string;
   requestIds: readonly string[];
 }): Promise<HostedEngineSnapshot> {
+  const readSignal = AbortSignal.timeout(SESSION_READ_TIMEOUT_MS);
   while (true) {
+    if (readSignal.aborted) {
+      throw new HostedSessionReadTimeoutError();
+    }
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const observed = await readInstalledSnapshot(input);
+    const observed = await readInstalledSnapshot({ ...input, readSignal });
     const outstanding = outstandingRequestIds(observed.installed);
     if (
       observed.snapshot.status !== "input_required" ||
@@ -426,8 +455,15 @@ async function readRespondSettlement(input: {
     ) {
       return observed.snapshot;
     }
-    // oxlint-disable-next-line eslint/no-await-in-loop -- retry only after the prior durable snapshot was observed
-    await delay(SESSION_SETTLEMENT_POLL_INTERVAL_MS);
+    try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- retry only after the prior durable snapshot was observed
+      await delay(SESSION_SETTLEMENT_POLL_INTERVAL_MS, undefined, { signal: readSignal });
+    } catch (error) {
+      if (readSignal.aborted) {
+        throw new HostedSessionReadTimeoutError();
+      }
+      throw error;
+    }
   }
 }
 
@@ -503,7 +539,8 @@ export function createSameOriginEveTransport(input: {
         await delay(SESSION_SETTLEMENT_POLL_INTERVAL_MS);
       }
     },
-    get: (request) => readSnapshot({ ...common, sessionId: request.adapterSessionId }),
+    get: (request) =>
+      readSnapshot({ ...common, readDeadline: true, sessionId: request.adapterSessionId }),
     async respond(request) {
       const accepted = await postMutation({
         ...common,
