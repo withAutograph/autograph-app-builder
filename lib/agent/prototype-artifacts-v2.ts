@@ -45,6 +45,20 @@ export interface DurablePrototypeChunkResult {
   reused: boolean;
 }
 
+/** The tool emits metadata only; complete receipts are eligible for public ref projection. */
+export const durablePrototypeToolReceipt = (result: DurablePrototypeChunkResult) => {
+  const { transfer, lastChunkReceipt, ...manifest } = result.artifact;
+  void transfer;
+  void lastChunkReceipt;
+  return {
+    ...manifest,
+    complete: result.complete,
+    nextChunkIndex: result.nextChunkIndex,
+    reused: result.reused,
+    size: result.artifact.contentBytes,
+  };
+};
+
 /** Store one ordered chunk, then publish only a digest-verified manifest to Eve state. */
 // oxlint-disable sonarjs/expression-complexity -- Exact retry and stale-revision checks require all receipt fields.
 // oxlint-disable-next-line eslint/complexity -- Transfer validation and receipt publication share one atomic decision path.

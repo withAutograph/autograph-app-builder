@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import { recordDurablePrototypeChunk } from "./prototype-artifacts-v2";
+import { durablePrototypeToolReceipt, recordDurablePrototypeChunk } from "./prototype-artifacts-v2";
 import type { DurablePrototypeChunkStore } from "./prototype-artifacts-v2";
 
 const digest = (value: string) => createHash("sha256").update(value, "utf-8").digest("hex");
@@ -73,6 +73,14 @@ describe("durable v2 prototype tool writer", () => {
     });
     expect(second.artifact).toMatchObject({ chunkCount: 2, digest: expectedDigest, version: 2 });
     expect(second.artifact).not.toHaveProperty("content");
+    expect(durablePrototypeToolReceipt(second)).toMatchObject({
+      complete: true,
+      contentBytes: Buffer.byteLength(pieces.join(""), "utf-8"),
+      digest: expectedDigest,
+      recordedByCallId: "call-2",
+      version: 2,
+    });
+    expect(durablePrototypeToolReceipt(second)).not.toHaveProperty("transfer");
     expect(
       await recordDurablePrototypeChunk({
         ...common,
