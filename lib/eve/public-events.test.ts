@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { MessageStreamEvent } from "eve/client";
 import {
+  createInstalledPreviewMetadataReducer,
   deriveInstalledEveStatus,
   latestInstalledPrototype,
   latestInstalledUiPreview,
@@ -346,6 +347,42 @@ describe("installed Eve 0.43 projection", () => {
       content,
       digest: digest(content),
     });
+  });
+
+  it("reduces preview receipts incrementally without retaining the event history", () => {
+    const reducer = createInstalledPreviewMetadataReducer();
+    const content = "<main>Reviewed preview</main>";
+    const result = (outputDigest: string) =>
+      installedEvent({
+        data: {
+          result: {
+            callId: "ui-preview",
+            kind: "tool-result",
+            output: {
+              appId: "vendor-onboarding",
+              content,
+              digest: outputDigest,
+              fidelity: "arrusted-component-catalog",
+              functionality: "fixtures-only",
+              revision: "a".repeat(64),
+              routes: ["/"],
+            },
+            toolName: "record_ui_preview",
+          },
+          status: "completed",
+        },
+        type: "action.result",
+      });
+    for (let index = 0; index < 10_001; index += 1) {
+      reducer.accept(installedEvent({ data: {}, type: "step.started" }));
+    }
+    reducer.accept(result("f".repeat(64)));
+    expect(reducer.snapshot()).toEqual({});
+    reducer.accept(result(digest(content)));
+    expect(reducer.snapshot()).toMatchObject({
+      uiPreview: { appId: "vendor-onboarding", revision: "a".repeat(64) },
+    });
+    expect(reducer).not.toHaveProperty("events");
   });
 
   it("fails closed if internal specification recording requests approval", () => {

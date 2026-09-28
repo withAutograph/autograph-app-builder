@@ -679,6 +679,32 @@ export const latestInstalledWorkingPreview = (
   return currentWorkingPreview(latest);
 };
 
+/** Retains only verified preview metadata while consuming an unbounded event stream. */
+export const createInstalledPreviewMetadataReducer = () => {
+  let uiPreview: PublicUiPreview | undefined;
+  let workingPreview: PublicWorkingPreview | null | undefined;
+  return {
+    accept(event: MessageStreamEvent) {
+      const nextUiPreview = latestInstalledUiPreview([event]);
+      if (nextUiPreview !== undefined) {
+        uiPreview = nextUiPreview;
+      }
+      const nextWorkingPreview = latestInstalledWorkingPreview([event]);
+      if (nextWorkingPreview !== undefined) {
+        workingPreview = nextWorkingPreview;
+      }
+    },
+    snapshot() {
+      return {
+        ...(uiPreview === undefined ? {} : { uiPreview }),
+        ...(workingPreview === undefined
+          ? {}
+          : { workingPreview: currentWorkingPreview(workingPreview) }),
+      };
+    },
+  };
+};
+
 const inputRequest = (request: {
   requestId: string;
   kind: "question" | "session-limit" | "tool-approval";
