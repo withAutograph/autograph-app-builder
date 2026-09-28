@@ -15,8 +15,6 @@ import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
 import type { ExistingDraftUpdateProposal } from "./github-draft-update";
 
-const MAX_INSTALLATION_REPOSITORIES = 10_000;
-
 class GitHubBlobWriteFailureError extends Error {
   readonly path: string;
   readonly bytes: number;
@@ -409,9 +407,6 @@ export const createGitHubAppHttpProvider = (input: {
       });
       const repositories = arrayProperty(response.body, "repositories");
       ids.push(...repositories.map((repository) => decimalProperty(repository, "id")));
-      if (ids.length > MAX_INSTALLATION_REPOSITORIES) {
-        throw new Error("installation-too-large");
-      }
       if (repositories.length < 100) {
         break;
       }
@@ -445,7 +440,7 @@ export const createGitHubAppHttpProvider = (input: {
     const commitData = property(commit.body, "commit");
     const tree = property(commitData, "tree");
     const variableNames: string[] = [];
-    for (let page = 1; page <= 10; page += 1) {
+    for (let page = 1; ; page += 1) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const variables = await github({
         authorization: accessToken,
@@ -456,9 +451,6 @@ export const createGitHubAppHttpProvider = (input: {
       variableNames.push(...pageVariables.map((value) => stringProperty(value, "name")));
       if (pageVariables.length < 100) {
         break;
-      }
-      if (page === 10) {
-        throw new Error("repository-variables-too-large");
       }
     }
     if (!booleanProperty(repositoryResponse.body, "private")) {

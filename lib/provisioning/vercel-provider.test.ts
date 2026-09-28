@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import type { GitHubProvisionResult } from "./contracts";
 import { provisionVercelProject } from "./vercel-provider";
@@ -40,6 +41,53 @@ function installation(scopeType: "team" | "user") {
 }
 
 describe("Vercel project provisioning", () => {
+  it("continues through more than five occupied names", async () => {
+    const created = new Set<string>();
+    let suffixNumber = 0;
+    const candidates: string[] = [];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    const request = vi.fn<typeof fetch>(async (url, init) => {
+      const path = new URL(String(url)).pathname;
+      if (init?.method === "POST") {
+        const body = z.object({ name: z.string() }).parse(JSON.parse(String(init.body)));
+        created.add(body.name);
+        return Response.json({ id: "prj_7" }, { status: 201 });
+      }
+      const name = decodeURIComponent(path.split("/").at(-1) ?? "");
+      if (!created.has(name)) {
+        return candidates.length <= 6
+          ? Response.json({ id: "occupied" })
+          : Response.json({}, { status: 404 });
+      }
+      return Response.json({
+        framework: "nextjs",
+        id: "prj_7",
+        name,
+        rootDirectory: "apps/vendor-portal",
+      });
+    });
+    const result = await provisionVercelProject({
+      appId: "vendor-portal",
+      fetch: request,
+      generateSuffix: () => {
+        suffixNumber += 1;
+        return `a${String(suffixNumber).padStart(5, "0")}`;
+      },
+      github: { code: "not_selected", retryable: false, status: "skipped" },
+      githubSelected: false,
+      installation: installation("user"),
+      persistAbsent: vi.fn(),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      persistCandidate: async (value) => {
+        candidates.push(value);
+      },
+      persistedAbsentCandidates: [],
+      persistedCandidates: [],
+      token: "vercel-token",
+    });
+    expect(result.status).toBe("succeeded");
+    expect(candidates).toHaveLength(7);
+  });
   it.each(["team", "user"] as const)(
     "creates and reads back one linked %s project without a deployment call",
     async (scopeType) => {
@@ -159,7 +207,7 @@ describe("Vercel project provisioning", () => {
       token: "vercel-token",
     });
     expect(result).toMatchObject({
-      code: "provider_rejected",
+      code: "provider_validation_failed",
       status: "failed",
     });
     expect(bodies).toHaveLength(1);

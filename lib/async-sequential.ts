@@ -30,3 +30,16 @@ export const runSequentiallyUntil = async <T, R>(
   };
   return await run(0);
 };
+
+export const runSequentiallyUntilAsync = async <T, R>(
+  values: AsyncIterable<T>,
+  operation: (value: T) => Promise<R | null>,
+): Promise<R | null> => {
+  for await (const value of values) {
+    const result = await operation(value);
+    if (result !== null) {
+      return result;
+    }
+  }
+  return null;
+};

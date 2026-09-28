@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 
 import type { VercelIntegrationConfig } from "../integrations/vercel-installation";
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
@@ -52,6 +52,7 @@ export interface BuilderProvisioningDependencies {
 }
 
 const LEASE_MS = 15 * 60_000;
+const LEASE_LOST = "provision-lease-lost";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function sameIntent(
@@ -109,150 +110,217 @@ export async function executeBuilderProvisioning(input: {
     return leased.record.response;
   }
 
-  const persist = async (kind: "candidate" | "absent", candidate: string) => {
+  let leaseFailure: Error | undefined;
+  const renewLease = async () => {
+    if (leaseFailure) {
+      throw leaseFailure;
+    }
     await updateBuilderProvisionJournal({
       authority: input.authority,
       now,
       requestId: request.requestId,
       store: input.dependencies.journal,
       update(current) {
-        const values =
-          kind === "candidate"
-            ? current.operations[request.operation].candidates
-            : current.operations[request.operation].absentCandidates;
-        if (!values.includes(candidate)) {
-          values.push(candidate);
+        const operation = current.operations[request.operation];
+        if (operation.leaseId !== leaseId) {
+          throw new Error(LEASE_LOST);
         }
+        operation.leaseExpiresAt = new Date(now() + LEASE_MS).toISOString();
         return current;
       },
     });
   };
+  const tick = async () => {
+    try {
+      await renewLease();
+    } catch (error) {
+      leaseFailure = error instanceof Error ? error : new Error("provision-lease-renewal-failed");
+    }
+  };
+  const renewal = setInterval(() => {
+    void tick();
+  }, LEASE_MS / 3);
+  renewal.unref?.();
 
-  let result: BuilderProvisionResponse[typeof request.operation];
-  if (request.operation === "github") {
-    const bindings = (await input.dependencies.githubInstallations.list?.(input.authority)) ?? [];
-    const installation = bindings.find(
-      (binding) =>
-        binding.installationId === request.providers.githubInstallationId && binding.active,
-    );
-    if (installation) {
-      try {
-        const source = await (input.dependencies.loadStarterSource ?? cloneStarterSource)();
-        const current = await input.dependencies.journal.read({
-          authority: input.authority,
-          requestId: request.requestId,
-        });
-        if (!current) {
-          throw new Error("provision-journal-missing");
+  try {
+    const persist = async (kind: "candidate" | "absent", candidate: string) => {
+      await renewLease();
+      await updateBuilderProvisionJournal({
+        authority: input.authority,
+        now,
+        requestId: request.requestId,
+        store: input.dependencies.journal,
+        update(current) {
+          if (current.operations[request.operation].leaseId !== leaseId) {
+            throw new Error(LEASE_LOST);
+          }
+          const values =
+            kind === "candidate"
+              ? current.operations[request.operation].candidates
+              : current.operations[request.operation].absentCandidates;
+          if (!values.includes(candidate)) {
+            values.push(candidate);
+          }
+          return current;
+        },
+      });
+    };
+
+    let result: BuilderProvisionResponse[typeof request.operation];
+    if (request.operation === "github") {
+      const bindings = (await input.dependencies.githubInstallations.list?.(input.authority)) ?? [];
+      const installation = bindings.find(
+        (binding) =>
+          binding.installationId === request.providers.githubInstallationId && binding.active,
+      );
+      if (installation) {
+        try {
+          const source = await (input.dependencies.loadStarterSource ?? cloneStarterSource)();
+          const current = await input.dependencies.journal.read({
+            authority: input.authority,
+            requestId: request.requestId,
+          });
+          if (!current) {
+            throw new Error("provision-journal-missing");
+          }
+          result = await provisionGitHubRepository({
+            authority: input.authority,
+            config: input.dependencies.githubConfig,
+            credentialStore: input.dependencies.githubCredentials,
+            fetch: input.dependencies.fetch,
+            installation,
+            now,
+            persistAbsent: (candidate) => persist("absent", candidate),
+            persistCandidate: (candidate) => persist("candidate", candidate),
+            persistedAbsentCandidates: current.record.operations.github.absentCandidates,
+            persistedCandidates: current.record.operations.github.candidates,
+            private: request.repository.private,
+            renewLease,
+            requestId: request.requestId,
+            requestedName: request.repository.name,
+            source,
+          });
+        } catch (error) {
+          result = {
+            code:
+              error instanceof Error && error.message.includes("mismatch")
+                ? "source_mismatch"
+                : "source_unavailable",
+            retryable: true,
+            status: "failed",
+          };
         }
-        result = await provisionGitHubRepository({
-          authority: input.authority,
-          config: input.dependencies.githubConfig,
-          credentialStore: input.dependencies.githubCredentials,
+      } else {
+        result = {
+          code: "installation_inactive",
+          retryable: true,
+          status: "failed",
+        };
+      }
+    } else {
+      const current = await input.dependencies.journal.read({
+        authority: input.authority,
+        requestId: request.requestId,
+      });
+      if (!current) {
+        throw new Error("provision-journal-missing");
+      }
+      const { vercelInstallationId } = request.providers;
+      if (vercelInstallationId === undefined) {
+        throw new Error("vercel-installation-missing");
+      }
+      const credential = await input.dependencies.readVercelCredential({
+        authority: input.authority,
+        installationId: vercelInstallationId,
+      });
+      if (credential?.binding.active) {
+        result = await provisionVercelProject({
+          appId: current.record.response.appId,
           fetch: input.dependencies.fetch,
-          installation,
-          now,
+          github: current.record.response.github,
+          githubSelected: request.providers.githubInstallationId !== undefined,
+          installation: credential.binding,
           persistAbsent: (candidate) => persist("absent", candidate),
           persistCandidate: (candidate) => persist("candidate", candidate),
-          persistedAbsentCandidates: current.record.operations.github.absentCandidates,
-          persistedCandidates: current.record.operations.github.candidates,
-          private: request.repository.private,
-          requestId: request.requestId,
-          requestedName: request.repository.name,
-          source,
+          persistedAbsentCandidates: current.record.operations.vercel.absentCandidates,
+          persistedCandidates: current.record.operations.vercel.candidates,
+          renewLease,
+          token: credential.token,
         });
-      } catch (error) {
-        result = {
-          code:
-            error instanceof Error && error.message.includes("mismatch")
-              ? "source_mismatch"
-              : "source_unavailable",
-          retryable: true,
-          status: "failed",
-        };
-      }
-    } else {
-      result = {
-        code: "installation_inactive",
-        retryable: true,
-        status: "failed",
-      };
-    }
-  } else {
-    const current = await input.dependencies.journal.read({
-      authority: input.authority,
-      requestId: request.requestId,
-    });
-    if (!current) {
-      throw new Error("provision-journal-missing");
-    }
-    const { vercelInstallationId } = request.providers;
-    if (vercelInstallationId === undefined) {
-      throw new Error("vercel-installation-missing");
-    }
-    const credential = await input.dependencies.readVercelCredential({
-      authority: input.authority,
-      installationId: vercelInstallationId,
-    });
-    if (credential?.binding.active) {
-      result = await provisionVercelProject({
-        appId: current.record.response.appId,
-        fetch: input.dependencies.fetch,
-        github: current.record.response.github,
-        githubSelected: request.providers.githubInstallationId !== undefined,
-        installation: credential.binding,
-        persistAbsent: (candidate) => persist("absent", candidate),
-        persistCandidate: (candidate) => persist("candidate", candidate),
-        persistedAbsentCandidates: current.record.operations.vercel.absentCandidates,
-        persistedCandidates: current.record.operations.vercel.candidates,
-        token: credential.token,
-      });
-      if (result.status === "failed" && result.code === "credential_unavailable") {
-        await input.dependencies.deactivateVercelInstallation(
-          credential.binding.installationId,
-          new Date(now()),
-        );
-      }
-    } else {
-      result = {
-        code: "installation_inactive",
-        retryable: true,
-        status: "failed",
-      };
-    }
-  }
-
-  const completed = await updateBuilderProvisionJournal({
-    authority: input.authority,
-    now,
-    requestId: request.requestId,
-    store: input.dependencies.journal,
-    update(current) {
-      if (request.operation === "github") {
-        current.response.github = githubProvisionResultSchema.parse(result);
+        if (result.status === "failed" && result.code === "credential_unavailable") {
+          await input.dependencies.deactivateVercelInstallation(
+            credential.binding.installationId,
+            new Date(now()),
+          );
+        }
       } else {
-        current.response.vercel = vercelProvisionResultSchema.parse(result);
-      }
-      if (
-        request.operation === "github" &&
-        result.status === "succeeded" &&
-        current.response.vercel.status === "skipped" &&
-        current.response.vercel.code === "github_required"
-      ) {
-        current.response.vercel = {
-          code: "provider_unavailable",
+        result = {
+          code: "installation_inactive",
           retryable: true,
           status: "failed",
         };
-        current.operations.vercel.attempted = false;
       }
-      current.operations[request.operation].attempted = true;
-      delete current.operations[request.operation].leaseId;
-      delete current.operations[request.operation].leaseExpiresAt;
-      return current;
-    },
-  });
-  return builderProvisionResponseSchema.parse(completed.record.response);
+    }
+
+    const completed = await updateBuilderProvisionJournal({
+      authority: input.authority,
+      now,
+      requestId: request.requestId,
+      store: input.dependencies.journal,
+      update(current) {
+        if (current.operations[request.operation].leaseId !== leaseId) {
+          throw new Error(LEASE_LOST);
+        }
+        if (request.operation === "github") {
+          current.response.github = githubProvisionResultSchema.parse(result);
+        } else {
+          current.response.vercel = vercelProvisionResultSchema.parse(result);
+        }
+        if (
+          request.operation === "github" &&
+          result.status === "succeeded" &&
+          current.response.vercel.status === "skipped" &&
+          current.response.vercel.code === "github_required"
+        ) {
+          current.response.vercel = {
+            code: "provider_unavailable",
+            retryable: true,
+            status: "failed",
+          };
+          current.operations.vercel.attempted = false;
+        }
+        current.operations[request.operation].attempted = true;
+        current.operations[request.operation].attemptCount =
+          (current.operations[request.operation].attemptCount ?? 0) + 1;
+        current.operations[request.operation].outcomeKnown = result.status === "succeeded";
+        if (result.status === "failed") {
+          current.operations[request.operation].failureDetail = result.code;
+          if (
+            result.code === "provider_unavailable" ||
+            result.code === "provider_rate_limited" ||
+            result.code === "source_unavailable"
+          ) {
+            const attempts = current.operations[request.operation].attemptCount ?? 1;
+            const delay = Math.min(15 * 60_000, 60_000 * 2 ** Math.min(attempts - 1, 4));
+            current.operations[request.operation].nextRetryAt = new Date(
+              now() + Math.round(delay * (0.75 + randomInt(0, 501) / 1000)),
+            ).toISOString();
+          } else {
+            delete current.operations[request.operation].nextRetryAt;
+          }
+        } else {
+          delete current.operations[request.operation].failureDetail;
+          delete current.operations[request.operation].nextRetryAt;
+        }
+        delete current.operations[request.operation].leaseId;
+        delete current.operations[request.operation].leaseExpiresAt;
+        return current;
+      },
+    });
+    return builderProvisionResponseSchema.parse(completed.record.response);
+  } finally {
+    clearInterval(renewal);
+  }
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

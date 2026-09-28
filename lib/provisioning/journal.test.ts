@@ -86,6 +86,36 @@ function memoryStore(): BuilderProvisionJournalStore {
 }
 
 describe("builder provisioning journal", () => {
+  it("persists more than five candidates and survives more than eight compare-and-set collisions", async () => {
+    const underlying = memoryStore();
+    await underlying.reserve({ authority, now: new Date(), request });
+    let collisions = 0;
+    const store: BuilderProvisionJournalStore = {
+      ...underlying,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      async compareAndSet(input) {
+        collisions += 1;
+        if (collisions <= 9) {
+          return;
+        }
+        return await underlying.compareAndSet(input);
+      },
+    };
+    const updated = await updateBuilderProvisionJournal({
+      authority,
+      requestId: request.requestId,
+      store,
+      update(current) {
+        current.operations.github.candidates = Array.from(
+          { length: 12 },
+          (_, index) => `candidate-${index}`,
+        );
+        return current;
+      },
+    });
+    expect(collisions).toBe(10);
+    expect(updated.record.operations.github.candidates).toHaveLength(12);
+  });
   it("is idempotent by tenant, request ID, and operation-independent digest", async () => {
     const store = memoryStore();
     const first = await store.reserve({ authority, now: new Date(), request });

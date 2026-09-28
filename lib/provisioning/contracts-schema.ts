@@ -55,10 +55,15 @@ const failureSchema = z
   .object({
     code: z.enum([
       "configuration_unavailable",
+      "authorization_required",
       "credential_unavailable",
       "installation_inactive",
       "name_conflict",
       "provider_rejected",
+      "provider_permission_denied",
+      "provider_validation_failed",
+      "provider_quota_exceeded",
+      "provider_rate_limited",
       "provider_unavailable",
       "source_unavailable",
       "source_mismatch",
