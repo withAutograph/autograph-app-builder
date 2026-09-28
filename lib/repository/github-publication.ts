@@ -8,6 +8,10 @@ import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
 import { githubPermissionsFor } from "./github-permissions";
 import type { GitHubOperation, GitHubPermissions } from "./github-permissions";
+import { parseGitHubTargetAccessProof } from "./github-target-access-proof";
+import type { GitHubTargetAccessProof } from "./github-target-access-proof";
+import type { z } from "zod";
+import type { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
 
 export const GITHUB_PUBLICATION_VERSION = 2 as const;
@@ -329,6 +333,15 @@ export interface GitHubSourceResolutionAdapter {
   inspectInstallation: (operation: GitHubOperation) => Promise<GitHubInstallationIdentity>;
   inspectRepository: (input: {
     operation: "resolve-existing-source" | "publish-draft-pull-request";
+    repositoryId: string;
+    ref: string;
+  }) => Promise<GitHubRepositoryObservation>;
+}
+
+export interface GitHubTargetSourceResolutionAdapter {
+  inspectTargetAccess: (repositoryId: string) => Promise<GitHubTargetAccessProof>;
+  inspectRepository: (input: {
+    proof: GitHubTargetAccessProof;
     repositoryId: string;
     ref: string;
   }) => Promise<GitHubRepositoryObservation>;
@@ -1172,6 +1185,64 @@ export async function resolveImmutableExistingSource(input: {
   }
   const unsigned = {
     installationIdentityDigest: installation.digest,
+    repository,
+    resolvedByCallId: input.resolvedByCallId,
+    resolvedRef: input.ref,
+    resolvedSha: repository.headSha,
+    resolvedTree: repository.headTree,
+    version: GITHUB_PUBLICATION_VERSION,
+  };
+  return { ...unsigned, digest: digest(unsigned) };
+}
+
+/** Issues the same immutable source receipt from a tenant-bound, target-scoped proof. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export async function resolveImmutableExistingSourceWithTargetProof(input: {
+  adapter: GitHubTargetSourceResolutionAdapter;
+  authority: z.input<typeof hostedTenantAuthoritySchema>;
+  expectedInstallationId: string;
+  repositoryId: string;
+  ref: string;
+  expectedSha: ObjectId;
+  expectedTree: ObjectId;
+  resolvedByCallId: string;
+}): Promise<ImmutableGitHubSourceReceipt> {
+  if (
+    !isDecimal(input.expectedInstallationId) ||
+    !isDecimal(input.repositoryId) ||
+    !safeHeadRef(input.ref) ||
+    !isObjectId(input.expectedSha) ||
+    !isObjectId(input.expectedTree)
+  ) {
+    throw new Error("The immutable source request is invalid.");
+  }
+  const proof = parseGitHubTargetAccessProof(
+    await input.adapter.inspectTargetAccess(input.repositoryId),
+    input.authority,
+  );
+  if (
+    proof.operation !== "resolve-existing-source" ||
+    proof.installationId !== input.expectedInstallationId ||
+    proof.repositoryId !== input.repositoryId
+  ) {
+    throw new Error("The installation is not selected for source resolution.");
+  }
+  const repository = await input.adapter.inspectRepository({
+    proof,
+    ref: input.ref,
+    repositoryId: input.repositoryId,
+  });
+  assertExactRepositoryObservation(repository);
+  if (
+    repository.installationIdentityDigest !== proof.digest ||
+    repository.repositoryId !== input.repositoryId ||
+    repository.headSha !== input.expectedSha ||
+    repository.headTree !== input.expectedTree
+  ) {
+    throw new Error("The GitHub source changed or is outside the approved installation.");
+  }
+  const unsigned = {
+    installationIdentityDigest: proof.digest,
     repository,
     resolvedByCallId: input.resolvedByCallId,
     resolvedRef: input.ref,

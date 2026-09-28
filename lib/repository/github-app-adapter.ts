@@ -18,12 +18,16 @@ import type {
   GitHubOperation,
   GitHubPublicationAdapter,
   GitHubSourceResolutionAdapter,
+  GitHubTargetSourceResolutionAdapter,
   GitHubDraftPullRequestContent,
   GitHubFreshRepositoryContent,
   GitHubRepositoryObservation,
 } from "./github-publication";
 import { safeSourcePath } from "./source-path";
-import { issueGitHubTargetAccessProof } from "./github-target-access-proof";
+import {
+  issueGitHubTargetAccessProof,
+  parseGitHubTargetAccessProof,
+} from "./github-target-access-proof";
 import type { GitHubTargetAccessProof } from "./github-target-access-proof";
 import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
 
@@ -311,6 +315,28 @@ function repositoryObservation(
     visibility: snapshot.visibility,
   });
 }
+
+export const createGitHubTargetSourceResolutionAdapter = (
+  provider: GitHubTargetAccessProvider & Pick<GitHubAppInstallationProvider, "inspectRepository">,
+  authority: z.input<typeof hostedTenantAuthoritySchema>,
+): GitHubTargetSourceResolutionAdapter => {
+  const targetAccess = createGitHubTargetAccessAdapter(provider, authority);
+  return {
+    async inspectRepository({ proof, repositoryId, ref }) {
+      parseGitHubTargetAccessProof(proof, authority);
+      if (proof.operation !== "resolve-existing-source" || proof.repositoryId !== repositoryId) {
+        throw new Error("github-target-access-proof-mismatch");
+      }
+      return repositoryObservation(
+        await provider.inspectRepository({ ref, repositoryId }),
+        proof.digest,
+      );
+    },
+    async inspectTargetAccess(repositoryId) {
+      return await targetAccess.inspectTargetAccess("resolve-existing-source", repositoryId);
+    },
+  };
+};
 
 /**
  * Validates an operation-scoped GitHub App provider without reading a token or
