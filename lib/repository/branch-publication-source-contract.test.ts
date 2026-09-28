@@ -10,6 +10,7 @@ import { contentDigest, stableDigest } from "./local-publication";
 import {
   deriveBranchWorktreePublicationProposal,
   hashBranchPublicationSourceBlob,
+  writeVerifiedOverlayStream,
 } from "./node-branch-worktree-publication";
 
 const roots: string[] = [];
@@ -18,6 +19,44 @@ afterEach(() => {
   for (const root of roots.splice(0)) {
     rmSync(root, { force: true, recursive: true });
   }
+});
+
+it("streams a large overlay with backpressure and rejects altered content", async () => {
+  const chunk = Buffer.alloc(64 * 1024, 0x53);
+  const expected = Buffer.alloc(17 * 1024 * 1024, 0x53);
+  const stream = () => {
+    let count = 0;
+    return new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(chunk);
+        count += 1;
+        if (count === expected.length / chunk.length) {
+          controller.close();
+        }
+      },
+    });
+  };
+  let written = 0;
+  await writeVerifiedOverlayStream({
+    digest: contentDigest(expected),
+    path: "large.bin",
+    stream: stream(),
+    write: async (bytes) => {
+      written += bytes.length;
+      await Promise.resolve();
+    },
+  });
+  expect(written).toBe(expected.length);
+  await expect(
+    writeVerifiedOverlayStream({
+      digest: "0".repeat(64),
+      path: "large.bin",
+      stream: stream(),
+      write: async () => {
+        await Promise.resolve();
+      },
+    }),
+  ).rejects.toThrow(/stale for large\.bin/u);
 });
 
 it("uses the actual source receipt identity for branch snapshots and rejects a changed HEAD", async () => {

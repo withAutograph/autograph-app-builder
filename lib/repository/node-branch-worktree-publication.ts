@@ -1643,6 +1643,73 @@ const writePostimage = async (
   await materializeAtomically(proposal, target, bytes, mode);
 };
 
+/** Consume one provider chunk at a time; reject altered bytes before the caller renames its staged file. */
+export const writeVerifiedOverlayStream = async (input: {
+  stream: ReadableStream<Uint8Array>;
+  digest: string;
+  path: string;
+  write: (chunk: Uint8Array) => Promise<void>;
+}): Promise<void> => {
+  const reader = input.stream.getReader();
+  const hash = createHash("sha256");
+  try {
+    while (true) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- consume one provider chunk at a time.
+      const result = await reader.read();
+      if (result.done) {
+        break;
+      }
+      hash.update(result.value);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- backpressure each staged write.
+      await input.write(result.value);
+    }
+    if (hash.digest("hex") !== input.digest) {
+      throw new Error(`The immutable apply overlay is stale for ${input.path}.`);
+    }
+  } finally {
+    await reader.cancel().catch(() => null);
+    reader.releaseLock();
+  }
+};
+
+const writePostimageStream = async (input: {
+  proposal: BranchWorktreePublicationProposal;
+  path: string;
+  stream: ReadableStream<Uint8Array>;
+  digest: string;
+  mode: string;
+}): Promise<void> => {
+  const target = await safeTarget(input.proposal.worktreePath, input.path, true);
+  const staging = pathResolve(
+    publicationRoot(),
+    "staging",
+    input.proposal.publicationIdentityDigest,
+  );
+  await durableDirectory(staging);
+  const temporary = pathResolve(staging, randomUUID());
+  try {
+    const handle = await open(temporary, "wx", Number.parseInt(input.mode, 8));
+    try {
+      await writeVerifiedOverlayStream({
+        digest: input.digest,
+        path: input.path,
+        stream: input.stream,
+        write: async (chunk) => {
+          await handle.writeFile(chunk);
+        },
+      });
+      await handle.chmod(Number.parseInt(input.mode, 8));
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await rename(temporary, target);
+    await syncDirectory(dirname(target));
+  } finally {
+    await unlink(temporary).catch(() => null);
+  }
+};
+
 const presentWorktreePaths = async function* presentWorktreePaths(
   directory: string,
   prefix = "",
@@ -1818,6 +1885,7 @@ const applyRemainingPostimages = async (input: {
   proposal: BranchWorktreePublicationProposal;
   review: ReviewedChangeSetReceipt;
   readOverlayFile: (path: string) => Promise<Uint8Array | null>;
+  readOverlayFileStream?: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
   hooks?: BranchWorktreePublicationFaultHooks;
   lock: PublicationLock;
 }): Promise<readonly string[]> => {
@@ -1841,14 +1909,28 @@ const applyRemainingPostimages = async (input: {
       await unlink(target);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await syncDirectory(dirname(target));
-    } else {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+    } else if (input.readOverlayFileStream === undefined) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- legacy provider fallback.
       const bytes = await input.readOverlayFile(change.path);
       if (bytes === null || contentDigest(bytes) !== change.after.digest) {
         throw new Error(`The immutable apply overlay is stale for ${change.path}.`);
       }
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       await writePostimage(input.proposal, change.path, bytes, change.after.mode);
+    } else {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- one approved path is staged at a time.
+      const stream = await input.readOverlayFileStream(change.path);
+      if (stream === null) {
+        throw new Error(`The immutable apply overlay is stale for ${change.path}.`);
+      }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- verify and atomically publish one staged path.
+      await writePostimageStream({
+        digest: change.after.digest,
+        mode: change.after.mode,
+        path: change.path,
+        proposal: input.proposal,
+        stream,
+      });
     }
     applied.push(change.path);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -2044,6 +2126,7 @@ const executePublication = async (input: {
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
   readOverlayFile: (path: string) => Promise<Uint8Array | null>;
+  readOverlayFileStream?: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
   publishedByCallId: string;
   recoveryOfDigest?: string;
   hooks?: BranchWorktreePublicationFaultHooks;
@@ -2159,6 +2242,7 @@ export const publishReviewedChangeSetToBranchWorktree = async (input: {
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
   readOverlayFile: (path: string) => Promise<Uint8Array | null>;
+  readOverlayFileStream?: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
   publishedByCallId: string;
   hooks?: BranchWorktreePublicationFaultHooks;
 }): Promise<BranchWorktreePublicationSuccessReceipt | BranchWorktreePublicationFailureReceipt> => {
@@ -2202,6 +2286,7 @@ export const recoverBranchWorktreePublication = async (input: {
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
   readOverlayFile: (path: string) => Promise<Uint8Array | null>;
+  readOverlayFileStream?: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
   recoveredByCallId: string;
   expectedJournalDigest: string;
   hooks?: BranchWorktreePublicationFaultHooks;
@@ -2243,6 +2328,7 @@ export const recoverBranchWorktreePublication = async (input: {
         proposal: input.proposal,
         publishedByCallId: input.recoveredByCallId,
         readOverlayFile: input.readOverlayFile,
+        readOverlayFileStream: input.readOverlayFileStream,
         recoveryOfDigest: existing.digest,
         review: input.review,
         sourceReceipt: input.sourceReceipt,
