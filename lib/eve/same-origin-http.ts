@@ -1075,12 +1075,19 @@ export function createSameOriginEveTransport(input: {
       if (cancelled.status === "no_active_turn") {
         return;
       }
-      await readCancellationSettlementIncremental({
-        ...common,
-        beforeEventCount: before.installedEventCount,
-        sessionId: request.adapterSessionId,
-        turnId: guardedTurnId,
-      });
+      try {
+        await readCancellationSettlementIncremental({
+          ...common,
+          beforeEventCount: before.installedEventCount,
+          sessionId: request.adapterSessionId,
+          turnId: guardedTurnId,
+        });
+      } catch (error) {
+        if (error instanceof HostedSessionReadTimeoutError) {
+          throw new HostedCancellationUnsettledError();
+        }
+        throw error;
+      }
     },
     get: (request) =>
       readSnapshot({ ...common, readDeadline: true, sessionId: request.adapterSessionId }),
