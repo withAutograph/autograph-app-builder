@@ -24,6 +24,7 @@ export default defineTool({
       abortSignal: ctx.abortSignal,
       appSpec: state.appSpec,
       applyReceipt: state.applyReceipt,
+      callId: ctx.callId,
       getSandbox: async () => await ctx.getSandbox(),
     });
     ctx.abortSignal?.throwIfAborted();

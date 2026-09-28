@@ -84,7 +84,26 @@ export const reviewAppliedProductSource = async (input: {
   applyReceipt: TargetApplyReceipt;
   getSandbox: () => Promise<SandboxSession>;
   abortSignal?: AbortSignal;
+  callId?: string;
 }): Promise<ProductSourceAssessment> => {
+  const logPhase = (
+    phase: string,
+    detail?: {
+      changedPathCount?: number;
+      errorName?: string;
+      fileCount?: number;
+      status?: string;
+    },
+  ) => {
+    console.info(
+      JSON.stringify({
+        callId: input.callId,
+        event: "app_builder.source_review_progress",
+        phase,
+        ...detail,
+      }),
+    );
+  };
   const request = productRequestState.get();
   const reviewInput: ProductSourceReviewInput = {
     appSpec: input.appSpec.content,
@@ -109,34 +128,51 @@ export const reviewAppliedProductSource = async (input: {
   }
   try {
     input.abortSignal?.throwIfAborted();
+    logPhase("observing_current_source");
     const sandbox = await input.getSandbox();
     const observed = await inspectApplyOverlay(sandbox, input.applyReceipt.applyRoot);
+    logPhase("current_source_observed", { fileCount: observed.files.length });
     const currentInput = { ...reviewInput, sourceDigest: observed.treeDigest };
     const retained = currentProductSourceAssessment(currentInput);
     if (retained !== undefined) {
       const latest = await inspectApplyOverlay(sandbox, input.applyReceipt.applyRoot);
       if (latest.treeDigest === observed.treeDigest) {
         input.abortSignal?.throwIfAborted();
+        logPhase("retained_review_reused");
         return retained;
       }
+      logPhase("source_changed_during_review");
       return unavailableSourceAssessment(
         currentInput,
         "Source changed during review; this assessment is stale. Review the current implementation when ready.",
       );
     }
+    const changedPaths = currentChangedSourcePaths(input.applyReceipt, observed);
     const source = readProductReviewSourcePages({
       applyRoot: input.applyReceipt.applyRoot,
-      changedPaths: currentChangedSourcePaths(input.applyReceipt, observed),
+      changedPaths,
       observed,
       sandbox,
     });
+    logPhase("reviewing_changed_source", { changedPathCount: changedPaths.length });
     const assessedInput = { ...currentInput, omissions: source.omissions };
     const assessment = await assessProductSourcePages(assessedInput, source.pages, {
       abortSignal: input.abortSignal,
+      onProgress(progress) {
+        console.info(
+          JSON.stringify({
+            callId: input.callId,
+            event: "app_builder.source_review_progress",
+            ...progress,
+          }),
+        );
+      },
     });
+    logPhase("changed_source_review_finished", { status: assessment.status });
     input.abortSignal?.throwIfAborted();
     const latest = await inspectApplyOverlay(sandbox, input.applyReceipt.applyRoot);
     if (latest.treeDigest !== observed.treeDigest) {
+      logPhase("source_changed_during_review");
       return unavailableSourceAssessment(
         assessedInput,
         "Source changed during review; this assessment is stale. Review the current implementation when ready.",
@@ -144,8 +180,11 @@ export const reviewAppliedProductSource = async (input: {
     }
     retainCurrentProductSourceAssessment(assessment);
     return assessment;
-  } catch {
+  } catch (error) {
     input.abortSignal?.throwIfAborted();
+    logPhase("source_review_unavailable", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
     return unavailableSourceAssessment(
       reviewInput,
       "Applied source review could not complete. Check source streaming, provider context, and the current repository revision; then retry.",
