@@ -3,6 +3,12 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { MessageStreamEvent } from "eve/client";
 import { z } from "zod";
 
+import type {
+  EveSessionStatus,
+  PublicInputRequest,
+  PublicUiPreview,
+  PublicWorkingPreview,
+} from "../mcp/contracts";
 import { hostedPrincipalSchema } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
 import {
@@ -19,6 +25,7 @@ import {
   latestInstalledWorkingPreview,
   projectInstalledEveEvent,
 } from "./public-events";
+import type { InternalEveEvent } from "./public-events";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const SESSION_SETTLEMENT_POLL_INTERVAL_MS = 200;
@@ -303,6 +310,131 @@ export async function* streamSameOriginEveEvents(input: {
     await reader.cancel().catch(() => null);
     reader.releaseLock();
   }
+}
+
+/** Scan the durable tail with backpressure. Artifact content must be recovered by a receipt verifier. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export async function observeSameOriginEveStream(
+  input: Parameters<typeof streamSameOriginEveEvents>[0] & {
+    onEvent: (event: InternalEveEvent) => Promise<void> | void;
+  },
+): Promise<{
+  installedEventCount: number;
+  publicEventCount: number;
+  status: EveSessionStatus;
+  pendingRequests: PublicInputRequest[];
+  activeTurnId?: string;
+  uiPreview?: PublicUiPreview;
+  workingPreview?: PublicWorkingPreview | null;
+  artifactProjectionRequiresLegacyReadback: boolean;
+}> {
+  const pending = new Map<string, PublicInputRequest>();
+  let installedEventCount = 0;
+  let publicEventCount = 0;
+  let boundary: EveSessionStatus = "working";
+  let invalidInput = false;
+  let currentTurnId: string | undefined;
+  let uiPreview: PublicUiPreview | undefined;
+  let workingPreview: PublicWorkingPreview | null | undefined;
+  let artifactProjectionRequiresLegacyReadback = false;
+  for await (const event of streamSameOriginEveEvents(input)) {
+    installedEventCount += 1;
+    const turnId =
+      "data" in event && "turnId" in event.data
+        ? (event.data.turnId as string | undefined)
+        : undefined;
+    if (
+      turnId !== undefined &&
+      !["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type)
+    ) {
+      currentTurnId = turnId;
+    }
+    if (
+      ["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type) &&
+      (turnId === undefined || turnId === currentTurnId)
+    ) {
+      currentTurnId = undefined;
+    }
+    if (["session.waiting", "session.completed", "session.failed"].includes(event.type)) {
+      currentTurnId = undefined;
+    }
+    if (event.type === "turn.cancelled") {
+      boundary = "cancelled";
+    }
+    if (event.type === "session.waiting") {
+      boundary = "waiting";
+    }
+    if (event.type === "session.completed") {
+      boundary = "completed";
+    }
+    if (event.type === "session.failed") {
+      boundary = "failed";
+    }
+    if (event.type === "step.started") {
+      boundary = "working";
+    }
+    if (event.type === "actions.requested") {
+      artifactProjectionRequiresLegacyReadback ||= event.data.actions.some(
+        (action) =>
+          action.kind === "tool-call" &&
+          ["record_prototype_artifact", "get_prototype_artifact", "record_ui_preview"].includes(
+            action.toolName,
+          ),
+      );
+    }
+    if (event.type === "action.result" && event.data.result.kind === "tool-result") {
+      artifactProjectionRequiresLegacyReadback ||= [
+        "record_prototype_artifact",
+        "get_prototype_artifact",
+        "record_ui_preview",
+      ].includes(event.data.result.toolName);
+    }
+    const nextUiPreview = latestInstalledUiPreview([event]);
+    if (nextUiPreview !== undefined) {
+      uiPreview = nextUiPreview;
+    }
+    const nextWorkingPreview = latestInstalledWorkingPreview([event]);
+    if (nextWorkingPreview !== undefined) {
+      workingPreview = nextWorkingPreview;
+    }
+    for (const projected of projectInstalledEveEvent(event, 0)) {
+      const indexed = { ...projected, index: publicEventCount };
+      publicEventCount += 1;
+      if (indexed.type === "input.requested" && indexed.request !== undefined) {
+        pending.set(indexed.request.requestId, indexed.request);
+      }
+      if (indexed.type === "input.resolved") {
+        for (const requestId of indexed.requestIds ?? []) {
+          pending.delete(requestId);
+        }
+      }
+      if (
+        event.type === "input.requested" &&
+        indexed.type === "status" &&
+        indexed.status === "failed"
+      ) {
+        invalidInput = true;
+      }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- the callback controls storage backpressure
+      await input.onEvent(indexed);
+    }
+  }
+  let status: EveSessionStatus = boundary;
+  if (invalidInput) {
+    status = "failed";
+  } else if (boundary !== "completed" && boundary !== "failed" && pending.size > 0) {
+    status = "input_required";
+  }
+  return {
+    artifactProjectionRequiresLegacyReadback,
+    installedEventCount,
+    pendingRequests: [...pending.values()],
+    publicEventCount,
+    status,
+    ...(currentTurnId === undefined ? {} : { activeTurnId: currentTurnId }),
+    ...(uiPreview === undefined ? {} : { uiPreview }),
+    ...(workingPreview === undefined ? {} : { workingPreview }),
+  };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

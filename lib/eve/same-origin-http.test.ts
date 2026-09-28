@@ -4,7 +4,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { hostedEveOperationScopes } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
-import { createSameOriginEveTransport, streamSameOriginEveEvents } from "./same-origin-http";
+import {
+  createSameOriginEveTransport,
+  observeSameOriginEveStream,
+  streamSameOriginEveEvents,
+} from "./same-origin-http";
 import type { HostedWorkloadIdentity } from "./same-origin-http";
 import {
   SubmissionOutcomeUnknownError,
@@ -58,6 +62,74 @@ function stream(
 }
 
 describe("incremental canonical Eve stream", () => {
+  it("projects dense events and tracks only unresolved requests", async () => {
+    const projected: { index: number; type: string }[] = [];
+    const events = [
+      { data: { turnId: "turn_1" }, type: "step.started" },
+      {
+        data: {
+          requests: [
+            {
+              action: { input: {}, kind: "tool-call", toolName: "resolve-github-source" },
+              kind: "tool-approval",
+              prompt: "Approve source",
+              requestId: "request_1",
+            },
+          ],
+        },
+        type: "input.requested",
+      },
+      { data: { resolutions: [{ requestId: "request_1" }] }, type: "input.resolved" },
+      { data: {}, type: "session.waiting" },
+    ];
+    const observed = await observeSameOriginEveStream({
+      config: { ...config, timeoutMs: 10_000 },
+      // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
+      fetchImplementation: vi.fn(async () => stream(events)),
+      onEvent(event) {
+        projected.push({ index: event.index, type: event.type });
+      },
+      sessionId: "wrun_1",
+      workloadIdentity: identity(),
+    });
+    expect(projected.map(({ index }) => index)).toEqual(projected.map((_, index) => index));
+    expect(observed).toMatchObject({
+      artifactProjectionRequiresLegacyReadback: false,
+      installedEventCount: events.length,
+      pendingRequests: [],
+      publicEventCount: projected.length,
+      status: "waiting",
+    });
+  });
+
+  it("flags prototype receipts for the verified artifact readback path", async () => {
+    const observed = await observeSameOriginEveStream({
+      config: { ...config, timeoutMs: 10_000 },
+      // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
+      fetchImplementation: vi.fn(async () =>
+        stream([
+          {
+            data: {
+              actions: [
+                {
+                  callId: "call_1",
+                  input: {},
+                  kind: "tool-call",
+                  toolName: "record_prototype_artifact",
+                },
+              ],
+            },
+            type: "actions.requested",
+          },
+        ]),
+      ),
+      onEvent() {},
+      sessionId: "wrun_1",
+      workloadIdentity: identity(),
+    });
+    expect(observed.artifactProjectionRequiresLegacyReadback).toBe(true);
+  });
+
   it("consumes more than 100,000 events without retaining them in the transport", async () => {
     const total = 100_001;
     let produced = 0;
