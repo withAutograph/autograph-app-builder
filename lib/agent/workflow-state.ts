@@ -183,7 +183,7 @@ interface WorkspacePhase {
   sourceReceipt: SourceReceipt;
   githubSource?: ImmutableGitHubSourceReceipt;
   preparedByCallId: string;
-  artifacts: readonly PrototypeArtifact[];
+  artifacts: readonly StoredPrototypeArtifact[];
   publishedGitHubDraftProposalDigest?: string;
 }
 

@@ -8,7 +8,14 @@ import {
   prototypeArtifactReceipt,
   recordPrototypeArtifactChunk,
   recordPrototypeArtifactRevision,
+  isPrototypeArtifactV2,
 } from "@/lib/agent/prototype-artifacts";
+import {
+  durablePrototypeToolReceipt,
+  recordDurablePrototypeChunk,
+} from "@/lib/agent/prototype-artifacts-v2";
+import { createHostedPrototypeChunkStore } from "@/lib/agent/hosted-prototype-chunk-store";
+import { openHostedPostgresDatabase } from "@/lib/mcp/hosted-route";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
@@ -26,6 +33,7 @@ const expectedAppIdForWorkflow = (
 export default defineTool({
   description:
     "Record internal product decisions and implementation design without pausing for approval. Use record_ui_preview for visual content composed from Arrusted components; never author replacement HTML controls here. Small content can use the original single-call shape. For larger content, split the exact UTF-8 text into chunks whose complete JSON tool-call envelope is below Eve's 10 MiB event ceiling; send chunkIndex 0 with expectedDigest equal to SHA-256 of the full UTF-8 content and finalChunk false unless it is the only chunk, then append each next chunk using the exact revision and nextChunkIndex from the prior receipt. Mark the last chunk finalChunk true. Retry only the same last chunk with the same call id after an uncertain response. Continue until complete is true. A complete design continues into planning automatically.",
+  // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- The v1 and staged v2 paths share one authorization boundary.
   async execute(
     { path, mediaType, content, expectedDigest, chunkIndex, finalChunk, baseRevision },
     ctx,
@@ -39,6 +47,72 @@ export default defineTool({
       throw new Error(
         `Target validation attempt ${current.validationAttempt.digest} is pending; artifact mutation is disabled until it is recovered.`,
       );
+    }
+    // The v2 writer is staged behind an explicit migration switch until the
+    // Browser's authenticated reference reader and complete tool readback land.
+    if (
+      process.env.APP_BUILDER_PROTOTYPE_V2_WRITER === "1" &&
+      process.env.EVE_HOSTED_ADAPTER === "1" &&
+      mediaType === "text/html" &&
+      expectedDigest !== undefined
+    ) {
+      if (chunkIndex === undefined || finalChunk === undefined) {
+        throw new Error("Durable prototype writes require chunkIndex and finalChunk.");
+      }
+      const appId = path.split("/")[1] ?? "";
+      const expectedAppId = expectedAppIdForWorkflow(current);
+      if (
+        (expectedAppId !== null && expectedAppId !== appId) ||
+        current.artifacts.some(
+          (artifact) => artifact.sessionId !== ctx.session.id || artifact.appId !== appId,
+        )
+      ) {
+        throw new Error("The durable prototype artifact does not match this workflow or session.");
+      }
+      const existing = current.artifacts.find((artifact) => artifact.path === path);
+      const recorded = await recordDurablePrototypeChunk({
+        appId,
+        ...(baseRevision === undefined ? {} : { baseRevision }),
+        callId: ctx.callId,
+        chunkIndex,
+        content,
+        ...(existing && isPrototypeArtifactV2(existing) ? { current: existing } : {}),
+        expectedDigest,
+        finalChunk,
+        mediaType,
+        path,
+        sessionId: ctx.session.id,
+        store: createHostedPrototypeChunkStore({
+          db: openHostedPostgresDatabase(process.env.DATABASE_URL ?? ""),
+          sessionAuth: ctx.session.auth,
+          sessionId: ctx.session.id,
+        }),
+      });
+      if (!recorded.reused) {
+        updateExactWorkflow({
+          expected: current,
+          operation: "durable prototype artifact recording",
+          transition: () => {
+            const artifacts = [
+              ...current.artifacts.filter((artifact) => artifact.path !== path),
+              recorded.artifact,
+            ].toSorted((left, right) => left.path.localeCompare(right.path));
+            if (current.phase === "ui_previewed" || current.phase === "ui_accepted") {
+              return { ...current, artifacts };
+            }
+            return {
+              artifacts,
+              phase: "prepared",
+              preparedByCallId: current.preparedByCallId,
+              sourceReceipt: current.sourceReceipt,
+              ...(current.githubSource === undefined ? {} : { githubSource: current.githubSource }),
+              version: APP_BUILDER_WORKFLOW_VERSION,
+              workspace: current.workspace,
+            };
+          },
+        });
+      }
+      return durablePrototypeToolReceipt(recorded);
     }
     const artifactInput = {
       artifacts: current.artifacts,

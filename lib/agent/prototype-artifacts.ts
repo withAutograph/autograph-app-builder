@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { PrototypeArtifact } from "./workflow-state";
+import type { PrototypeArtifact, StoredPrototypeArtifact } from "./workflow-state";
 import {
   appSpecRepairDiagnostic,
   normalizeBuildReadyAppSpec,
@@ -22,14 +22,18 @@ export const prototypeArtifactMediaTypes = ["text/markdown", "text/html"] as con
 export type PrototypeArtifactMediaType = (typeof prototypeArtifactMediaTypes)[number];
 
 export type PrototypeArtifactReceipt = Omit<
-  PrototypeArtifact,
+  StoredPrototypeArtifact,
   "content" | "transfer" | "lastChunkReceipt"
 > & {
   size: number;
 };
 
+export const isPrototypeArtifactV2 = (
+  artifact: StoredPrototypeArtifact,
+): artifact is Extract<StoredPrototypeArtifact, { version: 2 }> => artifact.version === 2;
+
 interface PrototypeArtifactChunkInput {
-  artifacts: readonly PrototypeArtifact[];
+  artifacts: readonly StoredPrototypeArtifact[];
   path: string;
   mediaType: PrototypeArtifactMediaType;
   content: string;
@@ -44,7 +48,7 @@ interface PrototypeArtifactChunkInput {
 
 interface PrototypeArtifactChunkResult {
   artifact: PrototypeArtifact;
-  artifacts: readonly PrototypeArtifact[];
+  artifacts: readonly StoredPrototypeArtifact[];
   reused: boolean;
   complete: boolean;
   nextChunkIndex: number;
@@ -123,7 +127,7 @@ export function expectedPrototypeArtifactMediaType(path: string): PrototypeArtif
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function recordPrototypeArtifactRevision(input: {
-  artifacts: readonly PrototypeArtifact[];
+  artifacts: readonly StoredPrototypeArtifact[];
   path: string;
   mediaType: PrototypeArtifactMediaType;
   content: string;
@@ -132,7 +136,7 @@ export function recordPrototypeArtifactRevision(input: {
   expectedAppId?: string | null;
 }): {
   artifact: PrototypeArtifact;
-  artifacts: readonly PrototypeArtifact[];
+  artifacts: readonly StoredPrototypeArtifact[];
   reused: boolean;
 } {
   const { appId } = parsePrototypeArtifactPath(input.path);
@@ -164,7 +168,7 @@ export function recordPrototypeArtifactRevision(input: {
   const digest = sha256(input.content);
   const revision = sha256(JSON.stringify({ digest, mediaType: input.mediaType, path: input.path }));
   const prior = input.artifacts.find(({ path }) => path === input.path);
-  if (prior?.revision === revision) {
+  if (prior?.version !== 2 && prior?.revision === revision) {
     return { artifact: prior, artifacts: input.artifacts, reused: true };
   }
 
@@ -187,16 +191,24 @@ export function recordPrototypeArtifactRevision(input: {
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function exactPrototypeArtifact(
   artifacts: readonly PrototypeArtifact[],
+  input: { path: string; digest: string; revision?: string; sessionId: string },
+): PrototypeArtifact;
+export function exactPrototypeArtifact(
+  artifacts: readonly StoredPrototypeArtifact[],
+  input: { path: string; digest: string; revision?: string; sessionId: string },
+): StoredPrototypeArtifact;
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function exactPrototypeArtifact(
+  artifacts: readonly StoredPrototypeArtifact[],
   input: {
     path: string;
     digest: string;
     revision?: string;
     sessionId: string;
   },
-): PrototypeArtifact {
+): StoredPrototypeArtifact {
   parsePrototypeArtifactPath(input.path);
   const artifact = artifacts.find(
     (candidate) =>
@@ -215,7 +227,15 @@ export function exactPrototypeArtifact(
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function prototypeArtifactReceipt(artifact: PrototypeArtifact): PrototypeArtifactReceipt {
+export function prototypeArtifactReceipt(
+  artifact: StoredPrototypeArtifact,
+): PrototypeArtifactReceipt {
+  if (isPrototypeArtifactV2(artifact)) {
+    const { transfer, lastChunkReceipt, ...receipt } = artifact;
+    void transfer;
+    void lastChunkReceipt;
+    return { ...receipt, size: artifact.contentBytes };
+  }
   const { content, transfer, lastChunkReceipt, ...receipt } = artifact;
   void lastChunkReceipt;
   return { ...receipt, size: transfer?.receivedBytes ?? Buffer.byteLength(content) };
@@ -483,6 +503,9 @@ export const recordPrototypeArtifactChunk = (
   const { appId } = parsePrototypeArtifactPath(input.path);
   validateArtifactChunkOwnership(input, appId);
   const prior = input.artifacts.find(({ path }) => path === input.path);
+  if (prior && isPrototypeArtifactV2(prior)) {
+    throw new Error("This artifact uses durable chunks; read its current receipt before retrying.");
+  }
   const chunkDigest = sha256(input.content);
   const continuation = resolveChunkContinuation(prior, input, chunkDigest);
   if (continuation.kind === "retry") return continuation.result;
@@ -503,7 +526,7 @@ export const recordPrototypeArtifactChunk = (
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function completeBuildReadyPrototypeAppSpec(input: {
-  artifacts: readonly PrototypeArtifact[];
+  artifacts: readonly StoredPrototypeArtifact[];
   appId: string;
 }): PrototypeArtifact | undefined {
   const prefix = `prototype/${input.appId}/`;
@@ -519,6 +542,7 @@ export function completeBuildReadyPrototypeAppSpec(input: {
     !byPath.has(`${prefix}index.html`) ||
     !byPath.has(`${prefix}decisions.md`) ||
     appSpec.mediaType !== "text/markdown" ||
+    isPrototypeArtifactV2(appSpec) ||
     !validateBuildReadyAppSpec(appSpec.content).valid
   ) {
     return undefined;
@@ -528,7 +552,7 @@ export function completeBuildReadyPrototypeAppSpec(input: {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function recordPrototypeArtifactBundle(input: {
-  artifacts: readonly PrototypeArtifact[];
+  artifacts: readonly StoredPrototypeArtifact[];
   appId: string;
   indexHtml: string;
   decisionsMarkdown: string;
@@ -537,7 +561,7 @@ export function recordPrototypeArtifactBundle(input: {
   callId: string;
   expectedAppId?: string;
 }): {
-  artifacts: readonly PrototypeArtifact[];
+  artifacts: readonly StoredPrototypeArtifact[];
   appSpec: PrototypeArtifact;
   reused: boolean;
 } {

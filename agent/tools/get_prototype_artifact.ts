@@ -2,6 +2,7 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 import {
   exactPrototypeArtifact,
+  isPrototypeArtifactV2,
   prototypeArtifactReadChunk,
   prototypeArtifactPathPattern,
 } from "@/lib/agent/prototype-artifacts";
@@ -25,6 +26,11 @@ export default defineTool({
       artifactReference.revision = revision;
     }
     const artifact = exactPrototypeArtifact(current.artifacts, artifactReference);
+    if (isPrototypeArtifactV2(artifact)) {
+      throw new Error(
+        "This prototype artifact uses durable chunks. Use its authenticated Browser preview URL while chunked tool readback is being upgraded.",
+      );
+    }
     const output = {
       content: artifact.content,
       digest: artifact.digest,
