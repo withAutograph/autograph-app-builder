@@ -87,7 +87,7 @@ describe("hosted storage read-only readiness", () => {
       format: "autograph-hosted-storage-readiness-v1",
       migrations: {
         additiveOnly: true,
-        count: 21,
+        count: 22,
         exactOrder: true,
         noPendingMigration: true,
       },

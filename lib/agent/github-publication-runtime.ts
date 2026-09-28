@@ -17,6 +17,7 @@ import type {
 import type { ReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
 import type { SourceReceiptEvidence } from "../repository/source-receipt";
 import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
+import type { GitHubDraftAdoptionStore } from "../repository/postgres-github-draft-adoption-store";
 import { isDeepStrictEqual } from "node:util";
 import { sealExistingDraftUpdate, updateExistingDraft } from "../repository/github-draft-update";
 import type {
@@ -194,6 +195,7 @@ export function composeGitHubPublicationRuntime(input: {
   adapter?: GitHubPublicationAdapter;
   proposals?: GitHubPublicationProposalStore;
   receipts?: GitHubPublicationReceiptStore;
+  adoptions?: GitHubDraftAdoptionStore;
 }): GitHubPublicationRuntime {
   if (!input.enabled) {
     return disabledRuntime();
@@ -210,6 +212,7 @@ export function composeGitHubPublicationRuntime(input: {
   const { adapter } = input;
   const { proposals } = input;
   const { receipts } = input;
+  const { adoptions } = input;
   const draftUpdateAdapter: ExistingDraftUpdateAdapter = {
     async inspectAppliedUpdate(proposal, content, observed) {
       if (adapter.inspectAppliedDraftUpdate === undefined) {
@@ -358,10 +361,59 @@ export function composeGitHubPublicationRuntime(input: {
       const matchesRequestedDigest =
         request.priorPublishedProposalDigest === undefined ||
         prior?.proposalDigest === request.priorPublishedProposalDigest;
-      if (!matchesOriginalPublication || !matchesRequestedDigest) {
+      if (prior !== undefined && (!matchesOriginalPublication || !matchesRequestedDigest)) {
         throw new Error(
-          "Builder has no successful, tenant-scoped publication receipt for this draft PR. Reopen its originating Builder session; do not overwrite a PR branch whose previous content cannot be verified.",
+          "The selected draft PR conflicts with Builder's tenant-scoped publication receipt. Select its current branch and retry; no branch was changed.",
         );
+      }
+      if (prior === undefined && request.priorPublishedProposalDigest !== undefined) {
+        throw new Error(
+          "The specified original publication receipt is unavailable in this tenant. Reopen the current PR branch and review its diff before requesting a verified adoption.",
+        );
+      }
+      let adoptedDraft: Awaited<ReturnType<GitHubDraftAdoptionStore["save"]>> | undefined;
+      if (prior === undefined) {
+        if (adoptions === undefined) {
+          throw new Error(
+            "This Builder installation cannot record verified draft PR adoptions. Upgrade its publication store, then retry; no branch was changed.",
+          );
+        }
+        const observed = await draftUpdateAdapter.inspectDraft({
+          name: request.githubSource.repository.name,
+          number: request.pullRequestNumber,
+          owner: request.githubSource.repository.owner,
+          repositoryId: request.githubSource.repository.repositoryId,
+        });
+        const origin = observed.verifiedBuilderOrigin;
+        if (origin === undefined) {
+          throw new Error(
+            "GitHub does not verify this draft PR as authored by this Builder App with matching PR and current-head commit markers. Restore the correct Builder-created branch or use its original Builder session; no branch was changed.",
+          );
+        }
+        const existing = await adoptions.read(observed.repositoryId, observed.pullRequestId);
+        if (existing === undefined) {
+          adoptedDraft = await adoptions.save({
+            appId: origin.appId,
+            authorId: origin.authorId,
+            builderMarker: origin.marker,
+            originalHeadSha: observed.headSha,
+            pullRequestId: observed.pullRequestId,
+            pullRequestNumber: observed.number,
+            repositoryId: observed.repositoryId,
+          });
+        } else {
+          if (
+            !isDeepStrictEqual(
+              [existing.appId, existing.authorId, existing.builderMarker, existing.pullRequestNumber],
+              [origin.appId, origin.authorId, origin.marker, observed.number],
+            )
+          ) {
+            throw new Error(
+              "The current GitHub draft differs from its tenant-scoped adoption record. Inspect its author and origin marker before retrying; no branch was changed.",
+            );
+          }
+          adoptedDraft = existing;
+        }
       }
       const repository = await adapter.inspectRepository({
         operation: draftPublicationOperation,
@@ -372,7 +424,7 @@ export function composeGitHubPublicationRuntime(input: {
       return sealExistingDraftUpdate({
         adapter: draftUpdateAdapter,
         installation,
-        priorPublication: prior,
+        ...(prior === undefined ? { adoptedDraft } : { priorPublication: prior }),
         pullRequestNumber: request.pullRequestNumber,
         repository,
         review: request.review,

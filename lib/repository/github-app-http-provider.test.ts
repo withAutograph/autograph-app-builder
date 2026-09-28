@@ -814,12 +814,12 @@ describe("existing draft update provider", () => {
     const headTree = "4".repeat(40);
     const newCommit = "5".repeat(40);
     let observedHead = head;
-    let recoveredMessage = `Update draft pull request #1500\n\nApp-Builder-Idempotency: ${"b".repeat(64)}`;
+    let recoveredMessage = `Update draft pull request #1500\n\nApp-Builder-Idempotency: ${"b".repeat(64)}\nApp-Builder-Origin: ${"d".repeat(64)}`;
     const { content } = unicodeDraftMaterial(false, false, ["apps/demo/page.tsx"]);
     const proposal = {
       approvedPaths: content.approvedPaths,
       baseBranch: "main",
-      branchName: "app-builder/review-original",
+      branchName: `app-builder/review-${"d".repeat(20)}`,
       changeSetDigest: content.changeSetDigest,
       changedContentDigest: content.changedContentDigest,
       digest: "a".repeat(64),
@@ -829,6 +829,7 @@ describe("existing draft update provider", () => {
       installationIdentityDigest: "c".repeat(64),
       intendedOutcome: "update-existing-draft-pull-request" as const,
       name: "example-app",
+      originMarker: "d".repeat(64),
       owner: "withAutograph",
       priorPublicationDigest: "d".repeat(64),
       pullRequestId: "150000",
@@ -844,6 +845,9 @@ describe("existing draft update provider", () => {
       const method = init.method ?? "GET";
       const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
       calls.push({ body, url });
+      if (url.endsWith("/app")) {
+        return json({ id: 123, slug: "autograph-app-builder" });
+      }
       if (url.endsWith("/app/installations/456/access_tokens")) {
         return json(
           {
@@ -871,18 +875,26 @@ describe("existing draft update provider", () => {
       if (url.endsWith("/repos/withAutograph/example-app/pulls/1500")) {
         return json({
           base: { ref: "main", repo: { id: 100 } },
+          body: `<!-- App-Builder-Idempotency: ${"d".repeat(64)} -->`,
           draft: true,
           head: { ref: proposal.branchName, repo: { id: 100 }, sha: observedHead },
           id: 150_000,
           number: 1500,
           state: "open",
+          user: { id: 900, login: "autograph-app-builder[bot]", type: "Bot" },
         });
       }
       if (url.endsWith(`/git/ref/heads/${proposal.branchName}`)) {
         return json({ node_id: "REF_NODE", object: { sha: observedHead } });
       }
       if (url.endsWith(`/commits/${head}`)) {
-        return json({ commit: { tree: { sha: headTree } }, sha: head });
+        return json({
+          commit: {
+            message: `Add demo\n\nApp-Builder-Idempotency: ${"d".repeat(64)}`,
+            tree: { sha: headTree },
+          },
+          sha: head,
+        });
       }
       if (url.endsWith(`/git/commits/${newCommit}`)) {
         return json({
@@ -892,7 +904,10 @@ describe("existing draft update provider", () => {
         });
       }
       if (url.endsWith(`/commits/${newCommit}`)) {
-        return json({ commit: { tree: { sha: "7".repeat(40) } }, sha: newCommit });
+        return json({
+          commit: { message: recoveredMessage, tree: { sha: "7".repeat(40) } },
+          sha: newCommit,
+        });
       }
       if (url.endsWith(`/git/trees/${headTree}`) && method === "GET") {
         return json({ tree: [], truncated: false });
@@ -937,6 +952,11 @@ describe("existing draft update provider", () => {
       owner: proposal.owner,
       repositoryId: proposal.repositoryId,
     })) as ExistingDraftObservation;
+    expect(observed.verifiedBuilderOrigin).toEqual({
+      appId: "123",
+      authorId: "900",
+      marker: "d".repeat(64),
+    });
     await expect(provider.inspectAppliedDraftUpdate(proposal, content, observed)).resolves.toBe(
       true,
     );

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
+import type { GitHubDraftAdoption } from "./postgres-github-draft-adoption-store";
 import { readExactGitHubPublicationContent } from "./github-publication";
 import type {
   DraftPullRequestSuccessReceipt,
@@ -34,6 +35,11 @@ export interface ExistingDraftObservation {
   headTree: string;
   baseRepositoryId: string;
   baseBranch: string;
+  verifiedBuilderOrigin?: {
+    appId: string;
+    authorId: string;
+    marker: string;
+  };
 }
 
 export interface ExistingDraftUpdateProposal {
@@ -49,6 +55,7 @@ export interface ExistingDraftUpdateProposal {
   expectedHeadSha: string;
   expectedHeadTree: string;
   priorPublicationDigest: string;
+  originMarker: string;
   baseBranch: string;
   reviewDigest: string;
   changeSetDigest: string;
@@ -107,13 +114,15 @@ const sameDraft = (proposal: ExistingDraftUpdateProposal, observed: ExistingDraf
     },
   );
 
+// oxlint-disable-next-line eslint/complexity -- seal checks installation, exact PR identity, checkout head, and verified adoption before creating an update proposal
 export const sealExistingDraftUpdate = async (input: {
   adapter: ExistingDraftUpdateAdapter;
   installation: GitHubInstallationIdentity;
   repository: GitHubRepositoryObservation;
   review: ReviewedChangeSetReceipt;
   pullRequestNumber: number;
-  priorPublication: DraftPullRequestSuccessReceipt;
+  priorPublication?: DraftPullRequestSuccessReceipt;
+  adoptedDraft?: GitHubDraftAdoption;
   selectedSourceRef: string;
   selectedCheckoutHeadSha: string;
   selectedCheckoutHeadTree: string;
@@ -148,6 +157,7 @@ export const sealExistingDraftUpdate = async (input: {
     );
   }
   if (
+    input.priorPublication !== undefined &&
     !isDeepStrictEqual(
       {
         branchName: observed.headBranch,
@@ -163,6 +173,33 @@ export const sealExistingDraftUpdate = async (input: {
   ) {
     throw new Error(
       "The draft PR is not Builder's previously approved publication. Inspect its origin and select the correct PR before updating.",
+    );
+  }
+  if (
+    input.priorPublication === undefined &&
+    (input.adoptedDraft === undefined ||
+      observed.verifiedBuilderOrigin === undefined ||
+      !isDeepStrictEqual(
+        {
+          appId: observed.verifiedBuilderOrigin.appId,
+          authorId: observed.verifiedBuilderOrigin.authorId,
+          builderMarker: observed.verifiedBuilderOrigin.marker,
+          pullRequestId: observed.pullRequestId,
+          pullRequestNumber: observed.number,
+          repositoryId: observed.repositoryId,
+        },
+        {
+          appId: input.adoptedDraft.appId,
+          authorId: input.adoptedDraft.authorId,
+          builderMarker: input.adoptedDraft.builderMarker,
+          pullRequestId: input.adoptedDraft.pullRequestId,
+          pullRequestNumber: input.adoptedDraft.pullRequestNumber,
+          repositoryId: input.adoptedDraft.repositoryId,
+        },
+      ))
+  ) {
+    throw new Error(
+      "Builder cannot verify this draft PR's author and matching PR/head commit origin marker. Refresh its GitHub provenance, then retry; no branch was changed.",
     );
   }
   if (
@@ -206,8 +243,11 @@ export const sealExistingDraftUpdate = async (input: {
     installationIdentityDigest: input.installation.digest,
     intendedOutcome: "update-existing-draft-pull-request" as const,
     name: observed.name,
+    originMarker:
+      observed.verifiedBuilderOrigin?.marker ?? input.priorPublication?.idempotencyKey ?? "",
     owner: observed.owner,
-    priorPublicationDigest: input.priorPublication.digest,
+    priorPublicationDigest:
+      input.priorPublication?.digest ?? input.adoptedDraft?.adoptionDigest ?? "",
     pullRequestId: observed.pullRequestId,
     pullRequestNumber: observed.number,
     repositoryId: observed.repositoryId,
