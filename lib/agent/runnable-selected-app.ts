@@ -42,7 +42,7 @@ export const runnableSelectedApp = async (input: {
   const appContract = await input.sandbox.readTextFile({
     path: `${root}/apps/${appId}/.config/app-spec.md`,
   });
-  if (appContract === null) {
+  if (appContract === null || appContract === undefined) {
     throw new Error(
       `The selected checkout has no apps/${appId}/.config/app-spec.md. Choose an app that exists in this repository or repair its app contract before running preview tasks.`,
     );
