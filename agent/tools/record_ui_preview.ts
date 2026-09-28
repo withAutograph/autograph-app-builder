@@ -9,6 +9,9 @@ import {
 } from "@/lib/agent/ui-preview";
 import { renderUiPreview } from "@/lib/agent/ui-preview-renderer";
 import { recordPrototypeArtifactRevision } from "@/lib/agent/prototype-artifacts";
+import { recordDurablePrototypeContent } from "@/lib/agent/prototype-artifacts-v2";
+import { createHostedPrototypeChunkStore } from "@/lib/agent/hosted-prototype-chunk-store";
+import { openHostedPostgresDatabase } from "@/lib/mcp/hosted-route";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
@@ -36,6 +39,7 @@ const ensurePreviewWorkspace = async (ctx: Parameters<typeof sourceStatus.execut
 export default defineTool({
   description:
     "Create or revise the Browser prototype from readable, formatted React source composed only from current Arrusted public components and compositions. Before the first call, inspect-repository must establish the exact public exports and props. Use capitalized component/composition/icon imports and inventory each exact name and source in the manifest; never infer an icon name. Lowercase package helpers are unsupported preview imports. Never author raw button, input, select, textarea, dialog, or table JSX. Keep catalogGaps empty. Export a default screen component from each screen entry. Navigation must set location.hash to an exact manifest screen route. Every enabled action must produce its intended fixture-backed visible result. Follow design-app interaction guidance and verify the rendered controls in the Browser. When revising, set baseRevision to the prior UI preview revision returned by this tool. File count and content size are unrestricted. For a source bundle that does not fit one Eve event, declare sourceFiles with each file's UTF-8 byte length and SHA-256, then send one file chunk per call using sourceChunk. Start at chunkIndex 0 and byte offset 0; continue with the returned transferId, transferRevision, nextFilePath, nextFileOffsetBytes, and nextChunkIndex. Keep each serialized event within Eve's actual envelope by reducing chunk size as needed. The source bundle is validated and rendered only after every declared file digest matches. The renderer includes the actual Arrusted theme automatically and installs missing repository dependencies as needed. If the returned receipt says requiresChunkedRead, read the stored prototype with get_prototype_artifact using its artifactDigest and artifactRevision, then continue from each returned nextOffsetBytes until complete before opening the Browser preview.",
+  // oxlint-disable-next-line eslint/complexity -- The staged v2 writer preserves the complete legacy preview path.
   async execute(input, ctx) {
     let previewInput = uiPreviewInputEnvelopeSchema.parse(input);
     await ensurePreviewWorkspace(ctx);
@@ -86,14 +90,50 @@ export default defineTool({
     const sourceDigest = uiPreviewSourceDigest(previewInput);
     const revision = sourceDigest;
     const previewHtml = await renderUiPreview(previewInput, await ctx.getSandbox());
-    const recorded = recordPrototypeArtifactRevision({
-      artifacts: current.artifacts,
-      callId: ctx.callId,
-      content: previewHtml,
-      mediaType: "text/html",
-      path: `prototype/${previewInput.appId}/index.html`,
-      sessionId: ctx.session.id,
-    });
+    const artifactPath = `prototype/${previewInput.appId}/index.html`;
+    const durable =
+      process.env.APP_BUILDER_PROTOTYPE_V2_WRITER === "1" && process.env.EVE_HOSTED_ADAPTER === "1";
+    if (
+      durable &&
+      current.artifacts.some(
+        (artifact) =>
+          artifact.sessionId !== ctx.session.id || artifact.appId !== previewInput.appId,
+      )
+    ) {
+      throw new Error("The UI preview artifact does not match this workflow or session.");
+    }
+    const durableResult = durable
+      ? await recordDurablePrototypeContent({
+          appId: previewInput.appId,
+          callId: ctx.callId,
+          content: previewHtml,
+          path: artifactPath,
+          sessionId: ctx.session.id,
+          store: createHostedPrototypeChunkStore({
+            db: openHostedPostgresDatabase(process.env.DATABASE_URL ?? ""),
+            sessionAuth: ctx.session.auth,
+            sessionId: ctx.session.id,
+          }),
+        })
+      : undefined;
+    const recorded =
+      durableResult === undefined
+        ? recordPrototypeArtifactRevision({
+            artifacts: current.artifacts,
+            callId: ctx.callId,
+            content: previewHtml,
+            mediaType: "text/html",
+            path: artifactPath,
+            sessionId: ctx.session.id,
+          })
+        : {
+            artifact: durableResult.artifact,
+            artifacts: [
+              ...current.artifacts.filter((artifact) => artifact.path !== artifactPath),
+              durableResult.artifact,
+            ].toSorted((left, right) => left.path.localeCompare(right.path)),
+            reused: durableResult.reused,
+          };
     const uiPreview = {
       appId: previewInput.appId,
       catalogDigest: current.workspace.eligibilityDigest,
@@ -124,6 +164,29 @@ export default defineTool({
       }),
     });
     uiPreviewTransferState.update(() => null);
+    if (durableResult !== undefined) {
+      return {
+        appId: uiPreview.appId,
+        artifactDigest: durableResult.artifact.digest,
+        artifactRevision: durableResult.artifact.revision,
+        chunkCount: durableResult.artifact.chunkCount,
+        complete: true,
+        contentBytes: durableResult.artifact.contentBytes,
+        digest: durableResult.artifact.digest,
+        fidelity: "arrusted-component-catalog" as const,
+        functionality: "fixtures-only" as const,
+        mediaType: "text/html" as const,
+        path: artifactPath,
+        recordedByCallId: ctx.callId,
+        requiresChunkedRead: true,
+        reused: prior?.revision === revision,
+        revision: uiPreview.revision,
+        routes: uiPreview.routes,
+        sessionId: ctx.session.id,
+        totalBytes: durableResult.artifact.contentBytes,
+        version: 2 as const,
+      };
+    }
     const result = {
       appId: uiPreview.appId,
       artifactDigest: recorded.artifact.digest,

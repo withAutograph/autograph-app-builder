@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import { durablePrototypeToolReceipt, recordDurablePrototypeChunk } from "./prototype-artifacts-v2";
+import {
+  durablePrototypeToolReceipt,
+  recordDurablePrototypeChunk,
+  recordDurablePrototypeContent,
+} from "./prototype-artifacts-v2";
 import type { DurablePrototypeChunkStore } from "./prototype-artifacts-v2";
 
 const digest = (value: string) => createHash("sha256").update(value, "utf-8").digest("hex");
@@ -31,6 +35,24 @@ const memoryStore = (): DurablePrototypeChunkStore => {
 };
 
 describe("durable v2 prototype tool writer", () => {
+  it("stores rendered Unicode HTML in bounded chunks and publishes one final manifest", async () => {
+    const content = "<main>🥑café</main>";
+    const result = await recordDurablePrototypeContent({
+      appId: "spend-review",
+      callId: "preview-call",
+      chunkBytes: 8,
+      content,
+      path: "prototype/spend-review/index.html",
+      sessionId: "session-1",
+      store: memoryStore(),
+    });
+    expect(result).toMatchObject({
+      artifact: { digest: digest(content), version: 2 },
+      complete: true,
+    });
+    expect(result.artifact.chunkCount).toBeGreaterThan(1);
+    expect(durablePrototypeToolReceipt(result)).not.toHaveProperty("content");
+  });
   it("stores chunks before publishing only a verified manifest and preserves idempotent retry", async () => {
     const store = memoryStore();
     const pieces = ["<main>🥑", "café</main>"];

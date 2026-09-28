@@ -6,6 +6,7 @@ import {
   parsePrototypeArtifactPath,
 } from "./prototype-artifacts";
 import { verifyPrototypeArtifactManifest } from "./prototype-artifact-stream";
+import { EVE_MAX_PAYLOAD_BYTES } from "../eve/payload-envelope";
 
 const sha256 = (value: string) => createHash("sha256").update(value, "utf-8").digest("hex");
 
@@ -209,3 +210,58 @@ export const recordDurablePrototypeChunk = async (
   return { artifact, complete: true, nextChunkIndex, reused: false };
 };
 // oxlint-enable sonarjs/expression-complexity
+
+/** Persist generated HTML incrementally; one Eve state update can publish the final manifest. */
+export const recordDurablePrototypeContent = async (input: {
+  appId: string;
+  callId: string;
+  content: string;
+  path: string;
+  sessionId: string;
+  store: DurablePrototypeChunkStore;
+  chunkBytes?: number;
+}): Promise<DurablePrototypeChunkResult> => {
+  const chunkBytes = input.chunkBytes ?? Math.floor(EVE_MAX_PAYLOAD_BYTES / 8);
+  if (!Number.isSafeInteger(chunkBytes) || chunkBytes < 4 || input.content.length === 0) {
+    throw new Error("The durable prototype content or chunk size is invalid.");
+  }
+  const expectedDigest = sha256(input.content);
+  let pending = "";
+  let pendingBytes = 0;
+  let current: PrototypeArtifactV2 | undefined;
+  let chunkIndex = 0;
+  const write = async (content: string, finalChunk: boolean) => {
+    const chunkInput: DurablePrototypeChunkInput = {
+      appId: input.appId,
+      callId: input.callId,
+      chunkIndex,
+      content,
+      expectedDigest,
+      finalChunk,
+      mediaType: "text/html",
+      path: input.path,
+      sessionId: input.sessionId,
+      store: input.store,
+    };
+    if (current !== undefined) {
+      chunkInput.baseRevision = current.revision;
+      chunkInput.current = current;
+    }
+    const result = await recordDurablePrototypeChunk(chunkInput);
+    current = result.artifact;
+    chunkIndex += 1;
+    return result;
+  };
+  for (const point of input.content) {
+    const pointBytes = Buffer.byteLength(point, "utf-8");
+    if (pendingBytes + pointBytes > chunkBytes && pending.length > 0) {
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Each chunk's receipt binds the next write.
+      await write(pending, false);
+      pending = "";
+      pendingBytes = 0;
+    }
+    pending += point;
+    pendingBytes += pointBytes;
+  }
+  return await write(pending, true);
+};
