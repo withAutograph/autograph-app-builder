@@ -108,12 +108,14 @@ async function readJson(response: Response): Promise<unknown> {
     throw new Error("invalid-response");
   }
   const chunks: Uint8Array[] = [];
+  let length = 0;
   for (;;) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const { done, value } = await reader.read();
     if (done) {
       break;
     }
+    length += value.byteLength;
     chunks.push(value);
   }
   const bytes = new Uint8Array(length);
