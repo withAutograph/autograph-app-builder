@@ -13,6 +13,7 @@ import {
 } from "@/lib/agent/preview-working-directory";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
+import { resolvePreviewPackageManager } from "@/lib/agent/preview-package-manager";
 import { ensureCheckoutDependencies } from "@/lib/agent/checkout-dependencies";
 import { prepareAppLocalPreview } from "./prepare-app-local-preview";
 import {
@@ -64,12 +65,14 @@ const usesNext = (source: string | null): boolean => {
 
 export default defineTool({
   description:
-    "Open the selected existing app or applied new app in its private Sandbox and return a working browser URL. For a prepared existing GitHub checkout, supply appId from the repository's apps directory; this only previews current files and does not grant build or publication approval. Use the repository's discovered development command in workingDirectory relative to the repository root. Configure it to listen on the supplied port. A reachable page is not proof of backend product behavior.",
+    "Open the selected existing app or applied new app in its private Sandbox and return a working browser URL. For a prepared existing GitHub checkout, supply appId from the repository's apps directory; this only previews current files and does not grant build or publication approval. Discover the development script and package manager from the checkout's package.json, then use workingDirectory relative to the repository root. Configure it to listen on the supplied port. A reachable page is not proof of backend product behavior.",
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
     const sandbox = await ctx.getSandbox();
     const selected = await runnableSelectedApp({ appId: input.appId, sandbox, state: current });
     const cwd = resolvePreviewWorkingDirectory(selected.root, input.workingDirectory);
+    const rootManifest = await sandbox.readTextFile({ path: `${selected.root}/package.json` });
+    const launch = resolvePreviewPackageManager(input.command, rootManifest);
     const evidenceGeneration = currentProductBehaviorGeneration();
     await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
     const provider = await getVercelPreviewProvider(sandbox.id, ctx.abortSignal);
@@ -79,7 +82,7 @@ export default defineTool({
       .update(
         JSON.stringify({
           appId: selected.appId,
-          command: input.command,
+          command: launch.command,
           cwd,
           landingPath: input.landingPath,
           port: input.port,
@@ -97,7 +100,7 @@ export default defineTool({
       const command = await provider.getCommand(previous.commandId, { signal: ctx.abortSignal });
       if (command.exitCode === null) {
         bindProductBehaviorPreview(previous.commandId, evidenceGeneration);
-        return { workingPreview: previous.receipt };
+        return { commandAdjustment: launch.adjustment, workingPreview: previous.receipt };
       }
     }
     const { appId } = selected;
@@ -139,6 +142,7 @@ export default defineTool({
     const preview = await startWorkingPreview({
       ...input,
       appId: selected.appId,
+      command: launch.command,
       cwd,
       onAttempt: (attempt) => {
         workingPreviewAttemptState.update((currentAttempt) => {
@@ -157,7 +161,7 @@ export default defineTool({
     });
     workingPreviewState.update(() => preview);
     bindProductBehaviorPreview(preview.commandId, evidenceGeneration);
-    return { workingPreview: preview.receipt };
+    return { commandAdjustment: launch.adjustment, workingPreview: preview.receipt };
   },
   inputSchema: z.object({
     appId: z
