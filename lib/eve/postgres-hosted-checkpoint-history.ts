@@ -173,7 +173,23 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
         .returning({ checkpointId: agentSessionCheckpointManifests.checkpointId });
       return deleted.length;
     },
-
+    async discardStage(input: {
+      principal: HostedPrincipal;
+      sessionId: string;
+      checkpointId: string;
+    }) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      const deleted = await database
+        .delete(agentSessionCheckpointManifests)
+        .where(
+          and(
+            manifestWhere(tenant(principal, input.sessionId, input.checkpointId)),
+            isNull(agentSessionCheckpointManifests.publishedAt),
+          ),
+        )
+        .returning({ checkpointId: agentSessionCheckpointManifests.checkpointId });
+      return deleted.length === 1;
+    },
     /** Invoke in the same transaction that updates agent_session's active pointer. */
     async publishInTransaction(
       transaction: Transaction,
@@ -267,7 +283,6 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
       }
       return rows[0];
     },
-
     async readItem(input: {
       principal: HostedPrincipal;
       sessionId: string;
@@ -344,7 +359,6 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
       }
       return publicEveEventSchema.parse(parsed);
     },
-
     async readPage(input: {
       principal: HostedPrincipal;
       sessionId: string;
@@ -376,7 +390,7 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
         return null;
       }
       const metadata = await this.readItem({ ...input, itemIndex: -1 });
-      if (metadata === null) {
+      if (metadata === null || "index" in metadata) {
         throw new Error("Hosted checkpoint metadata is missing.");
       }
       const events = [];
@@ -397,7 +411,6 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
         totalEvents: manifest.eventCount,
       };
     },
-
     async stage(input: {
       principal: HostedPrincipal;
       sessionId: string;
@@ -430,6 +443,7 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
         updatedAt: new Date(input.nowEpochMs),
       });
       const checkpointHash = createHash("sha256");
+      const progressHash = createHash("sha256");
       let eventCount = 0;
       // eslint-disable-next-line eslint/func-style -- Stage each item using its enclosing key.
       const writeItem = async (itemIndex: number, source: Bytes) => {
@@ -483,12 +497,20 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
           partCount,
         });
         checkpointHash.update(`${itemIndex}:${itemDigest}\n`);
+        if (itemIndex >= 0) {
+          progressHash.update(`${itemIndex}:${itemDigest}\n`);
+        }
       };
       try {
-        await writeItem(
-          -1,
-          encodeCheckpointJson(pagedCheckpointMetadataSchema.parse(input.metadata)),
-        );
+        const metadata = pagedCheckpointMetadataSchema.parse(input.metadata);
+        const { capturedAtEpochMs, ...progressMetadata } = metadata;
+        void capturedAtEpochMs;
+        const progressMetadataHash = createHash("sha256");
+        for await (const fragment of encodeCheckpointJson(progressMetadata)) {
+          progressMetadataHash.update(fragment);
+        }
+        progressHash.update(`-1:sha256:${progressMetadataHash.digest("hex")}\n`);
+        await writeItem(-1, encodeCheckpointJson(metadata));
         for await (const candidate of input.events) {
           const event = publicEveEventSchema.parse(candidate);
           if (event.index !== eventCount) {
@@ -505,6 +527,7 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
       return {
         checkpointDigest: `sha256:${checkpointHash.digest("hex")}`,
         checkpointId,
+        checkpointProgressDigest: `sha256:${progressHash.digest("hex")}`,
         eventCount,
         itemCount: eventCount + 1,
       };
