@@ -72,7 +72,7 @@ const unavailableConfirmationMessage =
   "Builder could not read the requested confirmation, so no action was run. Refresh this saved session and retry the confirmation; if it repeats, report the session ID and request title.";
 const publicFailureLimit = 700;
 const publicErrorCode = (value: string) =>
-  /^[A-Za-z][A-Za-z0-9_]{0,79}$/u.test(value) ? value : "unknown_error";
+  /^[A-Za-z][A-Za-z0-9_-]{0,79}$/u.test(value) ? value : "unknown_error";
 const publicFailureDetail = (value: string) =>
   value
     .replaceAll(/\s*\r?\n\s*/gu, " | ")
@@ -90,14 +90,11 @@ const publicFailureDetail = (value: string) =>
     .trim()
     .slice(0, publicFailureLimit);
 
-const publicSessionFailure = (
-  event: Extract<MessageStreamEvent, { type: "session.failed" }>,
-  operation?: string,
-) => {
+const publicBuilderFailure = (failure: { code: string; message: string }, operation?: string) => {
   const name = operation === undefined ? "the current Builder operation" : `\`${operation}\``;
   const size =
     /Chunk size (?<actual>\d+) exceeds maximum allowed size of (?<maximum>\d+) bytes/u.exec(
-      event.data.message,
+      failure.message,
     );
   if (size?.groups !== undefined) {
     return {
@@ -105,8 +102,8 @@ const publicSessionFailure = (
       message: `Builder could not complete ${name}: the serialized Eve event was ${size.groups.actual} bytes, above Eve's ${size.groups.maximum}-byte event envelope. For prototype or UI-preview content, retry with smaller UTF-8-safe chunks using the chunked read/write path, then resume this saved session.`,
     };
   }
-  const code = publicErrorCode(event.data.code);
-  const detail = publicFailureDetail(event.data.message);
+  const code = publicErrorCode(failure.code);
+  const detail = publicFailureDetail(failure.message);
   if (detail.length === 0) {
     return {
       code,
@@ -1045,15 +1042,21 @@ export const projectInstalledEveEvent = (
       } else {
         state = "failed";
       }
-      return [
-        {
-          index,
-          label: "Builder is working on this app",
-          state,
-          turnId: event.data.turnId,
-          type: "progress",
-        },
-      ];
+      const progress: InternalEveEvent = {
+        index,
+        label: "Builder is working on this app",
+        state,
+        turnId: event.data.turnId,
+        type: "progress",
+      };
+      if (event.type === "step.failed") {
+        const failure = publicBuilderFailure(event.data, operation);
+        return [
+          progress,
+          { code: failure.code, index, message: failure.message, type: "error.public" },
+        ];
+      }
+      return [progress];
     }
     case "actions.requested": {
       return event.data.actions.flatMap((action) => {
@@ -1184,8 +1187,12 @@ export const projectInstalledEveEvent = (
     case "session.completed": {
       return [{ index, status: "completed", type: "status" }];
     }
+    case "turn.failed": {
+      const failure = publicBuilderFailure(event.data, operation);
+      return [{ code: failure.code, index, message: failure.message, type: "error.public" }];
+    }
     case "session.failed": {
-      const failure = publicSessionFailure(event, operation);
+      const failure = publicBuilderFailure(event.data, operation);
       return [
         {
           code: failure.code,

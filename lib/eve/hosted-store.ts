@@ -135,6 +135,33 @@ export const hostedSessionCheckpointProgressDigest = (
   return `sha256:${createHash("sha256").update(canonicalRecordValue(progress)).digest("hex")}`;
 };
 
+const reportCheckpointDigestMismatch = (
+  record: {
+    checkpoint?: HostedSessionCheckpoint;
+    checkpointDigest?: string;
+    checkpointProgressDigest?: string;
+  },
+  context: z.RefinementCtx,
+) => {
+  if (record.checkpoint === undefined) {
+    return;
+  }
+  const computedCheckpointDigest = hostedSessionCheckpointDigest(record.checkpoint);
+  if (computedCheckpointDigest !== record.checkpointDigest) {
+    context.addIssue({
+      code: "custom",
+      message: `Hosted session checkpoint digest mismatch: stored ${record.checkpointDigest ?? "missing"}, computed ${computedCheckpointDigest}. Preserve the session and inspect checkpoint writes or source serialization before retrying.`,
+    });
+  }
+  const computedProgressDigest = hostedSessionCheckpointProgressDigest(record.checkpoint);
+  if (computedProgressDigest !== record.checkpointProgressDigest) {
+    context.addIssue({
+      code: "custom",
+      message: `Hosted session checkpoint progress digest mismatch: stored ${record.checkpointProgressDigest ?? "missing"}, computed ${computedProgressDigest}. Preserve the session and inspect checkpoint writes or source serialization before retrying.`,
+    });
+  }
+};
+
 export const durableHostedSessionRecordSchema = z
   .object({
     adapterGeneration: z.number().int().positive(),
@@ -217,24 +244,7 @@ export const durableHostedSessionRecordSchema = z
         message: "Hosted session checkpoints require their progress digest.",
       });
     }
-    if (
-      record.checkpoint !== undefined &&
-      hostedSessionCheckpointDigest(record.checkpoint) !== record.checkpointDigest
-    ) {
-      context.addIssue({
-        code: "custom",
-        message: "Hosted session checkpoint digest mismatch.",
-      });
-    }
-    if (
-      record.checkpoint !== undefined &&
-      hostedSessionCheckpointProgressDigest(record.checkpoint) !== record.checkpointProgressDigest
-    ) {
-      context.addIssue({
-        code: "custom",
-        message: "Hosted session checkpoint progress digest mismatch.",
-      });
-    }
+    reportCheckpointDigestMismatch(record, context);
     if (record.checkpoint !== undefined && record.checkpoint.status !== record.status) {
       context.addIssue({
         code: "custom",
