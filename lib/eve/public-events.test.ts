@@ -116,6 +116,48 @@ describe("toPublicEvent", () => {
 });
 
 describe("installed Eve 0.43 projection", () => {
+  it("reports a failed Builder step with its operation and redacted cause", () => {
+    const events = projectInstalledEveEvents([
+      installedEvent({
+        data: {
+          actions: [{ callId: "build_1", kind: "tool-call", toolName: "apply_app_creation" }],
+        },
+        type: "actions.requested",
+      }),
+      installedEvent({
+        data: {
+          code: "execution-error",
+          message: "Private build failed: missing proposal. token=private-value",
+          turnId: "turn_1",
+        },
+        type: "step.failed",
+      }),
+    ]);
+    expect(events).toEqual([
+      {
+        index: 0,
+        label: "Building the app in its private workspace",
+        state: "started",
+        type: "progress",
+      },
+      {
+        index: 1,
+        label: "Builder is working on this app",
+        state: "failed",
+        turnId: "turn_1",
+        type: "progress",
+      },
+      {
+        code: "execution-error",
+        index: 2,
+        message:
+          "Builder could not complete `apply_app_creation` (execution-error). Cause: Private build failed: missing proposal. token=[REDACTED]. Your progress is saved; correct the cause and resume this session.",
+        type: "error",
+      },
+    ]);
+    expect(JSON.stringify(events)).not.toContain("private-value");
+  });
+
   it("reports a private build's start and result without exposing tool arguments", () => {
     const events = projectInstalledEveEvents([
       installedEvent({
