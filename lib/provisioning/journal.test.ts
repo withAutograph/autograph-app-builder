@@ -7,6 +7,7 @@ import type {
   BuilderProvisionJournalStore,
 } from "./journal";
 import { builderProvisionRequestDigest, builderProvisionRequestSchema } from "./contracts";
+import { readBuilderProvisioning } from "./service";
 
 const request = builderProvisionRequestSchema.parse({
   appName: "Vendor Portal",
@@ -86,6 +87,42 @@ function memoryStore(): BuilderProvisionJournalStore {
 }
 
 describe("builder provisioning journal", () => {
+  it("projects a due retry with a safe recovery action", async () => {
+    const store = memoryStore();
+    await store.reserve({ authority, now: new Date(), request });
+    const nextRetryAt = new Date(Date.now() + 37_000).toISOString();
+    await updateBuilderProvisionJournal({
+      authority,
+      requestId: request.requestId,
+      store,
+      update(current) {
+        current.operations.github.attempted = true;
+        current.operations.github.failureDetail = "provider_rate_limited";
+        current.operations.github.nextRetryAt = nextRetryAt;
+        current.response.github = {
+          code: "provider_rate_limited",
+          retryable: true,
+          status: "failed",
+        };
+        return current;
+      },
+    });
+    const response = await readBuilderProvisioning({
+      authority,
+      journal: store,
+      requestId: request.requestId,
+    });
+    expect(response?.diagnostics).toEqual([
+      {
+        code: "provider_rate_limited",
+        nextRetryAt,
+        operation: "github",
+        outcomeKnown: false,
+        provider: "github",
+        recoveryAction: "Builder will retry after the provider delay.",
+      },
+    ]);
+  });
   it("persists more than five candidates and survives more than eight compare-and-set collisions", async () => {
     const underlying = memoryStore();
     await underlying.reserve({ authority, now: new Date(), request });

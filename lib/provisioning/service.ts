@@ -167,6 +167,10 @@ export async function executeBuilderProvisioning(input: {
     };
 
     let result: BuilderProvisionResponse[typeof request.operation];
+    let providerRetryAfterMs: number | undefined;
+    const recordRetryAfter = (milliseconds: number) => {
+      providerRetryAfterMs = Math.max(providerRetryAfterMs ?? 0, milliseconds);
+    };
     if (request.operation === "github") {
       const bindings = (await input.dependencies.githubInstallations.list?.(input.authority)) ?? [];
       const installation = bindings.find(
@@ -195,6 +199,7 @@ export async function executeBuilderProvisioning(input: {
             persistedAbsentCandidates: current.record.operations.github.absentCandidates,
             persistedCandidates: current.record.operations.github.candidates,
             private: request.repository.private,
+            recordRetryAfter,
             renewLease,
             requestId: request.requestId,
             requestedName: request.repository.name,
@@ -244,6 +249,7 @@ export async function executeBuilderProvisioning(input: {
           persistCandidate: (candidate) => persist("candidate", candidate),
           persistedAbsentCandidates: current.record.operations.vercel.absentCandidates,
           persistedCandidates: current.record.operations.vercel.candidates,
+          recordRetryAfter,
           renewLease,
           token: credential.token,
         });
@@ -303,7 +309,11 @@ export async function executeBuilderProvisioning(input: {
             const attempts = current.operations[request.operation].attemptCount ?? 1;
             const delay = Math.min(15 * 60_000, 60_000 * 2 ** Math.min(attempts - 1, 4));
             current.operations[request.operation].nextRetryAt = new Date(
-              now() + Math.round(delay * (0.75 + randomInt(0, 501) / 1000)),
+              now() +
+                Math.max(
+                  Math.round(delay * (0.75 + randomInt(0, 501) / 1000)),
+                  providerRetryAfterMs ?? 0,
+                ),
             ).toISOString();
           } else {
             delete current.operations[request.operation].nextRetryAt;
@@ -333,5 +343,44 @@ export async function readBuilderProvisioning(input: {
     authority: input.authority,
     requestId: input.requestId,
   });
-  return row?.record.response;
+  if (!row) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- the read contract distinguishes missing journals from a response.
+    return undefined;
+  }
+  const diagnostics: NonNullable<BuilderProvisionResponse["diagnostics"]> = [];
+  for (const operation of ["github", "vercel"] as const) {
+    const state = row.record.operations[operation];
+    const result = row.record.response[operation];
+    const expiredLease =
+      state.leaseId &&
+      state.leaseExpiresAt &&
+      Date.parse(state.leaseExpiresAt) <= Date.now() &&
+      !state.attempted;
+    if ((!state.attempted || result.status !== "failed") && !expiredLease) {
+      continue;
+    }
+    let code = "provider_outcome_unknown";
+    if (!expiredLease) {
+      code = state.failureDetail ?? (result.status === "failed" ? result.code : code);
+    }
+    let recoveryAction = "Review provider access or validation details, then retry this operation.";
+    if (expiredLease) {
+      recoveryAction =
+        "The worker stopped during provisioning. Verify the provider resource and its Builder marker before retrying this operation.";
+    } else if (state.nextRetryAt) {
+      recoveryAction = "Builder will retry after the provider delay.";
+    }
+    const diagnostic: (typeof diagnostics)[number] = {
+      code,
+      operation,
+      outcomeKnown: state.outcomeKnown ?? false,
+      provider: operation,
+      recoveryAction,
+    };
+    if (state.nextRetryAt) {
+      diagnostic.nextRetryAt = state.nextRetryAt;
+    }
+    diagnostics.push(diagnostic);
+  }
+  return builderProvisionResponseSchema.parse({ ...row.record.response, diagnostics });
 }

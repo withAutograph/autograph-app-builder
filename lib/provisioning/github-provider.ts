@@ -84,6 +84,23 @@ function suffix() {
   return [...randomBytes(6)].map((value) => alphabet[value % alphabet.length]).join("");
 }
 
+// eslint-disable-next-line eslint/func-style -- Shared by the GitHub request boundary.
+function retryAfterMilliseconds(headers: unknown, now: number): number | undefined {
+  if (!record(headers)) {
+    return undefined;
+  }
+  const raw = headers["retry-after"];
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.ceil(seconds * 1000);
+  }
+  const date = Date.parse(raw);
+  return Number.isFinite(date) ? Math.max(0, date - now) : undefined;
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function gitBlobSha(bytes: Uint8Array) {
   return createHash("sha1").update(`blob ${bytes.byteLength}\0`).update(bytes).digest("hex");
@@ -167,6 +184,7 @@ export async function provisionGitHubRepository(input: {
   persistCandidate: (candidate: string) => Promise<void>;
   persistAbsent: (candidate: string) => Promise<void>;
   renewLease?: () => Promise<void>;
+  recordRetryAfter?: (milliseconds: number) => void;
   fetch?: typeof fetch;
   now?: () => number;
   generateSuffix?: () => string;
@@ -206,8 +224,19 @@ export async function provisionGitHubRepository(input: {
     } catch (error) {
       const status = record(error) ? error.status : undefined;
       const response = record(error) ? error.response : undefined;
+      const headers = record(response) ? response.headers : undefined;
+      const retryAfter = retryAfterMilliseconds(headers, now());
+      if (retryAfter !== undefined) {
+        input.recordRetryAfter?.(retryAfter);
+      }
       if (status === 401) {
         throw new Error("credential-rejected", { cause: error });
+      }
+      if (status === 429 || (status === 403 && retryAfter !== undefined)) {
+        throw new Error("provider-rate-limited", { cause: error });
+      }
+      if (status === 403) {
+        throw new Error("provider-permission-denied", { cause: error });
       }
       if (typeof status === "number" && args.expected.includes(status)) {
         return {
@@ -643,7 +672,10 @@ export async function provisionGitHubRepository(input: {
           if (created.status === 422) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
             const recovered = await repository(candidate);
-            if (recovered.status !== 200) {
+            const recoveredOwned =
+              recovered.status === 200 &&
+              stringProperty(recovered.body, "description") === marker(input.requestId);
+            if (!recoveredOwned) {
               const errors = record(created.body) ? created.body.errors : undefined;
               const confirmedCollision =
                 Array.isArray(errors) &&
@@ -707,6 +739,12 @@ export async function provisionGitHubRepository(input: {
         retryable: true,
         status: "failed",
       };
+    }
+    if (error instanceof Error && error.message === "provider-rate-limited") {
+      return { code: "provider_rate_limited", retryable: true, status: "failed" };
+    }
+    if (error instanceof Error && error.message === "provider-permission-denied") {
+      return { code: "provider_permission_denied", retryable: false, status: "failed" };
     }
     return {
       code:

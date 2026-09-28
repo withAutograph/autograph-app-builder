@@ -42,6 +42,7 @@ export async function provisionVercelProject(input: {
   persistCandidate: (candidate: string) => Promise<void>;
   persistAbsent: (candidate: string) => Promise<void>;
   renewLease?: () => Promise<void>;
+  recordRetryAfter?: (milliseconds: number) => void;
   fetch?: typeof fetch;
   generateSuffix?: () => string;
 }): Promise<VercelProvisionResult> {
@@ -87,10 +88,26 @@ export async function provisionVercelProject(input: {
     } catch {
       throw new Error("invalid-response");
     }
+    const retryAfter = response.headers.get("retry-after");
+    if (retryAfter !== null) {
+      const seconds = Number(retryAfter);
+      const milliseconds = Number.isFinite(seconds)
+        ? Math.ceil(seconds * 1000)
+        : Date.parse(retryAfter) - Date.now();
+      if (Number.isFinite(milliseconds) && milliseconds >= 0) {
+        input.recordRetryAfter?.(milliseconds);
+      }
+    }
     if (response.status === 401) {
       throw new Error("credential-rejected");
     }
     if (!args.expected.includes(response.status)) {
+      if (response.status === 429) {
+        throw new Error("provider-rate-limited");
+      }
+      if (response.status === 403) {
+        throw new Error("provider-permission-denied");
+      }
       throw new Error(`vercel-status-${response.status}`);
     }
     return { body, status: response.status };
@@ -186,7 +203,16 @@ export async function provisionVercelProject(input: {
             // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
             const recovered = await inspect(candidate);
             if (recovered.status !== 200) {
-              return null;
+              const collision = z
+                .object({
+                  error: z.object({
+                    code: z.enum(["project_already_exists", "name_already_exists"]),
+                  }),
+                })
+                .safeParse(created.body).success;
+              return collision
+                ? null
+                : { code: "provider_rejected", retryable: false, status: "failed" };
             }
           }
         }
@@ -232,6 +258,12 @@ export async function provisionVercelProject(input: {
     );
     return result ?? { code: "provider_unavailable", retryable: true, status: "failed" };
   } catch (error) {
+    if (error instanceof Error && error.message === "provider-rate-limited") {
+      return { code: "provider_rate_limited", retryable: true, status: "failed" };
+    }
+    if (error instanceof Error && error.message === "provider-permission-denied") {
+      return { code: "provider_permission_denied", retryable: false, status: "failed" };
+    }
     return {
       code:
         error instanceof Error && error.message === "credential-rejected"

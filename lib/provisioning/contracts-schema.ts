@@ -169,6 +169,20 @@ export const vercelProvisionResultSchema = z.union([
 export const builderProvisionResponseSchema = z
   .object({
     appId: builderAppIdSchema,
+    diagnostics: z
+      .array(
+        z
+          .object({
+            code: z.string().min(1),
+            nextRetryAt: instant.optional(),
+            operation: z.enum(["github", "vercel"]),
+            outcomeKnown: z.boolean(),
+            provider: z.enum(["github", "vercel"]),
+            recoveryAction: z.string().min(1),
+          })
+          .strict(),
+      )
+      .optional(),
     github: githubProvisionResultSchema,
     requestDigest: sha256,
     requestId: z.string().uuid(),

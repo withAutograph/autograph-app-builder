@@ -41,6 +41,36 @@ function installation(scopeType: "team" | "user") {
 }
 
 describe("Vercel project provisioning", () => {
+  it("preserves provider retry delay and stops on a rate limit", async () => {
+    const observed: number[] = [];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    const request = vi.fn<typeof fetch>(async (_url, init) =>
+      init?.method === "POST"
+        ? Response.json(
+            { error: { code: "rate_limited" } },
+            { headers: { "Retry-After": "37" }, status: 429 },
+          )
+        : Response.json({}, { status: 404 }),
+    );
+    const result = await provisionVercelProject({
+      appId: "vendor-portal",
+      fetch: request,
+      github: { code: "not_selected", retryable: false, status: "skipped" },
+      githubSelected: false,
+      installation: installation("user"),
+      persistAbsent: vi.fn(),
+      persistCandidate: vi.fn(),
+      persistedAbsentCandidates: [],
+      persistedCandidates: [],
+      recordRetryAfter: (milliseconds) => {
+        observed.push(milliseconds);
+      },
+      token: "vercel-token",
+    });
+    expect(result).toEqual({ code: "provider_rate_limited", retryable: true, status: "failed" });
+    expect(observed).toEqual([37_000]);
+    expect(request.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+  });
   it("continues through more than five occupied names", async () => {
     const created = new Set<string>();
     let suffixNumber = 0;
