@@ -1216,6 +1216,56 @@ export const hostedGitHubPublicationJournals = pgTable(
   ],
 );
 
+/** Immutable, tenant-owned evidence for adopting a verified Builder-authored draft. */
+export const hostedGitHubDraftAdoptions = pgTable(
+  "hosted_github_draft_adoption",
+  {
+    ...hostedGitHubTenantColumns,
+    adoptionDigest: text("adoption_digest").notNull(),
+    appId: text("app_id").notNull(),
+    authorId: text("author_id").notNull(),
+    builderMarker: text("builder_marker").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    originalHeadSha: text("original_head_sha").notNull(),
+    pullRequestId: text("pull_request_id").notNull(),
+    pullRequestNumber: integer("pull_request_number").notNull(),
+    repositoryId: text("repository_id").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.adoptionDigest,
+      ],
+      name: "hosted_github_draft_adoption_pk",
+    }),
+    uniqueIndex("hosted_github_draft_adoption_pr_uidx").on(
+      table.issuer,
+      table.audience,
+      table.workspaceId,
+      table.ownerUserId,
+      table.repositoryId,
+      table.pullRequestId,
+    ),
+    check(
+      "hosted_github_draft_adoption_digest_check",
+      sql`${table.adoptionDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "hosted_github_draft_adoption_marker_check",
+      sql`${table.builderMarker} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "hosted_github_draft_adoption_head_check",
+      sql`${table.originalHeadSha} ~ '^[0-9a-f]{40}$'`,
+    ),
+    check("hosted_github_draft_adoption_pr_check", sql`${table.pullRequestNumber} > 0`),
+  ],
+);
+
 export const emulatePreviewState = pgTable(
   "emulate_preview_state",
   {

@@ -1558,6 +1558,21 @@ describe("existing draft PR updates", () => {
     pullRequestNumber: initial.number,
     repositoryId: initial.repositoryId,
   } as DraftPullRequestSuccessReceipt;
+  const origin = {
+    appId: "123",
+    authorId: "900",
+    marker: "d".repeat(64),
+  };
+  const adoptedDraft = {
+    adoptionDigest: "e".repeat(64),
+    appId: origin.appId,
+    authorId: origin.authorId,
+    builderMarker: origin.marker,
+    originalHeadSha: initial.headSha,
+    pullRequestId: initial.pullRequestId,
+    pullRequestNumber: initial.number,
+    repositoryId: initial.repositoryId,
+  };
 
   const adapter = () => {
     let observed = initial;
@@ -1630,6 +1645,67 @@ describe("existing draft PR updates", () => {
       }),
     ).resolves.toEqual(updated);
     expect(mock.updates).toBe(1);
+  });
+
+  it("seals a verified Builder-authored draft without an original publication receipt", async () => {
+    const mock = adapter();
+    mock.setObserved({ ...initial, verifiedBuilderOrigin: origin });
+    const proposal = await sealExistingDraftUpdate({
+      adapter: mock.port,
+      adoptedDraft,
+      installation: identity,
+      pullRequestNumber: initial.number,
+      repository: selectedRepository,
+      review: reviewed,
+      selectedCheckoutHeadSha: initial.headSha,
+      selectedCheckoutHeadTree: initial.headTree,
+      selectedSourceRef: `refs/heads/${initial.headBranch}`,
+    });
+    expect(proposal.priorPublicationDigest).toBe(adoptedDraft.adoptionDigest);
+    expect(proposal.originMarker).toBe(origin.marker);
+    await updateExistingDraft({
+      adapter: mock.port,
+      contentSource: publicationContentSource(),
+      proposal,
+      review: reviewed,
+    });
+    expect(mock.updates).toBe(1);
+    const next = await sealExistingDraftUpdate({
+      adapter: mock.port,
+      adoptedDraft,
+      installation: identity,
+      pullRequestNumber: initial.number,
+      repository: selectedRepository,
+      review: reviewed,
+      selectedCheckoutHeadSha: "6".repeat(40),
+      selectedCheckoutHeadTree: "7".repeat(40),
+      selectedSourceRef: `refs/heads/${initial.headBranch}`,
+    });
+    expect(next.priorPublicationDigest).toBe(adoptedDraft.adoptionDigest);
+    expect(next.expectedHeadSha).toBe("6".repeat(40));
+  });
+
+  it("rejects a draft adoption when current head provenance does not match", async () => {
+    const mock = adapter();
+    const attempt = async (verifiedBuilderOrigin?: typeof origin) => {
+      mock.setObserved({ ...initial, verifiedBuilderOrigin });
+      await expect(
+        sealExistingDraftUpdate({
+          adapter: mock.port,
+          adoptedDraft,
+          installation: identity,
+          pullRequestNumber: initial.number,
+          repository: selectedRepository,
+          review: reviewed,
+          selectedCheckoutHeadSha: initial.headSha,
+          selectedCheckoutHeadTree: initial.headTree,
+          selectedSourceRef: `refs/heads/${initial.headBranch}`,
+        }),
+      ).rejects.toThrow(/cannot verify this draft PR/u);
+    };
+    await attempt();
+    await attempt({ ...origin, marker: "f".repeat(64) });
+    expect(mock.updates).toBe(0);
   });
 
   it("recovers an approved update when GitHub moved the ref but its response was lost", async () => {
