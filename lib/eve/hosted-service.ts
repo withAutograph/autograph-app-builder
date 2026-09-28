@@ -86,10 +86,6 @@ export {
 export type { HostedEngineSnapshot } from "./hosted-projection";
 
 export interface HostedEveTransport {
-  /** Durable mutation acceptance without materializing the installed event history. */
-  sendAccepted?: (input: Parameters<HostedEveTransport["send"]>[0]) => Promise<void>;
-  /** Confirms exact input settlement without materializing the installed event history. */
-  respondAccepted?: (input: Parameters<HostedEveTransport["respond"]>[0]) => Promise<void>;
   /** Incremental readback for paged checkpoint writers. Legacy transports may omit it. */
   observe?: (input: {
     principal: HostedPrincipal;
@@ -1235,7 +1231,9 @@ export function createHostedEveSessionService(input: {
           const observed = paged
             ? await input.transport.observe?.({
                 adapterSessionId: session.adapterSessionId,
-                onEvent: () => {},
+                onEvent() {
+                  // Preflight needs only the bounded observation summary.
+                },
                 principal,
                 sessionId: request.sessionId,
               })
@@ -1302,7 +1300,9 @@ export function createHostedEveSessionService(input: {
           const observed = paged
             ? await input.transport.observe?.({
                 adapterSessionId: session.adapterSessionId,
-                onEvent: () => {},
+                onEvent() {
+                  // Preflight needs only the bounded observation summary.
+                },
                 principal,
                 sessionId: request.sessionId,
               })

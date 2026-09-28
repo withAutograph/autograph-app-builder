@@ -642,7 +642,9 @@ async function readRespondSettlementIncremental(input: {
     // oxlint-disable-next-line eslint/no-await-in-loop -- Each read verifies the durable tail before polling again.
     const observed = await observeSameOriginEveStream({
       ...input,
-      onEvent: () => null,
+      onEvent() {
+        // Settlement only needs the reducer's pending-request state.
+      },
       readSignal,
     });
     const outstanding = new Set(observed.pendingRequests.map((request) => request.requestId));
