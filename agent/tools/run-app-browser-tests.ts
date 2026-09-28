@@ -3,6 +3,7 @@ import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 
@@ -78,22 +79,16 @@ export const runAppBrowserTests = async (input: {
 export default defineTool({
   description:
     "Run the selected app's repository-owned test-e2e mise task in its approved private checkout. Use this when the app defines that task and the accepted behavior requires browser interaction that the JSON behavior verifier cannot exercise. Prepare sandbox-local data first when the app requires it. This runs real browser tests and returns the exact command, exit status, and bounded redacted output; it does not publish or deploy. Passing tests are evidence for the scenarios asserted by those tests, not proof of every product outcome.",
-  async execute(_input, ctx) {
+  async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
-    if (
-      state.phase !== "applied" &&
-      state.phase !== "validation_failed" &&
-      state.phase !== "validated" &&
-      state.phase !== "reviewed"
-    ) {
-      throw new Error("Apply the selected app before running its browser tests.");
-    }
+    const sandbox = await ctx.getSandbox();
+    const selected = await runnableSelectedApp({ appId: input.appId, sandbox, state });
     return await runAppBrowserTests({
-      appId: state.appSpec.appId,
-      root: state.applyReceipt.applyRoot,
-      sandbox: await ctx.getSandbox(),
+      appId: selected.appId,
+      root: selected.root,
+      sandbox,
       signal: ctx.abortSignal,
     });
   },
-  inputSchema: z.strictObject({}),
+  inputSchema: z.strictObject({ appId: appIdSchema.optional() }),
 });

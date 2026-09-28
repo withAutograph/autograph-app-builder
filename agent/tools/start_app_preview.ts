@@ -12,6 +12,7 @@ import {
   resolvePreviewWorkingDirectory,
 } from "@/lib/agent/preview-working-directory";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 import { ensureCheckoutDependencies } from "@/lib/agent/checkout-dependencies";
 import { prepareAppLocalPreview } from "./prepare-app-local-preview";
 import {
@@ -63,20 +64,13 @@ const usesNext = (source: string | null): boolean => {
 
 export default defineTool({
   description:
-    "Open the implemented app in its private Sandbox and return an actual working browser URL. Repeating the same request for the same applied build reuses its live preview instead of interrupting it. Use the repository's discovered development command as executable plus argument array (no shell wrappers), in workingDirectory relative to the applied repository root (default .). Use the discovered app package directory for a nested package; landingPath is an HTTP route, not a filesystem directory. Configure that command to listen on the supplied port; use landingPath for a nested app route. This uses the already-approved implementation, does not publish or provision app resources, and can reopen an expired preview. A reachable page is not proof of backend product behavior.",
+    "Open the selected existing app or applied new app in its private Sandbox and return a working browser URL. For a prepared existing GitHub checkout, supply appId from the repository's apps directory; this only previews current files and does not grant build or publication approval. Use the repository's discovered development command in workingDirectory relative to the repository root. Configure it to listen on the supplied port. A reachable page is not proof of backend product behavior.",
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
-    if (!("applyReceipt" in current)) {
-      throw new Error(
-        "Build approval and an applied implementation are needed before opening the working app.",
-      );
-    }
-    const cwd = resolvePreviewWorkingDirectory(
-      current.applyReceipt.applyRoot,
-      input.workingDirectory,
-    );
-    const evidenceGeneration = currentProductBehaviorGeneration();
     const sandbox = await ctx.getSandbox();
+    const selected = await runnableSelectedApp({ appId: input.appId, sandbox, state: current });
+    const cwd = resolvePreviewWorkingDirectory(selected.root, input.workingDirectory);
+    const evidenceGeneration = currentProductBehaviorGeneration();
     await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
     const provider = await getVercelPreviewProvider(sandbox.id, ctx.abortSignal);
     const previous = workingPreviewState.get();
@@ -84,17 +78,18 @@ export default defineTool({
     const requestDigest = createHash("sha256")
       .update(
         JSON.stringify({
-          appId: current.appSpec.appId,
-          applyDigest: current.applyReceipt.digest,
+          appId: selected.appId,
           command: input.command,
           cwd,
           landingPath: input.landingPath,
           port: input.port,
+          revision: selected.revision,
           validationDigest,
         }),
       )
       .digest("hex");
     if (
+      selected.reusable &&
       previous?.requestDigest === requestDigest &&
       hasLiveWorkingPreview(previous, sandbox.id) &&
       previous.providerSessionId === provider.currentSession().sessionId
@@ -105,10 +100,10 @@ export default defineTool({
         return { workingPreview: previous.receipt };
       }
     }
-    const { appId } = current.appSpec;
+    const { appId } = selected;
     const packageManifest = await sandbox.readTextFile({ path: `${cwd}/package.json` });
     const dependencyInput = {
-      root: current.applyReceipt.applyRoot,
+      root: selected.root,
       sandbox,
       signal: ctx.abortSignal,
     };
@@ -118,10 +113,10 @@ export default defineTool({
         : dependencyInput,
     );
     const appContract = await sandbox.readTextFile({
-      path: `${current.applyReceipt.applyRoot}/apps/${appId}/.config/app-spec.md`,
+      path: `${selected.root}/apps/${appId}/.config/app-spec.md`,
     });
     const repositoryTasks = await sandbox.readTextFile({
-      path: `${current.applyReceipt.applyRoot}/.config/mise/config.toml`,
+      path: `${selected.root}/.config/mise/config.toml`,
     });
     if (
       appContract?.includes(`mise run app:local -- ${appId} setup`) === true &&
@@ -129,7 +124,7 @@ export default defineTool({
     ) {
       const setup = await prepareAppLocalPreview({
         appId,
-        root: current.applyReceipt.applyRoot,
+        root: selected.root,
         sandbox,
         signal: ctx.abortSignal,
       });
@@ -143,7 +138,7 @@ export default defineTool({
     let ownedAttemptId: string | undefined;
     const preview = await startWorkingPreview({
       ...input,
-      appId: current.appSpec.appId,
+      appId: selected.appId,
       cwd,
       onAttempt: (attempt) => {
         workingPreviewAttemptState.update((currentAttempt) => {
@@ -165,6 +160,10 @@ export default defineTool({
     return { workingPreview: preview.receipt };
   },
   inputSchema: z.object({
+    appId: z
+      .string()
+      .regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u)
+      .optional(),
     command: z.object({
       args: z.array(z.string().max(8192)).max(256),
       executable: z.string().min(1).max(1024),
