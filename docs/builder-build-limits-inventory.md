@@ -69,13 +69,15 @@ its public result. Its bounded checkpoint remains necessary for older sessions.
 The post-#515 buffering audit also found whole-result reads in
 `captured-process-output.ts` (a compatibility helper that reopens temporary
 stdout as a `Buffer`), `node-fresh-bootstrap.ts` (whole-byte compatibility
-source and overlay adapters), `node-branch-worktree-publication.ts` (remaining
-proposal changes and ownership sets), `supported-template.ts` and
+source and overlay adapters), `node-branch-worktree-publication.ts` (the
+contract-shaped proposal changes array and per-directory listing),
+`supported-template.ts` and
 `arrusted-template.ts` (some source and command reads), and
 `same-origin-http.ts` (complete v1 HTML projection). The default fresh-bootstrap
 source, overlay, Git tree, Git object, and Git blob paths now stream with digest
-and size verification. Publication base-tree and worktree-state verification
-also stream; a digest-only command caller uses streaming hashing. The remaining
+and size verification. Publication base-tree, worktree-state, approved-path,
+and overlay-byte verification also stream; a digest-only command caller uses
+streaming hashing. The remaining
 call sites need caller-specific streaming contracts. This is an implementation
 inventory, not evidence that those paths are safe at arbitrary size.
 
