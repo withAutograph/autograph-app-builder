@@ -404,7 +404,12 @@ export function composeGitHubPublicationRuntime(input: {
         } else {
           if (
             !isDeepStrictEqual(
-              [existing.appId, existing.authorId, existing.builderMarker, existing.pullRequestNumber],
+              [
+                existing.appId,
+                existing.authorId,
+                existing.builderMarker,
+                existing.pullRequestNumber,
+              ],
               [origin.appId, origin.authorId, origin.marker, observed.number],
             )
           ) {
