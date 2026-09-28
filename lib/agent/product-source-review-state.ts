@@ -160,6 +160,11 @@ const sessionAssessmentStore: SourceAssessmentStore = {
     sourceAssessmentState.update(() => assessment);
   },
 };
+export const retainCurrentProductSourceAssessment = (assessment: ProductSourceAssessment): void => {
+  if (assessment.reviewCompleted) {
+    sessionAssessmentStore.set(assessment);
+  }
+};
 export const reviewCurrentProductSource = async (
   input: ProductSourceReviewInput,
   mockModel: boolean,
