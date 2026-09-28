@@ -131,7 +131,9 @@ describe("approval receipt", () => {
     }).toThrow("base commit");
     expect(
       publicApprovalDescription({ approvalReceipt: publicationReceipt }, "publish_github_draft_pr"),
-    ).toBe(JSON.stringify(publicationReceipt));
+    ).toBe(
+      "This will publish the reviewed changes to a draft pull request in withAutograph/arrusted-development on main. The pull request will remain a draft; this will not merge or deploy it.",
+    );
     expect(
       publicApprovalDescription({ approvalReceipt: receipt }, "publish_github_draft_pr"),
     ).toBeUndefined();

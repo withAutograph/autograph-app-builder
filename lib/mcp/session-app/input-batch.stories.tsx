@@ -4,6 +4,7 @@ import {
   approvalRequest,
   authorizationRequest,
   choiceRequest,
+  draftPullRequestApprovalRequest,
   freeformRequest,
   repositoryScopeRequest,
   sessionResult,
@@ -86,6 +87,31 @@ export const CompleteBatchAction: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Continue" }));
     await expect(args.onRespond).toHaveBeenCalledOnce();
     await expect(await canvas.findByText("Response received")).toBeVisible();
+  },
+};
+export const DraftPullRequestApproval: Story = {
+  args: {
+    result: sessionResult([draftPullRequestApprovalRequest]),
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const accept = canvas.getByRole("button", { name: "Accept" });
+    const cancel = canvas.getByRole("button", { name: "Cancel" });
+    await expect(accept).toBeVisible();
+    await expect(cancel).toBeVisible();
+    await expect(canvas.queryByRole("radio")).not.toBeInTheDocument();
+    await expect(canvas.queryByRole("button", { name: "Continue" })).not.toBeInTheDocument();
+    await userEvent.click(accept);
+    await expect(args.onRespond).toHaveBeenCalledWith([
+      {
+        requestId: "publish-reviewed-changes",
+        response: {
+          kind: "answer",
+          optionId: "update-draft",
+          value: "Update draft PR",
+        },
+      },
+    ]);
   },
 };
 export const RepositoryScopeKeyboardSelection: Story = {

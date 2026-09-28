@@ -963,7 +963,7 @@ const inputRequest = (request: {
 }): PublicInputRequest | undefined => {
   const approvalTitles = {
     apply_app_creation: "Build this app?",
-    "publish-github-draft-pr": "Approve draft PR publication",
+    "publish-github-draft-pr": "Publish the reviewed changes?",
   } as const;
   const toolName = request.action?.toolName;
   if (

@@ -215,8 +215,13 @@ app-owned files and reuse the same component-backed preview flow.
    directory is a publication destination, so an empty destination does not
    mean the private implementation is missing. If the user requests publication,
    obtain the separate effect-based approval for the named destination and
-   action. One approval never authorizes another outcome. Keep internal
-   execution mechanics out of the public conversation.
+   action. Present it with a short action title and one-click Accept and Cancel
+   choices. For a draft pull request, name the repository and pull request,
+   summarize the reviewed changes, and state that it remains a draft and will
+   not be merged or deployed. Do not show commit IDs, content digests, receipt
+   JSON, or other internal verification values. One approval never authorizes
+   another outcome. Keep internal execution mechanics out of the public
+   conversation.
 
 ## Boundaries
 
