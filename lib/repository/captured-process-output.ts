@@ -58,6 +58,37 @@ export const streamProcessStdout = async function* streamProcessStdout(
   }
 };
 
+/** Parse delimited command records without retaining the complete stdout.
+ * @yields {string} A complete UTF-8 record.
+ */
+export const streamProcessRecords = async function* streamProcessRecords(
+  command: string,
+  args: readonly string[],
+  delimiter: number,
+  options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
+): AsyncGenerator<string> {
+  let pending = Buffer.alloc(0);
+  for await (const chunk of streamProcessStdout(command, args, options)) {
+    const bytes = pending.byteLength === 0 ? Buffer.from(chunk) : Buffer.concat([pending, chunk]);
+    let start = 0;
+    for (
+      let index = bytes.indexOf(delimiter);
+      index !== -1;
+      index = bytes.indexOf(delimiter, start)
+    ) {
+      yield bytes.subarray(start, index).toString("utf-8");
+      start = index + 1;
+    }
+    pending = bytes.subarray(start);
+  }
+  if (pending.byteLength !== 0) {
+    if (delimiter === 0) {
+      throw new Error("The command returned an incomplete NUL-delimited record.");
+    }
+    yield pending.toString("utf-8");
+  }
+};
+
 /** Adapt streamed command stdout to a provider file-write stream. */
 export const processStdoutByteStream = (
   command: string,

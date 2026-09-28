@@ -59,7 +59,11 @@ import { inspectSourceReceipt, parseSourceReceipt, SOURCE_RECEIPT_VERSION } from
 import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import type { PreparedSourceFile } from "./supported-template";
-import { captureProcessStdout, digestProcessStdout } from "./captured-process-output";
+import {
+  captureProcessStdout,
+  digestProcessStdout,
+  streamProcessRecords,
+} from "./captured-process-output";
 
 export interface FreshBootstrapFaultHooks {
   afterLockReady?: (pid: number) => void | Promise<void>;
@@ -262,6 +266,20 @@ const gitBuffer = (
   captureProcessStdout(capability.systemGit, [...gitOptions, "-C", root, ...args], {
     env: minimalEnvironment(),
   });
+
+const gitRecords = async function* gitRecords(
+  capability: FreshBootstrapCapability,
+  root: string,
+  args: readonly string[],
+  delimiter: number,
+): AsyncGenerator<string> {
+  yield* streamProcessRecords(
+    capability.systemGit,
+    [...gitOptions, "-C", root, ...args],
+    delimiter,
+    { env: minimalEnvironment() },
+  );
+};
 
 const within = (root: string, candidate: string): boolean => {
   const relativePath = nodePath.relative(root, candidate);
@@ -938,15 +956,16 @@ const exactSourceTree = async (
   sourcePath: string,
   sourceSha: string,
 ): Promise<ExactFile[]> => {
-  const output = gitBuffer(capability, sourcePath, [
-    "ls-tree",
-    "-r",
-    "-z",
-    "--full-tree",
-    sourceSha,
-  ]);
   const files: ExactFile[] = [];
-  for (const record of output.toString("utf-8").split("\0").filter(Boolean)) {
+  for await (const record of gitRecords(
+    capability,
+    sourcePath,
+    ["ls-tree", "-r", "-z", "--full-tree", sourceSha],
+    0,
+  )) {
+    if (record === "") {
+      continue;
+    }
     const match =
       /^(?<mode>100644|100755|120000|160000) (?<type>blob|commit) (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(
         record,
@@ -1851,26 +1870,30 @@ const assertExactRepository = async (
     .split("\n")
     .filter(Boolean);
   const parents = git(capability, root, ["rev-list", "--parents", "--max-count=1", "HEAD"]).trim();
-  const paths = gitBuffer(capability, root, ["ls-tree", "-r", "-z", "--full-tree", "HEAD"]);
-  const observed = paths
-    .toString("utf-8")
-    .split("\0")
-    .filter(Boolean)
-    .map((record) => {
-      const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(
-        record,
-      );
-      if (match === null || !safeSourcePath(match[3])) {
-        throw new Error("The final repository tree is malformed.");
-      }
-      return { blob: match[2], mode: match[1], path: match[3] };
-    });
-  const reachableObjects = new Set(
-    git(capability, root, ["rev-list", "--objects", "--all"])
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => line.split(" ", 1)[0]),
-  );
+  const observed: { blob: string; mode: string; path: string }[] = [];
+  for await (const record of gitRecords(
+    capability,
+    root,
+    ["ls-tree", "-r", "-z", "--full-tree", "HEAD"],
+    0,
+  )) {
+    if (record === "") {
+      continue;
+    }
+    const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(
+      record,
+    );
+    if (match === null || !safeSourcePath(match[3])) {
+      throw new Error("The final repository tree is malformed.");
+    }
+    observed.push({ blob: match[2], mode: match[1], path: match[3] });
+  }
+  const reachableObjects = new Set<string>();
+  for await (const line of gitRecords(capability, root, ["rev-list", "--objects", "--all"], 10)) {
+    if (line !== "") {
+      reachableObjects.add(line.split(" ", 1)[0] ?? "");
+    }
+  }
   const objectDirectory = nodePath.resolve(gitDirectory, "objects");
   const looseObjects = new Set<string>();
   for (const entry of await readdir(objectDirectory, { withFileTypes: true })) {

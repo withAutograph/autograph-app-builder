@@ -6,6 +6,7 @@ import {
   digestProcessStdout,
   digestProcessStdoutSync,
   processStdoutByteStream,
+  streamProcessRecords,
 } from "./captured-process-output";
 
 it("digests command output above the former capture threshold without retaining it", () => {
@@ -24,6 +25,35 @@ it("digests command output above the former capture threshold without retaining 
     name.startsWith("app-builder-command-digest-"),
   );
   expect(after.filter((name) => !before.has(name))).toEqual([]);
+});
+
+it("streams delimited records across output chunks without retaining the full result", async () => {
+  let count = 0;
+  for await (const record of streamProcessRecords(
+    process.execPath,
+    ["-e", "for (let i = 0; i < 120000; i++) process.stdout.write('record-' + i + '\\0')"],
+    0,
+  )) {
+    expect(record).toBe(`record-${count}`);
+    count += 1;
+  }
+  expect(count).toBe(120_000);
+});
+
+it("rejects an incomplete NUL record after preserving Unicode boundaries", async () => {
+  const records: string[] = [];
+  await expect(
+    (async () => {
+      for await (const record of streamProcessRecords(
+        process.execPath,
+        ["-e", "process.stdout.write('☃\\0'); process.stdout.write('incomplete')"],
+        0,
+      )) {
+        records.push(record);
+      }
+    })(),
+  ).rejects.toThrow(/incomplete NUL-delimited record/u);
+  expect(records).toEqual(["☃"]);
 });
 
 it("streams large command output to a consumer and computes its digest", async () => {
