@@ -20,21 +20,18 @@ a ceiling on the total number of files, events, or retry attempts.
 
 ## Live-writer migration blockers
 
-The staged checkpoint tables are additive and are not a replacement for the
-current writer until the Eve adapter streams events into them. The adapter
-currently assembles the complete installed event stream in memory. Therefore
-the live snapshot still has a 100,000-event validation bound and the legacy
-inline checkpoint still retains at most 512 events, 32 pending input requests,
-and 512 KiB. Removing those bounds before streaming would expose the hosted
-service to resource exhaustion. Historical events already discarded by an
-older checkpoint cannot be reconstructed; its truncation marker is retained
-and shown during recovery.
-
-The staged history helper currently requires an existing tenant session row.
-The live `start` path settles a new session and operation together, so its
-integration must stage under a reserved session identity and publish the
-checkpoint pointer in that same settlement transaction. This ordering must be
-tested before enabling the paged writer.
+Hosted reads and mutations use streamed Eve observation and paged checkpoints
+for sessions whose installed actions require no prototype receipt readback.
+The `start` call stores a provisional empty session; the next read stages its
+durable history under that tenant session. Each checkpoint publishes its
+manifest with the session pointer in one transaction, leaving the prior
+checkpoint usable if staging fails. Prototype sessions still use the legacy
+receipt-verified projection and inline checkpoint. That path retains the
+100,000-event snapshot validation bound, 512 retained events, 32 pending input
+requests, and 512 KiB checkpoint ceiling until its artifact reference and
+Browser streaming migration is complete. Historical events discarded by an
+older checkpoint cannot be reconstructed; its truncation marker remains
+visible during recovery.
 
 Automatic provisioning retries cover settled transient failures with a known
 outcome and a durable next retry time. An expired in-flight lease with an
@@ -50,19 +47,21 @@ selected repository. Legacy provider adapters and v2 receipts retain their
 full-inventory compatibility path. The emulated test harness also retains v2.
 
 Large prototype and UI-preview content is transferred in verified chunks, but
-the installed Eve event readback and some artifact projections still assemble
-complete content in memory. Those paths require streaming readers and a
-bounded projection before the remaining checkpoint caps can be removed.
+legacy prototype projection still assembles complete content. The additive v2
+chunk reader and metadata reducer are not live until the Eve tool writer,
+public reference, and authenticated Browser route all use the same manifest.
 
 The post-#515 buffering audit also found whole-result reads in
 `captured-process-output.ts` (temporary stdout reopened as a `Buffer`),
 `node-fresh-bootstrap.ts` (some blob, command-output, and Git-index reads),
-`node-branch-worktree-publication.ts` (some file and Git-output reads),
+`node-branch-worktree-publication.ts` (full tree and changeset maps after its
+streamed Git listings),
 `supported-template.ts` and `arrusted-template.ts` (some source and command
-reads), and `same-origin-http.ts` (complete Eve event array). A digest-only
-caller now uses streaming hashing, but these remaining call sites still need
-caller-specific streaming contracts. The file paths are an implementation
-inventory, not evidence that the remaining paths are safe at arbitrary size.
+reads), and `same-origin-http.ts` (the legacy artifact projection). A
+digest-only caller now uses streaming hashing, but these remaining call sites
+still need caller-specific streaming contracts. The file paths are an
+implementation inventory, not evidence that the remaining paths are safe at
+arbitrary size.
 
 The local Preview provider emulator retains an 8 MiB state-document limit
 because its persistence adapter loads and parses the state as one JSON value.
