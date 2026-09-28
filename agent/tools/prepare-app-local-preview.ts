@@ -36,7 +36,7 @@ export const prepareAppLocalPreview = async (input: {
 }) => {
   const command = localPreviewSetupCommand(input.appId);
   try {
-    const result =
+    let result =
       input.signal === undefined
         ? await input.sandbox.run({ command, workingDirectory: input.root })
         : await input.sandbox.run({
@@ -44,6 +44,30 @@ export const prepareAppLocalPreview = async (input: {
             command,
             workingDirectory: input.root,
           });
+    if (result.exitCode !== 0 && /\binitdb failed\b/iu.test(result.stderr)) {
+      const probe = await input.sandbox.run({
+        command: "command -v initdb",
+        workingDirectory: input.root,
+      });
+      if (probe.exitCode !== 0) {
+        const install = await input.sandbox.run({
+          command: "mise install conda:postgresql",
+          workingDirectory: input.root,
+        });
+        if (install.exitCode !== 0) {
+          return {
+            command: "mise install conda:postgresql",
+            exitCode: install.exitCode,
+            problem:
+              "Local setup needs initdb, but it is absent from the selected checkout's runtime and mise could not install the repository-pinned PostgreSQL tool. Check the PostgreSQL declaration in .config/mise/config.toml, mise's conda backend, and the sandbox network, then retry.",
+            status: "failed" as const,
+            stderr: safeOutput(install.stderr),
+            stdout: safeOutput(install.stdout),
+          };
+        }
+        result = await input.sandbox.run({ command, workingDirectory: input.root });
+      }
+    }
     const stdout = safeOutput(result.stdout);
     const stderr = safeOutput(result.stderr);
     if (result.exitCode !== 0) {
