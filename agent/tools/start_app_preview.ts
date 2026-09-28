@@ -15,7 +15,7 @@ import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 import { resolvePreviewPackageManager } from "@/lib/agent/preview-package-manager";
 import { ensureCheckoutDependencies } from "@/lib/agent/checkout-dependencies";
-import { prepareAppLocalPreview } from "./prepare-app-local-preview";
+import { appDeclaresLocalSetup, prepareAppLocalPreview } from "./prepare-app-local-preview";
 import {
   hasLiveWorkingPreview,
   workingPreviewState,
@@ -115,16 +115,7 @@ export default defineTool({
         ? { ...dependencyInput, requiredExecutable: "next" }
         : dependencyInput,
     );
-    const appContract = await sandbox.readTextFile({
-      path: `${selected.root}/apps/${appId}/.config/app-spec.md`,
-    });
-    const repositoryTasks = await sandbox.readTextFile({
-      path: `${selected.root}/.config/mise/config.toml`,
-    });
-    if (
-      appContract?.includes(`mise run app:local -- ${appId} setup`) === true &&
-      repositoryTasks?.includes('[tasks."app:local"]') === true
-    ) {
+    if (await appDeclaresLocalSetup({ appId, root: selected.root, sandbox })) {
       const setup = await prepareAppLocalPreview({
         appId,
         root: selected.root,

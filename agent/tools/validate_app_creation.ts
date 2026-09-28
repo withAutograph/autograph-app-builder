@@ -2,6 +2,7 @@ import { reviewAppliedProductSource } from "@/lib/agent/review-applied-product-s
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
+import { prepareValidationLocalData } from "./prepare-app-local-preview";
 
 import {
   assertExistingAppImplementationFiles,
@@ -106,6 +107,18 @@ export default defineTool({
     if (input.implementationFiles.length > 0) {
       clearProductBehaviorEvidence();
       await writeImplementationFiles(0);
+    }
+    // Some repository test tasks start local services. Prepare the declared
+    // local data task first so its server inherits the setup log file rather
+    // than Turbo's captured test pipe, which would keep Turbo waiting after
+    // the tests themselves have finished.
+    if (!fixture) {
+      await prepareValidationLocalData({
+        appId: current.appSpec.appId,
+        root: current.applyReceipt.applyRoot,
+        sandbox,
+        signal: ctx.abortSignal,
+      });
     }
     const result = await executeProposalBoundValidation({
       appId: current.appSpec.appId,
