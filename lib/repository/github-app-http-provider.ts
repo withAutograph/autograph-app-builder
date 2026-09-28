@@ -3,12 +3,16 @@ import { createHash, createPrivateKey } from "node:crypto";
 import { z } from "zod";
 
 import { createGitHubApp, createGitHubTokenOctokit } from "../github/octokit";
-import type { GitHubAppInstallationProvider } from "./github-app-adapter";
+import type {
+  GitHubAppInstallationProvider,
+  GitHubTargetAccessProvider,
+} from "./github-app-adapter";
 import {
   assertExactGitHubFreshRepositoryContent,
   assertExactGitHubDraftPullRequestContent,
   assertExactDraftPullRequestProposal,
   assertExactFreshRepositoryProposal,
+  githubPermissionsFor,
 } from "./github-publication";
 import type { DraftPullRequestProposal, GitHubDraftPullRequestContent } from "./github-publication";
 import { safeSourcePath } from "./source-path";
@@ -96,7 +100,8 @@ export interface GitHubPublicationFile {
   content: Uint8Array;
 }
 
-export interface GitHubAppHttpProvider extends GitHubAppInstallationProvider {
+export interface GitHubAppHttpProvider
+  extends GitHubAppInstallationProvider, GitHubTargetAccessProvider {
   inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown | undefined>;
   acquireRepositoryReadCredential: (input: { repositoryId: string }) => Promise<{
     token: string;
@@ -1084,6 +1089,34 @@ export const createGitHubAppHttpProvider = (input: {
       return {
         ...publicRepositorySnapshot(snapshot),
         archived: booleanProperty(response.body, "archived"),
+      };
+    },
+    async inspectTargetAccess({ operation, repositoryId, requestedPermissions }) {
+      decimal.parse(repositoryId);
+      const expectedPermissions = githubPermissionsFor(operation);
+      if (JSON.stringify(requestedPermissions) !== JSON.stringify(expectedPermissions)) {
+        throw new Error("github-target-permissions-mismatch");
+      }
+      const identity = await installation();
+      const accessToken = await token(requestedPermissions, [repositoryId]);
+      const response = await github({
+        authorization: accessToken,
+        expected: [200],
+        path: `/repositories/${repositoryId}`,
+      });
+      if (
+        decimalProperty(response.body, "id") !== repositoryId ||
+        !booleanProperty(response.body, "private")
+      ) {
+        throw new Error("github-target-repository-mismatch");
+      }
+      return {
+        accountId: identity.accountId,
+        accountLogin: identity.accountLogin,
+        accountType: identity.accountType,
+        installationId: identity.installationId,
+        permissions: requestedPermissions,
+        repositoryId,
       };
     },
     async publishDraftPullRequest(proposal, content) {

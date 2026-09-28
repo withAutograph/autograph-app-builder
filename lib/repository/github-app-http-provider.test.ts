@@ -3,7 +3,10 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 import { decodeJwt, decodeProtectedHeader } from "jose";
 import { describe, expect, it } from "vitest";
 
-import { createGitHubAppPublicationAdapter } from "./github-app-adapter";
+import {
+  createGitHubAppPublicationAdapter,
+  createGitHubTargetAccessAdapter,
+} from "./github-app-adapter";
 import {
   createGitHubAppHttpProvider,
   parseGitHubAppHttpProviderCredentials,
@@ -14,6 +17,7 @@ import {
   createDraftPullRequestProposal,
   createGitHubInstallationIdentity,
   createRepositoryObservation,
+  githubPermissionsFor,
 } from "./github-publication";
 import type { GitHubDraftPullRequestContent, FreshRepositoryProposal } from "./github-publication";
 import { createReviewedChangeSetReceipt } from "./reviewed-change-set";
@@ -214,6 +218,7 @@ function providerFetch(input?: {
   fail?: boolean;
   repositorySelection?: "all" | "selected";
   repositoryPages?: (number | string)[][];
+  targetRepositoryId?: string;
 }) {
   const calls: { url: string; init: RequestInit; body: unknown }[] = [];
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
@@ -252,6 +257,9 @@ function providerFetch(input?: {
       const repositoryIds = input?.repositoryPages?.[page - 1] ?? [100, 200];
       return json({ repositories: repositoryIds.map((id) => ({ id })) });
     }
+    if (url.endsWith("/repositories/100") && input?.targetRepositoryId) {
+      return json({ id: Number(input.targetRepositoryId), private: true });
+    }
     throw new Error(`Unexpected URL: ${url}`);
   };
   return { calls, implementation };
@@ -271,6 +279,38 @@ function createProvider(fetchImplementation: typeof fetch) {
 }
 
 describe("GitHub App fixed-origin HTTP provider", () => {
+  it("proves target repository access without enumerating installation repositories", async () => {
+    const mock = providerFetch({
+      repositoryPages: Array.from({ length: 101 }, (_unusedPage, page) =>
+        Array.from({ length: 100 }, (_unusedIndex, index) => page * 100 + index + 1),
+      ),
+      targetRepositoryId: "100",
+    });
+    const provider = createProvider(mock.implementation);
+    const adapter = createGitHubTargetAccessAdapter(provider, {
+      audience: "https://builder.example/mcp",
+      issuer: "https://builder.example/api/auth",
+      ownerUserId: "user-1",
+      workspaceId: "workspace-1",
+    });
+    const proof = await adapter.inspectTargetAccess("resolve-existing-source", "100");
+    expect(proof.repositoryId).toBe("100");
+    expect(proof.version).toBe(3);
+    expect(mock.calls.some(({ url }) => url.includes("/installation/repositories?"))).toBe(false);
+    expect(mock.calls.some(({ url }) => url.endsWith("/repositories/100"))).toBe(true);
+  });
+
+  it("rejects a provider repository ID mismatch in target proof", async () => {
+    const mock = providerFetch({ targetRepositoryId: "101" });
+    const provider = createProvider(mock.implementation);
+    await expect(
+      provider.inspectTargetAccess({
+        operation: "resolve-existing-source",
+        repositoryId: "100",
+        requestedPermissions: githubPermissionsFor("resolve-existing-source"),
+      }),
+    ).rejects.toThrow("github-target-repository-mismatch");
+  });
   it("parses only the closed credential contract and rejects endpoint or token overrides", () => {
     expect(
       parseGitHubAppHttpProviderCredentials({

@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
-import { githubPermissionsFor } from "./github-publication";
-import type { GitHubOperation } from "./github-publication";
+import { githubPermissionsFor } from "./github-permissions";
+import type { GitHubOperation } from "./github-permissions";
 
 export const GITHUB_TARGET_ACCESS_PROOF_VERSION = 3 as const;
 

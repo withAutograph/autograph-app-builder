@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { githubPermissionsFor } from "./github-publication";
+import { createGitHubTargetAccessAdapter } from "./github-app-adapter";
 import {
   issueGitHubTargetAccessProof,
   parseGitHubTargetAccessProof,
@@ -51,5 +52,27 @@ describe("target-scoped GitHub access proof", () => {
     expect(() =>
       parseGitHubTargetAccessProof({ ...proof, repositoryId: "10002" }, authority),
     ).toThrow("github-target-access-proof-invalid");
+  });
+
+  it("rejects provider permissions that differ from the requested operation", async () => {
+    const adapter = createGitHubTargetAccessAdapter(
+      {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        async inspectTargetAccess() {
+          return {
+            accountId: "88",
+            accountLogin: "withAutograph",
+            accountType: "Organization",
+            installationId: "101",
+            permissions: githubPermissionsFor("publish-draft-pull-request"),
+            repositoryId: "10001",
+          };
+        },
+      },
+      authority,
+    );
+    await expect(adapter.inspectTargetAccess("resolve-existing-source", "10001")).rejects.toThrow(
+      "github-target-access-observation-mismatch",
+    );
   });
 });

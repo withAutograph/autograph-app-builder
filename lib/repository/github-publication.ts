@@ -6,6 +6,8 @@ import { parseSourceReceiptEvidence } from "./source-receipt";
 import type { SourceReceiptEvidence } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
+import { githubPermissionsFor } from "./github-permissions";
+import type { GitHubOperation, GitHubPermissions } from "./github-permissions";
 import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
 
 export const GITHUB_PUBLICATION_VERSION = 2 as const;
@@ -14,19 +16,8 @@ export const REPOSITORY_RELEASE_GATE = "REPOSITORY_RELEASE_ENABLED" as const;
 type Digest = string;
 type ObjectId = string;
 export type GitHubRepositorySelection = "all" | "selected";
-export type GitHubOperation =
-  | "resolve-existing-source"
-  | "create-fresh-repository"
-  | "publish-draft-pull-request";
-
-interface GitHubPermissions {
-  metadata: "read";
-  contents: "read" | "write";
-  workflows: "none" | "write";
-  pullRequests: "none" | "write";
-  administration: "none" | "write";
-  variables: "read";
-}
+export { githubPermissionsFor } from "./github-permissions";
+export type { GitHubOperation } from "./github-permissions";
 
 export interface GitHubInstallationIdentity {
   version: typeof GITHUB_PUBLICATION_VERSION;
@@ -529,45 +520,6 @@ function canonicalWithoutDigest<T extends { digest: string }>(value: T) {
 function exactDigest(value: { digest: string }, label: string): void {
   if (!isDigest(value.digest) || digest(canonicalWithoutDigest(value)) !== value.digest) {
     throw new Error(`${label} digest is malformed.`);
-  }
-}
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function githubPermissionsFor(operation: GitHubOperation): GitHubPermissions {
-  switch (operation) {
-    case "resolve-existing-source": {
-      return {
-        administration: "none",
-        contents: "read",
-        metadata: "read",
-        pullRequests: "none",
-        variables: "read",
-        workflows: "none",
-      };
-    }
-    case "create-fresh-repository": {
-      return {
-        administration: "write",
-        contents: "write",
-        metadata: "read",
-        pullRequests: "none",
-        variables: "read",
-        workflows: "write",
-      };
-    }
-    case "publish-draft-pull-request": {
-      return {
-        administration: "none",
-        contents: "write",
-        metadata: "read",
-        pullRequests: "write",
-        variables: "read",
-        workflows: "write",
-      };
-    }
-    default: {
-      throw new Error(`Unsupported GitHub operation: ${operation}`);
-    }
   }
 }
 

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { z } from "zod";
 
+import type { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import {
   GITHUB_PUBLICATION_VERSION,
   REPOSITORY_RELEASE_GATE,
@@ -22,6 +23,8 @@ import type {
   GitHubRepositoryObservation,
 } from "./github-publication";
 import { safeSourcePath } from "./source-path";
+import { issueGitHubTargetAccessProof } from "./github-target-access-proof";
+import type { GitHubTargetAccessProof } from "./github-target-access-proof";
 import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
 
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
@@ -183,6 +186,55 @@ const acknowledgementSchema = z.discriminatedUnion("status", [
 ]);
 
 type RequestedPermissions = z.infer<typeof permissionSnapshotSchema>;
+
+const targetAccessObservationSchema = z.strictObject({
+  accountId: decimal,
+  accountLogin: z.string().min(1).max(100),
+  accountType: z.enum(["Organization", "User"]),
+  installationId: decimal,
+  permissions: permissionSnapshotSchema,
+  repositoryId: decimal,
+});
+
+export interface GitHubTargetAccessProvider {
+  inspectTargetAccess: (input: {
+    operation: "resolve-existing-source" | "publish-draft-pull-request";
+    repositoryId: string;
+    requestedPermissions: RequestedPermissions;
+  }) => Promise<unknown>;
+}
+
+/** Additive v3 path; existing v2 publication adapters retain their current contract. */
+export const createGitHubTargetAccessAdapter = (
+  provider: GitHubTargetAccessProvider,
+  authority: z.input<typeof hostedTenantAuthoritySchema>,
+) => ({
+  async inspectTargetAccess(
+    operation: "resolve-existing-source" | "publish-draft-pull-request",
+    repositoryId: string,
+  ): Promise<GitHubTargetAccessProof> {
+    const requestedPermissions = githubPermissionsFor(operation);
+    const observed = targetAccessObservationSchema.parse(
+      await provider.inspectTargetAccess({ operation, repositoryId, requestedPermissions }),
+    );
+    return issueGitHubTargetAccessProof({
+      authority,
+      installation: {
+        accountId: observed.accountId,
+        accountLogin: observed.accountLogin,
+        accountType: observed.accountType,
+        installationId: observed.installationId,
+      },
+      observed: {
+        installationId: observed.installationId,
+        permissions: observed.permissions,
+        repositoryId: observed.repositoryId,
+      },
+      operation,
+      repositoryId,
+    });
+  },
+});
 
 export interface GitHubAppInstallationProvider {
   inspectExistingDraft: (input: {
