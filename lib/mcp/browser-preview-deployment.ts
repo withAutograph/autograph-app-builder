@@ -72,6 +72,7 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
     if (hosted === undefined) {
       const config = readPreviewOAuthRuntimeConfig(input.environment);
       const database = openHostedPostgresDatabase(config.databaseUrl);
+      const store = createPostgresHostedEveStore(database);
       hosted = {
         audience: config.resource,
         auth: getPreviewOAuthDeploymentAuth(input.environment),
@@ -81,10 +82,14 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
           issuer: config.issuer,
         }),
         origin: new URL(config.issuer).origin,
-        store: createPostgresHostedEveStore(database),
+        store,
         transport: createSameOriginEveTransport({
           config: { baseUrl: new URL(config.resource).origin },
           fetchImplementation: input.fetchImplementation,
+          async verifyReadAuthority({ principal, sessionId, adapterSessionId }) {
+            const session = await store.getSession(principal, sessionId);
+            return session !== null && session.adapterSessionId === adapterSessionId;
+          },
           workloadIdentity: input.workloadIdentity,
         }),
       };

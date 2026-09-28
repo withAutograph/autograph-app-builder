@@ -72,6 +72,22 @@ export {
 export type { HostedEngineSnapshot } from "./hosted-projection";
 
 export interface HostedEveTransport {
+  /** Incremental readback for paged checkpoint writers. Legacy transports may omit it. */
+  observe?: (input: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    adapterSessionId: string;
+    onEvent: (event: InternalEveEvent) => Promise<void> | void;
+  }) => Promise<{
+    activeTurnId?: string;
+    artifactProjectionRequiresLegacyReadback: boolean;
+    installedEventCount: number;
+    pendingRequests: PublicInputRequest[];
+    publicEventCount: number;
+    status: HostedEngineSnapshot["status"];
+    uiPreview?: HostedEngineSnapshot["uiPreview"];
+    workingPreview?: HostedEngineSnapshot["workingPreview"];
+  }>;
   start: (input: {
     principal: HostedPrincipal;
     operationId: string;

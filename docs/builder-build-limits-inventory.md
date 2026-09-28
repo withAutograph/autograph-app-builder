@@ -29,6 +29,12 @@ service to resource exhaustion. Historical events already discarded by an
 older checkpoint cannot be reconstructed; its truncation marker is retained
 and shown during recovery.
 
+The staged history helper currently requires an existing tenant session row.
+The live `start` path settles a new session and operation together, so its
+integration must stage under a reserved session identity and publish the
+checkpoint pointer in that same settlement transaction. This ordering must be
+tested before enabling the paged writer.
+
 Automatic provisioning retries cover settled transient failures with a known
 outcome and a durable next retry time. An expired in-flight lease with an
 uncertain provider write is not redispatched automatically: a read-only
