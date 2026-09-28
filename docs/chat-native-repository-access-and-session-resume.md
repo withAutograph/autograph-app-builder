@@ -77,7 +77,10 @@ compute leases and abandoned-turn detection.
 
 Each durable session stores a product-facing title, inferred app identity,
 current product stage, resumability state, adapter generation, checkpoint
-digest, parent session when applicable, and bounded session-owned artifacts.
+digest, parent session when applicable, and the session-owned artifacts needed
+for continuation. Per-call artifact reads may be paged, but must not impose a
+total artifact or session workload ceiling; follow the
+[Builder workload capacity policy](builder-workload-capacity-policy.md).
 Checkpoints are persisted after settled turns, input boundaries, prototype and
 plan revisions, and consequential authorization state. Provider credentials,
 tokens, and raw authorization responses MUST NOT be stored in checkpoints.

@@ -22,3 +22,10 @@ preserve explicit user cancellation. A slow successful command is not a failed
 build merely because it exceeded an estimate.
 
 Any new blocking assertion requires documented user-visible failure, prevented effect, and recovery path. Otherwise it is prohibited.
+
+Workload limits have a stricter rule: follow the normative
+[Builder workload capacity policy](builder-workload-capacity-policy.md). A
+fixed total count, size, history, attempt, or session-duration cap is prohibited
+for otherwise valid work unless an explicit product decision authorizes a
+quota. Per-operation limits require a concrete basis and a continuation path;
+they must not be disguised as eligibility, validation, or publication gates.

@@ -100,8 +100,10 @@ as an opaque secret container.
 Hosted session handles remain tenant-scoped and resumable until explicitly
 deleted. The 30-minute idle and 24-hour lifetime windows apply only to compute
 leases: expired compute is recoverable without limiting the number of sessions,
-and product history remains readable. Bounded checkpoints retain
-the latest public product events, outstanding input, prototype, and plan.
+and product history remains readable. New paged checkpoints retain the full
+public event history, outstanding input, prototype, and plan; chunk size bounds
+one storage operation rather than total history. Older inline checkpoint
+formats retain their documented legacy ceilings and truncation markers.
 Unchanged `working` observations cannot refresh an execution lease forever; the
 service marks the session checkpoint-resumable and fences any replacement
 adapter generation. The separately confirmed retention task remains the only

@@ -66,9 +66,13 @@ target checkout or external system is changed.
 After the appropriate authorization, the builder prepares its changes, runs the
 fixed local checks and tests, and presents the ordered result for review.
 For a failed private apply, Builder names the failed repository command and
-exit status, includes bounded redacted compiler or command diagnostics when
-available, and gives a repair or retry instruction. Checkout-backed execution
-readiness uses the prepared checkout and its hosted sandbox binding; absence of
+exit status, includes sanitized compiler or command diagnostics, and gives a
+repair or retry instruction. If the response cannot carry all diagnostics,
+preserve the complete sanitized output in retrievable storage and provide an
+excerpt with a continuation reference; never discard the only copy. Follow the
+[Builder workload capacity policy](builder-workload-capacity-policy.md).
+Checkout-backed execution readiness uses the prepared checkout and its hosted
+sandbox binding; absence of
 an obsolete offline dependency cache is not an image-configuration failure.
 Schema release compilation may follow an initial validation pass. It clears
 that pass before changing the private checkout so normal app checks run again

@@ -68,13 +68,13 @@ Public progress MAY describe visible outcomes such as “I’ve drafted the revi
 
 The builder MUST classify every unresolved item before interrupting the conversation.
 
-| Decision class                | Required behavior                                                              | Examples                                                                                                              |
-| ----------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Conventional product default  | Infer, state the visible choice briefly, and continue                          | Product name, lowercase identifier, common routes, standard roles, familiar layout, reversible technical default      |
-| Internal completion work      | Resolve silently and retry within a bounded policy                             | Draft completion, schema repair, planning, builder-owned apply/check/review, source inspection, workspace preparation |
-| Material product ambiguity    | Ask one focused product question and recommend a default                       | Ownership, permissions, policy, workflow order, irreversible visible behavior                                         |
-| Consequential outward effect  | Request effect-based approval immediately before the action                    | Modify a repository, open or publish a pull request, deploy, provision a resource, release software                   |
-| Unresolvable capability limit | Explain the missing user-visible outcome and offer a product-level alternative | A requested live interaction cannot be delivered, but a reviewable static workflow can be produced                    |
+| Decision class                | Required behavior                                                                            | Examples                                                                                                              |
+| ----------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Conventional product default  | Infer, state the visible choice briefly, and continue                                        | Product name, lowercase identifier, common routes, standard roles, familiar layout, reversible technical default      |
+| Internal completion work      | Retry transient failures without a fixed attempt ceiling; pause only for an actionable cause | Draft completion, schema repair, planning, builder-owned apply/check/review, source inspection, workspace preparation |
+| Material product ambiguity    | Ask one focused product question and recommend a default                                     | Ownership, permissions, policy, workflow order, irreversible visible behavior                                         |
+| Consequential outward effect  | Request effect-based approval immediately before the action                                  | Modify a repository, open or publish a pull request, deploy, provision a resource, release software                   |
+| Unresolvable capability limit | Explain the missing user-visible outcome and offer a product-level alternative               | A requested live interaction cannot be delivered, but a reviewable static workflow can be produced                    |
 
 The builder MUST preserve a valid name or identifier that the person supplied. When neither is supplied, it MUST infer both from the brief. It MUST ask only when a collision, unsupported identifier, or material product ambiguity prevents a safe choice.
 
@@ -84,12 +84,17 @@ An outward-effect approval MUST state the visible effect, destination, and expec
 
 ## Translate internal failures into product decisions
 
-The builder MUST attempt bounded automatic repair before interrupting the person.
+The builder MUST attempt automatic repair before interrupting the person. It
+MUST NOT stop after an arbitrary number of repair or retry attempts.
 
 1. Diagnose the internal failure without exposing it in public conversation.
 2. Repair missing, malformed, or inconsistent internal data when the product intent remains clear.
-3. Retry within the bounded policy and preserve diagnostics for operators.
-4. If repair cannot continue, identify the user-visible consequence.
+3. Retry transient failures using provider guidance and backoff; preserve
+   progress and complete diagnostics across attempts. Backoff controls retry
+   frequency, not the total number of attempts or session lifetime.
+4. Pause only for cancellation, missing authorization, a real product decision,
+   or an actionable failure that cannot make progress without changed input;
+   identify the user-visible consequence and concrete recovery step.
 5. Ask the smallest product question that resolves that consequence, recommend one answer, and state the visible tradeoff.
 6. If no product answer can resolve the problem, name the outcome that cannot be delivered and offer a useful product-level alternative.
 
@@ -98,7 +103,9 @@ The builder MUST NOT turn an implementation defect into a request for technical 
 For a terminal operational failure that Builder cannot repair, the error must
 identify the failed operation or command, status or error code, specific file and
 cause when known, and a concrete next repair action. Sanitize credentials,
-private URLs, and unbounded provider output. If a provider supplies no cause,
+private URLs, and secrets in provider output. Preserve complete sanitized
+diagnostics in retrievable storage; use an excerpt with a continuation reference
+when the public response cannot hold the full result. If a provider supplies no cause,
 say that explicitly and identify the operation and session needed for support.
 This failure report is separate from normal product progress and does not ask
 the user to solve Builder's internal implementation defect.
@@ -163,17 +170,17 @@ The final handoff MUST lead with what the person can see, review, or do next.
 
 The builder MUST use this flow. Silent transitions produce no technical narration.
 
-| Transition                                                | Conversation behavior                                                            |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Product brief → inferred defaults                         | Silent, followed by a concise statement of the visible choices                   |
-| Inferred defaults → visual prototype                      | Silent progress; MAY ask a product question only for material ambiguity          |
-| Visual prototype → product refinement                     | Show the product result; ask product questions when answers materially change it |
-| Product refinement → internal validation and repair loop  | Silent and bounded                                                               |
-| Internal validation and repair loop → implementation plan | Silent; translate an unresolved consequence into one product question            |
-| Implementation plan → builder-owned apply, checks, review | Silent and bounded; MUST NOT request approval                                    |
-| Review-ready result → outward-effect choice               | Show the product result and offer one concrete repository/publication next step  |
-| Outward-effect choice → approval                          | MUST request approval and name the concrete destination and effect               |
-| Approval → repository/publication effect                  | Apply only the approved effect; request again for any different external outcome |
+| Transition                                                | Conversation behavior                                                                            |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Product brief → inferred defaults                         | Silent, followed by a concise statement of the visible choices                                   |
+| Inferred defaults → visual prototype                      | Silent progress; MAY ask a product question only for material ambiguity                          |
+| Visual prototype → product refinement                     | Show the product result; ask product questions when answers materially change it                 |
+| Product refinement → internal validation and repair loop  | Silent; continue until success, cancellation, or an actionable failure; no fixed attempt ceiling |
+| Internal validation and repair loop → implementation plan | Silent; translate an unresolved consequence into one product question                            |
+| Implementation plan → builder-owned apply, checks, review | Silent; repair without a fixed attempt ceiling; MUST NOT request approval                        |
+| Review-ready result → outward-effect choice               | Show the product result and offer one concrete repository/publication next step                  |
+| Outward-effect choice → approval                          | MUST request approval and name the concrete destination and effect                               |
+| Approval → repository/publication effect                  | Apply only the approved effect; request again for any different external outcome                 |
 
 The builder MAY revisit an earlier product decision when new product information changes the intended experience. It MUST NOT expose internal retries as new conversation stages.
 
@@ -194,7 +201,7 @@ The regression suite MUST prove:
 - the same brief reaches a reviewable visual prototype, implementation plan, and review-ready app changes without technical questions
 - the agent does not stop after a prototype or plan and does not substitute a prose outline for the builder-owned review path
 - source inspection and isolated preparation complete without public approval requests
-- an initially incomplete or malformed internal artifact repairs itself within the bounded retry policy
+- an initially incomplete or malformed internal artifact repairs itself without a fixed attempt ceiling, or pauses with a specific actionable cause and recovery step
 - only a genuine product ambiguity produces a question
 - an irreconcilable internal constraint becomes one concise product question with a recommended answer
 - internal drafting, recording, validation, planning, builder-owned apply, checks, and review produce no user approval requests
@@ -220,7 +227,7 @@ Future contributors and language models MUST complete this checklist:
 
 - confirm the first interruption asks about the product, not setup mechanics
 - confirm inferred defaults remain visible and reversible
-- confirm internal repair uses a bounded retry policy
+- confirm retries have no arbitrary total attempt or session-duration ceiling, and that actionable failures preserve progress and explain recovery
 - confirm public messages contain no prohibited internal vocabulary
 - confirm outward-effect approvals name their visible destination and result
 - confirm negative and end-to-end behavioral tests cover the changed conversation path
