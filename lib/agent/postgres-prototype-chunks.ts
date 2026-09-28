@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { and, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { z } from "zod";
 
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Drizzle's database type requires the complete schema namespace.
 import type * as databaseSchema from "../db/schema";
@@ -12,6 +13,26 @@ import type { PrototypeArtifactV2 } from "./workflow-state";
 import { streamVerifiedPrototypeArtifact } from "./prototype-artifact-stream";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
+
+/** Check the additive migration before enabling hosted artifact writes. */
+export const assertPrototypeChunkSchemaReady = async (db: Database): Promise<void> => {
+  try {
+    await db
+      .select({ chunkIndex: prototypeArtifactChunks.chunkIndex })
+      .from(prototypeArtifactChunks)
+      .limit(0);
+  } catch (error) {
+    const code = z.object({ code: z.string() }).safeParse(error);
+    if (code.success && (code.data.code === "42P01" || code.data.code === "42703")) {
+      throw new Error(
+        "Hosted prototype storage is not ready. Apply the additive prototype_artifact_chunks database migration before retrying this Builder session.",
+        { cause: error },
+      );
+    }
+    throw error;
+  }
+};
+
 const sha256 = (content: string): string =>
   createHash("sha256").update(content, "utf-8").digest("hex");
 

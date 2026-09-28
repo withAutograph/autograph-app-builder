@@ -1,11 +1,35 @@
 import { readFile } from "node:fs/promises";
 
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 
 import {
   assertPrototypeChunkKey,
+  assertPrototypeChunkSchemaReady,
   streamStoredPrototypeArtifact,
 } from "./postgres-prototype-chunks";
+
+it("explains an unapplied prototype storage migration without hiding other database failures", async () => {
+  const missingRelation = Object.assign(new Error("relation missing"), { code: "42P01" });
+  const missing = {
+    select: vi.fn().mockReturnValue({
+      from: vi.fn().mockReturnValue({ limit: vi.fn().mockRejectedValue(missingRelation) }),
+    }),
+  };
+  // SAFETY: The function only calls the three mocked methods in this minimal Drizzle chain.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Minimal Drizzle chain fixture.
+  await expect(assertPrototypeChunkSchemaReady(missing as never)).rejects.toThrow(
+    "Apply the additive prototype_artifact_chunks database migration",
+  );
+  const outage = new Error("database unavailable");
+  const failed = {
+    select: vi.fn().mockReturnValue({
+      from: vi.fn().mockReturnValue({ limit: vi.fn().mockRejectedValue(outage) }),
+    }),
+  };
+  // SAFETY: The function only calls the three mocked methods in this minimal Drizzle chain.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Minimal Drizzle chain fixture.
+  await expect(assertPrototypeChunkSchemaReady(failed as never)).rejects.toBe(outage);
+});
 
 const principal = {
   audience: "app-builder",

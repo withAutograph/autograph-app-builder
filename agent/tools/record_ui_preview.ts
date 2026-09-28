@@ -11,6 +11,7 @@ import { renderUiPreview } from "@/lib/agent/ui-preview-renderer";
 import { recordPrototypeArtifactRevision } from "@/lib/agent/prototype-artifacts";
 import { recordDurablePrototypeContent } from "@/lib/agent/prototype-artifacts-v2";
 import { createHostedPrototypeChunkStore } from "@/lib/agent/hosted-prototype-chunk-store";
+import { assertPrototypeChunkSchemaReady } from "@/lib/agent/postgres-prototype-chunks";
 import { openHostedPostgresDatabase } from "@/lib/mcp/hosted-route";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
@@ -34,6 +35,15 @@ const ensurePreviewWorkspace = async (ctx: Parameters<typeof sourceStatus.execut
   if (appBuilderWorkflowState.get().phase === "empty") {
     await prepareWorkspace.execute({}, ctx);
   }
+};
+
+const readyPrototypeDatabase = async () => {
+  if (process.env.EVE_HOSTED_ADAPTER !== "1") {
+    return null;
+  }
+  const db = openHostedPostgresDatabase(process.env.DATABASE_URL ?? "");
+  await assertPrototypeChunkSchemaReady(db);
+  return db;
 };
 
 export default defineTool({
@@ -91,8 +101,7 @@ export default defineTool({
     const revision = sourceDigest;
     const previewHtml = await renderUiPreview(previewInput, await ctx.getSandbox());
     const artifactPath = `prototype/${previewInput.appId}/index.html`;
-    const durable =
-      process.env.APP_BUILDER_PROTOTYPE_V2_WRITER === "1" && process.env.EVE_HOSTED_ADAPTER === "1";
+    const durable = process.env.EVE_HOSTED_ADAPTER === "1";
     if (
       durable &&
       current.artifacts.some(
@@ -102,20 +111,22 @@ export default defineTool({
     ) {
       throw new Error("The UI preview artifact does not match this workflow or session.");
     }
-    const durableResult = durable
-      ? await recordDurablePrototypeContent({
-          appId: previewInput.appId,
-          callId: ctx.callId,
-          content: previewHtml,
-          path: artifactPath,
-          sessionId: ctx.session.id,
-          store: createHostedPrototypeChunkStore({
-            db: openHostedPostgresDatabase(process.env.DATABASE_URL ?? ""),
-            sessionAuth: ctx.session.auth,
+    const db = await readyPrototypeDatabase();
+    const durableResult =
+      db === null
+        ? undefined
+        : await recordDurablePrototypeContent({
+            appId: previewInput.appId,
+            callId: ctx.callId,
+            content: previewHtml,
+            path: artifactPath,
             sessionId: ctx.session.id,
-          }),
-        })
-      : undefined;
+            store: createHostedPrototypeChunkStore({
+              db,
+              sessionAuth: ctx.session.auth,
+              sessionId: ctx.session.id,
+            }),
+          });
     const recorded =
       durableResult === undefined
         ? recordPrototypeArtifactRevision({

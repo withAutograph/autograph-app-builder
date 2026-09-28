@@ -15,6 +15,7 @@ import {
   recordDurablePrototypeChunk,
 } from "@/lib/agent/prototype-artifacts-v2";
 import { createHostedPrototypeChunkStore } from "@/lib/agent/hosted-prototype-chunk-store";
+import { assertPrototypeChunkSchemaReady } from "@/lib/agent/postgres-prototype-chunks";
 import { openHostedPostgresDatabase } from "@/lib/mcp/hosted-route";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
@@ -48,10 +49,8 @@ export default defineTool({
         `Target validation attempt ${current.validationAttempt.digest} is pending; artifact mutation is disabled until it is recovered.`,
       );
     }
-    // The v2 writer is staged behind an explicit migration switch until the
-    // Browser's authenticated reference reader and complete tool readback land.
+    // Hosted HTML artifacts use durable chunks after the additive migration is verified.
     if (
-      process.env.APP_BUILDER_PROTOTYPE_V2_WRITER === "1" &&
       process.env.EVE_HOSTED_ADAPTER === "1" &&
       mediaType === "text/html" &&
       expectedDigest !== undefined
@@ -70,6 +69,8 @@ export default defineTool({
         throw new Error("The durable prototype artifact does not match this workflow or session.");
       }
       const existing = current.artifacts.find((artifact) => artifact.path === path);
+      const db = openHostedPostgresDatabase(process.env.DATABASE_URL ?? "");
+      await assertPrototypeChunkSchemaReady(db);
       const recorded = await recordDurablePrototypeChunk({
         appId,
         ...(baseRevision === undefined ? {} : { baseRevision }),
@@ -83,7 +84,7 @@ export default defineTool({
         path,
         sessionId: ctx.session.id,
         store: createHostedPrototypeChunkStore({
-          db: openHostedPostgresDatabase(process.env.DATABASE_URL ?? ""),
+          db,
           sessionAuth: ctx.session.auth,
           sessionId: ctx.session.id,
         }),
