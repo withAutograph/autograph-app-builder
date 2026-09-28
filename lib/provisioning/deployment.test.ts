@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createBuilderProvisioningRouteHandler } from "./deployment";
+import { initialBuilderProvisionJournalRecord } from "./journal";
 import type { BuilderProvisioningDependencies } from "./service";
 
 const origin = "https://builder.example.test";
@@ -112,9 +113,13 @@ describe("authenticated builder provisioning route", () => {
   });
 
   it("exposes a monotonic journal projection only to an authenticated reader", async () => {
+    const record = initialBuilderProvisionJournalRecord(request, new Date(response.updatedAt));
+    record.response = response;
+    record.operations.github.attempted = true;
+    record.operations.github.failureDetail = "provider_rejected";
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const read = vi.fn(async () => ({
-      record: { response },
+      record,
       revision: 7,
     }));
     const handler = createBuilderProvisioningRouteHandler({
@@ -136,7 +141,19 @@ describe("authenticated builder provisioning route", () => {
 
     expect(projection.status).toBe(200);
     expect(await projection.json()).toEqual({
-      provisioning: response,
+      provisioning: {
+        ...response,
+        diagnostics: [
+          {
+            code: "provider_rejected",
+            operation: "github",
+            outcomeKnown: false,
+            provider: "github",
+            recoveryAction:
+              "Review provider access or validation details, then retry this operation.",
+          },
+        ],
+      },
       revision: 7,
     });
     expect(read).toHaveBeenCalledWith(

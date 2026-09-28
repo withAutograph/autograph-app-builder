@@ -15,7 +15,11 @@ import { readGitHubProvisioningEnvironment } from "./github-provider";
 import { readGitHubUserCredentialEnvironment } from "./github-user-credential";
 import { createPostgresGitHubUserCredentialStore } from "./postgres-github-user-credential";
 import { createPostgresBuilderProvisionJournalStore } from "./postgres-journal";
-import { executeBuilderProvisioning, readBuilderProvisioning } from "./service";
+import {
+  executeBuilderProvisioning,
+  projectBuilderProvisioning,
+  readBuilderProvisioning,
+} from "./service";
 
 const noStore = { "Cache-Control": "no-store" } as const;
 
@@ -62,7 +66,7 @@ export function createBuilderProvisioningRouteHandler(input: {
           return row
             ? Response.json(
                 builderProvisionProjectionSchema.parse({
-                  provisioning: row.record.response,
+                  provisioning: projectBuilderProvisioning(row),
                   revision: row.revision,
                 }),
                 { headers: noStore },

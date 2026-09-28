@@ -14,7 +14,11 @@ import type { GitHubProvisioningConfig } from "./github-provider";
 import { provisionGitHubRepository } from "./github-provider";
 import type { GitHubUserCredentialStore } from "./github-user-credential";
 import { updateBuilderProvisionJournal } from "./journal";
-import type { BuilderProvisionAuthority, BuilderProvisionJournalStore } from "./journal";
+import type {
+  BuilderProvisionAuthority,
+  BuilderProvisionJournalRow,
+  BuilderProvisionJournalStore,
+} from "./journal";
 import { cloneStarterSource } from "./starter-source";
 import type { StarterSource } from "./starter-source";
 import { provisionVercelProject } from "./vercel-provider";
@@ -334,19 +338,7 @@ export async function executeBuilderProvisioning(input: {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export async function readBuilderProvisioning(input: {
-  authority: BuilderProvisionAuthority;
-  requestId: string;
-  journal: BuilderProvisionJournalStore;
-}) {
-  const row = await input.journal.read({
-    authority: input.authority,
-    requestId: input.requestId,
-  });
-  if (!row) {
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- the read contract distinguishes missing journals from a response.
-    return undefined;
-  }
+export function projectBuilderProvisioning(row: BuilderProvisionJournalRow) {
   const diagnostics: NonNullable<BuilderProvisionResponse["diagnostics"]> = [];
   for (const operation of ["github", "vercel"] as const) {
     const state = row.record.operations[operation];
@@ -383,4 +375,21 @@ export async function readBuilderProvisioning(input: {
     diagnostics.push(diagnostic);
   }
   return builderProvisionResponseSchema.parse({ ...row.record.response, diagnostics });
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve the named public read contract.
+export async function readBuilderProvisioning(input: {
+  authority: BuilderProvisionAuthority;
+  requestId: string;
+  journal: BuilderProvisionJournalStore;
+}) {
+  const row = await input.journal.read({
+    authority: input.authority,
+    requestId: input.requestId,
+  });
+  if (!row) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- the read contract distinguishes missing journals from a response.
+    return undefined;
+  }
+  return projectBuilderProvisioning(row);
 }
