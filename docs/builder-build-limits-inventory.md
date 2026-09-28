@@ -4,18 +4,18 @@ This inventory records the limit's source, its effect on an app build, and the
 recovery path. A page or chunk size controls memory for one operation; it is not
 a ceiling on the total number of files, events, or retry attempts.
 
-| Boundary                           | Basis                                                      | Behavior                                                                                                                                                                                  |
-| ---------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GitHub repository enumeration      | Provider pagination                                        | Follow every provider page. The current adapter accumulates IDs for its final result and restarts enumeration after a page failure; durable cursor and streamed result work remains open. |
-| Repository candidate names         | GitHub name availability                                   | Generate names lazily. Only a confirmed collision advances to another name; permission, validation, quota, and service failures retain their distinct diagnostics.                        |
-| GitHub recursive trees             | Provider 100,000-entry or 7 MB recursive response boundary | On `truncated`, walk nonrecursive subtrees. A truncated individual directory fails with repository, revision, and path; it is never accepted as complete.                                 |
-| GitHub files                       | Provider 100 MiB per-file ceiling                          | Report the rejected operation and path. Suggest a smaller source file or a user-approved storage alternative; do not silently redesign storage.                                           |
-| Eve event messages                 | Transport envelope                                         | Size each artifact chunk against the serialized envelope, including escaping and metadata. Continue with another chunk; do not impose a total artifact ceiling.                           |
-| Model review context               | Provider context capacity                                  | Review source in scoped, digest-verified pages. Report the path and line when the smallest page is rejected.                                                                              |
-| Postgres checkpoint stage          | Database transaction and memory pressure                   | Write immutable 64 KiB byte chunks and publish the manifest atomically with the session pointer. The chunk size limits one read or write, not history length.                             |
-| Hosted session compute lease       | Cleanup and stale-writer fencing                           | Compute can be released after idle or lifetime expiry. The public session and its durable progress remain available for continuation.                                                     |
-| Eve Sandbox duration               | Eve inherited default                                      | Keep the current 30-minute default. Restart compute from durable progress when possible.                                                                                                  |
-| Untrusted requests and identifiers | Authentication, integrity, and provider naming             | Keep finite request body, credential, path, identifier, and per-call page bounds. These do not set a total app or session workload quota.                                                 |
+| Boundary                           | Basis                                                      | Behavior                                                                                                                                                                                                                     |
+| ---------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub repository enumeration      | Provider pagination                                        | Default hosted target access checks request the selected repository directly. Legacy adapters that lack target access proof still enumerate and accumulate IDs; durable cursor and streamed compatibility work remains open. |
+| Repository candidate names         | GitHub name availability                                   | Generate names lazily. Only a confirmed collision advances to another name; permission, validation, quota, and service failures retain their distinct diagnostics.                                                           |
+| GitHub recursive trees             | Provider 100,000-entry or 7 MB recursive response boundary | On `truncated`, walk nonrecursive subtrees. A truncated individual directory fails with repository, revision, and path; it is never accepted as complete.                                                                    |
+| GitHub files                       | Provider 100 MiB per-file ceiling                          | Report the rejected operation and path. Suggest a smaller source file or a user-approved storage alternative; do not silently redesign storage.                                                                              |
+| Eve event messages                 | Transport envelope                                         | Size each artifact chunk against the serialized envelope, including escaping and metadata. Continue with another chunk; do not impose a total artifact ceiling.                                                              |
+| Model review context               | Provider context capacity                                  | Review source in scoped, digest-verified pages. Report the path and line when the smallest page is rejected.                                                                                                                 |
+| Postgres checkpoint stage          | Database transaction and memory pressure                   | Write immutable 64 KiB byte chunks and publish the manifest atomically with the session pointer. The chunk size limits one read or write, not history length.                                                                |
+| Hosted session compute lease       | Cleanup and stale-writer fencing                           | Compute can be released after idle or lifetime expiry. The public session and its durable progress remain available for continuation.                                                                                        |
+| Eve Sandbox duration               | Eve inherited default                                      | Keep the current 30-minute default. Restart compute from durable progress when possible.                                                                                                                                     |
+| Untrusted requests and identifiers | Authentication, integrity, and provider naming             | Keep finite request body, credential, path, identifier, and per-call page bounds. These do not set a total app or session workload quota.                                                                                    |
 
 ## Live-writer migration blockers
 
@@ -37,16 +37,16 @@ tested before enabling the paged writer.
 
 Automatic provisioning retries cover settled transient failures with a known
 outcome and a durable next retry time. An expired in-flight lease with an
-uncertain provider write is not redispatched automatically: a read-only
-provider reconciliation must establish whether that repository or project was
-created first. This preserves the no-duplicate outward-effect rule.
+uncertain provider write runs a read-only reconciliation first. A verified,
+owned GitHub result can settle successfully. Ambiguous GitHub or Vercel results
+pause with recovery instructions; a missing resource after an uncertain write
+is not treated as authoritative absence. This preserves the no-duplicate
+outward-effect rule.
 
-The GitHub target-scoped access proof format is additive. Existing v2 source
-and publication receipts still bind the full selected-repository list, so the
-target flows still enumerate and buffer that list. The v3 proof must be issued
-from a provider-verified target read and adopted by every receipt/proposal
-validator before those paths can stop enumerating all selected IDs. Existing
-v2 receipts must continue to verify during that migration.
+The default hosted GitHub connection, existing-source, and publication source
+flows use a provider-verified target proof, so they do not enumerate every
+selected repository. Legacy provider adapters and v2 receipts retain their
+full-inventory compatibility path. The emulated test harness also retains v2.
 
 Large prototype and UI-preview content is transferred in verified chunks, but
 the installed Eve event readback and some artifact projections still assemble
