@@ -1,3 +1,10 @@
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { mkdtemp, open, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import nodePath from "node:path";
+import { createInterface } from "node:readline";
+
 import type { z } from "zod";
 
 import type { EveSessionService } from "./service";
@@ -23,10 +30,16 @@ import type {
   HostedEveStore,
   HostedOperationKind,
   HostedOperationRecord,
+  HostedPagedCheckpointMetadata,
   HostedSessionCheckpoint,
+  HostedSessionRecord,
   HostedSessionTimeoutPolicy,
 } from "./hosted-store";
-import { outstandingInternalEveRequests, toPublicEvent } from "./public-events";
+import {
+  currentWorkingPreview,
+  outstandingInternalEveRequests,
+  toPublicEvent,
+} from "./public-events";
 import type { InternalEveEvent } from "./public-events";
 import { projectHostedSnapshot } from "./hosted-projection";
 import type { HostedEngineSnapshot } from "./hosted-projection";
@@ -444,6 +457,109 @@ function recoveryPrompt(record: z.infer<typeof durableHostedSessionRecordSchema>
   return prompt;
 }
 
+interface PagedObservationSpool {
+  directory: string;
+  path: string;
+  eventCount: number;
+  digest: string;
+  observation: Awaited<ReturnType<NonNullable<HostedEveTransport["observe"]>>>;
+}
+
+// eslint-disable-next-line eslint/func-style -- The spool is consumed only after Eve's durable tail is verified.
+async function spoolObservedSession(input: {
+  transport: NonNullable<HostedEveTransport["observe"]>;
+  principal: HostedPrincipal;
+  sessionId: string;
+  adapterSessionId: string;
+}): Promise<PagedObservationSpool> {
+  let directory: string;
+  try {
+    directory = await mkdtemp(nodePath.join(tmpdir(), "app-builder-checkpoint-"));
+  } catch (error) {
+    throw new Error(
+      "Builder could not create private Eve checkpoint material. Check available local disk space and retry this saved session.",
+      { cause: error },
+    );
+  }
+  const path = nodePath.join(directory, "events.ndjson");
+  let file: Awaited<ReturnType<typeof open>> | null = null;
+  try {
+    file = await open(path, "wx", 0o600);
+    const handle = file;
+    const hash = createHash("sha256");
+    let eventCount = 0;
+    const observation = await input.transport({
+      adapterSessionId: input.adapterSessionId,
+      onEvent: async (candidate) => {
+        const projected = toPublicEvent(candidate);
+        if (projected === null) {
+          return;
+        }
+        const parsed = publicEveEventSchema.safeParse({ ...projected, index: eventCount });
+        if (!parsed.success) {
+          return;
+        }
+        const line = `${JSON.stringify(parsed.data)}\n`;
+        try {
+          await handle.writeFile(line);
+        } catch (error) {
+          throw new Error(
+            `Builder could not write private Eve checkpoint material at ${path}. Free local disk space and retry this saved session.`,
+            { cause: error },
+          );
+        }
+        hash.update(line);
+        eventCount += 1;
+      },
+      principal: input.principal,
+      sessionId: input.sessionId,
+    });
+    await handle.sync();
+    await handle.close();
+    file = null;
+    return {
+      digest: hash.digest("hex"),
+      directory,
+      eventCount,
+      observation,
+      path,
+    };
+  } catch (error) {
+    if (file !== null) {
+      try {
+        await file.close();
+      } catch {
+        // The original spool or stream error remains authoritative.
+      }
+    }
+    await rm(directory, { force: true, recursive: true });
+    throw error;
+  }
+}
+
+// eslint-disable-next-line eslint/func-style -- Each verified line is released after staging.
+async function* readSpoolEvents(spool: PagedObservationSpool) {
+  const hash = createHash("sha256");
+  let count = 0;
+  const lines = createInterface({ crlfDelay: Infinity, input: createReadStream(spool.path) });
+  try {
+    for await (const line of lines) {
+      hash.update(`${line}\n`);
+      const event = publicEveEventSchema.parse(JSON.parse(line));
+      if (event.index !== count) {
+        throw new Error("Private Eve checkpoint spool has nonconsecutive event indexes.");
+      }
+      count += 1;
+      yield event;
+    }
+  } finally {
+    lines.close();
+  }
+  if (count !== spool.eventCount || hash.digest("hex") !== spool.digest) {
+    throw new Error("Private Eve checkpoint spool changed before durable publication.");
+  }
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createHostedEveSessionService(input: {
   principal: HostedPrincipal;
@@ -829,6 +945,70 @@ export function createHostedEveSessionService(input: {
     return completeResult;
   }
 
+  // eslint-disable-next-line eslint/func-style -- Paged reads preserve the active tenant-bound manifest reference.
+  async function resultFromDurableCheckpoint(
+    sessionId: string,
+    record: HostedSessionRecord,
+    cursor: number,
+    limit: number,
+  ): Promise<EveSessionResult> {
+    const durable = toDurableHostedSessionRecord(record);
+    if (durable.checkpointRef !== undefined && input.store.readCheckpointPage !== undefined) {
+      const page = await input.store.readCheckpointPage({
+        checkpointRef: durable.checkpointRef,
+        cursor,
+        limit,
+        principal,
+        sessionId,
+      });
+      const { metadata } = page;
+      return eveSessionResultSchema.parse({
+        cursor: page.cursor,
+        events: page.events,
+        ...(metadata.inputRequests === undefined ? {} : { inputRequests: metadata.inputRequests }),
+        ...(metadata.prototype === undefined ? {} : { prototype: metadata.prototype }),
+        sessionId,
+        status:
+          metadata.status === "working" && durable.resumability === "checkpoint"
+            ? "waiting"
+            : metadata.status,
+        ...(metadata.uiPreview === undefined ? {} : { uiPreview: metadata.uiPreview }),
+        ...(metadata.workingPreview === undefined
+          ? {}
+          : {
+              workingPreview:
+                metadata.status === "failed" || metadata.status === "cancelled"
+                  ? null
+                  : currentWorkingPreview(metadata.workingPreview),
+            }),
+      });
+    }
+    if (durable.checkpoint !== undefined) {
+      return resultFromHostedCheckpoint(sessionId, durable.checkpoint, cursor, limit);
+    }
+    throw new HostedSessionRecoveryUnavailableError();
+  }
+
+  // eslint-disable-next-line eslint/func-style -- A timeout leaves the saved checkpoint readable without authorizing a response.
+  async function delayedCheckpointResult(
+    sessionId: string,
+    record: HostedSessionRecord,
+    cursor: number,
+    limit: number,
+  ): Promise<EveSessionResult> {
+    const checkpoint = await resultFromDurableCheckpoint(sessionId, record, cursor, limit);
+    return eveSessionResultSchema.parse({
+      ...checkpoint,
+      error: {
+        code: "session_read_delayed",
+        message:
+          "Builder could not finish reading Eve's durable session history within 30 seconds. This does not mean the build stopped or failed. The events shown are the last saved checkpoint. Retry autograph_get with this same session ID and cursor; wait for a read without this warning before responding to an approval or reviewing a final diff. If it repeats, report the session ID and this read operation to the Builder operator.",
+      },
+      inputRequests: [],
+      status: "working",
+    });
+  }
+
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function readSession(inputValue: { sessionId: string; cursor: number; limit: number }) {
     const { sessionId, cursor, limit } = inputValue;
@@ -839,6 +1019,83 @@ export function createHostedEveSessionService(input: {
       sessionId,
       sourceHandoffId: session.sourceHandoffId,
     });
+    if (
+      input.transport.observe !== undefined &&
+      input.store.observeSessionPaged !== undefined &&
+      input.store.readCheckpointPage !== undefined
+    ) {
+      let spool: PagedObservationSpool | undefined;
+      try {
+        spool = await spoolObservedSession({
+          adapterSessionId: session.adapterSessionId,
+          principal,
+          sessionId,
+          transport: input.transport.observe,
+        });
+        if (!spool.observation.artifactProjectionRequiresLegacyReadback) {
+          const capturedAtEpochMs = now();
+          const metadata: HostedPagedCheckpointMetadata = {
+            capturedAtEpochMs,
+            ...(spool.observation.pendingRequests.length === 0
+              ? {}
+              : { inputRequests: spool.observation.pendingRequests }),
+            status: spool.observation.status,
+            ...(spool.observation.uiPreview === undefined
+              ? {}
+              : { uiPreview: spool.observation.uiPreview }),
+            version: 1,
+            ...(spool.observation.workingPreview === undefined
+              ? {}
+              : { workingPreview: spool.observation.workingPreview }),
+          };
+          const summary = eveSessionResultSchema.parse({
+            cursor: 0,
+            events: [],
+            ...(metadata.inputRequests === undefined
+              ? {}
+              : { inputRequests: metadata.inputRequests }),
+            sessionId,
+            status: metadata.status,
+            ...(metadata.uiPreview === undefined ? {} : { uiPreview: metadata.uiPreview }),
+            ...(metadata.workingPreview === undefined
+              ? {}
+              : { workingPreview: metadata.workingPreview }),
+          });
+          const stored = await input.store.observeSessionPaged({
+            ...(summary.uiPreview?.appId === undefined ? {} : { appId: summary.uiPreview.appId }),
+            events: readSpoolEvents(spool),
+            expectedCheckpointDigest: session.checkpointDigest,
+            metadata,
+            nowEpochMs: capturedAtEpochMs,
+            principal,
+            resumability: ["completed", "failed", "cancelled"].includes(summary.status)
+              ? "terminal"
+              : "live",
+            sessionId,
+            stage: stageForResult(summary),
+          });
+          return resultFromDurableCheckpoint(sessionId, stored, cursor, limit);
+        }
+      } catch (error) {
+        if (error instanceof HostedSessionReadTimeoutError) {
+          if (session.checkpoint === undefined && session.checkpointRef === undefined) {
+            throw error;
+          }
+          return delayedCheckpointResult(sessionId, session, cursor, limit);
+        }
+        if (error instanceof HostedAdapterSessionUnavailableError && session.checkpointRef) {
+          const retained = await resultFromDurableCheckpoint(sessionId, session, cursor, limit);
+          return retained.status === "working"
+            ? eveSessionResultSchema.parse({ ...retained, status: "waiting" })
+            : retained;
+        }
+        throw error;
+      } finally {
+        if (spool !== undefined) {
+          await rm(spool.directory, { force: true, recursive: true });
+        }
+      }
+    }
     try {
       const snapshot = await input.transport.get({
         adapterSessionId: session.adapterSessionId,
@@ -875,20 +1132,10 @@ export function createHostedEveSessionService(input: {
       return projectSnapshot(sessionId, snapshot, cursor, limit);
     } catch (error) {
       if (error instanceof HostedSessionReadTimeoutError) {
-        if (session.checkpoint === undefined) {
+        if (session.checkpoint === undefined && session.checkpointRef === undefined) {
           throw error;
         }
-        const checkpoint = resultFromHostedCheckpoint(sessionId, session.checkpoint, cursor, limit);
-        return {
-          ...checkpoint,
-          error: {
-            code: "session_read_delayed",
-            message:
-              "Builder could not finish reading Eve's durable session history within 30 seconds. This does not mean the build stopped or failed. The events shown are the last saved checkpoint. Retry autograph_get with this same session ID and cursor; wait for a read without this warning before responding to an approval or reviewing a final diff. If it repeats, report the session ID and this read operation to the Builder operator.",
-          },
-          inputRequests: [],
-          status: "working" as const,
-        };
+        return delayedCheckpointResult(sessionId, session, cursor, limit);
       }
       if (!(error instanceof HostedAdapterSessionUnavailableError)) {
         throw error;
