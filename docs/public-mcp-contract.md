@@ -25,6 +25,14 @@ transport protocol remain implementation details.
 
 `autograph_get` without `sessionId` returns a tenant-scoped paginated recent
 session index. With `sessionId`, it retains absolute-cursor event pagination.
+If the durable Eve stream cannot be read within 30 seconds, `autograph_get`
+returns the last saved checkpoint with `session_read_delayed`, identifies it as
+stale, and instructs the caller to retry the same session and cursor. A delayed
+read does not declare the build failed and never exposes checkpoint approval
+controls. After an accepted `autograph_respond` whose settlement cannot be
+observed within 30 seconds, Builder reports `submission_unknown`; callers must
+read the same session before taking further action and must not replay that
+response.
 `autograph_start` accepts exactly one of a new prompt, an opaque `handoffId`,
 or `resumeSessionId`.
 Healthy active sessions retain their public handle. A terminal or interrupted

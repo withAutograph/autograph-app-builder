@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { hostedEveOperationScopes } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
 import { createSameOriginEveTransport } from "./same-origin-http";
+import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
 import type { HostedWorkloadIdentity } from "./same-origin-http";
 import {
   SubmissionOutcomeUnknownError,
@@ -87,7 +88,7 @@ function pendingApprovalEvents(requestId: string) {
 }
 
 describe("same-origin canonical Eve transport", () => {
-  it("lets durable session snapshots finish while keeping mutation requests bounded", async () => {
+  it("bounds both durable session reads and mutation requests", async () => {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning fetch test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
       String(url).includes("/stream?") ? stream() : accepted(),
@@ -99,7 +100,7 @@ describe("same-origin canonical Eve transport", () => {
     });
 
     await transport.get({ adapterSessionId: "wrun_1", principal });
-    expect(fetchImplementation.mock.calls[0]?.[1]?.signal).toBeUndefined();
+    expect(fetchImplementation.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
 
     await transport.send({
       adapterSessionId: "wrun_1",
@@ -302,6 +303,144 @@ describe("same-origin canonical Eve transport", () => {
       snapshot: { events: [], status: "working" },
     });
     expect(fetchImplementation).toHaveBeenCalledOnce();
+  });
+
+  it("aborts a stalled durable read and reports a retryable read timeout", async () => {
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+    try {
+      const response = Promise.withResolvers<Response>();
+      const fetchImplementation = vi.fn<typeof fetch>(async (_url, init) => {
+        const signal = init?.signal;
+        expect(signal).toBe(controller.signal);
+        signal?.addEventListener("abort", () => {
+          response.reject(new DOMException("Timed out", "TimeoutError"));
+        });
+        return await response.promise;
+      });
+      const transport = createSameOriginEveTransport({
+        config,
+        fetchImplementation,
+        workloadIdentity: identity(),
+      });
+      const pending = transport.get({ adapterSessionId: "wrun_1", principal });
+      await vi.waitFor(() => {
+        expect(fetchImplementation).toHaveBeenCalledOnce();
+      });
+      controller.abort();
+      await expect(pending).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
+      expect(timeout).toHaveBeenCalledWith(30_000);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
+  it("bounds a stream that sends headers but stalls before its durable tail", async () => {
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+    try {
+      // oxlint-disable-next-line eslint/require-await -- Preserve the fetch promise contract in this test double.
+      const fetchImplementation = vi.fn<typeof fetch>(async (_url, init) => {
+        const body = new ReadableStream<Uint8Array>({
+          start(streamController) {
+            init?.signal?.addEventListener("abort", () => {
+              streamController.error(new DOMException("Timed out", "TimeoutError"));
+            });
+          },
+        });
+        return new Response(body, {
+          headers: {
+            "content-type": "application/x-ndjson",
+            "x-eve-session-id": "wrun_1",
+            "x-eve-stream-format": "ndjson",
+            "x-eve-stream-tail-index": "0",
+            "x-eve-stream-version": "23",
+          },
+          status: 200,
+        });
+      });
+      const transport = createSameOriginEveTransport({
+        config,
+        fetchImplementation,
+        workloadIdentity: identity(),
+      });
+      const pending = transport.get({ adapterSessionId: "wrun_1", principal });
+      await vi.waitFor(() => {
+        expect(fetchImplementation).toHaveBeenCalledOnce();
+      });
+      controller.abort();
+      await expect(pending).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
+  it("returns the complete durable tail even if stream cancellation never settles", async () => {
+    const cancellation = Promise.withResolvers<undefined>();
+    const encoded = new TextEncoder().encode(
+      `${JSON.stringify({ data: {}, meta: { at: 1, id: "evt_1" }, type: "session.waiting" })}\n`,
+    );
+    const fetchImplementation = vi.fn<typeof fetch>(
+      // oxlint-disable-next-line eslint/require-await -- Preserve the fetch promise contract in this test double.
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            async cancel() {
+              await cancellation.promise;
+            },
+            start(controller) {
+              controller.enqueue(encoded);
+            },
+          }),
+          {
+            headers: {
+              "content-type": "application/x-ndjson",
+              "x-eve-session-id": "wrun_1",
+              "x-eve-stream-format": "ndjson",
+              "x-eve-stream-tail-index": "0",
+              "x-eve-stream-version": "23",
+            },
+            status: 200,
+          },
+        ),
+    );
+    const transport = createSameOriginEveTransport({
+      config,
+      fetchImplementation,
+      workloadIdentity: identity(),
+    });
+    await expect(transport.get({ adapterSessionId: "wrun_1", principal })).resolves.toMatchObject({
+      status: "waiting",
+    });
+  });
+
+  it("bounds accepted response settlement so the caller can recover through a read", async () => {
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+    try {
+      // oxlint-disable-next-line eslint/require-await -- Preserve the fetch promise contract in this test double.
+      const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
+        String(url).includes("/stream?") ? stream(pendingApprovalEvents("approval_1")) : accepted(),
+      );
+      const transport = createSameOriginEveTransport({
+        config,
+        fetchImplementation,
+        workloadIdentity: identity(),
+      });
+      const pending = transport.respond({
+        adapterSessionId: "wrun_1",
+        operationId: "op_respond",
+        principal,
+        responses: [{ requestId: "approval_1", response: { kind: "approve" } }],
+      });
+      await vi.waitFor(() => {
+        expect(fetchImplementation).toHaveBeenCalledTimes(2);
+      });
+      controller.abort();
+      await expect(pending).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
+    } finally {
+      timeout.mockRestore();
+    }
   });
 
   it("uses canonical continuation and inputResponses bodies", async () => {
