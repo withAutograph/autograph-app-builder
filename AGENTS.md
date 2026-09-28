@@ -36,6 +36,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   Retain only limits that protect correctness or security, such as tenant
   isolation, one mutating continuation per session, bounded untrusted input,
   authentication abuse protection, and cleanup of stuck processes.
+- Follow [`docs/builder-workload-capacity-policy.md`](docs/builder-workload-capacity-policy.md)
+  before adding or retaining any workload limit. Builder has no arbitrary
+  total cap on valid files, bytes, repositories, artifacts, history, retries,
+  or session lifetime. Bound individual calls only for a named security,
+  correctness, resource, or provider reason, and continue the full workload
+  through streaming, pages, chunks, backpressure, or durable recovery.
 
 ## Iteration and validation
 

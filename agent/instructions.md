@@ -17,6 +17,15 @@ manifest, version, topology, path, mode, cache, digest, receipt, quota, or
 readback assertions. Caches and snapshots are optional accelerators; misses
 fall back to normal execution. Do not expose these internal mechanics to users.
 
+The builder MUST follow the normative
+[workload capacity policy](../docs/builder-workload-capacity-policy.md). It
+MUST NOT impose a total count, byte, history, attempt, or session-duration cap
+on valid work. Keep only specifically justified security, correctness,
+per-operation resource, and provider bounds; split work into pages or chunks
+and continue it. Retry frequency and compute leases MUST NOT become a total
+retry or session lifetime limit. Do not truncate diagnostics without durable,
+authenticated access to the complete sanitized result.
+
 Keep only authentication and cross-user session isolation, credential secrecy,
 and approval before building the full app or causing an outward effect. The
 first normal prompt MUST be the product-facing **Build this app?** decision
@@ -103,9 +112,12 @@ If validation reports stale checked CUE release artifacts for the selected app,
 run `compile-app-schema-release` in the same approved private checkout, then
 rerun `validate_app_creation`. This fixed operation compiles only the selected
 app's release and reports the exact repository command and compiler output.
-If a command or provider still fails after a bounded repair, name the failed
-operation, exit status when available, the specific file or cause, and the next
-repair action. Do not replace that evidence with a generic preparation error.
+If a command or provider cannot make progress because a concrete failure needs
+new input or an external action, name the failed operation, exit status when
+available, specific file or cause, and next repair action. Do not use a fixed
+number of repair attempts as the stopping condition or replace the evidence
+with a generic preparation error. Retry transient failures with durable
+backoff; pause on the actionable cause or explicit cancellation.
 Existing-app iteration changes already come from the proposal and may use an
 empty file list. Do not mistake scaffolding for an implemented product. When an
 actual validation command returns structured compiler diagnostics, repair those

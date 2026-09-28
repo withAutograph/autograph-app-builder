@@ -36,15 +36,19 @@ response.
 `autograph_start` accepts exactly one of a new prompt, an opaque `handoffId`,
 or `resumeSessionId`.
 Healthy active sessions retain their public handle. A terminal or interrupted
-session resumes from a bounded durable checkpoint as a child session, while a
+session resumes from its last durable checkpoint as a child session, while a
 missing adapter for otherwise-active work is fenced by adapter generation before
 the same public handle continues. User-visible sessions do not expire with
 their short-lived compute leases.
 
-The current hosted checkpoint retains a bounded legacy history while the
-[paged checkpoint migration](builder-build-limits-inventory.md) is staged.
-Recovery reports the legacy truncation marker and preserves exact outstanding
-requests; it cannot recover events already discarded by the old writer.
+New hosted checkpoints store the complete public history in tenant-scoped,
+digest-verified pages and publish a versioned manifest only after its chunks
+are durable. Page size bounds one operation, not total history. Older inline
+checkpoints and legacy HTML compatibility paths retain their historical
+ceilings; recovery reports their truncation marker and preserves exact
+outstanding requests. Events already discarded by an older writer cannot be
+reconstructed. See the [limit and recovery inventory](builder-build-limits-inventory.md)
+for the remaining compatibility boundaries.
 
 Hosted authorization advertises the matching `autograph:*` scopes. A caller
 must hold `autograph:session` before the request-scoped tenant service is
