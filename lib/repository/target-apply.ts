@@ -372,7 +372,7 @@ const visit = (directory, relativeDirectory) => {
     // belongs in a source review or a published change set.
     if (
       entry.isDirectory() &&
-      [".git", ".scratch", ".next", ".turbo", "node_modules", "dist", "coverage", "storybook-static", "target"].includes(entry.name)
+      [".git", ".scratch", ".next", ".turbo", "node_modules", "dist", "coverage", "storybook-static", "target", "test-results", "playwright-report", "blob-report"].includes(entry.name)
     ) continue;
     if (entry.isFile() && entry.name === "next-env.d.ts") continue;
     const absolutePath = join(directory, entry.name);
