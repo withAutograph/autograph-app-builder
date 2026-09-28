@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { readdirSync } from "node:fs";
 import { expect, it } from "vitest";
-import { digestProcessStdoutSync } from "./captured-process-output";
+import {
+  digestProcessStdout,
+  digestProcessStdoutSync,
+  processStdoutByteStream,
+} from "./captured-process-output";
 
 it("digests command output above the former capture threshold without retaining it", () => {
   const before = new Set(
@@ -20,4 +24,45 @@ it("digests command output above the former capture threshold without retaining 
     name.startsWith("app-builder-command-digest-"),
   );
   expect(after.filter((name) => !before.has(name))).toEqual([]);
+});
+
+it("streams large command output to a consumer and computes its digest", async () => {
+  const size = 12 * 1024 * 1024;
+  const command = ["-e", `process.stdout.write(Buffer.alloc(${size}, 97))`];
+  const expected = createHash("sha256").update(Buffer.alloc(size, 97)).digest("hex");
+  expect(await digestProcessStdout(process.execPath, command)).toBe(expected);
+
+  const stream = processStdoutByteStream(process.execPath, command);
+  const reader = stream.getReader();
+  const hash = createHash("sha256");
+  let received = 0;
+  for (;;) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- The reader must consume one chunk at a time.
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    received += value.byteLength;
+    hash.update(value);
+  }
+  expect(received).toBe(size);
+  expect(hash.digest("hex")).toBe(expected);
+});
+
+it("rejects failed commands after streaming their output", async () => {
+  const reader = processStdoutByteStream(process.execPath, [
+    "-e",
+    "process.stdout.write('partial'); process.exit(7)",
+  ]).getReader();
+  await expect(
+    (async () => {
+      for (;;) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- The process failure surfaces during stream consumption.
+        const result = await reader.read();
+        if (result.done) {
+          return;
+        }
+      }
+    })(),
+  ).rejects.toThrow(/exited with status 7/u);
 });

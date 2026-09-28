@@ -10,7 +10,13 @@ import type { SandboxSession } from "eve/sandbox";
 import { parse as parseYaml } from "yaml";
 
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
-import { captureProcessStdout, digestProcessStdout } from "./captured-process-output";
+import {
+  captureProcessStdout,
+  digestProcessStdout,
+  digestProcessStdoutSync,
+  processStdoutByteStream,
+  streamProcessStdout,
+} from "./captured-process-output";
 import { safeSourcePath } from "./source-path";
 import { hasTestCapability } from "../testing/test-capability";
 import { runSequentially } from "../async-sequential";
@@ -238,47 +244,54 @@ const git = function git(path: string, args: string[]): string {
     .trim();
 };
 
-const gitBytes = function gitBytes(path: string, args: string[]): Buffer {
-  const executable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
-  return captureProcessStdout(
-    executable,
-    [
-      "-c",
-      "core.hooksPath=/dev/null",
-      "-c",
-      "core.fsmonitor=false",
-      "-c",
-      "core.attributesfile=/dev/null",
-      "-c",
-      "credential.helper=",
-      "-c",
-      "protocol.allow=never",
-      "-C",
-      path,
-      ...args,
-    ],
-    {
-      env: {
-        GIT_ATTR_NOSYSTEM: "1",
-        GIT_CONFIG_GLOBAL: "/dev/null",
-        GIT_CONFIG_NOSYSTEM: "1",
-        GIT_CONFIG_SYSTEM: "/dev/null",
-        GIT_NO_LAZY_FETCH: "1",
-        GIT_TERMINAL_PROMPT: "0",
-        HOME: "/dev/null",
-        LANG: "C.UTF-8",
-        LC_ALL: "C.UTF-8",
-        NODE_ENV: process.env.NODE_ENV ?? "production",
-        PATH: "/usr/bin:/bin",
-        TMPDIR: "/tmp",
-        XDG_CONFIG_HOME: "/dev/null",
-      },
+const gitByteInvocation = (path: string, args: string[]) => ({
+  args: [
+    "-c",
+    "core.hooksPath=/dev/null",
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    "core.attributesfile=/dev/null",
+    "-c",
+    "credential.helper=",
+    "-c",
+    "protocol.allow=never",
+    "-C",
+    path,
+    ...args,
+  ],
+  command: existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git",
+  options: {
+    env: {
+      GIT_ATTR_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_SYSTEM: "/dev/null",
+      GIT_NO_LAZY_FETCH: "1",
+      GIT_TERMINAL_PROMPT: "0",
+      HOME: "/dev/null",
+      LANG: "C.UTF-8",
+      LC_ALL: "C.UTF-8",
+      NODE_ENV: process.env.NODE_ENV ?? "production",
+      PATH: "/usr/bin:/bin",
+      TMPDIR: "/tmp",
+      XDG_CONFIG_HOME: "/dev/null",
     },
-  );
+  },
+});
+
+const gitBytes = function gitBytes(path: string, args: string[]): Buffer {
+  const command = gitByteInvocation(path, args);
+  return captureProcessStdout(command.command, command.args, command.options);
+};
+
+const gitStream = (path: string, args: string[]): AsyncGenerator<Uint8Array> => {
+  const command = gitByteInvocation(path, args);
+  return streamProcessStdout(command.command, command.args, command.options);
 };
 
 const gitNulRecords = async function* gitNulRecords(
-  stream: NodeJS.ReadableStream & AsyncIterable<Uint8Array>,
+  stream: AsyncIterable<Uint8Array>,
 ): AsyncGenerator<string> {
   let pending = Buffer.alloc(0);
   for await (const chunk of stream) {
@@ -317,7 +330,10 @@ export const inspectSupportedTemplateDependencyClosure =
         mode: match.groups.mode as DependencyFile["mode"],
         objectId: match.groups.objectId,
         path,
-        sha256: sha256(gitBytes(repositoryRoot, ["show", `${resolvedCommit}:${path}`])),
+        sha256: (() => {
+          const command = gitByteInvocation(repositoryRoot, ["show", `${resolvedCommit}:${path}`]);
+          return digestProcessStdoutSync(command.command, command.args, command.options);
+        })(),
       };
     });
     return {
@@ -1376,15 +1392,14 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
       sourceFiles.map(({ path }) => `repository/${path.split("/").slice(0, -1).join("/")}`),
     );
     for (const entry of sourceFiles) {
+      const command = gitByteInvocation(eligibility.sourcePath, [
+        "cat-file",
+        "blob",
+        entry.objectId,
+      ]);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await sandbox.writeBinaryFile({
-        content: captureProcessStdout("git", [
-          "-C",
-          eligibility.sourcePath,
-          "cat-file",
-          "blob",
-          entry.objectId,
-        ]),
+      await sandbox.writeFile({
+        content: processStdoutByteStream(command.command, command.args, command.options),
         path: `repository/${entry.path}`,
       });
     }
@@ -1487,30 +1502,25 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
   const sourceSha = git(sourcePath, ["rev-parse", "HEAD"]);
   const eligibilityDigest = sha256(sourceSha);
 
-  const names = gitBytes(sourcePath, [
-    "ls-files",
-    "-z",
-    "--cached",
-    "--others",
-    "--exclude-standard",
-  ])
-    .toString("utf-8")
-    .split("\0")
-    .filter(Boolean)
-    .toSorted()
-    .filter((path) => {
-      if (!safeSourcePath(path)) {
-        throw new Error("The development source contains an unsafe path.");
-      }
-      const absolutePath = nodePath.resolve(sourcePath, path);
-      if (!within(sourcePath, absolutePath)) {
-        throw new Error("The development source escapes its root.");
-      }
-      // `git ls-files --cached` keeps a deleted tracked path until it is
-      // staged. Development follows the working tree, so that path is a
-      // managed deletion rather than a failed source snapshot.
-      return existsSync(absolutePath);
-    });
+  const listedNames: string[] = [];
+  for await (const name of gitNulRecords(
+    gitStream(sourcePath, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]),
+  )) {
+    listedNames.push(name);
+  }
+  const names = listedNames.toSorted().filter((path) => {
+    if (!safeSourcePath(path)) {
+      throw new Error("The development source contains an unsafe path.");
+    }
+    const absolutePath = nodePath.resolve(sourcePath, path);
+    if (!within(sourcePath, absolutePath)) {
+      throw new Error("The development source escapes its root.");
+    }
+    // `git ls-files --cached` keeps a deleted tracked path until it is
+    // staged. Development follows the working tree, so that path is a
+    // managed deletion rather than a failed source snapshot.
+    return existsSync(absolutePath);
+  });
   const sourceFiles: PreparedSourceFile[] = [];
   for (const path of names) {
     const absolutePath = nodePath.resolve(sourcePath, path);
