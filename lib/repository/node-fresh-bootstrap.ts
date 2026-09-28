@@ -1,13 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
-import { spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   closeSync,
   constants as fsConstants,
+  createReadStream,
   existsSync,
   mkdtempSync,
   openSync,
   readFileSync,
   rmSync,
+  writeSync,
 } from "node:fs";
 import {
   chmod,
@@ -57,7 +59,7 @@ import { inspectSourceReceipt, parseSourceReceipt, SOURCE_RECEIPT_VERSION } from
 import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import type { PreparedSourceFile } from "./supported-template";
-import { captureProcessStdout, digestProcessStdoutSync } from "./captured-process-output";
+import { captureProcessStdout, digestProcessStdout } from "./captured-process-output";
 
 export interface FreshBootstrapFaultHooks {
   afterLockReady?: (pid: number) => void | Promise<void>;
@@ -261,13 +263,6 @@ const gitBuffer = (
     env: minimalEnvironment(),
   });
 
-const gitBlobDigest = (capability: FreshBootstrapCapability, root: string, blob: string): string =>
-  digestProcessStdoutSync(
-    capability.systemGit,
-    [...gitOptions, "-C", root, "cat-file", "blob", blob],
-    { env: minimalEnvironment() },
-  );
-
 const within = (root: string, candidate: string): boolean => {
   const relativePath = nodePath.relative(root, candidate);
   return (
@@ -324,6 +319,21 @@ const assertExactIdentity = async (
   }
 };
 
+export const hashBootstrapFile = async (
+  path: string,
+  prefix = "",
+  algorithm: "sha1" | "sha256" = "sha256",
+) => {
+  const hash = createHash(algorithm).update(prefix);
+  for await (const chunk of createReadStream(path)) {
+    if (!(chunk instanceof Uint8Array)) {
+      throw new Error("Bootstrap file reader returned non-byte content.");
+    }
+    hash.update(chunk);
+  }
+  return hash.digest("hex");
+};
+
 const executableIdentity = async (path: string): Promise<ExecutableIdentity> => {
   const canonical = await realpath(path);
   const value = await lstat(canonical);
@@ -337,9 +347,7 @@ const executableIdentity = async (path: string): Promise<ExecutableIdentity> => 
     mode: (value.mode & 0o777).toString(8),
     nlink: String(value.nlink),
     path: canonical,
-    sha256: createHash("sha256")
-      .update(await readFile(canonical))
-      .digest("hex"),
+    sha256: await hashBootstrapFile(canonical),
     uid: String(value.uid),
   };
 };
@@ -925,11 +933,11 @@ const sanitizeMaterializationDiagnostic = (value: string): string =>
     .replaceAll(/\s+/gu, " ")
     .trim();
 
-const exactSourceTree = (
+const exactSourceTree = async (
   capability: FreshBootstrapCapability,
   sourcePath: string,
   sourceSha: string,
-): ExactFile[] => {
+): Promise<ExactFile[]> => {
   const output = gitBuffer(capability, sourcePath, [
     "ls-tree",
     "-r",
@@ -962,7 +970,12 @@ const exactSourceTree = (
         "Fresh bootstrap rejects submodules, symlinks, reserved names, and unsafe paths.",
       );
     }
-    const digest = gitBlobDigest(capability, sourcePath, blob);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Verify each blob before adding its receipt.
+    const digest = await digestProcessStdout(
+      capability.systemGit,
+      [...gitOptions, "-C", sourcePath, "cat-file", "blob", blob],
+      { env: minimalEnvironment() },
+    );
     files.push({
       blob,
       contentSha256: digest,
@@ -1060,7 +1073,7 @@ const exactResultTree = async (input: {
     }
     sourceFiles = await exactPreparedSourceTree(sourceWorkspace);
   } else {
-    sourceFiles = exactSourceTree(input.capability, receipt.sourcePath, receipt.sourceSha);
+    sourceFiles = await exactSourceTree(input.capability, receipt.sourcePath, receipt.sourceSha);
   }
   const files = new Map(sourceFiles.map((file) => [file.path, file]));
   for (const change of input.review.changes) {
@@ -1651,29 +1664,46 @@ const initializeGit = async (input: {
     throw new Error("The fresh repository did not use files ref format.");
   }
   await input.hooks?.beforeGitAdd?.();
-  const indexRecords: Buffer[] = [];
-  for (const file of input.files) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Read, verify, and add one source blob at a time.
-    const bytes = await file.readBytes();
-    const observed = git(
-      input.capability,
-      input.proposal.stagingPath,
-      ["hash-object", "-w", "--stdin"],
-      undefined,
-      bytes,
-    ).trim();
-    if (observed !== file.blob) {
-      throw new Error(`Git blob identity changed at ${file.path}.`);
+  const indexDirectory = mkdtempSync(nodePath.join(tmpdir(), "app-builder-git-index-"));
+  const indexPath = nodePath.join(indexDirectory, "records");
+  try {
+    const outputFd = openSync(indexPath, "w", 0o600);
+    try {
+      for (const file of input.files) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Read, verify, and add one source blob at a time.
+        const bytes = await file.readBytes();
+        const observed = git(
+          input.capability,
+          input.proposal.stagingPath,
+          ["hash-object", "-w", "--stdin"],
+          undefined,
+          bytes,
+        ).trim();
+        if (observed !== file.blob) {
+          throw new Error(`Git blob identity changed at ${file.path}.`);
+        }
+        const record = Buffer.from(`${file.mode} ${file.blob}\t${file.path}\0`);
+        let written = 0;
+        while (written < record.byteLength) {
+          written += writeSync(outputFd, record, written, record.byteLength - written);
+        }
+      }
+    } finally {
+      closeSync(outputFd);
     }
-    indexRecords.push(Buffer.from(`${file.mode} ${file.blob}\t${file.path}\0`));
+    const inputFd = openSync(indexPath, "r");
+    try {
+      execFileSync(
+        input.capability.systemGit,
+        [...gitOptions, "-C", input.proposal.stagingPath, "update-index", "-z", "--index-info"],
+        { env: minimalEnvironment(), stdio: [inputFd, "ignore", "inherit"] },
+      );
+    } finally {
+      closeSync(inputFd);
+    }
+  } finally {
+    rmSync(indexDirectory, { force: true, recursive: true });
   }
-  git(
-    input.capability,
-    input.proposal.stagingPath,
-    ["update-index", "-z", "--index-info"],
-    undefined,
-    Buffer.concat(indexRecords),
-  );
   await input.hooks?.afterGitAdd?.();
   const tree = git(input.capability, input.proposal.stagingPath, ["write-tree"]).trim();
   if (tree !== input.proposal.expectedGitTree) {
@@ -1762,14 +1792,14 @@ const rawWorktreeManifest = async (
         throw new Error("The fresh repository contains a special raw entry.");
       }
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const bytes = await readFile(absolute);
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       const exactMode = (state.mode & 0o777).toString(8);
       if (exactMode !== "644" && exactMode !== "755") {
         throw new Error("The fresh repository contains a file with an unexpected mode.");
       }
       output.push({
-        blob: blobId(bytes),
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Hash files sequentially against their observed stat size.
+        blob: await hashBootstrapFile(absolute, `blob ${state.size}\0`, "sha1"),
         // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
         mode: (state.mode & 0o111) === 0 ? "100644" : "100755",
         path,
