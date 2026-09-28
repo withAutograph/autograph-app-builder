@@ -9,6 +9,7 @@ import {
   recordPrototypeArtifactBundle,
   recordPrototypeArtifactChunk,
   recordPrototypeArtifactRevision,
+  shouldRecordHostedPrototypeDurably,
 } from "./prototype-artifacts";
 import { sha256 } from "./workflow-state";
 
@@ -28,6 +29,23 @@ function record(input: Partial<Parameters<typeof recordPrototypeArtifactRevision
 }
 
 describe("prototype artifact receipts", () => {
+  it("uses v2 for new hosted single-call HTML while preserving identical v1 retries", () => {
+    const content = "<main>Review</main>";
+    const path = "prototype/expense-review/index.html";
+    const common = { content, hosted: true, mediaType: "text/html" as const, path };
+    expect(shouldRecordHostedPrototypeDurably(common)).toBe(true);
+    const prior = record({ content, mediaType: "text/html", path }).artifact;
+    expect(shouldRecordHostedPrototypeDurably({ ...common, existing: prior })).toBe(false);
+    expect(
+      shouldRecordHostedPrototypeDurably({
+        ...common,
+        content: "<main>Changed</main>",
+        existing: prior,
+      }),
+    ).toBe(true);
+    expect(shouldRecordHostedPrototypeDurably({ ...common, hosted: false })).toBe(false);
+  });
+
   it("allows only the three exact files below one kebab-case app id", () => {
     expect(parsePrototypeArtifactPath("prototype/expense-review/app-spec.md")).toEqual({
       appId: "expense-review",

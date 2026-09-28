@@ -32,6 +32,26 @@ export const isPrototypeArtifactV2 = (
   artifact: StoredPrototypeArtifact,
 ): artifact is Extract<StoredPrototypeArtifact, { version: 2 }> => artifact.version === 2;
 
+/** A v1 completed single-call retry keeps its original receipt and checkpoint shape. */
+export const shouldRecordHostedPrototypeDurably = (input: {
+  hosted: boolean;
+  mediaType: PrototypeArtifactMediaType;
+  path: string;
+  content: string;
+  expectedDigest?: string;
+  existing?: StoredPrototypeArtifact;
+}): boolean => {
+  if (!input.hosted || (input.mediaType !== "text/html" && !input.path.endsWith("/decisions.md"))) {
+    return false;
+  }
+  return !(
+    input.expectedDigest === undefined &&
+    input.existing !== undefined &&
+    !isPrototypeArtifactV2(input.existing) &&
+    input.existing.digest === sha256(input.content)
+  );
+};
+
 interface PrototypeArtifactChunkInput {
   artifacts: readonly StoredPrototypeArtifact[];
   path: string;

@@ -35,6 +35,27 @@ const memoryStore = (): DurablePrototypeChunkStore => {
 };
 
 describe("durable v2 prototype tool writer", () => {
+  it("records one HTML tool payload as a complete durable artifact", async () => {
+    const content = "<main>Single call</main>";
+    const result = await recordDurablePrototypeChunk({
+      appId: "spend-review",
+      callId: "single-call",
+      chunkIndex: 0,
+      content,
+      expectedDigest: digest(content),
+      finalChunk: true,
+      mediaType: "text/html",
+      path: "prototype/spend-review/index.html",
+      sessionId: "session-1",
+      store: memoryStore(),
+    });
+    expect(result).toMatchObject({
+      artifact: { chunkCount: 1, digest: digest(content), version: 2 },
+      complete: true,
+    });
+    expect(durablePrototypeToolReceipt(result)).not.toHaveProperty("content");
+  });
+
   it("records Markdown decisions without retaining their content in workflow state", async () => {
     const content = "# Decisions\n\nUse a synthetic local-only review queue.\n";
     const result = await recordDurablePrototypeChunk({

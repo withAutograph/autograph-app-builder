@@ -9,6 +9,7 @@ import {
   recordPrototypeArtifactChunk,
   recordPrototypeArtifactRevision,
   isPrototypeArtifactV2,
+  shouldRecordHostedPrototypeDurably,
 } from "@/lib/agent/prototype-artifacts";
 import {
   durablePrototypeToolReceipt,
@@ -21,6 +22,7 @@ import {
   APP_BUILDER_WORKFLOW_VERSION,
   appBuilderWorkflowState,
   assertUpstreamMutationAllowed,
+  sha256,
   updateExactWorkflow,
 } from "@/lib/agent/workflow-state";
 
@@ -49,13 +51,20 @@ export default defineTool({
         `Target validation attempt ${current.validationAttempt.digest} is pending; artifact mutation is disabled until it is recovered.`,
       );
     }
+    const existing = current.artifacts.find((artifact) => artifact.path === path);
+    const singleCallDigest = expectedDigest === undefined ? sha256(content) : undefined;
     // Hosted HTML and design-decision artifacts use durable chunks after the additive migration is verified.
     if (
-      process.env.EVE_HOSTED_ADAPTER === "1" &&
-      (mediaType === "text/html" || path.endsWith("/decisions.md")) &&
-      expectedDigest !== undefined
+      shouldRecordHostedPrototypeDurably({
+        content,
+        existing,
+        expectedDigest,
+        hosted: process.env.EVE_HOSTED_ADAPTER === "1",
+        mediaType,
+        path,
+      })
     ) {
-      if (chunkIndex === undefined || finalChunk === undefined) {
+      if (expectedDigest !== undefined && (chunkIndex === undefined || finalChunk === undefined)) {
         throw new Error("Durable prototype writes require chunkIndex and finalChunk.");
       }
       const appId = path.split("/")[1] ?? "";
@@ -68,18 +77,17 @@ export default defineTool({
       ) {
         throw new Error("The durable prototype artifact does not match this workflow or session.");
       }
-      const existing = current.artifacts.find((artifact) => artifact.path === path);
       const db = openHostedPostgresDatabase(process.env.DATABASE_URL ?? "");
       await assertPrototypeChunkSchemaReady(db);
       const recorded = await recordDurablePrototypeChunk({
         appId,
         ...(baseRevision === undefined ? {} : { baseRevision }),
         callId: ctx.callId,
-        chunkIndex,
+        chunkIndex: chunkIndex ?? 0,
         content,
         ...(existing && isPrototypeArtifactV2(existing) ? { current: existing } : {}),
-        expectedDigest,
-        finalChunk,
+        expectedDigest: expectedDigest ?? singleCallDigest ?? "",
+        finalChunk: finalChunk ?? true,
         mediaType,
         path,
         sessionId: ctx.session.id,
