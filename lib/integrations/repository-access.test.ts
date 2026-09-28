@@ -4,7 +4,11 @@ import type {
   HostedGitHubInstallationBinding,
   HostedGitHubInstallationStore,
 } from "../repository/postgres-github-installation-store";
-import { classifyGitHubRepositoryAccess, parseRepositoryReference } from "./repository-access";
+import {
+  classifyGitHubRepositoryAccess,
+  classifyGitHubRepositoryAccessWithTargetProof,
+  parseRepositoryReference,
+} from "./repository-access";
 import type { GitHubRepositoryAccessProvider } from "./repository-access";
 
 const authority = {
@@ -81,6 +85,38 @@ function provider(
 }
 
 describe("tenant-bound GitHub repository access", () => {
+  it("classifies target access without fetching a 10,000-repository installation inventory", async () => {
+    const connected = binding("10");
+    const legacy = provider(connected, "200");
+    const result = await classifyGitHubRepositoryAccessWithTargetProof({
+      authority,
+      installations: store([connected]),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      providerFactory: async () => ({
+        ...legacy,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        async inspectInstallation() {
+          throw new Error("unexpected full installation inventory");
+        },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        async inspectTargetAccess({ requestedPermissions }) {
+          return {
+            accountId: connected.accountId,
+            accountLogin: connected.accountLogin,
+            accountType: connected.accountType,
+            installationId: connected.installationId,
+            permissions: requestedPermissions,
+            repositoryId: "200",
+          };
+        },
+      }),
+      repository: "withAutograph/app-builder-dogfood",
+    });
+    expect(result.status).toBe("ready");
+    if (result.status === "ready") {
+      expect(result.targetProof?.repositoryId).toBe("200");
+    }
+  });
   it("accepts provider-proven selections above 10,000 repositories", async () => {
     const connected = binding("10");
     const selectedRepositoryIds = Array.from({ length: 10_001 }, (_, index) => String(index + 1));

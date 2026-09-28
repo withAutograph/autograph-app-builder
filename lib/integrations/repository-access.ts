@@ -4,6 +4,10 @@ import { z } from "zod";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { mergeHostedGitHubInstallationBindings } from "../repository/postgres-github-installation-store";
+import { createGitHubTargetAccessAdapter } from "../repository/github-app-adapter";
+import type { GitHubTargetAccessProvider } from "../repository/github-app-adapter";
+import { githubTargetAccessProofSchema } from "../repository/github-target-access-proof";
+import type { GitHubTargetAccessProof } from "../repository/github-target-access-proof";
 import type {
   HostedGitHubInstallationBinding,
   HostedGitHubInstallationStore,
@@ -110,6 +114,7 @@ export const repositoryAccessResultSchema = z.discriminatedUnion("status", [
       repository: repositoryAccessSnapshotSchema,
       scope: scopeSchema,
       status: z.literal("ready"),
+      targetProof: githubTargetAccessProofSchema.optional(),
     })
     .strict(),
   z
@@ -138,12 +143,22 @@ export const repositoryAccessResultSchema = z.discriminatedUnion("status", [
 export type RepositoryAccessResult = z.infer<typeof repositoryAccessResultSchema>;
 export type ReadyRepositoryAccess = Extract<RepositoryAccessResult, { status: "ready" }>;
 
+const exactTargetBinding = (
+  binding: HostedGitHubInstallationBinding,
+  proof: GitHubTargetAccessProof,
+) =>
+  proof.installationId === binding.installationId &&
+  proof.accountId === binding.accountId &&
+  proof.accountLogin === binding.accountLogin &&
+  proof.accountType === binding.accountType;
+
 export interface GitHubRepositoryAccessProvider {
   inspectInstallation: (input: {
     operation: "resolve-existing-source";
     requestedPermissions: z.infer<typeof readPermissionsSchema>;
   }) => Promise<unknown>;
   inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown | undefined>;
+  inspectTargetAccess?: GitHubTargetAccessProvider["inspectTargetAccess"];
 }
 
 export type GitHubRepositoryAccessProviderFactory = (input: {
@@ -302,6 +317,108 @@ export async function classifyGitHubRepositoryAccess(input: {
     action: "update",
     repository,
     scopes: publicScopes,
+    status: "authorization-required",
+  });
+}
+
+/** Target-scoped path for providers that can verify one repository without an installation inventory. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export async function classifyGitHubRepositoryAccessWithTargetProof(input: {
+  authority: HostedGitHubTenantAuthority;
+  repository: string;
+  selectedInstallationId?: string;
+  installations: HostedGitHubInstallationStore;
+  providerFactory: GitHubRepositoryAccessProviderFactory;
+}): Promise<RepositoryAccessResult> {
+  const authority = hostedTenantAuthoritySchema.parse(input.authority);
+  const repository = parseRepositoryReference(input.repository);
+  const selectedInstallationId = input.selectedInstallationId
+    ? decimal.parse(input.selectedInstallationId)
+    : undefined;
+  const listed = (await input.installations.list?.(authority)) ?? [];
+  const legacy = await input.installations.read(authority);
+  const allActive = mergeHostedGitHubInstallationBindings(listed, legacy).filter(
+    (binding) => binding.active,
+  );
+  const active = allActive.filter(
+    (binding) =>
+      selectedInstallationId === undefined || binding.installationId === selectedInstallationId,
+  );
+  if (active.length === 0) {
+    return repositoryAccessResultSchema.parse({
+      action: allActive.length > 0 ? "update" : "connect",
+      repository,
+      scopes: [],
+      status: "authorization-required",
+    });
+  }
+  const matches: ReadyRepositoryAccess[] = [];
+  let providerFailures = 0;
+  for (const binding of active) {
+    try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Provider authority is checked sequentially for each installation.
+      const provider = await input.providerFactory({ authority, installation: binding });
+      if (!provider.inspectTargetAccess) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- compatibility fallback rechecks the whole installation.
+        return await classifyGitHubRepositoryAccess(input);
+      }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- The target id comes from the provider read.
+      const candidate = await provider.inspectRepositoryByName(repository);
+      if (candidate === undefined) {
+        continue;
+      }
+      const snapshot = repositoryAccessSnapshotSchema.parse(candidate);
+      if (
+        snapshot.owner.toLowerCase() !== repository.owner.toLowerCase() ||
+        snapshot.name.toLowerCase() !== repository.name.toLowerCase()
+      ) {
+        providerFailures += 1;
+        continue;
+      }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- The target proof follows this exact provider observation.
+      const proof = await createGitHubTargetAccessAdapter(
+        { inspectTargetAccess: provider.inspectTargetAccess },
+        authority,
+      ).inspectTargetAccess("resolve-existing-source", snapshot.repositoryId);
+      if (!exactTargetBinding(binding, proof)) {
+        providerFailures += 1;
+        continue;
+      }
+      const selectedScope = scope(binding);
+      const parsed = repositoryAccessResultSchema.options[0].parse({
+        accessDigest: sha256({
+          authority,
+          proofDigest: proof.digest,
+          repository: snapshot,
+          scope: selectedScope,
+        }),
+        repository: snapshot,
+        scope: selectedScope,
+        status: "ready",
+        targetProof: proof,
+      });
+      matches.push(parsed);
+    } catch {
+      providerFailures += 1;
+    }
+  }
+  if (matches.length > 1 && selectedInstallationId === undefined) {
+    return repositoryAccessResultSchema.parse({
+      repository,
+      scopes: matches.map((match) => match.scope),
+      status: "scope-selection-required",
+    });
+  }
+  if (matches[0]) {
+    return matches[0];
+  }
+  if (providerFailures === active.length) {
+    return repositoryAccessResultSchema.parse({ repository, status: "provider-unavailable" });
+  }
+  return repositoryAccessResultSchema.parse({
+    action: "update",
+    repository,
+    scopes: active.map(scope),
     status: "authorization-required",
   });
 }
