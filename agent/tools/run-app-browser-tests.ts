@@ -36,7 +36,7 @@ export const runAppBrowserTests = async (input: {
 }) => {
   const command = appBrowserTestCommand(input.appId);
   try {
-    const result =
+    let result =
       input.signal === undefined
         ? await input.sandbox.run({ command, workingDirectory: input.root })
         : await input.sandbox.run({
@@ -44,6 +44,31 @@ export const runAppBrowserTests = async (input: {
             command,
             workingDirectory: input.root,
           });
+    if (
+      result.exitCode !== 0 &&
+      /error while loading shared libraries: [A-Za-z0-9_.+-]+\.so/iu.test(
+        `${result.stderr}\n${result.stdout}`,
+      )
+    ) {
+      const dependencyCommand =
+        'sudo env PATH="$PATH" ./node_modules/.bin/playwright install-deps chromium';
+      const dependencies = await input.sandbox.run({
+        command: dependencyCommand,
+        workingDirectory: input.root,
+      });
+      if (dependencies.exitCode !== 0) {
+        return {
+          command: dependencyCommand,
+          exitCode: dependencies.exitCode,
+          problem:
+            "Chromium could not start because a system library is missing, and Playwright could not install its Linux dependencies. Check package manager access in the private sandbox, then rerun the browser task.",
+          status: "failed" as const,
+          stderr: safeOutput(dependencies.stderr),
+          stdout: safeOutput(dependencies.stdout),
+        };
+      }
+      result = await input.sandbox.run({ command, workingDirectory: input.root });
+    }
     const stdout = safeOutput(result.stdout);
     const stderr = safeOutput(result.stderr);
     if (result.exitCode !== 0) {

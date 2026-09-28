@@ -41,6 +41,35 @@ describe("private app browser tests", () => {
     expect(JSON.stringify(result)).not.toContain("secret");
   });
 
+  it("repairs missing Chromium libraries once and reruns the browser journey", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stderr: "error while loading shared libraries: libglib-2.0.so.0",
+        stdout: "",
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "installed" })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "4 passed" });
+    const result = await runAppBrowserTests({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run },
+    });
+    expect(run).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ command: "mise run --skip-tools //apps/spend-review:test-e2e" }),
+    );
+    expect(run).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        command: 'sudo env PATH="$PATH" ./node_modules/.bin/playwright install-deps chromium',
+      }),
+    );
+    expect(run).toHaveBeenCalledTimes(3);
+    expect(result).toMatchObject({ status: "passed", stdout: "4 passed" });
+  });
+
   it("names sandbox command failures", async () => {
     const result = await runAppBrowserTests({
       appId: "spend-review",

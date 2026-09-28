@@ -41,6 +41,50 @@ describe("private local preview setup", () => {
     expect(JSON.stringify(result)).not.toContain("secret");
   });
 
+  it("installs the repository-pinned PostgreSQL tool when initdb is absent", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "error: initdb failed", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "installed" })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "setup complete" });
+    const result = await prepareAppLocalPreview({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run },
+    });
+    expect(run).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ command: "mise run --skip-tools app:local -- spend-review setup" }),
+    );
+    expect(run).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ command: "command -v initdb" }),
+    );
+    expect(run).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ command: "mise install conda:postgresql" }),
+    );
+    expect(run).toHaveBeenCalledTimes(4);
+    expect(result).toMatchObject({ status: "prepared", stdout: "setup complete" });
+  });
+
+  it("reports why PostgreSQL installation could not complete", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "error: initdb failed", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 2, stderr: "conda backend unavailable", stdout: "" });
+    const result = await prepareAppLocalPreview({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run },
+    });
+    expect(result).toMatchObject({ exitCode: 2, status: "failed" });
+    expect(result.problem).toContain("mise's conda backend");
+    expect(result.stderr).toContain("conda backend unavailable");
+  });
+
   it("reports command-provider errors with a recovery action", async () => {
     const result = await prepareAppLocalPreview({
       appId: "spend-review",
