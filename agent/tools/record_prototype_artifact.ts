@@ -49,10 +49,10 @@ export default defineTool({
         `Target validation attempt ${current.validationAttempt.digest} is pending; artifact mutation is disabled until it is recovered.`,
       );
     }
-    // Hosted HTML artifacts use durable chunks after the additive migration is verified.
+    // Hosted HTML and design-decision artifacts use durable chunks after the additive migration is verified.
     if (
       process.env.EVE_HOSTED_ADAPTER === "1" &&
-      mediaType === "text/html" &&
+      (mediaType === "text/html" || path.endsWith("/decisions.md")) &&
       expectedDigest !== undefined
     ) {
       if (chunkIndex === undefined || finalChunk === undefined) {
