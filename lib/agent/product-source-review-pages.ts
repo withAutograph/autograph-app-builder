@@ -22,22 +22,15 @@ interface ProductReviewPageSource {
 export const readProductReviewSourcePages = (input: {
   sandbox: Pick<SandboxSession, "readFile">;
   applyRoot: string;
-  appId: string;
   observed: OverlaySnapshot;
   changedPaths: string[];
 }): ProductReviewPageSource => {
   const omissions = [
-    "Source selection covers app files, changed files and root manifests; imports into unchanged shared/dependency implementations are not traversed and cannot establish absence of functionality.",
+    "Source selection covers files changed in the current checkout; unchanged app files and imported dependencies are not traversed and cannot establish absence of functionality.",
     "Only original request text and textual clarifications are retained; attached assets are not reviewed.",
   ];
-  const prefix = `apps/${input.appId}/`;
   const changedPaths = new Set(input.changedPaths);
-  const selected = input.observed.files.filter(
-    (file) =>
-      file.path.startsWith(prefix) ||
-      changedPaths.has(file.path) ||
-      ["package.json", "tsconfig.json"].includes(file.path),
-  );
+  const selected = input.observed.files.filter((file) => changedPaths.has(file.path));
   const pages = async function* pages(): AsyncGenerator<ProductReviewSourcePage> {
     for (const file of selected) {
       if (

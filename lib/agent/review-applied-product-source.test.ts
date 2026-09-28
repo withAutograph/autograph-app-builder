@@ -1,6 +1,9 @@
 /* oxlint-disable eslint/require-await -- Faithful asynchronous observation and judge test doubles. */
 import { expect, it, vi } from "vitest";
-import { reviewObservedProductSource } from "./review-applied-product-source";
+import {
+  currentChangedSourcePaths,
+  reviewObservedProductSource,
+} from "./review-applied-product-source";
 import { unavailableSourceAssessment } from "./product-source-review";
 
 const reviewInput = {
@@ -15,6 +18,23 @@ const reviewInput = {
 const observe = async () => ({
   currentDigest: async () => "observed",
   source: { files: [], omissions: ["No behavior inferred"], sourceDigest: "observed" },
+});
+it("includes a validation repair absent from the original apply path list", () => {
+  const receipt = {
+    preTree: [{ digest: "old", mode: "644", path: "apps/example/page.tsx" }],
+    preTreeDigest: "before",
+  };
+  const observed = {
+    files: [
+      { digest: "new", mode: "644", path: "apps/example/page.tsx" },
+      { digest: "added", mode: "644", path: "apps/example/error.tsx" },
+    ],
+    treeDigest: "after",
+  };
+  expect(currentChangedSourcePaths(receipt, observed)).toEqual([
+    "apps/example/error.tsx",
+    "apps/example/page.tsx",
+  ]);
 });
 it("binds original requirements and actual source to the shared cached reviewer", async () => {
   const review = vi.fn(async () => unavailableSourceAssessment(reviewInput, "test"));

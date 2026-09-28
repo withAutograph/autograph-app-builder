@@ -5,7 +5,8 @@ import {
   retainCurrentProductSourceAssessment,
 } from "@/lib/agent/product-source-review-state";
 import { readProductReviewSourcePages } from "@/lib/agent/product-source-review-pages";
-import { inspectApplyOverlay } from "@/lib/repository/target-apply";
+import { inspectApplyOverlay, overlayChanges } from "@/lib/repository/target-apply";
+import type { OverlaySnapshot } from "@/lib/repository/target-apply";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import {
   assessProductSourcePages,
@@ -23,6 +24,15 @@ export interface AppliedSourceObservation {
   source: Pick<ProductSourceReviewInput, "files" | "omissions" | "sourceDigest">;
   currentDigest: () => Promise<string>;
 }
+
+/** Validation repairs may change files beyond the original apply proposal. */
+export const currentChangedSourcePaths = (
+  receipt: Pick<TargetApplyReceipt, "preTree" | "preTreeDigest">,
+  observed: OverlaySnapshot,
+): string[] =>
+  overlayChanges({ files: receipt.preTree, treeDigest: receipt.preTreeDigest }, observed).flatMap(
+    (change) => (change.kind === "deleted" ? [] : [change.path]),
+  );
 
 /** Observe and assess through the same boundary for validation and review. */
 export const reviewObservedProductSource = async (
@@ -115,9 +125,8 @@ export const reviewAppliedProductSource = async (input: {
       );
     }
     const source = readProductReviewSourcePages({
-      appId: input.appSpec.appId,
       applyRoot: input.applyReceipt.applyRoot,
-      changedPaths: input.applyReceipt.changes.map((change) => change.path),
+      changedPaths: currentChangedSourcePaths(input.applyReceipt, observed),
       observed,
       sandbox,
     });
