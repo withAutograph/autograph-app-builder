@@ -1,4 +1,5 @@
 import {
+  currentProductSourceAssessment,
   productRequestState,
   reviewCurrentProductSource,
   retainCurrentProductSourceAssessment,
@@ -100,6 +101,19 @@ export const reviewAppliedProductSource = async (input: {
     input.abortSignal?.throwIfAborted();
     const sandbox = await input.getSandbox();
     const observed = await inspectApplyOverlay(sandbox, input.applyReceipt.applyRoot);
+    const currentInput = { ...reviewInput, sourceDigest: observed.treeDigest };
+    const retained = currentProductSourceAssessment(currentInput);
+    if (retained !== undefined) {
+      const latest = await inspectApplyOverlay(sandbox, input.applyReceipt.applyRoot);
+      if (latest.treeDigest === observed.treeDigest) {
+        input.abortSignal?.throwIfAborted();
+        return retained;
+      }
+      return unavailableSourceAssessment(
+        currentInput,
+        "Source changed during review; this assessment is stale. Review the current implementation when ready.",
+      );
+    }
     const source = readProductReviewSourcePages({
       appId: input.appSpec.appId,
       applyRoot: input.applyReceipt.applyRoot,
@@ -107,19 +121,15 @@ export const reviewAppliedProductSource = async (input: {
       observed,
       sandbox,
     });
-    const currentInput = {
-      ...reviewInput,
-      omissions: source.omissions,
-      sourceDigest: observed.treeDigest,
-    };
-    const assessment = await assessProductSourcePages(currentInput, source.pages, {
+    const assessedInput = { ...currentInput, omissions: source.omissions };
+    const assessment = await assessProductSourcePages(assessedInput, source.pages, {
       abortSignal: input.abortSignal,
     });
     input.abortSignal?.throwIfAborted();
     const latest = await inspectApplyOverlay(sandbox, input.applyReceipt.applyRoot);
     if (latest.treeDigest !== observed.treeDigest) {
       return unavailableSourceAssessment(
-        currentInput,
+        assessedInput,
         "Source changed during review; this assessment is stale. Review the current implementation when ready.",
       );
     }
