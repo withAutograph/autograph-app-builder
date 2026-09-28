@@ -54,8 +54,12 @@ outward-effect rule.
 
 The default hosted GitHub connection, existing-source, and publication source
 flows use a provider-verified target proof, so they do not enumerate every
-selected repository. Legacy provider adapters and v2 receipts retain their
-full-inventory compatibility path. The emulated test harness also retains v2.
+selected repository. Legacy v2 publication proposals and receipts bind the
+digest of the complete selected-repository inventory. The provider adapter
+deduplicates IDs as pages arrive, but those v2 authority and readback contracts
+still retain the full list in memory. Replacing them requires versioned
+publication proposals, journal and receipt validation, readback, and existing
+draft update support. The emulated test harness also retains v2.
 
 Large hosted HTML and UI-preview content uses the v2 writer, public reference,
 tool readback, and authenticated Browser route. The v1 compatibility projector
@@ -63,19 +67,17 @@ now consumes events incrementally, but retains the complete HTML required by
 its public result. Its bounded checkpoint remains necessary for older sessions.
 
 The post-#515 buffering audit also found whole-result reads in
-`captured-process-output.ts` (compatibility helper that still reopens temporary
-stdout as a `Buffer`),
-`node-fresh-bootstrap.ts` (whole-byte compatibility source and overlay adapters),
-`node-branch-worktree-publication.ts` (full tree and changeset maps after its
-streamed Git listings),
-`supported-template.ts` and `arrusted-template.ts` (some source and command
-reads), and `same-origin-http.ts` (complete v1 HTML projection). The default
-fresh-bootstrap source, overlay, Git tree, Git object, and Git blob paths now
-stream with digest and size verification. A digest-only command caller also
-uses streaming hashing. The remaining call sites need caller-specific
-streaming contracts. The file paths are an
-implementation inventory, not evidence that the remaining paths are safe at
-arbitrary size.
+`captured-process-output.ts` (a compatibility helper that reopens temporary
+stdout as a `Buffer`), `node-fresh-bootstrap.ts` (whole-byte compatibility
+source and overlay adapters), `node-branch-worktree-publication.ts` (remaining
+proposal changes and ownership sets), `supported-template.ts` and
+`arrusted-template.ts` (some source and command reads), and
+`same-origin-http.ts` (complete v1 HTML projection). The default fresh-bootstrap
+source, overlay, Git tree, Git object, and Git blob paths now stream with digest
+and size verification. Publication base-tree and worktree-state verification
+also stream; a digest-only command caller uses streaming hashing. The remaining
+call sites need caller-specific streaming contracts. This is an implementation
+inventory, not evidence that those paths are safe at arbitrary size.
 
 The local Preview provider emulator retains an 8 MiB state-document limit
 because its persistence adapter loads and parses the state as one JSON value.
