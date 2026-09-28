@@ -1407,3 +1407,41 @@ export const emulatePreviewState = pgTable(
     check("emulate_preview_state_timestamp_check", sql`${table.createdAt} <= ${table.updatedAt}`),
   ],
 );
+
+/** Immutable content-addressed chunks for version 2 prototype artifacts. */
+export const prototypeArtifactChunks = pgTable(
+  "prototype_artifact_chunk",
+  {
+    audience: text("audience").notNull(),
+    chunkDigest: text("chunk_digest").notNull(),
+    chunkIndex: integer("chunk_index").notNull(),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    issuer: text("issuer").notNull(),
+    ownerUserId: text("owner_user_id").notNull(),
+    path: text("path").notNull(),
+    sessionId: text("session_id").notNull(),
+    transferDigest: text("transfer_digest").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.sessionId,
+        table.path,
+        table.transferDigest,
+        table.chunkIndex,
+      ],
+      name: "prototype_artifact_chunk_tenant_pk",
+    }),
+    check("prototype_artifact_chunk_index_check", sql`${table.chunkIndex} >= 0`),
+    check(
+      "prototype_artifact_chunk_digest_check",
+      sql`${table.chunkDigest} ~ '^[0-9a-f]{64}$' AND ${table.transferDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);

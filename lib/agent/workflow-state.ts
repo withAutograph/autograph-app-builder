@@ -54,6 +54,8 @@ export interface AcceptedAppSpec {
 }
 
 export interface PrototypeArtifact {
+  /** Absent on legacy Eve state; the current writer emits the v1 shape. */
+  version?: 1;
   appId: string;
   path: string;
   mediaType: "text/markdown" | "text/html";
@@ -79,6 +81,28 @@ export interface PrototypeArtifact {
     lastCallId: string;
   };
 }
+
+/** Future artifact state stores only a verified chunk manifest in Eve. */
+export interface PrototypeArtifactV2 extends Omit<
+  PrototypeArtifact,
+  "content" | "transfer" | "version"
+> {
+  version: 2;
+  contentBytes: number;
+  chunkCount: number;
+  transfer?: {
+    version: 2;
+    expectedDigest: string;
+    nextChunkIndex: number;
+    lastChunkDigest: string;
+    lastCallId: string;
+    receivedBytes: number;
+    rollingDigest: string;
+  };
+}
+
+/** Legacy state remains readable until a separately migrated writer is enabled. */
+export type StoredPrototypeArtifact = PrototypeArtifact | PrototypeArtifactV2;
 
 /**
  * A UI preview is source-first. The Browser HTML is a renderer output, never
