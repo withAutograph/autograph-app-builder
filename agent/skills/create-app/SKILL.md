@@ -203,6 +203,10 @@ app-owned files and reuse the same component-backed preview flow.
    for this evidence. If an observation capability or external dependency is
    unavailable, identify the affected outcome as unverified rather than
    inventing a tool or claiming success.
+   When the selected app has a repository-owned `test-e2e` task, use
+   `run-app-browser-tests` for browser-only workflows that `verify_app_behavior`
+   cannot exercise. Prepare required sandbox-local data first. Report the exact
+   cases the tests covered and any missing behavior separately.
 
    Deliver the actual private preview with a concise account of what works,
    what was checked, and any remaining incomplete or unverified outcomes.

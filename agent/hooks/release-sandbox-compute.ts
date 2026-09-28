@@ -1,5 +1,9 @@
 import { defineHook } from "eve/hooks";
 import type { HookContext } from "eve/hooks";
+import { sourceWorkflowState } from "../../lib/agent/source-state";
+import { repositoryAccessReceiptState } from "../../lib/agent/repository-access-state";
+import { repositoryAccessRuntimeForSession } from "../../lib/agent/deployment-repository-access-runtime";
+import { restoreSelectedGitHubSandboxSource } from "../../lib/agent/restore-selected-github-sandbox-source";
 import {
   hasLiveWorkingPreview,
   workingPreviewState,
@@ -90,6 +94,16 @@ export default defineHook({
       const environment = process.env;
       if (!isHostedSandboxExecutionEnabled(environment)) {
         return;
+      }
+      const source = sourceWorkflowState.get();
+      const githubSource = source.phase === "empty" ? undefined : source.githubSource;
+      if (githubSource !== undefined) {
+        restoreSelectedGitHubSandboxSource({
+          accessReceipt: repositoryAccessReceiptState.get(),
+          githubSource,
+          runtime: () => repositoryAccessRuntimeForSession(ctx.session.auth),
+          sessionId: ctx.session.id,
+        });
       }
       await acquireHostedSandboxExecutionLease({
         environment,

@@ -12,6 +12,8 @@ import {
   resolvePreviewWorkingDirectory,
 } from "@/lib/agent/preview-working-directory";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { ensureCheckoutDependencies } from "@/lib/agent/checkout-dependencies";
+import { prepareAppLocalPreview } from "./prepare-app-local-preview";
 import {
   hasLiveWorkingPreview,
   workingPreviewState,
@@ -34,6 +36,29 @@ const validationAttemptDigest = (
     return state.validationAttempt.digest;
   }
   return undefined;
+};
+
+const nextDependencyManifest = z.object({
+  dependencies: z.object({ next: z.string().optional() }).optional(),
+  devDependencies: z.object({ next: z.string().optional() }).optional(),
+});
+
+const usesNext = (source: string | null): boolean => {
+  if (source === null) {
+    return false;
+  }
+  try {
+    const parsed = nextDependencyManifest.safeParse(JSON.parse(source));
+    return (
+      parsed.success &&
+      (parsed.data.dependencies?.next !== undefined ||
+        parsed.data.devDependencies?.next !== undefined)
+    );
+  } catch {
+    throw new Error(
+      "The selected app's package.json is not valid JSON. Repair its manifest before starting the private preview.",
+    );
+  }
 };
 
 export default defineTool({
@@ -78,6 +103,40 @@ export default defineTool({
       if (command.exitCode === null) {
         bindProductBehaviorPreview(previous.commandId, evidenceGeneration);
         return { workingPreview: previous.receipt };
+      }
+    }
+    const { appId } = current.appSpec;
+    const packageManifest = await sandbox.readTextFile({ path: `${cwd}/package.json` });
+    const dependencyInput = {
+      root: current.applyReceipt.applyRoot,
+      sandbox,
+      signal: ctx.abortSignal,
+    };
+    await ensureCheckoutDependencies(
+      usesNext(packageManifest)
+        ? { ...dependencyInput, requiredExecutable: "next" }
+        : dependencyInput,
+    );
+    const appContract = await sandbox.readTextFile({
+      path: `${current.applyReceipt.applyRoot}/apps/${appId}/.config/app-spec.md`,
+    });
+    const repositoryTasks = await sandbox.readTextFile({
+      path: `${current.applyReceipt.applyRoot}/.config/mise/config.toml`,
+    });
+    if (
+      appContract?.includes(`mise run app:local -- ${appId} setup`) === true &&
+      repositoryTasks?.includes('[tasks."app:local"]') === true
+    ) {
+      const setup = await prepareAppLocalPreview({
+        appId,
+        root: current.applyReceipt.applyRoot,
+        sandbox,
+        signal: ctx.abortSignal,
+      });
+      if (setup.status === "failed") {
+        throw new Error(
+          `The app's local data setup failed before preview startup. ${setup.problem}\nCommand: ${setup.command}\n${setup.stderr || setup.stdout || "No command output was returned."}`,
+        );
       }
     }
     workingPreviewState.update(() => null);

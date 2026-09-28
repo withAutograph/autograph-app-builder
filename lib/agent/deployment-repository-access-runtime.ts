@@ -105,6 +105,11 @@ export interface RepositoryAccessRuntime {
     sessionId: string;
     fetchImplementation?: typeof fetch;
   }) => Promise<number>;
+  acquireExistingSourceCredential: (input: {
+    sessionId: string;
+    repository: { owner: string; name: string; repositoryId: string };
+    installationId: string;
+  }) => Promise<{ token: string }>;
   prepareExistingSource: (input: {
     repository: string;
     selectedInstallationId?: string;
@@ -244,6 +249,48 @@ export function createRepositoryAccessRuntime(input: {
   };
 
   return {
+    async acquireExistingSourceCredential(value) {
+      const repository = `${value.repository.owner}/${value.repository.name}`;
+      const access = await classify({
+        repository,
+        selectedInstallationId: value.installationId,
+      });
+      if (
+        access.status !== "ready" ||
+        access.repository.repositoryId !== value.repository.repositoryId ||
+        access.scope.installationId !== value.installationId
+      ) {
+        throw new Error(
+          `Builder cannot restore the selected checkout for ${repository}: the original GitHub installation no longer has verified access to this repository. Continue with GitHub to restore access, then retry this same Builder session.`,
+        );
+      }
+      const listed = (await input.installations.list?.(input.authority)) ?? [];
+      const legacy = await input.installations.read(input.authority);
+      const binding = mergeHostedGitHubInstallationBindings(listed, legacy).find(
+        (candidate) =>
+          candidate.active &&
+          candidate.installationId === access.scope.installationId &&
+          candidate.accountLogin === access.scope.accountLogin &&
+          candidate.accountType === access.scope.accountType,
+      );
+      if (binding === undefined) {
+        throw new Error(
+          `Builder cannot restore the selected checkout for ${repository}: the GitHub installation is no longer connected to this workspace. Continue with GitHub, then retry this same Builder session.`,
+        );
+      }
+      const provider = await input.providerFactory({
+        authority: input.authority,
+        installation: binding,
+      });
+      if (!repositorySourceProvider(provider)) {
+        throw new Error(
+          `Builder cannot restore the selected checkout for ${repository}: the GitHub source provider is unavailable. Ask an operator to restore the GitHub App source adapter, then retry.`,
+        );
+      }
+      return provider.acquireRepositoryReadCredential({
+        repositoryId: value.repository.repositoryId,
+      });
+    },
     authorization(request) {
       const value = {
         ...request,

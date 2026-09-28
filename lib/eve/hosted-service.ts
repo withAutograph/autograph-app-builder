@@ -38,6 +38,7 @@ import type {
 import {
   currentWorkingPreview,
   outstandingInternalEveRequests,
+  pendingBuilderOperation,
   toPublicEvent,
 } from "./public-events";
 import type { InternalEveEvent } from "./public-events";
@@ -70,6 +71,7 @@ import { resultFromHostedCheckpoint } from "./hosted-checkpoint-result";
 
 const projectSnapshot = projectHostedSnapshot;
 const HOSTED_START_REQUEST_TIMEOUT_MS = 300_000;
+const HOSTED_PROGRESS_NOTICE_MS = 60_000;
 
 export {
   HostedAdapterSessionUnavailableError,
@@ -1142,7 +1144,34 @@ export function createHostedEveSessionService(input: {
           return resultFromHostedCheckpoint(sessionId, durable.checkpoint, cursor, limit);
         }
       }
-      return projectSnapshot(sessionId, snapshot, cursor, limit);
+      const result = projectSnapshot(sessionId, snapshot, cursor, limit);
+      if (
+        result.status !== "working" ||
+        session.checkpointProgressDigest !==
+          hostedSessionCheckpointProgressDigest(observedCheckpoint) ||
+        observedAt - session.lastProgressAtEpochMs < HOSTED_PROGRESS_NOTICE_MS
+      ) {
+        return result;
+      }
+      const recentEvents = snapshot.events.slice(-512).flatMap((event) => {
+        if (event === null || typeof event !== "object") {
+          return [];
+        }
+        const projected = toPublicEvent(event as InternalEveEvent);
+        return projected === null ? [] : [projected];
+      });
+      const operation = pendingBuilderOperation(recentEvents);
+      const elapsedMinutes = Math.max(
+        1,
+        Math.floor((observedAt - session.lastProgressAtEpochMs) / 60_000),
+      );
+      return eveSessionResultSchema.parse({
+        ...result,
+        error: {
+          code: "builder_operation_still_running",
+          message: `${operation} has produced no new result for ${elapsedMinutes} minute${elapsedMinutes === 1 ? "" : "s"}. Builder has not reported a failure. Keep this saved session and retry autograph_get with the same session ID and cursor. If this continues beyond the command's expected duration, report the session ID and operation so the Builder operator can inspect or recover the stalled run.`,
+        },
+      });
     } catch (error) {
       if (error instanceof HostedSessionReadTimeoutError) {
         if (session.checkpoint === undefined && session.checkpointRef === undefined) {

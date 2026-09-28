@@ -18,6 +18,8 @@ export interface WorkingPreviewAccess {
 export const createWorkingPreviewAccess = (input: {
   /** Coordinator-owned file. Missing or invalid content keeps an already-bound gateway closed. */
   configurationPath?: string;
+  /** Supervisor-owned observation of the app's actual loopback listening port. */
+  observedPortPath?: string;
   origin: string;
   appPort: number;
   gatewayPort: number;
@@ -71,6 +73,12 @@ const loadConfiguration = () => {
         landing.pathname === "/__autograph_preview_launch" || !Number.isSafeInteger(active.expiresAt) ||
         active.appPort !== bootstrap.appPort || active.gatewayPort !== bootstrap.gatewayPort ||
         typeof active.launchDigest !== "string" || !/^[a-f0-9]{64}$/.test(active.launchDigest)) return null;
+    if (bootstrap.observedPortPath !== undefined) {
+      try {
+        const observed = Number(readFileSync(bootstrap.observedPortPath, "utf8"));
+        if (Number.isInteger(observed) && observed >= 1024 && observed <= 65535 && observed !== active.gatewayPort) active.appPort = observed;
+      } catch {}
+    }
     return active;
   } catch { return null; }
 };
@@ -124,13 +132,14 @@ const server = http.createServer((request, response) => {
   const headers = forwardedHeaders(request, config, cookies);
   const upstream = http.request({ hostname: "127.0.0.1", port: config.appPort, path: url.pathname + url.search, method: request.method, headers }, result => {
     const outgoing = cleanHeaders(result.headers);
+    delete outgoing["x-autograph-preview-error"];
     outgoing["cache-control"] = "private, no-store";
     outgoing["referrer-policy"] = "no-referrer";
     if (outgoing["set-cookie"]) outgoing["set-cookie"] = outgoing["set-cookie"].filter(value => !value.trim().startsWith(cookieName + "="));
     response.writeHead(result.statusCode ?? 502, outgoing);
     result.pipe(response);
   });
-  upstream.on("error", () => { if (!response.headersSent) deny(response, 502); else response.destroy(); });
+  upstream.on("error", () => { if (!response.headersSent) { response.setHeader("x-autograph-preview-error", "upstream-unavailable"); deny(response, 502); } else response.destroy(); });
   request.on("aborted", () => upstream.destroy());
   response.on("close", () => upstream.destroy());
   request.pipe(upstream);

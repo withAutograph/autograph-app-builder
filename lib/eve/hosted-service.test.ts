@@ -322,6 +322,56 @@ const started = async function started(input?: {
 };
 
 describe("delayed durable session reads", () => {
+  it("names a long-running build without claiming it failed or moving the event cursor", async () => {
+    let now = 1000;
+    const working: HostedEngineSnapshot = {
+      events: [
+        {
+          index: 0,
+          label: "Building the app in its private workspace",
+          state: "started",
+          type: "progress",
+        },
+      ],
+      status: "working",
+    };
+    const adapter = transport({
+      get: vi.fn(() => Promise.resolve(working)),
+      start: vi.fn(() => Promise.resolve({ adapterSessionId: "eve_build", snapshot: working })),
+    });
+    const { service, result } = await started({ now: () => now, transport: adapter });
+    const { cursor } = result;
+    now = 61_001;
+    const delayed = await service.get({ cursor, limit: 25, sessionId: result.sessionId });
+    expect(delayed).toMatchObject({
+      cursor,
+      error: {
+        code: "builder_operation_still_running",
+        message: expect.stringContaining("Building the app in its private workspace"),
+      },
+      events: [],
+      status: "working",
+    });
+    expect(delayed.error?.message).toContain("same session ID and cursor");
+    now = 62_001;
+    const completed: HostedEngineSnapshot = {
+      events: [
+        ...working.events,
+        {
+          index: 1,
+          label: "Building the app in its private workspace",
+          state: "completed",
+          type: "progress",
+        },
+      ],
+      status: "waiting",
+    };
+    vi.mocked(adapter.get).mockResolvedValue(completed);
+    const resumed = await service.get({ cursor, limit: 25, sessionId: result.sessionId });
+    expect(resumed.error).toBeUndefined();
+    expect(resumed.events).toMatchObject([{ state: "completed" }]);
+  });
+
   it("returns a saved checkpoint with an actionable warning and never presents stale approvals", async () => {
     const adapter = transport({
       get: vi.fn().mockRejectedValue(new HostedSessionReadTimeoutError()),

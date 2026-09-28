@@ -10,18 +10,28 @@ export type VercelGitSessionSource = Readonly<{
   revision?: string;
 }>;
 
-const pendingSources = new Map<string, VercelGitSessionSource>();
+type PendingGitSource =
+  | { readonly kind: "ready"; readonly source: VercelGitSessionSource }
+  | { readonly kind: "resolve"; readonly resolve: () => Promise<VercelGitSessionSource> };
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function configureVercelSessionGitSource(input: {
+const pendingSources = new Map<string, PendingGitSource>();
+
+export const configureVercelSessionGitSource = (input: {
   sessionId: string;
   source: VercelGitSessionSource;
-}) {
-  pendingSources.set(input.sessionId, input.source);
-}
+}) => {
+  pendingSources.set(input.sessionId, { kind: "ready", source: input.source });
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function readVercelSessionGitSource(sessionId: string) {
+/** Registers source intent without contacting GitHub on a healthy resume. */
+export const configureVercelSessionGitSourceResolver = (input: {
+  sessionId: string;
+  resolve: () => Promise<VercelGitSessionSource>;
+}) => {
+  pendingSources.set(input.sessionId, { kind: "resolve", resolve: input.resolve });
+};
+
+const matchingSource = (sessionId: string): PendingGitSource | undefined => {
   const exact = pendingSources.get(sessionId);
   if (exact !== undefined) {
     return exact;
@@ -36,9 +46,27 @@ export function readVercelSessionGitSource(sessionId: string) {
       (sessionId.includes(`-${candidate}-`) || sessionId.endsWith(`-${candidate}`)),
   );
   return matches.length === 1 ? matches[0]?.[1] : undefined;
-}
+};
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function clearVercelSessionGitSource(sessionId: string) {
+export const hasVercelSessionGitSource = (sessionId: string): boolean =>
+  matchingSource(sessionId) !== undefined;
+
+export const resolveVercelSessionGitSource = async (
+  sessionId: string,
+): Promise<VercelGitSessionSource | undefined> => {
+  const pending = matchingSource(sessionId);
+  if (pending?.kind === "ready") {
+    return pending.source;
+  }
+  return pending ? await pending.resolve() : undefined;
+};
+
+/** Test and diagnostic readback; intentionally does not invoke a lazy resolver. */
+export const readVercelSessionGitSource = (sessionId: string) => {
+  const pending = matchingSource(sessionId);
+  return pending?.kind === "ready" ? pending.source : undefined;
+};
+
+export const clearVercelSessionGitSource = (sessionId: string) => {
   pendingSources.delete(sessionId);
-}
+};
