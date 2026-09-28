@@ -931,7 +931,7 @@ export const outstandingInstalledEveRequests = (
 };
 
 export const outstandingInternalEveRequests = (
-  events: readonly InternalEveEvent[],
+  events: Iterable<InternalEveEvent>,
 ): PublicInputRequest[] => {
   const outstanding = new Map<string, PublicInputRequest>();
   for (const event of events) {
