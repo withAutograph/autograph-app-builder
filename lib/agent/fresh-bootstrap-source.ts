@@ -33,6 +33,8 @@ export async function freshBootstrapSourceWorkspace(input: {
     files,
     readSourceFile: async (path) =>
       await input.sandbox.readBinaryFile({ path: `repository/${path}` }),
+    readSourceFileStream: async (path) =>
+      await input.sandbox.readFile({ path: `repository/${path}` }),
     reverify,
   };
 }

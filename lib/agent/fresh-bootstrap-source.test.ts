@@ -61,9 +61,22 @@ function sandboxFixture() {
   const readBinaryFile = vi.fn(async ({ path }: { path: string }) =>
     path === "repository/assets/payload.bin" ? Buffer.from([0, 255, 17, 128]) : null,
   );
+  const readFile = vi.fn(async ({ path }: { path: string }) => {
+    await Promise.resolve();
+    return path === "repository/assets/payload.bin"
+      ? new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(Uint8Array.from([0, 255]));
+            controller.enqueue(Uint8Array.from([17, 128]));
+            controller.close();
+          },
+        })
+      : null;
+  });
   return {
     readBinaryFile,
-    sandbox: { readBinaryFile } as unknown as SandboxSession,
+    readFile,
+    sandbox: { readBinaryFile, readFile } as unknown as SandboxSession,
   };
 }
 
@@ -128,7 +141,7 @@ describe("fresh bootstrap source workspace", () => {
   });
 
   it("reads repository-relative source paths as binary data", async () => {
-    const { readBinaryFile, sandbox } = sandboxFixture();
+    const { readBinaryFile, readFile, sandbox } = sandboxFixture();
     const source = await freshBootstrapSourceWorkspace({
       receipt: canonicalReceipt,
       sandbox,
@@ -141,6 +154,12 @@ describe("fresh bootstrap source workspace", () => {
     expect(readBinaryFile).toHaveBeenCalledWith({
       path: "repository/assets/payload.bin",
     });
+    const stream = await source?.readSourceFileStream?.("assets/payload.bin");
+    expect(stream).not.toBeNull();
+    const reader = stream?.getReader();
+    expect(await reader?.read()).toMatchObject({ value: Uint8Array.from([0, 255]) });
+    expect(await reader?.read()).toMatchObject({ value: Uint8Array.from([17, 128]) });
+    expect(readFile).toHaveBeenCalledWith({ path: "repository/assets/payload.bin" });
   });
 
   it("fails closed when initial canonical re-verification fails", async () => {

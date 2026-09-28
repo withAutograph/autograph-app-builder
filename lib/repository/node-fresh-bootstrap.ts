@@ -95,8 +95,49 @@ type ExactFile = FreshBootstrapFile & {
 export interface FreshBootstrapSourceWorkspace {
   files: readonly PreparedSourceFile[];
   readSourceFile: (path: string) => Promise<Uint8Array | null>;
+  readSourceFileStream?: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
   reverify: () => Promise<void>;
 }
+
+const sourceBytes = async function* sourceBytes(
+  workspace: FreshBootstrapSourceWorkspace,
+  path: string,
+): AsyncGenerator<Uint8Array> {
+  if (workspace.readSourceFileStream === undefined) {
+    const bytes = await workspace.readSourceFile(path);
+    if (bytes === null) {
+      throw new Error(`The prepared fresh-template source changed at ${path}.`);
+    }
+    yield bytes;
+    return;
+  }
+  const stream = await workspace.readSourceFileStream(path);
+  if (stream === null) {
+    throw new Error(`The prepared fresh-template source changed at ${path}.`);
+  }
+  const reader = stream.getReader();
+  let completed = false;
+  try {
+    for (;;) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Consume one provider chunk at a time.
+      const { done, value } = await reader.read();
+      if (done) {
+        completed = true;
+        return;
+      }
+      yield value;
+    }
+  } finally {
+    if (!completed) {
+      try {
+        await reader.cancel();
+      } catch {
+        // Preserve the source verification or caller cancellation failure.
+      }
+    }
+    reader.releaseLock();
+  }
+};
 const atomicPublicationAdapter = String.raw`
 import ctypes, os, platform, stat, sys
 mode, stage, destination, stage_dev, stage_ino, stage_uid, stage_mode, stage_nlink, empty_dev, empty_ino, empty_uid, empty_mode, empty_nlink, parent_dev, parent_ino, parent_uid, parent_mode, parent_nlink = sys.argv[1:]
@@ -1109,9 +1150,24 @@ const exactPreparedSourceTree = async (
       throw new Error("The prepared fresh-template manifest is invalid.");
     }
     paths.add(file.path);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const bytes = await sourceWorkspace.readSourceFile(file.path);
-    if (bytes === null || contentDigest(bytes) !== file.sha256 || blobId(bytes) !== file.objectId) {
+    const contentHash = createHash("sha256");
+    let size = 0;
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Verify each file in order with bounded chunk memory.
+    for await (const chunk of sourceBytes(sourceWorkspace, file.path)) {
+      contentHash.update(chunk);
+      size += chunk.byteLength;
+    }
+    if (!Number.isSafeInteger(size) || contentHash.digest("hex") !== file.sha256) {
+      throw new Error(`The prepared fresh-template source drifted at ${file.path}.`);
+    }
+    const gitHash = createHash("sha1").update(Buffer.from(`blob ${size}\0`));
+    let verifiedSize = 0;
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Re-read to bind Git's size-prefixed blob identity.
+    for await (const chunk of sourceBytes(sourceWorkspace, file.path)) {
+      gitHash.update(chunk);
+      verifiedSize += chunk.byteLength;
+    }
+    if (verifiedSize !== size || gitHash.digest("hex") !== file.objectId) {
       throw new Error(`The prepared fresh-template source drifted at ${file.path}.`);
     }
     const { objectId: blob, path, sha256: digest, mode } = file;
@@ -1121,19 +1177,13 @@ const exactPreparedSourceTree = async (
       mode,
       path,
       readStream: verifiedFileReader(
-        async function* readPreparedSource() {
-          const content = await sourceWorkspace.readSourceFile(path);
-          if (content === null) {
-            throw new Error(`The prepared fresh-template source changed at ${path}.`);
-          }
-          yield content;
-        },
+        () => sourceBytes(sourceWorkspace, path),
         path,
         digest,
         blob,
-        bytes.byteLength,
+        size,
       ),
-      sizeBytes: bytes.byteLength,
+      sizeBytes: size,
     });
   }
   if (files.length === 0) {
