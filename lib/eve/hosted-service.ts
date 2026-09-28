@@ -66,7 +66,7 @@ import {
   HostedSubmissionUnknownError,
   SubmissionRejectedBeforeDispatchError,
 } from "./hosted-errors";
-import { recoveryPromptForSession } from "./hosted-recovery-prompt";
+import { recoveryPromptForPagedSession, recoveryPromptForSession } from "./hosted-recovery-prompt";
 import { resultFromHostedCheckpoint } from "./hosted-checkpoint-result";
 
 const projectSnapshot = projectHostedSnapshot;
@@ -459,12 +459,52 @@ function checkpointForSnapshot(
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function recoveryPrompt(record: z.infer<typeof durableHostedSessionRecordSchema>): string {
-  const prompt = recoveryPromptForSession(record);
-  if (prompt === undefined) {
+async function recoveryPrompt(input: {
+  record: z.infer<typeof durableHostedSessionRecordSchema>;
+  store: HostedEveStore;
+  principal: HostedPrincipal;
+}): Promise<string> {
+  const { record } = input;
+  if (record.checkpoint !== undefined) {
+    const prompt = recoveryPromptForSession(record);
+    if (prompt !== undefined) {
+      return prompt;
+    }
+  }
+  if (record.checkpointRef === undefined || input.store.readCheckpointPage === undefined) {
     throw new HostedSessionRecoveryUnavailableError();
   }
-  return prompt;
+  const messages: string[] = [];
+  let cursor = record.checkpointRef.eventCount;
+  let metadata: HostedPagedCheckpointMetadata | undefined;
+  do {
+    const start = Math.max(0, cursor - 250);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Read only as many verified pages as needed for the recovery context.
+    const page = await input.store.readCheckpointPage({
+      checkpointRef: record.checkpointRef,
+      cursor: start,
+      limit: Math.max(1, cursor - start),
+      principal: input.principal,
+      sessionId: record.sessionId,
+    });
+    ({ metadata } = page);
+    for (let index = page.events.length - 1; index >= 0 && messages.length < 20; index -= 1) {
+      const event = page.events[index];
+      if (event?.type === "assistant_message") {
+        messages.unshift(event.text);
+      }
+    }
+    cursor = start;
+  } while (cursor > 0 && messages.length < 20);
+  if (metadata === undefined) {
+    throw new HostedSessionRecoveryUnavailableError();
+  }
+  return recoveryPromptForPagedSession({
+    earlierEventsRemain: cursor > 0,
+    metadata,
+    recentMessages: messages,
+    record,
+  });
 }
 
 interface PagedObservationSpool {
@@ -1426,7 +1466,7 @@ export function createHostedEveSessionService(input: {
         const terminal = ["completed", "failed", "cancelled"].includes(existing.status);
         const interrupted = existing.status === "working" && existing.resumability === "checkpoint";
         if (terminal || interrupted) {
-          if (existing.checkpoint === undefined) {
+          if (existing.checkpoint === undefined && existing.checkpointRef === undefined) {
             throw new HostedSessionRecoveryUnavailableError();
           }
           return mutate({
@@ -1434,7 +1474,7 @@ export function createHostedEveSessionService(input: {
               const response = await input.transport.start({
                 operationId,
                 principal,
-                prompt: recoveryPrompt(existing),
+                prompt: await recoveryPrompt({ principal, record: existing, store: input.store }),
                 ...(existing.sourceHandoffId ? { sourceHandoffId: existing.sourceHandoffId } : {}),
               });
               const sessionId = stableId(
@@ -1498,7 +1538,7 @@ export function createHostedEveSessionService(input: {
           }
         }
         if (
-          existing.checkpoint === undefined ||
+          (existing.checkpoint === undefined && existing.checkpointRef === undefined) ||
           existing.checkpointDigest === undefined ||
           input.store.replaceSessionAdapter === undefined
         ) {
@@ -1513,7 +1553,7 @@ export function createHostedEveSessionService(input: {
             const response = await input.transport.start({
               operationId,
               principal,
-              prompt: recoveryPrompt(existing),
+              prompt: await recoveryPrompt({ principal, record: existing, store: input.store }),
               ...(existing.sourceHandoffId ? { sourceHandoffId: existing.sourceHandoffId } : {}),
             });
             const result = projectSnapshot(existing.sessionId, response.snapshot);
