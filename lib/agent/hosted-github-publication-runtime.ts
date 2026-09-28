@@ -172,8 +172,8 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
       const adapter = await input.providerFactory({ authority, installation });
       return composeGitHubPublicationRuntime({
         adapter,
-        authority,
         adoptions: stores.adoptions ?? createPostgresGitHubDraftAdoptionStore(pool, authority),
+        authority,
         enabled: true,
         proposals: stores.proposals,
         receipts: stores.receipts,
