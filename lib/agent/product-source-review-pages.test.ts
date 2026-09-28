@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { assessProductSourcePages } from "./product-source-review";
 import { readProductReviewSourcePages } from "./product-source-review-pages";
 
@@ -8,9 +8,8 @@ const source = `${"const value = 1;\n".repeat(28_000)}FIXME: fake save\n`;
 const digest = createHash("sha256").update(source).digest("hex");
 const reader = (expectedDigest = digest) =>
   readProductReviewSourcePages({
-    appId: "example",
     applyRoot: "/workspace/repository",
-    changedPaths: [],
+    changedPaths: [path],
     observed: {
       files: [{ digest: expectedDigest, mode: "644", path }],
       treeDigest: "tree",
@@ -20,6 +19,41 @@ const reader = (expectedDigest = digest) =>
       readFile: async () => new Blob([source]).stream(),
     },
   });
+
+it("reviews current changed files without rereading unchanged app source", async () => {
+  const changed = "export const changed = true;";
+  const unchanged = "export const unchanged = true;";
+  const changedPath = "apps/example/changed.ts";
+  const unchangedPath = "apps/example/unchanged.ts";
+  // oxlint-disable-next-line eslint/require-await -- Match the asynchronous sandbox readFile contract.
+  const readFile = vi.fn(async () => new Blob([changed]).stream());
+  const observed = readProductReviewSourcePages({
+    applyRoot: "/workspace/repository",
+    changedPaths: [changedPath],
+    observed: {
+      files: [
+        {
+          digest: createHash("sha256").update(changed).digest("hex"),
+          mode: "644",
+          path: changedPath,
+        },
+        {
+          digest: createHash("sha256").update(unchanged).digest("hex"),
+          mode: "644",
+          path: unchangedPath,
+        },
+      ],
+      treeDigest: "tree",
+    },
+    sandbox: { readFile },
+  });
+  const pages = [];
+  for await (const page of observed.pages) {
+    pages.push(page);
+  }
+  expect(pages.map((page) => page.path)).toEqual([changedPath]);
+  expect(readFile).toHaveBeenCalledTimes(1);
+});
 
 it("reviews source above the former 400 KB ceiling in bounded pages with exact original citations", async () => {
   const observed = reader();
@@ -88,9 +122,8 @@ it("rejects a changed source digest after yielding pages", async () => {
 it("splits a giant Unicode line without losing bytes or source coordinates", async () => {
   const content = `header\n${"🚀".repeat(30_000)}`;
   const observed = readProductReviewSourcePages({
-    appId: "example",
     applyRoot: "/workspace/repository",
-    changedPaths: [],
+    changedPaths: [path],
     observed: {
       files: [
         {
