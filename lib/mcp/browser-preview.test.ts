@@ -48,6 +48,18 @@ describe("Browser prototype preview", () => {
       sessionId: "session-one",
       version: 2 as const,
     };
+    expect(
+      attachPrototypePreviewUrl(
+        {
+          cursor: 1,
+          events: [],
+          prototypeRef: artifact,
+          sessionId: "session-one",
+          status: "completed",
+        },
+        "https://builder.example.test/mcp",
+      ).prototypeRef?.previewUrl,
+    ).toBe(`https://builder.example.test/preview/session-one/${digest}`);
     const readChunk = vi.fn(async (index: number) => await Promise.resolve(chunks[index]));
     const resolveStreamedPrototype = vi.fn(
       async () => await Promise.resolve({ artifact, readChunk }),

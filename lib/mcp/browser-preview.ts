@@ -149,11 +149,12 @@ export function attachPrototypePreviewUrl(
   requestUrl: string,
 ): EveSessionResult {
   const result = eveSessionResultSchema.parse(resultInput);
-  if (result.prototype === undefined) {
+  const selected = result.prototypeRef ?? result.prototype;
+  if (selected === undefined) {
     return result;
   }
   const url = previewUrl({
-    digest: result.prototype.digest,
+    digest: selected.digest,
     requestUrl,
     sessionId: result.sessionId,
   });
@@ -162,7 +163,12 @@ export function attachPrototypePreviewUrl(
   }
   return eveSessionResultSchema.parse({
     ...result,
-    prototype: { ...result.prototype, previewUrl: url },
+    ...(result.prototype === undefined || result.prototypeRef !== undefined
+      ? {}
+      : { prototype: { ...result.prototype, previewUrl: url } }),
+    ...(result.prototypeRef === undefined
+      ? {}
+      : { prototypeRef: { ...result.prototypeRef, previewUrl: url } }),
     ...(result.uiPreview === undefined
       ? {}
       : { uiPreview: { ...result.uiPreview, previewUrl: url } }),

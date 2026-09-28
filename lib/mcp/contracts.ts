@@ -158,6 +158,7 @@ export const publicPrototypeReferenceSchema = z
     digest: sha256DigestSchema,
     mediaType: z.literal("text/html"),
     path: z.string().regex(/^prototype\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/index\.html$/u),
+    previewUrl: publicPrototypePreviewUrlSchema.optional(),
     recordedByCallId: z.string().min(1),
     revision: sha256DigestSchema,
     sessionId: z.string().min(1),
