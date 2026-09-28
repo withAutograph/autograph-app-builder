@@ -49,7 +49,7 @@ it("preserves full snapshot failure diagnostics while redacting secrets", async 
   await expect(failure).rejects.toThrow("overlay snapshot detail ".repeat(70));
 });
 
-it("keeps Next runtime output out of reviewed changes while retaining application source", () => {
+it("keeps build output out of reviewed changes while retaining application source", () => {
   const root = mkdtempSync(path.join(tmpdir(), "app-builder-source-snapshot-"));
   try {
     const files = [
@@ -63,6 +63,8 @@ it("keeps Next runtime output out of reviewed changes while retaining applicatio
       ".turbo/cache/state.json",
       "apps/example/.turbo/turbo-test.log",
       "apps/example/node_modules/.vite/results.json",
+      "target/debug/deps/schema_compiler.json",
+      "packages/schema-compiler/target/debug/deps/schema_compiler.json",
       "apps/example/next-env.d.ts",
     ];
     for (const file of files) {

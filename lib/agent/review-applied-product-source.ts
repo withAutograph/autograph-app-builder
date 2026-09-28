@@ -90,6 +90,7 @@ export const reviewAppliedProductSource = async (input: {
     phase: string,
     detail?: {
       changedPathCount?: number;
+      changedPathGroups?: Record<string, number>;
       errorName?: string;
       fileCount?: number;
       status?: string;
@@ -148,13 +149,24 @@ export const reviewAppliedProductSource = async (input: {
       );
     }
     const changedPaths = currentChangedSourcePaths(input.applyReceipt, observed);
+    const groups = new Map<string, number>();
+    for (const path of changedPaths) {
+      const group = path.split("/")[0] ?? "";
+      groups.set(group, (groups.get(group) ?? 0) + 1);
+    }
+    const changedPathGroups = Object.fromEntries(
+      [...groups].toSorted(([a], [b]) => a.localeCompare(b)),
+    );
     const source = readProductReviewSourcePages({
       applyRoot: input.applyReceipt.applyRoot,
       changedPaths,
       observed,
       sandbox,
     });
-    logPhase("reviewing_changed_source", { changedPathCount: changedPaths.length });
+    logPhase("reviewing_changed_source", {
+      changedPathCount: changedPaths.length,
+      changedPathGroups,
+    });
     const assessedInput = { ...currentInput, omissions: source.omissions };
     const assessment = await assessProductSourcePages(assessedInput, source.pages, {
       abortSignal: input.abortSignal,
