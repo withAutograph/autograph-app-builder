@@ -181,6 +181,8 @@ export async function provisionGitHubRepository(input: {
   source: StarterSource;
   persistedCandidates: readonly string[];
   persistedAbsentCandidates: readonly string[];
+  /** Recheck every prior candidate before a retry can issue another write. */
+  reconcilePriorWrite?: boolean;
   persistCandidate: (candidate: string) => Promise<void>;
   persistAbsent: (candidate: string) => Promise<void>;
   renewLease?: () => Promise<void>;
@@ -609,6 +611,38 @@ export async function provisionGitHubRepository(input: {
       url: `https://github.com/${owner}/${resolvedName}`,
       visibility: isPrivate ? "private" : "public",
     };
+  }
+
+  if (input.reconcilePriorWrite) {
+    try {
+      let uncertainWrite = false;
+      for (const candidate of input.persistedCandidates) {
+        if (!input.persistedAbsentCandidates.includes(candidate)) {
+          continue;
+        }
+        uncertainWrite = true;
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Inspect all prior candidates before permitting a new write.
+        const observed = await repository(candidate);
+        if (observed.status === 404) {
+          continue;
+        }
+        if (stringProperty(observed.body, "description") !== marker(input.requestId)) {
+          return { code: "reconciliation_uncertain", retryable: false, status: "failed" };
+        }
+        try {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Exact readback proves which previous write completed.
+          return await readBack(candidate);
+        } catch {
+          return { code: "reconciliation_uncertain", retryable: false, status: "failed" };
+        }
+      }
+      if (uncertainWrite) {
+        // A 404 is not authoritative evidence that a previous POST did not commit.
+        return { code: "reconciliation_uncertain", retryable: false, status: "failed" };
+      }
+    } catch {
+      return { code: "provider_unavailable", retryable: true, status: "failed" };
+    }
   }
 
   const candidates = async function* candidates(): AsyncGenerator<string> {

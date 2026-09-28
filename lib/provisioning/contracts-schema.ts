@@ -64,6 +64,7 @@ const failureSchema = z
       "provider_validation_failed",
       "provider_quota_exceeded",
       "provider_rate_limited",
+      "reconciliation_uncertain",
       "provider_unavailable",
       "source_unavailable",
       "source_mismatch",

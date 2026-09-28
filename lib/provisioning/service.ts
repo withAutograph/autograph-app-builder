@@ -113,6 +113,9 @@ export async function executeBuilderProvisioning(input: {
   if (leased.record.operations[request.operation].leaseId !== leaseId) {
     return leased.record.response;
   }
+  const priorOperation = leased.record.operations[request.operation];
+  const reconcilePriorWrite =
+    priorOperation.candidates.length > 0 && priorOperation.outcomeKnown !== true;
 
   let leaseFailure: Error | undefined;
   const renewLease = async () => {
@@ -203,6 +206,7 @@ export async function executeBuilderProvisioning(input: {
             persistedAbsentCandidates: current.record.operations.github.absentCandidates,
             persistedCandidates: current.record.operations.github.candidates,
             private: request.repository.private,
+            reconcilePriorWrite,
             recordRetryAfter,
             renewLease,
             requestId: request.requestId,
@@ -253,6 +257,7 @@ export async function executeBuilderProvisioning(input: {
           persistCandidate: (candidate) => persist("candidate", candidate),
           persistedAbsentCandidates: current.record.operations.vercel.absentCandidates,
           persistedCandidates: current.record.operations.vercel.candidates,
+          reconcilePriorWrite,
           recordRetryAfter,
           renewLease,
           token: credential.token,
@@ -361,6 +366,8 @@ export function projectBuilderProvisioning(row: BuilderProvisionJournalRow) {
         "The worker stopped during provisioning. Verify the provider resource and its Builder marker before retrying this operation.";
     } else if (state.nextRetryAt) {
       recoveryAction = "Builder will retry after the provider delay.";
+    } else if (code === "reconciliation_uncertain") {
+      recoveryAction = `Builder found an existing ${operation === "github" ? "repository" : "project"} at a previously attempted name but cannot prove that this request created it. Verify provider ownership and the requested source, then resume with a reviewed recovery action; Builder will not create another resource automatically.`;
     }
     const diagnostic: (typeof diagnostics)[number] = {
       code,

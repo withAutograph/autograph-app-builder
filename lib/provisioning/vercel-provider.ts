@@ -39,6 +39,8 @@ export async function provisionVercelProject(input: {
   githubSelected: boolean;
   persistedCandidates: readonly string[];
   persistedAbsentCandidates: readonly string[];
+  /** Recheck every prior candidate before a retry can issue another write. */
+  reconcilePriorWrite?: boolean;
   persistCandidate: (candidate: string) => Promise<void>;
   persistAbsent: (candidate: string) => Promise<void>;
   renewLease?: () => Promise<void>;
@@ -123,6 +125,29 @@ export async function provisionVercelProject(input: {
 
   const baseName = `apps-${input.appId}`;
   const linkedRepository = input.github.status === "succeeded" ? input.github.fullName : undefined;
+  if (input.reconcilePriorWrite) {
+    try {
+      let uncertainWrite = false;
+      for (const candidate of input.persistedCandidates) {
+        if (!input.persistedAbsentCandidates.includes(candidate)) {
+          continue;
+        }
+        uncertainWrite = true;
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Inspect all prior candidates before permitting a new write.
+        const observed = await inspect(candidate);
+        if (observed.status === 200) {
+          // Vercel project metadata has no Builder request marker. A matching shape is not proof of ownership.
+          return { code: "reconciliation_uncertain", retryable: false, status: "failed" };
+        }
+      }
+      if (uncertainWrite) {
+        // A 404 is not authoritative evidence that a previous POST did not commit.
+        return { code: "reconciliation_uncertain", retryable: false, status: "failed" };
+      }
+    } catch {
+      return { code: "provider_unavailable", retryable: true, status: "failed" };
+    }
+  }
   const candidates = async function* candidates(): AsyncGenerator<string> {
     const seen = new Set<string>();
     for (const candidate of input.persistedCandidates) {

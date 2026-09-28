@@ -41,6 +41,74 @@ function installation(scopeType: "team" | "user") {
 }
 
 describe("Vercel project provisioning", () => {
+  it("pauses when an expired write may already have created a project", async () => {
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
+    const request = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        framework: "nextjs",
+        id: "prj_existing",
+        name: "apps-vendor-portal",
+        rootDirectory: "apps/vendor-portal",
+      }),
+    );
+    const result = await provisionVercelProject({
+      appId: "vendor-portal",
+      fetch: request,
+      github: { code: "not_selected", retryable: false, status: "skipped" },
+      githubSelected: false,
+      installation: installation("user"),
+      persistAbsent: vi.fn(),
+      persistCandidate: vi.fn(),
+      persistedAbsentCandidates: ["apps-vendor-portal"],
+      persistedCandidates: ["apps-vendor-portal"],
+      reconcilePriorWrite: true,
+      token: "vercel-token",
+    });
+    expect(result).toEqual({
+      code: "reconciliation_uncertain",
+      retryable: false,
+      status: "failed",
+    });
+    expect(request.mock.calls.every(([, init]) => init?.method !== "POST")).toBe(true);
+  });
+
+  it("does not retry an uncertain project write after a read-only 404", async () => {
+    let created = false;
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
+    const request = vi.fn<typeof fetch>(async (_url, init) => {
+      if (init?.method === "POST") {
+        created = true;
+        return Response.json({ id: "prj_new" }, { status: 201 });
+      }
+      return created
+        ? Response.json({
+            framework: "nextjs",
+            id: "prj_new",
+            name: "apps-vendor-portal",
+            rootDirectory: "apps/vendor-portal",
+          })
+        : Response.json({}, { status: 404 });
+    });
+    const result = await provisionVercelProject({
+      appId: "vendor-portal",
+      fetch: request,
+      github: { code: "not_selected", retryable: false, status: "skipped" },
+      githubSelected: false,
+      installation: installation("user"),
+      persistAbsent: vi.fn(),
+      persistCandidate: vi.fn(),
+      persistedAbsentCandidates: ["apps-vendor-portal"],
+      persistedCandidates: ["apps-vendor-portal"],
+      reconcilePriorWrite: true,
+      token: "vercel-token",
+    });
+    expect(result).toEqual({
+      code: "reconciliation_uncertain",
+      retryable: false,
+      status: "failed",
+    });
+    expect(request.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
+  });
   it("preserves provider retry delay and stops on a rate limit", async () => {
     const observed: number[] = [];
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double

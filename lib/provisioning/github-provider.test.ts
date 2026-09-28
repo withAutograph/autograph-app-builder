@@ -471,8 +471,21 @@ describe("GitHub starter repository provisioning", () => {
       ...base,
       persistedAbsentCandidates: absent,
       persistedCandidates: candidates,
+      reconcilePriorWrite: true,
     });
-    expect(recovered).toMatchObject({
+    expect(recovered).toEqual({
+      code: "reconciliation_uncertain",
+      retryable: false,
+      status: "failed",
+    });
+    main = true;
+    const verified = await provisionGitHubRepository({
+      ...base,
+      persistedAbsentCandidates: absent,
+      persistedCandidates: candidates,
+      reconcilePriorWrite: true,
+    });
+    expect(verified).toMatchObject({
       fullName: `withAutograph/${resolved}`,
       headTree: ARRUSTED_TARGET_TREE,
       repositoryId: "303",
