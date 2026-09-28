@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import {
   publicPrototypeSchema,
+  publicPrototypeReferenceSchema,
   publicUiPreviewSchema,
   publicWorkingPreviewSchema,
 } from "../mcp/contracts";
@@ -10,6 +11,7 @@ import type {
   PublicEveEvent,
   PublicInputRequest,
   PublicPrototype,
+  PublicPrototypeReference,
   PublicUiPreview,
   PublicWorkingPreview,
 } from "../mcp/contracts";
@@ -97,6 +99,7 @@ const publicSessionFailure = (
 };
 const prototypePathPattern = /^prototype\/(?<appId>[a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/index\.html$/u;
 const lowercaseSha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
+const sha256 = (value: string): string => createHash("sha256").update(value, "utf-8").digest("hex");
 const prototypeRequestSchema = z
   .object({
     baseRevision: lowercaseSha256Schema.optional(),
@@ -143,6 +146,138 @@ const prototypeResultSchema = z
     size: z.number().int().min(1),
   })
   .strict();
+
+const prototypeReferenceResultSchema = z
+  .object({
+    appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+    chunkCount: z.number().int().positive(),
+    complete: z.literal(true),
+    contentBytes: z.number().int().positive(),
+    digest: lowercaseSha256Schema,
+    mediaType: z.literal("text/html"),
+    path: z.string().regex(prototypePathPattern),
+    recordedByCallId: z.string().min(1),
+    revision: lowercaseSha256Schema,
+    sessionId: z.string().min(1),
+    version: z.literal(2),
+  })
+  .passthrough();
+
+/** Projects v2 manifests only from a matching completed tool receipt. */
+export const createInstalledPrototypeReferenceReducer = (input: { sessionId: string }) => {
+  const requested = new Map<string, z.infer<typeof prototypeRequestSchema>>();
+  let latest: PublicPrototypeReference | undefined;
+  return {
+    accept(candidate: unknown) {
+      const event = z
+        .object({ data: z.unknown(), type: z.string() })
+        .passthrough()
+        .safeParse(candidate);
+      if (!event.success) {
+        return;
+      }
+      if (event.data.type === "actions.requested") {
+        const actions = z
+          .object({ actions: z.array(z.unknown()) })
+          .passthrough()
+          .safeParse(event.data.data);
+        if (!actions.success) {
+          return;
+        }
+        for (const candidateAction of actions.data.actions) {
+          const action = z
+            .object({
+              callId: z.string(),
+              input: z.unknown(),
+              kind: z.string(),
+              toolName: z.string(),
+            })
+            .passthrough()
+            .safeParse(candidateAction);
+          if (!action.success || action.data.kind !== "tool-call") {
+            continue;
+          }
+          if (action.data.toolName !== "record_prototype_artifact") {
+            requested.delete(action.data.callId);
+            continue;
+          }
+          const parsed = prototypeRequestSchema.safeParse(action.data.input);
+          if (parsed.success) {
+            requested.set(action.data.callId, parsed.data);
+          }
+        }
+        return;
+      }
+      if (event.data.type !== "action.result") {
+        return;
+      }
+      const resultEvent = z
+        .object({
+          result: z
+            .object({
+              callId: z.string(),
+              isError: z.boolean().optional(),
+              kind: z.literal("tool-result"),
+              output: z.unknown(),
+              toolName: z.literal("record_prototype_artifact"),
+            })
+            .passthrough(),
+          status: z.literal("completed"),
+        })
+        .passthrough()
+        .safeParse(event.data.data);
+      if (!resultEvent.success) {
+        return;
+      }
+      const receipt = resultEvent.data.result;
+      const request = requested.get(receipt.callId);
+      requested.delete(receipt.callId);
+      if (request === undefined || receipt.isError === true) {
+        return;
+      }
+      const output = prototypeReferenceResultSchema.safeParse(receipt.output);
+      if (!output.success) {
+        return;
+      }
+      const value = output.data;
+      const revision = sha256(
+        JSON.stringify({ digest: value.digest, mediaType: value.mediaType, path: value.path }),
+      );
+      if (
+        value.sessionId !== input.sessionId ||
+        value.recordedByCallId !== receipt.callId ||
+        value.appId !== prototypePathPattern.exec(request.path)?.groups?.appId ||
+        value.path !== request.path ||
+        value.mediaType !== request.mediaType ||
+        value.revision !== revision ||
+        (request.expectedDigest !== undefined && value.digest !== request.expectedDigest) ||
+        (request.chunkIndex !== undefined &&
+          (request.finalChunk !== true || value.chunkCount !== request.chunkIndex + 1)) ||
+        (request.chunkIndex === undefined &&
+          (value.digest !== sha256(request.content) ||
+            value.contentBytes !== Buffer.byteLength(request.content, "utf-8")))
+      ) {
+        return;
+      }
+      const projected = publicPrototypeReferenceSchema.safeParse({
+        appId: value.appId,
+        chunkCount: value.chunkCount,
+        contentBytes: value.contentBytes,
+        digest: value.digest,
+        mediaType: value.mediaType,
+        path: value.path,
+        recordedByCallId: value.recordedByCallId,
+        revision: value.revision,
+        sessionId: value.sessionId,
+        version: 2,
+      });
+      if (projected.success) {
+        latest = projected.data;
+      }
+    },
+    snapshot: () => latest,
+  };
+};
 const uiPreviewResultSchema = z
   .object({
     appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
@@ -159,7 +294,6 @@ const uiPreviewResultSchema = z
     totalBytes: z.number().int().positive().optional(),
   })
   .passthrough();
-const sha256 = (value: string): string => createHash("sha256").update(value, "utf-8").digest("hex");
 
 /**
  * Recovers only a successfully recorded HTML prototype from Eve's durable

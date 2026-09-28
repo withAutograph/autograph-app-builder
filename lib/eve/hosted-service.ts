@@ -53,6 +53,7 @@ import type {
   publicSessionStageSchema,
   EveSessionResult,
   PublicInputRequest,
+  PublicPrototypeReference,
 } from "../mcp/contracts";
 import {
   HostedAdapterSessionUnavailableError,
@@ -97,6 +98,7 @@ export interface HostedEveTransport {
     artifactProjectionRequiresLegacyReadback: boolean;
     installedEventCount: number;
     pendingRequests: PublicInputRequest[];
+    prototypeRef?: PublicPrototypeReference;
     publicEventCount: number;
     status: HostedEngineSnapshot["status"];
     uiPreview?: HostedEngineSnapshot["uiPreview"];
@@ -973,6 +975,7 @@ export function createHostedEveSessionService(input: {
         events: page.events,
         ...(metadata.inputRequests === undefined ? {} : { inputRequests: metadata.inputRequests }),
         ...(metadata.prototype === undefined ? {} : { prototype: metadata.prototype }),
+        ...(metadata.prototypeRef === undefined ? {} : { prototypeRef: metadata.prototypeRef }),
         sessionId,
         status:
           metadata.status === "working" && durable.resumability === "checkpoint"
@@ -1045,6 +1048,9 @@ export function createHostedEveSessionService(input: {
             ...(spool.observation.pendingRequests.length === 0
               ? {}
               : { inputRequests: spool.observation.pendingRequests }),
+            ...(spool.observation.prototypeRef === undefined
+              ? {}
+              : { prototypeRef: spool.observation.prototypeRef }),
             status: spool.observation.status,
             ...(spool.observation.uiPreview === undefined
               ? {}
@@ -1060,6 +1066,7 @@ export function createHostedEveSessionService(input: {
             ...(metadata.inputRequests === undefined
               ? {}
               : { inputRequests: metadata.inputRequests }),
+            ...(metadata.prototypeRef === undefined ? {} : { prototypeRef: metadata.prototypeRef }),
             sessionId,
             status: metadata.status,
             ...(metadata.uiPreview === undefined ? {} : { uiPreview: metadata.uiPreview }),
