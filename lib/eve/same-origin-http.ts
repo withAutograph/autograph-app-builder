@@ -3,7 +3,6 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { MessageStreamEvent } from "eve/client";
 import { z } from "zod";
 
-import { sessionStatusSchema } from "../mcp/contracts";
 import { hostedPrincipalSchema } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
 import {
@@ -220,15 +219,12 @@ async function authenticatedFetch(input: {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function readInstalledSnapshot(input: {
+export async function* streamSameOriginEveEvents(input: {
   config: z.infer<typeof sameOriginConfigSchema>;
   workloadIdentity: HostedWorkloadIdentity;
   fetchImplementation: typeof fetch;
   sessionId: string;
-}): Promise<{
-  snapshot: HostedEngineSnapshot;
-  installed: MessageStreamEvent[];
-}> {
+}): AsyncGenerator<MessageStreamEvent, void, undefined> {
   const path = `/eve/v1/session/${encodeURIComponent(input.sessionId)}/stream?startIndex=0&includeTailIndex=1`;
   const response = await authenticatedFetch({ ...input, path, timeout: "unbounded" });
   if (response.status >= 300 && response.status < 400) {
@@ -260,27 +256,26 @@ async function readInstalledSnapshot(input: {
   }
   if (tail === -1) {
     await response.body.cancel().catch(() => null);
-    return {
-      installed: [],
-      snapshot: { events: [], status: sessionStatusSchema.parse("working") },
-    };
+    return;
   }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder("utf-8", { fatal: true });
-  const events: MessageStreamEvent[] = [];
+  let eventCount = 0;
   let buffered = "";
   try {
-    while (events.length <= tail) {
+    while (eventCount <= tail) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const chunk = await reader.read();
       if (chunk.done) {
         buffered += decoder.decode();
         const line = buffered.trim();
-        if (line.length > 0 && events.length <= tail) {
-          events.push(
-            streamEnvelopeSchema.parse(JSON.parse(line)) as unknown as MessageStreamEvent,
-          );
+        if (line.length > 0 && eventCount <= tail) {
+          const event = streamEnvelopeSchema.parse(
+            JSON.parse(line),
+          ) as unknown as MessageStreamEvent;
+          eventCount += 1;
+          yield event;
         }
         break;
       }
@@ -288,23 +283,38 @@ async function readInstalledSnapshot(input: {
       // the provider's observed tail rather than imposing a lifetime byte quota.
       buffered += decoder.decode(chunk.value, { stream: true });
       let newline = buffered.indexOf("\n");
-      while (newline !== -1 && events.length <= tail) {
+      while (newline !== -1 && eventCount <= tail) {
         const line = buffered.slice(0, newline).trim();
         buffered = buffered.slice(newline + 1);
         if (line.length > 0) {
-          events.push(
-            streamEnvelopeSchema.parse(JSON.parse(line)) as unknown as MessageStreamEvent,
-          );
+          const event = streamEnvelopeSchema.parse(
+            JSON.parse(line),
+          ) as unknown as MessageStreamEvent;
+          eventCount += 1;
+          yield event;
         }
         newline = buffered.indexOf("\n");
       }
     }
-    if (events.length !== tail + 1) {
+    if (eventCount !== tail + 1) {
       throw new Error("Canonical Eve stream ended before its durable tail.");
     }
   } finally {
     await reader.cancel().catch(() => null);
     reader.releaseLock();
+  }
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+async function readInstalledSnapshot(
+  input: Parameters<typeof streamSameOriginEveEvents>[0],
+): Promise<{
+  snapshot: HostedEngineSnapshot;
+  installed: MessageStreamEvent[];
+}> {
+  const events: MessageStreamEvent[] = [];
+  for await (const event of streamSameOriginEveEvents(input)) {
+    events.push(event);
   }
 
   const projected = events

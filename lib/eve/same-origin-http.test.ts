@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { hostedEveOperationScopes } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
-import { createSameOriginEveTransport } from "./same-origin-http";
+import { createSameOriginEveTransport, streamSameOriginEveEvents } from "./same-origin-http";
 import type { HostedWorkloadIdentity } from "./same-origin-http";
 import {
   SubmissionOutcomeUnknownError,
@@ -56,6 +56,50 @@ function stream(
     status: 200,
   });
 }
+
+describe("incremental canonical Eve stream", () => {
+  it("consumes more than 100,000 events without retaining them in the transport", async () => {
+    const total = 100_001;
+    let produced = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const encoder = new TextEncoder();
+        const lines: string[] = [];
+        while (produced < total && lines.length < 128) {
+          lines.push(JSON.stringify({ data: {}, type: "step.started" }));
+          produced += 1;
+        }
+        if (lines.length > 0) {
+          controller.enqueue(encoder.encode(`${lines.join("\n")}\n`));
+        } else {
+          controller.close();
+        }
+      },
+    });
+    const response = new Response(body, {
+      headers: {
+        "content-type": "application/x-ndjson",
+        "x-eve-session-id": "wrun_1",
+        "x-eve-stream-format": "ndjson",
+        "x-eve-stream-tail-index": String(total - 1),
+        "x-eve-stream-version": "23",
+      },
+      status: 200,
+    });
+    let observed = 0;
+    for await (const event of streamSameOriginEveEvents({
+      config: { ...config, timeoutMs: 10_000 },
+      // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
+      fetchImplementation: vi.fn(async () => response),
+      sessionId: "wrun_1",
+      workloadIdentity: identity(),
+    })) {
+      expect(event.type).toBe("step.started");
+      observed += 1;
+    }
+    expect(observed).toBe(total);
+  });
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function pendingApprovalEvents(requestId: string) {
