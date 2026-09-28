@@ -200,6 +200,46 @@ function runtimeFixture(input?: {
 }
 
 describe("deployment repository access authorization", () => {
+  it("uses a target proof without reading an installation repository inventory", async () => {
+    const legacy = mutableProvider({ repositoryAvailable: () => true });
+    const provider = await legacy({ authority, installation });
+    const inspectInstallation = vi.fn(() =>
+      Promise.reject(new Error("inventory must not be read")),
+    );
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    const providerFactory = vi.fn(async () => ({
+      ...provider,
+      inspectInstallation,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      async inspectTargetAccess({
+        repositoryId,
+        requestedPermissions,
+      }: Parameters<NonNullable<GitHubRepositoryAccessProvider["inspectTargetAccess"]>>[0]) {
+        return {
+          accountId: installation.accountId,
+          accountLogin: installation.accountLogin,
+          accountType: installation.accountType,
+          installationId: installation.installationId,
+          permissions: requestedPermissions,
+          repositoryId,
+        };
+      },
+    }));
+    const runtime = createRepositoryAccessRuntime({
+      authority,
+      continuations: runtimeFixture().continuations,
+      installations: installationStore([installation]),
+      origin: "https://builder.example",
+      providerFactory,
+    });
+    await expect(runtime.classify({ repository })).resolves.toMatchObject({
+      status: "ready",
+      targetProof: { repositoryId: "200", version: 3 },
+    });
+    expect(providerFactory).toHaveBeenCalledTimes(1);
+    expect(inspectInstallation).not.toHaveBeenCalled();
+  });
+
   it("uses the web selection among multiple installations and preserves its handoff return", async () => {
     const providerFactory = mutableProvider({
       repositoryAvailable: () => true,
@@ -225,7 +265,8 @@ describe("deployment repository access authorization", () => {
       scope: { installationId: "10" },
       status: "ready",
     });
-    expect(providerFactory).toHaveBeenCalledTimes(1);
+    // A provider without target reads retains the legacy classification path.
+    expect(providerFactory).toHaveBeenCalledTimes(2);
     expect(providerFactory.mock.calls[0]?.[0]).toMatchObject({
       authority,
       installation: { installationId: "10" },
