@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, lte, ne, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
@@ -629,6 +629,55 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
             ? { disposition: "existing" as const, operation: raced }
             : { disposition: "conflict" as const };
         }
+      });
+    },
+
+    async settleIdleReservations(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      return await database.transaction(async (transaction) => {
+        if ((await sessionById(transaction, principal, input.sessionId, true)) === null) {
+          throw new Error(SESSION_NOT_FOUND);
+        }
+        const rows = await transaction
+          .select()
+          .from(agentOperations)
+          .where(
+            and(
+              tenantPredicate(principal),
+              eq(agentOperations.sessionId, input.sessionId),
+              eq(agentOperations.state, "reserved"),
+              ne(agentOperations.kind, "start"),
+              lte(agentOperations.updatedAt, new Date(input.beforeEpochMs)),
+            ),
+          )
+          .for("update");
+        await Promise.all(
+          rows.map(async (row) => {
+            const operation = parseHostedOperationRow(row);
+            const settled = hostedOperationRecordSchema.parse({
+              ...operation,
+              safeErrorCode: "submission_unknown",
+              state: "submission_unknown",
+              updatedAtEpochMs: input.nowEpochMs,
+            });
+            const updated = await transaction
+              .update(agentOperations)
+              .set(operationValues(settled))
+              .where(
+                and(
+                  tenantPredicate(principal),
+                  eq(agentOperations.operationId, operation.operationId),
+                  eq(agentOperations.state, "reserved"),
+                ),
+              )
+              .returning();
+            if (updated.length !== 1) {
+              throw new Error("Hosted idle operation settlement was not durable.");
+            }
+            parseHostedOperationRow(updated[0]);
+          }),
+        );
+        return rows.length;
       });
     },
 

@@ -519,6 +519,8 @@ export const hostedOperationRecordSchema = z
 
 export type HostedOperationRecord = z.infer<typeof hostedOperationRecordSchema>;
 
+const SESSION_NOT_FOUND = "Hosted session was not found.";
+
 export const withoutHostedOperationError = (operation: HostedOperationRecord) => {
   if (operation.state !== "submission_unknown") {
     return operation;
@@ -579,6 +581,13 @@ export interface HostedEveStore {
     safeErrorCode: string;
     nowEpochMs: number;
   }) => Promise<HostedOperationRecord>;
+  /** After a complete idle Eve observation, release only old unanswered mutations. */
+  settleIdleReservations?: (input: {
+    principal: z.infer<typeof hostedPrincipalSchema>;
+    sessionId: string;
+    beforeEpochMs: number;
+    nowEpochMs: number;
+  }) => Promise<number>;
   getSession: (
     principal: z.infer<typeof hostedPrincipalSchema>,
     sessionId: string,
@@ -759,6 +768,37 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   }
 
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+  async settleIdleReservations(
+    input: Parameters<NonNullable<HostedEveStore["settleIdleReservations"]>>[0],
+  ) {
+    if (!this.sessions.has(InMemoryHostedEveStore.sessionKey(input.principal, input.sessionId))) {
+      throw new Error(SESSION_NOT_FOUND);
+    }
+    let settledCount = 0;
+    for (const [key, operation] of this.operations) {
+      const reservedMutation = operation.kind !== "start" && operation.state === "reserved";
+      const oldSessionOperation =
+        operation.sessionId === input.sessionId &&
+        operation.updatedAtEpochMs <= input.beforeEpochMs;
+      const sameTenant = tenantKeyFor(operation.principal) === tenantKeyFor(input.principal);
+      if (!reservedMutation || !oldSessionOperation || !sameTenant) {
+        continue;
+      }
+      this.operations.set(
+        key,
+        hostedOperationRecordSchema.parse({
+          ...operation,
+          safeErrorCode: "submission_unknown",
+          state: "submission_unknown",
+          updatedAtEpochMs: input.nowEpochMs,
+        }),
+      );
+      settledCount += 1;
+    }
+    return settledCount;
+  }
+
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async getSession(
     principal: z.infer<typeof hostedPrincipalSchema>,
     sessionId: string,
@@ -798,7 +838,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     const key = InMemoryHostedEveStore.sessionKey(input.principal, input.sessionId);
     const current = this.sessions.get(key);
     if (current === undefined) {
-      throw new Error("Hosted session was not found.");
+      throw new Error(SESSION_NOT_FOUND);
     }
     const durable = toDurableHostedSessionRecord(current);
     // Cancellation is terminal for this session; explicit resume creates a new child.
@@ -840,7 +880,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     const key = InMemoryHostedEveStore.sessionKey(input.principal, input.sessionId);
     const current = this.sessions.get(key);
     if (current === undefined) {
-      throw new Error("Hosted session was not found.");
+      throw new Error(SESSION_NOT_FOUND);
     }
     const durable = toDurableHostedSessionRecord(current);
     if (
