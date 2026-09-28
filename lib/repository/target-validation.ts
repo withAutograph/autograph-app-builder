@@ -407,7 +407,17 @@ export const sandboxValidationCommandExecutor =
     if (!supportedValidationCommands(appId).some((planned) => planned.command === command)) {
       throw new Error("The repository validation command is not supported.");
     }
-    return await sandbox.run({ command, workingDirectory: validationRoot });
+    // Repository tasks may start local services. Keep those services' output on
+    // a file so a child that outlives the task cannot hold the sandbox command
+    // pipe open after the validation task exits.
+    const detachedCommand = `set +e
+log=$(mktemp /tmp/app-builder-validation.XXXXXX) || exit $?
+${command} > "$log" 2>&1
+status=$?
+cat "$log"
+rm -f "$log"
+exit "$status"`;
+    return await sandbox.run({ command: detachedCommand, workingDirectory: validationRoot });
   };
 
 export const fixtureValidationCommandExecutor =

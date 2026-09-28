@@ -1,3 +1,8 @@
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import type { SandboxSession } from "eve/sandbox";
@@ -392,8 +397,54 @@ describe("target validation", () => {
 
     expect(result.exitCode).toBe(1);
     expect(run).toHaveBeenCalledExactlyOnceWith({
-      command,
+      command: `set +e
+log=$(mktemp /tmp/app-builder-validation.XXXXXX) || exit $?
+${command} > "$log" 2>&1
+status=$?
+cat "$log"
+rm -f "$log"
+exit "$status"`,
       workingDirectory: "/workspace/repository",
     });
+  });
+
+  it("returns a validation failure even when a local service keeps writing after the task exits", async () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "builder-validation-"));
+    const mise = path.join(directory, "mise");
+    writeFileSync(
+      mise,
+      "#!/bin/sh\n(sleep 3; printf 'service log\\n') &\nprintf 'test failure\\n'\nexit 17\n",
+    );
+    chmodSync(mise, 0o755);
+    try {
+      // oxlint-disable-next-line eslint/require-await -- model the sandbox's async command API
+      const run = vi.fn(async ({ command }: { command: string }) => {
+        const result = spawnSync("/bin/sh", ["-c", command], {
+          cwd: directory,
+          encoding: "utf-8",
+          env: { ...process.env, PATH: `${directory}:${process.env.PATH ?? ""}` },
+          timeout: 1000,
+        });
+        if (result.error !== undefined) {
+          throw result.error;
+        }
+        return {
+          exitCode: result.status ?? -1,
+          stderr: result.stderr,
+          stdout: result.stdout,
+        };
+      });
+      const result = await sandboxValidationCommandExecutor()({
+        appId: "example",
+        command: "mise run --skip-tools app:test example 1/1",
+        sandbox: { run } as unknown as SandboxSession,
+        validationRoot: directory,
+      });
+      expect(result.exitCode).toBe(17);
+      expect(result.stdout).toContain("test failure");
+      expect(run).toHaveBeenCalledOnce();
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
   });
 });
