@@ -472,6 +472,22 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     ).toHaveLength(6);
   });
 
+  it("reads more than 10,000 installation repositories through the final page", async () => {
+    const pages = Array.from({ length: 100 }, (_unusedPage, page) =>
+      Array.from({ length: 100 }, (_unusedItem, index) => page * 100 + index + 1),
+    );
+    pages.push([10_001]);
+    const mock = providerFetch({ repositoryPages: pages });
+    const adapter = createGitHubAppPublicationAdapter(createProvider(mock.implementation));
+
+    const identity = await adapter.inspectInstallation("resolve-existing-source");
+    expect(identity.selectedRepositoryIds).toHaveLength(10_001);
+    expect(identity.selectedRepositoryIds).toContain("10001");
+    expect(
+      mock.calls.filter(({ url }) => url.includes("/installation/repositories?")),
+    ).toHaveLength(101);
+  });
+
   it("rejects repository IDs that cannot round-trip as safe JSON integers", async () => {
     const provider = createProvider(providerFetch().implementation);
 
