@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  localPreviewExecutionCommand,
   localPreviewSetupCommand,
   prepareAppLocalPreview,
 } from "../../agent/tools/prepare-app-local-preview";
@@ -16,9 +17,13 @@ describe("private local preview setup", () => {
       sandbox: { run },
     });
     expect(run).toHaveBeenCalledWith({
-      command: "mise run --skip-tools app:local -- spend-review setup",
+      command: localPreviewExecutionCommand("spend-review"),
       workingDirectory: "/workspace/repository",
     });
+    expect(localPreviewExecutionCommand("spend-review")).toContain(
+      "mise run --skip-tools app:local -- spend-review setup > '/tmp/app-builder-local-setup-spend-review.log' 2>&1",
+    );
+    expect(localPreviewExecutionCommand("spend-review")).toContain('exit "$status"');
     expect(result).toMatchObject({ exitCode: 0, status: "prepared" });
     expect(() => localPreviewSetupCommand("spend-review; deploy")).toThrow();
   });
@@ -55,7 +60,7 @@ describe("private local preview setup", () => {
     });
     expect(run).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ command: "mise run --skip-tools app:local -- spend-review setup" }),
+      expect.objectContaining({ command: localPreviewExecutionCommand("spend-review") }),
     );
     expect(run).toHaveBeenNthCalledWith(
       2,
