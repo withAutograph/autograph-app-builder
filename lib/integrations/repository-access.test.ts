@@ -81,6 +81,65 @@ function provider(
 }
 
 describe("tenant-bound GitHub repository access", () => {
+  it("accepts provider-proven selections above 10,000 repositories", async () => {
+    const connected = binding("10");
+    const selectedRepositoryIds = Array.from({ length: 10_001 }, (_, index) => String(index + 1));
+    const result = await classifyGitHubRepositoryAccess({
+      authority,
+      installations: store([connected]),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      providerFactory: async () => ({
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        async inspectInstallation({ requestedPermissions }) {
+          return {
+            accountId: connected.accountId,
+            accountLogin: connected.accountLogin,
+            accountType: connected.accountType,
+            grantedPermissions: requestedPermissions,
+            installationId: connected.installationId,
+            repositorySelection: "selected",
+            selectedRepositoryIds,
+          };
+        },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        async inspectRepositoryByName() {
+          return {
+            archived: false,
+            defaultBranch: "main",
+            headSha: "1".repeat(40),
+            headTree: "2".repeat(40),
+            name: "app-builder-dogfood",
+            owner: "withAutograph",
+            repositoryId: "10001",
+            repositoryVariableNames: Array.from(
+              { length: 1001 },
+              (_, index) => `VARIABLE_${index}`,
+            ),
+            visibility: "private",
+          };
+        },
+      }),
+      repository: "withAutograph/app-builder-dogfood",
+    });
+    expect(result.status).toBe("ready");
+  });
+
+  it("returns every verified scope when more than 100 installations match", async () => {
+    const bindings = Array.from({ length: 101 }, (_, index) =>
+      binding(String(index + 1), `account-${index + 1}`),
+    );
+    const result = await classifyGitHubRepositoryAccess({
+      authority,
+      installations: store(bindings),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      providerFactory: async ({ installation }) => provider(installation, "200"),
+      repository: "withAutograph/app-builder-dogfood",
+    });
+    expect(result.status).toBe("scope-selection-required");
+    if (result.status === "scope-selection-required") {
+      expect(result.scopes).toHaveLength(101);
+    }
+  });
   it("requires a connection when the tenant has no installation", async () => {
     await expect(
       classifyGitHubRepositoryAccess({

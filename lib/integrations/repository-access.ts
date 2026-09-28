@@ -75,7 +75,7 @@ const installationReadBackSchema = z
     grantedPermissions: readPermissionsSchema,
     installationId: decimal,
     repositorySelection: z.enum(["all", "selected"]),
-    selectedRepositoryIds: z.array(decimal).max(10_000),
+    selectedRepositoryIds: z.array(decimal),
   })
   .strict();
 
@@ -88,7 +88,7 @@ export const repositoryAccessSnapshotSchema = z
     name: repositoryPart,
     owner: repositoryPart,
     repositoryId: decimal,
-    repositoryVariableNames: z.array(z.string().min(1).max(255)).max(1000),
+    repositoryVariableNames: z.array(z.string().min(1).max(255)),
     visibility: z.literal("private"),
   })
   .strict();
@@ -115,7 +115,7 @@ export const repositoryAccessResultSchema = z.discriminatedUnion("status", [
   z
     .object({
       repository: repositoryReferenceResultSchema,
-      scopes: z.array(scopeSchema).min(2).max(100),
+      scopes: z.array(scopeSchema).min(2),
       status: z.literal("scope-selection-required"),
     })
     .strict(),
@@ -123,7 +123,7 @@ export const repositoryAccessResultSchema = z.discriminatedUnion("status", [
     .object({
       action: z.enum(["connect", "update"]),
       repository: repositoryReferenceResultSchema,
-      scopes: z.array(scopeSchema).max(100),
+      scopes: z.array(scopeSchema),
       status: z.literal("authorization-required"),
     })
     .strict(),
