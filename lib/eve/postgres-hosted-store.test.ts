@@ -269,6 +269,13 @@ describe("PostgreSQL hosted Eve row authority", () => {
           version: "7",
           when: 1_789_992_000_000,
         },
+        {
+          breakpoints: true,
+          idx: 22,
+          tag: "0023_prototype_chunks",
+          version: "7",
+          when: 1_790_567_902_244,
+        },
       ],
       version: "7",
     });
