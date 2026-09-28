@@ -3,6 +3,7 @@ import {
   createApprovedFreshRepository,
   publishApprovedDraftPullRequest,
   resolveImmutableExistingSource,
+  resolveImmutableExistingSourceWithTargetProof,
 } from "../repository/github-publication";
 import type {
   DraftPullRequestProposal,
@@ -27,6 +28,7 @@ import type {
 } from "../repository/github-draft-update";
 import { approvalTargetFromDraftProposal, assertApprovalReceipt } from "./approval-receipt";
 import type { ApprovalReceipt } from "./approval-receipt";
+import type { HostedGitHubTenantAuthority } from "../repository/postgres-github-installation-store";
 
 const supportedOperations = [
   "resolve-immutable-existing-source",
@@ -193,6 +195,7 @@ function disabledRuntime(): GitHubPublicationRuntime {
 export function composeGitHubPublicationRuntime(input: {
   enabled: boolean;
   adapter?: GitHubPublicationAdapter;
+  authority?: HostedGitHubTenantAuthority;
   proposals?: GitHubPublicationProposalStore;
   receipts?: GitHubPublicationReceiptStore;
   adoptions?: GitHubDraftAdoptionStore;
@@ -313,6 +316,18 @@ export function composeGitHubPublicationRuntime(input: {
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async resolveImmutableSource(request) {
+      if (adapter.targetSourceAdapter && input.authority) {
+        return resolveImmutableExistingSourceWithTargetProof({
+          adapter: adapter.targetSourceAdapter,
+          authority: input.authority,
+          expectedInstallationId: request.expectedInstallationId,
+          expectedSha: request.expectedSha,
+          expectedTree: request.expectedTree,
+          ref: request.ref,
+          repositoryId: request.repositoryId,
+          resolvedByCallId: request.approvedByCallId,
+        });
+      }
       return resolveImmutableExistingSource({
         adapter,
         expectedInstallationId: request.expectedInstallationId,

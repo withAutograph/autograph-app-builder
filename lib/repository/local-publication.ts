@@ -9,9 +9,6 @@ import { safeSourcePath } from "./source-path";
 import { assertRepositoryReleasePolicyAtGitSnapshot } from "./supported-template";
 
 export const LOCAL_PUBLICATION_VERSION = 2 as const;
-export const LOCAL_PUBLICATION_MAX_FILE_BYTES = 4 * 1024 * 1024;
-export const LOCAL_PUBLICATION_MAX_CHANGE_BYTES = 16 * 1024 * 1024;
-export const LOCAL_PUBLICATION_MAX_DIRTY_BYTES = 8 * 1024 * 1024;
 export const LOCAL_PUBLICATION_ALLOWED_MODES = ["644", "755"] as const;
 const topologyPath = "microfrontends.json";
 
@@ -60,7 +57,6 @@ export interface DirtyPathSnapshot {
   mode?: string;
   size?: number;
   contentDigest?: string;
-  contentBase64?: string;
 }
 
 export interface DestinationSnapshot {

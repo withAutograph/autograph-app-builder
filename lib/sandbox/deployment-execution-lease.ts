@@ -110,7 +110,7 @@ export function sandboxCleanupEvidence(error: unknown) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function stopWithin(
   sandbox: Pick<RuntimeSandboxSession, "stop">,
-  timeoutMs = SANDBOX_EXECUTION_POLICY.command.maximumKillCleanupTimeMs,
+  timeoutMs = SANDBOX_EXECUTION_POLICY.lease.cleanupTimeoutMs,
 ): Promise<SandboxCleanupEvidence> {
   const timeoutController = new AbortController();
   const stop = Promise.resolve(sandbox.stop());

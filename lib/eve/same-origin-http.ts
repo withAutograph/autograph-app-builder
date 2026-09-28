@@ -1,9 +1,16 @@
+import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
 import type { MessageStreamEvent } from "eve/client";
 import { z } from "zod";
 
-import { sessionStatusSchema } from "../mcp/contracts";
+import { readJsonStringChecks } from "../agent/streaming-json-pointer";
+import type {
+  EveSessionStatus,
+  PublicInputRequest,
+  PublicUiPreview,
+  PublicWorkingPreview,
+} from "../mcp/contracts";
 import { hostedPrincipalSchema } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
 import {
@@ -15,14 +22,16 @@ import {
 import type { HostedEngineSnapshot, HostedEveTransport } from "./hosted-service";
 import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
 import {
+  createInstalledPrototypeProjector,
+  createInstalledPrototypeReferenceReducer,
   deriveInstalledEveStatus,
   latestInstalledPrototype,
   latestInstalledUiPreview,
   latestInstalledWorkingPreview,
   projectInstalledEveEvent,
 } from "./public-events";
+import type { InternalEveEvent } from "./public-events";
 
-const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 10_000;
 const SESSION_READ_TIMEOUT_MS = 30_000;
 const SESSION_SETTLEMENT_POLL_INTERVAL_MS = 200;
@@ -136,23 +145,29 @@ async function workloadHeaders(identity: HostedWorkloadIdentity) {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function boundedJson(response: Response): Promise<unknown> {
+async function readJson(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type")?.split(";", 1)[0];
   if (contentType !== "application/json") {
     throw new Error("The canonical Eve API returned a non-JSON response.");
   }
-  const declaredLength = response.headers.get("content-length");
-  if (
-    declaredLength !== null &&
-    (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > MAX_RESPONSE_BYTES)
-  ) {
-    throw new Error("The canonical Eve API response is too large.");
+  if (response.status >= 400) {
+    const parsed = await readJsonStringChecks(response.body, [{ capture: true, pointer: "/code" }]);
+    return { code: parsed.matches[0] ? parsed.values[0] : undefined };
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength > MAX_RESPONSE_BYTES) {
-    throw new Error("The canonical Eve API response is too large.");
-  }
-  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  const parsed = await readJsonStringChecks(
+    response.body,
+    [
+      { expectedLiteral: "true", pointer: "/ok" },
+      { capture: true, optional: true, pointer: "/sessionId" },
+      { capture: true, pointer: "/status" },
+    ],
+    { allowedRootKeys: ["ok", "sessionId", "status"] },
+  );
+  return {
+    ok: parsed.matches[0],
+    ...(parsed.values[1] === undefined ? {} : { sessionId: parsed.values[1] }),
+    ...(parsed.values[2] === undefined ? {} : { status: parsed.values[2] }),
+  };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -193,7 +208,7 @@ async function postMutation(input: {
   }
 
   try {
-    const body = await boundedJson(response);
+    const body = await readJson(response);
     if (response.status >= 400 && response.status < 500) {
       const parsed = errorResponseSchema.safeParse(body);
       throw new SubmissionRejectedBeforeDispatchError(
@@ -233,17 +248,14 @@ async function authenticatedFetch(input: {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function readInstalledSnapshot(input: {
+export async function* streamSameOriginEveEvents(input: {
   config: z.infer<typeof sameOriginConfigSchema>;
   workloadIdentity: HostedWorkloadIdentity;
   fetchImplementation: typeof fetch;
   sessionId: string;
   readDeadline?: boolean;
   readSignal?: AbortSignal;
-}): Promise<{
-  snapshot: HostedEngineSnapshot;
-  installed: MessageStreamEvent[];
-}> {
+}): AsyncGenerator<MessageStreamEvent, void, undefined> {
   const path = `/eve/v1/session/${encodeURIComponent(input.sessionId)}/stream?startIndex=0&includeTailIndex=1`;
   const signal =
     input.readSignal ??
@@ -290,31 +302,29 @@ async function readInstalledSnapshot(input: {
     throw new Error("Canonical Eve returned an invalid durable stream tail.");
   }
   if (tail === -1) {
-    // Provider cancellation is best effort. Waiting for a stalled cancel
-    // would turn a completed durable read into a host-level timeout.
-    // oxlint-disable-next-line promise/prefer-await-to-then -- This cleanup must not delay the MCP response.
+    // Provider cancellation is best effort; a stalled cancel must not hold the response.
+    // oxlint-disable-next-line promise/prefer-await-to-then -- Cleanup must not delay the reader.
     void response.body.cancel().catch(() => null);
-    return {
-      installed: [],
-      snapshot: { events: [], status: sessionStatusSchema.parse("working") },
-    };
+    return;
   }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder("utf-8", { fatal: true });
-  const events: MessageStreamEvent[] = [];
+  let eventCount = 0;
   let buffered = "";
   try {
-    while (events.length <= tail) {
+    while (eventCount <= tail) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const chunk = await reader.read();
       if (chunk.done) {
         buffered += decoder.decode();
         const line = buffered.trim();
-        if (line.length > 0 && events.length <= tail) {
-          events.push(
-            streamEnvelopeSchema.parse(JSON.parse(line)) as unknown as MessageStreamEvent,
-          );
+        if (line.length > 0 && eventCount <= tail) {
+          const event = streamEnvelopeSchema.parse(
+            JSON.parse(line),
+          ) as unknown as MessageStreamEvent;
+          eventCount += 1;
+          yield event;
         }
         break;
       }
@@ -322,18 +332,20 @@ async function readInstalledSnapshot(input: {
       // the provider's observed tail rather than imposing a lifetime byte quota.
       buffered += decoder.decode(chunk.value, { stream: true });
       let newline = buffered.indexOf("\n");
-      while (newline !== -1 && events.length <= tail) {
+      while (newline !== -1 && eventCount <= tail) {
         const line = buffered.slice(0, newline).trim();
         buffered = buffered.slice(newline + 1);
         if (line.length > 0) {
-          events.push(
-            streamEnvelopeSchema.parse(JSON.parse(line)) as unknown as MessageStreamEvent,
-          );
+          const event = streamEnvelopeSchema.parse(
+            JSON.parse(line),
+          ) as unknown as MessageStreamEvent;
+          eventCount += 1;
+          yield event;
         }
         newline = buffered.indexOf("\n");
       }
     }
-    if (events.length !== tail + 1) {
+    if (eventCount !== tail + 1) {
       throw new Error("Canonical Eve stream ended before its durable tail.");
     }
   } catch (error) {
@@ -352,10 +364,306 @@ async function readInstalledSnapshot(input: {
       // A pending cancellation can retain the lock until the provider closes.
     }
   }
+}
 
-  const projected = events
-    .flatMap((event) => projectInstalledEveEvent(event, 0))
-    .map((event, index) => ({ ...event, index }));
+/** Scan the durable tail with backpressure. Artifact content must be recovered by a receipt verifier. */
+const artifactTools = new Set([
+  "record_prototype_artifact",
+  "record_ui_preview",
+  "get_prototype_artifact",
+]);
+const markdownPrototypePath =
+  /^prototype\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/(?:app-spec|decisions)\.md$/u;
+const markdownPrototypeInputSchema = z
+  .object({
+    mediaType: z.string().optional(),
+    path: z.string().regex(markdownPrototypePath),
+  })
+  .passthrough();
+
+const v2ReadRequestSchema = z.object({
+  digest: z.string().regex(/^[a-f0-9]{64}$/u),
+  offsetBytes: z.number().int().nonnegative(),
+  path: z.string(),
+  revision: z.string().regex(/^[a-f0-9]{64}$/u),
+});
+const v2ReadResultSchema = z.object({
+  byteOffset: z.number().int().nonnegative(),
+  chunkDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  complete: z.boolean(),
+  content: z.string().min(1),
+  digest: z.string().regex(/^[a-f0-9]{64}$/u),
+  mediaType: z.literal("text/html"),
+  nextOffsetBytes: z.number().int().positive(),
+  path: z.string(),
+  revision: z.string().regex(/^[a-f0-9]{64}$/u),
+  totalBytes: z.number().int().positive(),
+});
+
+/** A v2 receipt is sufficient for paged history; unresolved or v1 actions require legacy readback. */
+const createArtifactReadbackClassifier = (sessionId: string) => {
+  const references = createInstalledPrototypeReferenceReducer({ sessionId });
+  const pending = new Map<string, { input: unknown; toolName: string }>();
+  const markdownCalls = new Map<string, string>();
+  const incompleteArtifacts = new Set<string>();
+  const incompleteUiPreviews = new Set<string>();
+  let legacy = false;
+  return {
+    accept(event: MessageStreamEvent) {
+      references.accept(event);
+      if (event.type === "actions.requested") {
+        for (const action of event.data.actions) {
+          if (action.kind === "tool-call" && artifactTools.has(action.toolName)) {
+            if (pending.has(action.callId) || markdownCalls.has(action.callId)) {
+              legacy = true;
+            }
+            const markdown = markdownPrototypeInputSchema.safeParse(action.input);
+            if (
+              markdown.success &&
+              (action.toolName === "get_prototype_artifact" ||
+                (action.toolName === "record_prototype_artifact" &&
+                  markdown.data.mediaType === "text/markdown"))
+            ) {
+              markdownCalls.set(action.callId, action.toolName);
+            } else {
+              pending.set(action.callId, { input: action.input, toolName: action.toolName });
+            }
+          }
+        }
+        return;
+      }
+      if (event.type !== "action.result" || event.data.result.kind !== "tool-result") {
+        return;
+      }
+      const { result } = event.data;
+      if (!artifactTools.has(result.toolName)) {
+        return;
+      }
+      const markdownTool = markdownCalls.get(result.callId);
+      if (markdownTool !== undefined) {
+        markdownCalls.delete(result.callId);
+        if (markdownTool !== result.toolName) {
+          legacy = true;
+        }
+        return;
+      }
+      const request = pending.get(result.callId);
+      pending.delete(result.callId);
+      if (
+        request?.toolName !== result.toolName ||
+        event.data.status !== "completed" ||
+        result.isError === true
+      ) {
+        legacy = true;
+        return;
+      }
+      const reference = references.snapshot();
+      if (result.toolName === "get_prototype_artifact") {
+        const read = v2ReadRequestSchema.safeParse(request.input);
+        const output = v2ReadResultSchema.safeParse(result.output);
+        if (
+          !read.success ||
+          !output.success ||
+          reference === undefined ||
+          read.data.path !== reference.path ||
+          read.data.digest !== reference.digest ||
+          read.data.revision !== reference.revision ||
+          read.data.offsetBytes !== output.data.byteOffset ||
+          output.data.path !== reference.path ||
+          output.data.digest !== reference.digest ||
+          output.data.revision !== reference.revision ||
+          output.data.totalBytes !== reference.contentBytes ||
+          output.data.nextOffsetBytes <= output.data.byteOffset ||
+          output.data.nextOffsetBytes > reference.contentBytes ||
+          output.data.complete !== (output.data.nextOffsetBytes === reference.contentBytes) ||
+          createHash("sha256").update(output.data.content).digest("hex") !==
+            output.data.chunkDigest ||
+          Buffer.byteLength(output.data.content, "utf-8") !==
+            output.data.nextOffsetBytes - output.data.byteOffset
+        ) {
+          legacy = true;
+        }
+        return;
+      }
+      if (result.toolName === "record_prototype_artifact") {
+        const chunk = z
+          .object({
+            expectedDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+            finalChunk: z.literal(false),
+            path: z.string(),
+          })
+          .passthrough()
+          .safeParse(request.input);
+        const incomplete = z
+          .object({ complete: z.literal(false), path: z.string(), version: z.literal(2) })
+          .passthrough()
+          .safeParse(result.output);
+        if (chunk.success && incomplete.success && chunk.data.path === incomplete.data.path) {
+          incompleteArtifacts.add(chunk.data.path);
+          return;
+        }
+      }
+      if (result.toolName === "record_ui_preview") {
+        const preview = z.object({ appId: z.string() }).passthrough().safeParse(request.input);
+        const incomplete = z
+          .object({ complete: z.literal(false), transferId: z.string() })
+          .passthrough()
+          .safeParse(result.output);
+        if (preview.success && incomplete.success) {
+          incompleteUiPreviews.add(preview.data.appId);
+          return;
+        }
+      }
+      const output = z
+        .object({ complete: z.literal(true), version: z.literal(2) })
+        .passthrough()
+        .safeParse(result.output);
+      if (
+        !output.success ||
+        reference === undefined ||
+        reference.recordedByCallId !== result.callId
+      ) {
+        legacy = true;
+      } else if (result.toolName === "record_prototype_artifact") {
+        incompleteArtifacts.delete(reference.path);
+      } else {
+        incompleteUiPreviews.delete(reference.appId);
+      }
+    },
+    requiresLegacy: () =>
+      legacy || pending.size > 0 || incompleteArtifacts.size > 0 || incompleteUiPreviews.size > 0,
+  };
+};
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export async function observeSameOriginEveStream(
+  input: Parameters<typeof streamSameOriginEveEvents>[0] & {
+    onEvent: (event: InternalEveEvent) => Promise<void> | void;
+    onInstalledEvent?: (event: MessageStreamEvent) => void;
+  },
+): Promise<{
+  installedEventCount: number;
+  publicEventCount: number;
+  status: EveSessionStatus;
+  pendingRequests: PublicInputRequest[];
+  activeTurnId?: string;
+  uiPreview?: PublicUiPreview;
+  workingPreview?: PublicWorkingPreview | null;
+  artifactProjectionRequiresLegacyReadback: boolean;
+}> {
+  const pending = new Map<string, PublicInputRequest>();
+  let installedEventCount = 0;
+  let publicEventCount = 0;
+  let boundary: EveSessionStatus = "working";
+  let invalidInput = false;
+  let currentTurnId: string | undefined;
+  let uiPreview: PublicUiPreview | undefined;
+  let workingPreview: PublicWorkingPreview | null | undefined;
+  const artifactReadback = createArtifactReadbackClassifier(input.sessionId);
+  for await (const event of streamSameOriginEveEvents(input)) {
+    artifactReadback.accept(event);
+    input.onInstalledEvent?.(event);
+    installedEventCount += 1;
+    const turnId =
+      "data" in event && "turnId" in event.data
+        ? (event.data.turnId as string | undefined)
+        : undefined;
+    if (
+      turnId !== undefined &&
+      !["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type)
+    ) {
+      currentTurnId = turnId;
+    }
+    if (
+      ["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type) &&
+      (turnId === undefined || turnId === currentTurnId)
+    ) {
+      currentTurnId = undefined;
+    }
+    if (["session.waiting", "session.completed", "session.failed"].includes(event.type)) {
+      currentTurnId = undefined;
+    }
+    if (event.type === "turn.cancelled") {
+      boundary = "cancelled";
+    }
+    if (event.type === "session.waiting") {
+      boundary = "waiting";
+    }
+    if (event.type === "session.completed") {
+      boundary = "completed";
+    }
+    if (event.type === "session.failed") {
+      boundary = "failed";
+    }
+    if (event.type === "step.started") {
+      boundary = "working";
+    }
+    if (event.type === "approval.settled") {
+      pending.delete(event.data.requestId);
+    }
+    const nextUiPreview = latestInstalledUiPreview([event]);
+    if (nextUiPreview !== undefined) {
+      uiPreview = nextUiPreview;
+    }
+    const nextWorkingPreview = latestInstalledWorkingPreview([event]);
+    if (nextWorkingPreview !== undefined) {
+      workingPreview = nextWorkingPreview;
+    }
+    for (const projected of projectInstalledEveEvent(event, 0)) {
+      const indexed = { ...projected, index: publicEventCount };
+      publicEventCount += 1;
+      if (indexed.type === "input.requested" && indexed.request !== undefined) {
+        pending.set(indexed.request.requestId, indexed.request);
+      }
+      if (indexed.type === "input.resolved") {
+        for (const requestId of indexed.requestIds ?? []) {
+          pending.delete(requestId);
+        }
+      }
+      if (
+        event.type === "input.requested" &&
+        indexed.type === "status" &&
+        indexed.status === "failed"
+      ) {
+        invalidInput = true;
+      }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- the callback controls storage backpressure
+      await input.onEvent(indexed);
+    }
+  }
+  let status: EveSessionStatus = boundary;
+  if (invalidInput) {
+    status = "failed";
+  } else if (boundary !== "completed" && boundary !== "failed" && pending.size > 0) {
+    status = "input_required";
+  }
+  return {
+    artifactProjectionRequiresLegacyReadback: artifactReadback.requiresLegacy(),
+    installedEventCount,
+    pendingRequests: [...pending.values()],
+    publicEventCount,
+    status,
+    ...(currentTurnId === undefined ? {} : { activeTurnId: currentTurnId }),
+    ...(uiPreview === undefined ? {} : { uiPreview }),
+    ...(workingPreview === undefined ? {} : { workingPreview }),
+  };
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+async function readInstalledSnapshot(
+  input: Parameters<typeof streamSameOriginEveEvents>[0],
+): Promise<{
+  snapshot: HostedEngineSnapshot;
+  installed: MessageStreamEvent[];
+}> {
+  const events: MessageStreamEvent[] = [];
+  const projected: InternalEveEvent[] = [];
+  for await (const event of streamSameOriginEveEvents(input)) {
+    events.push(event);
+    for (const publicEvent of projectInstalledEveEvent(event, 0)) {
+      projected.push({ ...publicEvent, index: projected.length });
+    }
+  }
   const prototype = latestInstalledPrototype(events);
   const uiPreview = latestInstalledUiPreview(events);
   const workingPreview = latestInstalledWorkingPreview(events);
@@ -375,8 +683,25 @@ async function readInstalledSnapshot(input: {
 async function readSnapshot(
   input: Parameters<typeof readInstalledSnapshot>[0],
 ): Promise<HostedEngineSnapshot> {
-  const installedSnapshot = await readInstalledSnapshot(input);
-  return installedSnapshot.snapshot;
+  const events: InternalEveEvent[] = [];
+  const prototype = createInstalledPrototypeProjector();
+  const observation = await observeSameOriginEveStream({
+    ...input,
+    onEvent(event) {
+      events.push(event);
+    },
+    onInstalledEvent: prototype.observe,
+  });
+  const latest = prototype.current();
+  return {
+    events,
+    status: observation.status,
+    ...(latest === undefined ? {} : { prototype: latest }),
+    ...(observation.uiPreview === undefined ? {} : { uiPreview: observation.uiPreview }),
+    ...(observation.workingPreview === undefined
+      ? {}
+      : { workingPreview: observation.workingPreview }),
+  };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -477,12 +802,149 @@ async function readRespondSettlement(input: {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Shared exact response encoding for both settlement paths.
+function responsePayload(responses: Parameters<HostedEveTransport["respond"]>[0]["responses"]) {
+  return responses.map(({ requestId, response }) => {
+    if (response.kind === "approve") {
+      return { optionId: "approve", requestId };
+    }
+    if (response.kind === "deny") {
+      return { optionId: "cancel", requestId };
+    }
+    if (response.optionId === undefined) {
+      return { requestId, text: response.value };
+    }
+    return { optionId: response.optionId, requestId };
+  });
+}
+
+// eslint-disable-next-line eslint/func-style -- Wait for durable resolution without materializing Eve history.
+async function readRespondSettlementIncremental(input: {
+  config: z.infer<typeof sameOriginConfigSchema>;
+  workloadIdentity: HostedWorkloadIdentity;
+  fetchImplementation: typeof fetch;
+  sessionId: string;
+  requestIds: readonly string[];
+}): Promise<void> {
+  const readSignal = AbortSignal.timeout(SESSION_READ_TIMEOUT_MS);
+  while (true) {
+    if (readSignal.aborted) {
+      throw new HostedSessionReadTimeoutError();
+    }
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Each read verifies the durable tail before polling again.
+    const observed = await observeSameOriginEveStream({
+      ...input,
+      onEvent() {
+        // Settlement only needs the reducer's pending-request state.
+      },
+      readSignal,
+    });
+    const outstanding = new Set(observed.pendingRequests.map((request) => request.requestId));
+    if (
+      observed.status !== "input_required" ||
+      input.requestIds.every((requestId) => !outstanding.has(requestId))
+    ) {
+      return;
+    }
+    try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Poll only after the prior durable tail was observed.
+      await delay(SESSION_SETTLEMENT_POLL_INTERVAL_MS, undefined, { signal: readSignal });
+    } catch (error) {
+      if (readSignal.aborted) {
+        throw new HostedSessionReadTimeoutError();
+      }
+      throw error;
+    }
+  }
+}
+
+// eslint-disable-next-line eslint/func-style -- A guarded cancel needs a durable cancel/waiting boundary.
+async function readCancellationSettlementIncremental(input: {
+  config: z.infer<typeof sameOriginConfigSchema>;
+  workloadIdentity: HostedWorkloadIdentity;
+  fetchImplementation: typeof fetch;
+  sessionId: string;
+  turnId: string;
+  beforeEventCount: number;
+}): Promise<void> {
+  const readSignal = AbortSignal.timeout(SESSION_READ_TIMEOUT_MS);
+  while (true) {
+    if (readSignal.aborted) {
+      throw new HostedSessionReadTimeoutError();
+    }
+    let index = 0;
+    let cancelled = false;
+    let settled = false;
+    let currentTurnId: string | undefined;
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Observe the full durable tail before another poll.
+    for await (const event of streamSameOriginEveEvents({ ...input, readSignal })) {
+      const eventTurnId =
+        "data" in event && "turnId" in event.data
+          ? (event.data.turnId as string | undefined)
+          : undefined;
+      if (
+        eventTurnId !== undefined &&
+        !["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type)
+      ) {
+        currentTurnId = eventTurnId;
+      }
+      if (
+        ["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type) &&
+        (eventTurnId === undefined || eventTurnId === currentTurnId)
+      ) {
+        currentTurnId = undefined;
+      }
+      if (["session.waiting", "session.completed", "session.failed"].includes(event.type)) {
+        currentTurnId = undefined;
+      }
+      if (
+        index >= input.beforeEventCount &&
+        event.type === "turn.cancelled" &&
+        event.data.turnId === input.turnId
+      ) {
+        cancelled = true;
+      }
+      if (cancelled && event.type === "session.waiting") {
+        settled = true;
+      }
+      index += 1;
+    }
+    if (settled) {
+      return;
+    }
+    if (currentTurnId !== undefined && currentTurnId !== input.turnId) {
+      throw new SubmissionRejectedBeforeDispatchError("turn_changed");
+    }
+    try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Poll only after reading the durable tail.
+      await delay(SESSION_SETTLEMENT_POLL_INTERVAL_MS, undefined, { signal: readSignal });
+    } catch (error) {
+      if (readSignal.aborted) {
+        throw new HostedSessionReadTimeoutError();
+      }
+      throw error;
+    }
+  }
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createSameOriginEveTransport(input: {
   config: unknown;
   workloadIdentity: HostedWorkloadIdentity;
   fetchImplementation?: typeof fetch;
-}): HostedEveTransport {
+  verifyReadAuthority?: (input: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    adapterSessionId: string;
+  }) => Promise<boolean>;
+}): HostedEveTransport & {
+  observe?: (request: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    adapterSessionId: string;
+    onEvent: (event: InternalEveEvent) => Promise<void> | void;
+  }) => ReturnType<typeof observeSameOriginEveStream>;
+} {
   const config = sameOriginConfigSchema.parse(input.config);
   const fetchImplementation = input.fetchImplementation ?? fetch;
   const common = {
@@ -491,6 +953,26 @@ export function createSameOriginEveTransport(input: {
     workloadIdentity: input.workloadIdentity,
   };
   return {
+    ...(input.verifyReadAuthority === undefined
+      ? {}
+      : {
+          async observe(request) {
+            const principal = hostedPrincipalSchema.parse(request.principal);
+            const authorized = await input.verifyReadAuthority?.({
+              adapterSessionId: request.adapterSessionId,
+              principal,
+              sessionId: request.sessionId,
+            });
+            if (authorized !== true) {
+              throw new SubmissionRejectedBeforeDispatchError("session_access_denied");
+            }
+            return observeSameOriginEveStream({
+              ...common,
+              onEvent: request.onEvent,
+              sessionId: request.adapterSessionId,
+            });
+          },
+        }),
     async cancel(request) {
       const before = await readInstalledSnapshot({
         ...common,
@@ -516,7 +998,7 @@ export function createSameOriginEveTransport(input: {
       if (response.status !== 200 && response.status !== 202) {
         throw new Error("Canonical Eve cancellation failed.");
       }
-      const cancelled = cancelResponseSchema.parse(await boundedJson(response));
+      const cancelled = cancelResponseSchema.parse(await readJson(response));
       if (
         (response.status === 202 && cancelled.status !== "accepted") ||
         (response.status === 200 && cancelled.status !== "no_active_turn")
@@ -549,25 +1031,63 @@ export function createSameOriginEveTransport(input: {
         await delay(SESSION_SETTLEMENT_POLL_INTERVAL_MS);
       }
     },
+    async cancelAccepted(request) {
+      const before = await observeSameOriginEveStream({
+        ...common,
+        onEvent() {
+          // Guarding cancellation needs only the durable stream summary.
+        },
+        readDeadline: true,
+        sessionId: request.adapterSessionId,
+      });
+      if (request.turnId !== undefined && request.turnId !== before.activeTurnId) {
+        throw new SubmissionRejectedBeforeDispatchError("turn_changed");
+      }
+      const guardedTurnId = request.turnId ?? before.activeTurnId;
+      if (guardedTurnId === undefined) {
+        throw new SubmissionRejectedBeforeDispatchError("no_active_turn");
+      }
+      let response: Response;
+      try {
+        response = await authenticatedFetch({
+          ...common,
+          init: {
+            body: JSON.stringify({ turnId: guardedTurnId }),
+            headers: { Accept: "application/json", "Content-Type": "application/json" },
+            method: "POST",
+          },
+          path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}/cancel`,
+        });
+      } catch {
+        throw new SubmissionOutcomeUnknownError();
+      }
+      if (response.status !== 200 && response.status !== 202) {
+        throw new SubmissionOutcomeUnknownError();
+      }
+      const cancelled = cancelResponseSchema.parse(await readJson(response));
+      if (
+        (response.status === 202 && cancelled.status !== "accepted") ||
+        (response.status === 200 && cancelled.status !== "no_active_turn") ||
+        (cancelled.status === "accepted" && cancelled.sessionId !== request.adapterSessionId)
+      ) {
+        throw new SubmissionOutcomeUnknownError();
+      }
+      if (cancelled.status === "no_active_turn") {
+        return;
+      }
+      await readCancellationSettlementIncremental({
+        ...common,
+        beforeEventCount: before.installedEventCount,
+        sessionId: request.adapterSessionId,
+        turnId: guardedTurnId,
+      });
+    },
     get: (request) =>
       readSnapshot({ ...common, readDeadline: true, sessionId: request.adapterSessionId }),
     async respond(request) {
       const accepted = await postMutation({
         ...common,
-        body: {
-          inputResponses: request.responses.map(({ requestId, response }) => {
-            if (response.kind === "approve") {
-              return { optionId: "approve", requestId };
-            }
-            if (response.kind === "deny") {
-              return { optionId: "cancel", requestId };
-            }
-            if (response.optionId === undefined) {
-              return { requestId, text: response.value };
-            }
-            return { optionId: response.optionId, requestId };
-          }),
-        },
+        body: { inputResponses: responsePayload(request.responses) },
         path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
         principal: request.principal,
         sourceHandoffId: request.sourceHandoffId,
@@ -576,6 +1096,23 @@ export function createSameOriginEveTransport(input: {
         throw new SubmissionOutcomeUnknownError();
       }
       return readRespondSettlement({
+        ...common,
+        requestIds: request.responses.map(({ requestId }) => requestId),
+        sessionId: request.adapterSessionId,
+      });
+    },
+    async respondAccepted(request) {
+      const accepted = await postMutation({
+        ...common,
+        body: { inputResponses: responsePayload(request.responses) },
+        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
+        principal: request.principal,
+        sourceHandoffId: request.sourceHandoffId,
+      });
+      if (accepted.sessionId !== request.adapterSessionId) {
+        throw new SubmissionOutcomeUnknownError();
+      }
+      await readRespondSettlementIncremental({
         ...common,
         requestIds: request.responses.map(({ requestId }) => requestId),
         sessionId: request.adapterSessionId,
@@ -593,6 +1130,18 @@ export function createSameOriginEveTransport(input: {
         throw new SubmissionOutcomeUnknownError();
       }
       return readSnapshot({ ...common, sessionId: request.adapterSessionId });
+    },
+    async sendAccepted(request) {
+      const accepted = await postMutation({
+        ...common,
+        body: { message: request.message, turnPolicy: "queue" },
+        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
+        principal: request.principal,
+        sourceHandoffId: request.sourceHandoffId,
+      });
+      if (accepted.sessionId !== request.adapterSessionId) {
+        throw new SubmissionOutcomeUnknownError();
+      }
     },
     async start(request) {
       const accepted = await postMutation({

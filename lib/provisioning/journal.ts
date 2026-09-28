@@ -1,3 +1,5 @@
+import { setTimeout as delay } from "node:timers/promises";
+
 import { z } from "zod";
 
 import type { hostedTenantAuthoritySchema } from "../db/hosted-admin";
@@ -38,11 +40,15 @@ const storedRequestSchema = z
 
 const operationStateSchema = z
   .object({
-    absentCandidates: z.array(z.string().min(1).max(100)).max(5),
+    absentCandidates: z.array(z.string().min(1).max(100)),
+    attemptCount: z.number().int().nonnegative().optional(),
     attempted: z.boolean(),
-    candidates: z.array(z.string().min(1).max(100)).max(5),
+    candidates: z.array(z.string().min(1).max(100)),
+    failureDetail: z.string().max(2048).optional(),
     leaseExpiresAt: z.string().datetime({ offset: true }).optional(),
     leaseId: z.string().uuid().optional(),
+    nextRetryAt: z.string().datetime({ offset: true }).optional(),
+    outcomeKnown: z.boolean().optional(),
   })
   .strict();
 
@@ -75,6 +81,30 @@ export interface BuilderProvisionJournalRow {
 }
 
 export interface BuilderProvisionJournalStore {
+  listDue?: (input: {
+    now: Date;
+    after?: {
+      issuer: string;
+      audience: string;
+      workspaceId: string;
+      ownerUserId: string;
+      requestId: string;
+    };
+    limit: number;
+  }) => Promise<{
+    items: readonly {
+      authority: BuilderProvisionAuthority;
+      requestId: string;
+      operation: "github" | "vercel";
+    }[];
+    nextCursor?: {
+      issuer: string;
+      audience: string;
+      workspaceId: string;
+      ownerUserId: string;
+      requestId: string;
+    };
+  }>;
   reserve: (input: {
     authority: BuilderProvisionAuthority;
     request: BuilderProvisionRequest;
@@ -133,7 +163,7 @@ export const updateBuilderProvisionJournal = async (input: {
   now?: () => number;
   update: (current: BuilderProvisionJournalRecord) => BuilderProvisionJournalRecord;
 }): Promise<BuilderProvisionJournalRow> => {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
+  for (let attempt = 0; ; attempt += 1) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const current = await input.store.read({
       authority: input.authority,
@@ -160,6 +190,8 @@ export const updateBuilderProvisionJournal = async (input: {
     if (saved) {
       return saved;
     }
+    // Yield under contention rather than exhausting an arbitrary retry budget.
+    // oxlint-disable-next-line eslint/no-await-in-loop -- each retry follows a failed compare-and-set
+    await delay(Math.min(250, 5 * 2 ** Math.min(attempt, 6)));
   }
-  throw new Error("provision-journal-contention");
 };

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ARRUSTED_TARGET_SHA, ARRUSTED_TARGET_TREE } from "../repository/dependency-cache";
 import { deterministicGzip, deterministicTar } from "../../scripts/portable-release";
-import { loadStarterSource } from "./starter-source";
+import { loadStarterSource, starterSourceManifestSchema } from "./starter-source";
 
 const sha256 = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
 
@@ -92,5 +92,56 @@ describe("immutable Arrusted starter source", () => {
         fetch: vi.fn(async () => new Response("tampered")),
       }),
     ).rejects.toThrow("manifest-mismatch");
+  });
+
+  it("does not impose starter archive, file, or inventory size ceilings", () => {
+    const value = fixture();
+    const parsed = starterSourceManifestSchema.parse(
+      JSON.parse(new TextDecoder().decode(value.manifestBytes)),
+    );
+    const manifest = {
+      ...parsed,
+      archive: { ...parsed.archive, bytes: 101 * 1024 * 1024 },
+      files: Array.from({ length: 10_001 }, (_, index) => ({
+        bytes: 11 * 1024 * 1024,
+        mode: "100644",
+        path: `large-inventory/${index}.txt`,
+        sha256: "0".repeat(64),
+      })),
+    };
+    expect(starterSourceManifestSchema.safeParse(manifest).success).toBe(true);
+  });
+
+  it("accepts long relative paths for the filesystem to validate", () => {
+    const value = fixture();
+    const manifest = starterSourceManifestSchema.parse(
+      JSON.parse(new TextDecoder().decode(value.manifestBytes)),
+    );
+    expect(
+      starterSourceManifestSchema.safeParse({
+        ...manifest,
+        files: [{ ...manifest.files[0], path: `nested/${"a".repeat(600)}.txt` }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("forwards caller cancellation without imposing an internal fetch deadline", async () => {
+    const value = fixture();
+    const controller = new AbortController();
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning fetch test double
+    const request = vi.fn<typeof fetch>(async (url) =>
+      String(url) === value.manifestUrl
+        ? new Response(value.manifestBytes)
+        : new Response(value.archive),
+    );
+    await loadStarterSource({
+      config: { manifestSha256: value.manifestSha256, manifestUrl: value.manifestUrl },
+      fetch: request,
+      signal: controller.signal,
+    });
+    expect(request.mock.calls.map((call) => call[1]?.signal)).toEqual([
+      controller.signal,
+      controller.signal,
+    ]);
   });
 });

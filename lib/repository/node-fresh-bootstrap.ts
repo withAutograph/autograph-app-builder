@@ -1,6 +1,17 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { constants as fsConstants, existsSync } from "node:fs";
+import { pipeline } from "node:stream/promises";
+import {
+  closeSync,
+  constants as fsConstants,
+  createReadStream,
+  existsSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  writeSync,
+} from "node:fs";
 import {
   chmod,
   lstat,
@@ -14,6 +25,7 @@ import {
   unlink,
 } from "node:fs/promises";
 import nodePath from "node:path";
+import { tmpdir } from "node:os";
 
 import {
   assertCanonicalFreshBootstrapJournal,
@@ -37,17 +49,18 @@ import type {
   ExecutableIdentity,
   PathIdentity,
 } from "./fresh-bootstrap";
-import {
-  assertExactReviewedChangeSet,
-  contentDigest,
-  pathsOverlap,
-  stableDigest,
-} from "./local-publication";
+import { assertExactReviewedChangeSet, pathsOverlap, stableDigest } from "./local-publication";
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
 import { inspectSourceReceipt, parseSourceReceipt, SOURCE_RECEIPT_VERSION } from "./source-receipt";
 import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import type { PreparedSourceFile } from "./supported-template";
+import {
+  captureProcessStdout,
+  digestProcessStdout,
+  streamProcessRecords,
+  streamProcessStdout,
+} from "./captured-process-output";
 
 export interface FreshBootstrapFaultHooks {
   afterLockReady?: (pid: number) => void | Promise<void>;
@@ -68,13 +81,89 @@ export interface FreshBootstrapFaultHooks {
   preserveNonterminalJournal?: boolean;
 }
 
-type ExactFile = FreshBootstrapFile & { bytes: Buffer };
+type ExactFile = FreshBootstrapFile & {
+  contentSha256: string;
+  readStream: () => AsyncIterable<Uint8Array>;
+  sizeBytes: number;
+};
 
 export interface FreshBootstrapSourceWorkspace {
   files: readonly PreparedSourceFile[];
   readSourceFile: (path: string) => Promise<Uint8Array | null>;
+  readSourceFileStream?: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
   reverify: () => Promise<void>;
 }
+
+/** Internal streaming bridge for canonical source files.
+ * @yields {Uint8Array} Exact source byte chunks.
+ */
+export const sourceBytes = async function* sourceBytes(
+  workspace: FreshBootstrapSourceWorkspace,
+  path: string,
+): AsyncGenerator<Uint8Array> {
+  if (workspace.readSourceFileStream === undefined) {
+    const bytes = await workspace.readSourceFile(path);
+    if (bytes === null) {
+      throw new Error(`The prepared fresh-template source changed at ${path}.`);
+    }
+    yield bytes;
+    return;
+  }
+  const stream = await workspace.readSourceFileStream(path);
+  if (stream === null) {
+    throw new Error(`The prepared fresh-template source changed at ${path}.`);
+  }
+  // oxlint-disable-next-line eslint/no-use-before-define -- Shared reader is a hoisted function declaration.
+  yield* readableBytes(stream);
+};
+
+// eslint-disable-next-line eslint/func-style -- Shared stream reader is used by source and overlay adapters.
+async function* readableBytes(stream: ReadableStream<Uint8Array>): AsyncGenerator<Uint8Array> {
+  const reader = stream.getReader();
+  let completed = false;
+  try {
+    for (;;) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Consume one provider chunk at a time.
+      const { done, value } = await reader.read();
+      if (done) {
+        completed = true;
+        return;
+      }
+      yield value;
+    }
+  } finally {
+    if (!completed) {
+      try {
+        await reader.cancel();
+      } catch {
+        // Preserve the source verification or caller cancellation failure.
+      }
+    }
+    reader.releaseLock();
+  }
+}
+
+const overlayBytes = async function* overlayBytes(
+  input: {
+    readOverlayFile: (path: string) => Promise<Uint8Array | null>;
+    readOverlayFileStream?: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
+  },
+  path: string,
+): AsyncGenerator<Uint8Array> {
+  if (input.readOverlayFileStream === undefined) {
+    const bytes = await input.readOverlayFile(path);
+    if (bytes === null) {
+      throw new Error(`The reviewed bootstrap overlay changed at ${path}.`);
+    }
+    yield bytes;
+    return;
+  }
+  const stream = await input.readOverlayFileStream(path);
+  if (stream === null) {
+    throw new Error(`The reviewed bootstrap overlay changed at ${path}.`);
+  }
+  yield* readableBytes(stream);
+};
 const atomicPublicationAdapter = String.raw`
 import ctypes, os, platform, stat, sys
 mode, stage, destination, stage_dev, stage_ino, stage_uid, stage_mode, stage_nlink, empty_dev, empty_ino, empty_uid, empty_mode, empty_nlink, parent_dev, parent_ino, parent_uid, parent_mode, parent_nlink = sys.argv[1:]
@@ -175,8 +264,71 @@ try:
 finally: os.close(fd)
 `;
 
-export const FRESH_BOOTSTRAP_MATERIALIZE_ADAPTER_DIGEST = createHash("sha256")
+const LEGACY_FRESH_BOOTSTRAP_MATERIALIZE_ADAPTER_DIGEST = createHash("sha256")
   .update(materializeAdapter)
+  .digest("hex");
+
+export const streamingMaterializeAdapter = String.raw`
+import hashlib, os, stat, sys, tempfile
+path, mode, expected_blob, expected_size, recovery = sys.argv[1:]
+size = int(expected_size)
+parts = path.split("/")
+if size < 0 or not parts or any(part in ("", ".", "..") for part in parts): raise SystemExit(70)
+root_fd = 3
+root = os.fstat(root_fd)
+fd = os.dup(root_fd)
+try:
+    for part in parts[:-1]:
+        try: os.mkdir(part, 0o755, dir_fd=fd); os.fsync(fd)
+        except FileExistsError: pass
+        next_fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+        value = os.fstat(next_fd)
+        if not stat.S_ISDIR(value.st_mode) or value.st_uid != os.geteuid() or value.st_dev != root.st_dev or value.st_mode & 0o022:
+            raise SystemExit(71)
+        os.close(fd); fd = next_fd
+    digest = hashlib.sha1(f"blob {size}\0".encode())
+    with tempfile.TemporaryFile() as spool:
+        received = 0
+        while True:
+            chunk = sys.stdin.buffer.read(65536)
+            if not chunk: break
+            received += len(chunk)
+            if received > size: raise SystemExit(72)
+            digest.update(chunk)
+            spool.write(chunk)
+        if received != size or digest.hexdigest() != expected_blob: raise SystemExit(72)
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW
+        desired = 0o755 if mode == "100755" else 0o644
+        try: target = os.open(parts[-1], flags, desired, dir_fd=fd)
+        except FileExistsError:
+            if recovery != "1": raise
+            target = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=fd)
+            value = os.fstat(target)
+            observed = hashlib.sha1(f"blob {size}\0".encode())
+            observed_size = 0
+            while True:
+                chunk = os.read(target, 65536)
+                if not chunk: break
+                observed_size += len(chunk)
+                observed.update(chunk)
+            if not stat.S_ISREG(value.st_mode) or value.st_nlink != 1 or value.st_uid != os.geteuid() or value.st_dev != root.st_dev or value.st_mode & 0o777 != desired or observed_size != size or observed.hexdigest() != expected_blob:
+                raise SystemExit(73)
+            os.close(target); raise SystemExit(0)
+        try:
+            spool.seek(0)
+            while True:
+                chunk = spool.read(65536)
+                if not chunk: break
+                offset = 0
+                while offset < len(chunk): offset += os.write(target, chunk[offset:])
+            os.fchmod(target, desired); os.fsync(target)
+        finally: os.close(target)
+        os.fsync(fd)
+finally: os.close(fd)
+`;
+
+export const FRESH_BOOTSTRAP_MATERIALIZE_ADAPTER_DIGEST = createHash("sha256")
+  .update(streamingMaterializeAdapter)
   .digest("hex");
 
 const minimalEnvironment = (authorIdentity?: FreshBootstrapIdentity): NodeJS.ProcessEnv => ({
@@ -234,27 +386,24 @@ const git = (
   commitIdentity?: FreshBootstrapIdentity,
   input?: Uint8Array,
 ): string =>
-  execFileSync(capability.systemGit, [...gitOptions, "-C", root, ...args], {
-    encoding: "utf-8",
+  captureProcessStdout(capability.systemGit, [...gitOptions, "-C", root, ...args], {
     env: minimalEnvironment(commitIdentity),
-    input,
-    maxBuffer: 16 * 1024 * 1024,
-    stdio: ["pipe", "pipe", "pipe"],
-    timeout: 30_000,
-  });
+    ...(input === undefined ? {} : { input }),
+  }).toString("utf-8");
 
-const gitBuffer = (
+const gitRecords = async function* gitRecords(
   capability: FreshBootstrapCapability,
   root: string,
   args: readonly string[],
-): Buffer =>
-  execFileSync(capability.systemGit, [...gitOptions, "-C", root, ...args], {
-    encoding: "buffer",
-    env: minimalEnvironment(),
-    maxBuffer: 32 * 1024 * 1024,
-    stdio: ["ignore", "pipe", "pipe"],
-    timeout: 30_000,
-  });
+  delimiter: number,
+): AsyncGenerator<string> {
+  yield* streamProcessRecords(
+    capability.systemGit,
+    [...gitOptions, "-C", root, ...args],
+    delimiter,
+    { env: minimalEnvironment() },
+  );
+};
 
 const within = (root: string, candidate: string): boolean => {
   const relativePath = nodePath.relative(root, candidate);
@@ -312,6 +461,21 @@ const assertExactIdentity = async (
   }
 };
 
+export const hashBootstrapFile = async (
+  path: string,
+  prefix = "",
+  algorithm: "sha1" | "sha256" = "sha256",
+) => {
+  const hash = createHash(algorithm).update(prefix);
+  for await (const chunk of createReadStream(path)) {
+    if (!(chunk instanceof Uint8Array)) {
+      throw new Error("Bootstrap file reader returned non-byte content.");
+    }
+    hash.update(chunk);
+  }
+  return hash.digest("hex");
+};
+
 const executableIdentity = async (path: string): Promise<ExecutableIdentity> => {
   const canonical = await realpath(path);
   const value = await lstat(canonical);
@@ -325,9 +489,7 @@ const executableIdentity = async (path: string): Promise<ExecutableIdentity> => 
     mode: (value.mode & 0o777).toString(8),
     nlink: String(value.nlink),
     path: canonical,
-    sha256: createHash("sha256")
-      .update(await readFile(canonical))
-      .digest("hex"),
+    sha256: await hashBootstrapFile(canonical),
     uid: String(value.uid),
   };
 };
@@ -873,37 +1035,81 @@ const quiesceAbandonedLease = async (
   };
 };
 
-const blobId = (bytes: Uint8Array) =>
-  createHash("sha1")
-    .update(Buffer.from(`blob ${bytes.byteLength}\0`))
-    .update(bytes)
-    .digest("hex");
+const verifiedFileReader = (
+  read: () => AsyncIterable<Uint8Array>,
+  path: string,
+  expectedDigest: string,
+  expectedBlob: string,
+  expectedSize: number,
+): (() => AsyncIterable<Uint8Array>) =>
+  async function* readVerifiedFile() {
+    const sha256 = createHash("sha256");
+    const sha1 = createHash("sha1").update(Buffer.from(`blob ${expectedSize}\0`));
+    let total = 0;
+    for await (const bytes of read()) {
+      total += bytes.byteLength;
+      if (total > expectedSize) {
+        throw new Error(`The fresh-bootstrap source changed at ${path}.`);
+      }
+      sha256.update(bytes);
+      sha1.update(bytes);
+      yield bytes;
+    }
+    if (
+      total !== expectedSize ||
+      sha256.digest("hex") !== expectedDigest ||
+      sha1.digest("hex") !== expectedBlob
+    ) {
+      throw new Error(`The fresh-bootstrap source changed at ${path}.`);
+    }
+  };
 
-const exactSourceTree = (
+const sanitizeMaterializationDiagnostic = (value: string): string =>
+  value
+    .replaceAll(/https?:\/\/[^\s]+/giu, "[URL REDACTED]")
+    .replaceAll(/Bearer\s+[^\s,;]+/giu, "Bearer [REDACTED]")
+    .replaceAll(
+      /\b(?:gh[oprsu]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,})\b/gu,
+      "[REDACTED]",
+    )
+    .replaceAll(
+      /\b(?<key>authorization|cookie|password|passwd|secret|token|api[-_]?key)\s*[:=]\s*[^\s,;]+/giu,
+      "$<key>=[REDACTED]",
+    )
+    .replaceAll(/\s+/gu, " ")
+    .trim();
+
+const exactSourceTree = async (
   capability: FreshBootstrapCapability,
   sourcePath: string,
   sourceSha: string,
-): ExactFile[] => {
-  const output = gitBuffer(capability, sourcePath, [
-    "ls-tree",
-    "-r",
-    "-z",
-    "--full-tree",
-    sourceSha,
-  ]);
+): Promise<ExactFile[]> => {
   const files: ExactFile[] = [];
-  for (const record of output.toString("utf-8").split("\0").filter(Boolean)) {
+  for await (const record of gitRecords(
+    capability,
+    sourcePath,
+    ["ls-tree", "-r", "-z", "--full-tree", sourceSha],
+    0,
+  )) {
+    if (record === "") {
+      continue;
+    }
     const match =
       /^(?<mode>100644|100755|120000|160000) (?<type>blob|commit) (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(
         record,
       );
+    if (match === null) {
+      throw new Error(
+        "Fresh bootstrap rejects submodules, symlinks, reserved names, and unsafe paths.",
+      );
+    }
+    const [, mode, type, blob, path] = match;
     if (
-      match === null ||
-      match[1] === "120000" ||
-      match[1] === "160000" ||
-      match[2] !== "blob" ||
-      !safeSourcePath(match[4]) ||
-      match[4]
+      mode === "120000" ||
+      mode === "160000" ||
+      type !== "blob" ||
+      !safeSourcePath(path) ||
+      path
         .split("/")
         .some((part) => [".git", ".repository-bootstrap-claim"].includes(part.toLowerCase()))
     ) {
@@ -911,12 +1117,34 @@ const exactSourceTree = (
         "Fresh bootstrap rejects submodules, symlinks, reserved names, and unsafe paths.",
       );
     }
-    const bytes = gitBuffer(capability, sourcePath, ["cat-file", "blob", match[3]]);
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Verify each blob before adding its receipt.
+    const digest = await digestProcessStdout(
+      capability.systemGit,
+      [...gitOptions, "-C", sourcePath, "cat-file", "blob", blob],
+      { env: minimalEnvironment() },
+    );
+    const size = Number(git(capability, sourcePath, ["cat-file", "-s", blob]).trim());
+    if (!Number.isSafeInteger(size) || size < 0) {
+      throw new Error(`Git returned an invalid blob size at ${path}.`);
+    }
     files.push({
-      blob: match[3],
-      bytes,
-      mode: match[1] as FreshBootstrapFile["mode"],
-      path: match[4],
+      blob,
+      contentSha256: digest,
+      mode: mode as FreshBootstrapFile["mode"],
+      path,
+      readStream: verifiedFileReader(
+        () =>
+          streamProcessStdout(
+            capability.systemGit,
+            [...gitOptions, "-C", sourcePath, "cat-file", "blob", blob],
+            { env: minimalEnvironment() },
+          ),
+        path,
+        digest,
+        blob,
+        size,
+      ),
+      sizeBytes: size,
     });
   }
   return files.toSorted((left, right) => Buffer.from(left.path).compare(Buffer.from(right.path)));
@@ -942,16 +1170,40 @@ const exactPreparedSourceTree = async (
       throw new Error("The prepared fresh-template manifest is invalid.");
     }
     paths.add(file.path);
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const bytes = await sourceWorkspace.readSourceFile(file.path);
-    if (bytes === null || contentDigest(bytes) !== file.sha256 || blobId(bytes) !== file.objectId) {
+    const contentHash = createHash("sha256");
+    let size = 0;
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Verify each file in order with bounded chunk memory.
+    for await (const chunk of sourceBytes(sourceWorkspace, file.path)) {
+      contentHash.update(chunk);
+      size += chunk.byteLength;
+    }
+    if (!Number.isSafeInteger(size) || contentHash.digest("hex") !== file.sha256) {
       throw new Error(`The prepared fresh-template source drifted at ${file.path}.`);
     }
+    const gitHash = createHash("sha1").update(Buffer.from(`blob ${size}\0`));
+    let verifiedSize = 0;
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Re-read to bind Git's size-prefixed blob identity.
+    for await (const chunk of sourceBytes(sourceWorkspace, file.path)) {
+      gitHash.update(chunk);
+      verifiedSize += chunk.byteLength;
+    }
+    if (verifiedSize !== size || gitHash.digest("hex") !== file.objectId) {
+      throw new Error(`The prepared fresh-template source drifted at ${file.path}.`);
+    }
+    const { objectId: blob, path, sha256: digest, mode } = file;
     files.push({
-      blob: file.objectId,
-      bytes: Buffer.from(bytes),
-      mode: file.mode,
-      path: file.path,
+      blob,
+      contentSha256: digest,
+      mode,
+      path,
+      readStream: verifiedFileReader(
+        () => sourceBytes(sourceWorkspace, path),
+        path,
+        digest,
+        blob,
+        size,
+      ),
+      sizeBytes: size,
     });
   }
   if (files.length === 0) {
@@ -966,6 +1218,7 @@ const exactResultTree = async (input: {
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
   readOverlayFile: (path: string) => Promise<Uint8Array | null>;
+  readOverlayFileStream?: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<ExactFile[]> => {
   assertExactReviewedChangeSet(input.review);
@@ -995,7 +1248,7 @@ const exactResultTree = async (input: {
     }
     sourceFiles = await exactPreparedSourceTree(sourceWorkspace);
   } else {
-    sourceFiles = exactSourceTree(input.capability, receipt.sourcePath, receipt.sourceSha);
+    sourceFiles = await exactSourceTree(input.capability, receipt.sourcePath, receipt.sourceSha);
   }
   const files = new Map(sourceFiles.map((file) => [file.path, file]));
   for (const change of input.review.changes) {
@@ -1012,7 +1265,7 @@ const exactResultTree = async (input: {
         ? before !== undefined
         : before === undefined ||
           before.mode !== `100${change.before.mode}` ||
-          contentDigest(before.bytes) !== change.before.digest
+          before.contentSha256 !== change.before.digest
     ) {
       throw new Error(`The reviewed bootstrap preimage is stale at ${change.path}.`);
     }
@@ -1021,16 +1274,36 @@ const exactResultTree = async (input: {
       continue;
     }
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const bytes = await input.readOverlayFile(change.path);
-    if (bytes === null || contentDigest(bytes) !== change.after.digest) {
+    const contentHash = createHash("sha256");
+    let size = 0;
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Verify the reviewed overlay through bounded chunks.
+    for await (const chunk of overlayBytes(input, change.path)) {
+      contentHash.update(chunk);
+      size += chunk.byteLength;
+    }
+    if (!Number.isSafeInteger(size) || contentHash.digest("hex") !== change.after.digest) {
       throw new Error(`The reviewed bootstrap overlay is stale at ${change.path}.`);
     }
-    const buffer = Buffer.from(bytes);
+    const gitHash = createHash("sha1").update(Buffer.from(`blob ${size}\0`));
+    let verifiedSize = 0;
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Bind the reviewed bytes to Git's size-prefixed identity.
+    for await (const chunk of overlayBytes(input, change.path)) {
+      gitHash.update(chunk);
+      verifiedSize += chunk.byteLength;
+    }
+    if (verifiedSize !== size) {
+      throw new Error(`The reviewed bootstrap overlay is stale at ${change.path}.`);
+    }
+    const { digest } = change.after;
+    const blob = gitHash.digest("hex");
+    const { path } = change;
     files.set(change.path, {
-      blob: blobId(buffer),
-      bytes: buffer,
+      blob,
+      contentSha256: digest,
       mode: `100${change.after.mode}` as FreshBootstrapFile["mode"],
-      path: change.path,
+      path,
+      readStream: verifiedFileReader(() => overlayBytes(input, path), path, digest, blob, size),
+      sizeBytes: size,
     });
   }
   return [...files.values()].toSorted((left, right) =>
@@ -1147,6 +1420,7 @@ export const deriveFreshBootstrapProposal = async (input: {
   review: ReviewedChangeSetReceipt;
   protectedPaths: readonly string[];
   readOverlayFile: (path: string) => Promise<Uint8Array | null>;
+  readOverlayFileStream?: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<FreshBootstrapProposal> => {
   const capability = await assertCapability(input.capability);
@@ -1185,6 +1459,7 @@ export const deriveFreshBootstrapProposal = async (input: {
   const files = await exactResultTree({
     capability,
     readOverlayFile: input.readOverlayFile,
+    readOverlayFileStream: input.readOverlayFileStream,
     review: input.review,
     sourceReceipt: input.sourceReceipt,
     sourceWorkspace: input.sourceWorkspace,
@@ -1241,12 +1516,16 @@ const assertExactInputs = async (input: {
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
   readOverlayFile: (path: string) => Promise<Uint8Array | null>;
+  readOverlayFileStream?: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<ExactFile[]> => {
   assertExactFreshBootstrapProposal(input.proposal);
   if (
     input.proposal.atomicAdapterDigest !== FRESH_BOOTSTRAP_ATOMIC_ADAPTER_DIGEST ||
-    input.proposal.materializeAdapterDigest !== FRESH_BOOTSTRAP_MATERIALIZE_ADAPTER_DIGEST ||
+    ![
+      FRESH_BOOTSTRAP_MATERIALIZE_ADAPTER_DIGEST,
+      LEGACY_FRESH_BOOTSTRAP_MATERIALIZE_ADAPTER_DIGEST,
+    ].includes(input.proposal.materializeAdapterDigest) ||
     input.proposal.sourceReceiptDigest !== input.sourceReceipt.digest ||
     input.proposal.sourceSha !== input.sourceReceipt.sourceSha ||
     input.proposal.sourceTree !== input.sourceReceipt.sourceTree ||
@@ -1276,6 +1555,7 @@ const assertExactInputs = async (input: {
   const files = await exactResultTree({
     capability: input.capability,
     readOverlayFile: input.readOverlayFile,
+    readOverlayFileStream: input.readOverlayFileStream,
     review: input.review,
     sourceReceipt: input.sourceReceipt,
     sourceWorkspace: input.sourceWorkspace,
@@ -1426,20 +1706,89 @@ const materializeFile = async (
     ) {
       throw new Error("The fd-bound bootstrap stage changed after its durable layout receipt.");
     }
-    const result = spawnSync(
-      capability.systemPython,
-      ["-I", "-c", materializeAdapter, file.path, file.mode, file.blob, recovery ? "1" : "0"],
-      {
-        encoding: "utf-8",
-        env: minimalEnvironment(),
-        input: file.bytes,
-        maxBuffer: Math.max(1024 * 1024, file.bytes.length + 64 * 1024),
-        stdio: ["pipe", "pipe", "pipe", stage.fd],
-        timeout: 30_000,
-      },
-    );
-    if (result.status !== 0) {
-      throw new Error(`Fd-bound materialization failed at ${file.path}.`);
+    const outputDirectory = mkdtempSync(nodePath.join(tmpdir(), "app-builder-materialize-output-"));
+    const stdoutPath = nodePath.join(outputDirectory, "stdout");
+    const stderrPath = nodePath.join(outputDirectory, "stderr");
+    const stdoutFd = openSync(stdoutPath, "w");
+    const stderrFd = openSync(stderrPath, "w");
+    let commandResult: { status: number | null; signal: NodeJS.Signals | null; error?: Error };
+    let stdout: string;
+    let stderr: string;
+    try {
+      if (proposal.materializeAdapterDigest === LEGACY_FRESH_BOOTSTRAP_MATERIALIZE_ADAPTER_DIGEST) {
+        const chunks: Buffer[] = [];
+        for await (const chunk of file.readStream()) {
+          chunks.push(Buffer.from(chunk));
+        }
+        commandResult = spawnSync(
+          capability.systemPython,
+          ["-I", "-c", materializeAdapter, file.path, file.mode, file.blob, recovery ? "1" : "0"],
+          {
+            env: minimalEnvironment(),
+            input: Buffer.concat(chunks),
+            stdio: ["pipe", stdoutFd, stderrFd, stage.fd],
+          },
+        );
+      } else {
+        const child = spawn(
+          capability.systemPython,
+          [
+            "-I",
+            "-c",
+            streamingMaterializeAdapter,
+            file.path,
+            file.mode,
+            file.blob,
+            String(file.sizeBytes),
+            recovery ? "1" : "0",
+          ],
+          { env: minimalEnvironment(), stdio: ["pipe", stdoutFd, stderrFd, stage.fd] },
+        );
+        // oxlint-disable-next-line promise/avoid-new -- ChildProcess completion is event-based.
+        const completion = new Promise<{ status: number | null; signal: NodeJS.Signals | null }>(
+          (resolve, reject) => {
+            child.once("error", reject);
+            child.once("close", (status, signal) => resolve({ signal, status }));
+          },
+        );
+        // oxlint-disable-next-line github/no-then, promise/prefer-await-to-then -- Observe early spawn failures while piping input.
+        void completion.catch(() => {
+          // The materializer result is awaited after its input stream settles.
+        });
+        try {
+          if (child.stdin === null) {
+            throw new Error("The materializer did not accept input.");
+          }
+          await pipeline(file.readStream(), child.stdin);
+          commandResult = await completion;
+        } catch (error) {
+          child.kill();
+          try {
+            await completion;
+          } catch {
+            // Preserve the source or pipe failure.
+          }
+          throw error;
+        }
+      }
+      stdout = readFileSync(stdoutPath, "utf-8");
+      stderr = readFileSync(stderrPath, "utf-8");
+    } finally {
+      closeSync(stdoutFd);
+      closeSync(stderrFd);
+      rmSync(outputDirectory, { force: true, recursive: true });
+    }
+    if (commandResult.status !== 0) {
+      const status =
+        commandResult.status === null
+          ? `signal ${commandResult.signal ?? "unknown"}`
+          : `exit ${commandResult.status}`;
+      const detail = sanitizeMaterializationDiagnostic(
+        [commandResult.error?.message, stderr, stdout].filter(Boolean).join(" "),
+      );
+      throw new Error(
+        `Fd-bound materialization failed at ${file.path} (${status}). ${detail || "The materializer returned no diagnostic output."}`,
+      );
     }
   } finally {
     await stage.close();
@@ -1554,27 +1903,43 @@ const initializeGit = async (input: {
     throw new Error("The fresh repository did not use files ref format.");
   }
   await input.hooks?.beforeGitAdd?.();
-  const indexRecords: Buffer[] = [];
-  for (const file of input.files) {
-    const observed = git(
-      input.capability,
-      input.proposal.stagingPath,
-      ["hash-object", "-w", "--stdin"],
-      undefined,
-      file.bytes,
-    ).trim();
-    if (observed !== file.blob) {
-      throw new Error(`Git blob identity changed at ${file.path}.`);
+  const indexDirectory = mkdtempSync(nodePath.join(tmpdir(), "app-builder-git-index-"));
+  const indexPath = nodePath.join(indexDirectory, "records");
+  try {
+    const outputFd = openSync(indexPath, "w", 0o600);
+    try {
+      for (const file of input.files) {
+        const observed = git(input.capability, input.proposal.stagingPath, [
+          "hash-object",
+          "-w",
+          "--",
+          file.path,
+        ]).trim();
+        if (observed !== file.blob) {
+          throw new Error(`Git blob identity changed at ${file.path}.`);
+        }
+        const record = Buffer.from(`${file.mode} ${file.blob}\t${file.path}\0`);
+        let written = 0;
+        while (written < record.byteLength) {
+          written += writeSync(outputFd, record, written, record.byteLength - written);
+        }
+      }
+    } finally {
+      closeSync(outputFd);
     }
-    indexRecords.push(Buffer.from(`${file.mode} ${file.blob}\t${file.path}\0`));
+    const inputFd = openSync(indexPath, "r");
+    try {
+      execFileSync(
+        input.capability.systemGit,
+        [...gitOptions, "-C", input.proposal.stagingPath, "update-index", "-z", "--index-info"],
+        { env: minimalEnvironment(), stdio: [inputFd, "ignore", "inherit"] },
+      );
+    } finally {
+      closeSync(inputFd);
+    }
+  } finally {
+    rmSync(indexDirectory, { force: true, recursive: true });
   }
-  git(
-    input.capability,
-    input.proposal.stagingPath,
-    ["update-index", "-z", "--index-info"],
-    undefined,
-    Buffer.concat(indexRecords),
-  );
   await input.hooks?.afterGitAdd?.();
   const tree = git(input.capability, input.proposal.stagingPath, ["write-tree"]).trim();
   if (tree !== input.proposal.expectedGitTree) {
@@ -1663,14 +2028,14 @@ const rawWorktreeManifest = async (
         throw new Error("The fresh repository contains a special raw entry.");
       }
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      const bytes = await readFile(absolute);
       // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
       const exactMode = (state.mode & 0o777).toString(8);
       if (exactMode !== "644" && exactMode !== "755") {
         throw new Error("The fresh repository contains a file with an unexpected mode.");
       }
       output.push({
-        blob: blobId(bytes),
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Hash files sequentially against their observed stat size.
+        blob: await hashBootstrapFile(absolute, `blob ${state.size}\0`, "sha1"),
         // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
         mode: (state.mode & 0o111) === 0 ? "100644" : "100755",
         path,
@@ -1722,26 +2087,30 @@ const assertExactRepository = async (
     .split("\n")
     .filter(Boolean);
   const parents = git(capability, root, ["rev-list", "--parents", "--max-count=1", "HEAD"]).trim();
-  const paths = gitBuffer(capability, root, ["ls-tree", "-r", "-z", "--full-tree", "HEAD"]);
-  const observed = paths
-    .toString("utf-8")
-    .split("\0")
-    .filter(Boolean)
-    .map((record) => {
-      const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(
-        record,
-      );
-      if (match === null || !safeSourcePath(match[3])) {
-        throw new Error("The final repository tree is malformed.");
-      }
-      return { blob: match[2], mode: match[1], path: match[3] };
-    });
-  const reachableObjects = new Set(
-    git(capability, root, ["rev-list", "--objects", "--all"])
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => line.split(" ", 1)[0]),
-  );
+  const observed: { blob: string; mode: string; path: string }[] = [];
+  for await (const record of gitRecords(
+    capability,
+    root,
+    ["ls-tree", "-r", "-z", "--full-tree", "HEAD"],
+    0,
+  )) {
+    if (record === "") {
+      continue;
+    }
+    const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(
+      record,
+    );
+    if (match === null || !safeSourcePath(match[3])) {
+      throw new Error("The final repository tree is malformed.");
+    }
+    observed.push({ blob: match[2], mode: match[1], path: match[3] });
+  }
+  const reachableObjects = new Set<string>();
+  for await (const line of gitRecords(capability, root, ["rev-list", "--objects", "--all"], 10)) {
+    if (line !== "") {
+      reachableObjects.add(line.split(" ", 1)[0] ?? "");
+    }
+  }
   const objectDirectory = nodePath.resolve(gitDirectory, "objects");
   const looseObjects = new Set<string>();
   for (const entry of await readdir(objectDirectory, { withFileTypes: true })) {
@@ -2109,6 +2478,7 @@ const executeBootstrap = async (input: {
   publishedByCallId: string;
   recoveryOfDigest?: string;
   readOverlayFile: (path: string) => Promise<Uint8Array | null>;
+  readOverlayFileStream?: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
   hooks?: FreshBootstrapFaultHooks;
 }): Promise<
@@ -2514,6 +2884,7 @@ export const verifyFreshBootstrap = async (input: {
   sourceReceipt: SourceReceipt;
   review: ReviewedChangeSetReceipt;
   readOverlayFile: (path: string) => Promise<Uint8Array | null>;
+  readOverlayFileStream?: (path: string) => Promise<ReadableStream<Uint8Array> | null>;
   sourceWorkspace?: FreshBootstrapSourceWorkspace;
 }): Promise<void> => {
   const capability = await assertCapability(input.capability);
@@ -2522,6 +2893,7 @@ export const verifyFreshBootstrap = async (input: {
     capability,
     proposal: proposalFromFreshBootstrapJournal(input.receipt),
     readOverlayFile: input.readOverlayFile,
+    readOverlayFileStream: input.readOverlayFileStream,
     review: input.review,
     sourceReceipt: input.sourceReceipt,
     sourceWorkspace: input.sourceWorkspace,

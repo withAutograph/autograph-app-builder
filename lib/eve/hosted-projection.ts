@@ -28,6 +28,29 @@ const hostedSnapshotSchema = z
 
 export type HostedEngineSnapshot = z.infer<typeof hostedSnapshotSchema>;
 
+// eslint-disable-next-line eslint/func-style -- Keep the filtering iterator lazy for snapshot projection.
+function* internalEvents(candidates: readonly unknown[]): Generator<InternalEveEvent> {
+  for (const candidate of candidates) {
+    if (candidate !== null && typeof candidate === "object") {
+      yield candidate as InternalEveEvent;
+    }
+  }
+}
+
+const publicEventFromCandidate = (
+  candidate: unknown,
+): z.infer<typeof publicEveEventSchema> | undefined => {
+  if (candidate === null || typeof candidate !== "object") {
+    return undefined;
+  }
+  const projected = toPublicEvent(candidate as InternalEveEvent);
+  if (projected === null) {
+    return undefined;
+  }
+  const parsed = publicEveEventSchema.safeParse(projected);
+  return parsed.success ? parsed.data : undefined;
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function projectHostedSnapshot(
   sessionId: string,
@@ -36,27 +59,20 @@ export function projectHostedSnapshot(
   limit = 100,
 ): EveSessionResult {
   const snapshot = hostedSnapshotSchema.parse(snapshotInput);
-  const projected = snapshot.events
-    .flatMap((candidate) => {
-      if (candidate === null || typeof candidate !== "object") {
-        return [];
+  const events: z.infer<typeof publicEveEventSchema>[] = [];
+  let publicEventCount = 0;
+  for (const candidate of snapshot.events) {
+    const publicEvent = publicEventFromCandidate(candidate);
+    if (publicEvent !== undefined) {
+      if (publicEventCount >= cursor && events.length < limit) {
+        events.push({ ...publicEvent, index: publicEventCount });
       }
-      const publicEvent = toPublicEvent(candidate as InternalEveEvent);
-      if (publicEvent === null) {
-        return [];
-      }
-      const parsed = publicEveEventSchema.safeParse(publicEvent);
-      return parsed.success ? [parsed.data] : [];
-    })
-    .map((event, index) => ({ ...event, index }));
-  const events = projected.slice(cursor, cursor + limit);
-  const inputRequests = outstandingInternalEveRequests(
-    snapshot.events.filter(
-      (event): event is InternalEveEvent => event !== null && typeof event === "object",
-    ),
-  );
+      publicEventCount += 1;
+    }
+  }
+  const inputRequests = outstandingInternalEveRequests(internalEvents(snapshot.events));
   return eveSessionResultSchema.parse({
-    cursor: Math.min(cursor + events.length, projected.length),
+    cursor: Math.min(cursor + events.length, publicEventCount),
     events,
     sessionId,
     status: snapshot.status,

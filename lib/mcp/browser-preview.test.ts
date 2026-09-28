@@ -31,6 +31,74 @@ const result = {
 };
 
 describe("Browser prototype preview", () => {
+  it("verifies a v2 manifest before streaming its exact chunks", async () => {
+    const path = "prototype/vendor-onboarding/index.html";
+    const chunks = [content.slice(0, 19), content.slice(19)];
+    const artifact = {
+      appId: "vendor-onboarding",
+      chunkCount: chunks.length,
+      contentBytes: Buffer.byteLength(content),
+      digest,
+      mediaType: "text/html" as const,
+      path,
+      recordedByCallId: "call-one",
+      revision: createHash("sha256")
+        .update(JSON.stringify({ digest, mediaType: "text/html", path }))
+        .digest("hex"),
+      sessionId: "session-one",
+      version: 2 as const,
+    };
+    expect(
+      attachPrototypePreviewUrl(
+        {
+          cursor: 1,
+          events: [],
+          prototypeRef: artifact,
+          sessionId: "session-one",
+          status: "completed",
+        },
+        "https://builder.example.test/mcp",
+      ).prototypeRef?.previewUrl,
+    ).toBe(`https://builder.example.test/preview/session-one/${digest}`);
+    const readChunk = vi.fn(async (index: number) => await Promise.resolve(chunks[index]));
+    const resolveStreamedPrototype = vi.fn(
+      async () => await Promise.resolve({ artifact, readChunk }),
+    );
+    const handler = createPrototypePreviewRequestHandler({
+      // oxlint-disable-next-line unicorn/no-useless-undefined, typescript/no-confusing-void-expression -- This v2 test intentionally has no legacy artifact.
+      resolvePrototype: async () => await Promise.resolve(undefined),
+      resolveStreamedPrototype,
+    });
+    const response = await handler(
+      new Request(`https://builder.example.test/preview/session-one/${digest}`),
+      { digest, sessionId: "session-one" },
+    );
+    expect(response.status).toBe(200);
+    expect(readChunk.mock.calls.length).toBeGreaterThanOrEqual(chunks.length);
+    await expect(response.text()).resolves.toBe(content);
+    expect(readChunk).toHaveBeenCalledTimes(chunks.length * 2);
+    expect(response.headers.get("cache-control")).toBe("private, no-store, max-age=0");
+    expect(response.headers.get("content-security-policy")).toBe(
+      prototypePreviewContentSecurityPolicy,
+    );
+
+    const tampered = createPrototypePreviewRequestHandler({
+      // oxlint-disable-next-line unicorn/no-useless-undefined, typescript/no-confusing-void-expression -- This v2 test intentionally has no legacy artifact.
+      resolvePrototype: async () => await Promise.resolve(undefined),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double.
+      resolveStreamedPrototype: async () => ({
+        artifact,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double.
+        readChunk: async (index) => (index === 1 ? `${chunks[index]}tampered` : chunks[index]),
+      }),
+    });
+    const denied = await tampered(
+      new Request(`https://builder.example.test/preview/session-one/${digest}`),
+      { digest, sessionId: "session-one" },
+    );
+    expect(denied.status).toBe(404);
+    await expect(denied.text()).resolves.toBe("");
+  });
   it("uses the supervisor-owned non-default loopback origin only in exact development mode", () => {
     const developmentRequestUrl = prototypePreviewRequestUrl({
       environment: {

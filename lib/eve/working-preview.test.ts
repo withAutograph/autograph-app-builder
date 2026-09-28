@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { MessageStreamEvent } from "eve/client";
 import { publicWorkingPreviewSchema } from "../mcp/contracts";
-import { latestInstalledWorkingPreview } from "./public-events";
+import {
+  createInstalledPreviewMetadataReducer,
+  latestInstalledWorkingPreview,
+} from "./public-events";
 import { projectHostedSnapshot } from "./hosted-projection";
 import { resultFromHostedCheckpoint } from "./hosted-checkpoint-result";
 import { hostedSessionCheckpointSchema } from "./hosted-store";
@@ -29,6 +32,13 @@ const resultEvent = (toolName = "start_app_preview", status = "completed", isErr
   }) as unknown as MessageStreamEvent;
 
 describe("public working app preview", () => {
+  it("reduces a live preview receipt and its invalidation one event at a time", () => {
+    const reducer = createInstalledPreviewMetadataReducer();
+    reducer.accept(resultEvent());
+    expect(reducer.snapshot().workingPreview).toEqual(workingPreview);
+    reducer.accept(resultEvent("start_app_preview", "failed"));
+    expect(reducer.snapshot().workingPreview).toBeNull();
+  });
   it("requires the actual successful runtime tool result, never model prose or fixture preview", () => {
     expect(latestInstalledWorkingPreview([resultEvent()])).toEqual(workingPreview);
     expect(

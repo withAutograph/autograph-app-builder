@@ -88,6 +88,8 @@ export default defineTool({
         ctx
           .getSandbox()
           .then((sandbox) => sandbox.readBinaryFile({ path: `${relativeRoot}/${path}` })),
+      readOverlayFileStream: (path) =>
+        ctx.getSandbox().then((sandbox) => sandbox.readFile({ path: `${relativeRoot}/${path}` })),
       review: workflow.reviewReceipt,
       sourceReceipt: workflow.sourceReceipt,
     });

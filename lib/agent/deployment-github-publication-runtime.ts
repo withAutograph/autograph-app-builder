@@ -4,13 +4,17 @@ import { parseHostedDatabaseUrl } from "../db/postgres-connection-policy";
 import { readHostedForwarderSubject } from "../eve/hosted-forwarder";
 import { readHostedDeploymentEnvironment } from "../hosted/deployment-environment";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
-import { createGitHubAppPublicationAdapter } from "../repository/github-app-adapter";
+import {
+  createGitHubAppPublicationAdapter,
+  createGitHubTargetSourceResolutionAdapter,
+} from "../repository/github-app-adapter";
 import {
   createGitHubAppHttpProvider,
   parseGitHubAppHttpProviderCredentials,
 } from "../repository/github-app-http-provider";
 import type { GitHubAppHttpProviderConfig } from "../repository/github-app-http-provider";
 import type { GitHubPublicationAdapter } from "../repository/github-publication";
+import type { HostedGitHubTenantAuthority } from "../repository/postgres-github-installation-store";
 import { createHostedGitHubPublicationRuntimeResolver } from "./hosted-github-publication-runtime";
 import type {
   HostedGitHubPublicationRuntimeResolver,
@@ -95,23 +99,29 @@ export function createDeploymentGitHubPublicationRuntimeResolver(input: {
   const openDatabase = input.openDatabase ?? openHostedPostgresDatabase;
   const createAdapter =
     input.createAdapter ??
-    ((providerConfig: GitHubAppHttpProviderConfig) =>
-      createGitHubAppPublicationAdapter(
-        createGitHubAppHttpProvider({
-          config: providerConfig,
-          fetch: input.fetchImplementation,
-          now: input.now,
-        }),
-      ));
+    ((providerConfig: GitHubAppHttpProviderConfig, authority: HostedGitHubTenantAuthority) => {
+      const provider = createGitHubAppHttpProvider({
+        config: providerConfig,
+        fetch: input.fetchImplementation,
+        now: input.now,
+      });
+      return {
+        ...createGitHubAppPublicationAdapter(provider),
+        targetSourceAdapter: createGitHubTargetSourceResolutionAdapter(provider, authority),
+      };
+    });
   return createHostedGitHubPublicationRuntimeResolver({
     dependencies: input.resolverDependencies,
     enabled: true,
     openDatabase: () => openDatabase(config.databaseUrl),
-    providerFactory: ({ installation }) =>
-      createAdapter({
-        ...config.providerCredentials,
-        installationId: installation.installationId,
-      }),
+    providerFactory: ({ authority, installation }) =>
+      createAdapter(
+        {
+          ...config.providerCredentials,
+          installationId: installation.installationId,
+        },
+        authority,
+      ),
   });
 }
 

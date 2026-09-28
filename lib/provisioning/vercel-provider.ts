@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { VercelInstallationBinding } from "../integrations/vercel-installation";
 import type { GitHubProvisionResult, VercelProvisionResult } from "./contracts";
 import { suffixedProviderName } from "./names";
-import { runSequentiallyUntil } from "../async-sequential.ts";
+import { runSequentiallyUntilAsync } from "../async-sequential.ts";
 
 const projectSchema = z
   .object({
@@ -39,8 +39,12 @@ export async function provisionVercelProject(input: {
   githubSelected: boolean;
   persistedCandidates: readonly string[];
   persistedAbsentCandidates: readonly string[];
+  /** Recheck every prior candidate before a retry can issue another write. */
+  reconcilePriorWrite?: boolean;
   persistCandidate: (candidate: string) => Promise<void>;
   persistAbsent: (candidate: string) => Promise<void>;
+  renewLease?: () => Promise<void>;
+  recordRetryAfter?: (milliseconds: number) => void;
   fetch?: typeof fetch;
   generateSuffix?: () => string;
 }): Promise<VercelProvisionResult> {
@@ -60,6 +64,9 @@ export async function provisionVercelProject(input: {
     body?: unknown;
     expected: readonly number[];
   }) {
+    if (args.method === "POST") {
+      await input.renewLease?.();
+    }
     let response: Response;
     try {
       response = await request(`https://api.vercel.com${args.path}${query}`, {
@@ -77,22 +84,32 @@ export async function provisionVercelProject(input: {
     } catch {
       throw new Error("provider-unavailable");
     }
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength > 2 * 1024 * 1024) {
-      throw new Error("invalid-response");
-    }
     let body: unknown;
     try {
-      body = bytes.byteLength
-        ? JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
-        : undefined;
+      body = response.body === null ? undefined : await response.json();
     } catch {
       throw new Error("invalid-response");
+    }
+    const retryAfter = response.headers.get("retry-after");
+    if (retryAfter !== null) {
+      const seconds = Number(retryAfter);
+      const milliseconds = Number.isFinite(seconds)
+        ? Math.ceil(seconds * 1000)
+        : Date.parse(retryAfter) - Date.now();
+      if (Number.isFinite(milliseconds) && milliseconds >= 0) {
+        input.recordRetryAfter?.(milliseconds);
+      }
     }
     if (response.status === 401) {
       throw new Error("credential-rejected");
     }
     if (!args.expected.includes(response.status)) {
+      if (response.status === 429) {
+        throw new Error("provider-rate-limited");
+      }
+      if (response.status === 403) {
+        throw new Error("provider-permission-denied");
+      }
       throw new Error(`vercel-status-${response.status}`);
     }
     return { body, status: response.status };
@@ -108,26 +125,58 @@ export async function provisionVercelProject(input: {
 
   const baseName = `apps-${input.appId}`;
   const linkedRepository = input.github.status === "succeeded" ? input.github.fullName : undefined;
-  try {
-    const candidates = [...input.persistedCandidates];
-    for (let generated = 0; candidates.length < 5 && generated < 20; generated += 1) {
+  if (input.reconcilePriorWrite) {
+    try {
+      let uncertainWrite = false;
+      for (const candidate of input.persistedCandidates) {
+        if (!input.persistedAbsentCandidates.includes(candidate)) {
+          continue;
+        }
+        uncertainWrite = true;
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Inspect all prior candidates before permitting a new write.
+        const observed = await inspect(candidate);
+        if (observed.status === 200) {
+          // Vercel project metadata has no Builder request marker. A matching shape is not proof of ownership.
+          return { code: "reconciliation_uncertain", retryable: false, status: "failed" };
+        }
+      }
+      if (uncertainWrite) {
+        // A 404 is not authoritative evidence that a previous POST did not commit.
+        return { code: "reconciliation_uncertain", retryable: false, status: "failed" };
+      }
+    } catch {
+      return { code: "provider_unavailable", retryable: true, status: "failed" };
+    }
+  }
+  const candidates = async function* candidates(): AsyncGenerator<string> {
+    const seen = new Set<string>();
+    for (const candidate of input.persistedCandidates) {
+      if (!seen.has(candidate)) {
+        seen.add(candidate);
+        yield candidate;
+      }
+    }
+    for (;;) {
       const candidate =
-        candidates.length === 0
+        seen.size === 0
           ? baseName
           : suffixedProviderName({
               base: baseName,
               maximumLength: 100,
               suffix: (input.generateSuffix ?? suffix)(),
             });
-      if (candidates.includes(candidate)) {
+      if (seen.has(candidate)) {
         continue;
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- each candidate must be durably recorded before the next provider operation.
       await input.persistCandidate(candidate);
-      candidates.push(candidate);
+      seen.add(candidate);
+      yield candidate;
     }
-    const result = await runSequentiallyUntil<(typeof candidates)[number], VercelProvisionResult>(
-      candidates.slice(0, 5),
+  };
+  try {
+    const result = await runSequentiallyUntilAsync<string, VercelProvisionResult>(
+      candidates(),
       async (candidate) => {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const before = await inspect(candidate);
@@ -155,14 +204,23 @@ export async function provisionVercelProject(input: {
                   }
                 : {}),
             },
-            expected: [200, 201, 400, 403, 409],
+            expected: [200, 201, 400, 403, 409, 429],
             method: "POST",
             path: "/v11/projects",
           });
-          if (created.status === 400 || created.status === 403) {
+          if (created.status === 400 || created.status === 403 || created.status === 429) {
+            let code:
+              | "provider_validation_failed"
+              | "provider_permission_denied"
+              | "provider_rate_limited" = "provider_validation_failed";
+            if (created.status === 403) {
+              code = "provider_permission_denied";
+            } else if (created.status === 429) {
+              code = "provider_rate_limited";
+            }
             return {
-              code: "provider_rejected",
-              retryable: true,
+              code,
+              retryable: created.status === 429,
               status: "failed",
             };
           }
@@ -170,7 +228,16 @@ export async function provisionVercelProject(input: {
             // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
             const recovered = await inspect(candidate);
             if (recovered.status !== 200) {
-              return null;
+              const collision = z
+                .object({
+                  error: z.object({
+                    code: z.enum(["project_already_exists", "name_already_exists"]),
+                  }),
+                })
+                .safeParse(created.body).success;
+              return collision
+                ? null
+                : { code: "provider_rejected", retryable: false, status: "failed" };
             }
           }
         }
@@ -214,8 +281,14 @@ export async function provisionVercelProject(input: {
         };
       },
     );
-    return result ?? { code: "name_conflict", retryable: true, status: "failed" };
+    return result ?? { code: "provider_unavailable", retryable: true, status: "failed" };
   } catch (error) {
+    if (error instanceof Error && error.message === "provider-rate-limited") {
+      return { code: "provider_rate_limited", retryable: true, status: "failed" };
+    }
+    if (error instanceof Error && error.message === "provider-permission-denied") {
+      return { code: "provider_permission_denied", retryable: false, status: "failed" };
+    }
     return {
       code:
         error instanceof Error && error.message === "credential-rejected"

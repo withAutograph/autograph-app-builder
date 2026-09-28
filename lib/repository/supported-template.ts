@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { createReadStream, existsSync, lstatSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import nodePath from "node:path";
 import { tmpdir } from "node:os";
@@ -9,6 +10,13 @@ import type { SandboxSession } from "eve/sandbox";
 import { parse as parseYaml } from "yaml";
 
 import { ensureSandboxDirectories } from "./sandbox-filesystem";
+import {
+  captureProcessStdout,
+  digestProcessStdout,
+  digestProcessStdoutSync,
+  processStdoutByteStream,
+  streamProcessStdout,
+} from "./captured-process-output";
 import { safeSourcePath } from "./source-path";
 import { hasTestCapability } from "../testing/test-capability";
 import { runSequentially } from "../async-sequential";
@@ -154,6 +162,39 @@ const sha256 = function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 };
 
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting.
+async function hashFile(filePath: string): Promise<string> {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(filePath)) {
+    if (!(chunk instanceof Uint8Array)) {
+      throw new Error("The development source returned non-byte file content.");
+    }
+    hash.update(chunk);
+  }
+  return hash.digest("hex");
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting.
+function fileReadableStream(filePath: string): ReadableStream<Uint8Array> {
+  const file = createReadStream(filePath);
+  const iterator = file[Symbol.asyncIterator]();
+  return new ReadableStream<Uint8Array>({
+    cancel() {
+      file.destroy();
+    },
+    async pull(controller) {
+      const next = await iterator.next();
+      if (next.done === true) {
+        controller.close();
+      } else if (next.value instanceof Uint8Array) {
+        controller.enqueue(next.value);
+      } else {
+        controller.error(new Error("The development source returned non-byte file content."));
+      }
+    },
+  });
+}
+
 interface DependencyFile {
   path: (typeof SUPPORTED_TEMPLATE_DEPENDENCY_PATHS)[number];
   mode: "100644" | "100755";
@@ -170,7 +211,7 @@ export interface SupportedTemplateDependencyClosure {
 
 const git = function git(path: string, args: string[]): string {
   const executable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
-  return execFileSync(
+  return captureProcessStdout(
     executable,
     [
       "-c",
@@ -184,7 +225,6 @@ const git = function git(path: string, args: string[]): string {
       ...args,
     ],
     {
-      encoding: "utf-8",
       env: {
         GIT_ATTR_NOSYSTEM: "1",
         GIT_CONFIG_GLOBAL: "/dev/null",
@@ -199,49 +239,76 @@ const git = function git(path: string, args: string[]): string {
         XDG_CONFIG_HOME: "/dev/null",
       },
     },
-  ).trim();
+  )
+    .toString("utf-8")
+    .trim();
 };
 
-const gitBytes = function gitBytes(path: string, args: string[]): Buffer {
-  const executable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
-  return execFileSync(
-    executable,
-    [
-      "-c",
-      "core.hooksPath=/dev/null",
-      "-c",
-      "core.fsmonitor=false",
-      "-c",
-      "core.attributesfile=/dev/null",
-      "-c",
-      "credential.helper=",
-      "-c",
-      "protocol.allow=never",
-      "-C",
-      path,
-      ...args,
-    ],
-    {
-      encoding: "buffer",
-      env: {
-        GIT_ATTR_NOSYSTEM: "1",
-        GIT_CONFIG_GLOBAL: "/dev/null",
-        GIT_CONFIG_NOSYSTEM: "1",
-        GIT_CONFIG_SYSTEM: "/dev/null",
-        GIT_NO_LAZY_FETCH: "1",
-        GIT_TERMINAL_PROMPT: "0",
-        HOME: "/dev/null",
-        LANG: "C.UTF-8",
-        LC_ALL: "C.UTF-8",
-        NODE_ENV: process.env.NODE_ENV ?? "production",
-        PATH: "/usr/bin:/bin",
-        TMPDIR: "/tmp",
-        XDG_CONFIG_HOME: "/dev/null",
-      },
-      maxBuffer: 16 * 1024 * 1024,
-      timeout: 30_000,
+const gitByteInvocation = (path: string, args: string[]) => ({
+  args: [
+    "-c",
+    "core.hooksPath=/dev/null",
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    "core.attributesfile=/dev/null",
+    "-c",
+    "credential.helper=",
+    "-c",
+    "protocol.allow=never",
+    "-C",
+    path,
+    ...args,
+  ],
+  command: existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git",
+  options: {
+    env: {
+      GIT_ATTR_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_SYSTEM: "/dev/null",
+      GIT_NO_LAZY_FETCH: "1",
+      GIT_TERMINAL_PROMPT: "0",
+      HOME: "/dev/null",
+      LANG: "C.UTF-8",
+      LC_ALL: "C.UTF-8",
+      NODE_ENV: process.env.NODE_ENV ?? "production",
+      PATH: "/usr/bin:/bin",
+      TMPDIR: "/tmp",
+      XDG_CONFIG_HOME: "/dev/null",
     },
-  );
+  },
+});
+
+const gitBytes = function gitBytes(path: string, args: string[]): Buffer {
+  const command = gitByteInvocation(path, args);
+  return captureProcessStdout(command.command, command.args, command.options);
+};
+
+const gitStream = (path: string, args: string[]): AsyncGenerator<Uint8Array> => {
+  const command = gitByteInvocation(path, args);
+  return streamProcessStdout(command.command, command.args, command.options);
+};
+
+const gitNulRecords = async function* gitNulRecords(
+  stream: AsyncIterable<Uint8Array>,
+): AsyncGenerator<string> {
+  let pending = Buffer.alloc(0);
+  for await (const chunk of stream) {
+    if (!(chunk instanceof Uint8Array)) {
+      throw new Error("Git emitted a non-byte source record.");
+    }
+    const bytes = pending.byteLength === 0 ? Buffer.from(chunk) : Buffer.concat([pending, chunk]);
+    let start = 0;
+    for (let index = bytes.indexOf(0); index !== -1; index = bytes.indexOf(0, start)) {
+      yield bytes.subarray(start, index).toString("utf-8");
+      start = index + 1;
+    }
+    pending = bytes.subarray(start);
+  }
+  if (pending.byteLength > 0) {
+    throw new Error("Git returned an incomplete source-tree record.");
+  }
 };
 
 export const inspectSupportedTemplateDependencyClosure =
@@ -263,7 +330,10 @@ export const inspectSupportedTemplateDependencyClosure =
         mode: match.groups.mode as DependencyFile["mode"],
         objectId: match.groups.objectId,
         path,
-        sha256: sha256(gitBytes(repositoryRoot, ["show", `${resolvedCommit}:${path}`])),
+        sha256: (() => {
+          const command = gitByteInvocation(repositoryRoot, ["show", `${resolvedCommit}:${path}`]);
+          return digestProcessStdoutSync(command.command, command.args, command.options);
+        })(),
       };
     });
     return {
@@ -771,26 +841,68 @@ const preparedSourceChecksums = function preparedSourceChecksums(
 };
 
 /**
- * Development is deliberately a live working-tree transport.  The archive is
- * only a one-shot upload envelope for the first transfer; it is neither a
- * release artifact nor a source authority.  Subsequent transfers use the
- * manifest delta below, so ordinary edits do not rebuild or replace the
- * sandbox workspace.
+ * Development is deliberately a live working-tree transport. The archive is
+ * only a first-transfer transport; subsequent transfers use the manifest
+ * delta below so ordinary edits do not replace the sandbox workspace.
  */
-const developmentWorkingTreeArchive = function developmentWorkingTreeArchive(
+const developmentWorkingTreeArchive = async function developmentWorkingTreeArchive(
+  sandbox: SandboxSession,
   sourcePath: string,
   paths: readonly string[],
-): Buffer {
-  return execFileSync("tar", ["--create", "--gzip", "--file=-", "--null", "--files-from=-"], {
-    cwd: sourcePath,
-    env: {
-      ...process.env,
-      COPYFILE_DISABLE: "1",
-      COPY_EXTENDED_ATTRIBUTES_DISABLE: "1",
+): Promise<void> {
+  const archiveProcess = spawn(
+    "tar",
+    ["--create", "--gzip", "--file=-", "--null", "--files-from=-"],
+    {
+      cwd: sourcePath,
+      env: {
+        ...process.env,
+        COPYFILE_DISABLE: "1",
+        COPY_EXTENDED_ATTRIBUTES_DISABLE: "1",
+      },
+      stdio: ["pipe", "pipe", "inherit"],
     },
-    input: `${paths.join("\0")}\0`,
-    maxBuffer: 256 * 1024 * 1024,
+  );
+  if (archiveProcess.stdout === null || archiveProcess.stdin === null) {
+    throw new Error("The development source archive could not be streamed.");
+  }
+  const archiveOutputIterator = archiveProcess.stdout[Symbol.asyncIterator]();
+  const archiveStream = new ReadableStream<Uint8Array>({
+    cancel() {
+      archiveProcess.kill();
+    },
+    async pull(controller) {
+      const next = await archiveOutputIterator.next();
+      if (next.done === true) {
+        controller.close();
+        return;
+      }
+      if (!(next.value instanceof Uint8Array)) {
+        controller.error(new Error("tar emitted a non-byte archive chunk."));
+        return;
+      }
+      controller.enqueue(next.value);
+    },
   });
+  const archiveCompletion = once(archiveProcess, "close");
+  try {
+    const transfer = sandbox.writeFile({ content: archiveStream, path: sandboxSourceArchivePath });
+    for (const path of paths) {
+      if (!archiveProcess.stdin.write(`${path}\0`)) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Respect tar stdin backpressure.
+        await once(archiveProcess.stdin, "drain");
+      }
+    }
+    archiveProcess.stdin.end();
+    await transfer;
+    await archiveCompletion;
+    if (archiveProcess.exitCode !== 0) {
+      throw new Error("The development source archive could not be created.");
+    }
+  } catch (error) {
+    archiveProcess.kill();
+    throw error;
+  }
 };
 
 const parsePreparedWorkspace = function parsePreparedWorkspace(
@@ -1208,14 +1320,17 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
     return existing;
   }
 
-  const treeEntries = execFileSync(
+  const treeProcess = spawn(
     "git",
     ["-C", eligibility.sourcePath, "ls-tree", "-rz", "--full-tree", expectedSha],
-    { encoding: "utf-8", maxBuffer: 32 * 1024 * 1024 },
-  )
-    .split("\0")
-    .filter(Boolean)
-    .map((entry) => {
+    { stdio: ["ignore", "pipe", "ignore"] },
+  );
+  if (treeProcess.stdout === null) {
+    throw new Error("The reviewed Git tree could not be streamed.");
+  }
+  const treeEntries: { mode: "100644" | "100755"; objectId: string; path: string }[] = [];
+  try {
+    for await (const entry of gitNulRecords(treeProcess.stdout)) {
       const match = /^(?<mode>\d+) (?<type>\w+) (?<objectId>[0-9a-f]{40})\t(?<path>.+)$/u.exec(
         entry,
       );
@@ -1232,16 +1347,28 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
       ) {
         throw new Error("The reviewed Git tree contains an unsupported entry.");
       }
-      return { mode: mode as "100644" | "100755", objectId, path };
-    });
-  const sourceFiles: PreparedSourceFile[] = treeEntries.map((entry) => {
-    const content = execFileSync(
-      "git",
-      ["-C", eligibility.sourcePath, "cat-file", "blob", entry.objectId],
-      { maxBuffer: 128 * 1024 * 1024 },
-    );
-    return { ...entry, sha256: sha256(content) };
-  });
+      treeEntries.push({ mode: mode as "100644" | "100755", objectId, path });
+    }
+    await once(treeProcess, "close");
+    if (treeProcess.exitCode !== 0) {
+      throw new Error("The reviewed Git tree could not be enumerated.");
+    }
+  } catch (error) {
+    treeProcess.kill();
+    throw error;
+  }
+  const sourceFiles: PreparedSourceFile[] = [];
+  for (const entry of treeEntries) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Hash one source blob at a time.
+    const fileDigest = await digestProcessStdout("git", [
+      "-C",
+      eligibility.sourcePath,
+      "cat-file",
+      "blob",
+      entry.objectId,
+    ]);
+    sourceFiles.push({ ...entry, sha256: fileDigest });
+  }
   const intent = {
     callId,
     eligibilityDigest: expectedEligibilityDigest,
@@ -1265,28 +1392,58 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
       sourceFiles.map(({ path }) => `repository/${path.split("/").slice(0, -1).join("/")}`),
     );
     for (const entry of sourceFiles) {
+      const command = gitByteInvocation(eligibility.sourcePath, [
+        "cat-file",
+        "blob",
+        entry.objectId,
+      ]);
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await sandbox.writeBinaryFile({
-        content: execFileSync(
-          "git",
-          ["-C", eligibility.sourcePath, "cat-file", "blob", entry.objectId],
-          { maxBuffer: 128 * 1024 * 1024 },
-        ),
+      await sandbox.writeFile({
+        content: processStdoutByteStream(command.command, command.args, command.options),
         path: `repository/${entry.path}`,
       });
     }
   } else {
-    // Microsandbox transfers the archive through a bounded file-write API. A
-    // compressed archive keeps real template repositories within that bound.
-    const sourceArchive = execFileSync(
+    const archiveProcess = spawn(
       "git",
       ["-C", eligibility.sourcePath, "archive", "--format=tar.gz", expectedSha],
-      { maxBuffer: 256 * 1024 * 1024 },
+      { stdio: ["ignore", "pipe", "inherit"] },
     );
-    await sandbox.writeBinaryFile({
-      content: sourceArchive,
-      path: sandboxSourceArchivePath,
+    if (archiveProcess.stdout === null) {
+      throw new Error("The reviewed source archive could not be streamed.");
+    }
+    const archiveOutputIterator = archiveProcess.stdout[Symbol.asyncIterator]();
+    const archiveStream = new ReadableStream<Uint8Array>({
+      cancel() {
+        archiveProcess.kill();
+      },
+      async pull(controller) {
+        const next = await archiveOutputIterator.next();
+        if (next.done === true) {
+          controller.close();
+          return;
+        }
+        if (next.value === undefined || !(next.value instanceof Uint8Array)) {
+          controller.error(new Error("Git emitted a non-byte archive chunk."));
+          return;
+        }
+        controller.enqueue(next.value);
+      },
     });
+    const archiveCompletion = once(archiveProcess, "close");
+    try {
+      await sandbox.writeFile({
+        content: archiveStream,
+        path: sandboxSourceArchivePath,
+      });
+      await archiveCompletion;
+      if (archiveProcess.exitCode !== 0) {
+        throw new Error("The reviewed source archive could not be created.");
+      }
+    } catch (error) {
+      archiveProcess.kill();
+      throw error;
+    }
     try {
       const extraction = await sandbox.run({
         command: `mkdir -p repository && tar --extract --gzip --file ${sandboxSourceArchivePath} --directory repository --no-same-owner --no-same-permissions`,
@@ -1345,52 +1502,47 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
   const sourceSha = git(sourcePath, ["rev-parse", "HEAD"]);
   const eligibilityDigest = sha256(sourceSha);
 
-  const names = gitBytes(sourcePath, [
-    "ls-files",
-    "-z",
-    "--cached",
-    "--others",
-    "--exclude-standard",
-  ])
-    .toString("utf-8")
-    .split("\0")
-    .filter(Boolean)
-    .toSorted()
-    .filter((path) => {
-      if (!safeSourcePath(path)) {
-        throw new Error("The development source contains an unsafe path.");
-      }
-      const absolutePath = nodePath.resolve(sourcePath, path);
-      if (!within(sourcePath, absolutePath)) {
-        throw new Error("The development source escapes its root.");
-      }
-      // `git ls-files --cached` keeps a deleted tracked path until it is
-      // staged. Development follows the working tree, so that path is a
-      // managed deletion rather than a failed source snapshot.
-      return existsSync(absolutePath);
-    });
-  const sourceFiles: PreparedSourceFile[] = names.flatMap((path) => {
+  const listedNames: string[] = [];
+  for await (const name of gitNulRecords(
+    gitStream(sourcePath, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]),
+  )) {
+    listedNames.push(name);
+  }
+  const names = listedNames.toSorted().filter((path) => {
+    if (!safeSourcePath(path)) {
+      throw new Error("The development source contains an unsafe path.");
+    }
+    const absolutePath = nodePath.resolve(sourcePath, path);
+    if (!within(sourcePath, absolutePath)) {
+      throw new Error("The development source escapes its root.");
+    }
+    // `git ls-files --cached` keeps a deleted tracked path until it is
+    // staged. Development follows the working tree, so that path is a
+    // managed deletion rather than a failed source snapshot.
+    return existsSync(absolutePath);
+  });
+  const sourceFiles: PreparedSourceFile[] = [];
+  for (const path of names) {
     const absolutePath = nodePath.resolve(sourcePath, path);
     const info = lstatSync(absolutePath);
     // Tar carries symlinks, submodule directories, and other ordinary Git
     // working-tree entries. They do not need to fit the old regular-file
     // receipt shape in order for the repository to run.
     if (!info.isFile() || info.isSymbolicLink()) {
-      return [];
+      continue;
     }
-    const content = readFileSync(absolutePath);
-    return [
-      {
-        // oxlint-disable-next-line eslint/no-bitwise -- Intentional executable-mode bitmask.
-        mode: (info.mode & 0o111) === 0 ? "100644" : "100755",
-        // The live working tree has no stable Git object for edited/untracked
-        // files. Its byte digest is the development-generation identity.
-        objectId: sha256(content).slice(0, 40),
-        path,
-        sha256: sha256(content),
-      },
-    ];
-  });
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Hash source files incrementally to avoid whole-file buffering.
+    const digest = await hashFile(absolutePath);
+    sourceFiles.push({
+      // oxlint-disable-next-line eslint/no-bitwise -- Intentional executable-mode bitmask.
+      mode: (info.mode & 0o111) === 0 ? "100644" : "100755",
+      // The live working tree has no stable Git object for edited/untracked
+      // files. Its byte digest is the development-generation identity.
+      objectId: digest.slice(0, 40),
+      path,
+      sha256: digest,
+    });
+  }
   if (sourceFiles.length === 0) {
     throw new Error("The development source contains no files.");
   }
@@ -1445,11 +1597,7 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
     path: ".app-builder/prepare-intent.json",
   });
   if (fullTransfer) {
-    const archive = developmentWorkingTreeArchive(sourcePath, names);
-    await sandbox.writeBinaryFile({
-      content: archive,
-      path: sandboxSourceArchivePath,
-    });
+    await developmentWorkingTreeArchive(sandbox, sourcePath, names);
     try {
       const extraction = await sandbox.run({
         command: `mkdir -p repository && tar --extract --gzip --file ${sandboxSourceArchivePath} --directory repository --no-same-owner --no-same-permissions`,
@@ -1474,15 +1622,14 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
     });
     for (const file of changedFiles) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await sandbox.writeBinaryFile({
-        content: readFileSync(nodePath.resolve(sourcePath, file.path)),
+      await sandbox.writeFile({
+        content: fileReadableStream(nodePath.resolve(sourcePath, file.path)),
         path: `repository/${file.path}`,
       });
     }
     const nonRegularPaths = names.filter((path) => !currentByPath.has(path));
     if (nonRegularPaths.length > 0) {
-      const archive = developmentWorkingTreeArchive(sourcePath, nonRegularPaths);
-      await sandbox.writeBinaryFile({ content: archive, path: sandboxSourceArchivePath });
+      await developmentWorkingTreeArchive(sandbox, sourcePath, nonRegularPaths);
       try {
         const extraction = await sandbox.run({
           command: `tar --extract --gzip --file ${sandboxSourceArchivePath} --directory repository --no-same-owner --no-same-permissions`,

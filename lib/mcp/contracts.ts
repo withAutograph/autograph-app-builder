@@ -138,14 +138,7 @@ export const publicPrototypePreviewUrlSchema = z
 
 export const publicPrototypeSchema = z
   .object({
-    content: z
-      .string()
-      .min(1)
-      .max(8 * 1024 * 1024)
-      .refine(
-        (content) => new TextEncoder().encode(content).byteLength <= 8 * 1024 * 1024,
-        "Prototype HTML must be at most 8 MiB.",
-      ),
+    content: z.string().min(1),
     digest: sha256DigestSchema,
     mediaType: z.literal("text/html"),
     path: z.string().regex(/^prototype\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/index\.html$/u),
@@ -156,6 +149,29 @@ export const publicPrototypeSchema = z
 
 export type PublicPrototype = z.infer<typeof publicPrototypeSchema>;
 
+/** Verified v2 artifact manifest; bytes remain in tenant-scoped chunk storage. */
+export const publicPrototypeReferenceSchema = z
+  .object({
+    appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+    chunkCount: z.number().int().positive(),
+    contentBytes: z.number().int().positive(),
+    digest: sha256DigestSchema,
+    mediaType: z.literal("text/html"),
+    path: z.string().regex(/^prototype\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/index\.html$/u),
+    previewUrl: publicPrototypePreviewUrlSchema.optional(),
+    recordedByCallId: z.string().min(1),
+    revision: sha256DigestSchema,
+    sessionId: z.string().min(1),
+    version: z.literal(2),
+  })
+  .strict()
+  .refine((value) => value.path === `prototype/${value.appId}/index.html`, {
+    message: "Prototype reference path must match the app ID.",
+    path: ["path"],
+  });
+
+export type PublicPrototypeReference = z.infer<typeof publicPrototypeReferenceSchema>;
+
 /** A fixture-backed revision compiled from the prepared Arrusted catalog. */
 export const publicUiPreviewSchema = z
   .object({
@@ -164,7 +180,7 @@ export const publicUiPreviewSchema = z
     functionality: z.literal("fixtures-only"),
     previewUrl: publicPrototypePreviewUrlSchema.optional(),
     revision: sha256DigestSchema,
-    routes: z.array(z.string().startsWith("/")).min(1).max(16),
+    routes: z.array(z.string().startsWith("/")).min(1),
   })
   .strict();
 
@@ -201,6 +217,7 @@ export const eveSessionResultSchema = z
     events: z.array(publicEveEventSchema),
     inputRequests: z.array(publicInputRequestSchema).optional(),
     prototype: publicPrototypeSchema.optional(),
+    prototypeRef: publicPrototypeReferenceSchema.optional(),
     sessionId: z.string(),
     status: sessionStatusSchema,
     uiPreview: publicUiPreviewSchema.optional(),

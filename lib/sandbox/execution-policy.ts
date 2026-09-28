@@ -4,13 +4,8 @@ import { z } from "zod";
 
 export const sandboxExecutionPolicySchema = z
   .object({
-    command: z.object({
-      maximumKillCleanupTimeMs: z.literal(2000),
-      maximumNoOutputTimeMs: z.literal(60_000),
-      maximumOutputBytes: z.literal(1_048_576),
-      maximumWallTimeMs: z.literal(300_000),
-    }),
     lease: z.object({
+      cleanupTimeoutMs: z.literal(2000),
       heartbeatMs: z.literal(60_000),
       ttlMs: z.literal(900_000),
     }),
@@ -28,13 +23,8 @@ export const sandboxExecutionPolicySchema = z
 export type SandboxExecutionPolicy = z.infer<typeof sandboxExecutionPolicySchema>;
 
 export const SANDBOX_EXECUTION_POLICY = sandboxExecutionPolicySchema.parse({
-  command: {
-    maximumKillCleanupTimeMs: 2000,
-    maximumNoOutputTimeMs: 60_000,
-    maximumOutputBytes: 1_048_576,
-    maximumWallTimeMs: 300_000,
-  },
   lease: {
+    cleanupTimeoutMs: 2000,
     heartbeatMs: 60_000,
     ttlMs: 900_000,
   },

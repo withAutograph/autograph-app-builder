@@ -1053,6 +1053,35 @@ describe("closed GitHub publication contract", () => {
     expect(JSON.stringify(failure)).not.toContain("src/app.tsx");
   });
 
+  it("reports a GitHub file-size rejection with its safe operation, path, bytes, and status", async () => {
+    const adapter = new Adapter();
+    adapter.draftAcknowledgement = {
+      bytes: 12_345,
+      code: "github-file-write-failed",
+      operation: "create-blob",
+      path: "apps/demo/large.tsx",
+      providerStatus: 413,
+      status: "rejected",
+    };
+    const proposal = draftProposal(adapter);
+    const store = new Store();
+
+    await expect(
+      publishApprovedDraftPullRequest({
+        adapter,
+        approvedByCallId: "approve",
+        contentSource: publicationContentSource(),
+        proposal,
+        review: review(),
+        store,
+      }),
+    ).rejects.toThrow(
+      /create-blob for apps\/demo\/large\.tsx \(12345 bytes\) \(GitHub HTTP 413\).*repository's current GitHub limits/u,
+    );
+    const failure = await store.read(proposal.digest);
+    expect(failure).toMatchObject({ providerCode: "github-file-write-failed", status: "failed" });
+  });
+
   it("proves exact branch tree/content/paths and PR head/base/draft read-back", async () => {
     const adapter = new Adapter();
     const store = new Store();

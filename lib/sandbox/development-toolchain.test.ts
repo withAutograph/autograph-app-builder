@@ -1,4 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { Readable } from "node:stream";
 import { mkdir, mkdtemp, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -13,12 +15,13 @@ import {
   developmentVercelDependencyRepairCommand,
   developmentVercelProviderTemplateKey,
   developmentVercelRevalidationKey,
+  readDevelopmentVercelBootstrapInput,
 } from "./development-toolchain";
 import type { DevelopmentVercelBootstrapInput } from "./development-toolchain";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function input(override: Partial<DevelopmentVercelBootstrapInput> = {}) {
-  const sourceArchive = Buffer.from("source");
+  const sourceArchive = Readable.from([Buffer.from("source")]);
   return {
     dependencyKey: "d".repeat(64),
     lockfiles: {
@@ -38,6 +41,45 @@ function input(override: Partial<DevelopmentVercelBootstrapInput> = {}) {
 }
 
 describe("Development Vercel Sandbox dependency template", () => {
+  it("streams the development source archive from scratch storage with a verified digest", async () => {
+    const sourceRoot = await realpath(
+      await mkdtemp(path.join(tmpdir(), "app-builder-bootstrap-source-")),
+    );
+    await writeFile(path.join(sourceRoot, "app.txt"), "source input");
+    execFileSync("/usr/bin/git", ["init", "--quiet"], { cwd: sourceRoot });
+    execFileSync("/usr/bin/git", ["config", "user.email", "test@example.com"], { cwd: sourceRoot });
+    execFileSync("/usr/bin/git", ["config", "user.name", "Test"], { cwd: sourceRoot });
+    execFileSync("/usr/bin/git", ["config", "commit.gpgsign", "false"], { cwd: sourceRoot });
+    execFileSync("/usr/bin/git", ["add", "app.txt"], { cwd: sourceRoot });
+    execFileSync("/usr/bin/git", ["commit", "--quiet", "-m", "fixture"], { cwd: sourceRoot });
+    const sourceSha = execFileSync("/usr/bin/git", ["rev-parse", "HEAD"], {
+      cwd: sourceRoot,
+      encoding: "utf-8",
+    }).trim();
+    const sourceTree = execFileSync("/usr/bin/git", ["rev-parse", "HEAD^{tree}"], {
+      cwd: sourceRoot,
+      encoding: "utf-8",
+    }).trim();
+    const archive = readDevelopmentVercelBootstrapInput({
+      APP_BUILDER_DEVELOPMENT_DEPENDENCY_KEY: "d".repeat(64),
+      APP_BUILDER_DEVELOPMENT_SOURCE_FINGERPRINT: "a".repeat(64),
+      APP_BUILDER_DEVELOPMENT_SOURCE_SHA: sourceSha,
+      APP_BUILDER_DEVELOPMENT_SOURCE_TREE: sourceTree,
+      APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+      APP_BUILDER_EXECUTION_MODE: "development",
+      APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+      REPOSITORY_LOCAL_ROOTS: sourceRoot,
+    });
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of archive.sourceArchive) {
+      chunks.push(chunk);
+    }
+    const bytes = Buffer.concat(chunks);
+    expect(bytes.byteLength).toBeGreaterThan(0);
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe(archive.sourceArchiveSha256);
+    await rm(sourceRoot, { force: true, recursive: true });
+  });
+
   it("keys provider reuse only by dependency inputs", () => {
     const first = input();
     const codeOnlyChange = input({

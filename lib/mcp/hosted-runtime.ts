@@ -31,12 +31,19 @@ export function composeHostedMcpRuntime(input: {
     fetchImplementation: input.fetchImplementation,
     workloadIdentity: input.workloadIdentity,
   };
+  const store = createPostgresHostedEveStore(input.database);
   return {
     auth,
     membership: createPostgresWorkspaceMembership(input.database),
     now: input.now,
-    store: createPostgresHostedEveStore(input.database),
-    transport: createSameOriginEveTransport(httpInput),
+    store,
+    transport: createSameOriginEveTransport({
+      ...httpInput,
+      async verifyReadAuthority({ principal, sessionId, adapterSessionId }) {
+        const session = await store.getSession(principal, sessionId);
+        return session !== null && session.adapterSessionId === adapterSessionId;
+      },
+    }),
     verifier: createRemoteJwksAccessTokenVerifier({
       config: auth,
       fetchImplementation: input.fetchImplementation,

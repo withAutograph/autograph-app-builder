@@ -195,8 +195,7 @@ const planningFailureDetail = (value: string): string =>
       "$<key>=[REDACTED]",
     )
     .replaceAll(/\s+/gu, " ")
-    .trim()
-    .slice(0, 500);
+    .trim();
 
 const parseOutput = <T>(result: TargetCommandResult, schema: z.ZodType<T>, label: string): T => {
   const stdout = result.stdout

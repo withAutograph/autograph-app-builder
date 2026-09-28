@@ -198,6 +198,49 @@ it("bounds untrusted read response and omits its contents", async () => {
   expect(JSON.stringify(result)).not.toContain("sensitive");
 });
 
+it("validates the complete streamed read even when an early marker matches", async () => {
+  let calls = 0;
+  let marker: string | undefined;
+  const result = await executeProductReadback({
+    authority: {
+      expiresAt: Date.now() + 60_000,
+      launchUrl: "https://preview.test/__autograph_preview_launch?token=private",
+    },
+    fetch: (_url, options) => {
+      calls += 1;
+      if (calls === 1) {
+        return Promise.resolve(
+          new Response(null, {
+            headers: { location: "/", "set-cookie": "preview=secret" },
+            status: 303,
+          }),
+        );
+      }
+      if (options?.method === "POST") {
+        const submitted: unknown = JSON.parse(String(options.body));
+        if (typeof submitted !== "object" || submitted === null || !("value" in submitted)) {
+          throw new Error("Invalid test request");
+        }
+        marker = String(submitted.value);
+        return Promise.resolve(new Response("ok"));
+      }
+      return Promise.resolve(
+        new Response(`{"value":"${marker}","other":${"1".repeat(1_000_000)}x}`),
+      );
+    },
+    scenario: {
+      body: {},
+      markerField: "value",
+      outcomeId: "save",
+      readPath: "/record",
+      readPointer: "/value",
+      writePath: "/record",
+    },
+  });
+  expect(result.status).toBe("failed");
+  expect(result.reason).toContain("malformed JSON");
+});
+
 it("blocks application login requirements without calling persistence broken", async () => {
   const { requests, result } = await run("auth");
   expect(result.status).toBe("blocked");

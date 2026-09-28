@@ -1,6 +1,17 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { lstatSync, readFileSync, realpathSync } from "node:fs";
+import {
+  closeSync,
+  createReadStream,
+  lstatSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  readSync,
+  realpathSync,
+  rmSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 import {
@@ -49,7 +60,7 @@ export type DevelopmentVercelBootstrapInput = Readonly<{
   sourceSha: string;
   sourceTree: string;
   dependencyKey: string;
-  sourceArchive: Buffer;
+  sourceArchive: NodeJS.ReadableStream & AsyncIterable<Uint8Array>;
   sourceArchiveSha256: string;
   lockfiles: Readonly<Record<(typeof dependencyInputs)[number], string>>;
 }>;
@@ -138,7 +149,6 @@ function assertInput(input: DevelopmentVercelBootstrapInput) {
     !gitObjectPattern.test(input.sourceSha) ||
     !gitObjectPattern.test(input.sourceTree) ||
     !sha256Pattern.test(input.sourceArchiveSha256) ||
-    sha256(input.sourceArchive) !== input.sourceArchiveSha256 ||
     Object.values(input.lockfiles).some(
       (digest) => digest !== "absent" && !sha256Pattern.test(digest),
     )
@@ -400,23 +410,48 @@ export function readDevelopmentVercelBootstrapInput(
   ) {
     throw new Error("Development Vercel source snapshot drifted.");
   }
-  const sourceArchive = execFileSync(
-    "/usr/bin/git",
-    [
-      "-c",
-      "core.hooksPath=/dev/null",
-      "-C",
-      sourceRoot,
-      "archive",
-      "--format=tar.gz",
-      result.sourceSha,
-    ],
-    { env: gitEnvironment(), maxBuffer: 256 * 1024 * 1024 },
-  );
+  const archiveDirectory = mkdtempSync(path.join(tmpdir(), "app-builder-development-archive-"));
+  const archivePath = path.join(archiveDirectory, "source.tar.gz");
+  const archiveFd = openSync(archivePath, "w");
+  try {
+    execFileSync(
+      "/usr/bin/git",
+      [
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-C",
+        sourceRoot,
+        "archive",
+        "--format=tar.gz",
+        result.sourceSha,
+      ],
+      { env: gitEnvironment(), stdio: ["ignore", archiveFd, "inherit"] },
+    );
+  } catch (error) {
+    closeSync(archiveFd);
+    rmSync(archiveDirectory, { force: true, recursive: true });
+    throw error;
+  }
+  closeSync(archiveFd);
+  const archiveHash = createHash("sha256");
+  const hashFd = openSync(archivePath, "r");
+  const buffer = Buffer.allocUnsafe(64 * 1024);
+  try {
+    let bytesRead = 0;
+    while ((bytesRead = readSync(hashFd, buffer, 0, buffer.length, null)) > 0) {
+      archiveHash.update(buffer.subarray(0, bytesRead));
+    }
+  } finally {
+    closeSync(hashFd);
+  }
+  const sourceArchive = createReadStream(archivePath);
+  sourceArchive.once("close", () => {
+    rmSync(archiveDirectory, { force: true, recursive: true });
+  });
   const input = {
     ...result,
     sourceArchive,
-    sourceArchiveSha256: sha256(sourceArchive),
+    sourceArchiveSha256: archiveHash.digest("hex"),
   };
   assertInput(input);
   return input;

@@ -3,22 +3,49 @@ import { createHash, createPrivateKey } from "node:crypto";
 import { z } from "zod";
 
 import { createGitHubApp, createGitHubTokenOctokit } from "../github/octokit";
-import type { GitHubAppInstallationProvider } from "./github-app-adapter";
+import type {
+  GitHubAppInstallationProvider,
+  GitHubTargetAccessProvider,
+} from "./github-app-adapter";
 import {
   assertExactGitHubFreshRepositoryContent,
   assertExactGitHubDraftPullRequestContent,
   assertExactDraftPullRequestProposal,
   assertExactFreshRepositoryProposal,
+  githubPermissionsFor,
 } from "./github-publication";
 import type { DraftPullRequestProposal, GitHubDraftPullRequestContent } from "./github-publication";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
 import type { ExistingDraftUpdateProposal } from "./github-draft-update";
 
-const MAX_FILES = 10_000;
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
-const MAX_TOTAL_MATERIAL_BYTES = 100 * 1024 * 1024;
-const MAX_INSTALLATION_REPOSITORIES = 10_000;
+class GitHubBlobWriteFailureError extends Error {
+  readonly path: string;
+  readonly bytes: number;
+  readonly providerStatus?: number;
+
+  constructor(path: string, bytes: number, providerStatus?: number) {
+    super("github-blob-write-failed");
+    this.name = "GitHubBlobWriteFailureError";
+    this.path = path;
+    this.bytes = bytes;
+    this.providerStatus = providerStatus;
+  }
+}
+
+const providerHttpStatus = (error: unknown): number | undefined => {
+  if (!(error instanceof Error)) {
+    return;
+  }
+  const cause: unknown = error.cause;
+  if (cause === null || typeof cause !== "object" || !("status" in cause)) {
+    return;
+  }
+  const { status } = cause;
+  return typeof status === "number" && Number.isInteger(status) && status >= 400 && status <= 599
+    ? status
+    : undefined;
+};
 
 const decimal = z.string().regex(/^[1-9]\d*$/u);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
@@ -73,7 +100,8 @@ export interface GitHubPublicationFile {
   content: Uint8Array;
 }
 
-export interface GitHubAppHttpProvider extends GitHubAppInstallationProvider {
+export interface GitHubAppHttpProvider
+  extends GitHubAppInstallationProvider, GitHubTargetAccessProvider {
   inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown | undefined>;
   acquireRepositoryReadCredential: (input: { repositoryId: string }) => Promise<{
     token: string;
@@ -151,8 +179,7 @@ const validateFile = (file: GitHubPublicationFile): void => {
   if (
     !safeSourcePath(file.path) ||
     (file.mode !== "100644" && file.mode !== "100755") ||
-    !(file.content instanceof Uint8Array) ||
-    file.content.byteLength > MAX_FILE_BYTES
+    !(file.content instanceof Uint8Array)
   ) {
     throw new Error("invalid-material");
   }
@@ -161,26 +188,35 @@ const validateFile = (file: GitHubPublicationFile): void => {
 const canonicalFiles = (
   input: readonly GitHubPublicationFile[],
 ): readonly GitHubPublicationFile[] => {
-  if (input.length === 0 || input.length > MAX_FILES) {
+  if (input.length === 0) {
     throw new Error("invalid-material");
   }
-  const paths = new Set<string>();
-  let totalBytes = 0;
+  interface PathNode {
+    children: Map<string, PathNode>;
+    file: boolean;
+  }
+  const root: PathNode = {
+    children: new Map(),
+    file: false,
+  };
   for (const file of input) {
     validateFile(file);
-    totalBytes += file.content.byteLength;
-    if (
-      paths.has(file.path) ||
-      [...paths].some(
-        (path) => path.startsWith(`${file.path}/`) || file.path.startsWith(`${path}/`),
-      )
-    ) {
+    let node = root;
+    for (const segment of file.path.split("/")) {
+      if (node.file) {
+        throw new Error("invalid-material");
+      }
+      let child = node.children.get(segment);
+      if (child === undefined) {
+        child = { children: new Map(), file: false };
+        node.children.set(segment, child);
+      }
+      node = child;
+    }
+    if (node.file || node.children.size > 0) {
       throw new Error("invalid-material");
     }
-    paths.add(file.path);
-  }
-  if (totalBytes > MAX_TOTAL_MATERIAL_BYTES) {
-    throw new Error("invalid-material");
+    node.file = true;
   }
   return [...input].toSorted((left, right) => compareOverlayPaths(left.path, right.path));
 };
@@ -366,7 +402,9 @@ export const createGitHubAppHttpProvider = (input: {
     permissions: PermissionSnapshot,
   ): Promise<readonly string[]> => {
     const accessToken = await token(permissions);
-    const ids: string[] = [];
+    // The v2 installation identity still includes every selected ID. Accumulate
+    // one canonical set rather than retaining a page list and a second dedupe copy.
+    const ids = new Set<string>();
     for (let page = 1; ; page += 1) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await github({
@@ -375,15 +413,17 @@ export const createGitHubAppHttpProvider = (input: {
         path: `/installation/repositories?per_page=100&page=${page}`,
       });
       const repositories = arrayProperty(response.body, "repositories");
-      ids.push(...repositories.map((repository) => decimalProperty(repository, "id")));
-      if (ids.length > MAX_INSTALLATION_REPOSITORIES) {
-        throw new Error("installation-too-large");
+      for (const repository of repositories) {
+        ids.add(decimalProperty(repository, "id"));
       }
       if (repositories.length < 100) {
         break;
       }
     }
-    return [...new Set(ids)].toSorted();
+    const canonicalIds = [...ids];
+    // oxlint-disable-next-line unicorn/no-array-sort -- This fresh array is owned here; avoid a full duplicate inventory.
+    canonicalIds.sort();
+    return canonicalIds;
   };
 
   const repositoryById = async (
@@ -412,7 +452,7 @@ export const createGitHubAppHttpProvider = (input: {
     const commitData = property(commit.body, "commit");
     const tree = property(commitData, "tree");
     const variableNames: string[] = [];
-    for (let page = 1; page <= 10; page += 1) {
+    for (let page = 1; ; page += 1) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const variables = await github({
         authorization: accessToken,
@@ -423,9 +463,6 @@ export const createGitHubAppHttpProvider = (input: {
       variableNames.push(...pageVariables.map((value) => stringProperty(value, "name")));
       if (pageVariables.length < 100) {
         break;
-      }
-      if (page === 10) {
-        throw new Error("repository-variables-too-large");
       }
     }
     if (!booleanProperty(repositoryResponse.body, "private")) {
@@ -480,17 +517,25 @@ export const createGitHubAppHttpProvider = (input: {
     accessToken: string,
     file: GitHubPublicationFile,
   ): Promise<string> => {
-    const response = await github({
-      authorization: accessToken,
-      body: {
-        content: Buffer.from(file.content).toString("base64"),
-        encoding: "base64",
-      },
-      expected: [201],
-      method: "POST",
-      path: `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repositoryName)}/git/blobs`,
-    });
-    return objectId.parse(stringProperty(response.body, "sha"));
+    try {
+      const response = await github({
+        authorization: accessToken,
+        body: {
+          content: Buffer.from(file.content).toString("base64"),
+          encoding: "base64",
+        },
+        expected: [201],
+        method: "POST",
+        path: `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repositoryName)}/git/blobs`,
+      });
+      return objectId.parse(stringProperty(response.body, "sha"));
+    } catch (error) {
+      throw new GitHubBlobWriteFailureError(
+        file.path,
+        file.content.byteLength,
+        providerHttpStatus(error),
+      );
+    }
   };
 
   const createTree = async (treeInput: {
@@ -1080,6 +1125,34 @@ export const createGitHubAppHttpProvider = (input: {
         archived: booleanProperty(response.body, "archived"),
       };
     },
+    async inspectTargetAccess({ operation, repositoryId, requestedPermissions }) {
+      decimal.parse(repositoryId);
+      const expectedPermissions = githubPermissionsFor(operation);
+      if (JSON.stringify(requestedPermissions) !== JSON.stringify(expectedPermissions)) {
+        throw new Error("github-target-permissions-mismatch");
+      }
+      const identity = await installation();
+      const accessToken = await token(requestedPermissions, [repositoryId]);
+      const response = await github({
+        authorization: accessToken,
+        expected: [200],
+        path: `/repositories/${repositoryId}`,
+      });
+      if (
+        decimalProperty(response.body, "id") !== repositoryId ||
+        !booleanProperty(response.body, "private")
+      ) {
+        throw new Error("github-target-repository-mismatch");
+      }
+      return {
+        accountId: identity.accountId,
+        accountLogin: identity.accountLogin,
+        accountType: identity.accountType,
+        installationId: identity.installationId,
+        permissions: requestedPermissions,
+        repositoryId,
+      };
+    },
     async publishDraftPullRequest(proposal, content) {
       assertExactDraftPullRequestProposal(proposal);
       let changes: readonly {
@@ -1104,23 +1177,17 @@ export const createGitHubAppHttpProvider = (input: {
                 ]),
               }),
         }));
-        if (
-          changes.length === 0 ||
-          changes.length > MAX_FILES ||
-          changes.some((change) => !safeSourcePath(change.path))
-        ) {
+        if (changes.length === 0 || changes.some((change) => !safeSourcePath(change.path))) {
           throw new Error("invalid-material");
         }
         const paths = changes.map(({ path }) => path).toSorted(compareOverlayPaths);
         if (JSON.stringify(paths) !== JSON.stringify(proposal.approvedPaths)) {
           throw new Error("invalid-material");
         }
-        let totalBytes = 0;
         changes = changes.map((change) => {
           if (change.after !== undefined) {
             validateFile(change.after);
           }
-          totalBytes += change.after?.content.byteLength ?? 0;
           if (change.after !== undefined && change.after.path !== change.path) {
             throw new Error("invalid-material");
           }
@@ -1140,9 +1207,6 @@ export const createGitHubAppHttpProvider = (input: {
           }
           return change;
         });
-        if (totalBytes > MAX_TOTAL_MATERIAL_BYTES) {
-          throw new Error("invalid-material");
-        }
       } catch {
         return {
           code: "invalid-publication-material",
@@ -1205,14 +1269,29 @@ export const createGitHubAppHttpProvider = (input: {
       const deletions = changes.flatMap((change) =>
         change.kind === "deleted" ? [change.path] : [],
       );
-      const tree = await createTree({
-        accessToken,
-        baseTree: snapshot.headTree,
-        deletions,
-        files,
-        owner: proposal.owner,
-        repositoryName: proposal.name,
-      });
+      let tree: string;
+      try {
+        tree = await createTree({
+          accessToken,
+          baseTree: snapshot.headTree,
+          deletions,
+          files,
+          owner: proposal.owner,
+          repositoryName: proposal.name,
+        });
+      } catch (error) {
+        if (error instanceof GitHubBlobWriteFailureError) {
+          return {
+            bytes: error.bytes,
+            code: "github-file-write-failed",
+            operation: "create-blob",
+            path: error.path,
+            ...(error.providerStatus === undefined ? {} : { providerStatus: error.providerStatus }),
+            status: "rejected",
+          };
+        }
+        throw error;
+      }
       const marker = `App-Builder-Idempotency: ${proposal.idempotencyKey}`;
       const commit = await github({
         authorization: accessToken,

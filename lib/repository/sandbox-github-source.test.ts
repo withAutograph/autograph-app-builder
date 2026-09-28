@@ -121,12 +121,12 @@ describe("provider-created sandbox GitHub source", () => {
   });
 
   it("names a sandbox failure and redacts credentials while inspecting the checkout", async () => {
-    const run = vi
-      .fn()
-      .mockRejectedValue(new Error("token=github_pat_12345678901234567890 timeout"));
+    const longDetail = `${"source inspection detail ".repeat(40)} token=github_pat_12345678901234567890 timeout`;
+    const run = vi.fn().mockRejectedValue(new Error(longDetail));
     const operation = readSandboxGitHubSourceSnapshot({ run } as never, expected);
     await expect(operation).rejects.toThrow("could not inspect the Builder checkout");
     await expect(operation).rejects.toThrow("token=[REDACTED]");
+    await expect(operation).rejects.toThrow("source inspection detail ".repeat(40));
   });
 
   it("reports manifest command stderr, its exit code, and a recovery action", async () => {

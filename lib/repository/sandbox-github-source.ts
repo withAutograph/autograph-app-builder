@@ -33,8 +33,7 @@ const sandboxFailureDetail = (value: string): string =>
       "$<key>=[REDACTED]",
     )
     .replaceAll(/\s+/gu, " ")
-    .trim()
-    .slice(0, 350);
+    .trim();
 
 const sandboxCommandFailure = (
   operation: string,
@@ -109,24 +108,76 @@ export const sandboxGitHubSourceManifestProgram = (
 ) => String.raw`
 const { execFileSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
-const { lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } = require("node:fs");
-const { isAbsolute, resolve } = require("node:path");
+const { closeSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, realpathSync, rmSync, writeFileSync } = require("node:fs");
+const { tmpdir } = require("node:os");
+const { isAbsolute, join, resolve } = require("node:path");
 
 const root = ${JSON.stringify(rootPath)};
 const actualRoot = realpathSync(root);
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
-const git = (args, encoding = "utf-8") => execFileSync(
-  "git",
-  [
+const sha256File = (path) => {
+  const descriptor = openSync(path, "r");
+  const chunk = Buffer.alloc(64 * 1024);
+  const hash = createHash("sha256");
+  try {
+    for (;;) {
+      const length = readSync(descriptor, chunk, 0, chunk.length, null);
+      if (length === 0) break;
+      hash.update(chunk.subarray(0, length));
+    }
+    return hash.digest("hex");
+  } finally {
+    closeSync(descriptor);
+  }
+};
+const readNulRecords = (path) => {
+  const descriptor = openSync(path, "r");
+  const chunk = Buffer.alloc(64 * 1024);
+  const records = [];
+  let pending = Buffer.alloc(0);
+  try {
+    for (;;) {
+      const length = readSync(descriptor, chunk, 0, chunk.length, null);
+      if (length === 0) break;
+      const bytes = pending.length === 0 ? chunk.subarray(0, length) : Buffer.concat([pending, chunk.subarray(0, length)]);
+      let start = 0;
+      for (let index = bytes.indexOf(0); index !== -1; index = bytes.indexOf(0, start)) {
+        records.push(bytes.subarray(start, index).toString("utf-8"));
+        start = index + 1;
+      }
+      pending = Buffer.from(bytes.subarray(start));
+    }
+    if (pending.length > 0) throw new Error("incomplete Git tree record");
+    return records;
+  } finally {
+    closeSync(descriptor);
+  }
+};
+const git = (args, encoding = "utf-8") => {
+  const outputDirectory = mkdtempSync(join(tmpdir(), "app-builder-source-git-"));
+  const outputPath = join(outputDirectory, "stdout");
+  const outputDescriptor = openSync(outputPath, "w");
+  try {
+    execFileSync(
+      "git",
+      [
     "-c", "protocol.allow=never",
     "-c", "credential.helper=",
     "-c", "core.hooksPath=/dev/null",
     "-c", "core.fsmonitor=false",
     "-C", root,
-    ...args,
-  ],
-  { encoding, maxBuffer: 32 * 1024 * 1024 },
-);
+        ...args,
+      ],
+      { encoding: "buffer", stdio: ["ignore", outputDescriptor, "inherit"] },
+    );
+    if (encoding === "records") return readNulRecords(outputPath);
+    const output = readFileSync(outputPath);
+    return encoding === "buffer" ? output : output.toString("utf-8");
+  } finally {
+    closeSync(outputDescriptor);
+    rmSync(outputDirectory, { force: true, recursive: true });
+  }
+};
 const safeSourcePath = (value) =>
   value !== "" &&
   !isAbsolute(value) &&
@@ -137,11 +188,7 @@ const sourceSha = git(["rev-parse", "HEAD"]).trim();
 if (!/^[0-9a-f]{40}$/.test(sourceSha)) throw new Error("invalid source SHA");
 const sourceTree = git(["rev-parse", sourceSha + "^{tree}"]).trim();
 if (!/^[0-9a-f]{40}$/.test(sourceTree)) throw new Error("invalid source tree");
-const output = git(["ls-tree", "-r", "-z", "--full-tree", sourceSha], "buffer");
-const files = output
-  .toString("utf-8")
-  .split("\0")
-  .filter(Boolean)
+const files = git(["ls-tree", "-r", "-z", "--full-tree", sourceSha], "records")
   .flatMap((entry) => {
     const match = /^(100644|100755) blob ([0-9a-f]{40})\t([^\r\n]+)$/.exec(entry);
     if (match === null) {
@@ -161,7 +208,7 @@ const files = output
       mode: match[1],
       objectId: match[2],
       path,
-      sha256: sha256(readFileSync(file)),
+      sha256: sha256File(file),
     }];
   });
 if (files.length === 0) throw new Error("cloned source tree is empty");
@@ -196,12 +243,36 @@ console.log(JSON.stringify({ sourceSha, sourceTree, workspaceDigest: sha256(JSON
 const sandboxGitHubSourceReinspectionProgram = String.raw`
 const { execFileSync, spawnSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
-const { existsSync, lstatSync, readFileSync, realpathSync } = require("node:fs");
-const { isAbsolute, resolve } = require("node:path");
+const { closeSync, existsSync, lstatSync, mkdtempSync, openSync, readFileSync, readSync, realpathSync, rmSync } = require("node:fs");
+const { tmpdir } = require("node:os");
+const { isAbsolute, join, resolve } = require("node:path");
 
 const root = "/workspace/repository";
 const expected = JSON.parse(process.argv[1]);
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
+const readNulRecords = (path) => {
+  const descriptor = openSync(path, "r");
+  const chunk = Buffer.alloc(64 * 1024);
+  const records = [];
+  let pending = Buffer.alloc(0);
+  try {
+    for (;;) {
+      const length = readSync(descriptor, chunk, 0, chunk.length, null);
+      if (length === 0) break;
+      const bytes = pending.length === 0 ? chunk.subarray(0, length) : Buffer.concat([pending, chunk.subarray(0, length)]);
+      let start = 0;
+      for (let index = bytes.indexOf(0); index !== -1; index = bytes.indexOf(0, start)) {
+        records.push(bytes.subarray(start, index).toString("utf-8"));
+        start = index + 1;
+      }
+      pending = Buffer.from(bytes.subarray(start));
+    }
+    if (pending.length > 0) throw new Error("incomplete Git tree record");
+    return records;
+  } finally {
+    closeSync(descriptor);
+  }
+};
 const gitArgs = [
   "-c", "protocol.allow=never",
   "-c", "credential.helper=",
@@ -209,11 +280,23 @@ const gitArgs = [
   "-c", "core.fsmonitor=false",
   "-C", root,
 ];
-const git = (args, encoding = "utf-8") => execFileSync(
-  "git",
-  [...gitArgs, ...args],
-  { encoding, maxBuffer: 32 * 1024 * 1024 },
-);
+const git = (args, encoding = "utf-8") => {
+  const outputDirectory = mkdtempSync(join(tmpdir(), "app-builder-source-git-"));
+  const outputPath = join(outputDirectory, "stdout");
+  const outputDescriptor = openSync(outputPath, "w");
+  try {
+    execFileSync("git", [...gitArgs, ...args], {
+      encoding: "buffer",
+      stdio: ["ignore", outputDescriptor, "inherit"],
+    });
+    if (encoding === "records") return readNulRecords(outputPath);
+    const output = readFileSync(outputPath);
+    return encoding === "buffer" ? output : output.toString("utf-8");
+  } finally {
+    closeSync(outputDescriptor);
+    rmSync(outputDirectory, { force: true, recursive: true });
+  }
+};
 const safeSourcePath = (value) =>
   value !== "" &&
   !isAbsolute(value) &&
@@ -227,18 +310,14 @@ const resolvedRef = git(["rev-parse", expected.ref]).trim();
 const symbolicRef = spawnSync(
   "git",
   [...gitArgs, "symbolic-ref", "-q", "HEAD"],
-  { encoding: "utf-8", maxBuffer: 1024 * 1024 },
+  { stdio: ["ignore", "ignore", "inherit"] },
 );
 if (symbolicRef.error || ![0, 1].includes(symbolicRef.status))
   throw new Error("invalid checkout state");
-const detached = symbolicRef.status === 1 && symbolicRef.stdout.trim() === "";
-const output = git(["ls-tree", "-rz", "--full-tree", sourceSha], "buffer");
+const detached = symbolicRef.status === 1;
+const entries = git(["ls-tree", "-rz", "--full-tree", sourceSha], "records");
 const gitlinks = [];
-const files = output
-  .toString("utf-8")
-  .split("\0")
-  .filter(Boolean)
-  .flatMap((entry) => {
+const files = entries.flatMap((entry) => {
     const match = /^(100644|100755) blob ([0-9a-f]{40})\t([^\r\n]+)$/.exec(entry);
     if (match === null) {
       const gitlink = /^160000 commit [0-9a-f]{40}\t([^\r\n]+)$/.exec(entry);
@@ -262,7 +341,7 @@ const files = output
       mode: match[1],
       objectId: match[2],
       path,
-      sha256: sha256(readFileSync(file)),
+      sha256: sha256File(file),
     }];
   });
 if (files.length === 0) throw new Error("cloned source tree is empty");

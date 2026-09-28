@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import type * as databaseSchema from "../db/schema";
 import { agentOperations, agentSessions } from "../db/schema";
-import { eveSessionResultSchema } from "../mcp/contracts";
+import { eveSessionResultSchema, sessionStatusSchema } from "../mcp/contracts";
 import { hostedPrincipalSchema, tenantKeyFor } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
 import {
@@ -18,9 +18,11 @@ import {
   withoutHostedOperationError,
 } from "./hosted-store";
 import type { HostedEveStore, HostedOperationRecord, HostedSessionRecord } from "./hosted-store";
+import { createPostgresHostedCheckpointHistory } from "./postgres-hosted-checkpoint-history";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+const SESSION_NOT_FOUND = "Hosted session was not found.";
 
 const sessionRowSchema = z
   .object({
@@ -28,6 +30,7 @@ const sessionRowSchema = z
     adapterSessionId: z.string(),
     audience: z.string(),
     checkpointDigest: z.string().nullable(),
+    checkpointId: z.string().nullable(),
     checkpointProgressDigest: z.string().nullable(),
     createdAt: z.date(),
     issuer: z.string(),
@@ -122,6 +125,7 @@ export function parseHostedSessionRow(input: unknown): HostedSessionRecord {
         row.stage !== null ||
         row.resumabilityState !== null ||
         row.checkpointDigest !== null ||
+        row.checkpointId !== null ||
         row.checkpointProgressDigest !== null ||
         row.parentSessionId !== null ||
         row.lastProgressAt !== null
@@ -130,6 +134,7 @@ export function parseHostedSessionRow(input: unknown): HostedSessionRecord {
         row.stage !== record.stage ||
         row.resumabilityState !== record.resumability ||
         row.checkpointDigest !== (record.checkpointDigest ?? null) ||
+        row.checkpointId !== (record.checkpointRef?.id ?? null) ||
         row.checkpointProgressDigest !== (record.checkpointProgressDigest ?? null) ||
         row.parentSessionId !== (record.parentSessionId ?? null) ||
         row.lastProgressAt?.getTime() !== record.lastProgressAtEpochMs) ||
@@ -167,6 +172,7 @@ function sessionValues(record: HostedSessionRecord) {
     adapterSessionId: record.adapterSessionId,
     audience: record.principal.audience,
     checkpointDigest: record.version === 1 ? null : (record.checkpointDigest ?? null),
+    checkpointId: record.version === 1 ? null : (record.checkpointRef?.id ?? null),
     checkpointProgressDigest:
       record.version === 1 ? null : (record.checkpointProgressDigest ?? null),
     createdAt: new Date(record.createdAtEpochMs),
@@ -269,6 +275,7 @@ function assertReserved(
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresHostedEveStore(database: Database): HostedEveStore {
+  const checkpointHistory = createPostgresHostedCheckpointHistory(database);
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async getSession(principalInput, sessionId) {
@@ -304,7 +311,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           .limit(1)
           .for("update");
         if (rows[0] === undefined) {
-          throw new Error("Hosted session was not found.");
+          throw new Error(SESSION_NOT_FOUND);
         }
         const current = toDurableHostedSessionRecord(parseHostedSessionRow(rows[0]));
         // Hold the row lock while refusing late observations after cancellation.
@@ -313,8 +320,10 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         }
         const checkpointDigest = hostedSessionCheckpointDigest(input.checkpoint);
         const checkpointProgressDigest = hostedSessionCheckpointProgressDigest(input.checkpoint);
+        const { checkpointRef: priorCheckpointRef, ...inlineBase } = current;
+        void priorCheckpointRef;
         const observed = durableHostedSessionRecordSchema.parse({
-          ...current,
+          ...inlineBase,
           checkpoint: input.checkpoint,
           checkpointDigest,
           checkpointProgressDigest,
@@ -346,13 +355,130 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       });
     },
 
+    async observeSessionPaged(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      const metadataStatus = sessionStatusSchema.parse(
+        z.object({ status: sessionStatusSchema }).parse(input.metadata).status,
+      );
+      const staged = await checkpointHistory.stage({
+        events: input.events,
+        metadata: input.metadata,
+        nowEpochMs: input.nowEpochMs,
+        principal,
+        sessionId: input.sessionId,
+      });
+      try {
+        const result = await database.transaction(async (transaction) => {
+          const current = await sessionById(transaction, principal, input.sessionId, true);
+          if (current === null) {
+            throw new Error(SESSION_NOT_FOUND);
+          }
+          const durable = toDurableHostedSessionRecord(current);
+          if (durable.status === "cancelled") {
+            return durable;
+          }
+          if (durable.checkpointDigest !== input.expectedCheckpointDigest) {
+            throw new Error("Hosted paged checkpoint observation raced another update.");
+          }
+          await checkpointHistory.publishInTransaction(transaction, {
+            checkpointDigest: staged.checkpointDigest,
+            checkpointId: staged.checkpointId,
+            eventCount: staged.eventCount,
+            itemCount: staged.itemCount,
+            nowEpochMs: input.nowEpochMs,
+            principal,
+            sessionId: input.sessionId,
+          });
+          const { checkpoint: priorInlineCheckpoint, ...pagedBase } = durable;
+          void priorInlineCheckpoint;
+          const observed = durableHostedSessionRecordSchema.parse({
+            ...pagedBase,
+            checkpointDigest: staged.checkpointDigest,
+            checkpointProgressDigest: staged.checkpointProgressDigest,
+            checkpointRef: {
+              digest: staged.checkpointDigest,
+              eventCount: staged.eventCount,
+              id: staged.checkpointId,
+            },
+            ...(input.appId === undefined ? {} : { appId: input.appId }),
+            lastProgressAtEpochMs:
+              durable.checkpointProgressDigest === staged.checkpointProgressDigest
+                ? durable.lastProgressAtEpochMs
+                : input.nowEpochMs,
+            resumability: input.resumability,
+            stage: input.stage,
+            status: metadataStatus,
+            updatedAtEpochMs: input.nowEpochMs,
+          });
+          const updated = await transaction
+            .update(agentSessions)
+            .set(sessionValues(observed))
+            .where(
+              and(
+                sessionTenantPredicate(principal),
+                eq(agentSessions.sessionId, input.sessionId),
+                eq(agentSessions.updatedAt, new Date(durable.updatedAtEpochMs)),
+              ),
+            )
+            .returning();
+          if (updated.length !== 1) {
+            throw new Error("Hosted paged checkpoint observation was not durable.");
+          }
+          return parseHostedSessionRow(updated[0]);
+        });
+        if (result.version !== 2 || result.checkpointRef?.id !== staged.checkpointId) {
+          await checkpointHistory.discardStage({
+            checkpointId: staged.checkpointId,
+            principal,
+            sessionId: input.sessionId,
+          });
+        }
+        return result;
+      } catch (error) {
+        await checkpointHistory.discardStage({
+          checkpointId: staged.checkpointId,
+          principal,
+          sessionId: input.sessionId,
+        });
+        throw error;
+      }
+    },
+
+    async readCheckpointPage(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      const current = await sessionById(database, principal, input.sessionId);
+      if (
+        current?.version !== 2 ||
+        current.checkpointRef?.id !== input.checkpointRef.id ||
+        current.checkpointRef.digest !== input.checkpointRef.digest ||
+        current.checkpointRef.eventCount !== input.checkpointRef.eventCount
+      ) {
+        throw new Error("Hosted checkpoint reference is stale or belongs to another tenant.");
+      }
+      const page = await checkpointHistory.readPage({
+        checkpointId: input.checkpointRef.id,
+        cursor: input.cursor,
+        limit: input.limit,
+        principal,
+        sessionId: input.sessionId,
+      });
+      if (
+        page === null ||
+        page.checkpointDigest !== input.checkpointRef.digest ||
+        page.totalEvents !== input.checkpointRef.eventCount
+      ) {
+        throw new Error("Hosted checkpoint manifest does not match the active reference.");
+      }
+      return { ...page, checkpointDigest: input.checkpointRef.digest };
+    },
+
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async replaceSessionAdapter(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
       return database.transaction(async (transaction) => {
         const row = await sessionById(transaction, principal, input.sessionId, true);
         if (row === null) {
-          throw new Error("Hosted session was not found.");
+          throw new Error(SESSION_NOT_FOUND);
         }
         const current = toDurableHostedSessionRecord(row);
         if (
@@ -361,8 +487,10 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         ) {
           throw new Error("Hosted session recovery raced another continuation.");
         }
+        const { checkpointRef: priorCheckpointRef, ...inlineBase } = current;
+        void priorCheckpointRef;
         const replaced = durableHostedSessionRecordSchema.parse({
-          ...current,
+          ...inlineBase,
           adapterGeneration: current.adapterGeneration + 1,
           adapterSessionId: input.adapterSessionId,
           checkpoint: input.checkpoint,

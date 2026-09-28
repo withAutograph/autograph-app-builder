@@ -9,6 +9,7 @@ import type {
 import type { HostedGitHubInstallationStore } from "../repository/postgres-github-installation-store";
 import type { BuilderHandoffIntent } from "../handoff/contracts";
 import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
+import { createGitHubTargetSourceResolutionAdapter } from "../repository/github-app-adapter";
 import { createHostedGitHubPublicationRuntimeResolver } from "./hosted-github-publication-runtime";
 import type { HostedGitHubPublicationProviderFactory } from "./hosted-github-publication-runtime";
 
@@ -105,6 +106,62 @@ function dependencies(input?: {
 }
 
 describe("hosted tenant GitHub publication runtime resolver", () => {
+  it("resolves an existing source through a target proof without installation inventory", async () => {
+    const inspectInstallation = vi.fn(() =>
+      Promise.reject(new Error("inventory must not be read")),
+    );
+    const targetSourceAdapter = createGitHubTargetSourceResolutionAdapter(
+      {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        async inspectRepository() {
+          return {
+            defaultBranch: "main",
+            headSha: "1".repeat(40),
+            headTree: "2".repeat(40),
+            name: "spend-review",
+            owner: "withAutograph",
+            repositoryId: "200",
+            repositoryVariableNames: [],
+            visibility: "private",
+          };
+        },
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        async inspectTargetAccess({ requestedPermissions }) {
+          return {
+            accountId: installation.accountId,
+            accountLogin: installation.accountLogin,
+            accountType: installation.accountType,
+            installationId: installation.installationId,
+            permissions: requestedPermissions,
+            repositoryId: "200",
+          };
+        },
+      },
+      authority,
+    );
+    const injected = dependencies();
+    const resolver = createHostedGitHubPublicationRuntimeResolver({
+      dependencies: injected.dependencies,
+      enabled: true,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      openDatabase: async () => ({}) as never,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      providerFactory: async () => ({ ...adapter, inspectInstallation, targetSourceAdapter }),
+    });
+    const runtime = await resolver.resolve(sessionAuth());
+    await expect(
+      runtime.resolveImmutableSource({
+        approvedByCallId: "call-1",
+        expectedInstallationId: installation.installationId,
+        expectedSha: "1".repeat(40),
+        expectedTree: "2".repeat(40),
+        ref: "refs/heads/main",
+        repositoryId: "200",
+      }),
+    ).resolves.toMatchObject({ repository: { repositoryId: "200" } });
+    expect(inspectInstallation).not.toHaveBeenCalled();
+  });
+
   it("uses the prepared selection instead of the last connected installation on every resolution", async () => {
     const selected = {
       ...installation,

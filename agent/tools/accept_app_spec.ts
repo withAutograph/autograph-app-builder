@@ -70,7 +70,7 @@ export default defineTool({
     if (artifact === undefined) {
       throw new Error("Create a product design before creating its implementation plan.");
     }
-    if (artifact.mediaType !== "text/markdown") {
+    if (artifact.mediaType !== "text/markdown" || artifact.version === 2) {
       throw new Error("The accepted AppSpec artifact media type is invalid.");
     }
     // A resumed acceptance is bound to the recorded artifact revision. New

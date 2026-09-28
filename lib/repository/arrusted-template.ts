@@ -34,7 +34,6 @@ const SHA = /^[0-9a-f]{40}$/u;
 const DIGEST = /^[0-9a-f]{64}$/u;
 const TEMPLATE_READINESS_CHECK = "Template readiness";
 const SANDBOX_WORKSPACE = "/workspace/repository";
-const SANDBOX_INSPECTION_BYTES = 2 * 1024 * 1024;
 const SANDBOX_CLONE_INSPECTION = ".app-builder/canonical-clone-inspection.json";
 const SANDBOX_CLONE_INSPECTOR = ".arrusted-template-inspect.cjs";
 
@@ -105,19 +104,7 @@ export function sanitizeSandboxCloneError(stderr: string, token: string) {
     .replaceAll(/[\r\n]+/gu, " ")
     .replaceAll(/[^\u0020-\u007E]/gu, "?")
     .trim();
-  if (sanitized.length <= 512) {
-    return sanitized;
-  }
-
-  // Clone stage logs are deliberately detailed. Preserve a terminal inspector
-  // error too, otherwise the successful stages can consume the full bound.
-  const inspectorError = sanitized.lastIndexOf("AUTOGRAPH_CLONE_INSPECT_ERROR=");
-  if (inspectorError === -1) {
-    return sanitized.slice(0, 512);
-  }
-  const suffix = sanitized.slice(inspectorError);
-  const prefixLength = Math.max(0, 512 - suffix.length - 4);
-  return `${sanitized.slice(0, prefixLength)} ...${suffix}`;
+  return sanitized;
 }
 
 const sandboxCloneInspectionProgram = String.raw`
@@ -125,30 +112,82 @@ process.on("uncaughtException", (error) => {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(
     "AUTOGRAPH_CLONE_INSPECT_ERROR=" +
-      message.replace(/[\r\n]/g, " ").slice(0, 512) +
+      message.replace(/[\r\n]/g, " ") +
       "\\n",
   );
   process.exit(1);
 });
 const { execFileSync } = require("node:child_process");
 const { createHash } = require("node:crypto");
-const { mkdirSync, readFileSync, writeFileSync } = require("node:fs");
-const { isAbsolute, resolve } = require("node:path");
+const { closeSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, rmSync, writeFileSync } = require("node:fs");
+const { tmpdir } = require("node:os");
+const { isAbsolute, join, resolve } = require("node:path");
 
 const root = "/workspace/repository";
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
-const git = (args, encoding = "utf-8") => execFileSync(
-  "git",
-  [
+const sha256File = (path) => {
+  const descriptor = openSync(path, "r");
+  const chunk = Buffer.alloc(64 * 1024);
+  const hash = createHash("sha256");
+  try {
+    for (;;) {
+      const length = readSync(descriptor, chunk, 0, chunk.length, null);
+      if (length === 0) break;
+      hash.update(chunk.subarray(0, length));
+    }
+    return hash.digest("hex");
+  } finally {
+    closeSync(descriptor);
+  }
+};
+const readNulRecords = (path) => {
+  const descriptor = openSync(path, "r");
+  const chunk = Buffer.alloc(64 * 1024);
+  const records = [];
+  let pending = Buffer.alloc(0);
+  try {
+    for (;;) {
+      const length = readSync(descriptor, chunk, 0, chunk.length, null);
+      if (length === 0) break;
+      const bytes = pending.length === 0 ? chunk.subarray(0, length) : Buffer.concat([pending, chunk.subarray(0, length)]);
+      let start = 0;
+      for (let index = bytes.indexOf(0); index !== -1; index = bytes.indexOf(0, start)) {
+        records.push(bytes.subarray(start, index).toString("utf-8"));
+        start = index + 1;
+      }
+      pending = Buffer.from(bytes.subarray(start));
+    }
+    if (pending.length > 0) throw new Error("incomplete Git tree record");
+    return records;
+  } finally {
+    closeSync(descriptor);
+  }
+};
+const git = (args, encoding = "utf-8") => {
+  const outputDirectory = mkdtempSync(join(tmpdir(), "app-builder-source-git-"));
+  const outputPath = join(outputDirectory, "stdout");
+  const outputDescriptor = openSync(outputPath, "w");
+  try {
+    execFileSync(
+      "git",
+      [
     "-c", "protocol.allow=never",
     "-c", "credential.helper=",
     "-c", "core.hooksPath=/dev/null",
     "-c", "core.fsmonitor=false",
     "-C", root,
-    ...args,
-  ],
-  { encoding, maxBuffer: 32 * 1024 * 1024 },
-);
+        ...args,
+      ],
+      { encoding: "buffer", stdio: ["ignore", outputDescriptor, "inherit"] },
+    );
+    if (encoding === "records") return readNulRecords(outputPath);
+    const output = readFileSync(outputPath);
+    return encoding === "buffer" ? output : output.toString("utf-8");
+  } finally {
+    closeSync(outputDescriptor);
+    rmSync(outputDirectory, { force: true, recursive: true });
+  }
+};
 const safeSourcePath = (value) =>
   value !== "" &&
   !isAbsolute(value) &&
@@ -159,11 +198,7 @@ const sourceSha = git(["rev-parse", "HEAD"]).trim();
 if (!/^[0-9a-f]{40}$/.test(sourceSha)) throw new Error("invalid source SHA");
 const sourceTree = git(["rev-parse", sourceSha + "^{tree}"]).trim();
 if (!/^[0-9a-f]{40}$/.test(sourceTree)) throw new Error("invalid source tree");
-const output = git(["ls-tree", "-r", "-z", "--full-tree", sourceSha], "buffer");
-const files = output
-  .toString("utf-8")
-  .split("\0")
-  .filter(Boolean)
+const files = git(["ls-tree", "-r", "-z", "--full-tree", sourceSha], "records")
   .map((entry) => {
     const match = /^(100644|100755) blob ([0-9a-f]{40})\t([^\r\n]+)$/.exec(entry);
     if (match === null || !safeSourcePath(match[3]))
@@ -176,7 +211,7 @@ const files = output
       mode: match[1],
       objectId: match[2],
       path,
-      sha256: sha256(readFileSync(file)),
+      sha256: sha256File(file),
     };
   });
 if (files.length === 0) throw new Error("cloned source tree is empty");
@@ -267,7 +302,7 @@ function sandboxCloneCommand() {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function readCanonicalTemplateSnapshot(sandbox: SandboxSession) {
   const raw = await sandbox.readTextFile({ path: SANDBOX_CLONE_INSPECTION });
-  if (raw === null || Buffer.byteLength(raw) > SANDBOX_INSPECTION_BYTES) {
+  if (raw === null) {
     throw new Error("The canonical Arrusted workspace inspection is missing.");
   }
   try {

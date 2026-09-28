@@ -5,9 +5,13 @@ import {
   exactPrototypeArtifact,
   expectedPrototypeArtifactMediaType,
   parsePrototypeArtifactPath,
+  prototypeArtifactReadChunk,
   recordPrototypeArtifactBundle,
+  recordPrototypeArtifactChunk,
   recordPrototypeArtifactRevision,
+  shouldRecordHostedPrototypeDurably,
 } from "./prototype-artifacts";
+import { sha256 } from "./workflow-state";
 
 const sessionId = "session-1";
 
@@ -25,6 +29,23 @@ function record(input: Partial<Parameters<typeof recordPrototypeArtifactRevision
 }
 
 describe("prototype artifact receipts", () => {
+  it("uses v2 for new hosted single-call HTML while preserving identical v1 retries", () => {
+    const content = "<main>Review</main>";
+    const path = "prototype/expense-review/index.html";
+    const common = { content, hosted: true, mediaType: "text/html" as const, path };
+    expect(shouldRecordHostedPrototypeDurably(common)).toBe(true);
+    const prior = record({ content, mediaType: "text/html", path }).artifact;
+    expect(shouldRecordHostedPrototypeDurably({ ...common, existing: prior })).toBe(false);
+    expect(
+      shouldRecordHostedPrototypeDurably({
+        ...common,
+        content: "<main>Changed</main>",
+        existing: prior,
+      }),
+    ).toBe(true);
+    expect(shouldRecordHostedPrototypeDurably({ ...common, hosted: false })).toBe(false);
+  });
+
   it("allows only the three exact files below one kebab-case app id", () => {
     expect(parsePrototypeArtifactPath("prototype/expense-review/app-spec.md")).toEqual({
       appId: "expense-review",
@@ -80,6 +101,184 @@ describe("prototype artifact receipts", () => {
     expect(retry.artifact).toBe(first.artifact);
     expect(retry.artifacts).toBe(first.artifacts);
     expect(retry.artifact.recordedByCallId).toBe("call-1");
+  });
+
+  it("assembles ordered chunks into an uncapped artifact and rejects gaps, duplicates, and stale revisions", () => {
+    const firstChunk = "first 🧾\n";
+    const secondChunk = "second chunk\n";
+    const thirdChunk = "final chunk";
+    const fullContent = firstChunk + secondChunk + thirdChunk;
+    const expectedDigest = sha256(fullContent);
+    const first = recordPrototypeArtifactChunk({
+      artifacts: [],
+      callId: "chunk-0",
+      chunkIndex: 0,
+      content: firstChunk,
+      expectedDigest,
+      finalChunk: false,
+      mediaType: "text/markdown",
+      path: "prototype/expense-review/app-spec.md",
+      sessionId,
+    });
+    expect(first).toMatchObject({ complete: false, nextChunkIndex: 1 });
+    expect(() =>
+      recordPrototypeArtifactChunk({
+        artifacts: first.artifacts,
+        baseRevision: first.artifact.revision,
+        callId: "chunk-2-gap",
+        chunkIndex: 2,
+        content: thirdChunk,
+        expectedDigest,
+        finalChunk: true,
+        mediaType: "text/markdown",
+        path: first.artifact.path,
+        sessionId,
+      }),
+    ).toThrow("out of order");
+    expect(() =>
+      recordPrototypeArtifactChunk({
+        artifacts: first.artifacts,
+        baseRevision: "0".repeat(64),
+        callId: "chunk-1-stale",
+        chunkIndex: 1,
+        content: secondChunk,
+        expectedDigest,
+        finalChunk: false,
+        mediaType: "text/markdown",
+        path: first.artifact.path,
+        sessionId,
+      }),
+    ).toThrow("stale");
+
+    const second = recordPrototypeArtifactChunk({
+      artifacts: first.artifacts,
+      baseRevision: first.artifact.revision,
+      callId: "chunk-1",
+      chunkIndex: 1,
+      content: secondChunk,
+      expectedDigest,
+      finalChunk: false,
+      mediaType: "text/markdown",
+      path: first.artifact.path,
+      sessionId,
+    });
+    expect(second).toMatchObject({ complete: false, nextChunkIndex: 2 });
+    const duplicate = recordPrototypeArtifactChunk({
+      artifacts: second.artifacts,
+      baseRevision: first.artifact.revision,
+      callId: "chunk-1",
+      chunkIndex: 1,
+      content: secondChunk,
+      expectedDigest,
+      finalChunk: false,
+      mediaType: "text/markdown",
+      path: first.artifact.path,
+      sessionId,
+    });
+    expect(duplicate).toMatchObject({ complete: false, nextChunkIndex: 2, reused: true });
+
+    const complete = recordPrototypeArtifactChunk({
+      artifacts: second.artifacts,
+      baseRevision: second.artifact.revision,
+      callId: "chunk-2",
+      chunkIndex: 2,
+      content: thirdChunk,
+      expectedDigest,
+      finalChunk: true,
+      mediaType: "text/markdown",
+      path: first.artifact.path,
+      sessionId,
+    });
+    expect(complete).toMatchObject({
+      artifact: { content: fullContent, digest: expectedDigest },
+      complete: true,
+    });
+    expect(complete.artifact.transfer).toBeUndefined();
+    expect(
+      recordPrototypeArtifactChunk({
+        artifacts: complete.artifacts,
+        baseRevision: second.artifact.revision,
+        callId: "chunk-2",
+        chunkIndex: 2,
+        content: thirdChunk,
+        expectedDigest,
+        finalChunk: true,
+        mediaType: "text/markdown",
+        path: first.artifact.path,
+        sessionId,
+      }),
+    ).toMatchObject({ complete: true, reused: true });
+    expect(
+      exactPrototypeArtifact(complete.artifacts, {
+        digest: expectedDigest,
+        path: first.artifact.path,
+        revision: complete.artifact.revision,
+        sessionId,
+      }),
+    ).toBe(complete.artifact);
+  });
+
+  it("accepts aggregate content beyond the former 8 MiB ceiling when each chunk fits Eve's envelope", () => {
+    const chunk = "a".repeat(4 * 1024 * 1024);
+    const fullContent = `${chunk + chunk}end`;
+    const expectedDigest = sha256(fullContent);
+    const first = recordPrototypeArtifactChunk({
+      artifacts: [],
+      callId: "large-0",
+      chunkIndex: 0,
+      content: chunk,
+      expectedDigest,
+      finalChunk: false,
+      mediaType: "text/html",
+      path: "prototype/expense-review/index.html",
+      sessionId,
+    });
+    const second = recordPrototypeArtifactChunk({
+      artifacts: first.artifacts,
+      baseRevision: first.artifact.revision,
+      callId: "large-1",
+      chunkIndex: 1,
+      content: chunk,
+      expectedDigest,
+      finalChunk: false,
+      mediaType: "text/html",
+      path: first.artifact.path,
+      sessionId,
+    });
+    const final = recordPrototypeArtifactChunk({
+      artifacts: second.artifacts,
+      baseRevision: second.artifact.revision,
+      callId: "large-2",
+      chunkIndex: 2,
+      content: "end",
+      expectedDigest,
+      finalChunk: true,
+      mediaType: "text/html",
+      path: first.artifact.path,
+      sessionId,
+    });
+    expect(final.complete).toBe(true);
+    expect(Buffer.byteLength(final.artifact.content)).toBeGreaterThan(8 * 1024 * 1024);
+    expect(final.artifact.digest).toBe(expectedDigest);
+  });
+
+  it("reads artifacts larger than one Eve event in digest-verified UTF-8 ranges", () => {
+    const content = "🧾".repeat(2_700_000);
+    const { artifact } = record({ content });
+    const first = prototypeArtifactReadChunk(artifact, { offsetBytes: 0 });
+    expect(first.complete).toBe(false);
+    expect(first.byteOffset).toBe(0);
+    expect(sha256(first.content)).toBe(first.chunkDigest);
+    expect(first.nextOffsetBytes).toBeLessThan(Buffer.byteLength(content));
+    const second = prototypeArtifactReadChunk(artifact, {
+      offsetBytes: first.nextOffsetBytes,
+    });
+    expect(second.complete).toBe(true);
+    expect(first.content + second.content).toBe(content);
+    expect(sha256(first.content + second.content)).toBe(artifact.digest);
+    expect(() =>
+      prototypeArtifactReadChunk(artifact, { offsetBytes: first.nextOffsetBytes - 1 }),
+    ).toThrow("UTF-8 character boundary");
   });
 
   it("changes the revision when bytes or the allowlisted path change", () => {
@@ -143,6 +342,46 @@ describe("prototype artifact receipts", () => {
         artifacts: complete.artifacts,
       }),
     ).toMatchObject({ path: "prototype/expense-review/app-spec.md" });
+
+    const durableIndex = {
+      appId: index.artifact.appId,
+      chunkCount: 1,
+      contentBytes: Buffer.byteLength(index.artifact.content, "utf-8"),
+      digest: index.artifact.digest,
+      mediaType: index.artifact.mediaType,
+      path: index.artifact.path,
+      recordedByCallId: index.artifact.recordedByCallId,
+      revision: index.artifact.revision,
+      sessionId: index.artifact.sessionId,
+      version: 2 as const,
+    };
+    const mixed = complete.artifacts.map((artifact) =>
+      artifact.path === durableIndex.path ? durableIndex : artifact,
+    );
+    expect(
+      completeBuildReadyPrototypeAppSpec({ appId: "expense-review", artifacts: mixed }),
+    ).toMatchObject({ path: "prototype/expense-review/app-spec.md" });
+    expect(
+      completeBuildReadyPrototypeAppSpec({
+        appId: "expense-review",
+        artifacts: mixed.map((artifact) =>
+          artifact.path === durableIndex.path
+            ? {
+                ...durableIndex,
+                transfer: {
+                  expectedDigest: durableIndex.digest,
+                  lastCallId: "call",
+                  lastChunkDigest: durableIndex.digest,
+                  nextChunkIndex: 1,
+                  receivedBytes: durableIndex.contentBytes,
+                  rollingDigest: durableIndex.digest,
+                  version: 2 as const,
+                },
+              }
+            : artifact,
+        ),
+      }),
+    ).toBeUndefined();
 
     const bundle = recordPrototypeArtifactBundle({
       appId: "expense-review",

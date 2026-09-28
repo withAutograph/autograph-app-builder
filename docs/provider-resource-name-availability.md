@@ -1,9 +1,18 @@
 # Future: Provider Resource Name Availability
 
 The current provisioning flow tries the requested GitHub repository name and
-derived Vercel project name first. On a provider conflict it records and tries
-up to five bounded names with a six-character lowercase alphanumeric suffix.
+derived Vercel project name first. On a confirmed provider name conflict it
+records a new candidate with a six-character lowercase alphanumeric suffix.
 The Ready screen shows the actual names returned by provider read-back.
+
+An expired provisioning lease is not proof that a provider write failed.
+Before retrying, Builder reads every candidate that was confirmed absent before
+a possible write. A GitHub repository with the exact request marker and starter
+readback settles as success. An incomplete or foreign repository pauses for
+review. Vercel projects have no equivalent request marker, so an existing
+project pauses for review. A 404 after an uncertain write also pauses: delayed
+provider visibility could otherwise cause duplicate creation. Builder does not
+issue another create request until the previous outcome is known.
 
 A future form improvement should check availability after the user selects an
 installation and display conflicts inline beside Repository and Deployment.

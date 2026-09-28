@@ -47,4 +47,15 @@ describe("private app schema release compilation", () => {
     expect(result.problem).toContain("Sandbox aborted");
     expect(JSON.stringify(result)).not.toContain("secret-value");
   });
+
+  it("preserves complete sanitized compiler output", async () => {
+    const detail = `apps/spend-review/schema/spend-review.cue:18: conflicting values ${"x".repeat(7000)}`;
+    const run = vi.fn().mockResolvedValue({ exitCode: 1, stderr: detail, stdout: "" });
+    const result = await compileAppSchemaRelease({
+      appId: "spend-review",
+      root: "/workspace/repository",
+      sandbox: { run },
+    });
+    expect(result.stderr).toBe(detail);
+  });
 });

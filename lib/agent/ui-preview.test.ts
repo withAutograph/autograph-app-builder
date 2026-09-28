@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 
 import {
   publicPreviewIcons,
   uiPreviewInputSchema,
   uiPreviewSourceDigest,
+  stageUiPreviewSourceChunk,
   validateUiPreview,
 } from "./ui-preview";
 import { uiPreviewRendererFiles } from "./ui-preview-renderer";
@@ -65,6 +67,146 @@ const preview = {
 };
 
 describe("component-backed UI preview policy", () => {
+  it("stages a preview source bundle larger than one event and preserves the single-call digest", () => {
+    const content = `import { Button } from "@autograph/components"; export default function Page() { return <Button>Review</Button>; }\n/*${"x".repeat(11 * 1024 * 1024)}*/`;
+    const sourceFile = {
+      digest: createHash("sha256").update(content).digest("hex"),
+      path: "src/routes/index.tsx",
+      sizeBytes: Buffer.byteLength(content, "utf-8"),
+    };
+    const metadata = {
+      ...preview,
+      files: [{ content: "placeholder", path: sourceFile.path }],
+      sourceFiles: [sourceFile],
+    };
+    const firstContent = content.slice(0, 6 * 1024 * 1024);
+    const first = stageUiPreviewSourceChunk({
+      callId: "chunk-0",
+      value: {
+        ...metadata,
+        files: [{ content: firstContent, path: sourceFile.path }],
+        sourceChunk: { chunkIndex: 0, filePath: sourceFile.path, offsetBytes: 0 },
+      },
+    });
+    expect(first.receipt.complete).toBe(false);
+    const transferred = first.transfer;
+    if (transferred === undefined) {
+      throw new Error("Expected incomplete transfer state.");
+    }
+    const replay = stageUiPreviewSourceChunk({
+      callId: "chunk-0",
+      current: transferred,
+      value: {
+        ...metadata,
+        files: [{ content: firstContent, path: sourceFile.path }],
+        sourceChunk: { chunkIndex: 0, filePath: sourceFile.path, offsetBytes: 0 },
+      },
+    });
+    expect(replay.receipt).toEqual(first.receipt);
+    const rest = content.slice(firstContent.length);
+    const complete = stageUiPreviewSourceChunk({
+      callId: "chunk-1",
+      current: transferred,
+      value: {
+        ...metadata,
+        files: [{ content: rest, path: sourceFile.path }],
+        sourceChunk: {
+          chunkIndex: 1,
+          filePath: sourceFile.path,
+          offsetBytes: Buffer.byteLength(firstContent, "utf-8"),
+          transferId: first.receipt.transferId,
+          transferRevision: first.receipt.transferRevision,
+        },
+      },
+    });
+    expect(complete.receipt.complete).toBe(true);
+    expect(complete.completeInput).toBeDefined();
+    expect(complete.receipt.sourceDigest).toBe(
+      uiPreviewSourceDigest({ ...preview, files: [{ content, path: sourceFile.path }] }),
+    );
+  });
+
+  it("rejects out-of-order, stale-revision, and altered-digest source chunks", () => {
+    const content = "export default function Page() { return null; }";
+    const sourceFiles = [
+      {
+        digest: createHash("sha256").update(content).digest("hex"),
+        path: "src/routes/index.tsx",
+        sizeBytes: Buffer.byteLength(content),
+      },
+    ];
+    const base = {
+      ...preview,
+      files: [{ content: content.slice(0, 10), path: sourceFiles[0].path }],
+      sourceFiles,
+    };
+    const started = stageUiPreviewSourceChunk({
+      callId: "first",
+      value: {
+        ...base,
+        sourceChunk: { chunkIndex: 0, filePath: sourceFiles[0].path, offsetBytes: 0 },
+      },
+    });
+    const current = started.transfer;
+    if (current === undefined) {
+      throw new Error("Expected incomplete transfer state.");
+    }
+    const next = {
+      ...base,
+      files: [{ content: content.slice(10), path: sourceFiles[0].path }],
+      sourceChunk: {
+        chunkIndex: 1,
+        filePath: sourceFiles[0].path,
+        offsetBytes: 10,
+        transferId: started.receipt.transferId,
+        transferRevision: started.receipt.transferRevision,
+      },
+    };
+    expect(() =>
+      stageUiPreviewSourceChunk({
+        callId: "gap",
+        current,
+        value: { ...next, sourceChunk: { ...next.sourceChunk, chunkIndex: 2 } },
+      }),
+    ).toThrow(/in order/u);
+    expect(() =>
+      stageUiPreviewSourceChunk({
+        callId: "stale",
+        current,
+        value: { ...next, sourceChunk: { ...next.sourceChunk, transferRevision: "0".repeat(64) } },
+      }),
+    ).toThrow(/stale/u);
+    const alteredRemainder = content.slice(10).replace(/^./u, "x");
+    expect(() =>
+      stageUiPreviewSourceChunk({
+        callId: "altered",
+        current,
+        value: { ...next, files: [{ content: alteredRemainder, path: sourceFiles[0].path }] },
+      }),
+    ).toThrow(/digest/u);
+  });
+  it("accepts more than the former file, per-file, and route-count ceilings", () => {
+    const files = Array.from({ length: 33 }, (_, index) => ({
+      content: `export const File${index} = "${"x".repeat(262_145)}";`,
+      path: `src/routes/page-${index}.tsx`,
+    }));
+    const routes = Array.from({ length: 17 }, (_, index) => `/route-${index}`);
+    const screens = Array.from({ length: 17 }, (_, index) => ({
+      entry: `src/routes/page-${index}.tsx`,
+      id: `screen-${index}`,
+      route: `/route-${index}`,
+      title: `Screen ${index}`,
+    }));
+    expect(
+      uiPreviewInputSchema.safeParse({
+        ...preview,
+        files,
+        manifest: { ...preview.manifest, screens },
+        routes,
+      }).success,
+    ).toBe(true);
+  });
+
   it("does not count TypeScript-only imports as visual components", () => {
     expect(() =>
       validateUiPreview({

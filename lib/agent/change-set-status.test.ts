@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 
 import {
-  boundedChangedAppTextExport,
+  changedAppTextExport,
   changedAppTextPaths,
   isCandidateExportTextPath,
   reviewableChanges,
 } from "../../agent/tools/change_set_status";
 import { assertExistingAppReviewScope } from "../repository/reviewed-change-set";
+
+const digest = (value: string) => createHash("sha256").update(value, "utf-8").digest("hex");
 
 describe("reviewed candidate export", () => {
   it("rejects a legacy existing-repository review that includes planning or build output", () => {
@@ -61,35 +64,87 @@ describe("reviewed candidate export", () => {
       ),
     ).toEqual(["apps/replica/app/page.tsx", "apps/replica/app/actions.ts"]);
   });
-  it("keeps the review payload bounded and names every omitted changed file", async () => {
+  it("exports large changed files in digest-bound chunks without dropping them", async () => {
     const content = new Map([
       ["apps/replica/app/page.tsx", "updated page"],
-      ["apps/replica/schema/release/large.json", "x".repeat(600 * 1024)],
+      ["apps/replica/schema/release/large.json", "é".repeat(6 * 1024 * 1024)],
     ]);
     const reads: string[] = [];
-    const exported = await boundedChangedAppTextExport(
-      [
-        { kind: "modified", path: "apps/replica/app/page.tsx" },
-        { kind: "modified", path: "apps/replica/schema/release/large.json" },
-        { kind: "added", path: "apps/replica/public/logo.png" },
-        { kind: "modified", path: "apps/other/schema/release/huge.json" },
-      ],
+    const changes = [
+      {
+        after: { digest: digest("updated page"), mode: "100644" },
+        kind: "modified" as const,
+        path: "apps/replica/app/page.tsx",
+      },
+      {
+        after: {
+          digest: digest(content.get("apps/replica/schema/release/large.json") ?? ""),
+          mode: "100644",
+        },
+        kind: "modified" as const,
+        path: "apps/replica/schema/release/large.json",
+      },
+      {
+        after: { digest: "unused", mode: "100644" },
+        kind: "added" as const,
+        path: "apps/replica/public/logo.png",
+      },
+      {
+        after: { digest: "unused", mode: "100644" },
+        kind: "modified" as const,
+        path: "apps/other/schema/release/huge.json",
+      },
+    ];
+    const exported = await changedAppTextExport(changes, "replica", async (path) => {
+      reads.push(path);
+      return await Promise.resolve(content.get(path) ?? null);
+    });
+    expect(reads).toEqual(["apps/replica/app/page.tsx", "apps/replica/schema/release/large.json"]);
+    expect(exported.exportFiles[0]).toMatchObject({
+      content: "updated page",
+      digest: digest("updated page"),
+      offsetBytes: 0,
+      path: "apps/replica/app/page.tsx",
+    });
+    expect(exported.exportFiles[1]?.path).toBe("apps/replica/schema/release/large.json");
+    expect(exported.exportFiles[1]?.content.length).toBeLessThan(
+      content.get("apps/replica/schema/release/large.json")?.length ?? 0,
+    );
+    expect(exported.contentCursor).toMatchObject({
+      digest: digest(content.get("apps/replica/schema/release/large.json") ?? ""),
+      path: "apps/replica/schema/release/large.json",
+    });
+    expect(exported.exportOmissions).toEqual([
+      { path: "apps/replica/public/logo.png", reason: "changed non-text artifact" },
+    ]);
+    const continuation = await changedAppTextExport(
+      changes,
       "replica",
-      async (path) => {
-        reads.push(path);
-        return await Promise.resolve(content.get(path) ?? null);
+      async (path) => await Promise.resolve(content.get(path) ?? null),
+      {
+        cursor: exported.contentCursor,
       },
     );
-    expect(reads).toEqual(["apps/replica/app/page.tsx", "apps/replica/schema/release/large.json"]);
-    expect(exported.exportFiles).toEqual([
-      { content: "updated page", path: "apps/replica/app/page.tsx" },
-    ]);
-    expect(exported.exportOmissions.map(({ path }) => path)).toEqual([
-      "apps/replica/schema/release/large.json",
-      "apps/replica/public/logo.png",
-    ]);
-    expect(exported.exportOmissions[0]?.reason).toContain("614400 bytes");
-    expect(exported.exportOmissions[1]?.reason).toBe("changed non-text artifact");
+    expect(continuation.exportFiles[0]?.offsetBytes).toBe(exported.contentCursor?.offsetBytes);
+    expect(continuation.exportFiles[0]?.digest).toBe(
+      digest(content.get("apps/replica/schema/release/large.json") ?? ""),
+    );
+  });
+  it("rejects a changed reviewed file and an altered chunk cursor digest", async () => {
+    const expected = "reviewed";
+    const change = {
+      after: { digest: createHash("sha256").update(expected).digest("hex"), mode: "100644" },
+      kind: "modified" as const,
+      path: "apps/replica/app/page.tsx",
+    };
+    await expect(
+      changedAppTextExport([change], "replica", async () => await Promise.resolve("changed")),
+    ).rejects.toThrow("changed during export");
+    await expect(
+      changedAppTextExport([change], "replica", async () => await Promise.resolve(expected), {
+        cursor: { digest: "0".repeat(64), offsetBytes: 0, path: change.path },
+      }),
+    ).rejects.toThrow("cursor digest does not match");
   });
   it.each([
     "apps/replica/app/page.tsx",

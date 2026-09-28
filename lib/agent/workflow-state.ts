@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { defineState } from "eve/context";
 
-import type { UiPreviewInput } from "@/lib/agent/ui-preview";
+import type { UiPreviewInput, UiPreviewTransfer } from "@/lib/agent/ui-preview";
 import type { PreparedSandboxWorkspace } from "@/lib/repository/supported-template";
 import type { TargetIdentity, TargetProposal } from "@/lib/repository/target-planning";
 import type { TargetApplyFailureReceipt, TargetApplyReceipt } from "@/lib/repository/target-apply";
@@ -38,6 +38,8 @@ import type { ExecutionDependencyLayout } from "@/lib/repository/dependency-cach
 
 export const APP_BUILDER_WORKFLOW_VERSION = 17 as const;
 export const APP_BUILDER_WORKFLOW_STATE_KEY = "autograph-app-builder.workflow.v17" as const;
+export const UI_PREVIEW_TRANSFER_STATE_KEY =
+  "autograph-app-builder.ui-preview-transfer.v1" as const;
 
 export interface AcceptedAppSpec {
   appId: string;
@@ -52,6 +54,8 @@ export interface AcceptedAppSpec {
 }
 
 export interface PrototypeArtifact {
+  /** Absent on legacy Eve state; the current writer emits the v1 shape. */
+  version?: 1;
   appId: string;
   path: string;
   mediaType: "text/markdown" | "text/html";
@@ -60,7 +64,45 @@ export interface PrototypeArtifact {
   revision: string;
   sessionId: string;
   recordedByCallId: string;
+  transfer?: {
+    expectedDigest: string;
+    nextChunkIndex: number;
+    lastChunkIndex: number;
+    lastChunkDigest: string;
+    lastCallId: string;
+    chunks: readonly string[];
+    receivedBytes: number;
+    rollingDigest: string;
+  };
+  lastChunkReceipt?: {
+    expectedDigest: string;
+    lastChunkIndex: number;
+    lastChunkDigest: string;
+    lastCallId: string;
+  };
 }
+
+/** Future artifact state stores only a verified chunk manifest in Eve. */
+export interface PrototypeArtifactV2 extends Omit<
+  PrototypeArtifact,
+  "content" | "transfer" | "version"
+> {
+  version: 2;
+  contentBytes: number;
+  chunkCount: number;
+  transfer?: {
+    version: 2;
+    expectedDigest: string;
+    nextChunkIndex: number;
+    lastChunkDigest: string;
+    lastCallId: string;
+    receivedBytes: number;
+    rollingDigest: string;
+  };
+}
+
+/** Legacy state remains readable until a separately migrated writer is enabled. */
+export type StoredPrototypeArtifact = PrototypeArtifact | PrototypeArtifactV2;
 
 /**
  * A UI preview is source-first. The Browser HTML is a renderer output, never
@@ -78,7 +120,6 @@ export interface UiPreviewRevision {
   files: readonly { path: string; content: string }[];
   manifest?: UiPreviewInput["manifest"];
   catalogGaps: readonly UiPreviewInput["catalogGaps"][number][];
-  previewHtml: string;
   createdByCallId: string;
 }
 
@@ -142,7 +183,7 @@ interface WorkspacePhase {
   sourceReceipt: SourceReceipt;
   githubSource?: ImmutableGitHubSourceReceipt;
   preparedByCallId: string;
-  artifacts: readonly PrototypeArtifact[];
+  artifacts: readonly StoredPrototypeArtifact[];
   publishedGitHubDraftProposalDigest?: string;
 }
 
@@ -447,6 +488,17 @@ export const validAppId = (appId: string): boolean =>
 export const appBuilderWorkflowState = defineState<AppBuilderWorkflowState>(
   APP_BUILDER_WORKFLOW_STATE_KEY,
   () => ({ phase: "empty", version: APP_BUILDER_WORKFLOW_VERSION }),
+);
+
+export interface UiPreviewTransferState extends UiPreviewTransfer {
+  sessionId: string;
+  sourceSha: string;
+  sourceTree: string;
+}
+
+export const uiPreviewTransferState = defineState<UiPreviewTransferState | null>(
+  UI_PREVIEW_TRANSFER_STATE_KEY,
+  () => null,
 );
 
 /**

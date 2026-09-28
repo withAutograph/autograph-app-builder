@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import {
   publicPrototypeSchema,
+  publicPrototypeReferenceSchema,
   publicUiPreviewSchema,
   publicWorkingPreviewSchema,
 } from "../mcp/contracts";
@@ -10,6 +11,7 @@ import type {
   PublicEveEvent,
   PublicInputRequest,
   PublicPrototype,
+  PublicPrototypeReference,
   PublicUiPreview,
   PublicWorkingPreview,
 } from "../mcp/contracts";
@@ -75,7 +77,7 @@ const publicSessionFailure = (
   if (size?.groups !== undefined) {
     return {
       code: "result_too_large",
-      message: `Builder could not save the result of ${name}: its output was ${size.groups.actual} bytes, above the workflow limit of ${size.groups.maximum} bytes. Review only changed files or split the result into smaller parts, then resume this saved session.`,
+      message: `Builder could not complete ${name}: the serialized Eve event was ${size.groups.actual} bytes, above Eve's ${size.groups.maximum}-byte event envelope. For prototype or UI-preview content, retry with smaller UTF-8-safe chunks using the chunked read/write path, then resume this saved session.`,
     };
   }
   const code = publicErrorCode(event.data.code);
@@ -95,72 +97,359 @@ const publicSessionFailure = (
     message: `Builder could not complete ${name} (${code}). ${cause} Your progress is saved; correct the cause and resume this session.`,
   };
 };
-const maximumPrototypeBytes = 8 * 1024 * 1024;
+// Browser projection accepts only HTML; Markdown AppSpec/decision artifacts never become previews.
 const prototypePathPattern = /^prototype\/(?<appId>[a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/index\.html$/u;
 const lowercaseSha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
+const sha256 = (value: string): string => createHash("sha256").update(value, "utf-8").digest("hex");
 const prototypeRequestSchema = z
   .object({
-    content: z.string().min(1).max(maximumPrototypeBytes),
+    baseRevision: lowercaseSha256Schema.optional(),
+    chunkIndex: z.number().int().nonnegative().optional(),
+    content: z.string().min(1),
+    expectedDigest: lowercaseSha256Schema.optional(),
+    finalChunk: z.boolean().optional(),
     mediaType: z.literal("text/html"),
     path: z.string().regex(prototypePathPattern),
   })
-  .strict();
+  .strict()
+  .superRefine((input, context) => {
+    if (input.chunkIndex === undefined && input.expectedDigest !== undefined) {
+      context.addIssue({ code: "custom", message: "Missing chunk index.", path: ["chunkIndex"] });
+    }
+    if (input.chunkIndex !== undefined && input.expectedDigest === undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "Missing full digest.",
+        path: ["expectedDigest"],
+      });
+    }
+    if (input.chunkIndex !== undefined && input.finalChunk === undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "Missing final chunk marker.",
+        path: ["finalChunk"],
+      });
+    }
+  });
 const prototypeResultSchema = z
   .object({
     appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+    complete: z.boolean().optional(),
     digest: lowercaseSha256Schema,
     invalidated: z.boolean().optional(),
     mediaType: z.literal("text/html"),
+    nextChunkIndex: z.number().int().nonnegative().optional(),
     path: z.string().regex(prototypePathPattern),
     recordedByCallId: z.string().min(1),
     reused: z.boolean(),
     revision: lowercaseSha256Schema,
     sessionId: z.string().min(1),
-    size: z.number().int().min(1).max(maximumPrototypeBytes),
+    size: z.number().int().min(1),
   })
   .strict();
+
+const prototypeReferenceResultSchema = z
+  .object({
+    appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
+    chunkCount: z.number().int().positive(),
+    complete: z.literal(true),
+    contentBytes: z.number().int().positive(),
+    digest: lowercaseSha256Schema,
+    mediaType: z.literal("text/html"),
+    path: z.string().regex(prototypePathPattern),
+    recordedByCallId: z.string().min(1),
+    revision: lowercaseSha256Schema,
+    sessionId: z.string().min(1),
+    version: z.literal(2),
+  })
+  .passthrough();
+
+/** Projects v2 manifests only from a matching completed tool receipt. */
+export const createInstalledPrototypeReferenceReducer = (input: { sessionId: string }) => {
+  const requested = new Map<string, z.infer<typeof prototypeRequestSchema>>();
+  const requestedUiPreview = new Map<string, string>();
+  let latest: PublicPrototypeReference | undefined;
+  return {
+    accept(candidate: unknown) {
+      const event = z
+        .object({ data: z.unknown(), type: z.string() })
+        .passthrough()
+        .safeParse(candidate);
+      if (!event.success) {
+        return;
+      }
+      if (event.data.type === "actions.requested") {
+        const actions = z
+          .object({ actions: z.array(z.unknown()) })
+          .passthrough()
+          .safeParse(event.data.data);
+        if (!actions.success) {
+          return;
+        }
+        for (const candidateAction of actions.data.actions) {
+          const action = z
+            .object({
+              callId: z.string(),
+              input: z.unknown(),
+              kind: z.string(),
+              toolName: z.string(),
+            })
+            .passthrough()
+            .safeParse(candidateAction);
+          if (!action.success || action.data.kind !== "tool-call") {
+            continue;
+          }
+          if (action.data.toolName !== "record_prototype_artifact") {
+            requested.delete(action.data.callId);
+            if (action.data.toolName === "record_ui_preview") {
+              const preview = z
+                .object({ appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u) })
+                .passthrough()
+                .safeParse(action.data.input);
+              if (preview.success) {
+                requestedUiPreview.set(action.data.callId, preview.data.appId);
+              }
+            } else {
+              requestedUiPreview.delete(action.data.callId);
+            }
+            continue;
+          }
+          requestedUiPreview.delete(action.data.callId);
+          const parsed = prototypeRequestSchema.safeParse(action.data.input);
+          if (parsed.success) {
+            requested.set(action.data.callId, parsed.data);
+          }
+        }
+        return;
+      }
+      if (event.data.type !== "action.result") {
+        return;
+      }
+      const resultEvent = z
+        .object({
+          result: z
+            .object({
+              callId: z.string(),
+              isError: z.boolean().optional(),
+              kind: z.literal("tool-result"),
+              output: z.unknown(),
+              toolName: z.enum(["record_prototype_artifact", "record_ui_preview"]),
+            })
+            .passthrough(),
+          status: z.literal("completed"),
+        })
+        .passthrough()
+        .safeParse(event.data.data);
+      if (!resultEvent.success) {
+        return;
+      }
+      const receipt = resultEvent.data.result;
+      if (receipt.toolName === "record_ui_preview") {
+        const appId = requestedUiPreview.get(receipt.callId);
+        requestedUiPreview.delete(receipt.callId);
+        if (appId === undefined || receipt.isError === true) {
+          return;
+        }
+        const output = z
+          .object({
+            appId: z.string(),
+            artifactDigest: lowercaseSha256Schema,
+            artifactRevision: lowercaseSha256Schema,
+            chunkCount: z.number().int().positive(),
+            complete: z.literal(true),
+            contentBytes: z.number().int().positive(),
+            digest: lowercaseSha256Schema,
+            mediaType: z.literal("text/html"),
+            path: z.string().regex(prototypePathPattern),
+            recordedByCallId: z.string(),
+            sessionId: z.string(),
+            version: z.literal(2),
+          })
+          .passthrough()
+          .safeParse(receipt.output);
+        if (!output.success) {
+          return;
+        }
+        const value = output.data;
+        if (
+          value.appId !== appId ||
+          value.path !== `prototype/${appId}/index.html` ||
+          value.sessionId !== input.sessionId ||
+          value.recordedByCallId !== receipt.callId ||
+          value.digest !== value.artifactDigest ||
+          value.artifactRevision !==
+            sha256(
+              JSON.stringify({
+                digest: value.digest,
+                mediaType: value.mediaType,
+                path: value.path,
+              }),
+            )
+        ) {
+          return;
+        }
+        const projected = publicPrototypeReferenceSchema.safeParse({
+          appId,
+          chunkCount: value.chunkCount,
+          contentBytes: value.contentBytes,
+          digest: value.digest,
+          mediaType: value.mediaType,
+          path: value.path,
+          recordedByCallId: value.recordedByCallId,
+          revision: value.artifactRevision,
+          sessionId: value.sessionId,
+          version: 2,
+        });
+        if (projected.success) {
+          latest = projected.data;
+        }
+        return;
+      }
+      const request = requested.get(receipt.callId);
+      requested.delete(receipt.callId);
+      if (request === undefined || receipt.isError === true) {
+        return;
+      }
+      const output = prototypeReferenceResultSchema.safeParse(receipt.output);
+      if (!output.success) {
+        return;
+      }
+      const value = output.data;
+      const revision = sha256(
+        JSON.stringify({ digest: value.digest, mediaType: value.mediaType, path: value.path }),
+      );
+      if (
+        value.sessionId !== input.sessionId ||
+        value.recordedByCallId !== receipt.callId ||
+        value.appId !== prototypePathPattern.exec(request.path)?.groups?.appId ||
+        value.path !== request.path ||
+        value.mediaType !== request.mediaType ||
+        value.revision !== revision ||
+        (request.expectedDigest !== undefined && value.digest !== request.expectedDigest) ||
+        (request.chunkIndex !== undefined &&
+          (request.finalChunk !== true || value.chunkCount !== request.chunkIndex + 1)) ||
+        (request.chunkIndex === undefined &&
+          (value.digest !== sha256(request.content) ||
+            value.contentBytes !== Buffer.byteLength(request.content, "utf-8")))
+      ) {
+        return;
+      }
+      const projected = publicPrototypeReferenceSchema.safeParse({
+        appId: value.appId,
+        chunkCount: value.chunkCount,
+        contentBytes: value.contentBytes,
+        digest: value.digest,
+        mediaType: value.mediaType,
+        path: value.path,
+        recordedByCallId: value.recordedByCallId,
+        revision: value.revision,
+        sessionId: value.sessionId,
+        version: 2,
+      });
+      if (projected.success) {
+        latest = projected.data;
+      }
+    },
+    snapshot: () => latest,
+  };
+};
 const uiPreviewResultSchema = z
   .object({
     appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-    content: z.string().min(1).max(maximumPrototypeBytes),
+    artifactDigest: lowercaseSha256Schema.optional(),
+    artifactRevision: lowercaseSha256Schema.optional(),
+    complete: z.boolean().optional(),
+    content: z.string().min(1).optional(),
     digest: lowercaseSha256Schema,
     fidelity: z.literal("arrusted-component-catalog"),
     functionality: z.literal("fixtures-only"),
+    requiresChunkedRead: z.boolean().optional(),
     revision: lowercaseSha256Schema,
-    routes: z.array(z.string().startsWith("/")).min(1).max(16),
+    routes: z.array(z.string().startsWith("/")).min(1),
+    totalBytes: z.number().int().positive().optional(),
   })
   .passthrough();
-const sha256 = (value: string): string => createHash("sha256").update(value, "utf-8").digest("hex");
 
 /**
  * Recovers only a successfully recorded HTML prototype from Eve's durable
  * action stream. Raw tool input is never projected without its matching,
  * completed receipt.
  */
-export const latestInstalledPrototype = (
-  events: readonly MessageStreamEvent[],
-): PublicPrototype | undefined => {
+export interface InstalledPrototypeProjector {
+  observe: (event: MessageStreamEvent) => void;
+  current: () => PublicPrototype | undefined;
+}
+
+export const createInstalledPrototypeProjector = (): InstalledPrototypeProjector => {
   const requested = new Map<string, z.infer<typeof prototypeRequestSchema>>();
+  const artifactReadRequests = new Map<
+    string,
+    { path: string; digest: string; revision?: string; offsetBytes?: number }
+  >();
+  const readChunks = new Map<
+    string,
+    {
+      chunks: string[];
+      nextOffsetBytes: number;
+      totalBytes: number;
+      mediaType: "text/html";
+      path: string;
+      digest: string;
+      revision: string;
+    }
+  >();
+  let expectedChunkedPreview: { path: string; digest: string; revision: string } | undefined;
+  const transfers = new Map<
+    string,
+    {
+      expectedDigest: string;
+      chunks: string[];
+      nextChunkIndex: number;
+      revision: string;
+      lastChunkIndex: number;
+      lastChunkDigest: string;
+      lastCallId: string;
+      receivedBytes: number;
+      rollingDigest: string;
+    }
+  >();
   let latest: PublicPrototype | undefined;
 
-  for (const event of events) {
+  const observe = (event: MessageStreamEvent): void => {
     if (event.type === "actions.requested") {
       for (const action of event.data.actions) {
         if (action.kind !== "tool-call") {
           continue;
         }
-        if (action.toolName !== "record_prototype_artifact") {
-          requested.delete(action.callId);
-          continue;
-        }
-        const parsed = prototypeRequestSchema.safeParse(action.input);
-        if (parsed.success) {
-          requested.set(action.callId, parsed.data);
+        if (action.toolName === "record_prototype_artifact") {
+          const parsed = prototypeRequestSchema.safeParse(action.input);
+          if (parsed.success) {
+            requested.set(action.callId, parsed.data);
+          } else {
+            requested.delete(action.callId);
+          }
         } else {
           requested.delete(action.callId);
         }
+        if (action.toolName === "get_prototype_artifact") {
+          const read = z
+            .object({
+              digest: lowercaseSha256Schema,
+              offsetBytes: z.number().int().nonnegative().optional(),
+              path: z.string().regex(prototypePathPattern),
+              revision: lowercaseSha256Schema.optional(),
+            })
+            .safeParse(action.input);
+          if (read.success) {
+            artifactReadRequests.set(action.callId, read.data);
+          } else {
+            artifactReadRequests.delete(action.callId);
+          }
+        } else {
+          artifactReadRequests.delete(action.callId);
+        }
       }
-      continue;
+      return;
     }
 
     if (
@@ -169,46 +458,328 @@ export const latestInstalledPrototype = (
       event.data.result.kind !== "tool-result" ||
       event.data.result.isError === true
     ) {
-      continue;
+      return;
     }
 
     if (event.data.result.toolName === "record_ui_preview") {
       const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
-      if (!preview.success || sha256(preview.data.content) !== preview.data.digest) {
-        continue;
+      if (!preview.success || preview.data.complete === false) {
+        return;
       }
-      latest = publicPrototypeSchema.parse({
-        content: preview.data.content,
-        digest: preview.data.digest,
-        mediaType: "text/html",
-        path: `prototype/${preview.data.appId}/index.html`,
-        revision: preview.data.digest,
-      });
-      continue;
+      if (preview.data.content !== undefined) {
+        if (sha256(preview.data.content) !== preview.data.digest) {
+          return;
+        }
+        latest = publicPrototypeSchema.parse({
+          content: preview.data.content,
+          digest: preview.data.digest,
+          mediaType: "text/html",
+          path: `prototype/${preview.data.appId}/index.html`,
+          revision: preview.data.artifactRevision ?? preview.data.digest,
+        });
+      } else if (
+        preview.data.requiresChunkedRead === true &&
+        preview.data.artifactDigest !== undefined &&
+        preview.data.artifactRevision !== undefined
+      ) {
+        expectedChunkedPreview = {
+          digest: preview.data.artifactDigest,
+          path: `prototype/${preview.data.appId}/index.html`,
+          revision: preview.data.artifactRevision,
+        };
+      }
+      return;
+    }
+    if (event.data.result.toolName === "get_prototype_artifact") {
+      const { callId } = event.data.result;
+      const input = artifactReadRequests.get(callId);
+      const output = z
+        .object({
+          byteOffset: z.number().int().nonnegative().optional(),
+          chunkDigest: lowercaseSha256Schema.optional(),
+          complete: z.boolean().optional(),
+          content: z.string().min(1),
+          digest: lowercaseSha256Schema,
+          mediaType: z.literal("text/html"),
+          nextOffsetBytes: z.number().int().nonnegative().optional(),
+          path: z.string().regex(prototypePathPattern),
+          revision: lowercaseSha256Schema,
+          totalBytes: z.number().int().positive().optional(),
+        })
+        .safeParse(event.data.result.output);
+      if (
+        input === undefined ||
+        !output.success ||
+        input.path !== output.data.path ||
+        input.digest !== output.data.digest ||
+        (input.revision !== undefined && input.revision !== output.data.revision)
+      ) {
+        return;
+      }
+      if (output.data.byteOffset === undefined) {
+        if (sha256(output.data.content) !== output.data.digest) {
+          return;
+        }
+        latest = publicPrototypeSchema.parse({ ...output.data, mediaType: "text/html" });
+        return;
+      }
+      const { byteOffset, nextOffsetBytes, totalBytes, chunkDigest } = output.data;
+      if (
+        nextOffsetBytes === undefined ||
+        totalBytes === undefined ||
+        chunkDigest === undefined ||
+        input.offsetBytes !== byteOffset ||
+        sha256(output.data.content) !== chunkDigest ||
+        Buffer.byteLength(output.data.content, "utf-8") !== nextOffsetBytes - byteOffset
+      ) {
+        readChunks.delete(output.data.path);
+        return;
+      }
+      const prior = readChunks.get(output.data.path);
+      if (byteOffset === 0) {
+        if (input.revision === undefined) {
+          readChunks.delete(output.data.path);
+          return;
+        }
+        readChunks.set(output.data.path, {
+          chunks: [output.data.content],
+          digest: output.data.digest,
+          mediaType: "text/html",
+          nextOffsetBytes,
+          path: output.data.path,
+          revision: output.data.revision,
+          totalBytes,
+        });
+      } else if (
+        prior !== undefined &&
+        prior.nextOffsetBytes === byteOffset &&
+        prior.totalBytes === totalBytes &&
+        prior.digest === output.data.digest &&
+        prior.revision === output.data.revision &&
+        input.revision === prior.revision
+      ) {
+        readChunks.set(output.data.path, {
+          ...prior,
+          chunks: [...prior.chunks, output.data.content],
+          nextOffsetBytes,
+        });
+      } else {
+        readChunks.delete(output.data.path);
+        return;
+      }
+      const assembled = readChunks.get(output.data.path);
+      if (output.data.complete === true && assembled?.nextOffsetBytes === totalBytes) {
+        const content = assembled.chunks.join("");
+        if (
+          sha256(content) === assembled.digest &&
+          (expectedChunkedPreview === undefined ||
+            (expectedChunkedPreview.path === assembled.path &&
+              expectedChunkedPreview.digest === assembled.digest &&
+              expectedChunkedPreview.revision === assembled.revision))
+        ) {
+          latest = publicPrototypeSchema.parse({
+            content,
+            digest: assembled.digest,
+            mediaType: "text/html",
+            path: assembled.path,
+            revision: assembled.revision,
+          });
+        }
+        readChunks.delete(output.data.path);
+      }
+      return;
     }
     if (event.data.result.toolName !== "record_prototype_artifact") {
-      continue;
+      return;
     }
 
     const { callId } = event.data.result;
     const input = requested.get(callId);
     const output = prototypeResultSchema.safeParse(event.data.result.output);
     if (input === undefined || !output.success) {
-      continue;
+      return;
     }
 
-    const appId = prototypePathPattern.exec(input.path)?.[1];
+    const appId = prototypePathPattern.exec(input.path)?.groups?.appId;
+    if (input.chunkIndex !== undefined && input.expectedDigest !== undefined) {
+      const prior = transfers.get(input.path);
+      const chunkDigest = sha256(input.content);
+      if (input.chunkIndex === 0) {
+        if (
+          input.expectedDigest === chunkDigest &&
+          output.data.complete === true &&
+          output.data.digest === chunkDigest &&
+          output.data.appId === appId &&
+          output.data.path === input.path &&
+          output.data.mediaType === input.mediaType &&
+          output.data.size === Buffer.byteLength(input.content, "utf-8") &&
+          output.data.recordedByCallId === callId
+        ) {
+          const revision = sha256(
+            JSON.stringify({ digest: chunkDigest, mediaType: input.mediaType, path: input.path }),
+          );
+          if (output.data.revision === revision) {
+            transfers.delete(input.path);
+            latest = publicPrototypeSchema.parse({
+              content: input.content,
+              digest: chunkDigest,
+              mediaType: input.mediaType,
+              path: input.path,
+              revision,
+            });
+          }
+          return;
+        }
+        const rollingDigest = sha256(chunkDigest);
+        const receivedBytes = Buffer.byteLength(input.content, "utf-8");
+        if (
+          output.data.digest !== rollingDigest ||
+          output.data.nextChunkIndex !== 1 ||
+          output.data.complete !== false
+        ) {
+          transfers.delete(input.path);
+          return;
+        }
+        const transfer = {
+          chunks: [input.content],
+          expectedDigest: input.expectedDigest,
+          lastCallId: callId,
+          lastChunkDigest: chunkDigest,
+          lastChunkIndex: 0,
+          nextChunkIndex: 1,
+          receivedBytes,
+          rollingDigest,
+        };
+        const revision = sha256(
+          JSON.stringify({
+            digest: rollingDigest,
+            mediaType: input.mediaType,
+            path: input.path,
+            transfer,
+          }),
+        );
+        if (
+          output.data.revision !== revision ||
+          output.data.appId !== appId ||
+          output.data.path !== input.path ||
+          output.data.mediaType !== input.mediaType ||
+          output.data.size !== receivedBytes ||
+          output.data.recordedByCallId !== callId
+        ) {
+          transfers.delete(input.path);
+          return;
+        }
+        transfers.set(input.path, {
+          chunks: [input.content],
+          expectedDigest: input.expectedDigest,
+          lastCallId: callId,
+          lastChunkDigest: chunkDigest,
+          lastChunkIndex: 0,
+          nextChunkIndex: 1,
+          receivedBytes,
+          revision,
+          rollingDigest,
+        });
+        return;
+      }
+      if (prior === undefined || prior.expectedDigest !== input.expectedDigest) {
+        transfers.delete(input.path);
+        return;
+      }
+      if (
+        input.chunkIndex === prior.lastChunkIndex &&
+        callId === prior.lastCallId &&
+        chunkDigest === prior.lastChunkDigest
+      ) {
+        return;
+      }
+      if (
+        input.chunkIndex !== prior.nextChunkIndex ||
+        input.baseRevision !== prior.revision ||
+        output.data.nextChunkIndex !== input.chunkIndex + 1
+      ) {
+        transfers.delete(input.path);
+        return;
+      }
+      const chunks = [...prior.chunks, input.content];
+      const receivedBytes = prior.receivedBytes + Buffer.byteLength(input.content, "utf-8");
+      const rollingDigest = sha256(`${prior.rollingDigest}${chunkDigest}`);
+      if (
+        output.data.appId !== appId ||
+        output.data.path !== input.path ||
+        output.data.mediaType !== input.mediaType ||
+        output.data.digest !== (input.finalChunk === true ? input.expectedDigest : rollingDigest) ||
+        output.data.size !== receivedBytes ||
+        output.data.recordedByCallId !== callId
+      ) {
+        transfers.delete(input.path);
+        return;
+      }
+      const complete = input.finalChunk === true;
+      if (output.data.complete !== complete) {
+        transfers.delete(input.path);
+        return;
+      }
+      const assembled = complete ? chunks.join("") : null;
+      const digest = assembled === null ? rollingDigest : sha256(assembled);
+      if (complete && digest !== input.expectedDigest) {
+        transfers.delete(input.path);
+        return;
+      }
+      const revision = complete
+        ? sha256(JSON.stringify({ digest, mediaType: input.mediaType, path: input.path }))
+        : sha256(
+            JSON.stringify({
+              digest: rollingDigest,
+              mediaType: input.mediaType,
+              path: input.path,
+              transfer: {
+                chunks,
+                expectedDigest: input.expectedDigest,
+                lastCallId: callId,
+                lastChunkDigest: chunkDigest,
+                lastChunkIndex: input.chunkIndex,
+                nextChunkIndex: input.chunkIndex + 1,
+                receivedBytes,
+                rollingDigest,
+              },
+            }),
+          );
+      if (output.data.revision !== revision) {
+        transfers.delete(input.path);
+        return;
+      }
+      if (assembled === null) {
+        transfers.set(input.path, {
+          chunks,
+          expectedDigest: input.expectedDigest,
+          lastCallId: callId,
+          lastChunkDigest: chunkDigest,
+          lastChunkIndex: input.chunkIndex,
+          nextChunkIndex: input.chunkIndex + 1,
+          receivedBytes,
+          revision,
+          rollingDigest,
+        });
+      } else {
+        transfers.delete(input.path);
+        latest = publicPrototypeSchema.parse({
+          content: assembled,
+          digest,
+          mediaType: input.mediaType,
+          path: input.path,
+          revision,
+        });
+      }
+      return;
+    }
+
     const digest = sha256(input.content);
     const revision = sha256(
-      JSON.stringify({
-        digest,
-        mediaType: input.mediaType,
-        path: input.path,
-      }),
+      JSON.stringify({ digest, mediaType: input.mediaType, path: input.path }),
     );
     const size = Buffer.byteLength(input.content, "utf-8");
     if (
-      size > maximumPrototypeBytes ||
       output.data.appId !== appId ||
       output.data.path !== input.path ||
       output.data.mediaType !== input.mediaType ||
@@ -217,7 +788,7 @@ export const latestInstalledPrototype = (
       output.data.size !== size ||
       output.data.recordedByCallId !== callId
     ) {
-      continue;
+      return;
     }
 
     latest = publicPrototypeSchema.parse({
@@ -227,9 +798,19 @@ export const latestInstalledPrototype = (
       path: input.path,
       revision,
     });
-  }
+  };
 
-  return latest;
+  return { current: () => latest, observe };
+};
+
+export const latestInstalledPrototype = (
+  events: readonly MessageStreamEvent[],
+): PublicPrototype | undefined => {
+  const projector = createInstalledPrototypeProjector();
+  for (const event of events) {
+    projector.observe(event);
+  }
+  return projector.current();
 };
 
 /** Projects component-backed preview metadata only from a completed tool receipt. */
@@ -248,7 +829,13 @@ export const latestInstalledUiPreview = (
       continue;
     }
     const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
-    if (!preview.success || sha256(preview.data.content) !== preview.data.digest) {
+    if (
+      !preview.success ||
+      preview.data.complete === false ||
+      (preview.data.content !== undefined &&
+        sha256(preview.data.content) !== preview.data.digest) ||
+      (preview.data.content === undefined && preview.data.requiresChunkedRead !== true)
+    ) {
       continue;
     }
     latest = publicUiPreviewSchema.parse({
@@ -312,6 +899,32 @@ export const latestInstalledWorkingPreview = (
     }
   }
   return currentWorkingPreview(latest);
+};
+
+/** Retains only verified preview metadata while consuming an unbounded event stream. */
+export const createInstalledPreviewMetadataReducer = () => {
+  let uiPreview: PublicUiPreview | undefined;
+  let workingPreview: PublicWorkingPreview | null | undefined;
+  return {
+    accept(event: MessageStreamEvent) {
+      const nextUiPreview = latestInstalledUiPreview([event]);
+      if (nextUiPreview !== undefined) {
+        uiPreview = nextUiPreview;
+      }
+      const nextWorkingPreview = latestInstalledWorkingPreview([event]);
+      if (nextWorkingPreview !== undefined) {
+        workingPreview = nextWorkingPreview;
+      }
+    },
+    snapshot() {
+      return {
+        ...(uiPreview === undefined ? {} : { uiPreview }),
+        ...(workingPreview === undefined
+          ? {}
+          : { workingPreview: currentWorkingPreview(workingPreview) }),
+      };
+    },
+  };
 };
 
 const inputRequest = (request: {
@@ -566,7 +1179,7 @@ export const outstandingInstalledEveRequests = (
 };
 
 export const outstandingInternalEveRequests = (
-  events: readonly InternalEveEvent[],
+  events: Iterable<InternalEveEvent>,
 ): PublicInputRequest[] => {
   const outstanding = new Map<string, PublicInputRequest>();
   for (const event of events) {

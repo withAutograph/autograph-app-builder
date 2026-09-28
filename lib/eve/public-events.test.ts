@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { MessageStreamEvent } from "eve/client";
 import {
+  createInstalledPrototypeProjector,
+  createInstalledPreviewMetadataReducer,
   deriveInstalledEveStatus,
   latestInstalledPrototype,
   latestInstalledUiPreview,
@@ -10,6 +12,11 @@ import {
   projectInstalledEveEvent,
   toPublicEvent,
 } from "./public-events";
+import {
+  prototypeArtifactReadChunk,
+  recordPrototypeArtifactChunk,
+  recordPrototypeArtifactRevision,
+} from "../agent/prototype-artifacts";
 
 const installedEvent = (event: unknown) => event as MessageStreamEvent;
 
@@ -75,6 +82,17 @@ function recordedPrototypeEvents(input?: {
 }
 
 describe("toPublicEvent", () => {
+  it("projects legacy prototype receipts one event at a time", () => {
+    const first = recordedPrototypeEvents({ callId: "first", content: "<html>First</html>" });
+    const invalid = recordedPrototypeEvents({ callId: "bad", outputDigest: "f".repeat(64) });
+    const second = recordedPrototypeEvents({ callId: "second", content: "<html>Second</html>" });
+    const sequence = [...first, ...invalid, ...second];
+    const projector = createInstalledPrototypeProjector();
+    for (let index = 0; index < sequence.length; index += 1) {
+      projector.observe(sequence[index]);
+      expect(projector.current()).toEqual(latestInstalledPrototype(sequence.slice(0, index + 1)));
+    }
+  });
   it("publishes an allowlisted assistant message", () => {
     expect(
       toPublicEvent({
@@ -122,6 +140,165 @@ describe("installed Eve 0.43 projection", () => {
         }),
       ]),
     ).toEqual(latestInstalledPrototype(first));
+  });
+
+  it("reconstructs chunked prototype writes only after exact revision and digest verification", () => {
+    const contents = ["first 🧾\n", "second part\n", "finished"];
+    const fullContent = contents.join("");
+    const expectedDigest = digest(fullContent);
+    const path = "prototype/vendor-onboarding/index.html";
+    let artifacts: Parameters<typeof recordPrototypeArtifactChunk>[0]["artifacts"] = [];
+    let baseRevision: string | undefined;
+    const events: MessageStreamEvent[] = [];
+    for (const [chunkIndex, content] of contents.entries()) {
+      const callId = `chunk-${chunkIndex}`;
+      const input = {
+        baseRevision,
+        chunkIndex,
+        content,
+        expectedDigest,
+        finalChunk: chunkIndex === contents.length - 1,
+        mediaType: "text/html" as const,
+        path,
+      };
+      const recorded = recordPrototypeArtifactChunk({
+        ...input,
+        artifacts,
+        callId,
+        sessionId: "wrun_1",
+      });
+      const { artifacts: nextArtifacts, artifact } = recorded;
+      artifacts = nextArtifacts;
+      baseRevision = artifact.revision;
+      events.push(
+        installedEvent({
+          data: {
+            actions: [{ callId, input, kind: "tool-call", toolName: "record_prototype_artifact" }],
+          },
+          type: "actions.requested",
+        }),
+        installedEvent({
+          data: {
+            result: {
+              callId,
+              kind: "tool-result",
+              output: {
+                appId: recorded.artifact.appId,
+                complete: recorded.complete,
+                digest: recorded.artifact.digest,
+                mediaType: recorded.artifact.mediaType,
+                nextChunkIndex: recorded.nextChunkIndex,
+                path: recorded.artifact.path,
+                recordedByCallId: recorded.artifact.recordedByCallId,
+                reused: recorded.reused,
+                revision: recorded.artifact.revision,
+                sessionId: recorded.artifact.sessionId,
+                size:
+                  recorded.artifact.transfer?.receivedBytes ??
+                  Buffer.byteLength(recorded.artifact.content),
+              },
+              toolName: "record_prototype_artifact",
+            },
+            status: "completed",
+          },
+          type: "action.result",
+        }),
+      );
+    }
+    expect(latestInstalledPrototype(events)).toMatchObject({
+      content: fullContent,
+      digest: expectedDigest,
+      path,
+    });
+
+    const tampered = structuredClone(events);
+    const last = tampered.at(-1) as MessageStreamEvent & {
+      data: { result: { output: { digest: string } } };
+    };
+    last.data.result.output.digest = "0".repeat(64);
+    expect(latestInstalledPrototype(tampered)).toBeUndefined();
+  });
+
+  it("reconstructs chunked artifact readback over multiple Eve result envelopes", () => {
+    const { artifact } = recordPrototypeArtifactRevision({
+      artifacts: [],
+      callId: "record-large-preview",
+      content: `<html>${"x".repeat(10 * 1024 * 1024)}</html>`,
+      mediaType: "text/html",
+      path: "prototype/vendor-onboarding/index.html",
+      sessionId: "wrun_1",
+    });
+    const events: MessageStreamEvent[] = [];
+    events.push(
+      installedEvent({
+        data: {
+          result: {
+            callId: "preview-large",
+            kind: "tool-result",
+            output: {
+              appId: "vendor-onboarding",
+              artifactDigest: artifact.digest,
+              artifactRevision: artifact.revision,
+              digest: artifact.digest,
+              fidelity: "arrusted-component-catalog",
+              functionality: "fixtures-only",
+              requiresChunkedRead: true,
+              revision: "a".repeat(64),
+              routes: ["/"],
+              totalBytes: Buffer.byteLength(artifact.content),
+            },
+            toolName: "record_ui_preview",
+          },
+          status: "completed",
+        },
+        type: "action.result",
+      }),
+    );
+    let offsetBytes = 0;
+    let index = 0;
+    while (offsetBytes < Buffer.byteLength(artifact.content)) {
+      const callId = `read-${index}`;
+      const input = {
+        digest: artifact.digest,
+        offsetBytes,
+        path: artifact.path,
+        revision: artifact.revision,
+      };
+      const output = prototypeArtifactReadChunk(artifact, { offsetBytes });
+      events.push(
+        installedEvent({
+          data: {
+            actions: [{ callId, input, kind: "tool-call", toolName: "get_prototype_artifact" }],
+          },
+          type: "actions.requested",
+        }),
+        installedEvent({
+          data: {
+            result: {
+              callId,
+              kind: "tool-result",
+              output,
+              toolName: "get_prototype_artifact",
+            },
+            status: "completed",
+          },
+          type: "action.result",
+        }),
+      );
+      offsetBytes = output.nextOffsetBytes;
+      index += 1;
+    }
+    expect(index).toBeGreaterThan(1);
+    expect(latestInstalledPrototype(events)).toMatchObject({
+      content: artifact.content,
+      digest: artifact.digest,
+      path: artifact.path,
+      revision: artifact.revision,
+    });
+    expect(latestInstalledUiPreview(events)).toMatchObject({
+      appId: "vendor-onboarding",
+      revision: "a".repeat(64),
+    });
   });
 
   it("rejects unmatched, failed, wrong-tool, and digest-mismatched prototypes", () => {
@@ -182,6 +359,57 @@ describe("installed Eve 0.43 projection", () => {
       content,
       digest: digest(content),
     });
+  });
+
+  it("never treats a recorded Markdown AppSpec as Browser HTML", () => {
+    const events = structuredClone(recordedPrototypeEvents());
+    const request = events[0] as MessageStreamEvent & {
+      data: { actions: [{ input: { path: string; mediaType: string } }] };
+    };
+    const receipt = events[1] as MessageStreamEvent & {
+      data: { result: { output: { path: string; mediaType: string } } };
+    };
+    request.data.actions[0].input.path = "prototype/vendor-onboarding/app-spec.md";
+    request.data.actions[0].input.mediaType = "text/markdown";
+    receipt.data.result.output.path = "prototype/vendor-onboarding/app-spec.md";
+    receipt.data.result.output.mediaType = "text/markdown";
+    expect(latestInstalledPrototype(events)).toBeUndefined();
+  });
+
+  it("reduces preview receipts incrementally without retaining the event history", () => {
+    const reducer = createInstalledPreviewMetadataReducer();
+    const content = "<main>Reviewed preview</main>";
+    const result = (outputDigest: string) =>
+      installedEvent({
+        data: {
+          result: {
+            callId: "ui-preview",
+            kind: "tool-result",
+            output: {
+              appId: "vendor-onboarding",
+              content,
+              digest: outputDigest,
+              fidelity: "arrusted-component-catalog",
+              functionality: "fixtures-only",
+              revision: "a".repeat(64),
+              routes: ["/"],
+            },
+            toolName: "record_ui_preview",
+          },
+          status: "completed",
+        },
+        type: "action.result",
+      });
+    for (let index = 0; index < 10_001; index += 1) {
+      reducer.accept(installedEvent({ data: {}, type: "step.started" }));
+    }
+    reducer.accept(result("f".repeat(64)));
+    expect(reducer.snapshot()).toEqual({});
+    reducer.accept(result(digest(content)));
+    expect(reducer.snapshot()).toMatchObject({
+      uiPreview: { appId: "vendor-onboarding", revision: "a".repeat(64) },
+    });
+    expect(reducer).not.toHaveProperty("events");
   });
 
   it("fails closed if internal specification recording requests approval", () => {
@@ -761,7 +989,7 @@ describe("installed Eve 0.43 projection", () => {
     expect(message).not.toContain("correct the cause");
   });
 
-  it("names the failed operation and workflow size limit without exposing URLs or tokens", () => {
+  it("names the failed operation and Eve event envelope without exposing URLs or tokens", () => {
     const projected = projectInstalledEveEvents([
       installedEvent({
         data: {
@@ -789,7 +1017,7 @@ describe("installed Eve 0.43 projection", () => {
       code: "result_too_large",
       index: 0,
       message:
-        "Builder could not save the result of `change_set_status`: its output was 89847765 bytes, above the workflow limit of 10485760 bytes. Review only changed files or split the result into smaller parts, then resume this saved session.",
+        "Builder could not complete `change_set_status`: the serialized Eve event was 89847765 bytes, above Eve's 10485760-byte event envelope. For prototype or UI-preview content, retry with smaller UTF-8-safe chunks using the chunked read/write path, then resume this saved session.",
       type: "error",
     });
     expect(JSON.stringify(projected)).not.toContain("private");

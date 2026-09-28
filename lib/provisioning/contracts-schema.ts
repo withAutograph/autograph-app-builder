@@ -55,10 +55,16 @@ const failureSchema = z
   .object({
     code: z.enum([
       "configuration_unavailable",
+      "authorization_required",
       "credential_unavailable",
       "installation_inactive",
       "name_conflict",
       "provider_rejected",
+      "provider_permission_denied",
+      "provider_validation_failed",
+      "provider_quota_exceeded",
+      "provider_rate_limited",
+      "reconciliation_uncertain",
       "provider_unavailable",
       "source_unavailable",
       "source_mismatch",
@@ -164,6 +170,20 @@ export const vercelProvisionResultSchema = z.union([
 export const builderProvisionResponseSchema = z
   .object({
     appId: builderAppIdSchema,
+    diagnostics: z
+      .array(
+        z
+          .object({
+            code: z.string().min(1),
+            nextRetryAt: instant.optional(),
+            operation: z.enum(["github", "vercel"]),
+            outcomeKnown: z.boolean(),
+            provider: z.enum(["github", "vercel"]),
+            recoveryAction: z.string().min(1),
+          })
+          .strict(),
+      )
+      .optional(),
     github: githubProvisionResultSchema,
     requestDigest: sha256,
     requestId: z.string().uuid(),

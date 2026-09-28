@@ -14,6 +14,7 @@ import type { OverlayChange } from "@/lib/repository/target-apply";
 import { deriveNormalizedChangeSet } from "@/lib/repository/reviewed-change-set";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import type { SourceKind } from "@/lib/repository/source-receipt";
+import { largestUtf8PayloadChunk } from "@/lib/eve/payload-envelope";
 
 const isExistingRepositorySource = (sourceKind: SourceKind): boolean =>
   sourceKind === "existing-repository";
@@ -27,9 +28,89 @@ export const isCandidateExportTextPath = (path: string): boolean => {
   );
 };
 
-const MAX_EXPORT_FILE_BYTES = 512 * 1024;
-const MAX_EXPORT_TOTAL_BYTES = 2 * 1024 * 1024;
-type ChangePath = Pick<OverlayChange, "path" | "kind">;
+type ChangePath = Pick<OverlayChange, "path" | "kind" | "after">;
+type ChangeSetExportEnvelope = ReturnType<typeof deriveNormalizedChangeSet>;
+interface ChangeSetExportCursor {
+  digest: string;
+  offsetBytes: number;
+  path: string;
+}
+interface ExportFile {
+  content: string;
+  digest: string;
+  offsetBytes: number;
+  path: string;
+}
+interface ExportOmission {
+  path: string;
+  reason: string;
+}
+
+const exportTextPathChunk = async (input: {
+  contentCursor?: ChangeSetExportCursor;
+  cursorIndex: number;
+  envelope?: ChangeSetExportEnvelope;
+  exportFiles: ExportFile[];
+  exportOmissions: ExportOmission[];
+  expectedDigest?: string;
+  index: number;
+  path: string;
+  readText: (path: string) => PromiseLike<string | null>;
+}): Promise<{
+  contentCursor?: ChangeSetExportCursor;
+  file?: ExportFile;
+  omission?: ExportOmission;
+}> => {
+  const content = await input.readText(input.path);
+  if (content === null) {
+    return { omission: { path: input.path, reason: "changed text file could not be read" } };
+  }
+  const digest = createHash("sha256").update(content, "utf-8").digest("hex");
+  if (input.expectedDigest !== undefined && digest !== input.expectedDigest) {
+    throw new Error(
+      `Reviewed file ${input.path} changed during export. Re-run change_set_status to refresh the review.`,
+    );
+  }
+  const offsetBytes =
+    input.index === input.cursorIndex ? (input.contentCursor?.offsetBytes ?? 0) : 0;
+  if (
+    input.index === input.cursorIndex &&
+    input.contentCursor !== undefined &&
+    input.contentCursor.digest !== digest
+  ) {
+    throw new Error(
+      `Review export cursor digest does not match ${input.path}. Re-run change_set_status.`,
+    );
+  }
+  if (content.length === 0) {
+    return { file: { content, digest, offsetBytes: 0, path: input.path } };
+  }
+  const contentBytes = Buffer.byteLength(content, "utf-8");
+  const chunk = largestUtf8PayloadChunk({
+    content,
+    makePayload: (chunkContent, nextOffsetBytes) => ({
+      ...input.envelope,
+      contentCursor:
+        nextOffsetBytes < contentBytes
+          ? { digest, offsetBytes: nextOffsetBytes, path: input.path }
+          : undefined,
+      exportFiles: [
+        ...input.exportFiles,
+        { content: chunkContent, digest, offsetBytes, path: input.path },
+      ],
+      exportOmissions: input.exportOmissions,
+    }),
+    offsetBytes,
+  });
+  return {
+    ...(chunk.nextOffsetBytes < contentBytes
+      ? {
+          contentCursor: { digest, offsetBytes: chunk.nextOffsetBytes, path: input.path },
+        }
+      : {}),
+    file: { content: chunk.content, digest, offsetBytes, path: input.path },
+  };
+};
 
 export const changedAppTextPaths = (changes: readonly ChangePath[], appId: string): string[] =>
   changes
@@ -59,45 +140,63 @@ export const reviewableChanges = <T extends ChangePath>(
     return !existingApp || path.startsWith(`apps/${appId}/`);
   });
 
-export const boundedChangedAppTextExport = async (
+export const changedAppTextExport = async (
   changes: readonly ChangePath[],
   appId: string,
   readText: (path: string) => PromiseLike<string | null>,
+  options: {
+    cursor?: { digest: string; offsetBytes: number; path: string };
+    envelope?: ChangeSetExportEnvelope;
+  } = {},
 ) => {
   const appChanges = changes.filter(({ path }) => path.startsWith(`apps/${appId}/`));
-  const exportFiles: { content: string; path: string }[] = [];
-  const exportOmissions: { path: string; reason: string }[] = [];
-  let totalBytes = 0;
-  for (const path of changedAppTextPaths(changes, appId)) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- bound the total export in path order.
-    const content = await readText(path);
-    const size = content === null ? 0 : Buffer.byteLength(content, "utf-8");
-    if (
-      content === null ||
-      size > MAX_EXPORT_FILE_BYTES ||
-      totalBytes + size > MAX_EXPORT_TOTAL_BYTES
-    ) {
-      exportOmissions.push({
-        path,
-        reason:
-          content === null
-            ? "changed text file could not be read"
-            : `changed text file exceeds the bounded review export (${size} bytes); inspect it separately before publication`,
-      });
-      continue;
-    }
-    totalBytes += size;
-    exportFiles.push({ content, path });
+  const paths = changedAppTextPaths(changes, appId);
+  const exportFiles: ExportFile[] = [];
+  const exportOmissions: ExportOmission[] = appChanges
+    .filter(({ path, kind }) => kind !== "deleted" && !isCandidateExportTextPath(path))
+    .map(({ path }) => ({ path, reason: "changed non-text artifact" }));
+  const cursorIndex = options.cursor === undefined ? 0 : paths.indexOf(options.cursor.path);
+  if (options.cursor !== undefined && cursorIndex < 0) {
+    throw new Error(
+      "The review export cursor is stale because its path is no longer in the change set.",
+    );
   }
-  return {
-    exportFiles,
-    exportOmissions: [
-      ...exportOmissions,
-      ...appChanges
-        .filter(({ path, kind }) => kind !== "deleted" && !isCandidateExportTextPath(path))
-        .map(({ path }) => ({ path, reason: "changed non-text artifact" })),
-    ],
-  };
+  const expectedDigests = new Map(
+    changes.flatMap((change) =>
+      change.kind === "deleted" || change.after === undefined
+        ? []
+        : [[change.path, change.after.digest] as const],
+    ),
+  );
+  for (const [offset, path] of paths.slice(cursorIndex).entries()) {
+    const index = cursorIndex + offset;
+    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve reviewed path order while reading files.
+    const exported = await exportTextPathChunk({
+      contentCursor: options.cursor,
+      cursorIndex,
+      envelope: options.envelope,
+      expectedDigest: expectedDigests.get(path),
+      exportFiles,
+      exportOmissions,
+      index,
+      path,
+      readText,
+    });
+    if (exported.omission !== undefined) {
+      exportOmissions.push(exported.omission);
+    }
+    if (exported.file !== undefined) {
+      exportFiles.push(exported.file);
+    }
+    if (exported.contentCursor !== undefined) {
+      return {
+        contentCursor: exported.contentCursor,
+        exportFiles,
+        exportOmissions,
+      };
+    }
+  }
+  return { exportFiles, exportOmissions };
 };
 
 export const exactNormalizedChangeSet = async (input: {
@@ -149,6 +248,8 @@ const exportAppliedTextFiles = async (input: {
     { phase: "validated" | "reviewed" | "validation_failed" }
   >;
   sandbox: SandboxSession;
+  envelope?: ChangeSetExportEnvelope;
+  cursor?: { digest: string; offsetBytes: number; path: string };
 }) => {
   const observed = hasTestCapability("simulated-target")
     ? await inspectFixtureApplyOverlay(
@@ -169,14 +270,18 @@ const exportAppliedTextFiles = async (input: {
     isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
   );
   // A complete app checkout can include tens of megabytes of unchanged schema history.
-  const bounded = await boundedChangedAppTextExport(changes, input.state.appSpec.appId, (path) =>
-    input.sandbox.readTextFile({
-      path: `${input.state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "")}/${path}`,
-    }),
+  const exported = await changedAppTextExport(
+    changes,
+    input.state.appSpec.appId,
+    (path) =>
+      input.sandbox.readTextFile({
+        path: `${input.state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "")}/${path}`,
+      }),
+    { cursor: input.cursor, envelope: input.envelope },
   );
   return {
     changes,
-    ...bounded,
+    ...exported,
   };
 };
 
@@ -202,7 +307,7 @@ export default defineTool({
         };
       }
       return {
-        ...(await exportAppliedTextFiles({ sandbox, state })),
+        ...(await exportAppliedTextFiles({ cursor: input.contentCursor, sandbox, state })),
         reviewed: false,
         status: "validation_failed" as const,
         validationFailure: state.validationFailure,
@@ -210,7 +315,12 @@ export default defineTool({
     }
     const changeSet = await exactNormalizedChangeSet({ sandbox, state });
     const exported = input.includeContent
-      ? await exportAppliedTextFiles({ sandbox, state })
+      ? await exportAppliedTextFiles({
+          cursor: input.contentCursor,
+          envelope: changeSet,
+          sandbox,
+          state,
+        })
       : undefined;
     return {
       ...changeSet,
@@ -220,5 +330,14 @@ export default defineTool({
         : { exportFiles: exported.exportFiles, exportOmissions: exported.exportOmissions }),
     };
   },
-  inputSchema: z.strictObject({ includeContent: z.boolean().default(false) }),
+  inputSchema: z.strictObject({
+    contentCursor: z
+      .strictObject({
+        digest: z.string().regex(/^[0-9a-f]{64}$/u),
+        offsetBytes: z.number().int().nonnegative(),
+        path: z.string().min(1),
+      })
+      .optional(),
+    includeContent: z.boolean().default(false),
+  }),
 });

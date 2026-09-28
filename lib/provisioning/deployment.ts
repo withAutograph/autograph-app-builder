@@ -15,7 +15,11 @@ import { readGitHubProvisioningEnvironment } from "./github-provider";
 import { readGitHubUserCredentialEnvironment } from "./github-user-credential";
 import { createPostgresGitHubUserCredentialStore } from "./postgres-github-user-credential";
 import { createPostgresBuilderProvisionJournalStore } from "./postgres-journal";
-import { executeBuilderProvisioning, readBuilderProvisioning } from "./service";
+import {
+  executeBuilderProvisioning,
+  projectBuilderProvisioning,
+  readBuilderProvisioning,
+} from "./service";
 
 const noStore = { "Cache-Control": "no-store" } as const;
 
@@ -62,7 +66,7 @@ export function createBuilderProvisioningRouteHandler(input: {
           return row
             ? Response.json(
                 builderProvisionProjectionSchema.parse({
-                  provisioning: row.record.response,
+                  provisioning: projectBuilderProvisioning(row),
                   revision: row.revision,
                 }),
                 { headers: noStore },
@@ -122,12 +126,9 @@ export function createBuilderProvisioningRouteHandler(input: {
 let handler: ((request: Request) => Promise<Response>) | undefined;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function getBuilderProvisioningDeploymentHandler(
+export function createBuilderProvisioningDependencies(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
-  if (handler) {
-    return handler;
-  }
   const preview = readPreviewOAuthRuntimeConfig(environment);
   const database = openHostedPostgresDatabase(preview.databaseUrl);
   const vercelConfig = readVercelIntegrationEnvironment(environment);
@@ -154,6 +155,17 @@ export function getBuilderProvisioningDeploymentHandler(
       }),
     vercelConfig,
   };
+  return { database, dependencies, preview };
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function getBuilderProvisioningDeploymentHandler(
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+) {
+  if (handler) {
+    return handler;
+  }
+  const { dependencies, preview } = createBuilderProvisioningDependencies(environment);
   handler = createBuilderProvisioningRouteHandler({
     async authorityForRequest(request) {
       const session = await ensurePreviewOAuthDeploymentSessionOrganization({

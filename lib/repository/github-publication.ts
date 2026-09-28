@@ -6,6 +6,12 @@ import { parseSourceReceiptEvidence } from "./source-receipt";
 import type { SourceReceiptEvidence } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
+import { githubPermissionsFor } from "./github-permissions";
+import type { GitHubOperation, GitHubPermissions } from "./github-permissions";
+import { parseGitHubTargetAccessProof } from "./github-target-access-proof";
+import type { GitHubTargetAccessProof } from "./github-target-access-proof";
+import type { z } from "zod";
+import type { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
 
 export const GITHUB_PUBLICATION_VERSION = 2 as const;
@@ -14,19 +20,8 @@ export const REPOSITORY_RELEASE_GATE = "REPOSITORY_RELEASE_ENABLED" as const;
 type Digest = string;
 type ObjectId = string;
 export type GitHubRepositorySelection = "all" | "selected";
-export type GitHubOperation =
-  | "resolve-existing-source"
-  | "create-fresh-repository"
-  | "publish-draft-pull-request";
-
-interface GitHubPermissions {
-  metadata: "read";
-  contents: "read" | "write";
-  workflows: "none" | "write";
-  pullRequests: "none" | "write";
-  administration: "none" | "write";
-  variables: "read";
-}
+export { githubPermissionsFor } from "./github-permissions";
+export type { GitHubOperation } from "./github-permissions";
 
 export interface GitHubInstallationIdentity {
   version: typeof GITHUB_PUBLICATION_VERSION;
@@ -246,7 +241,15 @@ export interface DraftPublicationReadBack {
 
 export type GitHubMutationAcknowledgement =
   | { status: "accepted"; requestId: string }
-  | { status: "rejected"; code: string; path?: string };
+  | { status: "rejected"; code: string; path?: string }
+  | {
+      status: "rejected";
+      code: "github-file-write-failed";
+      operation: "create-blob";
+      path: string;
+      bytes: number;
+      providerStatus?: number;
+    };
 
 interface GitHubPublicationFileState {
   mode: string;
@@ -335,7 +338,18 @@ export interface GitHubSourceResolutionAdapter {
   }) => Promise<GitHubRepositoryObservation>;
 }
 
+export interface GitHubTargetSourceResolutionAdapter {
+  inspectTargetAccess: (repositoryId: string) => Promise<GitHubTargetAccessProof>;
+  inspectRepository: (input: {
+    proof: GitHubTargetAccessProof;
+    repositoryId: string;
+    ref: string;
+  }) => Promise<GitHubRepositoryObservation>;
+}
+
 export interface GitHubPublicationAdapter extends GitHubSourceResolutionAdapter {
+  /** Available when the provider can prove access to one repository without listing the installation. */
+  targetSourceAdapter?: GitHubTargetSourceResolutionAdapter;
   inspectExistingDraft: (input: {
     repositoryId: string;
     owner: string;
@@ -521,45 +535,6 @@ function canonicalWithoutDigest<T extends { digest: string }>(value: T) {
 function exactDigest(value: { digest: string }, label: string): void {
   if (!isDigest(value.digest) || digest(canonicalWithoutDigest(value)) !== value.digest) {
     throw new Error(`${label} digest is malformed.`);
-  }
-}
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function githubPermissionsFor(operation: GitHubOperation): GitHubPermissions {
-  switch (operation) {
-    case "resolve-existing-source": {
-      return {
-        administration: "none",
-        contents: "read",
-        metadata: "read",
-        pullRequests: "none",
-        variables: "read",
-        workflows: "none",
-      };
-    }
-    case "create-fresh-repository": {
-      return {
-        administration: "write",
-        contents: "write",
-        metadata: "read",
-        pullRequests: "none",
-        variables: "read",
-        workflows: "write",
-      };
-    }
-    case "publish-draft-pull-request": {
-      return {
-        administration: "none",
-        contents: "write",
-        metadata: "read",
-        pullRequests: "write",
-        variables: "read",
-        workflows: "write",
-      };
-    }
-    default: {
-      throw new Error(`Unsupported GitHub operation: ${operation}`);
-    }
   }
 }
 
@@ -1212,6 +1187,64 @@ export async function resolveImmutableExistingSource(input: {
   }
   const unsigned = {
     installationIdentityDigest: installation.digest,
+    repository,
+    resolvedByCallId: input.resolvedByCallId,
+    resolvedRef: input.ref,
+    resolvedSha: repository.headSha,
+    resolvedTree: repository.headTree,
+    version: GITHUB_PUBLICATION_VERSION,
+  };
+  return { ...unsigned, digest: digest(unsigned) };
+}
+
+/** Issues the same immutable source receipt from a tenant-bound, target-scoped proof. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export async function resolveImmutableExistingSourceWithTargetProof(input: {
+  adapter: GitHubTargetSourceResolutionAdapter;
+  authority: z.input<typeof hostedTenantAuthoritySchema>;
+  expectedInstallationId: string;
+  repositoryId: string;
+  ref: string;
+  expectedSha: ObjectId;
+  expectedTree: ObjectId;
+  resolvedByCallId: string;
+}): Promise<ImmutableGitHubSourceReceipt> {
+  if (
+    !isDecimal(input.expectedInstallationId) ||
+    !isDecimal(input.repositoryId) ||
+    !safeHeadRef(input.ref) ||
+    !isObjectId(input.expectedSha) ||
+    !isObjectId(input.expectedTree)
+  ) {
+    throw new Error("The immutable source request is invalid.");
+  }
+  const proof = parseGitHubTargetAccessProof(
+    await input.adapter.inspectTargetAccess(input.repositoryId),
+    input.authority,
+  );
+  if (
+    proof.operation !== "resolve-existing-source" ||
+    proof.installationId !== input.expectedInstallationId ||
+    proof.repositoryId !== input.repositoryId
+  ) {
+    throw new Error("The installation is not selected for source resolution.");
+  }
+  const repository = await input.adapter.inspectRepository({
+    proof,
+    ref: input.ref,
+    repositoryId: input.repositoryId,
+  });
+  assertExactRepositoryObservation(repository);
+  if (
+    repository.installationIdentityDigest !== proof.digest ||
+    repository.repositoryId !== input.repositoryId ||
+    repository.headSha !== input.expectedSha ||
+    repository.headTree !== input.expectedTree
+  ) {
+    throw new Error("The GitHub source changed or is outside the approved installation.");
+  }
+  const unsigned = {
+    installationIdentityDigest: proof.digest,
     repository,
     resolvedByCallId: input.resolvedByCallId,
     resolvedRef: input.ref,
@@ -1926,6 +1959,13 @@ async function reclaimRejectedDraftPending(
 const publicationRejectionMessage = (
   acknowledgement: Extract<GitHubMutationAcknowledgement, { status: "rejected" }>,
 ): string => {
+  if (acknowledgement.code === "github-file-write-failed" && "bytes" in acknowledgement) {
+    const providerStatus =
+      acknowledgement.providerStatus === undefined
+        ? ""
+        : ` (GitHub HTTP ${acknowledgement.providerStatus})`;
+    return `GitHub could not complete ${acknowledgement.operation} for ${acknowledgement.path} (${acknowledgement.bytes} bytes)${providerStatus}. Check the repository's current GitHub limits and retry after correcting the file or provider issue; then validate and approve the updated publication.`;
+  }
   if (acknowledgement.code === "reviewed-path-changed" && "path" in acknowledgement) {
     return `Reviewed content changed at ${acknowledgement.path}. Refresh the repository observation and reviewed diff, reseal the proposal, and request publication approval again.`;
   }

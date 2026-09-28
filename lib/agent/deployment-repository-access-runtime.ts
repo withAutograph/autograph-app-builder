@@ -10,7 +10,7 @@ import { readGitHubAppInstallationEnvironment } from "../auth/github-app-install
 import { createPostgresWorkspaceMembership } from "../eve/postgres-workspace-membership";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { createPostgresRepositoryAccessContinuationStore } from "../integrations/postgres-repository-access-continuation";
-import { classifyGitHubRepositoryAccess } from "../integrations/repository-access";
+import { classifyGitHubRepositoryAccessWithTargetProof } from "../integrations/repository-access";
 import type {
   GitHubRepositoryAccessProvider,
   ReadyRepositoryAccess,
@@ -18,7 +18,10 @@ import type {
 } from "../integrations/repository-access";
 import { createRepositoryAccessContinuationService } from "../integrations/repository-access-continuation";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
-import { createGitHubAppSourceResolutionAdapter } from "../repository/github-app-adapter";
+import {
+  createGitHubAppSourceResolutionAdapter,
+  createGitHubTargetSourceResolutionAdapter,
+} from "../repository/github-app-adapter";
 import type { GitHubAppSourceResolutionProvider } from "../repository/github-app-adapter";
 import {
   createGitHubAppHttpProvider,
@@ -31,6 +34,7 @@ import {
 import {
   assertExactImmutableGitHubSourceReceipt,
   resolveImmutableExistingSource,
+  resolveImmutableExistingSourceWithTargetProof,
 } from "../repository/github-publication";
 import type { ImmutableGitHubSourceReceipt } from "../repository/github-publication";
 import {
@@ -147,8 +151,12 @@ export function createRepositoryAccessRuntime(input: {
     ownerUserId: string;
   };
   origin: string;
-  installations: Parameters<typeof classifyGitHubRepositoryAccess>[0]["installations"];
-  providerFactory: Parameters<typeof classifyGitHubRepositoryAccess>[0]["providerFactory"];
+  installations: Parameters<
+    typeof classifyGitHubRepositoryAccessWithTargetProof
+  >[0]["installations"];
+  providerFactory: Parameters<
+    typeof classifyGitHubRepositoryAccessWithTargetProof
+  >[0]["providerFactory"];
   continuations: ReturnType<typeof createRepositoryAccessContinuationService>;
   protectionBypassSecret?: string;
   preparedIntent?: BuilderHandoffIntent;
@@ -161,7 +169,7 @@ export function createRepositoryAccessRuntime(input: {
     const selected = withPreparedGitHubSelection(repositoryInput, input.preparedIntent);
     const deniedInstallations = new Set<string>();
     let unavailable = false;
-    const result = await classifyGitHubRepositoryAccess({
+    const result = await classifyGitHubRepositoryAccessWithTargetProof({
       authority: input.authority,
       ...selected,
       installations: input.installations,
@@ -174,6 +182,22 @@ export function createRepositoryAccessRuntime(input: {
           throw error;
         }
         return {
+          ...(provider.inspectTargetAccess === undefined
+            ? {}
+            : {
+                async inspectTargetAccess(
+                  value: Parameters<
+                    NonNullable<GitHubRepositoryAccessProvider["inspectTargetAccess"]>
+                  >[0],
+                ) {
+                  try {
+                    return await provider.inspectTargetAccess?.(value);
+                  } catch (error) {
+                    unavailable = true;
+                    throw error;
+                  }
+                },
+              }),
           async inspectInstallation(value) {
             try {
               return await provider.inspectInstallation(value);
@@ -377,15 +401,30 @@ export function createRepositoryAccessRuntime(input: {
       }
 
       const ref = `refs/heads/${value.revision?.branch ?? value.access.repository.defaultBranch}`;
-      const observedGitHubSource = await resolveImmutableExistingSource({
-        adapter: createGitHubAppSourceResolutionAdapter(provider),
+      const resolution = {
         expectedInstallationId: binding.installationId,
         expectedSha: value.revision?.headSha ?? value.access.repository.headSha,
         expectedTree: value.revision?.headTree ?? value.access.repository.headTree,
         ref,
         repositoryId: value.access.repository.repositoryId,
         resolvedByCallId: value.callId,
-      });
+      };
+      const observedGitHubSource = provider.inspectTargetAccess
+        ? await resolveImmutableExistingSourceWithTargetProof({
+            ...resolution,
+            adapter: createGitHubTargetSourceResolutionAdapter(
+              {
+                inspectRepository: provider.inspectRepository,
+                inspectTargetAccess: provider.inspectTargetAccess,
+              },
+              input.authority,
+            ),
+            authority: input.authority,
+          })
+        : await resolveImmutableExistingSource({
+            ...resolution,
+            adapter: createGitHubAppSourceResolutionAdapter(provider),
+          });
       // Repository metadata is diagnostic context, not a source-drift gate.
       // The provider-created checkout below is the source the builder uses.
       assertExactImmutableGitHubSourceReceipt(observedGitHubSource);

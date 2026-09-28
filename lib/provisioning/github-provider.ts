@@ -9,7 +9,7 @@ import type { GitHubUserCredentialStore } from "./github-user-credential";
 import type { BuilderProvisionAuthority } from "./journal";
 import { suffixedProviderName } from "./names";
 import type { StarterSource } from "./starter-source";
-import { runSequentiallyUntil } from "../async-sequential.ts";
+import { runSequentiallyUntilAsync } from "../async-sequential.ts";
 
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -82,6 +82,23 @@ function marker(requestId: string) {
 function suffix() {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
   return [...randomBytes(6)].map((value) => alphabet[value % alphabet.length]).join("");
+}
+
+// eslint-disable-next-line eslint/func-style -- Shared by the GitHub request boundary.
+function retryAfterMilliseconds(headers: unknown, now: number): number | undefined {
+  if (!record(headers)) {
+    return undefined;
+  }
+  const raw = headers["retry-after"];
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.ceil(seconds * 1000);
+  }
+  const date = Date.parse(raw);
+  return Number.isFinite(date) ? Math.max(0, date - now) : undefined;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -164,8 +181,12 @@ export async function provisionGitHubRepository(input: {
   source: StarterSource;
   persistedCandidates: readonly string[];
   persistedAbsentCandidates: readonly string[];
+  /** Recheck every prior candidate before a retry can issue another write. */
+  reconcilePriorWrite?: boolean;
   persistCandidate: (candidate: string) => Promise<void>;
   persistAbsent: (candidate: string) => Promise<void>;
+  renewLease?: () => Promise<void>;
+  recordRetryAfter?: (milliseconds: number) => void;
   fetch?: typeof fetch;
   now?: () => number;
   generateSuffix?: () => string;
@@ -189,6 +210,9 @@ export async function provisionGitHubRepository(input: {
     expected: readonly number[];
   }): Promise<JsonResponse> {
     try {
+      if (args.method === "POST") {
+        await input.renewLease?.();
+      }
       const response = await createGitHubTokenOctokit({
         fetch: request,
         token: args.token,
@@ -202,8 +226,19 @@ export async function provisionGitHubRepository(input: {
     } catch (error) {
       const status = record(error) ? error.status : undefined;
       const response = record(error) ? error.response : undefined;
+      const headers = record(response) ? response.headers : undefined;
+      const retryAfter = retryAfterMilliseconds(headers, now());
+      if (retryAfter !== undefined) {
+        input.recordRetryAfter?.(retryAfter);
+      }
       if (status === 401) {
         throw new Error("credential-rejected", { cause: error });
+      }
+      if (status === 429 || (status === 403 && retryAfter !== undefined)) {
+        throw new Error("provider-rate-limited", { cause: error });
+      }
+      if (status === 403) {
+        throw new Error("provider-permission-denied", { cause: error });
       }
       if (typeof status === "number" && args.expected.includes(status)) {
         return {
@@ -483,14 +518,49 @@ export async function provisionGitHubRepository(input: {
       path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/git/trees/${headTree}?recursive=1`,
       token,
     });
-    if (property(tree.body, "truncated") !== false) {
-      throw new Error("tree-truncated");
-    }
     const entries = property(tree.body, "tree");
     if (!Array.isArray(entries)) {
       throw new TypeError("invalid-response");
     }
-    const observed = entries
+    const completeEntries: unknown[] = [];
+    if (property(tree.body, "truncated") === true) {
+      const queue = [{ path: "", sha: headTree }];
+      for (const directory of queue) {
+        // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Git tree traversal must discover children before reading them.
+        const page = await github({
+          expected: [200],
+          path: `/repos/${encodeURIComponent(input.installation.accountLogin)}/${encodeURIComponent(name)}/git/trees/${directory.sha}`,
+          token,
+        });
+        if (property(page.body, "truncated") !== false) {
+          throw new Error(
+            `github-tree-directory-truncated:${input.installation.accountLogin}/${name}@${headSha}:${directory.path || "."}; split this directory and retry`,
+          );
+        }
+        const pageEntries = property(page.body, "tree");
+        if (!Array.isArray(pageEntries)) {
+          throw new TypeError("invalid-response");
+        }
+        for (const entry of pageEntries) {
+          if (!record(entry)) {
+            throw new TypeError("invalid-response");
+          }
+          const path = `${directory.path}${stringProperty(entry, "path")}`;
+          if (stringProperty(entry, "type") === "tree") {
+            queue.push({ path: `${path}/`, sha: objectId.parse(stringProperty(entry, "sha")) });
+          } else {
+            completeEntries.push({ ...entry, path });
+          }
+        }
+      }
+    } else if (property(tree.body, "truncated") === false) {
+      for (const entry of entries) {
+        completeEntries.push(entry);
+      }
+    } else {
+      throw new TypeError("invalid-response");
+    }
+    const observed = completeEntries
       .filter((entry) => record(entry) && entry.type === "blob")
       .map((entry) => ({
         mode: stringProperty(entry, "mode"),
@@ -543,26 +613,67 @@ export async function provisionGitHubRepository(input: {
     };
   }
 
-  try {
-    const candidates = [...input.persistedCandidates];
-    for (let generated = 0; candidates.length < 5 && generated < 20; generated += 1) {
+  if (input.reconcilePriorWrite) {
+    try {
+      let uncertainWrite = false;
+      for (const candidate of input.persistedCandidates) {
+        if (!input.persistedAbsentCandidates.includes(candidate)) {
+          continue;
+        }
+        uncertainWrite = true;
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Inspect all prior candidates before permitting a new write.
+        const observed = await repository(candidate);
+        if (observed.status === 404) {
+          continue;
+        }
+        if (stringProperty(observed.body, "description") !== marker(input.requestId)) {
+          return { code: "reconciliation_uncertain", retryable: false, status: "failed" };
+        }
+        try {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Exact readback proves which previous write completed.
+          return await readBack(candidate);
+        } catch {
+          return { code: "reconciliation_uncertain", retryable: false, status: "failed" };
+        }
+      }
+      if (uncertainWrite) {
+        // A 404 is not authoritative evidence that a previous POST did not commit.
+        return { code: "reconciliation_uncertain", retryable: false, status: "failed" };
+      }
+    } catch {
+      return { code: "provider_unavailable", retryable: true, status: "failed" };
+    }
+  }
+
+  const candidates = async function* candidates(): AsyncGenerator<string> {
+    const seen = new Set<string>();
+    for (const candidate of input.persistedCandidates) {
+      if (!seen.has(candidate)) {
+        seen.add(candidate);
+        yield candidate;
+      }
+    }
+    for (;;) {
       const candidate =
-        candidates.length === 0
+        seen.size === 0
           ? input.requestedName
           : suffixedProviderName({
               base: input.requestedName,
               maximumLength: 100,
               suffix: (input.generateSuffix ?? suffix)(),
             });
-      if (candidates.includes(candidate)) {
+      if (seen.has(candidate)) {
         continue;
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- each candidate must be durably recorded before the next provider operation.
       await input.persistCandidate(candidate);
-      candidates.push(candidate);
+      seen.add(candidate);
+      yield candidate;
     }
-    const result = await runSequentiallyUntil<(typeof candidates)[number], GitHubProvisionResult>(
-      candidates.slice(0, 5),
+  };
+  try {
+    const result = await runSequentiallyUntilAsync<string, GitHubProvisionResult>(
+      candidates(),
       async (candidate) => {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
         const before = await repository(candidate);
@@ -595,8 +706,20 @@ export async function provisionGitHubRepository(input: {
           if (created.status === 422) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
             const recovered = await repository(candidate);
-            if (recovered.status !== 200) {
-              return null;
+            const recoveredOwned =
+              recovered.status === 200 &&
+              stringProperty(recovered.body, "description") === marker(input.requestId);
+            if (!recoveredOwned) {
+              const errors = record(created.body) ? created.body.errors : undefined;
+              const confirmedCollision =
+                Array.isArray(errors) &&
+                errors.some(
+                  (error) =>
+                    record(error) && error.field === "name" && error.code === "already_exists",
+                );
+              return confirmedCollision
+                ? null
+                : { code: "provider_validation_failed", retryable: false, status: "failed" };
             }
           } else {
             // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -637,7 +760,7 @@ export async function provisionGitHubRepository(input: {
         }
       },
     );
-    return result ?? { code: "name_conflict", retryable: true, status: "failed" };
+    return result ?? { code: "provider_unavailable", retryable: true, status: "failed" };
   } catch (error) {
     if (error instanceof Error && error.message === "credential-rejected") {
       await input.credentialStore.deactivate({
@@ -650,6 +773,12 @@ export async function provisionGitHubRepository(input: {
         retryable: true,
         status: "failed",
       };
+    }
+    if (error instanceof Error && error.message === "provider-rate-limited") {
+      return { code: "provider_rate_limited", retryable: true, status: "failed" };
+    }
+    if (error instanceof Error && error.message === "provider-permission-denied") {
+      return { code: "provider_permission_denied", retryable: false, status: "failed" };
     }
     return {
       code:

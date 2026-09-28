@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, or, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
@@ -82,6 +82,65 @@ export function createPostgresBuilderProvisionJournalStore(
         )
         .returning();
       return rows[0] ? parseRow(rows[0]) : undefined;
+    },
+    async listDue(input) {
+      const cursor = input.after;
+      const rows = await database
+        .select()
+        .from(builderProvisioningJournals)
+        .where(
+          and(
+            or(
+              sql`(${builderProvisioningJournals.record} #>> '{operations,github,nextRetryAt}')::timestamptz <= ${input.now}`,
+              sql`(${builderProvisioningJournals.record} #>> '{operations,vercel,nextRetryAt}')::timestamptz <= ${input.now}`,
+            ),
+            cursor
+              ? sql`(${builderProvisioningJournals.issuer}, ${builderProvisioningJournals.audience}, ${builderProvisioningJournals.workspaceId}, ${builderProvisioningJournals.ownerUserId}, ${builderProvisioningJournals.requestId}) > (${cursor.issuer}, ${cursor.audience}, ${cursor.workspaceId}, ${cursor.ownerUserId}, ${cursor.requestId})`
+              : undefined,
+          ),
+        )
+        .orderBy(
+          asc(builderProvisioningJournals.issuer),
+          asc(builderProvisioningJournals.audience),
+          asc(builderProvisioningJournals.workspaceId),
+          asc(builderProvisioningJournals.ownerUserId),
+          asc(builderProvisioningJournals.requestId),
+        )
+        .limit(input.limit);
+      const items: {
+        authority: BuilderProvisionAuthority;
+        requestId: string;
+        operation: "github" | "vercel";
+      }[] = [];
+      for (const raw of rows) {
+        const row = parseRow(raw);
+        for (const operation of ["github", "vercel"] as const) {
+          const state = row.record.operations[operation];
+          const result = row.record.response[operation];
+          const retryDue =
+            state.nextRetryAt !== undefined && Date.parse(state.nextRetryAt) <= input.now.getTime();
+          const leaseAvailable =
+            state.leaseExpiresAt === undefined ||
+            Date.parse(state.leaseExpiresAt) <= input.now.getTime();
+          if (result.status === "failed" && result.retryable && retryDue && leaseAvailable) {
+            items.push({ authority: row.authority, operation, requestId: row.requestId });
+          }
+        }
+      }
+      const last = rows.at(-1);
+      const page: Awaited<ReturnType<NonNullable<BuilderProvisionJournalStore["listDue"]>>> = {
+        items,
+      };
+      if (last && rows.length === input.limit) {
+        page.nextCursor = {
+          audience: last.audience,
+          issuer: last.issuer,
+          ownerUserId: last.ownerUserId,
+          requestId: last.requestId,
+          workspaceId: last.workspaceId,
+        };
+      }
+      return page;
     },
     read,
     async reserve(input) {

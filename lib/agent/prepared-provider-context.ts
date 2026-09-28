@@ -7,6 +7,7 @@ import type { RepositoryAccessResult } from "../integrations/repository-access";
 import type { VercelInstallationBinding } from "../integrations/vercel-installation";
 import type { openHostedPostgresDatabase } from "../mcp/hosted-route";
 import type { RepositoryAccessToolInput } from "./repository-access-tool";
+import { readJsonStringChecks } from "./streaming-json-pointer";
 
 // Cache infrastructure only. Handoff, membership, bindings, and decrypted
 // credentials are re-read for the authenticated tenant on each invocation.
@@ -101,37 +102,6 @@ const reconnect = (): PreparedVercelAccess => ({
   status: "authorization-required",
 });
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function boundedJson(response: Response): Promise<unknown> {
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error("invalid-response");
-  }
-  const chunks: Uint8Array[] = [];
-  let length = 0;
-  for (;;) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-    length += value.byteLength;
-    if (length > 2 * 1024 * 1024) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-      await reader.cancel();
-      throw new Error("invalid-response");
-    }
-    chunks.push(value);
-  }
-  const bytes = new Uint8Array(length);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-}
-
 /** Server-only credential read followed by a fresh, read-only provider request. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readPreparedVercelAccess(input: {
@@ -211,7 +181,6 @@ export async function readPreparedVercelAccess(input: {
       await response.body?.cancel();
       return unavailable();
     }
-    const body = await boundedJson(response);
     const scope: VercelScope = {
       id: binding.scopeId,
       installationId,
@@ -219,30 +188,30 @@ export async function readPreparedVercelAccess(input: {
       type: binding.scopeType,
     };
     if (project) {
-      const observed = z
-        .object({
-          accountId: z.string().min(1).optional(),
-          id: z.string().min(1),
-          name: z.string().min(1),
-        })
-        .parse(body);
-      if (
-        observed.id !== project.projectId ||
-        (observed.accountId !== undefined && observed.accountId !== binding.scopeId)
-      ) {
+      const observed = await readJsonStringChecks(response.body, [
+        { expected: project.projectId, pointer: "/id" },
+        { capture: true, pointer: "/name" },
+        { expected: binding.scopeId, optional: true, pointer: "/accountId" },
+      ]);
+      const [idMatches, hasName, accountMatches] = observed.matches;
+      if (!idMatches || !hasName || !accountMatches) {
         return unavailable();
       }
       return {
-        project: { id: observed.id, name: observed.name },
+        project: { id: project.projectId, name: observed.values[1] ?? project.name },
         scope,
         status: "ready",
       };
     }
-    const observed =
-      binding.scopeType === "team"
-        ? z.object({ id: z.string() }).parse(body)
-        : z.object({ user: z.object({ id: z.string() }) }).parse(body).user;
-    if (observed.id !== binding.scopeId) {
+    const {
+      matches: [scopeMatches],
+    } = await readJsonStringChecks(response.body, [
+      {
+        expected: binding.scopeId,
+        pointer: binding.scopeType === "team" ? "/id" : "/user/id",
+      },
+    ]);
+    if (!scopeMatches) {
       return unavailable();
     }
     return { scope, status: "ready" };

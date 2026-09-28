@@ -173,6 +173,7 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
       return composeGitHubPublicationRuntime({
         adapter,
         adoptions: stores.adoptions ?? createPostgresGitHubDraftAdoptionStore(pool, authority),
+        authority,
         enabled: true,
         proposals: stores.proposals,
         receipts: stores.receipts,

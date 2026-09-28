@@ -10,6 +10,7 @@ import {
   executeProposalBoundValidation,
   sandboxValidationCommandExecutor,
   validationOutputExcerpt,
+  sanitizeValidationDiagnosticText,
 } from "./target-validation";
 
 const digest = (value: string) => value.repeat(64).slice(0, 64);
@@ -103,17 +104,28 @@ describe("target validation", () => {
     });
     expect(JSON.stringify(result)).not.toContain("secret-test-value");
   });
-  it("retains bounded repair diagnostics while redacting common credentials", () => {
+  it("retains complete repair diagnostics while redacting common credentials", () => {
     const excerpt = validationOutputExcerpt(
       `apps/example/app/page.tsx(4,2): error TS2304: MissingThing ${"x".repeat(7000)}`,
       "Authorization: Bearer abc123\nAPI_KEY=super-secret\nCookie: session=private",
     );
     expect(excerpt.stdout).toContain("TS2304: MissingThing");
-    expect(excerpt.stdout).toContain("[output truncated; showing beginning and end]");
+    expect(excerpt.stdout).toContain("x".repeat(7000));
     expect(excerpt.stderr).not.toContain("abc123");
     expect(excerpt.stderr).not.toContain("super-secret");
     expect(excerpt.stderr).not.toContain("session=private");
     expect(excerpt.truncated).toBe(true);
+  });
+  it("redacts complete diagnostic text, including lines omitted from the repair excerpt", () => {
+    const raw =
+      "starting build\nhttps://user:password@example.test/path\nBearer abc123\nAPI_KEY=super-secret\napps/example/app/page.tsx(4,2): error TS2304: MissingThing";
+    const sanitized = sanitizeValidationDiagnosticText(raw);
+    expect(sanitized).toContain("starting build");
+    expect(sanitized).toContain("TS2304: MissingThing");
+    expect(sanitized).not.toContain("password@example");
+    expect(sanitized).not.toContain("abc123");
+    expect(sanitized).not.toContain("super-secret");
+    expect(validationOutputExcerpt(raw, "").truncated).toBe(true);
   });
 
   it("retains schema compiler failures and their repair guidance", () => {
@@ -138,7 +150,7 @@ describe("target validation", () => {
     );
     expect(excerpt.stderr).toContain("amount must be numeric");
     expect(excerpt.stderr).toContain("final constraint failure");
-    expect(excerpt.truncated).toBe(true);
+    expect(excerpt.truncated).toBe(false);
   });
 
   it("retains native toolchain repair steps when the failure has no CUE location", () => {
@@ -261,7 +273,7 @@ describe("target validation", () => {
     expect(JSON.stringify(result)).not.toContain("private-value");
   });
 
-  it("keeps timeout stage and safely bounds provider error details", async () => {
+  it("keeps timeout stage and full redacted provider error details", async () => {
     const { sandbox } = sandboxFixture();
     const timeout = new Error(
       `Authorization: Bearer private-bearer https://user:password@example.test/path ghp_privatekey ${"x".repeat(3000)}`,
@@ -294,11 +306,11 @@ describe("target validation", () => {
     }
     const hint = result.receipt.commandFailure?.hint ?? "";
     expect(hint).toContain("timed out while running");
-    expect(hint).toContain("[error detail truncated]");
+    expect(hint).toContain("x".repeat(3000));
     expect(hint).not.toContain("private-bearer");
     expect(hint).not.toContain("password");
     expect(hint).not.toContain("ghp_privatekey");
-    expect(hint.length).toBeLessThan(1500);
+    expect(hint.length).toBeGreaterThan(3000);
   });
 
   it("identifies the failing validation command after an earlier command passed", async () => {

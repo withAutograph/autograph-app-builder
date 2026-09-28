@@ -124,8 +124,6 @@ export type TargetValidationResult =
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
-const VALIDATION_OUTPUT_LIMIT = 6000;
-const EXECUTION_ERROR_LIMIT = 1200;
 const ansiPattern = new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, "gu");
 const sensitiveAssignmentPattern =
   /(?<name>authorization|cookie|password|passwd|secret|token|api[-_]?key)(?<separator>\s*[:=]\s*)(?<value>[^\s,;]+)/giu;
@@ -137,23 +135,27 @@ const repairLinePattern =
   /(?:^|\s)(?:apps\/|error(?:\s+TS\d+|:)|typescript\(TS\d+\)|FAIL\s|Build failed|Failed to compile|Module not found|Cannot find (?:module|name)|Script not found|Formatting issues found|stale iteration preimage|schema-compiler:|Schema compilation failed|Schema release generation failed|The schema compiler produced invalid JSON|Compiler output excerpt:|ToolNotFound:|linker\s+[`"']?cc|cue:|cargo:|rustc:|mise(?:\s+ERROR|:)|The compiler produced no diagnostic output|The compiler returned no output|No CUE source location was reported|Install a native C compiler|Install the repository's locked mise tools|Read the compiler error and its CUE file location|Retry:)/iu;
 const diagnosticContinuationPattern = /^(?:\s+\S|\s*\^|\s*\||\s*(?:caused by|help|note|retry):)/iu;
 
+/** Redact complete provider output before any durable diagnostic write. */
+export const sanitizeValidationDiagnosticText = (value: string): string =>
+  value
+    .replaceAll(ansiPattern, "")
+    .replaceAll(/\p{Cc}/gu, (character) =>
+      character === "\t" || character === "\n" || character === "\r" ? character : "",
+    )
+    .replaceAll(credentialUrlPattern, "$<scheme>[REDACTED]@")
+    .replaceAll(bearerPattern, "Bearer [REDACTED]")
+    .replaceAll(sensitiveAssignmentPattern, "$<name>$<separator>[REDACTED]")
+    .replaceAll(credentialPrefixPattern, "[REDACTED]")
+    .replaceAll(/(?:\/workspace\/repository\/)?(?=apps\/)/gu, "");
+
 // Keep enough compiler/build output for an agent to repair its own candidate,
 // while excluding control bytes and common credential forms from durable state.
 export const validationOutputExcerpt = (
   stdout: string,
   stderr: string,
 ): TargetValidationOutputExcerpt => {
-  let truncated = false;
   const sanitize = (value: string) => {
-    const lines = value
-      .replaceAll(ansiPattern, "")
-      .replaceAll(/\p{Cc}/gu, (character) =>
-        character === "\t" || character === "\n" || character === "\r" ? character : "",
-      )
-      .replaceAll(bearerPattern, "Bearer [REDACTED]")
-      .replaceAll(sensitiveAssignmentPattern, "$<name>$<separator>[REDACTED]")
-      .replaceAll(/(?:\/workspace\/repository\/)?(?=apps\/)/gu, "")
-      .split("\n");
+    const lines = sanitizeValidationDiagnosticText(value).split("\n");
     const retained = new Set<number>();
     for (const [index, line] of lines.entries()) {
       if (!repairLinePattern.test(line)) continue;
@@ -169,14 +171,18 @@ export const validationOutputExcerpt = (
       .filter((_line, index) => retained.has(index))
       .join("\n")
       .trim();
-    if (cleaned.length <= VALIDATION_OUTPUT_LIMIT) {
-      return cleaned;
-    }
-    truncated = true;
-    const portion = Math.floor(VALIDATION_OUTPUT_LIMIT / 2);
-    return `${cleaned.slice(0, portion)}\n[output truncated; showing beginning and end]\n${cleaned.slice(-portion)}`;
+    return {
+      cleaned,
+      omitted: lines.some((line, index) => line.trim().length > 0 && !retained.has(index)),
+    };
   };
-  return { stderr: sanitize(stderr), stdout: sanitize(stdout), truncated };
+  const safeStdout = sanitize(stdout);
+  const safeStderr = sanitize(stderr);
+  return {
+    stderr: safeStderr.cleaned,
+    stdout: safeStdout.cleaned,
+    truncated: safeStdout.omitted || safeStderr.omitted,
+  };
 };
 
 // A provider can throw before it returns a command result. Keep its useful
@@ -211,10 +217,7 @@ const executionErrorDetail = (error: Error): string => {
   if (cleaned.length === 0) {
     return "The execution provider returned no error detail.";
   }
-  if (cleaned.length <= EXECUTION_ERROR_LIMIT) {
-    return cleaned;
-  }
-  return `${cleaned.slice(0, EXECUTION_ERROR_LIMIT)} [error detail truncated]`;
+  return cleaned;
 };
 
 const compilerDiagnosticPatterns = [
