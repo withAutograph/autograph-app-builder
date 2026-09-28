@@ -361,6 +361,21 @@ describe("installed Eve 0.43 projection", () => {
     });
   });
 
+  it("never treats a recorded Markdown AppSpec as Browser HTML", () => {
+    const events = structuredClone(recordedPrototypeEvents());
+    const request = events[0] as MessageStreamEvent & {
+      data: { actions: [{ input: { path: string; mediaType: string } }] };
+    };
+    const receipt = events[1] as MessageStreamEvent & {
+      data: { result: { output: { path: string; mediaType: string } } };
+    };
+    request.data.actions[0].input.path = "prototype/vendor-onboarding/app-spec.md";
+    request.data.actions[0].input.mediaType = "text/markdown";
+    receipt.data.result.output.path = "prototype/vendor-onboarding/app-spec.md";
+    receipt.data.result.output.mediaType = "text/markdown";
+    expect(latestInstalledPrototype(events)).toBeUndefined();
+  });
+
   it("reduces preview receipts incrementally without retaining the event history", () => {
     const reducer = createInstalledPreviewMetadataReducer();
     const content = "<main>Reviewed preview</main>";

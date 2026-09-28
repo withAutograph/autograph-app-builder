@@ -372,6 +372,14 @@ const artifactTools = new Set([
   "record_ui_preview",
   "get_prototype_artifact",
 ]);
+const markdownPrototypePath =
+  /^prototype\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/(?:app-spec|decisions)\.md$/u;
+const markdownPrototypeInputSchema = z
+  .object({
+    mediaType: z.string().optional(),
+    path: z.string().regex(markdownPrototypePath),
+  })
+  .passthrough();
 
 const v2ReadRequestSchema = z.object({
   digest: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -396,6 +404,7 @@ const v2ReadResultSchema = z.object({
 const createArtifactReadbackClassifier = (sessionId: string) => {
   const references = createInstalledPrototypeReferenceReducer({ sessionId });
   const pending = new Map<string, { input: unknown; toolName: string }>();
+  const markdownCalls = new Map<string, string>();
   const incompleteArtifacts = new Set<string>();
   const incompleteUiPreviews = new Set<string>();
   let legacy = false;
@@ -405,10 +414,20 @@ const createArtifactReadbackClassifier = (sessionId: string) => {
       if (event.type === "actions.requested") {
         for (const action of event.data.actions) {
           if (action.kind === "tool-call" && artifactTools.has(action.toolName)) {
-            if (pending.has(action.callId)) {
+            if (pending.has(action.callId) || markdownCalls.has(action.callId)) {
               legacy = true;
             }
-            pending.set(action.callId, { input: action.input, toolName: action.toolName });
+            const markdown = markdownPrototypeInputSchema.safeParse(action.input);
+            if (
+              markdown.success &&
+              (action.toolName === "get_prototype_artifact" ||
+                (action.toolName === "record_prototype_artifact" &&
+                  markdown.data.mediaType === "text/markdown"))
+            ) {
+              markdownCalls.set(action.callId, action.toolName);
+            } else {
+              pending.set(action.callId, { input: action.input, toolName: action.toolName });
+            }
           }
         }
         return;
@@ -418,6 +437,14 @@ const createArtifactReadbackClassifier = (sessionId: string) => {
       }
       const { result } = event.data;
       if (!artifactTools.has(result.toolName)) {
+        return;
+      }
+      const markdownTool = markdownCalls.get(result.callId);
+      if (markdownTool !== undefined) {
+        markdownCalls.delete(result.callId);
+        if (markdownTool !== result.toolName) {
+          legacy = true;
+        }
         return;
       }
       const request = pending.get(result.callId);

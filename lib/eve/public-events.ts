@@ -97,6 +97,7 @@ const publicSessionFailure = (
     message: `Builder could not complete ${name} (${code}). ${cause} Your progress is saved; correct the cause and resume this session.`,
   };
 };
+// Browser projection accepts only HTML; Markdown AppSpec/decision artifacts never become previews.
 const prototypePathPattern = /^prototype\/(?<appId>[a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/index\.html$/u;
 const lowercaseSha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 const sha256 = (value: string): string => createHash("sha256").update(value, "utf-8").digest("hex");

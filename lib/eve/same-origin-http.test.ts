@@ -329,6 +329,54 @@ describe("incremental canonical Eve stream", () => {
       },
       type: "actions.requested",
     };
+    const markdown = "# Spend Review";
+    const markdownPath = "prototype/spend-review/app-spec.md";
+    const markdownDigest = createHash("sha256").update(markdown).digest("hex");
+    const v1Markdown = [
+      {
+        data: {
+          actions: [
+            {
+              callId: "app-spec",
+              input: { content: markdown, mediaType: "text/markdown", path: markdownPath },
+              kind: "tool-call",
+              toolName: "record_prototype_artifact",
+            },
+          ],
+        },
+        type: "actions.requested",
+      },
+      {
+        data: {
+          result: {
+            callId: "app-spec",
+            kind: "tool-result",
+            output: {
+              appId: "spend-review",
+              digest: markdownDigest,
+              mediaType: "text/markdown",
+              path: markdownPath,
+              recordedByCallId: "app-spec",
+              reused: false,
+              revision: createHash("sha256")
+                .update(
+                  JSON.stringify({
+                    digest: markdownDigest,
+                    mediaType: "text/markdown",
+                    path: markdownPath,
+                  }),
+                )
+                .digest("hex"),
+              sessionId: "wrun_1",
+              size: Buffer.byteLength(markdown),
+            },
+            toolName: "record_prototype_artifact",
+          },
+          status: "completed",
+        },
+        type: "action.result",
+      },
+    ];
     const observe = async (events: unknown[]) =>
       await observeSameOriginEveStream({
         config: { ...config, timeoutMs: 10_000 },
@@ -340,6 +388,8 @@ describe("incremental canonical Eve stream", () => {
       });
     const v2Observed = await observe([...v2Artifact, ...v2Read, ...v2UiPreview]);
     expect(v2Observed.artifactProjectionRequiresLegacyReadback).toBe(false);
+    const mixedMarkdownObserved = await observe([...v1Markdown, ...v2Artifact, ...v2UiPreview]);
+    expect(mixedMarkdownObserved.artifactProjectionRequiresLegacyReadback).toBe(false);
     const partialV2 = [
       {
         data: {
