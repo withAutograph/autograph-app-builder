@@ -670,6 +670,7 @@ export const createGitHubAppHttpProvider = (input: {
     workflows: "write",
   };
 
+  // oxlint-disable-next-line eslint/complexity -- verify the repository, PR, branch, and Builder-authored origin in one read
   const inspectExistingDraft = async (draftRequest: {
     repositoryId: string;
     owner: string;
@@ -705,6 +706,31 @@ export const createGitHubAppHttpProvider = (input: {
       expected: [200],
       path: `/repos/${encodeURIComponent(draftRequest.owner)}/${encodeURIComponent(draftRequest.name)}/commits/${headSha}`,
     });
+    const markerMatch = /^<!-- App-Builder-Idempotency: (?<marker>[0-9a-f]{64}) -->$/u.exec(
+      String(record(pull.body) ? pull.body.body : ""),
+    );
+    let verifiedBuilderOrigin: { appId: string; authorId: string; marker: string } | undefined;
+    if (markerMatch !== null) {
+      const appInfo = await app.octokit.request("GET /app");
+      const appId = decimalProperty(appInfo.data, "id");
+      const appSlug = stringProperty(appInfo.data, "slug");
+      const author = property(pull.body, "user");
+      const commitMessage = stringProperty(property(commit.body, "commit"), "message");
+      if (
+        appId === config.appId &&
+        stringProperty(author, "type") === "Bot" &&
+        stringProperty(author, "login") === `${appSlug}[bot]` &&
+        headBranch === `app-builder/review-${markerMatch.groups?.marker?.slice(0, 20)}` &&
+        (commitMessage.includes(`App-Builder-Idempotency: ${markerMatch.groups?.marker}`) ||
+          commitMessage.includes(`App-Builder-Origin: ${markerMatch.groups?.marker}`))
+      ) {
+        verifiedBuilderOrigin = {
+          appId,
+          authorId: decimalProperty(author, "id"),
+          marker: markerMatch.groups?.marker ?? "",
+        };
+      }
+    }
     return {
       baseBranch: stringProperty(base, "ref"),
       baseRepositoryId: decimalProperty(property(base, "repo"), "id"),
@@ -721,6 +747,7 @@ export const createGitHubAppHttpProvider = (input: {
       pullRequestId: decimalProperty(pull.body, "id"),
       repositoryId: repository.repositoryId,
       state: z.enum(["open", "closed"]).parse(stringProperty(pull.body, "state")),
+      ...(verifiedBuilderOrigin === undefined ? {} : { verifiedBuilderOrigin }),
     };
   };
 
@@ -871,7 +898,7 @@ export const createGitHubAppHttpProvider = (input: {
         path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/commits/${observed.headSha}`,
       });
       const parents = property(response.body, "parents");
-      const expectedMessage = `Update draft pull request #${proposal.pullRequestNumber}\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}`;
+      const expectedMessage = `Update draft pull request #${proposal.pullRequestNumber}\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`;
       return (
         Array.isArray(parents) &&
         parents.length === 1 &&
@@ -1365,7 +1392,7 @@ export const createGitHubAppHttpProvider = (input: {
       const commit = await github({
         authorization: accessToken,
         body: {
-          message: `Update draft pull request #${proposal.pullRequestNumber}\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}`,
+          message: `Update draft pull request #${proposal.pullRequestNumber}\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`,
           parents: [current.headSha],
           tree,
         },

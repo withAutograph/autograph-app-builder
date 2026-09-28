@@ -152,15 +152,22 @@
     {
       "idx": 21,
       "version": "7",
-      "when": 1789992000000,
-      "tag": "0022_paged_session_checkpoints",
+      "when": 1790514000000,
+      "tag": "0022_hosted_github_draft_adoption",
       "breakpoints": true
     },
     {
       "idx": 22,
       "version": "7",
       "when": 1790567902244,
-      "tag": "0023_prototype_chunks",
+      "tag": "0023_paged_session_checkpoints",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790567902245,
+      "tag": "0024_prototype_chunks",
       "breakpoints": true
     }
   ]

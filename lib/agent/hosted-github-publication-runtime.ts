@@ -23,6 +23,8 @@ import type {
 } from "../repository/postgres-github-installation-store";
 import { createPostgresGitHubPublicationStores } from "../repository/postgres-github-publication-store";
 import type { GitHubPublicationProposalStore } from "../repository/postgres-github-publication-store";
+import { createPostgresGitHubDraftAdoptionStore } from "../repository/postgres-github-draft-adoption-store";
+import type { GitHubDraftAdoptionStore } from "../repository/postgres-github-draft-adoption-store";
 import { composeGitHubPublicationRuntime } from "./github-publication-runtime";
 import type { GitHubPublicationRuntime } from "./github-publication-runtime";
 
@@ -58,6 +60,7 @@ function exactGitHubPublicationAuthority(sessionAuth: unknown) {
 interface PublicationStores {
   proposals: GitHubPublicationProposalStore;
   receipts: GitHubPublicationReceiptStore;
+  adoptions?: GitHubDraftAdoptionStore;
 }
 
 export interface HostedGitHubPublicationRuntimeResolverDependencies {
@@ -170,6 +173,7 @@ export function createHostedGitHubPublicationRuntimeResolver(input: {
       return composeGitHubPublicationRuntime({
         adapter,
         authority,
+        adoptions: stores.adoptions ?? createPostgresGitHubDraftAdoptionStore(pool, authority),
         enabled: true,
         proposals: stores.proposals,
         receipts: stores.receipts,

@@ -17,7 +17,7 @@ const principal = {
 
 it("declares immutable chunks under the complete tenant and transfer key", async () => {
   const migration = await readFile(
-    new URL("../../drizzle/0023_prototype_chunks.sql", import.meta.url),
+    new URL("../../drizzle/0024_prototype_chunks.sql", import.meta.url),
     "utf-8",
   );
   for (const column of [

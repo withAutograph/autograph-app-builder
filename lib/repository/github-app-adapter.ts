@@ -154,6 +154,10 @@ const existingDraftSchema = z
     pullRequestId: decimal,
     repositoryId: decimal,
     state: z.enum(["open", "closed"]),
+    verifiedBuilderOrigin: z
+      .object({ appId: decimal, authorId: decimal, marker: digest })
+      .strict()
+      .optional(),
   })
   .strict();
 

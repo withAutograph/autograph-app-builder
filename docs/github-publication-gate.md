@@ -33,6 +33,20 @@ compare-and-set against the prior receipt digest. The earlier unscoped V5
 tables remain unused compatibility artifacts. Migration remains the mise-owned
 `database:migrate` operation.
 
+An existing Builder-created draft can be updated from a later Builder session
+even when its original publication receipt is unavailable to that tenant.
+The recovery path does not invent an original receipt. It asks GitHub for the
+current open draft, verifies the selected same-repository branch and head,
+checks that the PR author is this GitHub App's bot, and requires the same
+Builder origin marker in the PR body and current head commit. It then writes
+one immutable adoption record in `hosted_github_draft_adoption`, keyed by the
+tenant and exact repository and PR IDs. Each later Builder update commit
+preserves the origin marker so subsequent reads keep that commit-level proof.
+The sealed proposal still binds the current head and exact reviewed app-owned
+diff; a separate approval and GitHub atomic expected-OID update are required.
+If GitHub provenance cannot be verified, Builder reports that reason and leaves
+the PR branch untouched.
+
 `hosted_github_installation` binds that same tenant tuple to one exact GitHub
 App installation and expected account identity. Binding is available only
 through the owner-only, confirmation-digest-bound
