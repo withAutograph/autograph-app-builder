@@ -21,6 +21,17 @@ import {
   currentProductBehaviorEvidence,
 } from "@/lib/agent/product-behavior-state";
 
+const validationPhase = (callId: string, phase: string, detail?: string | boolean): void => {
+  console.info(
+    JSON.stringify({
+      callId,
+      event: "app_builder.validation_phase",
+      phase,
+      ...(detail === undefined ? {} : { detail }),
+    }),
+  );
+};
+
 export default defineTool({
   description:
     "Run the repository's normal validation commands against the current applied app. Command exit status is the technical validation result; successful checks also return an independent source assessment against the original product request. Neither proves runtime behavior. This does not publish or otherwise change an external repository.",
@@ -65,7 +76,9 @@ export default defineTool({
         technicalStatus: "passed" as const,
       };
     }
+    validationPhase(ctx.callId, "resolving_sandbox");
     const sandbox = await ctx.getSandbox();
+    validationPhase(ctx.callId, "sandbox_ready");
     const relativeApplyRoot = current.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
     const writeImplementationFiles = async (index: number): Promise<void> => {
       const file = input.implementationFiles[index];
@@ -106,20 +119,25 @@ export default defineTool({
     }));
     if (input.implementationFiles.length > 0) {
       clearProductBehaviorEvidence();
+      validationPhase(ctx.callId, "writing_implementation_files");
       await writeImplementationFiles(0);
+      validationPhase(ctx.callId, "implementation_files_written");
     }
     // Some repository test tasks start local services. Prepare the declared
     // local data task first so its server inherits the setup log file rather
     // than Turbo's captured test pipe, which would keep Turbo waiting after
     // the tests themselves have finished.
     if (!fixture) {
+      validationPhase(ctx.callId, "preparing_declared_local_data");
       await prepareValidationLocalData({
         appId: current.appSpec.appId,
         root: current.applyReceipt.applyRoot,
         sandbox,
         signal: ctx.abortSignal,
       });
+      validationPhase(ctx.callId, "declared_local_data_ready");
     }
+    validationPhase(ctx.callId, "running_repository_commands");
     const result = await executeProposalBoundValidation({
       appId: current.appSpec.appId,
       apply: current.applyReceipt,
@@ -128,6 +146,7 @@ export default defineTool({
       executor: fixture ? fixtureValidationCommandExecutor() : sandboxValidationCommandExecutor(),
       sandbox,
     });
+    validationPhase(ctx.callId, "repository_commands_finished", result.ok);
     if (!result.ok) {
       appBuilderWorkflowState.update(() => ({
         ...base,
@@ -152,12 +171,14 @@ export default defineTool({
       current.appSpec.digest,
       current.applyReceipt.digest,
     );
+    validationPhase(ctx.callId, "reviewing_applied_source");
     const sourceAssessment = await reviewAppliedProductSource({
       abortSignal: ctx.abortSignal,
       appSpec: current.appSpec,
       applyReceipt: current.applyReceipt,
       getSandbox: async () => await ctx.getSandbox(),
     });
+    validationPhase(ctx.callId, "applied_source_review_finished", sourceAssessment.status);
     return {
       commandCount: result.receipt.commands.length,
       productAcceptance: productAcceptanceObligations(current.appSpec, evidence, sourceAssessment),

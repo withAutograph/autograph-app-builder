@@ -490,13 +490,39 @@ export const executeProposalBoundValidation = (input: {
     }
     let result: ApplyCommandResult;
     try {
+      console.info(
+        JSON.stringify({
+          callId: input.attempt.startedByCallId,
+          command: planned.name,
+          event: "app_builder.validation_command",
+          phase: "started",
+        }),
+      );
       result = await input.executor({
         appId: input.appId,
         command: planned.command,
         sandbox: input.sandbox,
         validationRoot: planned.validationRoot,
       });
+      console.info(
+        JSON.stringify({
+          callId: input.attempt.startedByCallId,
+          command: planned.name,
+          event: "app_builder.validation_command",
+          exitCode: result.exitCode,
+          phase: "finished",
+        }),
+      );
     } catch (error) {
+      console.warn(
+        JSON.stringify({
+          callId: input.attempt.startedByCallId,
+          command: planned.name,
+          errorName: error instanceof Error ? error.name : "non_error_rejection",
+          event: "app_builder.validation_command",
+          phase: "provider_error",
+        }),
+      );
       const timedOut = error instanceof Error && error.name === "TimeoutError";
       const rejection = z.string().safeParse(error);
       let providerError: Error;
