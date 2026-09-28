@@ -2,7 +2,10 @@ import { readFile } from "node:fs/promises";
 
 import { expect, it } from "vitest";
 
-import { assertPrototypeChunkKey } from "./postgres-prototype-chunks";
+import {
+  assertPrototypeChunkKey,
+  streamStoredPrototypeArtifact,
+} from "./postgres-prototype-chunks";
 
 const principal = {
   audience: "app-builder",
@@ -44,4 +47,28 @@ it("rejects invalid transfer keys before any database write or read", () => {
   expect(() => {
     assertPrototypeChunkKey(key);
   }).toThrow("key is invalid");
+});
+
+it("rejects a cross-session artifact before opening a chunk stream", () => {
+  expect(() =>
+    streamStoredPrototypeArtifact({
+      artifact: {
+        appId: "demo",
+        chunkCount: 1,
+        contentBytes: 1,
+        digest: "a".repeat(64),
+        mediaType: "text/html",
+        path: "prototype/demo/index.html",
+        recordedByCallId: "call-1",
+        revision: "b".repeat(64),
+        sessionId: "other-session",
+        version: 2,
+      },
+    // SAFETY: The session mismatch throws before any database method is called.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- This test exercises pre-read validation.
+    db: {} as never,
+      principal,
+      sessionId: "session-1",
+    }),
+  ).toThrow("different session");
 });

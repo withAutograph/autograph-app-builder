@@ -8,6 +8,8 @@ import type * as databaseSchema from "../db/schema";
 import { prototypeArtifactChunks } from "../db/schema";
 import type { HostedPrincipal } from "../eve/hosted-auth";
 import { parsePrototypeArtifactPath } from "./prototype-artifacts";
+import type { PrototypeArtifactV2 } from "./workflow-state";
+import { streamVerifiedPrototypeArtifact } from "./prototype-artifact-stream";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 const sha256 = (content: string): string =>
@@ -107,4 +109,27 @@ export const getPrototypeChunk = async (
     throw new Error("Stored prototype chunk digest does not match its content.");
   }
   return row.content;
+};
+
+/** Bind the two-pass verified stream to the same tenant, session, path, and digest for every read. */
+export const streamStoredPrototypeArtifact = (input: {
+  db: Database;
+  principal: HostedPrincipal;
+  sessionId: string;
+  artifact: PrototypeArtifactV2;
+}): AsyncGenerator<Uint8Array> => {
+  if (input.artifact.sessionId !== input.sessionId) {
+    throw new Error("The prototype artifact belongs to a different session.");
+  }
+  const key = {
+    path: input.artifact.path,
+    principal: input.principal,
+    sessionId: input.sessionId,
+    transferDigest: input.artifact.digest,
+  };
+  return streamVerifiedPrototypeArtifact({
+    artifact: input.artifact,
+    // oxlint-disable-next-line typescript/promise-function-async -- The database read already returns a Promise.
+    readChunk: (chunkIndex) => getPrototypeChunk(input.db, { ...key, chunkIndex }),
+  });
 };
