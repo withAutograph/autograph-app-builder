@@ -50,6 +50,24 @@ vi.mock("../sandbox/vercel-preview-provider", () => ({ getVercelPreviewProvider:
 vi.mock("../sandbox/working-preview-runtime", () => ({ startWorkingPreview: mocks.start }));
 vi.mock("./checkout-dependencies", () => ({ ensureCheckoutDependencies: mocks.dependencies }));
 vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
+  appDeclaresLocalSetup: async ({
+    appId,
+    root,
+    sandbox,
+  }: {
+    appId: string;
+    root: string;
+    sandbox: { readTextFile: (input: { path: string }) => Promise<string | null> };
+  }) => {
+    const [contract, tasks] = await Promise.all([
+      sandbox.readTextFile({ path: `${root}/apps/${appId}/.config/app-spec.md` }),
+      sandbox.readTextFile({ path: `${root}/.config/mise/config.toml` }),
+    ]);
+    return (
+      contract?.includes(`mise run app:local -- ${appId} setup`) === true &&
+      tasks?.includes('[tasks."app:local"]') === true
+    );
+  },
   prepareAppLocalPreview: mocks.prepare,
 }));
 

@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("./review-applied-product-source", () => ({ reviewAppliedProductSource: mocks.review }));
+vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
+  prepareValidationLocalData: vi.fn().mockResolvedValue(null),
+}));
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 vi.mock("./workflow-state", () => ({
   APP_BUILDER_WORKFLOW_VERSION: 1,

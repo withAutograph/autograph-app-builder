@@ -10,6 +10,22 @@ const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 export const localPreviewSetupCommand = (appId: string): string =>
   `mise run --skip-tools app:local -- ${appIdSchema.parse(appId)} setup`;
 
+export const appDeclaresLocalSetup = async (input: {
+  appId: string;
+  root: string;
+  sandbox: Pick<SandboxSession, "readTextFile">;
+}): Promise<boolean> => {
+  const appId = appIdSchema.parse(input.appId);
+  const [appContract, repositoryTasks] = await Promise.all([
+    input.sandbox.readTextFile({ path: `${input.root}/apps/${appId}/.config/app-spec.md` }),
+    input.sandbox.readTextFile({ path: `${input.root}/.config/mise/config.toml` }),
+  ]);
+  return (
+    appContract?.includes(`mise run app:local -- ${appId} setup`) === true &&
+    repositoryTasks?.includes('[tasks."app:local"]') === true
+  );
+};
+
 /** Keep a repository task's background services off the sandbox command output pipe. */
 export const localPreviewExecutionCommand = (appId: string): string => {
   const task = localPreviewSetupCommand(appId);
@@ -98,6 +114,24 @@ export const prepareAppLocalPreview = async (input: {
       stderr: "",
       stdout: "",
     };
+  }
+};
+
+/** Start declared local data before validation so test runners do not own the server's output pipe. */
+export const prepareValidationLocalData = async (input: {
+  appId: string;
+  root: string;
+  sandbox: Pick<SandboxSession, "readTextFile" | "run">;
+  signal?: AbortSignal;
+}): Promise<void> => {
+  if (!(await appDeclaresLocalSetup(input))) {
+    return;
+  }
+  const setup = await prepareAppLocalPreview(input);
+  if (setup.status === "failed") {
+    throw new Error(
+      `Validation could not prepare the selected app's local data. ${setup.problem}\nCommand: ${setup.command}\n${setup.stderr || setup.stdout || "No command output was returned."}`,
+    );
   }
 };
 
