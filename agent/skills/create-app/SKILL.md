@@ -167,6 +167,10 @@ app-owned files and reuse the same component-backed preview flow.
    for a separate approval of that exact PR, branch head, and reviewed diff,
    then use `update_github_draft_pr`. If its head moves, review and seal again.
 9. Continue to the implemented app's private preview with `start_app_preview`.
+   If the repository defines `app:local` for the selected app and the preview
+   needs local data, use `prepare-app-local-preview` first in the approved
+   sandbox. Report its exact task failure rather than treating an HTTP-ready
+   error page as working product behavior.
    Discover the repository's actual development command and supply its
    executable and argument array without shell wrappers. For a nested app
    package, set `workingDirectory` relative to the applied repository root;

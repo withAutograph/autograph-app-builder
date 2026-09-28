@@ -82,6 +82,11 @@ honest distinctions between verified behavior and behavior still unassessed.
 After technical validation, use `start_app_preview` with the repository's actual
 development command and the implemented app's route. It returns a private,
 expiring browser URL only after the running app answers an HTTP readiness check.
+If the selected app has a repository-owned `app:local` task and its preview
+requires local data, call `prepare-app-local-preview` in the same private sandbox
+before checking product behavior. Match the development server's listening port
+to the port supplied to `start_app_preview`; a package script may choose another
+port. A page that responds with HTTP 200 can still contain an application error.
 Give that URL to the user, including its expiry. Reopen it with the same supported
 tool when asked after expiry or a runtime restart. A reachable page is delivery
 evidence, not proof of persistence, authentication, or independent orchestration.
