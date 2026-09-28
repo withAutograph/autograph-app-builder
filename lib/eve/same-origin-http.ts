@@ -423,6 +423,9 @@ export async function observeSameOriginEveStream(
         "record_ui_preview",
       ].includes(event.data.result.toolName);
     }
+    if (event.type === "approval.settled") {
+      pending.delete(event.data.requestId);
+    }
     const nextUiPreview = latestInstalledUiPreview([event]);
     if (nextUiPreview !== undefined) {
       uiPreview = nextUiPreview;
@@ -607,6 +610,60 @@ async function readRespondSettlement(input: {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- Shared exact response encoding for both settlement paths.
+function responsePayload(responses: Parameters<HostedEveTransport["respond"]>[0]["responses"]) {
+  return responses.map(({ requestId, response }) => {
+    if (response.kind === "approve") {
+      return { optionId: "approve", requestId };
+    }
+    if (response.kind === "deny") {
+      return { optionId: "cancel", requestId };
+    }
+    if (response.optionId === undefined) {
+      return { requestId, text: response.value };
+    }
+    return { optionId: response.optionId, requestId };
+  });
+}
+
+// eslint-disable-next-line eslint/func-style -- Wait for durable resolution without materializing Eve history.
+async function readRespondSettlementIncremental(input: {
+  config: z.infer<typeof sameOriginConfigSchema>;
+  workloadIdentity: HostedWorkloadIdentity;
+  fetchImplementation: typeof fetch;
+  sessionId: string;
+  requestIds: readonly string[];
+}): Promise<void> {
+  const readSignal = AbortSignal.timeout(SESSION_READ_TIMEOUT_MS);
+  while (true) {
+    if (readSignal.aborted) {
+      throw new HostedSessionReadTimeoutError();
+    }
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Each read verifies the durable tail before polling again.
+    const observed = await observeSameOriginEveStream({
+      ...input,
+      onEvent: () => null,
+      readSignal,
+    });
+    const outstanding = new Set(observed.pendingRequests.map((request) => request.requestId));
+    if (
+      observed.status !== "input_required" ||
+      input.requestIds.every((requestId) => !outstanding.has(requestId))
+    ) {
+      return;
+    }
+    try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Poll only after the prior durable tail was observed.
+      await delay(SESSION_SETTLEMENT_POLL_INTERVAL_MS, undefined, { signal: readSignal });
+    } catch (error) {
+      if (readSignal.aborted) {
+        throw new HostedSessionReadTimeoutError();
+      }
+      throw error;
+    }
+  }
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createSameOriginEveTransport(input: {
   config: unknown;
@@ -716,20 +773,7 @@ export function createSameOriginEveTransport(input: {
     async respond(request) {
       const accepted = await postMutation({
         ...common,
-        body: {
-          inputResponses: request.responses.map(({ requestId, response }) => {
-            if (response.kind === "approve") {
-              return { optionId: "approve", requestId };
-            }
-            if (response.kind === "deny") {
-              return { optionId: "cancel", requestId };
-            }
-            if (response.optionId === undefined) {
-              return { requestId, text: response.value };
-            }
-            return { optionId: response.optionId, requestId };
-          }),
-        },
+        body: { inputResponses: responsePayload(request.responses) },
         path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
         principal: request.principal,
         sourceHandoffId: request.sourceHandoffId,
@@ -738,6 +782,23 @@ export function createSameOriginEveTransport(input: {
         throw new SubmissionOutcomeUnknownError();
       }
       return readRespondSettlement({
+        ...common,
+        requestIds: request.responses.map(({ requestId }) => requestId),
+        sessionId: request.adapterSessionId,
+      });
+    },
+    async respondAccepted(request) {
+      const accepted = await postMutation({
+        ...common,
+        body: { inputResponses: responsePayload(request.responses) },
+        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
+        principal: request.principal,
+        sourceHandoffId: request.sourceHandoffId,
+      });
+      if (accepted.sessionId !== request.adapterSessionId) {
+        throw new SubmissionOutcomeUnknownError();
+      }
+      await readRespondSettlementIncremental({
         ...common,
         requestIds: request.responses.map(({ requestId }) => requestId),
         sessionId: request.adapterSessionId,
@@ -755,6 +816,18 @@ export function createSameOriginEveTransport(input: {
         throw new SubmissionOutcomeUnknownError();
       }
       return readSnapshot({ ...common, sessionId: request.adapterSessionId });
+    },
+    async sendAccepted(request) {
+      const accepted = await postMutation({
+        ...common,
+        body: { message: request.message, turnPolicy: "queue" },
+        path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}`,
+        principal: request.principal,
+        sourceHandoffId: request.sourceHandoffId,
+      });
+      if (accepted.sessionId !== request.adapterSessionId) {
+        throw new SubmissionOutcomeUnknownError();
+      }
     },
     async start(request) {
       const accepted = await postMutation({

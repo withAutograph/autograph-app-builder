@@ -668,6 +668,52 @@ describe("same-origin canonical Eve transport", () => {
     );
   });
 
+  it("settles accepted mutations through the incremental reader", async () => {
+    const requestId = "aitxt-0oQwVrjWKWZWGigsWFL0FUqy";
+    const pending = pendingApprovalEvents(requestId);
+    const settled = [
+      ...pending,
+      {
+        data: { resolutions: [{ requestId }] },
+        meta: { at: 3, id: "evt_resolved" },
+        type: "input.resolved",
+      },
+    ];
+    let streamReads = 0;
+    // oxlint-disable-next-line eslint/require-await -- Preserve the fetch promise contract.
+    const fetchImplementation = vi.fn<typeof fetch>(async (url) => {
+      if (String(url).includes("/stream?")) {
+        streamReads += 1;
+        return stream(streamReads === 1 ? pending : settled);
+      }
+      return accepted();
+    });
+    const transport = createSameOriginEveTransport({
+      config,
+      fetchImplementation,
+      workloadIdentity: identity(),
+    });
+    await expect(
+      transport.sendAccepted?.({
+        adapterSessionId: "wrun_1",
+        message: "Continue",
+        operationId: "op_send_accepted",
+        principal,
+      }),
+    ).resolves.toBeUndefined();
+    expect(streamReads).toBe(0);
+    await expect(
+      transport.respondAccepted?.({
+        adapterSessionId: "wrun_1",
+        operationId: "op_respond_accepted",
+        principal,
+        responses: [{ requestId, response: { kind: "approve" } }],
+      }),
+    ).resolves.toBeUndefined();
+    expect(streamReads).toBe(2);
+    expect(fetchImplementation).toHaveBeenCalledTimes(4);
+  });
+
   it("waits for the exact accepted input response to settle", async () => {
     const requestId = "aitxt-0oQwVrjWKWZWGigsWFL0FUqy";
     const pending = pendingApprovalEvents(requestId);
