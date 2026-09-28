@@ -10,6 +10,13 @@ const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 export const localPreviewSetupCommand = (appId: string): string =>
   `mise run --skip-tools app:local -- ${appIdSchema.parse(appId)} setup`;
 
+/** Keep a repository task's background services off the sandbox command output pipe. */
+export const localPreviewExecutionCommand = (appId: string): string => {
+  const task = localPreviewSetupCommand(appId);
+  const log = `/tmp/app-builder-local-setup-${appIdSchema.parse(appId)}.log`;
+  return `set +e\n${task} > '${log}' 2>&1\nstatus=$?\ntail -c 8000 '${log}'\nexit "$status"`;
+};
+
 const safeOutput = (value: string): string =>
   value
     .replaceAll(/\p{Cc}/gu, (character) =>
@@ -34,7 +41,7 @@ export const prepareAppLocalPreview = async (input: {
   sandbox: Pick<SandboxSession, "run">;
   signal?: AbortSignal;
 }) => {
-  const command = localPreviewSetupCommand(input.appId);
+  const command = localPreviewExecutionCommand(input.appId);
   try {
     let result =
       input.signal === undefined
