@@ -3,6 +3,9 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { z } from "zod";
 
+import { verifyPrototypeArtifactManifest } from "../agent/prototype-artifact-stream";
+import type { ReadPrototypeChunk } from "../agent/prototype-artifact-stream";
+import type { PrototypeArtifactV2 } from "../agent/workflow-state";
 import {
   eveSessionResultSchema,
   publicPrototypePreviewUrlSchema,
@@ -171,9 +174,16 @@ export type PrototypePreviewResolver = (input: {
   sessionId: string;
 }) => Promise<PublicPrototype | undefined>;
 
+/** The resolver must authorize the request and bind immutable chunks to this tenant and session. */
+export type StreamedPrototypePreviewResolver = (input: {
+  request: Request;
+  sessionId: string;
+}) => Promise<{ artifact: PrototypeArtifactV2; readChunk: ReadPrototypeChunk } | undefined>;
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPrototypePreviewRequestHandler(input: {
   resolvePrototype: PrototypePreviewResolver;
+  resolveStreamedPrototype?: StreamedPrototypePreviewResolver;
 }) {
   return async (
     request: Request,
@@ -184,6 +194,42 @@ export function createPrototypePreviewRequestHandler(input: {
       return emptyPreviewNotFoundResponse();
     }
     try {
+      const streamed = await input.resolveStreamedPrototype?.({
+        request,
+        sessionId: route.data.sessionId,
+      });
+      if (streamed !== undefined) {
+        const { artifact, readChunk } = streamed;
+        if (
+          artifact.sessionId !== route.data.sessionId ||
+          artifact.mediaType !== "text/html" ||
+          !artifact.path.endsWith("/index.html") ||
+          !equalDigest(artifact.digest, route.data.digest)
+        ) {
+          return emptyPreviewNotFoundResponse();
+        }
+        // Finish complete manifest and content validation before response headers or bytes are sent.
+        await verifyPrototypeArtifactManifest({ artifact, readChunk });
+        let nextIndex = 0;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            async pull(controller) {
+              if (nextIndex >= artifact.chunkCount) {
+                controller.close();
+                return;
+              }
+              const content = await readChunk(nextIndex);
+              if (content === undefined) {
+                controller.error(new Error("A verified prototype chunk became unavailable."));
+                return;
+              }
+              nextIndex += 1;
+              controller.enqueue(Buffer.from(content, "utf-8"));
+            },
+          }),
+          { headers: previewResponseHeaders, status: 200 },
+        );
+      }
       const prototype = publicPrototypeSchema.safeParse(
         await input.resolvePrototype({
           request,
