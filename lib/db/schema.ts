@@ -1,6 +1,7 @@
 import {
   boolean,
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -439,6 +440,7 @@ export const agentSessions = pgTable(
     adapterSessionId: text("adapter_session_id").notNull(),
     audience: text("audience").notNull(),
     checkpointDigest: text("checkpoint_digest"),
+    checkpointId: text("checkpoint_id"),
     checkpointProgressDigest: text("checkpoint_progress_digest"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     issuer: text("issuer").notNull(),
@@ -511,6 +513,175 @@ export const agentSessions = pgTable(
     check(
       "agent_session_checkpoint_progress_digest_check",
       sql`${table.checkpointProgressDigest} IS NULL OR ${table.checkpointProgressDigest} ~ '^sha256:[a-f0-9]{64}$'`,
+    ),
+  ],
+);
+
+// A staged checkpoint has no authority until the session record points at it.
+// Old staged versions are removable after their writer lease has ended.
+export const agentSessionCheckpointManifests = pgTable(
+  "agent_session_checkpoint_manifest",
+  {
+    audience: text("audience").notNull(),
+    checkpointDigest: text("checkpoint_digest"),
+    checkpointId: text("checkpoint_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    eventCount: integer("event_count"),
+    issuer: text("issuer").notNull(),
+    itemCount: integer("item_count"),
+    ownerUserId: text("owner_user_id").notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    sessionId: text("session_id").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+    workspaceId: text("workspace_id").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.sessionId,
+        table.checkpointId,
+      ],
+      name: "agent_session_checkpoint_manifest_pk",
+    }),
+    foreignKey({
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.sessionId,
+      ],
+      foreignColumns: [
+        agentSessions.issuer,
+        agentSessions.audience,
+        agentSessions.workspaceId,
+        agentSessions.ownerUserId,
+        agentSessions.sessionId,
+      ],
+      name: "agent_session_checkpoint_manifest_session_fk",
+    }).onDelete("cascade"),
+    check(
+      "agent_session_checkpoint_manifest_state_check",
+      sql`(${table.publishedAt} IS NULL AND ${table.checkpointDigest} IS NULL AND ${table.eventCount} IS NULL AND ${table.itemCount} IS NULL) OR (${table.publishedAt} IS NOT NULL AND ${table.checkpointDigest} ~ '^sha256:[a-f0-9]{64}$' AND ${table.eventCount} >= 0 AND ${table.itemCount} = ${table.eventCount} + 1)`,
+    ),
+  ],
+);
+
+export const agentSessionCheckpointItems = pgTable(
+  "agent_session_checkpoint_item",
+  {
+    audience: text("audience").notNull(),
+    byteLength: integer("byte_length").notNull(),
+    checkpointId: text("checkpoint_id").notNull(),
+    digest: text("digest").notNull(),
+    issuer: text("issuer").notNull(),
+    itemIndex: integer("item_index").notNull(),
+    ownerUserId: text("owner_user_id").notNull(),
+    partCount: integer("part_count").notNull(),
+    sessionId: text("session_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.sessionId,
+        table.checkpointId,
+        table.itemIndex,
+      ],
+      name: "agent_session_checkpoint_item_pk",
+    }),
+    foreignKey({
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.sessionId,
+        table.checkpointId,
+      ],
+      foreignColumns: [
+        agentSessionCheckpointManifests.issuer,
+        agentSessionCheckpointManifests.audience,
+        agentSessionCheckpointManifests.workspaceId,
+        agentSessionCheckpointManifests.ownerUserId,
+        agentSessionCheckpointManifests.sessionId,
+        agentSessionCheckpointManifests.checkpointId,
+      ],
+      name: "agent_session_checkpoint_item_manifest_fk",
+    }).onDelete("cascade"),
+    check(
+      "agent_session_checkpoint_item_bounds_check",
+      sql`${table.itemIndex} >= -1 AND ${table.byteLength} >= 0 AND ${table.partCount} > 0`,
+    ),
+    check(
+      "agent_session_checkpoint_item_digest_check",
+      sql`${table.digest} ~ '^sha256:[a-f0-9]{64}$'`,
+    ),
+  ],
+);
+
+export const agentSessionCheckpointChunks = pgTable(
+  "agent_session_checkpoint_chunk",
+  {
+    audience: text("audience").notNull(),
+    checkpointId: text("checkpoint_id").notNull(),
+    chunkDigest: text("chunk_digest").notNull(),
+    issuer: text("issuer").notNull(),
+    itemIndex: integer("item_index").notNull(),
+    ownerUserId: text("owner_user_id").notNull(),
+    partIndex: integer("part_index").notNull(),
+    payload: text("payload").notNull(),
+    sessionId: text("session_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.sessionId,
+        table.checkpointId,
+        table.itemIndex,
+        table.partIndex,
+      ],
+      name: "agent_session_checkpoint_chunk_pk",
+    }),
+    foreignKey({
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.sessionId,
+        table.checkpointId,
+      ],
+      foreignColumns: [
+        agentSessionCheckpointManifests.issuer,
+        agentSessionCheckpointManifests.audience,
+        agentSessionCheckpointManifests.workspaceId,
+        agentSessionCheckpointManifests.ownerUserId,
+        agentSessionCheckpointManifests.sessionId,
+        agentSessionCheckpointManifests.checkpointId,
+      ],
+      name: "agent_session_checkpoint_chunk_manifest_fk",
+    }).onDelete("cascade"),
+    check(
+      "agent_session_checkpoint_chunk_position_check",
+      sql`${table.itemIndex} >= -1 AND ${table.partIndex} >= 0`,
+    ),
+    check(
+      "agent_session_checkpoint_chunk_digest_check",
+      sql`${table.chunkDigest} ~ '^sha256:[a-f0-9]{64}$'`,
     ),
   ],
 );
