@@ -15,6 +15,7 @@ import {
   SubmissionRejectedBeforeDispatchError,
 } from "./hosted-service";
 import type { HostedEngineSnapshot, HostedEveTransport } from "./hosted-service";
+import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
 import { hostedOperationRecordSchema, InMemoryHostedEveStore } from "./hosted-store";
 import type {
   HostedEveStore,
@@ -319,6 +320,64 @@ const started = async function started(input?: {
   });
   return { adapter, result, service, store };
 };
+
+describe("delayed durable session reads", () => {
+  it("returns a saved checkpoint with an actionable warning and never presents stale approvals", async () => {
+    const adapter = transport({
+      get: vi.fn().mockRejectedValue(new HostedSessionReadTimeoutError()),
+      start: vi.fn().mockResolvedValue({
+        adapterSessionId: "eve_1",
+        snapshot: approvalSnapshot(["build"]),
+      }),
+    });
+    const { service, result } = await started({ transport: adapter });
+    const observed = await service.get({ cursor: 0, limit: 25, sessionId: result.sessionId });
+    expect(observed).toMatchObject({
+      error: { code: "session_read_delayed" },
+      sessionId: result.sessionId,
+      status: "working",
+    });
+    expect(observed.error?.message).toContain("Retry autograph_get with this same session ID");
+    expect(observed.inputRequests).toEqual([]);
+    expect(observed.events).toHaveLength(1);
+  });
+
+  it("shows the durable final result on a later successful read", async () => {
+    const get = vi
+      .fn()
+      .mockRejectedValueOnce(new HostedSessionReadTimeoutError())
+      .mockResolvedValueOnce(snapshot);
+    const { service, result } = await started({ transport: transport({ get }) });
+    const delayed = await service.get({ cursor: 0, limit: 25, sessionId: result.sessionId });
+    expect(delayed.error?.code).toBe("session_read_delayed");
+    const recovered = await service.get({ cursor: 0, limit: 25, sessionId: result.sessionId });
+    expect(recovered.status).toBe("waiting");
+    expect(recovered.error).toBeUndefined();
+    expect(recovered.events[0]).toMatchObject({ text: "Ready." });
+  });
+
+  it("does not replay a response after its accepted settlement read times out", async () => {
+    const respond = vi.fn().mockRejectedValue(new HostedSessionReadTimeoutError());
+    const { service, result } = await started({
+      transport: transport({
+        get: vi.fn().mockResolvedValue(approvalSnapshot(["build"])),
+        respond,
+        start: vi.fn().mockResolvedValue({
+          adapterSessionId: "eve_1",
+          snapshot: approvalSnapshot(["build"]),
+        }),
+      }),
+    });
+    const request = {
+      clientRequestId: "respond_delayed_settlement",
+      responses: [{ requestId: "build", response: { kind: "approve" as const } }],
+      sessionId: result.sessionId,
+    };
+    await expect(service.respond(request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    await expect(service.respond(request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    expect(respond).toHaveBeenCalledOnce();
+  });
+});
 
 describe("hosted Eve service core", () => {
   it("runs the repository-access recovery seam before reading Eve", async () => {

@@ -94,6 +94,17 @@ describe("safe MCP tool errors", () => {
     expect(safeToolError(error).structuredContent.error?.message).toContain(nextStep);
   });
 
+  it("tells callers not to replay an approval whose settlement is unknown", () => {
+    const result = safeToolError(
+      new HostedSubmissionUnknownError(),
+      "session-one",
+      "autograph_respond",
+    );
+    expect(result.structuredContent.error?.code).toBe("submission_unknown");
+    expect(result.structuredContent.error?.message).toContain("Do not submit the response again");
+    expect(result.structuredContent.error?.message).toContain("same session with autograph_get");
+  });
+
   it("makes a provider outage retryable without a new OAuth challenge", () => {
     const result = safeToolError(new McpProviderUnavailableError());
     expect(result.structuredContent.error?.message).toContain("Retry this same handoff");

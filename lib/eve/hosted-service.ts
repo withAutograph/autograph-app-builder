@@ -30,6 +30,7 @@ import { outstandingInternalEveRequests, toPublicEvent } from "./public-events";
 import type { InternalEveEvent } from "./public-events";
 import { projectHostedSnapshot } from "./hosted-projection";
 import type { HostedEngineSnapshot } from "./hosted-projection";
+import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
 import {
   eveSessionResultSchema,
   publicInputRequestSchema,
@@ -873,6 +874,22 @@ export function createHostedEveSessionService(input: {
       }
       return projectSnapshot(sessionId, snapshot, cursor, limit);
     } catch (error) {
+      if (error instanceof HostedSessionReadTimeoutError) {
+        if (session.checkpoint === undefined) {
+          throw error;
+        }
+        const checkpoint = resultFromHostedCheckpoint(sessionId, session.checkpoint, cursor, limit);
+        return {
+          ...checkpoint,
+          error: {
+            code: "session_read_delayed",
+            message:
+              "Builder could not finish reading Eve's durable session history within 30 seconds. This does not mean the build stopped or failed. The events shown are the last saved checkpoint. Retry autograph_get with this same session ID and cursor; wait for a read without this warning before responding to an approval or reviewing a final diff. If it repeats, report the session ID and this read operation to the Builder operator.",
+          },
+          inputRequests: [],
+          status: "working" as const,
+        };
+      }
       if (!(error instanceof HostedAdapterSessionUnavailableError)) {
         throw error;
       }

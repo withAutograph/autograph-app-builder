@@ -289,7 +289,12 @@ export function createAutographMcpHandler(
                   limit: input.limit,
                   sessionId: input.sessionId,
                 });
-          return toolResult(present(result), "Autograph App Builder returned the latest progress.");
+          return toolResult(
+            present(result),
+            "kind" in result
+              ? "Autograph App Builder returned recent sessions."
+              : (result.error?.message ?? "Autograph App Builder returned the latest progress."),
+          );
         } catch (error) {
           return safeToolError(error, input.sessionId ?? "", "autograph_get");
         }
