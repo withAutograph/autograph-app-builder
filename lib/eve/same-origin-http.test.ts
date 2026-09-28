@@ -62,6 +62,62 @@ function stream(
 }
 
 describe("incremental canonical Eve stream", () => {
+  it("exposes observation only with tenant verification and fetches only after authorization", async () => {
+    // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
+    const fetchImplementation = vi.fn(async () => stream());
+    const verifyReadAuthority = vi.fn(
+      // oxlint-disable-next-line eslint/require-await -- Authorization callback follows the async store contract.
+      async ({
+        principal: candidate,
+        sessionId,
+        adapterSessionId,
+      }: {
+        principal: HostedPrincipal;
+        sessionId: string;
+        adapterSessionId: string;
+      }) =>
+        candidate.workspaceId === principal.workspaceId &&
+        sessionId === "session_1" &&
+        adapterSessionId === "wrun_1",
+    );
+    const withoutAuthority = createSameOriginEveTransport({
+      config,
+      fetchImplementation,
+      workloadIdentity: identity(),
+    });
+    expect(withoutAuthority.observe).toBeUndefined();
+    const transport = createSameOriginEveTransport({
+      config,
+      fetchImplementation,
+      verifyReadAuthority,
+      workloadIdentity: identity(),
+    });
+    await expect(
+      transport.observe?.({
+        adapterSessionId: "wrun_1",
+        onEvent() {},
+        principal: { ...principal, workspaceId: "other_workspace" },
+        sessionId: "session_1",
+      }),
+    ).rejects.toBeInstanceOf(SubmissionRejectedBeforeDispatchError);
+    await expect(
+      transport.observe?.({
+        adapterSessionId: "wrong_adapter",
+        onEvent() {},
+        principal,
+        sessionId: "session_1",
+      }),
+    ).rejects.toBeInstanceOf(SubmissionRejectedBeforeDispatchError);
+    expect(fetchImplementation).not.toHaveBeenCalled();
+    await transport.observe?.({
+      adapterSessionId: "wrun_1",
+      onEvent() {},
+      principal,
+      sessionId: "session_1",
+    });
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+  });
+
   it("projects dense events and tracks only unresolved requests", async () => {
     const projected: { index: number; type: string }[] = [];
     const events = [

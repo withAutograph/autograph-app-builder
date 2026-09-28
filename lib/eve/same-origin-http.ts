@@ -567,7 +567,19 @@ export function createSameOriginEveTransport(input: {
   config: unknown;
   workloadIdentity: HostedWorkloadIdentity;
   fetchImplementation?: typeof fetch;
-}): HostedEveTransport {
+  verifyReadAuthority?: (input: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    adapterSessionId: string;
+  }) => Promise<boolean>;
+}): HostedEveTransport & {
+  observe?: (request: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    adapterSessionId: string;
+    onEvent: (event: InternalEveEvent) => Promise<void> | void;
+  }) => ReturnType<typeof observeSameOriginEveStream>;
+} {
   const config = sameOriginConfigSchema.parse(input.config);
   const fetchImplementation = input.fetchImplementation ?? fetch;
   const common = {
@@ -576,6 +588,26 @@ export function createSameOriginEveTransport(input: {
     workloadIdentity: input.workloadIdentity,
   };
   return {
+    ...(input.verifyReadAuthority === undefined
+      ? {}
+      : {
+          async observe(request) {
+            const principal = hostedPrincipalSchema.parse(request.principal);
+            const authorized = await input.verifyReadAuthority?.({
+              adapterSessionId: request.adapterSessionId,
+              principal,
+              sessionId: request.sessionId,
+            });
+            if (authorized !== true) {
+              throw new SubmissionRejectedBeforeDispatchError("session_access_denied");
+            }
+            return observeSameOriginEveStream({
+              ...common,
+              onEvent: request.onEvent,
+              sessionId: request.adapterSessionId,
+            });
+          },
+        }),
     async cancel(request) {
       const before = await readInstalledSnapshot({
         ...common,
