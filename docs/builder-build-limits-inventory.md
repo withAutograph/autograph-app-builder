@@ -35,10 +35,27 @@ uncertain provider write is not redispatched automatically: a read-only
 provider reconciliation must establish whether that repository or project was
 created first. This preserves the no-duplicate outward-effect rule.
 
+The GitHub target-scoped access proof format is additive. Existing v2 source
+and publication receipts still bind the full selected-repository list, so the
+target flows still enumerate and buffer that list. The v3 proof must be issued
+from a provider-verified target read and adopted by every receipt/proposal
+validator before those paths can stop enumerating all selected IDs. Existing
+v2 receipts must continue to verify during that migration.
+
 Large prototype and UI-preview content is transferred in verified chunks, but
 the installed Eve event readback and some artifact projections still assemble
 complete content in memory. Those paths require streaming readers and a
 bounded projection before the remaining checkpoint caps can be removed.
+
+The post-#515 buffering audit also found whole-result reads in
+`captured-process-output.ts` (temporary stdout reopened as a `Buffer`),
+`node-fresh-bootstrap.ts` (some blob, command-output, and Git-index reads),
+`node-branch-worktree-publication.ts` (some file and Git-output reads),
+`supported-template.ts` and `arrusted-template.ts` (some source and command
+reads), and `same-origin-http.ts` (complete Eve event array). A digest-only
+caller now uses streaming hashing, but these remaining call sites still need
+caller-specific streaming contracts. The file paths are an implementation
+inventory, not evidence that the remaining paths are safe at arbitrary size.
 
 The local Preview provider emulator retains an 8 MiB state-document limit
 because its persistence adapter loads and parses the state as one JSON value.
