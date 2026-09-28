@@ -33,6 +33,11 @@ missing adapter for otherwise-active work is fenced by adapter generation before
 the same public handle continues. User-visible sessions do not expire with
 their short-lived compute leases.
 
+The current hosted checkpoint retains a bounded legacy history while the
+[paged checkpoint migration](builder-build-limits-inventory.md) is staged.
+Recovery reports the legacy truncation marker and preserves exact outstanding
+requests; it cannot recover events already discarded by the old writer.
+
 Hosted authorization advertises the matching `autograph:*` scopes. A caller
 must hold `autograph:session` before the request-scoped tenant service is
 constructed; operation-specific scope checks remain inside the shared service.
