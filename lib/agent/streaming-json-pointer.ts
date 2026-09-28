@@ -2,7 +2,14 @@
 /** Validate a streamed JSON document while retaining only selected string comparisons. */
 export const readJsonStringChecks = async (
   body: ReadableStream<Uint8Array> | null,
-  checks: readonly { pointer: string; expected?: string; optional?: boolean; capture?: boolean }[],
+  checks: readonly {
+    pointer: string;
+    expected?: string;
+    expectedLiteral?: "true" | "false";
+    optional?: boolean;
+    capture?: boolean;
+  }[],
+  options: { allowedRootKeys?: readonly string[] } = {},
 ): Promise<{ matches: boolean[]; values: (string | undefined)[] }> => {
   if (
     !body ||
@@ -18,6 +25,8 @@ export const readJsonStringChecks = async (
       .map((part) => part.replaceAll("~1", "/").replaceAll("~0", "~")),
   );
   const longestPointer = Math.max(...checks.map(({ pointer }) => pointer.length));
+  const allowedRootKeys =
+    options.allowedRootKeys === undefined ? undefined : new Set(options.allowedRootKeys);
   const reader = body.getReader();
   const decoder = new TextDecoder("utf-8", { fatal: true });
   let text = "";
@@ -195,7 +204,8 @@ export const readJsonStringChecks = async (
       );
       if (target !== undefined) {
         matched[target] =
-          checks[target]?.expected === undefined ? observed.nonempty : observed.equal;
+          checks[target]?.expectedLiteral === undefined &&
+          (checks[target]?.expected === undefined ? observed.nonempty : observed.equal);
         values[target] = observed.value;
       }
     } else if (character === "{") {
@@ -209,6 +219,9 @@ export const readJsonStringChecks = async (
         // oxlint-disable-next-line eslint/no-await-in-loop -- Traverse object members in order.
         const parsedKey = await string();
         const key = parsedKey.value;
+        if (depth === 0 && allowedRootKeys !== undefined && !allowedRootKeys.has(key)) {
+          throw new Error("Unexpected JSON response field.");
+        }
         await whitespace();
         await requireCharacter(":");
         await value(
@@ -252,8 +265,14 @@ export const readJsonStringChecks = async (
       }
     } else if (character === "t") {
       await literal("true");
+      if (target !== undefined) {
+        matched[target] = checks[target]?.expectedLiteral === "true";
+      }
     } else if (character === "f") {
       await literal("false");
+      if (target !== undefined) {
+        matched[target] = checks[target]?.expectedLiteral === "false";
+      }
     } else if (character === "n") {
       await literal("null");
     } else {

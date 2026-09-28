@@ -3,6 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { MessageStreamEvent } from "eve/client";
 import { z } from "zod";
 
+import { readJsonStringChecks } from "../agent/streaming-json-pointer";
 import type {
   EveSessionStatus,
   PublicInputRequest,
@@ -146,8 +147,24 @@ async function readJson(response: Response): Promise<unknown> {
   if (contentType !== "application/json") {
     throw new Error("The canonical Eve API returned a non-JSON response.");
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  if (response.status >= 400) {
+    const parsed = await readJsonStringChecks(response.body, [{ capture: true, pointer: "/code" }]);
+    return { code: parsed.matches[0] ? parsed.values[0] : undefined };
+  }
+  const parsed = await readJsonStringChecks(
+    response.body,
+    [
+      { expectedLiteral: "true", pointer: "/ok" },
+      { capture: true, optional: true, pointer: "/sessionId" },
+      { capture: true, pointer: "/status" },
+    ],
+    { allowedRootKeys: ["ok", "sessionId", "status"] },
+  );
+  return {
+    ok: parsed.matches[0],
+    ...(parsed.values[1] === undefined ? {} : { sessionId: parsed.values[1] }),
+    ...(parsed.values[2] === undefined ? {} : { status: parsed.values[2] }),
+  };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -482,13 +499,13 @@ async function readInstalledSnapshot(
   installed: MessageStreamEvent[];
 }> {
   const events: MessageStreamEvent[] = [];
+  const projected: InternalEveEvent[] = [];
   for await (const event of streamSameOriginEveEvents(input)) {
     events.push(event);
+    for (const publicEvent of projectInstalledEveEvent(event, 0)) {
+      projected.push({ ...publicEvent, index: projected.length });
+    }
   }
-
-  const projected = events
-    .flatMap((event) => projectInstalledEveEvent(event, 0))
-    .map((event, index) => ({ ...event, index }));
   const prototype = latestInstalledPrototype(events);
   const uiPreview = latestInstalledUiPreview(events);
   const workingPreview = latestInstalledWorkingPreview(events);

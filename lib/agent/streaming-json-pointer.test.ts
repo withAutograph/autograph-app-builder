@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readJsonPointerString } from "./streaming-json-pointer";
+import { readJsonPointerString, readJsonStringChecks } from "./streaming-json-pointer";
 
 const stream = (source: string, width = 65_536): ReadableStream<Uint8Array> => {
   const bytes = new TextEncoder().encode(source);
@@ -17,6 +17,29 @@ const stream = (source: string, width = 65_536): ReadableStream<Uint8Array> => {
 };
 
 describe("streaming JSON readback", () => {
+  it("checks literal fields and rejects unknown root fields without retaining large values", async () => {
+    const result = await readJsonStringChecks(
+      stream(`{"ok":true,"status":"accepted","ignored":"${"x".repeat(5_000_000)}"}`),
+      [
+        { expectedLiteral: "true", pointer: "/ok" },
+        { capture: true, pointer: "/status" },
+      ],
+    );
+    expect(result.matches).toEqual([true, true]);
+    expect(result.values[1]).toBe("accepted");
+    await expect(
+      readJsonStringChecks(stream('{"ok":"true","status":"accepted"}'), [
+        { expectedLiteral: "true", pointer: "/ok" },
+      ]),
+    ).resolves.toMatchObject({ matches: [false] });
+    await expect(
+      readJsonStringChecks(
+        stream('{"ok":true,"extra":null}'),
+        [{ expectedLiteral: "true", pointer: "/ok" }],
+        { allowedRootKeys: ["ok"] },
+      ),
+    ).rejects.toThrow("Unexpected JSON response field");
+  });
   it("finds a nested marker while discarding a large unrelated value", async () => {
     const source = JSON.stringify({ ignored: "x".repeat(12_000_000), records: [{ value: "μ" }] });
     expect(await readJsonPointerString(stream(source), "/records/0/value", "μ")).toBe(true);
