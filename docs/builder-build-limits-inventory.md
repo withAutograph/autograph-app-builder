@@ -29,8 +29,10 @@ checkpoint usable if staging fails. New hosted HTML previews and design
 decisions use tenant-bound immutable chunks once the additive schema is
 present. The Browser validates their complete manifest and digest before
 streaming HTML. Identical retries of existing v1 artifacts retain their v1
-receipts. Legacy HTML receipts and unresolved or malformed artifact actions still use
-the inline checkpoint path. It retains the 100,000-event snapshot validation
+receipts. Valid v1 Markdown AppSpec actions do not require Browser prototype
+readback, so they can coexist with a paged v2 HTML session. Legacy HTML receipts
+and unresolved or malformed HTML actions still use the inline checkpoint path.
+It retains the 100,000-event snapshot validation
 bound, 512 retained events, 32 pending input requests, and 512 KiB checkpoint
 ceiling. Historical events discarded by an older checkpoint cannot be
 reconstructed; its truncation marker remains visible during recovery.
@@ -79,3 +81,11 @@ The local Preview provider emulator retains an 8 MiB state-document limit
 because its persistence adapter loads and parses the state as one JSON value.
 It is local test infrastructure, not the hosted Builder source or publication
 path. Removing that limit safely requires a paged emulator state format.
+
+Validation command diagnostics remain a separate incomplete path. The sandbox
+command API returns complete stdout and stderr as strings, and validation
+persists only sanitized matching lines in its receipt. The receipt now marks
+that filtering as truncation. Complete sanitized output is not yet retrievable
+after the sandbox is released. Closing this gap needs streaming command output,
+tenant-scoped durable log chunks, and an authenticated paged read API; removing
+the excerpt flag alone would hide lost information.
