@@ -80,7 +80,7 @@ describe("direct app creation", () => {
     ]);
   });
 
-  it.each(["recovered", "failed", "invalid"] as const)(
+  it.each(["recovered", "failed", "stale", "invalid"] as const)(
     "preserves %s command evidence",
     async (outcome) => {
       const writes: string[] = [];
@@ -114,11 +114,23 @@ describe("direct app creation", () => {
         appliedByCallId: "apply-call",
         artifactRevision: "d".repeat(64),
         binding,
-        executor: async () => ({
-          exitCode: outcome === "failed" ? 1 : 0,
-          stderr: outcome === "failed" ? "repository validation failed" : "",
-          stdout: outcome === "invalid" ? "not a receipt" : JSON.stringify(receipt),
-        }),
+        executor: async () => {
+          let exitCode = 0;
+          let stderr = "";
+          if (outcome === "failed") {
+            exitCode = 1;
+            stderr = "repository validation failed";
+          } else if (outcome === "stale") {
+            exitCode = 2;
+            stderr = "stale iteration preimage";
+          }
+          return {
+            exitCode,
+            failedCommand: outcome === "stale" ? "verify current app file preimage" : undefined,
+            stderr,
+            stdout: outcome === "invalid" ? "not a receipt" : JSON.stringify(receipt),
+          };
+        },
         proposal,
         // SAFETY: This executor uses only the run, network, and write methods supplied by this test double.
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion
@@ -137,10 +149,18 @@ describe("direct app creation", () => {
         expect(result.ok).toBe(false);
         if (!result.ok) {
           expect(result.receipt).toMatchObject({
-            reason: outcome === "failed" ? "command-failed" : "invalid-receipt",
+            reason:
+              outcome === "failed" || outcome === "stale" ? "command-failed" : "invalid-receipt",
             recoveryRequired: true,
             status: "partial-failure",
           });
+          if (outcome === "stale") {
+            expect(result.receipt).toMatchObject({
+              commandFailureKind: "stale-proposal",
+              failedCommand: "verify current app file preimage",
+              output: { stderr: "stale iteration preimage" },
+            });
+          }
         }
       }
     },

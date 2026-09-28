@@ -168,6 +168,25 @@ describe("target command readiness", () => {
     });
   });
 
+  it("recognizes a checkout-backed hosted execution without an offline cache", () => {
+    expect(
+      resolveTargetExecutionEnvironment({
+        checkoutImageDigest: "vercel-sandbox",
+        environment: {
+          EVE_HOSTED_ADAPTER: "1",
+          EVE_HOSTED_VERCEL_ENVIRONMENT: "production",
+          VERCEL: "1",
+          VERCEL_ENV: "production",
+        },
+        fixture: false,
+      }),
+    ).toMatchObject({
+      backend: { blockers: [], kind: "vercel-production" },
+      cacheInspectable: false,
+      imageDigest: "vercel-sandbox",
+    });
+  });
+
   it("does not infer hosted readiness for an unsupported Vercel binding", () => {
     expect(
       resolveTargetExecutionEnvironment({

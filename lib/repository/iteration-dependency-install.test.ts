@@ -201,13 +201,18 @@ describe("existing-app dependency installation", () => {
   });
   it("returns the real installation failure after writes instead of an applied receipt", async () => {
     const state = fixture({ installFails: true });
-    expect(await state.execute()).toEqual(state.failure);
+    expect(await state.execute()).toMatchObject({
+      ...state.failure,
+      failedCommand: "bun install",
+    });
     expect(state.sandbox.writeTextFile).toHaveBeenCalledOnce();
     expect(state.sandbox.run).toHaveBeenCalledOnce();
   });
   it("returns CUE activation failure after writes without an applied receipt or generator dispatch", async () => {
     const state = fixture({ cueFails: true });
-    expect(await state.execute()).toEqual(state.cueFailure);
+    const result = await state.execute();
+    expect(result).toMatchObject(state.cueFailure);
+    expect(result.failedCommand).toContain("mise install --locked cue");
     expect(state.sandbox.writeTextFile).toHaveBeenCalledOnce();
     expect(state.events).toEqual([
       "read:repository/apps/vendor/package.json",

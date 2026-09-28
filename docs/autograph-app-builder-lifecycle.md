@@ -65,6 +65,11 @@ target checkout or external system is changed.
 
 After the appropriate authorization, the builder prepares its changes, runs the
 fixed local checks and tests, and presents the ordered result for review.
+For a failed private apply, Builder names the failed repository command and
+exit status, includes bounded redacted compiler or command diagnostics when
+available, and gives a repair or retry instruction. Checkout-backed execution
+readiness uses the prepared checkout and its hosted sandbox binding; absence of
+an obsolete offline dependency cache is not an image-configuration failure.
 
 ### 10. Authorize consequential effects separately
 

@@ -145,8 +145,24 @@ export default defineTool({
           workspace: current.workspace,
         }),
       });
+      const command = result.receipt.failedCommand ?? result.receipt.command.name;
+      const diagnostics = [result.receipt.output?.stderr, result.receipt.output?.stdout]
+        .filter(Boolean)
+        .join("\n");
+      let repair =
+        " Repair the reported command error in the isolated checkout, then retry the private build.";
+      if (result.receipt.commandFailureKind === "stale-proposal") {
+        repair =
+          " Re-observe the current app-owned files, accept a proposal based on their current contents, then retry the private build.";
+      } else if (result.receipt.command.exitCode === -1) {
+        repair =
+          " The execution service did not return a normal command result; check the sandbox provider and retry.";
+      } else if (diagnostics === "") {
+        repair =
+          " No safe command diagnostic was captured; inspect the named command in the isolated checkout before changing app files.";
+      }
       throw new Error(
-        `The repository build command exited with code ${result.receipt.command.exitCode} (${result.receipt.commandFailureKind ?? "unknown"})${result.receipt.missingDependency === undefined ? "" : ` while resolving ${result.receipt.missingDependency}`}.${result.receipt.command.exitCode === -1 ? " The execution service did not return a normal command result." : ""}`,
+        `Builder failed to run ${command} (exit ${result.receipt.command.exitCode}, ${result.receipt.commandFailureKind ?? "unknown"})${result.receipt.missingDependency === undefined ? "" : ` while resolving ${result.receipt.missingDependency}`}.${diagnostics === "" ? "" : ` Diagnostic:\n${diagnostics}`}${repair}`,
       );
     }
     updateExactWorkflow({
