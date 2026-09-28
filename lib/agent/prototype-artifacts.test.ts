@@ -325,6 +325,46 @@ describe("prototype artifact receipts", () => {
       }),
     ).toMatchObject({ path: "prototype/expense-review/app-spec.md" });
 
+    const durableIndex = {
+      appId: index.artifact.appId,
+      chunkCount: 1,
+      contentBytes: Buffer.byteLength(index.artifact.content, "utf-8"),
+      digest: index.artifact.digest,
+      mediaType: index.artifact.mediaType,
+      path: index.artifact.path,
+      recordedByCallId: index.artifact.recordedByCallId,
+      revision: index.artifact.revision,
+      sessionId: index.artifact.sessionId,
+      version: 2 as const,
+    };
+    const mixed = complete.artifacts.map((artifact) =>
+      artifact.path === durableIndex.path ? durableIndex : artifact,
+    );
+    expect(
+      completeBuildReadyPrototypeAppSpec({ appId: "expense-review", artifacts: mixed }),
+    ).toMatchObject({ path: "prototype/expense-review/app-spec.md" });
+    expect(
+      completeBuildReadyPrototypeAppSpec({
+        appId: "expense-review",
+        artifacts: mixed.map((artifact) =>
+          artifact.path === durableIndex.path
+            ? {
+                ...durableIndex,
+                transfer: {
+                  expectedDigest: durableIndex.digest,
+                  lastCallId: "call",
+                  lastChunkDigest: durableIndex.digest,
+                  nextChunkIndex: 1,
+                  receivedBytes: durableIndex.contentBytes,
+                  rollingDigest: durableIndex.digest,
+                  version: 2 as const,
+                },
+              }
+            : artifact,
+        ),
+      }),
+    ).toBeUndefined();
+
     const bundle = recordPrototypeArtifactBundle({
       appId: "expense-review",
       appSpecMarkdown: content,
