@@ -48,6 +48,80 @@ const result = {
 };
 
 describe("v2 public prototype reference projection", () => {
+  it("binds a completed UI preview artifact receipt to its source request", () => {
+    const reducer = createInstalledPrototypeReferenceReducer({ sessionId: "session_1" });
+    reducer.accept({
+      data: {
+        actions: [
+          {
+            callId: "preview_call",
+            input: { appId: "spend-review", sourceFiles: [] },
+            kind: "tool-call",
+            toolName: "record_ui_preview",
+          },
+        ],
+      },
+      type: "actions.requested",
+    });
+    const previewResult = {
+      data: {
+        result: {
+          callId: "preview_call",
+          kind: "tool-result",
+          output: {
+            appId: "spend-review",
+            artifactDigest: digest,
+            artifactRevision: revision,
+            chunkCount: 1,
+            complete: true,
+            contentBytes: Buffer.byteLength(content),
+            digest,
+            mediaType: "text/html",
+            path,
+            recordedByCallId: "preview_call",
+            revision: "a".repeat(64),
+            sessionId: "session_1",
+            version: 2,
+          },
+          toolName: "record_ui_preview",
+        },
+        status: "completed",
+      },
+      type: "action.result",
+    };
+    reducer.accept(previewResult);
+    expect(reducer.snapshot()).toMatchObject({
+      digest,
+      recordedByCallId: "preview_call",
+      revision,
+    });
+    const wrong = createInstalledPrototypeReferenceReducer({ sessionId: "session_1" });
+    wrong.accept({
+      data: {
+        actions: [
+          {
+            callId: "preview_call",
+            input: { appId: "spend-review" },
+            kind: "tool-call",
+            toolName: "record_ui_preview",
+          },
+        ],
+      },
+      type: "actions.requested",
+    });
+    wrong.accept({
+      ...previewResult,
+      data: {
+        ...previewResult.data,
+        result: {
+          ...previewResult.data.result,
+          output: { ...previewResult.data.result.output, artifactRevision: "b".repeat(64) },
+        },
+      },
+    });
+    expect(wrong.snapshot()).toBeUndefined();
+  });
+
   it("projects only a completed receipt bound to the request and session", () => {
     const reducer = createInstalledPrototypeReferenceReducer({ sessionId: "session_1" });
     reducer.accept(result);

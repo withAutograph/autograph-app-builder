@@ -166,6 +166,7 @@ const prototypeReferenceResultSchema = z
 /** Projects v2 manifests only from a matching completed tool receipt. */
 export const createInstalledPrototypeReferenceReducer = (input: { sessionId: string }) => {
   const requested = new Map<string, z.infer<typeof prototypeRequestSchema>>();
+  const requestedUiPreview = new Map<string, string>();
   let latest: PublicPrototypeReference | undefined;
   return {
     accept(candidate: unknown) {
@@ -199,8 +200,20 @@ export const createInstalledPrototypeReferenceReducer = (input: { sessionId: str
           }
           if (action.data.toolName !== "record_prototype_artifact") {
             requested.delete(action.data.callId);
+            if (action.data.toolName === "record_ui_preview") {
+              const preview = z
+                .object({ appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u) })
+                .passthrough()
+                .safeParse(action.data.input);
+              if (preview.success) {
+                requestedUiPreview.set(action.data.callId, preview.data.appId);
+              }
+            } else {
+              requestedUiPreview.delete(action.data.callId);
+            }
             continue;
           }
+          requestedUiPreview.delete(action.data.callId);
           const parsed = prototypeRequestSchema.safeParse(action.data.input);
           if (parsed.success) {
             requested.set(action.data.callId, parsed.data);
@@ -219,7 +232,7 @@ export const createInstalledPrototypeReferenceReducer = (input: { sessionId: str
               isError: z.boolean().optional(),
               kind: z.literal("tool-result"),
               output: z.unknown(),
-              toolName: z.literal("record_prototype_artifact"),
+              toolName: z.enum(["record_prototype_artifact", "record_ui_preview"]),
             })
             .passthrough(),
           status: z.literal("completed"),
@@ -230,6 +243,67 @@ export const createInstalledPrototypeReferenceReducer = (input: { sessionId: str
         return;
       }
       const receipt = resultEvent.data.result;
+      if (receipt.toolName === "record_ui_preview") {
+        const appId = requestedUiPreview.get(receipt.callId);
+        requestedUiPreview.delete(receipt.callId);
+        if (appId === undefined || receipt.isError === true) {
+          return;
+        }
+        const output = z
+          .object({
+            appId: z.string(),
+            artifactDigest: lowercaseSha256Schema,
+            artifactRevision: lowercaseSha256Schema,
+            chunkCount: z.number().int().positive(),
+            complete: z.literal(true),
+            contentBytes: z.number().int().positive(),
+            digest: lowercaseSha256Schema,
+            mediaType: z.literal("text/html"),
+            path: z.string().regex(prototypePathPattern),
+            recordedByCallId: z.string(),
+            sessionId: z.string(),
+            version: z.literal(2),
+          })
+          .passthrough()
+          .safeParse(receipt.output);
+        if (!output.success) {
+          return;
+        }
+        const value = output.data;
+        if (
+          value.appId !== appId ||
+          value.path !== `prototype/${appId}/index.html` ||
+          value.sessionId !== input.sessionId ||
+          value.recordedByCallId !== receipt.callId ||
+          value.digest !== value.artifactDigest ||
+          value.artifactRevision !==
+            sha256(
+              JSON.stringify({
+                digest: value.digest,
+                mediaType: value.mediaType,
+                path: value.path,
+              }),
+            )
+        ) {
+          return;
+        }
+        const projected = publicPrototypeReferenceSchema.safeParse({
+          appId,
+          chunkCount: value.chunkCount,
+          contentBytes: value.contentBytes,
+          digest: value.digest,
+          mediaType: value.mediaType,
+          path: value.path,
+          recordedByCallId: value.recordedByCallId,
+          revision: value.artifactRevision,
+          sessionId: value.sessionId,
+          version: 2,
+        });
+        if (projected.success) {
+          latest = projected.data;
+        }
+        return;
+      }
       const request = requested.get(receipt.callId);
       requested.delete(receipt.callId);
       if (request === undefined || receipt.isError === true) {
