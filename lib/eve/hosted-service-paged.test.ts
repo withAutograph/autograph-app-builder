@@ -7,7 +7,11 @@ import type { HostedPrincipal } from "./hosted-auth";
 import { createHostedEveSessionService, HostedSessionNotFoundError } from "./hosted-service";
 import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
 import type { HostedEveTransport } from "./hosted-service";
-import { durableHostedSessionRecordSchema, InMemoryHostedEveStore } from "./hosted-store";
+import {
+  durableHostedSessionRecordSchema,
+  hostedOperationRecordSchema,
+  InMemoryHostedEveStore,
+} from "./hosted-store";
 import type {
   HostedEveStore,
   HostedPagedCheckpointMetadata,
@@ -39,7 +43,7 @@ const transport = (observe: NonNullable<HostedEveTransport["observe"]>): HostedE
   start: vi.fn(async () => ({ adapterSessionId: "adapter_1", snapshot: emptySnapshot })),
 });
 
-const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>) => {
+const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, currentTime = 2000) => {
   const base = new InMemoryHostedEveStore();
   const adapter = transport(observe);
   const starting = createHostedEveSessionService({
@@ -124,11 +128,12 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>) => {
     readCheckpointPage,
     replaceSessionAdapter: base.replaceSessionAdapter.bind(base),
     reserveOperation: base.reserveOperation.bind(base),
+    settleIdleReservations: base.settleIdleReservations.bind(base),
     settleSucceeded: base.settleSucceeded.bind(base),
     settleUnsuccessful: base.settleUnsuccessful.bind(base),
   };
   const service = createHostedEveSessionService({
-    now: () => 2000,
+    now: () => currentTime,
     principal,
     store,
     transport: adapter,
@@ -164,6 +169,60 @@ describe("paged hosted session observation", () => {
     expect(result.status).toBe("waiting");
     expect(adapter.cancelAccepted).not.toHaveBeenCalled();
     expect(adapter.cancel).not.toHaveBeenCalled();
+  });
+
+  it("releases only an old reserved mutation after observing an idle session", async () => {
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async () => {
+      await Promise.resolve();
+      return {
+        artifactProjectionRequiresLegacyReadback: false,
+        installedEventCount: 0,
+        pendingRequests: [],
+        publicEventCount: 0,
+        status: "waiting",
+      };
+    });
+    const { adapter, base, service, sessionId } = await fixture(observe, 400_000);
+    adapter.cancelAccepted = vi.fn(async () => {
+      await Promise.resolve();
+    });
+    const old = hostedOperationRecordSchema.parse({
+      clientRequestId: "old-send",
+      createdAtEpochMs: 1000,
+      kind: "send",
+      operationId: "op-old",
+      principal,
+      requestDigest: `sha256:${"a".repeat(64)}`,
+      sessionId,
+      state: "reserved",
+      updatedAtEpochMs: 1000,
+      version: 1,
+    });
+    const next = hostedOperationRecordSchema.parse({
+      ...old,
+      clientRequestId: "next-send",
+      operationId: "op-next",
+      requestDigest: `sha256:${"b".repeat(64)}`,
+      updatedAtEpochMs: 400_000,
+    });
+    const firstReservation = await base.reserveOperation(principal, old);
+    const blockedReservation = await base.reserveOperation(principal, next);
+    expect(firstReservation.disposition).toBe("reserved");
+    expect(blockedReservation.disposition).toBe("rejected");
+    const result = await service.cancel({ sessionId });
+    expect(result.error?.code).toBe("idle_continuation_recovered");
+    expect(await base.reserveOperation(principal, old)).toMatchObject({
+      disposition: "existing",
+      operation: { safeErrorCode: "submission_unknown", state: "submission_unknown" },
+    });
+    const nextReservation = await base.reserveOperation(principal, next);
+    expect(nextReservation.disposition).toBe("reserved");
+    const repeat = await service.cancel({ sessionId });
+    expect(repeat.error?.code).not.toBe("idle_continuation_recovered");
+    expect(await base.reserveOperation(principal, next)).toMatchObject({
+      disposition: "existing",
+      operation: { state: "reserved" },
+    });
   });
 
   it("returns a cancelled session after accepted cancellation and fresh checkpoint", async () => {

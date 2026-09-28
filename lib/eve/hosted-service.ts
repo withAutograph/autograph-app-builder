@@ -71,6 +71,7 @@ import { resultFromHostedCheckpoint } from "./hosted-checkpoint-result";
 
 const projectSnapshot = projectHostedSnapshot;
 const HOSTED_START_REQUEST_TIMEOUT_MS = 300_000;
+const HOSTED_IDLE_RESERVATION_GRACE_MS = 300_000;
 const HOSTED_PROGRESS_NOTICE_MS = 60_000;
 
 export {
@@ -1282,7 +1283,23 @@ export function createHostedEveSessionService(input: {
             if (turnId !== undefined) {
               throw new SubmissionRejectedBeforeDispatchError("no_active_turn");
             }
-            return readSession({ cursor: 0, limit: 100, sessionId });
+            const observedAt = now();
+            const settledCount = await input.store.settleIdleReservations?.({
+              beforeEpochMs: observedAt - HOSTED_IDLE_RESERVATION_GRACE_MS,
+              nowEpochMs: observedAt,
+              principal,
+              sessionId,
+            });
+            const result = await readSession({ cursor: 0, limit: 100, sessionId });
+            return settledCount
+              ? eveSessionResultSchema.parse({
+                  ...result,
+                  error: {
+                    code: "idle_continuation_recovered",
+                    message: `Builder found no active turn and released ${settledCount} old unfinished continuation${settledCount === 1 ? "" : "s"}. Their outcomes remain unknown. Review the current app and PR state before sending a new continuation.`,
+                  },
+                })
+              : result;
           }
           await input.transport.cancelAccepted?.({
             adapterSessionId: session.adapterSessionId,
