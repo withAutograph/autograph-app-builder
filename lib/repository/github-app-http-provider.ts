@@ -402,7 +402,9 @@ export const createGitHubAppHttpProvider = (input: {
     permissions: PermissionSnapshot,
   ): Promise<readonly string[]> => {
     const accessToken = await token(permissions);
-    const ids: string[] = [];
+    // The v2 installation identity still includes every selected ID. Accumulate
+    // one canonical set rather than retaining a page list and a second dedupe copy.
+    const ids = new Set<string>();
     for (let page = 1; ; page += 1) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       const response = await github({
@@ -411,12 +413,17 @@ export const createGitHubAppHttpProvider = (input: {
         path: `/installation/repositories?per_page=100&page=${page}`,
       });
       const repositories = arrayProperty(response.body, "repositories");
-      ids.push(...repositories.map((repository) => decimalProperty(repository, "id")));
+      for (const repository of repositories) {
+        ids.add(decimalProperty(repository, "id"));
+      }
       if (repositories.length < 100) {
         break;
       }
     }
-    return [...new Set(ids)].toSorted();
+    const canonicalIds = [...ids];
+    // oxlint-disable-next-line unicorn/no-array-sort -- This fresh array is owned here; avoid a full duplicate inventory.
+    canonicalIds.sort();
+    return canonicalIds;
   };
 
   const repositoryById = async (
