@@ -65,6 +65,9 @@ it("keeps build output out of reviewed changes while retaining application sourc
       "apps/example/node_modules/.vite/results.json",
       "target/debug/deps/schema_compiler.json",
       "packages/schema-compiler/target/debug/deps/schema_compiler.json",
+      "apps/example/test-results/.last-run.json",
+      "apps/example/playwright-report/index.html",
+      "apps/example/blob-report/report.zip",
       "apps/example/next-env.d.ts",
     ];
     for (const file of files) {
