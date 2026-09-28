@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { MessageStreamEvent } from "eve/client";
 import {
+  createInstalledPrototypeProjector,
   createInstalledPreviewMetadataReducer,
   deriveInstalledEveStatus,
   latestInstalledPrototype,
@@ -81,6 +82,17 @@ function recordedPrototypeEvents(input?: {
 }
 
 describe("toPublicEvent", () => {
+  it("projects legacy prototype receipts one event at a time", () => {
+    const first = recordedPrototypeEvents({ callId: "first", content: "<html>First</html>" });
+    const invalid = recordedPrototypeEvents({ callId: "bad", outputDigest: "f".repeat(64) });
+    const second = recordedPrototypeEvents({ callId: "second", content: "<html>Second</html>" });
+    const sequence = [...first, ...invalid, ...second];
+    const projector = createInstalledPrototypeProjector();
+    for (let index = 0; index < sequence.length; index += 1) {
+      projector.observe(sequence[index]);
+      expect(projector.current()).toEqual(latestInstalledPrototype(sequence.slice(0, index + 1)));
+    }
+  });
   it("publishes an allowlisted assistant message", () => {
     expect(
       toPublicEvent({

@@ -300,9 +300,12 @@ const uiPreviewResultSchema = z
  * action stream. Raw tool input is never projected without its matching,
  * completed receipt.
  */
-export const latestInstalledPrototype = (
-  events: readonly MessageStreamEvent[],
-): PublicPrototype | undefined => {
+export interface InstalledPrototypeProjector {
+  observe: (event: MessageStreamEvent) => void;
+  current: () => PublicPrototype | undefined;
+}
+
+export const createInstalledPrototypeProjector = (): InstalledPrototypeProjector => {
   const requested = new Map<string, z.infer<typeof prototypeRequestSchema>>();
   const artifactReadRequests = new Map<
     string,
@@ -337,7 +340,7 @@ export const latestInstalledPrototype = (
   >();
   let latest: PublicPrototype | undefined;
 
-  for (const event of events) {
+  const observe = (event: MessageStreamEvent): void => {
     if (event.type === "actions.requested") {
       for (const action of event.data.actions) {
         if (action.kind !== "tool-call") {
@@ -371,7 +374,7 @@ export const latestInstalledPrototype = (
           artifactReadRequests.delete(action.callId);
         }
       }
-      continue;
+      return;
     }
 
     if (
@@ -380,17 +383,17 @@ export const latestInstalledPrototype = (
       event.data.result.kind !== "tool-result" ||
       event.data.result.isError === true
     ) {
-      continue;
+      return;
     }
 
     if (event.data.result.toolName === "record_ui_preview") {
       const preview = uiPreviewResultSchema.safeParse(event.data.result.output);
       if (!preview.success || preview.data.complete === false) {
-        continue;
+        return;
       }
       if (preview.data.content !== undefined) {
         if (sha256(preview.data.content) !== preview.data.digest) {
-          continue;
+          return;
         }
         latest = publicPrototypeSchema.parse({
           content: preview.data.content,
@@ -410,7 +413,7 @@ export const latestInstalledPrototype = (
           revision: preview.data.artifactRevision,
         };
       }
-      continue;
+      return;
     }
     if (event.data.result.toolName === "get_prototype_artifact") {
       const { callId } = event.data.result;
@@ -436,14 +439,14 @@ export const latestInstalledPrototype = (
         input.digest !== output.data.digest ||
         (input.revision !== undefined && input.revision !== output.data.revision)
       ) {
-        continue;
+        return;
       }
       if (output.data.byteOffset === undefined) {
         if (sha256(output.data.content) !== output.data.digest) {
-          continue;
+          return;
         }
         latest = publicPrototypeSchema.parse({ ...output.data, mediaType: "text/html" });
-        continue;
+        return;
       }
       const { byteOffset, nextOffsetBytes, totalBytes, chunkDigest } = output.data;
       if (
@@ -455,13 +458,13 @@ export const latestInstalledPrototype = (
         Buffer.byteLength(output.data.content, "utf-8") !== nextOffsetBytes - byteOffset
       ) {
         readChunks.delete(output.data.path);
-        continue;
+        return;
       }
       const prior = readChunks.get(output.data.path);
       if (byteOffset === 0) {
         if (input.revision === undefined) {
           readChunks.delete(output.data.path);
-          continue;
+          return;
         }
         readChunks.set(output.data.path, {
           chunks: [output.data.content],
@@ -487,7 +490,7 @@ export const latestInstalledPrototype = (
         });
       } else {
         readChunks.delete(output.data.path);
-        continue;
+        return;
       }
       const assembled = readChunks.get(output.data.path);
       if (output.data.complete === true && assembled?.nextOffsetBytes === totalBytes) {
@@ -509,17 +512,17 @@ export const latestInstalledPrototype = (
         }
         readChunks.delete(output.data.path);
       }
-      continue;
+      return;
     }
     if (event.data.result.toolName !== "record_prototype_artifact") {
-      continue;
+      return;
     }
 
     const { callId } = event.data.result;
     const input = requested.get(callId);
     const output = prototypeResultSchema.safeParse(event.data.result.output);
     if (input === undefined || !output.success) {
-      continue;
+      return;
     }
 
     const appId = prototypePathPattern.exec(input.path)?.groups?.appId;
@@ -550,7 +553,7 @@ export const latestInstalledPrototype = (
               revision,
             });
           }
-          continue;
+          return;
         }
         const rollingDigest = sha256(chunkDigest);
         const receivedBytes = Buffer.byteLength(input.content, "utf-8");
@@ -560,7 +563,7 @@ export const latestInstalledPrototype = (
           output.data.complete !== false
         ) {
           transfers.delete(input.path);
-          continue;
+          return;
         }
         const transfer = {
           chunks: [input.content],
@@ -589,7 +592,7 @@ export const latestInstalledPrototype = (
           output.data.recordedByCallId !== callId
         ) {
           transfers.delete(input.path);
-          continue;
+          return;
         }
         transfers.set(input.path, {
           chunks: [input.content],
@@ -602,18 +605,18 @@ export const latestInstalledPrototype = (
           revision,
           rollingDigest,
         });
-        continue;
+        return;
       }
       if (prior === undefined || prior.expectedDigest !== input.expectedDigest) {
         transfers.delete(input.path);
-        continue;
+        return;
       }
       if (
         input.chunkIndex === prior.lastChunkIndex &&
         callId === prior.lastCallId &&
         chunkDigest === prior.lastChunkDigest
       ) {
-        continue;
+        return;
       }
       if (
         input.chunkIndex !== prior.nextChunkIndex ||
@@ -621,7 +624,7 @@ export const latestInstalledPrototype = (
         output.data.nextChunkIndex !== input.chunkIndex + 1
       ) {
         transfers.delete(input.path);
-        continue;
+        return;
       }
       const chunks = [...prior.chunks, input.content];
       const receivedBytes = prior.receivedBytes + Buffer.byteLength(input.content, "utf-8");
@@ -635,18 +638,18 @@ export const latestInstalledPrototype = (
         output.data.recordedByCallId !== callId
       ) {
         transfers.delete(input.path);
-        continue;
+        return;
       }
       const complete = input.finalChunk === true;
       if (output.data.complete !== complete) {
         transfers.delete(input.path);
-        continue;
+        return;
       }
       const assembled = complete ? chunks.join("") : null;
       const digest = assembled === null ? rollingDigest : sha256(assembled);
       if (complete && digest !== input.expectedDigest) {
         transfers.delete(input.path);
-        continue;
+        return;
       }
       const revision = complete
         ? sha256(JSON.stringify({ digest, mediaType: input.mediaType, path: input.path }))
@@ -669,7 +672,7 @@ export const latestInstalledPrototype = (
           );
       if (output.data.revision !== revision) {
         transfers.delete(input.path);
-        continue;
+        return;
       }
       if (assembled === null) {
         transfers.set(input.path, {
@@ -693,7 +696,7 @@ export const latestInstalledPrototype = (
           revision,
         });
       }
-      continue;
+      return;
     }
 
     const digest = sha256(input.content);
@@ -710,7 +713,7 @@ export const latestInstalledPrototype = (
       output.data.size !== size ||
       output.data.recordedByCallId !== callId
     ) {
-      continue;
+      return;
     }
 
     latest = publicPrototypeSchema.parse({
@@ -720,9 +723,19 @@ export const latestInstalledPrototype = (
       path: input.path,
       revision,
     });
-  }
+  };
 
-  return latest;
+  return { current: () => latest, observe };
+};
+
+export const latestInstalledPrototype = (
+  events: readonly MessageStreamEvent[],
+): PublicPrototype | undefined => {
+  const projector = createInstalledPrototypeProjector();
+  for (const event of events) {
+    projector.observe(event);
+  }
+  return projector.current();
 };
 
 /** Projects component-backed preview metadata only from a completed tool receipt. */

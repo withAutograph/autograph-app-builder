@@ -21,6 +21,7 @@ import {
 import type { HostedEngineSnapshot, HostedEveTransport } from "./hosted-service";
 import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
 import {
+  createInstalledPrototypeProjector,
   deriveInstalledEveStatus,
   latestInstalledPrototype,
   latestInstalledUiPreview,
@@ -368,6 +369,7 @@ export async function* streamSameOriginEveEvents(input: {
 export async function observeSameOriginEveStream(
   input: Parameters<typeof streamSameOriginEveEvents>[0] & {
     onEvent: (event: InternalEveEvent) => Promise<void> | void;
+    onInstalledEvent?: (event: MessageStreamEvent) => void;
   },
 ): Promise<{
   installedEventCount: number;
@@ -389,6 +391,7 @@ export async function observeSameOriginEveStream(
   let workingPreview: PublicWorkingPreview | null | undefined;
   let artifactProjectionRequiresLegacyReadback = false;
   for await (const event of streamSameOriginEveEvents(input)) {
+    input.onInstalledEvent?.(event);
     installedEventCount += 1;
     const turnId =
       "data" in event && "turnId" in event.data
@@ -525,8 +528,25 @@ async function readInstalledSnapshot(
 async function readSnapshot(
   input: Parameters<typeof readInstalledSnapshot>[0],
 ): Promise<HostedEngineSnapshot> {
-  const installedSnapshot = await readInstalledSnapshot(input);
-  return installedSnapshot.snapshot;
+  const events: InternalEveEvent[] = [];
+  const prototype = createInstalledPrototypeProjector();
+  const observation = await observeSameOriginEveStream({
+    ...input,
+    onEvent(event) {
+      events.push(event);
+    },
+    onInstalledEvent: prototype.observe,
+  });
+  const latest = prototype.current();
+  return {
+    events,
+    status: observation.status,
+    ...(latest === undefined ? {} : { prototype: latest }),
+    ...(observation.uiPreview === undefined ? {} : { uiPreview: observation.uiPreview }),
+    ...(observation.workingPreview === undefined
+      ? {}
+      : { workingPreview: observation.workingPreview }),
+  };
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
