@@ -1015,8 +1015,10 @@ const fileState = async (path: string): Promise<FileState> => {
   }
 };
 
-const exactTreeEntries = async (sourcePath: string, sourceSha: string): Promise<TreeEntry[]> => {
-  const result: TreeEntry[] = [];
+const exactTreeEntries = async function* exactTreeEntries(
+  sourcePath: string,
+  sourceSha: string,
+): AsyncGenerator<TreeEntry> {
   for await (const record of gitNullRecords(
     sourcePath,
     ["ls-tree", "-r", "-z", "--full-tree", sourceSha],
@@ -1051,25 +1053,35 @@ const exactTreeEntries = async (sourcePath: string, sourceSha: string): Promise<
       if (target.includes("\0")) {
         throw new Error("The source tree contains an invalid symbolic link.");
       }
-      result.push({
+      yield {
         mode: "120000",
         objectId,
         path,
         state: { digest, kind: "symlink" },
-      });
+      };
       continue;
     }
     // oxlint-disable-next-line eslint/no-await-in-loop -- hash one blob at a time to bound streamed source memory.
     const { digest } = await hashBranchPublicationSourceBlob(sourcePath, objectId);
     const fileMode = mode === "100755" ? "755" : "644";
-    result.push({
+    yield {
       mode: fileMode,
       objectId,
       path,
       state: { digest, kind: "regular", mode: fileMode },
-    });
+    };
   }
-  return result;
+};
+
+const exactTreeStateMap = async (
+  sourcePath: string,
+  sourceSha: string,
+): Promise<Map<string, FileState>> => {
+  const states = new Map<string, FileState>();
+  for await (const entry of exactTreeEntries(sourcePath, sourceSha)) {
+    states.set(entry.path, entry.state);
+  }
+  return states;
 };
 
 const assertOwnedPartialWorktree = async (
@@ -1079,8 +1091,7 @@ const assertOwnedPartialWorktree = async (
   if (!rootState.isDirectory() || rootState.isSymbolicLink()) {
     throw new Error("The partial approved worktree path is unsafe.");
   }
-  const baseEntries = await exactTreeEntries(proposal.sourcePath, proposal.baseSha);
-  const base = new Map(baseEntries.map((entry) => [entry.path, entry.state]));
+  const base = await exactTreeStateMap(proposal.sourcePath, proposal.baseSha);
   const changes = new Map(proposal.changes.map((change) => [change.path, change]));
   const allowedPaths = new Set([...base.keys(), ...changes.keys()]);
   const commonGitDirectoryValue = await git(proposal.sourcePath, [
@@ -1362,12 +1373,12 @@ const ensureExactBaseMaterialization = async (
   preserveReviewedPostimages: boolean,
   lock: PublicationLock,
 ): Promise<void> => {
-  const entries = await exactTreeEntries(proposal.sourcePath, proposal.baseSha);
+  const changes = new Map(proposal.changes.map((change) => [change.path, change]));
   await git(proposal.worktreePath, ["read-tree", proposal.baseSha]);
   lock.assertHeld();
-  for (const entry of entries) {
+  for await (const entry of exactTreeEntries(proposal.sourcePath, proposal.baseSha)) {
     lock.assertHeld();
-    const change = proposal.changes.find(({ path }) => path === entry.path);
+    const change = changes.get(entry.path);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const target = await safeTarget(proposal.worktreePath, entry.path, true);
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -1715,8 +1726,7 @@ const applyRemainingPostimages = async (input: {
 };
 
 const assertPostimages = async (proposal: BranchWorktreePublicationProposal): Promise<void> => {
-  const baseEntries = await exactTreeEntries(proposal.sourcePath, proposal.baseSha);
-  const base = new Map(baseEntries.map((entry) => [entry.path, entry.state]));
+  const base = await exactTreeStateMap(proposal.sourcePath, proposal.baseSha);
   const changes = new Map(proposal.changes.map((change) => [change.path, change]));
   const expectedPaths = new Set(base.keys());
   for (const change of proposal.changes) {
