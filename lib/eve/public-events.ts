@@ -1324,7 +1324,7 @@ export const toPublicEvent = (event: InternalEveEvent): PublicEveEvent | null =>
             index: event.index,
             label: event.label,
             state: event.state as "started" | "completed" | "failed",
-            turnId: event.turnId,
+            ...(event.turnId === undefined ? {} : { turnId: event.turnId }),
             type: "progress",
           }
         : null;

@@ -122,9 +122,25 @@ const canonicalRecordValue = (value: unknown): string => {
   return JSON.stringify(value);
 };
 
+// JSON storage omits undefined object members and writes undefined array items
+// as null. Hash the same shape that a checkpoint can retain after persistence.
+const canonicalPersistedValue = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => (entry === undefined ? "null" : canonicalPersistedValue(entry))).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    return `{${Object.entries(value)
+      .filter(([, entry]) => entry !== undefined)
+      .toSorted(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalPersistedValue(entry)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+};
+
 export const hostedSessionCheckpointDigest = (checkpoint: HostedSessionCheckpoint): string => {
   const parsed = hostedSessionCheckpointSchema.parse(checkpoint);
-  return `sha256:${createHash("sha256").update(canonicalRecordValue(parsed)).digest("hex")}`;
+  return `sha256:${createHash("sha256").update(canonicalPersistedValue(parsed)).digest("hex")}`;
 };
 
 export const hostedSessionCheckpointProgressDigest = (
@@ -132,7 +148,28 @@ export const hostedSessionCheckpointProgressDigest = (
 ): string => {
   const { capturedAtEpochMs, ...progress } = hostedSessionCheckpointSchema.parse(checkpoint);
   void capturedAtEpochMs;
-  return `sha256:${createHash("sha256").update(canonicalRecordValue(progress)).digest("hex")}`;
+  return `sha256:${createHash("sha256").update(canonicalPersistedValue(progress)).digest("hex")}`;
+};
+
+// Older inline checkpoints hashed progress events with `turnId: undefined`.
+// That key disappeared when the record was stored as JSON. Recognize only this
+// known legacy shape, and require both old digests to match before recovery.
+const legacyProgressTurnIdDigests = (checkpoint: HostedSessionCheckpoint) => {
+  const legacy = hostedSessionCheckpointSchema.parse({
+    ...checkpoint,
+    events: checkpoint.events.map((event) =>
+      event.type === "progress" && !("turnId" in event)
+        ? // oxlint-disable-next-line sonarjs/no-undefined-assignment -- reproduce the legacy hashed shape exactly.
+          { ...event, turnId: undefined }
+        : event,
+    ),
+  });
+  const { capturedAtEpochMs, ...progress } = legacy;
+  void capturedAtEpochMs;
+  return {
+    checkpointDigest: `sha256:${createHash("sha256").update(canonicalRecordValue(legacy)).digest("hex")}`,
+    progressDigest: `sha256:${createHash("sha256").update(canonicalRecordValue(progress)).digest("hex")}`,
+  };
 };
 
 const reportCheckpointDigestMismatch = (
@@ -147,13 +184,25 @@ const reportCheckpointDigestMismatch = (
     return;
   }
   const computedCheckpointDigest = hostedSessionCheckpointDigest(record.checkpoint);
+  const computedProgressDigest = hostedSessionCheckpointProgressDigest(record.checkpoint);
+  if (
+    computedCheckpointDigest !== record.checkpointDigest ||
+    computedProgressDigest !== record.checkpointProgressDigest
+  ) {
+    const legacy = legacyProgressTurnIdDigests(record.checkpoint);
+    if (
+      legacy.checkpointDigest === record.checkpointDigest &&
+      legacy.progressDigest === record.checkpointProgressDigest
+    ) {
+      return;
+    }
+  }
   if (computedCheckpointDigest !== record.checkpointDigest) {
     context.addIssue({
       code: "custom",
       message: `Hosted session checkpoint digest mismatch: stored ${record.checkpointDigest ?? "missing"}, computed ${computedCheckpointDigest}. Preserve the session and inspect checkpoint writes or source serialization before retrying.`,
     });
   }
-  const computedProgressDigest = hostedSessionCheckpointProgressDigest(record.checkpoint);
   if (computedProgressDigest !== record.checkpointProgressDigest) {
     context.addIssue({
       code: "custom",
