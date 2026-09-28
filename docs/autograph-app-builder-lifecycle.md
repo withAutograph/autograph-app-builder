@@ -70,6 +70,9 @@ exit status, includes bounded redacted compiler or command diagnostics when
 available, and gives a repair or retry instruction. Checkout-backed execution
 readiness uses the prepared checkout and its hosted sandbox binding; absence of
 an obsolete offline dependency cache is not an image-configuration failure.
+Schema release compilation may follow an initial validation pass. It clears
+that pass before changing the private checkout so normal app checks run again
+against the compiled result before review.
 
 ### 10. Authorize consequential effects separately
 

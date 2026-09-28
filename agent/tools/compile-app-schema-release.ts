@@ -2,7 +2,11 @@ import { defineTool } from "eve/tools";
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
-import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import {
+  APP_BUILDER_WORKFLOW_VERSION,
+  appBuilderWorkflowState,
+  updateExactWorkflow,
+} from "@/lib/agent/workflow-state";
 
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 const outputLimit = 6000;
@@ -76,18 +80,44 @@ export const compileAppSchemaRelease = async (input: {
 
 export default defineTool({
   description:
-    "Regenerate the selected existing app's checked CUE schema release in its already approved private checkout when validation reports stale schema artifacts. The fixed repository-owned `schema:release -- compile --app` task targets only the selected app. This does not publish or deploy. The result includes the exact command, exit status, and bounded compiler output; rerun validate_app_creation after compilation.",
+    "Regenerate the selected existing app's checked CUE schema release in its already approved private checkout, including after an initial validation pass. The fixed repository-owned `schema:release -- compile --app` task targets only the selected app. This does not publish or deploy. The result includes the exact command, exit status, and bounded compiler output; rerun validate_app_creation after compilation.",
   async execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
-    if (state.phase !== "applied" && state.phase !== "validation_failed") {
+    if (
+      state.phase !== "applied" &&
+      state.phase !== "validation_failed" &&
+      state.phase !== "validated"
+    ) {
       throw new Error(
         "Compile the selected app schema only after the private app build is applied and before change review; rerun app validation afterward.",
       );
     }
+    const sandbox = await ctx.getSandbox();
+    if (state.phase !== "applied") {
+      updateExactWorkflow({
+        expected: state,
+        operation: "schema release invalidates prior validation",
+        transition: () => ({
+          appSpec: state.appSpec,
+          applyReceipt: state.applyReceipt,
+          artifacts: state.artifacts,
+          dependencyReceipt: state.dependencyReceipt,
+          githubSource: state.githubSource,
+          identityReceipt: state.identityReceipt,
+          phase: "applied",
+          preparedByCallId: state.preparedByCallId,
+          proposal: state.proposal,
+          publishedGitHubDraftProposalDigest: state.publishedGitHubDraftProposalDigest,
+          sourceReceipt: state.sourceReceipt,
+          version: APP_BUILDER_WORKFLOW_VERSION,
+          workspace: state.workspace,
+        }),
+      });
+    }
     return await compileAppSchemaRelease({
       appId: state.appSpec.appId,
       root: state.applyReceipt.applyRoot,
-      sandbox: await ctx.getSandbox(),
+      sandbox,
       signal: ctx.abortSignal,
     });
   },
