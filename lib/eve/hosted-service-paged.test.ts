@@ -145,6 +145,29 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>) => {
 };
 
 describe("paged hosted session observation", () => {
+  it("settles an accepted send only after a fresh paged checkpoint is durable", async () => {
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async ({ onEvent }) => {
+      await onEvent({ index: 0, text: "accepted", turnId: "turn_1", type: "assistant.message" });
+      return {
+        artifactProjectionRequiresLegacyReadback: false,
+        installedEventCount: 1,
+        pendingRequests: [],
+        publicEventCount: 1,
+        status: "waiting",
+      };
+    });
+    const { adapter, service, sessionId } = await fixture(observe);
+    adapter.sendAccepted = vi.fn(() => Promise.resolve());
+    const result = await service.send({
+      clientRequestId: randomUUID(),
+      message: "continue",
+      sessionId,
+    });
+    expect(result.events[0]).toMatchObject({ text: "accepted" });
+    expect(adapter.sendAccepted).toHaveBeenCalledOnce();
+    expect(adapter.send).not.toHaveBeenCalled();
+  });
+
   it("shows the saved page with a retry instruction when Eve readback times out", async () => {
     let reads = 0;
     const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async ({ onEvent }) => {

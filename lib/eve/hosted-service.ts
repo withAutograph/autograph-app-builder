@@ -126,6 +126,8 @@ export interface HostedEveTransport {
     message: string;
     sourceHandoffId?: string;
   }) => Promise<HostedEngineSnapshot>;
+  /** Resolves after Eve accepts the message, without exporting its complete history. */
+  sendAccepted?: (input: Parameters<HostedEveTransport["send"]>[0]) => Promise<void>;
   respond: (input: {
     principal: HostedPrincipal;
     operationId: string;
@@ -147,6 +149,8 @@ export interface HostedEveTransport {
     }[];
     sourceHandoffId?: string;
   }) => Promise<HostedEngineSnapshot>;
+  /** Resolves after Eve accepts and verifies settlement of the response batch. */
+  respondAccepted?: (input: Parameters<HostedEveTransport["respond"]>[0]) => Promise<void>;
   cancel: (input: {
     principal: HostedPrincipal;
     adapterSessionId: string;
@@ -1161,6 +1165,23 @@ export function createHostedEveSessionService(input: {
     }
   }
 
+  // eslint-disable-next-line eslint/func-style -- Mutation settlement must observe a new durable checkpoint.
+  async function readAcceptedMutation(
+    sessionId: string,
+    previousCheckpointDigest: string | undefined,
+  ): Promise<EveSessionResult> {
+    const result = await readSession({ cursor: 0, limit: 100, sessionId });
+    const current = toDurableHostedSessionRecord(await requireSession(sessionId));
+    if (
+      result.error?.code === "session_read_delayed" ||
+      current.checkpointDigest === undefined ||
+      current.checkpointDigest === previousCheckpointDigest
+    ) {
+      throw new HostedSubmissionUnknownError();
+    }
+    return result;
+  }
+
   return {
     async cancel({ sessionId, turnId }) {
       requireHostedOperationScope(principal, "cancel");
@@ -1206,14 +1227,34 @@ export function createHostedEveSessionService(input: {
       const session = await requireSession(request.sessionId);
       return mutate({
         async dispatch(operationId) {
-          const before = await input.transport.get({
-            adapterSessionId: session.adapterSessionId,
-            principal,
-          });
-          const expected = outstandingInternalEveRequests(
-            before.events.filter(
-              (event): event is InternalEveEvent => event !== null && typeof event === "object",
-            ),
+          const paged =
+            input.transport.observe !== undefined &&
+            input.transport.respondAccepted !== undefined &&
+            input.store.observeSessionPaged !== undefined &&
+            input.store.readCheckpointPage !== undefined;
+          const observed = paged
+            ? await input.transport.observe?.({
+                adapterSessionId: session.adapterSessionId,
+                onEvent: () => {},
+                principal,
+                sessionId: request.sessionId,
+              })
+            : undefined;
+          const before = observed
+            ? undefined
+            : await input.transport.get({
+                adapterSessionId: session.adapterSessionId,
+                principal,
+              });
+          const expected = (
+            observed
+              ? observed.pendingRequests
+              : outstandingInternalEveRequests(
+                  (before?.events ?? []).filter(
+                    (event): event is InternalEveEvent =>
+                      event !== null && typeof event === "object",
+                  ),
+                )
           ).flatMap((pending) => (pending.kind === "authorization" ? [] : [pending.requestId]));
           if (
             expected.length !== request.responses.length ||
@@ -1221,7 +1262,7 @@ export function createHostedEveSessionService(input: {
           ) {
             throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
           }
-          const snapshot = await input.transport.respond({
+          const responseInput = {
             adapterSessionId: session.adapterSessionId,
             operationId,
             principal,
@@ -1229,7 +1270,17 @@ export function createHostedEveSessionService(input: {
             ...(session.version === 2 && session.sourceHandoffId
               ? { sourceHandoffId: session.sourceHandoffId }
               : {}),
-          });
+          };
+          if (observed && !observed.artifactProjectionRequiresLegacyReadback) {
+            await input.transport.respondAccepted?.(responseInput);
+            return {
+              result: await readAcceptedMutation(
+                request.sessionId,
+                toDurableHostedSessionRecord(session).checkpointDigest,
+              ),
+            };
+          }
+          const snapshot = await input.transport.respond(responseInput);
           const result = await observeSnapshot(request.sessionId, snapshot);
           return { result };
         },
@@ -1243,7 +1294,20 @@ export function createHostedEveSessionService(input: {
       const session = await requireSession(request.sessionId);
       return mutate({
         async dispatch(operationId) {
-          const snapshot = await input.transport.send({
+          const paged =
+            input.transport.observe !== undefined &&
+            input.transport.sendAccepted !== undefined &&
+            input.store.observeSessionPaged !== undefined &&
+            input.store.readCheckpointPage !== undefined;
+          const observed = paged
+            ? await input.transport.observe?.({
+                adapterSessionId: session.adapterSessionId,
+                onEvent: () => {},
+                principal,
+                sessionId: request.sessionId,
+              })
+            : undefined;
+          const sendInput = {
             adapterSessionId: session.adapterSessionId,
             message: request.message,
             operationId,
@@ -1251,7 +1315,17 @@ export function createHostedEveSessionService(input: {
             ...(session.version === 2 && session.sourceHandoffId
               ? { sourceHandoffId: session.sourceHandoffId }
               : {}),
-          });
+          };
+          if (observed && !observed.artifactProjectionRequiresLegacyReadback) {
+            await input.transport.sendAccepted?.(sendInput);
+            return {
+              result: await readAcceptedMutation(
+                request.sessionId,
+                toDurableHostedSessionRecord(session).checkpointDigest,
+              ),
+            };
+          }
+          const snapshot = await input.transport.send(sendInput);
           const result = await observeSnapshot(request.sessionId, snapshot);
           return { result };
         },
