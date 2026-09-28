@@ -1578,39 +1578,110 @@ const writePostimage = async (
   await materializeAtomically(proposal, target, bytes, mode);
 };
 
-const worktreeFileStates = async (
+const presentWorktreePaths = async function* presentWorktreePaths(
+  directory: string,
+  prefix = "",
+): AsyncGenerator<string> {
+  const directoryEntries = await readdir(directory, { withFileTypes: true });
+  const entries = directoryEntries.toSorted((left, right) =>
+    compareOverlayPaths(
+      `${left.name}${left.isDirectory() ? "/" : ""}`,
+      `${right.name}${right.isDirectory() ? "/" : ""}`,
+    ),
+  );
+  for (const entry of entries) {
+    const path = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+    if (prefix === "" && path === ".git") {
+      continue;
+    }
+    if (!safeSourcePath(path)) {
+      throw new Error("The publication worktree contains an unsafe path.");
+    }
+    if (entry.isDirectory()) {
+      yield* presentWorktreePaths(pathResolve(directory, entry.name), path);
+    } else {
+      yield path;
+    }
+  }
+};
+
+/** Merge the two bytewise-sorted sources, retaining each path only once.
+ * @yields {string} A canonical path from either source.
+ */
+export const mergeSortedPublicationPaths = async function* mergeSortedPublicationPaths(
+  cached: AsyncIterable<string>,
+  present: AsyncIterable<string>,
+): AsyncGenerator<string> {
+  const left = cached[Symbol.asyncIterator]();
+  const right = present[Symbol.asyncIterator]();
+  try {
+    let leftNext = await left.next();
+    let rightNext = await right.next();
+    let previous: string | undefined;
+    while (leftNext.done !== true || rightNext.done !== true) {
+      let path: string;
+      if (
+        rightNext.done === false &&
+        (leftNext.done === true || compareOverlayPaths(rightNext.value, leftNext.value) < 0)
+      ) {
+        path = rightNext.value;
+        // oxlint-disable-next-line eslint/no-await-in-loop -- advance one bounded stream record.
+        rightNext = await right.next();
+      } else if (leftNext.done === false) {
+        path = leftNext.value;
+        // oxlint-disable-next-line eslint/no-await-in-loop -- advance one bounded stream record.
+        leftNext = await left.next();
+      } else {
+        break;
+      }
+      if (previous !== undefined && compareOverlayPaths(previous, path) > 0) {
+        throw new Error("The publication worktree path listing changed order.");
+      }
+      if (path !== previous) {
+        yield path;
+      }
+      previous = path;
+    }
+  } finally {
+    await Promise.all([left.return?.(), right.return?.()]);
+  }
+};
+
+const worktreeFileStates = async function* worktreeFileStates(
   proposal: BranchWorktreePublicationProposal,
-): Promise<readonly { path: string; state: FileState }[]> => {
-  const cached = await gitCanonicalPathList(
+): AsyncGenerator<{ path: string; state: FileState }> {
+  const cached = gitNullRecords(
     proposal.worktreePath,
     ["ls-files", "-z", "--cached"],
-    "The publication worktree contains non-canonical, non-UTF-8, or unsafe paths.",
+    "list cached publication worktree paths",
   );
-  const present: string[] = [];
-  const visit = async (directory: string, prefix: string): Promise<void> => {
-    const entries = await readdir(directory, { withFileTypes: true });
-    await runSequentially(entries, async (entry) => {
-      const path = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
-      if (!(prefix === "" && path === ".git")) {
-        if (!safeSourcePath(path)) {
-          throw new Error("The publication worktree contains an unsafe path.");
-        }
-        if (entry.isDirectory()) {
-          await visit(pathResolve(directory, entry.name), path);
-        } else {
-          present.push(path);
-        }
-      }
-    });
-  };
-  await visit(proposal.worktreePath, "");
-  const paths = [...new Set([...cached, ...present])].toSorted(compareOverlayPaths);
-  const states: { path: string; state: FileState }[] = [];
-  for (const path of paths) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- bound concurrent file reads for large repositories.
-    states.push({ path, state: await fileState(pathResolve(proposal.worktreePath, path)) });
+  for await (const path of mergeSortedPublicationPaths(
+    cached,
+    presentWorktreePaths(proposal.worktreePath),
+  )) {
+    if (!safeSourcePath(path)) {
+      throw new Error("The publication worktree contains an unsafe path.");
+    }
+    yield { path, state: await fileState(pathResolve(proposal.worktreePath, path)) };
   }
-  return states;
+};
+
+/** Hash the exact JSON array shape used by stableDigest without retaining it. */
+export const digestWorktreeStates = async (
+  states: AsyncIterable<{ path: string; state: FileState }>,
+): Promise<string> => {
+  const hash = createHash("sha256");
+  hash.update("[");
+  let first = true;
+  for await (const state of states) {
+    if (!first) {
+      hash.update(",");
+    }
+    hash.update(JSON.stringify(state));
+    first = false;
+  }
+  hash.update("]");
+  return hash.digest("hex");
 };
 
 const worktreeSnapshot = async (proposal: BranchWorktreePublicationProposal) => {
@@ -1631,7 +1702,7 @@ const worktreeSnapshot = async (proposal: BranchWorktreePublicationProposal) => 
     "index",
   ]);
   const indexPath = indexPathValue.trim();
-  const statusEntries = await worktreeFileStates(proposal);
+  const statusDigest = await digestWorktreeStates(worktreeFileStates(proposal));
   const [headShaValue, headTreeValue, headReferenceValue, remoteValue] = await Promise.all([
     git(root, ["rev-parse", "HEAD"]),
     git(root, ["rev-parse", "HEAD^{tree}"]),
@@ -1655,7 +1726,7 @@ const worktreeSnapshot = async (proposal: BranchWorktreePublicationProposal) => 
       device: rootStat.dev.toString(),
       inode: rootStat.ino.toString(),
     },
-    statusDigest: stableDigest(statusEntries),
+    statusDigest,
   };
 };
 
@@ -1726,54 +1797,70 @@ const applyRemainingPostimages = async (input: {
 export const assertBranchPublicationPostimageSequence = async (input: {
   base: AsyncIterable<{ path: string; state: FileState }>;
   changes: BranchWorktreePublicationProposal["changes"];
-  observed: readonly { path: string; state: FileState }[];
+  observed:
+    | AsyncIterable<{ path: string; state: FileState }>
+    | Iterable<{ path: string; state: FileState }>;
 }): Promise<void> => {
-  const { observed } = input;
   const changes = [...input.changes].toSorted((left, right) =>
     compareOverlayPaths(left.path, right.path),
   );
-  let observedIndex = 0;
+  const observed = async function* observed() {
+    for await (const entry of input.observed) {
+      yield entry;
+    }
+  };
+  const iterator = observed();
+  let current = await iterator.next();
   let changeIndex = 0;
-  const expectPath = (path: string, expected: FileState) => {
-    const current = observed[observedIndex];
-    if (current?.path !== path || !exactStateMatches(current.state, expected)) {
+  const expectPath = async (path: string, expected: FileState) => {
+    if (
+      current.done === true ||
+      current.value.path !== path ||
+      !exactStateMatches(current.value.state, expected)
+    ) {
       throw new Error(`The publication worktree changed unexpectedly at ${path}.`);
     }
-    observedIndex += 1;
+    current = await iterator.next();
   };
-  for await (const entry of input.base) {
-    while (
-      changes[changeIndex] !== undefined &&
-      compareOverlayPaths(changes[changeIndex].path, entry.path) < 0
-    ) {
+  try {
+    for await (const entry of input.base) {
+      while (
+        changes[changeIndex] !== undefined &&
+        compareOverlayPaths(changes[changeIndex].path, entry.path) < 0
+      ) {
+        const change = changes[changeIndex];
+        // oxlint-disable-next-line eslint/no-await-in-loop -- compare the next streamed path in order.
+        await expectPath(
+          change.path,
+          change.after === undefined ? { kind: "absent" } : { kind: "regular", ...change.after },
+        );
+        changeIndex += 1;
+      }
       const change = changes[changeIndex];
-      expectPath(
+      if (change?.path === entry.path) {
+        await expectPath(
+          entry.path,
+          change.after === undefined ? { kind: "absent" } : { kind: "regular", ...change.after },
+        );
+        changeIndex += 1;
+      } else {
+        await expectPath(entry.path, entry.state);
+      }
+    }
+    while (changeIndex < changes.length) {
+      const change = changes[changeIndex];
+      // oxlint-disable-next-line eslint/no-await-in-loop -- compare the next streamed path in order.
+      await expectPath(
         change.path,
         change.after === undefined ? { kind: "absent" } : { kind: "regular", ...change.after },
       );
       changeIndex += 1;
     }
-    const change = changes[changeIndex];
-    if (change?.path === entry.path) {
-      expectPath(
-        entry.path,
-        change.after === undefined ? { kind: "absent" } : { kind: "regular", ...change.after },
-      );
-      changeIndex += 1;
-    } else {
-      expectPath(entry.path, entry.state);
+    if (current.done !== true) {
+      throw new Error("The publication worktree contains an unapproved path.");
     }
-  }
-  while (changeIndex < changes.length) {
-    const change = changes[changeIndex];
-    expectPath(
-      change.path,
-      change.after === undefined ? { kind: "absent" } : { kind: "regular", ...change.after },
-    );
-    changeIndex += 1;
-  }
-  if (observedIndex !== observed.length) {
-    throw new Error("The publication worktree contains an unapproved path.");
+  } finally {
+    await iterator.return();
   }
 };
 
@@ -1781,7 +1868,7 @@ const assertPostimages = async (proposal: BranchWorktreePublicationProposal): Pr
   await assertBranchPublicationPostimageSequence({
     base: exactTreeEntries(proposal.sourcePath, proposal.baseSha),
     changes: proposal.changes,
-    observed: await worktreeFileStates(proposal),
+    observed: worktreeFileStates(proposal),
   });
 };
 

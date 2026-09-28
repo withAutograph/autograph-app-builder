@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { assertBranchPublicationPostimageSequence } from "./node-branch-worktree-publication";
+import {
+  assertBranchPublicationPostimageSequence,
+  digestWorktreeStates,
+  mergeSortedPublicationPaths,
+} from "./node-branch-worktree-publication";
+import { stableDigest } from "./local-publication";
 
 const regular = (digest: string) => ({ digest, kind: "regular" as const, mode: "644" });
 const base = async function* base() {
@@ -24,11 +29,50 @@ const observed = [
   { path: "c.txt", state: regular("C") },
   { path: "d.txt", state: regular("d") },
 ];
+const cached = async function* cached() {
+  yield "a";
+  yield "b";
+  yield "d";
+};
+const present = async function* present() {
+  yield "a";
+  yield "c";
+  yield "d";
+};
 
 describe("streamed branch publication postimage comparison", () => {
+  it("merges sorted tracked and present paths without retaining or repeating them", async () => {
+    const paths: string[] = [];
+    for await (const path of mergeSortedPublicationPaths(cached(), present())) {
+      paths.push(path);
+    }
+    expect(paths).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("hashes streamed worktree states with the exact legacy JSON digest", async () => {
+    const states = observed;
+    const streamed = async function* streamed() {
+      for (const state of states) {
+        yield state;
+      }
+    };
+    expect(await digestWorktreeStates(streamed())).toBe(stableDigest(states));
+  });
+
   it("accepts exact additions, modifications, and deletions", async () => {
     await expect(
       assertBranchPublicationPostimageSequence({ base: base(), changes, observed }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("accepts a streamed observed sequence", async () => {
+    const streamed = async function* streamed() {
+      for (const entry of observed) {
+        yield entry;
+      }
+    };
+    await expect(
+      assertBranchPublicationPostimageSequence({ base: base(), changes, observed: streamed() }),
     ).resolves.toBeUndefined();
   });
 
