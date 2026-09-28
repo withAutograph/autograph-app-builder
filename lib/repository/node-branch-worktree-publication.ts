@@ -291,8 +291,72 @@ const git = async (root: string, args: readonly string[]): Promise<string> => {
   return output.toString("utf-8");
 };
 
-const gitBuffer = async (root: string, args: readonly string[]): Promise<Buffer> =>
-  await gitOutput(root, args);
+/** Consume NUL-delimited Git output without retaining the complete process output.
+ * @yields {string} Each decoded record after canonical UTF-8 validation.
+ */
+const gitNullRecords = async function* gitNullRecords(
+  root: string,
+  args: readonly string[],
+  operation: string,
+): AsyncGenerator<string> {
+  const diagnosticCapture = await startGitDiagnosticCapture();
+  const child = spawn(gitExecutable(), gitArguments(root, args), {
+    env: gitEnvironment(),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
+  child.stderr.pipe(diagnosticCapture.writer);
+  let remainder = Buffer.alloc(0);
+  let completed = false;
+  let diagnosticsFinished = false;
+  try {
+    for await (const chunk of child.stdout as AsyncIterable<Buffer>) {
+      let offset = 0;
+      while (offset < chunk.length) {
+        const delimiter = chunk.indexOf(0, offset);
+        if (delimiter === -1) {
+          remainder = Buffer.concat([remainder, chunk.subarray(offset)]);
+          break;
+        }
+        const bytes = Buffer.concat([remainder, chunk.subarray(offset, delimiter)]);
+        remainder = Buffer.alloc(0);
+        let record: string;
+        try {
+          record = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        } catch {
+          throw new Error(`Git ${operation} returned a non-UTF-8 path for ${root}.`);
+        }
+        if (record.length === 0 || !Buffer.from(record).equals(bytes)) {
+          throw new Error(`Git ${operation} returned a non-canonical path for ${root}.`);
+        }
+        yield record;
+        offset = delimiter + 1;
+      }
+    }
+    const [status, signal] = await closed;
+    if (status !== 0) {
+      const logPath = await finishGitDiagnosticCapture(diagnosticCapture, true);
+      diagnosticsFinished = true;
+      throw new Error(
+        `Git ${operation} failed for ${root} (${signal ?? `exit ${status}`}); sanitized stderr is available at ${logPath ?? "an unavailable private diagnostic log"}.`,
+      );
+    }
+    await finishGitDiagnosticCapture(diagnosticCapture, false);
+    diagnosticsFinished = true;
+    completed = true;
+    if (remainder.length !== 0) {
+      throw new Error(`Git ${operation} returned an unterminated path for ${root}.`);
+    }
+  } finally {
+    if (!completed) {
+      child.kill();
+      await closed;
+      if (!diagnosticsFinished) {
+        await finishGitDiagnosticCapture(diagnosticCapture, false);
+      }
+    }
+  }
+};
 
 const runGitCommand = async (
   root: string,
@@ -337,11 +401,17 @@ export const hashBranchPublicationSourceBlob = async (
   };
 };
 
-const parseCanonicalPathList = (output: Buffer, message: string): string[] => {
-  const paths = output.toString("utf-8").split("\0").filter(Boolean);
-  const canonical = Buffer.from(`${paths.join("\0")}${paths.length === 0 ? "" : "\0"}`);
-  if (canonical.compare(output) !== 0 || paths.some((path) => !safeSourcePath(path))) {
-    throw new Error(message);
+const gitCanonicalPathList = async (
+  root: string,
+  args: readonly string[],
+  message: string,
+): Promise<string[]> => {
+  const paths: string[] = [];
+  for await (const path of gitNullRecords(root, args, args[0] ?? "list paths")) {
+    if (!safeSourcePath(path)) {
+      throw new Error(message);
+    }
+    paths.push(path);
   }
   return paths.toSorted(compareOverlayPaths);
 };
@@ -946,9 +1016,12 @@ const fileState = async (path: string): Promise<FileState> => {
 };
 
 const exactTreeEntries = async (sourcePath: string, sourceSha: string): Promise<TreeEntry[]> => {
-  const output = await gitBuffer(sourcePath, ["ls-tree", "-r", "-z", "--full-tree", sourceSha]);
   const result: TreeEntry[] = [];
-  for (const record of output.toString("utf-8").split("\0").filter(Boolean)) {
+  for await (const record of gitNullRecords(
+    sourcePath,
+    ["ls-tree", "-r", "-z", "--full-tree", sourceSha],
+    "ls-tree",
+  )) {
     const match =
       /^(?<mode>100644|100755|120000|160000) (?<type>blob|commit) (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
         record,
@@ -1354,20 +1427,16 @@ const inspectBranchPublicationSource = async (input: {
     "index",
   ]);
   const indexPath = indexPathValue.trim();
-  const listed = await gitBuffer(canonicalPath, [
-    "ls-files",
-    "-z",
-    "--cached",
-    "--others",
-    "--exclude-standard",
-  ]);
-  const paths = parseCanonicalPathList(
-    listed,
+  const paths = await gitCanonicalPathList(
+    canonicalPath,
+    ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
     "The source contains non-canonical, non-UTF-8, or unsafe paths.",
   );
-  const statusEntries = await Promise.all(
-    paths.map(async (path) => ({ path, state: await fileState(pathResolve(canonicalPath, path)) })),
-  );
+  const statusEntries: { path: string; state: FileState }[] = [];
+  for (const path of paths) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- bound concurrent file reads for large repositories.
+    statusEntries.push({ path, state: await fileState(pathResolve(canonicalPath, path)) });
+  }
   for (const change of input.review.changes) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
     const target = await safeTarget(canonicalPath, change.path, false);
@@ -1504,8 +1573,9 @@ const writePostimage = async (
 const worktreeFileStates = async (
   proposal: BranchWorktreePublicationProposal,
 ): Promise<readonly { path: string; state: FileState }[]> => {
-  const cached = parseCanonicalPathList(
-    await gitBuffer(proposal.worktreePath, ["ls-files", "-z", "--cached"]),
+  const cached = await gitCanonicalPathList(
+    proposal.worktreePath,
+    ["ls-files", "-z", "--cached"],
     "The publication worktree contains non-canonical, non-UTF-8, or unsafe paths.",
   );
   const present: string[] = [];
@@ -1527,12 +1597,12 @@ const worktreeFileStates = async (
   };
   await visit(proposal.worktreePath, "");
   const paths = [...new Set([...cached, ...present])].toSorted(compareOverlayPaths);
-  return Promise.all(
-    paths.map(async (path) => ({
-      path,
-      state: await fileState(pathResolve(proposal.worktreePath, path)),
-    })),
-  );
+  const states: { path: string; state: FileState }[] = [];
+  for (const path of paths) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- bound concurrent file reads for large repositories.
+    states.push({ path, state: await fileState(pathResolve(proposal.worktreePath, path)) });
+  }
+  return states;
 };
 
 const worktreeSnapshot = async (proposal: BranchWorktreePublicationProposal) => {
