@@ -38,6 +38,31 @@ export interface InternalEveEvent {
 }
 
 const progressStates = new Set(["started", "completed", "failed"]);
+const visibleOperations = new Map([
+  ["apply_app_creation", "Building the app in its private workspace"],
+  ["compile-app-schema-release", "Compiling the app schema release"],
+  ["prepare-app-local-preview", "Preparing the app's local preview dependencies"],
+  ["run-app-browser-tests", "Running the app's browser tests"],
+  ["start_app_preview", "Starting the app preview"],
+  ["validate_app_creation", "Validating the app changes"],
+  ["validate-app-creation", "Validating the app changes"],
+]);
+const visibleOperationLabels = new Set(visibleOperations.values());
+
+export const pendingBuilderOperation = (events: readonly PublicEveEvent[]): string => {
+  const pending = new Set<string>();
+  for (const event of events) {
+    if (event.type !== "progress" || !visibleOperationLabels.has(event.label)) {
+      continue;
+    }
+    if (event.state === "started") {
+      pending.add(event.label);
+    } else {
+      pending.delete(event.label);
+    }
+  }
+  return [...pending].at(-1) ?? "the current Builder step";
+};
 const silentInternalApprovalTools = new Set([
   "accept_app_spec",
   "validate-app-creation",
@@ -1023,12 +1048,40 @@ export const projectInstalledEveEvent = (
       return [
         {
           index,
-          label: "Agent step",
+          label: "Builder is working on this app",
           state,
           turnId: event.data.turnId,
           type: "progress",
         },
       ];
+    }
+    case "actions.requested": {
+      return event.data.actions.flatMap((action) => {
+        if (action.kind !== "tool-call") {
+          return [];
+        }
+        const label = visibleOperations.get(action.toolName);
+        return label === undefined ? [] : [{ index, label, state: "started", type: "progress" }];
+      });
+    }
+    case "action.result": {
+      if (event.data.result?.kind !== "tool-result") {
+        return [];
+      }
+      const label = visibleOperations.get(event.data.result.toolName);
+      return label === undefined
+        ? []
+        : [
+            {
+              index,
+              label,
+              state:
+                event.data.status === "completed" && event.data.result.isError !== true
+                  ? "completed"
+                  : "failed",
+              type: "progress",
+            },
+          ];
     }
     case "input.requested": {
       const projectedRequests = event.data.requests.map(inputRequest);

@@ -39,6 +39,7 @@ const ctx = {
   session: { auth: {}, id: "ses_one" },
 } as unknown as ToolContext;
 const runtime = {
+  acquireExistingSourceCredential: vi.fn(),
   authorization: vi.fn(),
   classify: vi.fn(),
   prepareExistingSource: vi.fn(),

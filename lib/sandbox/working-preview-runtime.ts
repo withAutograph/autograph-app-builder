@@ -42,6 +42,7 @@ export const workingPreviewSupervisorSource = (input: {
   configurationPath: string;
   ownership?: PreviewAttempt;
   diagnosticsPath?: string;
+  observedPortPath?: string;
 }): string => `${
   input.ownership === undefined
     ? ""
@@ -56,6 +57,16 @@ import { existsSync, writeFileSync } from "node:fs";
 const launch = ${JSON.stringify({ ...input, gatewaySource: undefined })};
 ${workingPreviewDiagnosticCollectorSource}
 let stderr = "";
+let banner = "";
+const recordPort = chunk => {
+  if (!launch.observedPortPath) return;
+  banner = (banner + chunk.toString()).slice(-4096);
+  const match = banner.match(/(?:^|\\n)\\s*-?\\s*Local:\\s*https?:\\/\\/(?:localhost|127\\.0\\.0\\.1):(\\d{4,5})(?:\\/|\\s|$)/i);
+  if (match) {
+    const port = Number(match[1]);
+    if (port >= 1024 && port <= 65535) writeFileSync(launch.observedPortPath, String(port));
+  }
+};
 let closing = false;
 let child;
 const close = () => {
@@ -75,8 +86,8 @@ const activation = setInterval(() => {
   if (!existsSync(launch.configurationPath)) return;
   clearInterval(activation);
   child = spawn(launch.command.executable, launch.command.args, { cwd: launch.cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] });
-  child.stdout.on("data", chunk => { if (launch.diagnosticsPath) appendPreviewDiagnostic("stdout", chunk); process.stdout.write(chunk); });
-  child.stderr.on("data", chunk => { if (launch.diagnosticsPath) appendPreviewDiagnostic("stderr", chunk); stderr = (stderr + chunk.toString()).slice(-8192); process.stderr.write(chunk); });
+  child.stdout.on("data", chunk => { recordPort(chunk); if (launch.diagnosticsPath) appendPreviewDiagnostic("stdout", chunk); process.stdout.write(chunk); });
+  child.stderr.on("data", chunk => { recordPort(chunk); if (launch.diagnosticsPath) appendPreviewDiagnostic("stderr", chunk); stderr = (stderr + chunk.toString()).slice(-8192); process.stderr.write(chunk); });
   child.on("error", error => fail(error.message));
   child.on("exit", (code, signal) => { if (!closing) fail("Application server exited: " + (signal ?? code)); });
 }, 50);
@@ -142,7 +153,11 @@ const openApp = async (input: {
       redirect: "manual",
       signal: requestSignal(input.signal),
     });
-    input.observe(`Application HTTP ${response.status}`);
+    input.observe(
+      response.headers.get("x-autograph-preview-error") === "upstream-unavailable"
+        ? "Preview gateway could not connect to the app's loopback listener. Check the development server's listening port and startup output."
+        : `Application HTTP ${response.status}`,
+    );
     absorbCookies(cookies, response);
     const next = response.headers.get("location");
     const ready = response.ok && response.headers.get("content-type")?.includes("text/html");
@@ -472,6 +487,7 @@ export const startWorkingPreview = async (input: {
     const failurePath = `${directory}/startup-error.json`;
     const readyPath = `${directory}/listener-ready`;
     diagnosticsPath = `${directory}/diagnostics.json`;
+    const observedPortPath = `${directory}/observed-port`;
     const supervisorPath = `${directory}/server.mjs`;
     const configurationPath = `${directory}/access.json`;
     const accessInput = {
@@ -480,6 +496,7 @@ export const startWorkingPreview = async (input: {
       expiresAt,
       gatewayPort,
       landingPath: input.landingPath,
+      observedPortPath,
     };
     const inactive = createWorkingPreviewAccess({
       ...accessInput,
@@ -497,6 +514,7 @@ export const startWorkingPreview = async (input: {
         expiresAt,
         failurePath,
         gatewaySource: inactive.source,
+        observedPortPath,
         ownership: attempt,
         readyPath,
       }),

@@ -5,22 +5,25 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { assertHostedSandboxCommandAuthority } from "./deployment-execution-lease";
 import { createAuthorizedSandboxBackend } from "./sandbox-command-adapter";
-import { readVercelSessionGitSource } from "./vercel-session-source";
+import { hasVercelSessionGitSource, resolveVercelSessionGitSource } from "./vercel-session-source";
 import { withVercelPreviewProvider } from "./vercel-preview-provider";
 
 export interface HostedVercelBackendOptions {
   readonly fetch?: ProviderFetch;
   readonly env?: Readonly<Record<string, string>>;
   readonly networkPolicy: "allow-all";
-  readonly sessionCreateOptions: (context?: { readonly session: { readonly id: string } }) => {
+  readonly sessionCreateOptions: (context?: {
+    readonly session: { readonly id: string };
+  }) => Promise<{
     readonly networkPolicy: "allow-all";
     readonly source?: {
       readonly type: "git";
       readonly url: string;
       readonly username: "x-access-token";
       readonly password: string;
+      readonly revision?: string;
     };
-  };
+  }>;
 }
 
 export type HostedVercelBackendFactory = (
@@ -126,7 +129,7 @@ function createRuntimeRecoveringBackend<BO, SO>(input: {
     input.providerTemplateKey?.(authoredTemplateKey) ?? authoredTemplateKey;
   return {
     async create(createInput) {
-      const selectedGitSource = readVercelSessionGitSource(
+      const selectedGitSource = hasVercelSessionGitSource(
         createInput.tags?.sessionId ?? createInput.sessionKey,
       );
       const providerCreateInput = {
@@ -134,8 +137,7 @@ function createRuntimeRecoveringBackend<BO, SO>(input: {
         // Eve replaces a session source with the template snapshot when a
         // template key is present. A selected Git source needs a fresh
         // provider create so Vercel can clone it exactly once.
-        templateKey:
-          selectedGitSource === undefined ? providerTemplateKey(createInput.templateKey) : null,
+        templateKey: selectedGitSource ? null : providerTemplateKey(createInput.templateKey),
       };
       try {
         return await input.backend.create(providerCreateInput);
@@ -270,9 +272,9 @@ export function createHostedVercelBackend(
     networkPolicy: "allow-all",
     // Eve resolves this for every fresh live session, including a replacement
     // created after the provider loses the previously recorded sandbox.
-    sessionCreateOptions: (context) => {
+    sessionCreateOptions: async (context) => {
       const source =
-        context === undefined ? undefined : readVercelSessionGitSource(context.session.id);
+        context === undefined ? undefined : await resolveVercelSessionGitSource(context.session.id);
       return {
         networkPolicy: "allow-all" as const,
         ...(source === undefined

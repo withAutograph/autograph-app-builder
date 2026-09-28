@@ -12,6 +12,7 @@ import type { HostedVercelBackendFactory, HostedVercelBackendOptions } from "./v
 import {
   clearVercelSessionGitSource,
   configureVercelSessionGitSource,
+  configureVercelSessionGitSourceResolver,
 } from "./vercel-session-source";
 
 const runtimeContext = { appRoot: "/app" };
@@ -66,7 +67,7 @@ describe.skip("retired template-backed Vercel backend", () => {
     expect(fetch.mock.calls[0]?.[0]).toBeInstanceOf(Request);
   });
 
-  it("keeps networking available for prewarm and every fresh live session", () => {
+  it("keeps networking available for prewarm and every fresh live session", async () => {
     let options: HostedVercelBackendOptions | undefined;
     const factory = vi.fn(((input: HostedVercelBackendOptions) => {
       options = input;
@@ -81,7 +82,7 @@ describe.skip("retired template-backed Vercel backend", () => {
     expect(factory).toHaveBeenCalledOnce();
     expect(options).toBeDefined();
     expect(options?.networkPolicy).toBe("allow-all");
-    expect(options?.sessionCreateOptions()).toEqual({
+    expect(await options?.sessionCreateOptions()).toEqual({
       networkPolicy: "allow-all",
     });
   });
@@ -422,6 +423,63 @@ describe("active hosted Vercel transport", () => {
 });
 
 describe("provider-native Vercel source", () => {
+  it("does not refresh GitHub on a healthy resume, but resolves a new provider checkout", async () => {
+    let options: HostedVercelBackendOptions | undefined;
+    const resolve = vi.fn().mockResolvedValue({
+      revision: "review/branch",
+      token: "fresh-token",
+      url: "https://github.com/acme/private.git",
+    });
+    configureVercelSessionGitSourceResolver({ resolve, sessionId: "resumed-session" });
+    const session = { id: "resumed-session" } as SandboxSession;
+    const handle = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      captureState: async () => ({ backendName: "vercel", metadata: {}, sessionKey: session.id }),
+      session,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      shutdown: async () => {},
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      stop: async () => {},
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      useSessionFn: async () => session,
+    } satisfies SandboxBackendHandle;
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    const create = vi.fn(async () => handle);
+    try {
+      const backend = createHostedVercelBackend({
+        factory: ((input) => {
+          options = input;
+          return { create, name: "vercel", prewarm: vi.fn() };
+        }) satisfies HostedVercelBackendFactory,
+      });
+      await backend.create({
+        existingMetadata: { sandboxName: "still-running" },
+        runtimeContext,
+        sessionKey: "resumed-session",
+        templateKey,
+      });
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ templateKey: null }));
+      expect(resolve).not.toHaveBeenCalled();
+
+      // Eve asks for these options only when its provider lookup finds no
+      // existing sandbox, including after a worker process restart.
+      expect(await options?.sessionCreateOptions({ session: { id: "resumed-session" } })).toEqual({
+        networkPolicy: "allow-all",
+        source: {
+          // oxlint-disable-next-line sonarjs/no-hardcoded-passwords -- test-only provider credential assertion
+          password: "fresh-token",
+          revision: "review/branch",
+          type: "git",
+          url: "https://github.com/acme/private.git",
+          username: "x-access-token",
+        },
+      });
+      expect(resolve).toHaveBeenCalledOnce();
+    } finally {
+      clearVercelSessionGitSource("resumed-session");
+    }
+  });
+
   it("bypasses the template snapshot for a selected Git source", async () => {
     const session = { id: "source-session" } as SandboxSession;
     const handle = {
@@ -496,7 +554,7 @@ describe("provider-native Vercel source", () => {
     expect(prewarm).not.toHaveBeenCalled();
   });
 
-  it("forwards a server-owned Git source only to the matching fresh session", () => {
+  it("forwards a server-owned Git source only to the matching fresh session", async () => {
     let options: HostedVercelBackendOptions | undefined;
     const factory = vi.fn(((input: HostedVercelBackendOptions) => {
       options = input;
@@ -513,10 +571,10 @@ describe("provider-native Vercel source", () => {
     });
     try {
       createHostedVercelBackend({ factory });
-      expect(options?.sessionCreateOptions({ session: { id: "other" } })).toEqual({
+      expect(await options?.sessionCreateOptions({ session: { id: "other" } })).toEqual({
         networkPolicy: "allow-all",
       });
-      expect(options?.sessionCreateOptions({ session: { id: "session-source" } })).toEqual({
+      expect(await options?.sessionCreateOptions({ session: { id: "session-source" } })).toEqual({
         networkPolicy: "allow-all",
         source: {
           password: token,
@@ -532,7 +590,7 @@ describe("provider-native Vercel source", () => {
     }
   });
 
-  it("forwards a source when Eve decorates the provider session key", () => {
+  it("forwards a source when Eve decorates the provider session key", async () => {
     let options: HostedVercelBackendOptions | undefined;
     const factory = vi.fn(((input: HostedVercelBackendOptions) => {
       options = input;
@@ -545,7 +603,7 @@ describe("provider-native Vercel source", () => {
     try {
       createHostedVercelBackend({ factory });
       expect(
-        options?.sessionCreateOptions({
+        await options?.sessionCreateOptions({
           session: {
             id: "eve-sbx-ses-vercel-scope-version-wrun_source-root",
           },

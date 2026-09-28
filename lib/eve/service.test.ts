@@ -628,8 +628,8 @@ describe("local Eve acceptance", () => {
       await expect(
         service.get({ cursor: 1, limit: 100, sessionId: started.sessionId }),
       ).resolves.toMatchObject({
-        cursor: 1,
-        events: [],
+        cursor: 2,
+        events: [{ index: 1, status: "waiting", type: "status" }],
         prototype: { content, digest, mediaType, path, revision },
         workingPreview,
       });

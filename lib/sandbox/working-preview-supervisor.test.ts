@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -44,12 +44,13 @@ describe("generated working preview supervisor", () => {
       }
       const configurationPath = nodePath.join(directory, "access.json");
       const readyPath = nodePath.join(directory, "ready");
+      const observedPortPath = nodePath.join(directory, "observed-port");
       const childStarted = nodePath.join(directory, "child-started");
       const grandchildStarted = nodePath.join(directory, "grandchild-started");
       const childStopped = nodePath.join(directory, "child-stopped");
       const grandchildStopped = nodePath.join(directory, "grandchild-stopped");
       const grandchild = `const fs = require("node:fs"); fs.writeFileSync(${JSON.stringify(grandchildStarted)}, "started"); process.on("SIGTERM", () => { fs.writeFileSync(${JSON.stringify(grandchildStopped)}, "stopped"); process.exit(); }); setInterval(() => {}, 100);`;
-      const child = `const fs = require("node:fs"); const {spawn} = require("node:child_process"); fs.writeFileSync(${JSON.stringify(childStarted)}, "started"); spawn(process.execPath, ["-e", ${JSON.stringify(grandchild)}], {stdio:"ignore"}); process.on("SIGTERM", () => { fs.writeFileSync(${JSON.stringify(childStopped)}, "stopped"); process.exit(); }); setInterval(() => {}, 100);`;
+      const child = `const fs = require("node:fs"); const {spawn} = require("node:child_process"); fs.writeFileSync(${JSON.stringify(childStarted)}, "started"); process.stdout.write("Local: http://localhost:${appPort}\\n"); spawn(process.execPath, ["-e", ${JSON.stringify(grandchild)}], {stdio:"ignore"}); process.on("SIGTERM", () => { fs.writeFileSync(${JSON.stringify(childStopped)}, "stopped"); process.exit(); }); setInterval(() => {}, 100);`;
       const expiresAt = Date.now() + (mode === "expiry" ? 2500 : 30_000);
       const access = createWorkingPreviewAccess({
         appPort,
@@ -87,6 +88,7 @@ describe("generated working preview supervisor", () => {
           expiresAt,
           failurePath: nodePath.join(directory, "failed.json"),
           gatewaySource: access.source,
+          observedPortPath,
           ownership,
           readyPath,
         }).replace(JSON.stringify(previewOwnershipRoot), JSON.stringify(ownerRoot)),
@@ -113,6 +115,7 @@ describe("generated working preview supervisor", () => {
         await writeFile(configurationPath, access.configuration);
         await waitFor(() => existsSync(grandchildStarted));
         expect(existsSync(childStarted)).toBe(true);
+        await expect(readFile(observedPortPath, "utf-8")).resolves.toBe(String(appPort));
         if (mode === "signal") {
           supervisor.kill("SIGTERM");
         }

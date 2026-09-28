@@ -162,8 +162,18 @@ function mutableProvider(input: { repositoryAvailable: () => boolean }) {
         : undefined;
     },
   };
+  const sourceProvider = Object.assign(provider, {
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async acquireRepositoryReadCredential({ repositoryId }: { repositoryId: string }) {
+      return { token: `credential-for-${repositoryId}` };
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    async inspectRepository() {
+      return {};
+    },
+  });
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-  return vi.fn<GitHubRepositoryAccessProviderFactory>(async () => provider);
+  return vi.fn<GitHubRepositoryAccessProviderFactory>(async () => sourceProvider);
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -240,6 +250,30 @@ describe("deployment repository access authorization", () => {
     expect(inspectInstallation).not.toHaveBeenCalled();
   });
 
+  it("refreshes only a currently verified tenant repository credential for replacement compute", async () => {
+    const fixture = runtimeFixture({ available: true });
+    await expect(
+      fixture.runtime.acquireExistingSourceCredential({
+        installationId: "10",
+        repository: { name: "app-builder-dogfood", owner: "withAutograph", repositoryId: "200" },
+        sessionId: "ses-one",
+      }),
+    ).resolves.toEqual({ token: "credential-for-200" });
+    await expect(
+      fixture.runtime.acquireExistingSourceCredential({
+        installationId: "10",
+        repository: { name: "app-builder-dogfood", owner: "withAutograph", repositoryId: "201" },
+        sessionId: "ses-one",
+      }),
+    ).rejects.toThrow("no longer has verified access");
+    await expect(
+      fixture.runtime.acquireExistingSourceCredential({
+        installationId: "11",
+        repository: { name: "app-builder-dogfood", owner: "withAutograph", repositoryId: "200" },
+        sessionId: "ses-one",
+      }),
+    ).rejects.toThrow("no longer has verified access");
+  });
   it("uses the web selection among multiple installations and preserves its handoff return", async () => {
     const providerFactory = mutableProvider({
       repositoryAvailable: () => true,

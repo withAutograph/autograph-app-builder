@@ -10,6 +10,7 @@ import {
   latestInstalledUiPreview,
   projectInstalledEveEvents,
   projectInstalledEveEvent,
+  pendingBuilderOperation,
   toPublicEvent,
 } from "./public-events";
 import {
@@ -115,6 +116,79 @@ describe("toPublicEvent", () => {
 });
 
 describe("installed Eve 0.43 projection", () => {
+  it("reports a private build's start and result without exposing tool arguments", () => {
+    const events = projectInstalledEveEvents([
+      installedEvent({
+        data: {
+          actions: [
+            {
+              callId: "build_1",
+              input: { implementationFiles: ["secret"], token: "private" },
+              kind: "tool-call",
+              toolName: "apply_app_creation",
+            },
+          ],
+        },
+        type: "actions.requested",
+      }),
+      installedEvent({
+        data: {
+          result: {
+            callId: "build_1",
+            kind: "tool-result",
+            output: { token: "private" },
+            toolName: "apply_app_creation",
+          },
+          status: "completed",
+        },
+        type: "action.result",
+      }),
+    ]);
+    expect(events).toEqual([
+      {
+        index: 0,
+        label: "Building the app in its private workspace",
+        state: "started",
+        type: "progress",
+      },
+      {
+        index: 1,
+        label: "Building the app in its private workspace",
+        state: "completed",
+        type: "progress",
+      },
+    ]);
+    expect(pendingBuilderOperation(events.slice(0, 1))).toBe(
+      "Building the app in its private workspace",
+    );
+    expect(pendingBuilderOperation(events)).toBe("the current Builder step");
+    expect(JSON.stringify(events)).not.toContain('"token":"private"');
+    expect(JSON.stringify(events)).not.toContain("apply_app_creation");
+  });
+  it("names the actual validation tool while it is running", () => {
+    const events = projectInstalledEveEvents([
+      installedEvent({
+        data: {
+          actions: [
+            { callId: "validation_1", kind: "tool-call", toolName: "validate_app_creation" },
+          ],
+        },
+        type: "actions.requested",
+      }),
+    ]);
+    expect(pendingBuilderOperation(events)).toBe("Validating the app changes");
+  });
+  it("names browser verification while it is running", () => {
+    const events = projectInstalledEveEvents([
+      installedEvent({
+        data: {
+          actions: [{ callId: "browser_1", kind: "tool-call", toolName: "run-app-browser-tests" }],
+        },
+        type: "actions.requested",
+      }),
+    ]);
+    expect(pendingBuilderOperation(events)).toBe("Running the app's browser tests");
+  });
   it("recovers only the latest receipt-bound HTML prototype", () => {
     const first = recordedPrototypeEvents();
     const second = recordedPrototypeEvents({

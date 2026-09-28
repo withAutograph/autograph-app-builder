@@ -26,6 +26,13 @@ const close = (server: Server): Promise<void> =>
     server.close((error) => (error ? reject(error) : resolve()));
   });
 
+const unusedPort = async (): Promise<number> => {
+  const reservation = createServer();
+  const port = await listen(reservation);
+  await close(reservation);
+  return port;
+};
+
 const call = (port: number, path: string, headers: IncomingHttpHeaders = {}, method = "GET") =>
   // oxlint-disable-next-line promise/avoid-new -- Collect an actual Node HTTP response.
   new Promise<{ status: number; headers: IncomingHttpHeaders; body: string }>((resolve, reject) => {
@@ -57,6 +64,7 @@ const withGateway = async (
     app: Server;
     shutdown: () => void;
     appPort: number;
+    configuredPort: number;
     port: number;
     launch: string;
     observed: { headers: IncomingHttpHeaders; url: string; body: string }[];
@@ -64,6 +72,7 @@ const withGateway = async (
   expiresAt = Date.now() + 60_000,
   landingPath?: string,
   configurationPath?: string,
+  observedPortPath?: string,
 ) => {
   const observed: { headers: IncomingHttpHeaders; url: string; body: string }[] = [];
   const app = createServer((incoming, response) => {
@@ -82,15 +91,19 @@ const withGateway = async (
     });
   });
   const appPort = await listen(app);
-  const reservation = createServer();
-  const port = await listen(reservation);
-  await close(reservation);
+  const configuredPort = observedPortPath === undefined ? appPort : await unusedPort();
+  let port = await unusedPort();
+  while (port === configuredPort) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Reserve a distinct gateway port.
+    port = await unusedPort();
+  }
   const access = createWorkingPreviewAccess({
-    appPort,
+    appPort: configuredPort,
     configurationPath,
     expiresAt,
     gatewayPort: port,
     landingPath,
+    observedPortPath,
     origin: configurationPath ? "https://pending.invalid" : "https://preview.example",
   });
   const child = spawn(
@@ -108,6 +121,7 @@ const withGateway = async (
     await run({
       app,
       appPort,
+      configuredPort,
       launch: launch.pathname + launch.search,
       observed,
       port,
@@ -123,6 +137,48 @@ const withGateway = async (
 };
 
 describe("working preview access", () => {
+  it("routes to the app's observed loopback port when its dev script ignores the requested port", async () => {
+    const directory = await mkdtemp(nodePath.join(tmpdir(), "working-preview-port-"));
+    const configurationPath = nodePath.join(directory, "access.json");
+    const observedPortPath = nodePath.join(directory, "observed-port");
+    try {
+      await withGateway(
+        async ({ appPort, configuredPort, port }) => {
+          const active = createWorkingPreviewAccess({
+            appPort: configuredPort,
+            expiresAt: Date.now() + 60_000,
+            gatewayPort: port,
+            origin: "https://preview.example",
+          });
+          await writeFile(configurationPath, active.configuration);
+          const launch = new URL(active.launchUrl);
+          const entry = await call(port, launch.pathname + launch.search);
+          const [cookie] = (entry.headers["set-cookie"]?.[0] ?? "").split(";");
+          const unavailable = await call(port, "/", { cookie });
+          expect(unavailable).toMatchObject({
+            headers: { "x-autograph-preview-error": "upstream-unavailable" },
+            status: 502,
+          });
+          await writeFile(observedPortPath, String(appPort));
+          await expect(call(port, "/", { cookie })).resolves.toMatchObject({
+            body: "working-app",
+            status: 200,
+          });
+          await writeFile(observedPortPath, "80");
+          await expect(call(port, "/", { cookie })).resolves.toMatchObject({
+            headers: { "x-autograph-preview-error": "upstream-unavailable" },
+            status: 502,
+          });
+        },
+        Date.now() + 60_000,
+        undefined,
+        configurationPath,
+        observedPortPath,
+      );
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
   it("protects assets and actions and strips its credentials before proxying", async () => {
     await withGateway(async ({ port, launch, observed }) => {
       await expect(call(port, "/")).resolves.toMatchObject({ status: 403 });

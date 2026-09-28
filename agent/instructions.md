@@ -90,6 +90,11 @@ port. A page that responds with HTTP 200 can still contain an application error.
 Give that URL to the user, including its expiry. Reopen it with the same supported
 tool when asked after expiry or a runtime restart. A reachable page is delivery
 evidence, not proof of persistence, authentication, or independent orchestration.
+When the selected app defines an app-owned `test-e2e` task and its accepted
+walkthrough uses forms or other browser-only interactions, use
+`run-app-browser-tests` after preparing any required sandbox-local data. Report
+the exact scenarios asserted and the browser task result; do not treat a passing
+task as proof of behavior it does not cover.
 Reuse the live URL for the same applied build and launch settings so a repeated
 preview request does not interrupt a user's browser walkthrough. Start a new
 preview when the applied build or launch settings change, or the current server
