@@ -10,6 +10,7 @@ import {
   executeProposalBoundValidation,
   sandboxValidationCommandExecutor,
   validationOutputExcerpt,
+  sanitizeValidationDiagnosticText,
 } from "./target-validation";
 
 const digest = (value: string) => value.repeat(64).slice(0, 64);
@@ -113,7 +114,18 @@ describe("target validation", () => {
     expect(excerpt.stderr).not.toContain("abc123");
     expect(excerpt.stderr).not.toContain("super-secret");
     expect(excerpt.stderr).not.toContain("session=private");
-    expect(excerpt.truncated).toBe(false);
+    expect(excerpt.truncated).toBe(true);
+  });
+  it("redacts complete diagnostic text, including lines omitted from the repair excerpt", () => {
+    const raw =
+      "starting build\nhttps://user:password@example.test/path\nBearer abc123\nAPI_KEY=super-secret\napps/example/app/page.tsx(4,2): error TS2304: MissingThing";
+    const sanitized = sanitizeValidationDiagnosticText(raw);
+    expect(sanitized).toContain("starting build");
+    expect(sanitized).toContain("TS2304: MissingThing");
+    expect(sanitized).not.toContain("password@example");
+    expect(sanitized).not.toContain("abc123");
+    expect(sanitized).not.toContain("super-secret");
+    expect(validationOutputExcerpt(raw, "").truncated).toBe(true);
   });
 
   it("retains schema compiler failures and their repair guidance", () => {

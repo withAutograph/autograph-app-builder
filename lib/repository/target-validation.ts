@@ -135,6 +135,19 @@ const repairLinePattern =
   /(?:^|\s)(?:apps\/|error(?:\s+TS\d+|:)|typescript\(TS\d+\)|FAIL\s|Build failed|Failed to compile|Module not found|Cannot find (?:module|name)|Script not found|Formatting issues found|schema-compiler:|Schema compilation failed|Schema release generation failed|The schema compiler produced invalid JSON|Compiler output excerpt:|ToolNotFound:|linker\s+[`"']?cc|cue:|cargo:|rustc:|mise(?:\s+ERROR|:)|The compiler produced no diagnostic output|The compiler returned no output|No CUE source location was reported|Install a native C compiler|Install the repository's locked mise tools|Read the compiler error and its CUE file location|Retry:)/iu;
 const diagnosticContinuationPattern = /^(?:\s+\S|\s*\^|\s*\||\s*(?:caused by|help|note|retry):)/iu;
 
+/** Redact complete provider output before any durable diagnostic write. */
+export const sanitizeValidationDiagnosticText = (value: string): string =>
+  value
+    .replaceAll(ansiPattern, "")
+    .replaceAll(/\p{Cc}/gu, (character) =>
+      character === "\t" || character === "\n" || character === "\r" ? character : "",
+    )
+    .replaceAll(credentialUrlPattern, "$<scheme>[REDACTED]@")
+    .replaceAll(bearerPattern, "Bearer [REDACTED]")
+    .replaceAll(sensitiveAssignmentPattern, "$<name>$<separator>[REDACTED]")
+    .replaceAll(credentialPrefixPattern, "[REDACTED]")
+    .replaceAll(/(?:\/workspace\/repository\/)?(?=apps\/)/gu, "");
+
 // Keep enough compiler/build output for an agent to repair its own candidate,
 // while excluding control bytes and common credential forms from durable state.
 export const validationOutputExcerpt = (
@@ -142,15 +155,7 @@ export const validationOutputExcerpt = (
   stderr: string,
 ): TargetValidationOutputExcerpt => {
   const sanitize = (value: string) => {
-    const lines = value
-      .replaceAll(ansiPattern, "")
-      .replaceAll(/\p{Cc}/gu, (character) =>
-        character === "\t" || character === "\n" || character === "\r" ? character : "",
-      )
-      .replaceAll(bearerPattern, "Bearer [REDACTED]")
-      .replaceAll(sensitiveAssignmentPattern, "$<name>$<separator>[REDACTED]")
-      .replaceAll(/(?:\/workspace\/repository\/)?(?=apps\/)/gu, "")
-      .split("\n");
+    const lines = sanitizeValidationDiagnosticText(value).split("\n");
     const retained = new Set<number>();
     for (const [index, line] of lines.entries()) {
       if (!repairLinePattern.test(line)) continue;
@@ -166,9 +171,18 @@ export const validationOutputExcerpt = (
       .filter((_line, index) => retained.has(index))
       .join("\n")
       .trim();
-    return cleaned;
+    return {
+      cleaned,
+      omitted: lines.some((line, index) => line.trim().length > 0 && !retained.has(index)),
+    };
   };
-  return { stderr: sanitize(stderr), stdout: sanitize(stdout), truncated: false };
+  const safeStdout = sanitize(stdout);
+  const safeStderr = sanitize(stderr);
+  return {
+    stderr: safeStderr.cleaned,
+    stdout: safeStdout.cleaned,
+    truncated: safeStdout.omitted || safeStderr.omitted,
+  };
 };
 
 // A provider can throw before it returns a command result. Keep its useful
