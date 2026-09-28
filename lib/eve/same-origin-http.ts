@@ -666,6 +666,75 @@ async function readRespondSettlementIncremental(input: {
   }
 }
 
+// eslint-disable-next-line eslint/func-style -- A guarded cancel needs a durable cancel/waiting boundary.
+async function readCancellationSettlementIncremental(input: {
+  config: z.infer<typeof sameOriginConfigSchema>;
+  workloadIdentity: HostedWorkloadIdentity;
+  fetchImplementation: typeof fetch;
+  sessionId: string;
+  turnId: string;
+  beforeEventCount: number;
+}): Promise<void> {
+  const readSignal = AbortSignal.timeout(SESSION_READ_TIMEOUT_MS);
+  while (true) {
+    if (readSignal.aborted) {
+      throw new HostedSessionReadTimeoutError();
+    }
+    let index = 0;
+    let cancelled = false;
+    let settled = false;
+    let currentTurnId: string | undefined;
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Observe the full durable tail before another poll.
+    for await (const event of streamSameOriginEveEvents({ ...input, readSignal })) {
+      const eventTurnId =
+        "data" in event && "turnId" in event.data
+          ? (event.data.turnId as string | undefined)
+          : undefined;
+      if (
+        eventTurnId !== undefined &&
+        !["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type)
+      ) {
+        currentTurnId = eventTurnId;
+      }
+      if (
+        ["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type) &&
+        (eventTurnId === undefined || eventTurnId === currentTurnId)
+      ) {
+        currentTurnId = undefined;
+      }
+      if (["session.waiting", "session.completed", "session.failed"].includes(event.type)) {
+        currentTurnId = undefined;
+      }
+      if (
+        index >= input.beforeEventCount &&
+        event.type === "turn.cancelled" &&
+        event.data.turnId === input.turnId
+      ) {
+        cancelled = true;
+      }
+      if (cancelled && event.type === "session.waiting") {
+        settled = true;
+      }
+      index += 1;
+    }
+    if (settled) {
+      return;
+    }
+    if (currentTurnId !== undefined && currentTurnId !== input.turnId) {
+      throw new SubmissionRejectedBeforeDispatchError("turn_changed");
+    }
+    try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Poll only after reading the durable tail.
+      await delay(SESSION_SETTLEMENT_POLL_INTERVAL_MS, undefined, { signal: readSignal });
+    } catch (error) {
+      if (readSignal.aborted) {
+        throw new HostedSessionReadTimeoutError();
+      }
+      throw error;
+    }
+  }
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createSameOriginEveTransport(input: {
   config: unknown;
@@ -769,6 +838,57 @@ export function createSameOriginEveTransport(input: {
         // oxlint-disable-next-line eslint/no-await-in-loop -- retry only after the prior durable snapshot was observed
         await delay(SESSION_SETTLEMENT_POLL_INTERVAL_MS);
       }
+    },
+    async cancelAccepted(request) {
+      const before = await observeSameOriginEveStream({
+        ...common,
+        onEvent() {
+          // Guarding cancellation needs only the durable stream summary.
+        },
+        readDeadline: true,
+        sessionId: request.adapterSessionId,
+      });
+      if (request.turnId !== undefined && request.turnId !== before.activeTurnId) {
+        throw new SubmissionRejectedBeforeDispatchError("turn_changed");
+      }
+      const guardedTurnId = request.turnId ?? before.activeTurnId;
+      if (guardedTurnId === undefined) {
+        throw new SubmissionRejectedBeforeDispatchError("no_active_turn");
+      }
+      let response: Response;
+      try {
+        response = await authenticatedFetch({
+          ...common,
+          init: {
+            body: JSON.stringify({ turnId: guardedTurnId }),
+            headers: { Accept: "application/json", "Content-Type": "application/json" },
+            method: "POST",
+          },
+          path: `/eve/v1/session/${encodeURIComponent(request.adapterSessionId)}/cancel`,
+        });
+      } catch {
+        throw new SubmissionOutcomeUnknownError();
+      }
+      if (response.status !== 200 && response.status !== 202) {
+        throw new SubmissionOutcomeUnknownError();
+      }
+      const cancelled = cancelResponseSchema.parse(await readJson(response));
+      if (
+        (response.status === 202 && cancelled.status !== "accepted") ||
+        (response.status === 200 && cancelled.status !== "no_active_turn") ||
+        (cancelled.status === "accepted" && cancelled.sessionId !== request.adapterSessionId)
+      ) {
+        throw new SubmissionOutcomeUnknownError();
+      }
+      if (cancelled.status === "no_active_turn") {
+        return;
+      }
+      await readCancellationSettlementIncremental({
+        ...common,
+        beforeEventCount: before.installedEventCount,
+        sessionId: request.adapterSessionId,
+        turnId: guardedTurnId,
+      });
     },
     get: (request) =>
       readSnapshot({ ...common, readDeadline: true, sessionId: request.adapterSessionId }),

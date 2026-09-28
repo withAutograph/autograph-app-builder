@@ -152,6 +152,8 @@ export interface HostedEveTransport {
     adapterSessionId: string;
     turnId?: string;
   }) => Promise<HostedEngineSnapshot>;
+  /** Confirms a guarded cancellation without exporting the complete history. */
+  cancelAccepted?: (input: Parameters<HostedEveTransport["cancel"]>[0]) => Promise<void>;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

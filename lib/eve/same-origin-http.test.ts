@@ -782,6 +782,38 @@ describe("same-origin canonical Eve transport", () => {
     ).resolves.toMatchObject({ status: "waiting" });
   });
 
+  it("confirms a guarded cancellation through incremental reads", async () => {
+    const active = [{ data: { turnId: "turn_1" }, type: "step.started" }];
+    const settled = [
+      ...active,
+      { data: { turnId: "turn_1" }, type: "turn.cancelled" },
+      { data: {}, type: "session.waiting" },
+    ];
+    let streamReads = 0;
+    // oxlint-disable-next-line eslint/require-await -- Preserve the fetch promise contract.
+    const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
+      if (String(url).endsWith("/cancel")) {
+        expect(JSON.parse(String(init?.body))).toEqual({ turnId: "turn_1" });
+        return Response.json(
+          { ok: true, sessionId: "wrun_1", status: "accepted" },
+          { status: 202 },
+        );
+      }
+      streamReads += 1;
+      return stream(streamReads === 1 ? active : settled);
+    });
+    const transport = createSameOriginEveTransport({
+      config,
+      fetchImplementation,
+      workloadIdentity: identity(),
+    });
+    await expect(
+      transport.cancelAccepted?.({ adapterSessionId: "wrun_1", principal, turnId: "turn_1" }),
+    ).resolves.toBeUndefined();
+    expect(streamReads).toBe(2);
+    expect(fetchImplementation).toHaveBeenCalledTimes(3);
+  });
+
   it("waits beyond the former poll limit for the current cancellation receipt", async () => {
     const historical = [
       { data: { turnId: "turn_old" }, type: "turn.cancelled" },
