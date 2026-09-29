@@ -1,4 +1,4 @@
-import { Client } from "eve/client";
+import { Client, ClientError } from "eve/client";
 import type { ClientSession, MessageStreamEvent } from "eve/client";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -13,6 +13,11 @@ import {
 } from "./public-events";
 import { readLocalEveCycleBinding } from "./local-cycle-binding";
 import { HostedCancellationUnsettledError } from "./hosted-errors";
+import {
+  isUnavailableLocalSession,
+  localSessionRecoveryError,
+  LocalSessionRecoveryUnavailableError,
+} from "./local-session-recovery";
 
 export class AdapterNotConfiguredError extends Error {
   constructor() {
@@ -135,6 +140,8 @@ interface LocalEveRuntimeState {
    */
   restartInterrupted: Set<string>;
   recoveryRequired: Set<string>;
+  /** No recoverable stream or a confirmed inactive worker; never replace its public identity. */
+  unavailableSessions: Set<string>;
   recoveries: Map<string, Promise<void>>;
   /** One durable tail reader per locally active public session. */
   tailPumps: Map<string, Promise<void>>;
@@ -182,6 +189,7 @@ function localRuntimeState(generation: string): LocalEveRuntimeState {
   const existing = localRuntimeGlobal[localEveRuntimeStateKey];
   if (existing !== undefined && existing.generation === generation) {
     existing.tailControllers ??= new Map();
+    existing.unavailableSessions ??= new Set();
     return existing;
   }
   return (localRuntimeGlobal[localEveRuntimeStateKey] = {
@@ -197,6 +205,7 @@ function localRuntimeState(generation: string): LocalEveRuntimeState {
     sessionHandles: new Map(),
     tailControllers: new Map(),
     tailPumps: new Map(),
+    unavailableSessions: new Set(),
   });
 }
 
@@ -251,6 +260,7 @@ function resultForEvents(
   options: {
     status?: EveSessionResult["status"];
     error?: EveSessionResult["error"];
+    suppressInputRequests?: boolean;
   } = {},
 ): EveSessionResult {
   const projected = projectInstalledEveEvents(snapshotEvents);
@@ -264,7 +274,9 @@ function resultForEvents(
     events,
     sessionId,
     status: options.status ?? deriveInstalledEveStatus(snapshotEvents),
-    ...(inputRequests.length === 0 ? {} : { inputRequests }),
+    ...(inputRequests.length === 0 || options.suppressInputRequests === true
+      ? {}
+      : { inputRequests }),
     ...(prototype === undefined ? {} : { prototype }),
     ...(uiPreview === undefined ? {} : { uiPreview }),
     ...(workingPreview === undefined ? {} : { workingPreview }),
@@ -430,7 +442,7 @@ export function createLocalEveSessionService(
     state.restartGeneration !== options.restartGeneration
   ) {
     for (const [sessionId, events] of localSessionEvents) {
-      if (deriveInstalledEveStatus(events) !== "working") {
+      if (["completed", "failed", "cancelled"].includes(deriveInstalledEveStatus(events))) {
         continue;
       }
       state.tailControllers.get(sessionId)?.abort();
@@ -459,6 +471,56 @@ export function createLocalEveSessionService(
     return attached;
   }
 
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  function unavailableSession(sessionId: string): never {
+    state.unavailableSessions.add(sessionId);
+    state.tailControllers.get(sessionId)?.abort();
+    localActiveResponses.delete(sessionId);
+    throw new LocalSessionRecoveryUnavailableError();
+  }
+
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  async function readLocalSnapshot(sessionId: string) {
+    if (state.unavailableSessions.has(sessionId)) {
+      throw new LocalSessionRecoveryUnavailableError();
+    }
+    try {
+      const snapshot = await sessionFor(sessionId).snapshot();
+      if (snapshot.session.sessionId !== sessionId) {
+        throw new Error("Eve changed the local session during recovery.");
+      }
+      // A local stream read can succeed for a missing run with an empty tail.
+      // It is not a resumable session and must not erase buffered progress.
+      if (snapshot.events.length === 0) {
+        unavailableSession(sessionId);
+      }
+      return snapshot;
+    } catch (error) {
+      if (
+        error instanceof LocalSessionRecoveryUnavailableError ||
+        (error instanceof ClientError && isUnavailableLocalSession(error))
+      ) {
+        unavailableSession(sessionId);
+      }
+      throw error;
+    }
+  }
+
+  // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  async function acceptLocalContinuation(
+    sessionId: string,
+    operation: () => Promise<CancellableResponse>,
+  ) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (error instanceof ClientError && isUnavailableLocalSession(error)) {
+        unavailableSession(sessionId);
+      }
+      throw error;
+    }
+  }
+
   // eslint-disable-next-line eslint/func-style, eslint/require-await -- Preserve function declaration hoisting and initialization timing.
   async function recoverDurableTail(sessionId: string) {
     if (!state.recoveryRequired.has(sessionId)) {
@@ -469,10 +531,7 @@ export function createLocalEveSessionService(
       return existing;
     }
     const recovery = (async () => {
-      const snapshot = await sessionFor(sessionId).snapshot();
-      if (snapshot.session.sessionId !== sessionId) {
-        throw new Error("Eve changed the local session during recovery.");
-      }
+      const snapshot = await readLocalSnapshot(sessionId);
       localSessionEvents.set(sessionId, [...snapshot.events]);
       localSessionHandles.set(
         sessionId,
@@ -484,6 +543,9 @@ export function createLocalEveSessionService(
       if (interruption === undefined || deriveInstalledEveStatus(snapshot.events) !== "working") {
         state.modelInterruptions.delete(sessionId);
         state.recoveryRequired.delete(sessionId);
+      }
+      if (deriveInstalledEveStatus(snapshot.events) !== "working") {
+        state.restartInterrupted.delete(sessionId);
       }
       // Remove the recovery entry regardless of its terminal outcome.
       // oxlint-disable-next-line promise/prefer-await-to-then
@@ -582,6 +644,13 @@ export function createLocalEveSessionService(
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function localResultOptions(sessionId: string) {
+    if (state.unavailableSessions.has(sessionId)) {
+      return {
+        error: localSessionRecoveryError,
+        status: "failed" as const,
+        suppressInputRequests: true,
+      };
+    }
     const interruption = state.modelInterruptions.get(sessionId);
     return {
       status:
@@ -601,6 +670,9 @@ export function createLocalEveSessionService(
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   async function requireSettledModelTurn(sessionId: string) {
+    if (state.unavailableSessions.has(sessionId)) {
+      throw new LocalSessionRecoveryUnavailableError();
+    }
     if (state.restartInterrupted.has(sessionId)) {
       await recoverDurableTail(sessionId);
     }
@@ -612,10 +684,7 @@ export function createLocalEveSessionService(
   const service = Object.create(Object.prototype) as EveSessionService;
   service.start = async ({ prompt, resumeSessionId, clientRequestId }) => {
     if (resumeSessionId !== undefined) {
-      const snapshot = await sessionFor(resumeSessionId).snapshot();
-      if (snapshot.session.sessionId !== resumeSessionId) {
-        throw new Error("Eve changed the local session during resume.");
-      }
+      const snapshot = await readLocalSnapshot(resumeSessionId);
       localSessionEvents.set(resumeSessionId, [...snapshot.events]);
       touchSession(resumeSessionId);
       return resultForEvents(resumeSessionId, snapshot.events, 0, 100, {
@@ -628,6 +697,12 @@ export function createLocalEveSessionService(
     const key = `start:${clientRequestId}`;
     const existing = localRequests.get(key);
     if (existing !== undefined) {
+      if (state.unavailableSessions.has(existing)) {
+        throw new LocalSessionRecoveryUnavailableError();
+      }
+      if (state.restartInterrupted.has(existing)) {
+        return await service.get({ cursor: 0, limit: 100, sessionId: existing });
+      }
       return acceptedResult(existing, localSessionEvents.get(existing));
     }
     const { session, response } = await client.sessions.create({
@@ -654,7 +729,13 @@ export function createLocalEveSessionService(
       )
       .slice(cursor, cursor + limit)
       .map(([sessionId, metadata]) => {
-        const result = resultForEvents(sessionId, localSessionEvents.get(sessionId) ?? []);
+        const result = resultForEvents(
+          sessionId,
+          localSessionEvents.get(sessionId) ?? [],
+          0,
+          100,
+          localResultOptions(sessionId),
+        );
         let stage: "complete" | "designing" | "prototype" | "ready";
         if (result.status === "completed") {
           stage = "complete";
@@ -663,9 +744,12 @@ export function createLocalEveSessionService(
         } else {
           stage = "ready";
         }
-        const resumability = ["completed", "failed", "cancelled"].includes(result.status)
-          ? ("terminal" as const)
-          : ("live" as const);
+        let resumability: "restart_required" | "terminal" | "live" = "live";
+        if (state.unavailableSessions.has(sessionId)) {
+          resumability = "restart_required";
+        } else if (["completed", "failed", "cancelled"].includes(result.status)) {
+          resumability = "terminal";
+        }
         return {
           ...(result.uiPreview?.appId === undefined ? {} : { appId: result.uiPreview.appId }),
           resumability,
@@ -683,15 +767,12 @@ export function createLocalEveSessionService(
     };
   };
   service.get = async ({ sessionId, cursor, limit }) => {
-    if (state.restartInterrupted.has(sessionId)) {
-      await recoverDurableTail(sessionId);
-    }
-    if (!localSessionEvents.has(sessionId)) {
-      try {
-        const snapshot = await sessionFor(sessionId).snapshot();
-        if (snapshot.session.sessionId !== sessionId) {
-          throw new Error("Eve changed the local session during recovery.");
-        }
+    try {
+      if (state.restartInterrupted.has(sessionId)) {
+        await recoverDurableTail(sessionId);
+      }
+      if (!localSessionEvents.has(sessionId)) {
+        const snapshot = await readLocalSnapshot(sessionId);
         localSessionEvents.set(sessionId, [...snapshot.events]);
         localSessionHandles.set(
           sessionId,
@@ -699,9 +780,10 @@ export function createLocalEveSessionService(
             streamIndex: snapshot.session.streamIndex,
           }),
         );
-      } catch {
-        // A fresh development invocation intentionally cannot recover an
-        // older application's local Eve session. Keep that lookup empty.
+      }
+    } catch (error) {
+      if (!(error instanceof LocalSessionRecoveryUnavailableError)) {
+        throw error;
       }
     }
     touchSession(sessionId);
@@ -721,7 +803,7 @@ export function createLocalEveSessionService(
         error: {
           code: "start_request_not_found",
           message:
-            "No start result is saved for this account and clientRequestId. Check the original request ID and signed-in account. If they are correct, retry autograph_start with exactly the original ID and input.",
+            "No original start receipt is saved in this development process. Keep the original clientRequestId, any returned sessionId and transcript. Read that same sessionId with autograph_get if available; otherwise an operator must recover the original workflow state. Do not submit a replacement start.",
         },
         events: [],
         sessionId: "",
@@ -731,10 +813,16 @@ export function createLocalEveSessionService(
     return await service.get({ cursor, limit, sessionId });
   };
   service.send = async ({ sessionId, message, clientRequestId }) => {
+    if (state.unavailableSessions.has(sessionId)) {
+      throw new LocalSessionRecoveryUnavailableError();
+    }
     const key = `send:${sessionId}:${clientRequestId}`;
     if (!localRequests.has(key)) {
       await requireSettledModelTurn(sessionId);
-      const response = await sessionAtBufferedTail(sessionId).send(message);
+      const response = await acceptLocalContinuation(
+        sessionId,
+        async () => await sessionAtBufferedTail(sessionId).send(message),
+      );
       state.restartInterrupted.delete(sessionId);
       consumeSessionResponse(sessionId, response);
       localRequests.set(key, sessionId);
@@ -743,6 +831,9 @@ export function createLocalEveSessionService(
     return acceptedResult(sessionId, localSessionEvents.get(sessionId));
   };
   service.respond = async ({ sessionId, responses, clientRequestId }) => {
+    if (state.unavailableSessions.has(sessionId)) {
+      throw new LocalSessionRecoveryUnavailableError();
+    }
     const key = `respond:${sessionId}:${clientRequestId}`;
     if (!localRequests.has(key)) {
       await requireSettledModelTurn(sessionId);
@@ -755,7 +846,10 @@ export function createLocalEveSessionService(
       ) {
         throw new Error("The complete outstanding Eve input batch is required.");
       }
-      const result = await sessionAtBufferedTail(sessionId).respond(toEveInputResponses(responses));
+      const result = await acceptLocalContinuation(
+        sessionId,
+        async () => await sessionAtBufferedTail(sessionId).respond(toEveInputResponses(responses)),
+      );
       state.restartInterrupted.delete(sessionId);
       consumeSessionResponse(sessionId, result);
       localRequests.set(key, sessionId);
@@ -764,6 +858,9 @@ export function createLocalEveSessionService(
     return acceptedResult(sessionId, localSessionEvents.get(sessionId));
   };
   service.cancel = async ({ sessionId, turnId }) => {
+    if (state.unavailableSessions.has(sessionId)) {
+      throw new LocalSessionRecoveryUnavailableError();
+    }
     if (state.restartInterrupted.has(sessionId)) {
       touchSession(sessionId);
       return resultForEvents(sessionId, localSessionEvents.get(sessionId) ?? [], 0, 100, {

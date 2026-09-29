@@ -10,6 +10,26 @@ Only protect credentials and cross-user session data, obtain approval before out
 
 Use the integrated Browser for loopback prototypes, never an MCP App preview. Run one final local walkthrough when ready; let CI perform broad verification.
 
+## Interrupted public sessions
+
+The development adapter keeps its public request index and buffered progress
+across Next module reloads within the same process. When the Eve child changes,
+nonterminal sessions read their saved stream before continuing. An empty or
+missing stream is a recovery blocker, not a usable waiting session; it never
+replaces buffered progress or exposes old approval controls. Eve's explicit
+`session_not_active` rejection also fences subsequent continuations. Public
+reads report `session_recovery_unavailable` with the original session ID.
+
+Eve's supported snapshot API reads history and does not prove a worker is
+active. A retained nonempty stream can still be read, but continuation is only
+confirmed when Eve accepts the same session ID. Development deliberately uses
+`WORKFLOW_LOCAL_RECOVER_ACTIVE_RUNS=0` and has no documented API that reconstructs
+an inactive local worker. Retain the original session ID, start request ID,
+cursor and transcript for operator recovery or an explicit blocked outcome;
+do not silently create a replacement public request. A fresh Node process also
+loses the local in-memory original-request index. Hosted checkpoint recovery is
+a separate durable path described in the [public MCP contract](public-mcp-contract.md).
+
 ## Synthetic web authentication and provider connections
 
 The default development command remains the fast HTTP MCP loop. For the normal

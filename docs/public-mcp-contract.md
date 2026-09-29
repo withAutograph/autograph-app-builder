@@ -56,6 +56,14 @@ missing adapter for otherwise-active work is fenced by adapter generation before
 the same public handle continues. User-visible sessions do not expire with
 their short-lived compute leases.
 
+Local development has a narrower recovery boundary. A missing local stream or
+Eve's explicit inactive-session rejection returns `session_recovery_unavailable`,
+preserves the original public identity and any buffered progress, and removes
+approval controls. The operator must restore the original development workflow
+state or report that run as blocked; it does not start a replacement request.
+The local snapshot API proves retained history, not worker liveness. See the
+[local lifecycle](local-development-lifecycle.md#interrupted-public-sessions).
+
 New hosted checkpoints store the complete public history in tenant-scoped,
 digest-verified pages and publish a versioned manifest only after its chunks
 are durable. Page size bounds one operation, not total history. Older inline

@@ -1,4 +1,8 @@
 import { AdapterNotConfiguredError } from "../eve/service";
+import {
+  localSessionRecoveryError,
+  LocalSessionRecoveryUnavailableError,
+} from "../eve/local-session-recovery";
 import { BuilderHandoffUnavailableError } from "../handoff/service";
 import { HostedAuthorizationError } from "../eve/hosted-auth";
 import {
@@ -119,6 +123,7 @@ export function safeToolError(
   const rejected = error instanceof HostedRejectedOperationError;
   const busy = error instanceof HostedSessionBusyError;
   const recoveryUnavailable = error instanceof HostedSessionRecoveryUnavailableError;
+  const localRecoveryUnavailable = error instanceof LocalSessionRecoveryUnavailableError;
   const cancellationUnsettled = error instanceof HostedCancellationUnsettledError;
   let code = "internal_error";
   let message = `Autograph App Builder could not complete ${operation}. Cause: ${safeUnexpectedCause(error) || "The service returned no error detail."} Retry this saved session after fixing the cause; if it repeats, report the operation and session ID.`;
@@ -151,6 +156,8 @@ export function safeToolError(
   } else if (busy) {
     code = "already_continuing";
     message = "This app is already continuing elsewhere. Try again shortly.";
+  } else if (localRecoveryUnavailable) {
+    ({ code, message } = localSessionRecoveryError);
   } else if (recoveryUnavailable) {
     code = "restart_required";
     message =

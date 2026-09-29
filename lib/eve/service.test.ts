@@ -2,10 +2,12 @@ import { createHash } from "node:crypto";
 import { once } from "node:events";
 
 import type { MessageStreamEvent } from "eve/client";
+import { ClientError } from "eve/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { createLocalEveSessionService, toEveInputResponse } from "./service";
 import { HostedCancellationUnsettledError } from "./hosted-errors";
+import { LocalSessionRecoveryUnavailableError } from "./local-session-recovery";
 
 describe("Eve input response mapping", () => {
   it("maps the public denial to Eve's cancel approval option", () => {
@@ -51,7 +53,7 @@ describe("local Eve acceptance", () => {
       error: {
         code: "start_request_not_found",
         message:
-          "No start result is saved for this account and clientRequestId. Check the original request ID and signed-in account. If they are correct, retry autograph_start with exactly the original ID and input.",
+          "No original start receipt is saved in this development process. Keep the original clientRequestId, any returned sessionId and transcript. Read that same sessionId with autograph_get if available; otherwise an operator must recover the original workflow state. Do not submit a replacement start.",
       },
       events: [],
       sessionId: "",
@@ -412,6 +414,7 @@ describe("local Eve acceptance", () => {
       respond: vi.fn(async () => response),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       send: vi.fn(async () => response),
+      snapshot: vi.fn(() => Promise.reject(new ClientError(404, "Stored session unavailable"))),
       state: { sessionId: "wrun_previous_cycle" },
     };
     const client = {
@@ -449,9 +452,14 @@ describe("local Eve acceptance", () => {
       }),
     ).resolves.toEqual({
       cursor: 0,
+      error: {
+        code: "session_recovery_unavailable",
+        message:
+          "Builder cannot recover this local Eve session from the current worker. Keep the original sessionId, clientRequestId, cursor and transcript. An operator must restore the original development workflow state or report this run as blocked; do not start a replacement request.",
+      },
       events: [],
       sessionId: started.sessionId,
-      status: "working",
+      status: "failed",
     });
   });
 
@@ -1273,5 +1281,202 @@ describe("local Eve acceptance", () => {
       { optionId: "approve", requestId: "request-plan" },
       { optionId: "approve", requestId: "request-preview" },
     ]);
+  });
+});
+
+const recoveryWaitingEvents: MessageStreamEvent[] = [
+  {
+    data: { continuationToken: "same-session", wait: "next-user-message" },
+    meta: { at: "2026-09-29T00:00:00.000Z", id: "waiting-event" },
+    type: "session.waiting",
+  },
+];
+
+const recoveryResponseFor = (events: MessageStreamEvent[]) => ({
+  cancel: vi.fn(() => Promise.resolve({ status: "accepted" })),
+  async *[Symbol.asyncIterator]() {
+    yield* events;
+  },
+});
+
+describe("local public session recovery", () => {
+  it("preserves the original checkpoint when a restarted child has no saved stream", async () => {
+    const events: MessageStreamEvent[] = [
+      {
+        data: {
+          requests: [
+            {
+              action: { callId: "publish-app", input: {}, kind: "tool-call", toolName: "open_pr" },
+              kind: "tool-approval",
+              prompt: "Publish app",
+              requestId: "old-approval",
+            },
+          ],
+          sequence: 1,
+          stepIndex: 0,
+          turnId: "original-turn",
+        },
+        meta: { at: "2026-09-29T00:00:00.000Z", id: "approval-event" },
+        type: "input.requested",
+      },
+      ...recoveryWaitingEvents,
+    ];
+    const sessionId = "wrun_lost_history";
+    const session = {
+      cancel: vi.fn(() => Promise.resolve({ status: "accepted" })),
+      respond: vi.fn(() => Promise.resolve(recoveryResponseFor(recoveryWaitingEvents))),
+      send: vi.fn(() => Promise.resolve(recoveryResponseFor(recoveryWaitingEvents))),
+      snapshot: vi.fn(() =>
+        Promise.resolve({ events: [], session: { sessionId, streamIndex: 0 } }),
+      ),
+      state: { sessionId },
+    };
+    const create = vi.fn(() => Promise.resolve({ response: recoveryResponseFor(events), session }));
+    const client = {
+      sessions: {
+        attach: vi.fn(() => session),
+        create,
+      } as never,
+    };
+    const first = createLocalEveSessionService(client, {
+      restartGeneration: "child-before-loss",
+      stateGeneration: "lost-history",
+    });
+    await first.start({ clientRequestId: "original-start", prompt: "Build the original app" });
+    await vi.waitFor(async () => {
+      await expect(first.get({ cursor: 0, limit: 100, sessionId })).resolves.toMatchObject({
+        cursor: 2,
+        status: "input_required",
+      });
+    });
+
+    const restarted = createLocalEveSessionService(client, {
+      restartGeneration: "child-after-loss",
+      stateGeneration: "lost-history",
+    });
+    const result = await restarted.get({ cursor: 0, limit: 100, sessionId });
+    expect(result).toMatchObject({
+      cursor: 2,
+      error: { code: "session_recovery_unavailable" },
+      events: expect.arrayContaining([expect.objectContaining({ type: "input_required" })]),
+      sessionId,
+      status: "failed",
+    });
+    expect(result.inputRequests).toBeUndefined();
+    expect(result.error?.message).toContain("do not start a replacement request");
+    await expect(
+      restarted.getStart?.({ clientRequestId: "original-start", cursor: 2, limit: 100 }),
+    ).resolves.toMatchObject({ cursor: 2, events: [], sessionId, status: "failed" });
+    await expect(restarted.list({ cursor: 0, limit: 10 })).resolves.toMatchObject({
+      sessions: [{ resumability: "restart_required", sessionId, status: "failed" }],
+    });
+    await expect(
+      restarted.send({ clientRequestId: "continue-original", message: "Continue", sessionId }),
+    ).rejects.toBeInstanceOf(LocalSessionRecoveryUnavailableError);
+    await expect(
+      restarted.respond({
+        clientRequestId: "respond-original",
+        responses: [{ requestId: "old-approval", response: { kind: "approve" } }],
+        sessionId,
+      }),
+    ).rejects.toBeInstanceOf(LocalSessionRecoveryUnavailableError);
+    await expect(
+      restarted.start({ clientRequestId: "original-start", prompt: "Build the original app" }),
+    ).rejects.toBeInstanceOf(LocalSessionRecoveryUnavailableError);
+    await expect(
+      restarted.start({ clientRequestId: "resume-original", resumeSessionId: sessionId }),
+    ).rejects.toBeInstanceOf(LocalSessionRecoveryUnavailableError);
+    await expect(restarted.cancel({ sessionId })).rejects.toBeInstanceOf(
+      LocalSessionRecoveryUnavailableError,
+    );
+    expect(session.send).not.toHaveBeenCalled();
+    expect(session.respond).not.toHaveBeenCalled();
+    expect(session.cancel).not.toHaveBeenCalled();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(session.snapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a missing stored session instead of usable empty progress", async () => {
+    const sessionId = "wrun_missing_worker";
+    const snapshot = vi.fn(() =>
+      Promise.resolve({ events: [], session: { sessionId, streamIndex: 0 } }),
+    );
+    const create = vi.fn();
+    const service = createLocalEveSessionService(
+      { sessions: { attach: vi.fn(() => ({ snapshot })), create } as never },
+      { stateGeneration: "missing-worker" },
+    );
+    await expect(service.get({ cursor: 12, limit: 100, sessionId })).resolves.toMatchObject({
+      cursor: 0,
+      error: { code: "session_recovery_unavailable" },
+      events: [],
+      sessionId,
+      status: "failed",
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("classifies Eve's inactive-session rejection and fences subsequent continuation", async () => {
+    const sessionId = "wrun_inactive_worker";
+    const inactive = new ClientError(
+      409,
+      JSON.stringify({ code: "session_not_active", error: "The session is no longer active." }),
+    );
+    const session = {
+      send: vi.fn(() => Promise.reject(inactive)),
+      state: { sessionId },
+    };
+    const create = vi.fn(() =>
+      Promise.resolve({ response: recoveryResponseFor(recoveryWaitingEvents), session }),
+    );
+    const service = createLocalEveSessionService(
+      { sessions: { attach: vi.fn(() => session), create } as never },
+      { stateGeneration: "inactive-worker" },
+    );
+    await service.start({ clientRequestId: "inactive-original", prompt: "Build" });
+    await vi.waitFor(async () => {
+      await expect(service.get({ cursor: 0, limit: 100, sessionId })).resolves.toMatchObject({
+        cursor: 1,
+        status: "waiting",
+      });
+    });
+    const continuation = {
+      clientRequestId: "inactive-continuation",
+      message: "Continue",
+      sessionId,
+    };
+    await expect(service.send(continuation)).rejects.toBeInstanceOf(
+      LocalSessionRecoveryUnavailableError,
+    );
+    await expect(service.send(continuation)).rejects.toBeInstanceOf(
+      LocalSessionRecoveryUnavailableError,
+    );
+    await expect(service.get({ cursor: 1, limit: 100, sessionId })).resolves.toMatchObject({
+      cursor: 1,
+      error: { code: "session_recovery_unavailable" },
+      events: [],
+      status: "failed",
+    });
+    expect(session.send).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not mistake a transient snapshot failure for a lost session", async () => {
+    const sessionId = "wrun_transient_read";
+    const snapshot = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("temporary connection failure"))
+      .mockResolvedValue({ events: recoveryWaitingEvents, session: { sessionId, streamIndex: 1 } });
+    const service = createLocalEveSessionService(
+      { sessions: { attach: vi.fn(() => ({ snapshot })) } as never },
+      { stateGeneration: "transient-local-read" },
+    );
+    await expect(service.get({ cursor: 0, limit: 100, sessionId })).rejects.toThrow(
+      "temporary connection failure",
+    );
+    await expect(service.get({ cursor: 0, limit: 100, sessionId })).resolves.toMatchObject({
+      cursor: 1,
+      status: "waiting",
+    });
   });
 });

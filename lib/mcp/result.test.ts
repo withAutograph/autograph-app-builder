@@ -10,6 +10,7 @@ import {
   HostedSubmissionUnknownError,
 } from "../eve/hosted-service";
 import { AdapterNotConfiguredError } from "../eve/service";
+import { LocalSessionRecoveryUnavailableError } from "../eve/local-session-recovery";
 import { BuilderHandoffUnavailableError } from "../handoff/service";
 import {
   McpToolAuthenticationRequiredError,
@@ -30,6 +31,7 @@ describe("safe MCP tool errors", () => {
     [new HostedRejectedOperationError(), "operation_rejected"],
     [new HostedSessionBusyError(), "already_continuing"],
     [new HostedSessionRecoveryUnavailableError(), "restart_required"],
+    [new LocalSessionRecoveryUnavailableError(), "session_recovery_unavailable"],
     [new Error("workflow result exceeded stream size"), "internal_error"],
     // Vitest's table test API is callback-based.
     // oxlint-disable-next-line promise/prefer-await-to-callbacks
@@ -51,6 +53,26 @@ describe("safe MCP tool errors", () => {
     expect(result.structuredContent.error?.message).toBe(
       "Autograph App Builder's session service is not configured. An operator must connect the hosted session adapter before this action can run.",
     );
+  });
+
+  it("preserves the local session identity and names the operator recovery blocker", () => {
+    const result = safeToolError(
+      new LocalSessionRecoveryUnavailableError(),
+      "original-local-session",
+      "autograph_send",
+    );
+    expect(result.structuredContent).toMatchObject({
+      error: { code: "session_recovery_unavailable" },
+      sessionId: "original-local-session",
+      status: "failed",
+    });
+    expect(result.structuredContent.error?.message).toContain(
+      "original sessionId, clientRequestId",
+    );
+    expect(result.structuredContent.error?.message).toContain("An operator must restore");
+    expect(result.structuredContent.error?.message).toContain("do not start a replacement request");
+    expect(result.isError).toBe(true);
+    expect(result._meta).toBeUndefined();
   });
 
   it("names the failing MCP operation and redacts provider credentials", () => {
