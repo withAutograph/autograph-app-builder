@@ -11,26 +11,27 @@ const files = new Map<string, string>([
     `${root}/apps/${app}/schema/release/${release}/release-manifest.json`,
     JSON.stringify({
       app,
-      schema_version: release,
       hashes: { schema: `sha256:${"a".repeat(64)}` },
+      schema_version: release,
     }),
   ],
   [
     `${root}/apps/${app}/.config/production-handoff.json`,
     JSON.stringify({
-      version: 1,
       appId: app,
       coreRoute: `/${app}`,
-      schemaReceiptPath: `/${app}/api/schema`,
-      roles: ["member", "reviewer"],
       operatorGuide: "docs/operations/generated-app-production.md",
+      roles: ["member", "reviewer"],
+      schemaReceiptPath: `/${app}/api/schema`,
+      version: 1,
     }),
   ],
   [`${root}/.config/mise/config.toml`, '[tasks."app:production"]\nrun = "..."'],
 ]);
 
 const source = (overrides: Map<string, string> = files) => ({
-  readTextFile: async ({ path }: { path: string }) => overrides.get(path) ?? null,
+  readTextFile: async ({ path }: { path: string }) =>
+    await Promise.resolve(overrides.get(path) ?? null),
 });
 
 describe("productionReadinessHandoff", () => {
@@ -41,14 +42,14 @@ describe("productionReadinessHandoff", () => {
       source: source(),
     });
     expect(result).toMatchObject({
-      status: "operator-review-required",
       appId: app,
-      route: `/${app}`,
-      checkedRelease: { releaseId: release, artifactHash: `sha256:${"a".repeat(64)}` },
-      roles: ["member", "reviewer"],
-      schemaReceiptPath: `/${app}/api/schema`,
-      operatorTask: "mise run app:production -- plan",
       blockers: [],
+      checkedRelease: { artifactHash: `sha256:${"a".repeat(64)}`, releaseId: release },
+      operatorTask: "mise run app:production -- plan",
+      roles: ["member", "reviewer"],
+      route: `/${app}`,
+      schemaReceiptPath: `/${app}/api/schema`,
+      status: "operator-review-required",
     });
   });
 
@@ -68,8 +69,8 @@ describe("productionReadinessHandoff", () => {
       `${root}/apps/${app}/schema/release/${release}/release-manifest.json`,
       JSON.stringify({
         app: "other-app",
-        schema_version: release,
         hashes: { schema: `sha256:${"a".repeat(64)}` },
+        schema_version: release,
       }),
     );
     const result = await productionReadinessHandoff({
