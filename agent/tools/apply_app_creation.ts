@@ -82,19 +82,20 @@ export default defineTool({
       proposalDigest: current.proposal.digest,
     });
     // Existing app submissions are deltas; repository checks own validation.
-    const architectureDiagnostics =
-      "operation" in current.proposal.target
-        ? []
-        : implementationArchitectureDiagnostics(
-            implementationFiles,
-            implementationFiles.some(
-              (file) =>
-                file.operation !== "delete" &&
-                file.path === `.config/app-specs/${current.appSpec.appId}.cue`,
-            )
-              ? "kernel"
-              : current.proposal.target.plan.source.schema.kind,
-          );
+    let architectureDiagnostics: string[] = [];
+    if (!("operation" in current.proposal.target)) {
+      const schemaKind = implementationFiles.some(
+        (file) =>
+          file.operation !== "delete" &&
+          file.path === `.config/app-specs/${current.appSpec.appId}.cue`,
+      )
+        ? "kernel"
+        : current.proposal.target.plan.source.schema.kind;
+      architectureDiagnostics = implementationArchitectureDiagnostics(
+        implementationFiles,
+        schemaKind,
+      );
+    }
     const sandbox = await ctx.getSandbox();
     const fixture = hasTestCapability("simulated-target");
     const binding = {
