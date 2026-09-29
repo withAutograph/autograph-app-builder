@@ -1,6 +1,7 @@
 import { getVercelPreviewProvider, registerVercelPreviewProvider } from "./vercel-preview-provider";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Sandbox } from "@vercel/sandbox";
+
 const sdk = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock("@vercel/sandbox", () => ({ Sandbox: sdk }));
 

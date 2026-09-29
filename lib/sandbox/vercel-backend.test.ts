@@ -1,8 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-  SandboxProviderPrepareContext,
-  SandboxProviderSessionContext,
-} from "eve/sandbox/provider";
+import type { SandboxProviderSessionContext } from "eve/sandbox/provider";
 import { createBuilderVercelProvider, createProviderFetch } from "./vercel-backend";
 import {
   configureVercelSessionGitSourceResolver,
@@ -12,21 +9,23 @@ import { getVercelPreviewProvider } from "./vercel-preview-provider";
 
 const sdk = vi.hoisted(() => ({ create: vi.fn(), get: vi.fn() }));
 const authority = vi.hoisted(() => vi.fn());
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Mock only the external SDK boundary so this test cannot create provider resources.
 vi.mock("@vercel/sandbox", () => ({ Sandbox: sdk }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- The persistent authority store is a terminal provider boundary in these lifecycle tests.
 vi.mock("./deployment-execution-lease", () => ({ assertHostedSandboxCommandAuthority: authority }));
 const context = { session: { id: "provider-test" } } as SandboxProviderSessionContext;
 const nativeFixture = () => ({
+  delete: vi.fn().mockResolvedValue(null),
+  fs: { mkdir: vi.fn().mockResolvedValue(null) },
   name: "owned-name",
-  status: "running",
-  fs: { mkdir: vi.fn().mockResolvedValue(undefined) },
-  writeFiles: vi.fn().mockResolvedValue(undefined),
   runCommand: vi.fn().mockResolvedValue({
     exitCode: 0,
-    stdout: async () => "/home/vercel\n",
-    stderr: async () => "",
+    stderr: () => Promise.resolve(""),
+    stdout: () => Promise.resolve("/home/vercel\n"),
   }),
-  stop: vi.fn().mockResolvedValue(undefined),
-  delete: vi.fn().mockResolvedValue(undefined),
+  status: "running",
+  stop: vi.fn().mockResolvedValue(null),
+  writeFiles: vi.fn().mockResolvedValue(null),
 });
 
 describe("Builder Vercel provider", () => {
@@ -38,22 +37,36 @@ describe("Builder Vercel provider", () => {
   it("prepares public resource targets without contacting Vercel or capturing source bytes", async () => {
     const provider = createBuilderVercelProvider();
     const artifact = await provider.prepare({
-      resources: {
-        source: { kind: "none" },
-        workspace: {
-          key: "workspace",
-          mountPath: "/unused",
-          targetPath: "/workspace",
-          files: [{ relativePath: "seed.txt", content: "seed" }],
+      files: {
+        list: () => Promise.resolve([]),
+        read: () => Promise.resolve(Buffer.alloc(0)),
+        readText: () => Promise.resolve(""),
+      },
+      host: {
+        loadOptionalPackage: async () => {
+          await Promise.resolve();
+          throw new Error("Not used by preparation fixture");
         },
+        resolveProjectPath: (path) => path,
+      },
+      resources: {
         skills: {
+          files: [{ content: "guide", relativePath: "design/SKILL.md" }],
           key: "skills",
           mountPath: "/unused",
           targetPath: "$HOME/.agents/skills",
-          files: [{ relativePath: "design/SKILL.md", content: "guide" }],
+        },
+        source: { kind: "none" },
+        workspace: {
+          files: [{ content: "seed", relativePath: "seed.txt" }],
+          key: "workspace",
+          mountPath: "/unused",
+          targetPath: "/workspace",
         },
       },
-    } as unknown as SandboxProviderPrepareContext);
+      sourceRevision: "fixture",
+      storagePath: "/fixture",
+    });
     expect(artifact.files.map((file) => file.path)).toEqual([
       "/workspace/seed.txt",
       "$HOME/.agents/skills/design/SKILL.md",
@@ -64,11 +77,11 @@ describe("Builder Vercel provider", () => {
     const native = nativeFixture();
     sdk.create.mockResolvedValue(native);
     const resolver = vi.fn().mockResolvedValue({
-      url: "https://github.com/acme/private.git",
-      token: "private-token",
       revision: "selected-head",
+      token: "private-token",
+      url: "https://github.com/acme/private.git",
     });
-    configureVercelSessionGitSourceResolver({ sessionId: context.session.id, resolve: resolver });
+    configureVercelSessionGitSourceResolver({ resolve: resolver, sessionId: context.session.id });
     const provider = createBuilderVercelProvider({
       sandboxEnvironment: { MISE_DATA_DIR: "/runtime" },
     });
@@ -76,27 +89,27 @@ describe("Builder Vercel provider", () => {
       const result = await provider.start(context, undefined, {
         files: [
           {
-            path: "$HOME/.agents/skills/SKILL.md",
             content: Buffer.from("guide").toString("base64"),
+            path: "$HOME/.agents/skills/SKILL.md",
           },
         ],
       });
       expect(sdk.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          networkPolicy: "allow-all",
           env: { MISE_DATA_DIR: "/runtime" },
+          networkPolicy: "allow-all",
           source: {
+            password: ["private", "token"].join("-"),
+            revision: "selected-head",
             type: "git",
             url: "https://github.com/acme/private.git",
-            password: "private-token",
             username: "x-access-token",
-            revision: "selected-head",
           },
         }),
       );
       expect(JSON.stringify(result.state)).not.toContain("private-token");
       expect(native.writeFiles).toHaveBeenCalledWith(
-        [{ path: "/home/vercel/.agents/skills/SKILL.md", content: Buffer.from("guide") }],
+        [{ content: Buffer.from("guide"), path: "/home/vercel/.agents/skills/SKILL.md" }],
         expect.anything(),
       );
       expect(await getVercelPreviewProvider(result.handle.sandbox.id)).toBe(native);
@@ -169,19 +182,22 @@ describe("Builder provider transport", () => {
         .mockResolvedValueOnce(new Response("ok"));
       const controller = new AbortController();
       const request = new Request("https://sandbox.example.test/create", {
-        signal: controller.signal,
-        method: "POST",
         body: "payload",
         headers: { authorization: "Bearer private" },
+        method: "POST",
+        signal: controller.signal,
       });
       await createProviderFetch(transport)(request);
       expect(transport).toHaveBeenCalledTimes(2);
-      const forwarded = transport.mock.calls[1]![0] as Request;
+      const forwarded = transport.mock.calls[1]?.[0];
+      if (!(forwarded instanceof Request)) {
+        throw new Error("Request was not forwarded");
+      }
       expect(forwarded.method).toBe("POST");
       expect(await forwarded.text()).toBe("payload");
       expect(forwarded.headers.get("authorization")).toBe("Bearer private");
       controller.abort(new Error("cancelled after retry"));
-      expect(transport.mock.calls[1]![1]?.signal?.aborted).toBe(true);
+      expect(transport.mock.calls[1]?.[1]?.signal?.aborted).toBe(true);
       expect(forwarded.signal.aborted).toBe(true);
     },
   );

@@ -102,7 +102,9 @@ export default defineTool({
         }),
       prepare: async () => await prepareDraftReconciliation(request),
       sandbox: {
-        setNetworkPolicy: async (policy) => await setBuilderSandboxNetworkPolicy(sandbox, policy),
+        setNetworkPolicy: async (policy) => {
+          await setBuilderSandboxNetworkPolicy(sandbox, policy);
+        },
       },
     });
     const { created, ...preparedCandidate } = prepared;

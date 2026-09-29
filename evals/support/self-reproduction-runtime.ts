@@ -212,13 +212,11 @@ export const evaluateCandidateRuntime = async (input: {
     input.timeoutMs ?? 600_000,
   );
   try {
-    if (input.backend !== undefined) {
-      handle = await input.backend.open();
-    } else {
+    if (input.backend === undefined) {
       const native = await Sandbox.create({
         ...input.credentials,
-        name: `self-reproduction-runtime-${randomUUID()}`,
         image: "vcr.vercel.com/vercel/eve/base:0.68.0",
+        name: `self-reproduction-runtime-${randomUUID()}`,
         networkPolicy: "allow-all",
       });
       await native.fs.mkdir("/workspace", { recursive: true });
@@ -229,6 +227,8 @@ export const evaluateCandidateRuntime = async (input: {
           await native.delete();
         },
       };
+    } else {
+      handle = await input.backend.open();
     }
     await handle.session.writeBinaryFile({
       content: input.workspaceArchive,

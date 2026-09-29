@@ -4,6 +4,11 @@ import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import type { BuilderSandboxSession } from "./builder-sandbox";
 
+export type VercelSdkSessionNative = Pick<
+  Sandbox,
+  "name" | "runCommand" | "readFile" | "readFileToBuffer" | "writeFiles" | "update"
+> & { readonly fs: Pick<Sandbox["fs"], "mkdir" | "writeFile" | "appendFile" | "rm"> };
+
 const resolvePath = (value: string) => path.posix.resolve("/workspace", value);
 const encoding = (value = "utf-8"): BufferEncoding => {
   if (!Buffer.isEncoding(value)) {
@@ -13,7 +18,7 @@ const encoding = (value = "utf-8"): BufferEncoding => {
 };
 
 /** The Builder's Vercel provider uses only the SDK's supported I/O APIs. */
-export const createVercelSdkSession = (native: Sandbox): BuilderSandboxSession => {
+export const createVercelSdkSession = (native: VercelSdkSessionNative): BuilderSandboxSession => {
   const runCommand = (options: SandboxRunOptions) => ({
     args: ["-lc", options.command],
     cmd: "bash",
