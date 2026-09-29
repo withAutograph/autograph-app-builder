@@ -22,7 +22,7 @@ describe("generic sandbox tool boundaries", () => {
 
     expect(router).not.toContain("inspect-existing-app");
     expect(router).not.toContain("and read-file respectively");
-    expect(inspector).toContain("await ctx.getSandbox()");
+    expect(inspector).toContain("await getSourceBoundSandbox(ctx)");
     expect(inspector).not.toContain("inspectSourceBoundSandboxWorkspace");
     expect(inspector).toContain(`path: \`repository/\${path}\``);
     expect(inspector).not.toContain("allowed.has(path)");

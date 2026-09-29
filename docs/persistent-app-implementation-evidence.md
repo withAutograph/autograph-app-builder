@@ -32,7 +32,7 @@ A development restart interrupted this session. Subsequent public read returned 
 
 The revision brief names the agreed demo PR #1500 head `d186c659629430e1d6c8dce9575cdc30bdc20087` as the app baseline and the shared runtime branch as the platform source. Builder asked the repository question through the public workflow and received the ordinary answer. Session `wrun_01M3QK1VA6SZAEYGNNGXTP1P2J` reported that hosted GitHub session authority was invalid before establishing either source. No baseline, application edits or manual comparison input was accessed. This local diagnostic does not qualify as a Builder-authored revision.
 
-Owner-only raw transcripts and sanitized reports were retained outside the repositories under `/private/tmp/builder-inventory-counts-public-v2` and `/private/tmp/builder-spend-review-public`. No evaluator prepared an application database, supplied Auth fixtures or edited an acceptance app.
+Sanitized public transcripts are retained in [Inventory Counts](evals/evidence/2026-09-29-persistent-apps/inventory-counts.public.jsonl) and [Spend Review](evals/evidence/2026-09-29-persistent-apps/spend-review.public.jsonl). Owner-only raw transcripts and local reports are under `/private/tmp/builder-inventory-counts-public-v2` and `/private/tmp/builder-spend-review-public`. No evaluator prepared an application database, supplied Auth fixtures or edited an acceptance app.
 
 ### Preview sign-in: emulated only
 

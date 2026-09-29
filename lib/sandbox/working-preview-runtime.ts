@@ -54,7 +54,7 @@ await ownershipOperation({kind:"update", attemptId:supervisorOwnership.attemptId
 `
 }${input.gatewaySource}
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync as supervisorReadFileSync, writeFileSync } from "node:fs";
 const launch = ${JSON.stringify({ ...input, gatewaySource: undefined })};
 ${workingPreviewDiagnosticCollectorSource}
 let stderr = "";
@@ -88,7 +88,7 @@ const activation = setInterval(() => {
   clearInterval(activation);
   let environment = process.env;
   if (launch.environmentPath) {
-    try { environment = { ...process.env, ...JSON.parse(readFileSync(launch.environmentPath, "utf8")) }; }
+    try { environment = { ...process.env, ...JSON.parse(supervisorReadFileSync(launch.environmentPath, "utf8")) }; }
     catch { fail("Prepared authenticated runtime environment is unavailable"); return; }
     delete environment.APP_RUNTIME_CLUSTER_DATABASE_URL;
   }
