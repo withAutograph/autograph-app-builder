@@ -141,7 +141,7 @@ describe("private local preview setup", () => {
   it("installs the repository-pinned PostgreSQL tool when initdb is absent", async () => {
     const run = vi
       .fn()
-      .mockResolvedValueOnce({ exitCode: 1, stderr: "error: initdb failed", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "error: initdb failed" })
       .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "installed" })
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "setup complete" });
@@ -160,7 +160,7 @@ describe("private local preview setup", () => {
     );
     expect(run).toHaveBeenNthCalledWith(
       3,
-      expect.objectContaining({ command: "mise install conda:postgresql" }),
+      expect.objectContaining({ command: "TERM=dumb mise install conda:postgresql" }),
     );
     expect(run).toHaveBeenCalledTimes(4);
     expect(result).toMatchObject({ status: "prepared", stdout: "setup complete" });
@@ -169,7 +169,7 @@ describe("private local preview setup", () => {
   it("reports why PostgreSQL installation could not complete", async () => {
     const run = vi
       .fn()
-      .mockResolvedValueOnce({ exitCode: 1, stderr: "error: initdb failed", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "error: initdb failed" })
       .mockResolvedValueOnce({ exitCode: 1, stderr: "", stdout: "" })
       .mockResolvedValueOnce({ exitCode: 2, stderr: "conda backend unavailable", stdout: "" });
     const result = await prepareAppLocalPreview({
