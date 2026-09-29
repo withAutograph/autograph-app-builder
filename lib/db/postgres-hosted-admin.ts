@@ -12,6 +12,8 @@ import {
   hostedVercelInstallations,
   hostedWorkspaceMemberships,
   vercelInstallationAuthorizationStates,
+  validationLogChunks,
+  validationLogManifests,
 } from "./schema";
 import type * as databaseSchema from "./schema";
 import type { HostedAdminStore } from "./hosted-admin";
@@ -64,7 +66,9 @@ function integrationTenantPredicate(
     | typeof hostedGitHubUserCredentials
     | typeof builderProvisioningJournals
     | typeof githubInstallationAuthorizationStates
-    | typeof vercelInstallationAuthorizationStates,
+    | typeof vercelInstallationAuthorizationStates
+    | typeof validationLogChunks
+    | typeof validationLogManifests,
   authority: Parameters<HostedAdminStore["seedMembership"]>[0]["authority"],
 ) {
   return and(
@@ -117,6 +121,47 @@ async function deleteExpired(
       ),
     )
     .returning({ sessionId: agentSessions.sessionId });
+
+  // Compute cleanup leaves published logs intact. Retention may remove them
+  // only after the durable public session itself has been removed.
+  await transaction.delete(validationLogManifests).where(
+    and(
+      integrationTenantPredicate(validationLogManifests, input.authority),
+      notExists(
+        transaction
+          .select({ sessionId: agentSessions.sessionId })
+          .from(agentSessions)
+          .where(
+            and(
+              eq(agentSessions.issuer, validationLogManifests.issuer),
+              eq(agentSessions.audience, validationLogManifests.audience),
+              eq(agentSessions.workspaceId, validationLogManifests.workspaceId),
+              eq(agentSessions.ownerUserId, validationLogManifests.ownerUserId),
+              eq(agentSessions.sessionId, validationLogManifests.sessionId),
+            ),
+          ),
+      ),
+    ),
+  );
+  await transaction.delete(validationLogChunks).where(
+    and(
+      integrationTenantPredicate(validationLogChunks, input.authority),
+      notExists(
+        transaction
+          .select({ sessionId: agentSessions.sessionId })
+          .from(agentSessions)
+          .where(
+            and(
+              eq(agentSessions.issuer, validationLogChunks.issuer),
+              eq(agentSessions.audience, validationLogChunks.audience),
+              eq(agentSessions.workspaceId, validationLogChunks.workspaceId),
+              eq(agentSessions.ownerUserId, validationLogChunks.ownerUserId),
+              eq(agentSessions.sessionId, validationLogChunks.sessionId),
+            ),
+          ),
+      ),
+    ),
+  );
 
   const githubStates = await transaction
     .delete(githubInstallationAuthorizationStates)
@@ -203,6 +248,12 @@ export function createPostgresHostedAdminStore(database: Database): HostedAdminS
           .delete(agentSessions)
           .where(sessionTenantPredicate(authority))
           .returning({ sessionId: agentSessions.sessionId });
+        await transaction
+          .delete(validationLogManifests)
+          .where(integrationTenantPredicate(validationLogManifests, authority));
+        await transaction
+          .delete(validationLogChunks)
+          .where(integrationTenantPredicate(validationLogChunks, authority));
         const githubInstallations = await transaction
           .delete(hostedGitHubInstallations)
           .where(integrationTenantPredicate(hostedGitHubInstallations, authority))

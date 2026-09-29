@@ -10,6 +10,15 @@ import {
 import { ARRUSTED_APP_VALIDATION_SHA256 } from "./dependency-cache";
 import type { ExecutionDependencyLayout } from "./dependency-cache";
 import type { ApplyCommandResult, TargetApplyReceipt } from "./target-apply";
+import { ValidationLogWriter } from "./validation-log";
+import type {
+  ValidationLogChannel,
+  ValidationLogReference,
+  ValidationLogStore,
+} from "./validation-log";
+import { sanitizeValidationDiagnosticText } from "./validation-output-sanitize";
+
+export { sanitizeValidationDiagnosticText } from "./validation-output-sanitize";
 
 export type TargetValidationCommand =
   | `mise run --skip-tools app:check ${string}`
@@ -21,6 +30,8 @@ export type ValidationCommandExecutor = (input: {
   appId: string;
   command: TargetValidationCommand;
   validationRoot: string;
+  onChunk?: (channel: ValidationLogChannel, content: string) => Promise<void>;
+  abortSignal?: AbortSignal;
 }) => Promise<ApplyCommandResult>;
 
 interface TargetValidationBinding {
@@ -65,6 +76,7 @@ export type TargetValidationCommandReceipt = PlannedValidationCommand & {
   exitCode: number;
   stdoutDigest: string;
   stderrDigest: string;
+  logs?: { stdout: ValidationLogReference; stderr: ValidationLogReference };
 };
 
 type ValidationReceiptBase = TargetValidationBinding & {
@@ -134,19 +146,6 @@ const credentialPrefixPattern =
 const repairLinePattern =
   /(?:^|\s)(?:apps\/|error(?:\s+TS\d+|:)|typescript\(TS\d+\)|FAIL\s|Build failed|Failed to compile|Module not found|Cannot find (?:module|name)|Script not found|Formatting issues found|stale iteration preimage|schema-compiler:|Schema compilation failed|Schema release generation failed|The schema compiler produced invalid JSON|Compiler output excerpt:|ToolNotFound:|linker\s+[`"']?cc|cue:|cargo:|rustc:|mise(?:\s+ERROR|:)|The compiler produced no diagnostic output|The compiler returned no output|No CUE source location was reported|Install a native C compiler|Install the repository's locked mise tools|Read the compiler error and its CUE file location|Retry:)/iu;
 const diagnosticContinuationPattern = /^(?:\s+\S|\s*\^|\s*\||\s*(?:caused by|help|note|retry):)/iu;
-
-/** Redact complete provider output before any durable diagnostic write. */
-export const sanitizeValidationDiagnosticText = (value: string): string =>
-  value
-    .replaceAll(ansiPattern, "")
-    .replaceAll(/\p{Cc}/gu, (character) =>
-      character === "\t" || character === "\n" || character === "\r" ? character : "",
-    )
-    .replaceAll(credentialUrlPattern, "$<scheme>[REDACTED]@")
-    .replaceAll(bearerPattern, "Bearer [REDACTED]")
-    .replaceAll(sensitiveAssignmentPattern, "$<name>$<separator>[REDACTED]")
-    .replaceAll(credentialPrefixPattern, "[REDACTED]")
-    .replaceAll(/(?:\/workspace\/repository\/)?(?=apps\/)/gu, "");
 
 // Keep enough compiler/build output for an agent to repair its own candidate,
 // while excluding control bytes and common credential forms from durable state.
@@ -403,7 +402,7 @@ const attemptBinding = (attempt: TargetValidationAttemptReceipt): TargetValidati
 
 export const sandboxValidationCommandExecutor =
   (): ValidationCommandExecutor =>
-  async ({ sandbox, appId, command, validationRoot }) => {
+  async ({ sandbox, appId, command, validationRoot, onChunk, abortSignal }) => {
     if (!supportedValidationCommands(appId).some((planned) => planned.command === command)) {
       throw new Error("The repository validation command is not supported.");
     }
@@ -417,7 +416,45 @@ status=$?
 cat "$log"
 rm -f "$log"
 exit "$status"`;
-    return await sandbox.run({ command: detachedCommand, workingDirectory: validationRoot });
+    if (onChunk === undefined) {
+      return await sandbox.run({ command: detachedCommand, workingDirectory: validationRoot });
+    }
+    const process = await sandbox.spawn({ abortSignal, command, workingDirectory: validationRoot });
+    const drain = async (channel: ValidationLogChannel, stream: ReadableStream<Uint8Array>) => {
+      const reader = stream.getReader();
+      const decoder = new TextDecoder("utf-8");
+      try {
+        while (true) {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Durable writes apply output backpressure.
+          const next = await reader.read();
+          if (next.done) break;
+          const content = decoder.decode(next.value, { stream: true });
+          if (content) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- Each stream read waits for durable storage.
+            await onChunk(channel, content);
+          }
+        }
+        const tail = decoder.decode();
+        if (tail) await onChunk(channel, tail);
+      } finally {
+        reader.releaseLock();
+      }
+    };
+    try {
+      const results = await Promise.all([
+        drain("stdout", process.stdout),
+        drain("stderr", process.stderr),
+        process.wait(),
+      ]);
+      const status = results.at(-1);
+      if (status === undefined) {
+        throw new Error("The validation command did not return an exit status.");
+      }
+      return { exitCode: status.exitCode, stderr: "", stdout: "" };
+    } catch (error) {
+      await process.kill();
+      throw error;
+    }
   };
 
 export const fixtureValidationCommandExecutor =
@@ -470,8 +507,12 @@ export const executeProposalBoundValidation = (input: {
   dependencyLayout?: ExecutionDependencyLayout;
   appId: string;
   environment?: Readonly<Record<string, string | undefined>>;
+  logStore?: ValidationLogStore;
+  sessionId?: string;
+  abortSignal?: AbortSignal;
 }): Promise<TargetValidationResult> => {
   const commands: TargetValidationCommandReceipt[] = [];
+  // oxlint-disable-next-line eslint/complexity -- Existing receipt branches and staged log rollback share one command transition.
   const execute = async (index: number): Promise<TargetValidationResult> => {
     const planned = input.attempt.commands[index];
     if (planned === undefined) {
@@ -489,6 +530,28 @@ export const executeProposalBoundValidation = (input: {
       };
     }
     let result: ApplyCommandResult;
+    const logInput =
+      input.logStore === undefined || input.sessionId === undefined
+        ? undefined
+        : {
+            attemptDigest: input.attempt.digest,
+            command: planned.name,
+            sessionId: input.sessionId,
+          };
+    const stdoutLog =
+      logInput === undefined || input.logStore === undefined
+        ? undefined
+        : new ValidationLogWriter(input.logStore, { ...logInput, channel: "stdout" });
+    const stderrLog =
+      logInput === undefined || input.logStore === undefined
+        ? undefined
+        : new ValidationLogWriter(input.logStore, { ...logInput, channel: "stderr" });
+    let durableOutput:
+      | {
+          stdout: Awaited<ReturnType<ValidationLogWriter["finish"]>>;
+          stderr: Awaited<ReturnType<ValidationLogWriter["finish"]>>;
+        }
+      | undefined;
     try {
       console.info(
         JSON.stringify({
@@ -499,11 +562,27 @@ export const executeProposalBoundValidation = (input: {
         }),
       );
       result = await input.executor({
+        abortSignal: input.abortSignal,
         appId: input.appId,
         command: planned.command,
         sandbox: input.sandbox,
         validationRoot: planned.validationRoot,
+        ...(stdoutLog === undefined || stderrLog === undefined
+          ? {}
+          : {
+              onChunk: async (channel: ValidationLogChannel, content: string) => {
+                await (channel === "stdout" ? stdoutLog : stderrLog).append(content);
+              },
+            }),
       });
+      if (stdoutLog !== undefined && stderrLog !== undefined) {
+        // Fixture executors return strings; hosted Sandbox executors stream.
+        if (result.stdout) await stdoutLog.append(result.stdout);
+        if (result.stderr) await stderrLog.append(result.stderr);
+        const stdout = await stdoutLog.finish();
+        const stderr = await stderrLog.finish();
+        durableOutput = { stderr, stdout };
+      }
       console.info(
         JSON.stringify({
           callId: input.attempt.startedByCallId,
@@ -514,6 +593,7 @@ export const executeProposalBoundValidation = (input: {
         }),
       );
     } catch (error) {
+      await Promise.allSettled([stdoutLog?.abort(), stderrLog?.abort()]);
       console.warn(
         JSON.stringify({
           callId: input.attempt.startedByCallId,
@@ -552,8 +632,16 @@ export const executeProposalBoundValidation = (input: {
       ...planned,
       exitCode: result.exitCode,
       inputTreeDigest: input.apply.postTreeDigest,
-      stderrDigest: sha256(result.stderr),
-      stdoutDigest: sha256(result.stdout),
+      stderrDigest: durableOutput?.stderr.reference.digest ?? sha256(result.stderr),
+      stdoutDigest: durableOutput?.stdout.reference.digest ?? sha256(result.stdout),
+      ...(durableOutput === undefined
+        ? {}
+        : {
+            logs: {
+              stderr: durableOutput.stderr.reference,
+              stdout: durableOutput.stdout.reference,
+            },
+          }),
     };
     commands.push(commandReceipt);
     if (result.exitCode !== 0) {
@@ -574,8 +662,16 @@ export const executeProposalBoundValidation = (input: {
                 }
               : {}),
           },
-          compilerDiagnostics(`${result.stderr}\n${result.stdout}`),
-          validationOutputExcerpt(result.stdout, result.stderr),
+          compilerDiagnostics(
+            `${durableOutput?.stderr.excerpt ?? result.stderr}\n${durableOutput?.stdout.excerpt ?? result.stdout}`,
+          ),
+          durableOutput === undefined
+            ? validationOutputExcerpt(result.stdout, result.stderr)
+            : {
+                stderr: durableOutput.stderr.excerpt,
+                stdout: durableOutput.stdout.excerpt,
+                truncated: durableOutput.stderr.omitted || durableOutput.stdout.omitted,
+              },
         ),
       };
     }

@@ -1,4 +1,6 @@
 import { spawnSync } from "node:child_process";
+
+// oxlint-disable typescript/promise-function-async -- In-memory store fakes return settled Promises.
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -9,6 +11,8 @@ import type { SandboxSession } from "eve/sandbox";
 
 import type { TargetApplyReceipt } from "./target-apply";
 import type { ValidationCommandExecutor } from "./target-validation";
+import type { ValidationLogStore } from "./validation-log";
+import { readValidationLogPage } from "./validation-log";
 import {
   createTargetValidationAttempt,
   compilerDiagnostics,
@@ -85,6 +89,84 @@ function sandboxFixture() {
 }
 
 describe("target validation", () => {
+  it("links a filtered failure receipt to its complete sanitized durable log", async () => {
+    const { sandbox } = sandboxFixture();
+    const chunks = new Map<string, { content: string; digest: string }>();
+    const manifests = new Map<
+      string,
+      {
+        bytes: number;
+        channel: "stdout" | "stderr";
+        chunkCount: number;
+        digest: string;
+        logId: string;
+      }
+    >();
+    const store: ValidationLogStore = {
+      getChunk: (key, index) => Promise.resolve(chunks.get(`${key.logId}:${index}`)),
+      getReference: (key) => Promise.resolve(manifests.get(key.logId)),
+      publish: (key, reference) => {
+        manifests.set(key.logId, reference);
+        return Promise.resolve();
+      },
+      putChunk: (key, index, content, chunkDigest) => {
+        chunks.set(`${key.logId}:${index}`, { content, digest: chunkDigest });
+        return Promise.resolve();
+      },
+      removeStaged: (key) => {
+        manifests.delete(key.logId);
+        let index = 0;
+        while (chunks.delete(`${key.logId}:${index}`)) {
+          index += 1;
+        }
+        return Promise.resolve();
+      },
+    };
+    const attempt = createTargetValidationAttempt(apply, "durable-failure");
+    const result = await executeProposalBoundValidation({
+      appId: "example",
+      apply,
+      attempt,
+      executor: () =>
+        Promise.resolve({
+          exitCode: 1,
+          stderr: "",
+          stdout:
+            "ordinary build progress\napps/example/app/page.tsx(1,1): error TS2304: token=private\n",
+        }),
+      logStore: store,
+      sandbox,
+      sessionId: "session-a",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("Expected validation failure.");
+    }
+    const [command] = result.receipt.commands;
+    if (command === undefined) {
+      throw new Error("Expected a command receipt.");
+    }
+    expect(command.logs?.stdout.digest).toBe(command.stdoutDigest);
+    expect(result.receipt.output?.truncated).toBe(true);
+    const reference = command.logs?.stdout;
+    if (reference === undefined) {
+      throw new Error("Expected durable log reference.");
+    }
+    const page = await readValidationLogPage({
+      digest: reference.digest,
+      key: {
+        attemptDigest: attempt.digest,
+        channel: "stdout",
+        command: command.name,
+        logId: reference.logId,
+        sessionId: "session-a",
+      },
+      store,
+    });
+    expect(page.content).toContain("ordinary build progress");
+    expect(page.content).not.toContain("private");
+    expect(page.content).toContain("token=[REDACTED]");
+  });
   it("reports a missing repository task with bounded sanitized command output", async () => {
     const { sandbox } = sandboxFixture();
     const result = await executeProposalBoundValidation({

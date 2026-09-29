@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import validateAppCreation from "../../agent/tools/validate_app_creation";
 
@@ -32,6 +32,10 @@ vi.mock("../repository/target-validation", () => ({
   sandboxValidationCommandExecutor: vi.fn(),
 }));
 vi.mock("../testing/test-capability", () => ({ hasTestCapability: () => false }));
+vi.mock("@/lib/mcp/hosted-route", () => ({ openHostedPostgresDatabase: vi.fn(() => ({})) }));
+vi.mock("@/lib/repository/postgres-validation-log-store", () => ({
+  createPostgresValidationLogStore: vi.fn(() => ({})),
+}));
 
 const workflow = (phase: "validated" | "reviewed") => ({
   appSpec: { appId: "app", content: "## Acceptance walkthrough\n\nSave draft.", digest: "a" },
@@ -57,11 +61,16 @@ const implementationFiles = [{ content: "updated", path: "apps/app/page.tsx" }];
 describe("behavior evidence invalidation during validation repair", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("DATABASE_URL", "postgres://builder-test.invalid/test");
     mocks.state.update.mockImplementation((change) => {
       mocks.state.current = change(mocks.state.current);
     });
     mocks.execute.mockResolvedValue({ ok: true, receipt: { commands: [] } });
     mocks.review.mockResolvedValue({ findings: [], reviewCompleted: true, status: "failed" });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("automatically returns source findings after technical validation without a review-tool call", async () => {
@@ -82,7 +91,10 @@ describe("behavior evidence invalidation during validation repair", () => {
   });
   it("does not invoke the source judge when repository commands fail", async () => {
     mocks.state.current = { ...workflow("validated"), phase: "applied" };
-    mocks.execute.mockResolvedValue({ ok: false, receipt: { reason: "command failed" } });
+    mocks.execute.mockResolvedValue({
+      ok: false,
+      receipt: { commands: [], reason: "command failed" },
+    });
     await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
       getSandbox: () => Promise.resolve({}),
@@ -130,6 +142,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       validateAppCreation.execute({ implementationFiles }, {
         callId: "repair",
         getSandbox: () => Promise.resolve({ writeTextFile }),
+        session: { auth: {}, id: "session" },
       } as never),
     ).rejects.toThrow("write failed");
     expect(mocks.clear).toHaveBeenCalledBefore(writeTextFile);

@@ -169,6 +169,13 @@
       "when": 1790567902245,
       "tag": "0024_prototype_chunks",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790654400000,
+      "tag": "0025_validation_logs",
+      "breakpoints": true
     }
   ]
 }

@@ -151,8 +151,10 @@ app-owned files and reuse the same component-backed preview flow.
    `validate_app_creation` and retry in the same approved checkout. Use the
    returned diagnostics and status; do not invent extra validation capabilities
    or treat a pending attempt as passed. Successful commands establish
-   technical validation, not product acceptance. Use `change_set_status` and
-   `accept_change_set` after validation to record the current reviewed changes;
+   technical validation, not product acceptance. Use `get_validation_log` with
+   each returned cursor when a repair excerpt is truncated. Use
+   `change_set_status` and `accept_change_set` after validation to record the
+   current reviewed changes;
    review is neither publication nor proof of working user interactions.
    Successful validation automatically runs the independent source assessment
    against the original request and accepted plan. An unchanged later review

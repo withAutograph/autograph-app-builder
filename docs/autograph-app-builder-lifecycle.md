@@ -71,6 +71,16 @@ repair or retry instruction. If the response cannot carry all diagnostics,
 preserve the complete sanitized output in retrievable storage and provide an
 excerpt with a continuation reference; never discard the only copy. Follow the
 [Builder workload capacity policy](builder-workload-capacity-policy.md).
+For hosted app checks, each stdout and stderr channel is sanitized while it is
+streamed to tenant and session scoped immutable chunks. A validation receipt
+contains each channel's log ID, SHA-256 digest, byte length, and chunk count.
+`get_validation_log` reads one authenticated page at a time using the exact
+attempt digest, command, channel, log ID, digest, and returned cursor. The
+caller verifies the assembled UTF-8 bytes against the digest. A filtered
+repair excerpt marks `truncated` whenever it omits nonempty output or matching
+lines that exceed its per-response budget. Sandbox cleanup leaves the durable
+log readable until the durable session itself is removed by retention or
+tenant deletion.
 Checkout-backed execution readiness uses the prepared checkout and its hosted
 sandbox binding; absence of
 an obsolete offline dependency cache is not an image-configuration failure.
