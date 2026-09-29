@@ -1,4 +1,5 @@
 import type { SandboxSession } from "eve/sandbox";
+import type { PreparedRuntimeExecution } from "./prepared-runtime-execution";
 
 import { describeSelectedApp } from "@/lib/repository/app-description";
 import type { AppDescription } from "@/lib/repository/app-description";
@@ -45,9 +46,15 @@ const sourceDescription = async (input: {
 const runtimeEvidence = (
   backend: AppDescription["backend"] | undefined,
   behaviorEvidence: readonly ProductBehaviorEvidence[],
+  installationProof?: PreparedRuntimeExecution["installationProof"],
 ) => {
   const generatedBackend = backend?.kind === "generated-postgres" ? backend : null;
   const staticApp = backend?.kind === "static";
+  const matchingInstallation =
+    installationProof &&
+    generatedBackend !== null &&
+    installationProof.releaseId === generatedBackend.release.id &&
+    installationProof.artifactHash === generatedBackend.release.artifactHash;
   return {
     authenticatedSchemaReceipt: {
       contract: generatedBackend?.schemaReceipt?.contract ?? null,
@@ -71,12 +78,14 @@ const runtimeEvidence = (
         "restart-durability",
       ],
     },
-    installedRelease: {
-      reason: staticApp
-        ? "The repository describes this app as static."
-        : "A checked source release does not establish installation in the selected database.",
-      status: staticApp ? ("not-applicable" as const) : ("unassessed" as const),
-    },
+    installedRelease: matchingInstallation
+      ? { observation: installationProof, status: "passed" as const }
+      : {
+          reason: staticApp
+            ? "The repository describes this app as static."
+            : "A checked source release does not establish installation in the selected database.",
+          status: staticApp ? ("not-applicable" as const) : ("unassessed" as const),
+        },
   };
 };
 
@@ -85,6 +94,7 @@ export const productionReadinessHandoff = async (input: {
   appId: string;
   repositoryRoot: string;
   source: SourceDescriptionRunner;
+  installationProof?: PreparedRuntimeExecution["installationProof"];
   productBehaviorEvidence?: readonly ProductBehaviorEvidence[];
   signal?: AbortSignal;
 }) => {
@@ -103,7 +113,11 @@ export const productionReadinessHandoff = async (input: {
             releaseId: generatedBackend.release.id,
           },
     description,
-    evidence: runtimeEvidence(backend, input.productBehaviorEvidence ?? []),
+    evidence: runtimeEvidence(
+      backend,
+      input.productBehaviorEvidence ?? [],
+      input.installationProof?.appId === input.appId ? input.installationProof : undefined,
+    ),
     nextSteps: [
       "Review this app's source, declared capabilities, and recorded runtime observations.",
       "Verify the selected database's installed release and authenticated schema receipt.",

@@ -66,6 +66,52 @@ describe("productionReadinessHandoff", () => {
     expect(result.evidence.behavior.unassessed).toContain("restart-durability");
   });
 
+  it.each([
+    {
+      appId: app,
+      artifactHash: `sha256:${"a".repeat(64)}`,
+      expected: "passed",
+      releaseId: release,
+    },
+    {
+      appId: "other-app",
+      artifactHash: `sha256:${"a".repeat(64)}`,
+      expected: "unassessed",
+      releaseId: release,
+    },
+    { appId: app, artifactHash: "different", expected: "unassessed", releaseId: release },
+    {
+      appId: app,
+      artifactHash: `sha256:${"a".repeat(64)}`,
+      expected: "unassessed",
+      releaseId: "predecessor",
+    },
+  ])(
+    "retains only fresh installation proof matching this selected app and release",
+    async (value) => {
+      const result = await productionReadinessHandoff({
+        appId: app,
+        installationProof: {
+          actors: 8,
+          appId: value.appId,
+          artifactHash: value.artifactHash,
+          authenticatedBehavior: "unassessed",
+          branch: "app-builder/inventory",
+          environment: "preview",
+          observation: "database-verification",
+          observedAt: "2026-09-29T20:00:00.000Z",
+          releaseId: value.releaseId,
+          tenants: 2,
+        },
+        repositoryRoot: root,
+        source: source(),
+      });
+      expect(result.evidence.installedRelease.status).toBe(value.expected);
+      expect(result.evidence.authenticatedSchemaReceipt.status).toBe("unassessed");
+      expect(result.evidence.behavior.coverage).toBe("unassessed");
+    },
+  );
+
   it("retains actual action-readback results without expanding their coverage", async () => {
     const evidence: ProductBehaviorEvidence = {
       acceptedOutcomeText: "Submit and read a request",

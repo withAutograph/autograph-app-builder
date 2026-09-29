@@ -184,11 +184,21 @@ export default defineTool({
     // local data task first so its server inherits the setup log file rather
     // than Turbo's captured test pipe, which would keep Turbo waiting after
     // the tests themselves have finished.
+    let runtime: Awaited<ReturnType<typeof prepareValidationLocalData>> = null;
     if (!fixture) {
       validationPhase(ctx.callId, "preparing_declared_local_data");
       try {
-        await prepareValidationLocalData({
+        runtime = await prepareValidationLocalData({
           appId: current.appSpec.appId,
+          execution: {
+            appId: current.appSpec.appId,
+            root: current.applyReceipt.applyRoot,
+            sandboxId: sandbox.id,
+            sessionAuth: ctx.session.auth,
+            sessionId: ctx.session.id,
+            signal: ctx.abortSignal,
+            state: current,
+          },
           root: current.applyReceipt.applyRoot,
           sandbox,
           signal: ctx.abortSignal,
@@ -218,7 +228,9 @@ export default defineTool({
       apply: current.applyReceipt,
       attempt,
       dependencyLayout: current.dependencyReceipt.dependencyLayout,
-      executor: fixture ? fixtureValidationCommandExecutor() : sandboxValidationCommandExecutor(),
+      executor: fixture
+        ? fixtureValidationCommandExecutor()
+        : sandboxValidationCommandExecutor({ runtime }),
       sandbox,
       ...(databaseUrl === undefined
         ? {}
@@ -267,6 +279,7 @@ export default defineTool({
     const backendValidation = await validatePersistentBackend(description, {
       appId: current.appSpec.appId,
       root: current.applyReceipt.applyRoot,
+      runtime,
       sandbox,
       signal: ctx.abortSignal,
     });
@@ -284,6 +297,7 @@ export default defineTool({
     validationPhase(ctx.callId, "applied_source_review_finished", sourceAssessment.status);
     const productionHandoff = await productionReadinessHandoff({
       appId: current.appSpec.appId,
+      installationProof: runtime?.installationProof,
       productBehaviorEvidence: evidence,
       repositoryRoot: current.applyReceipt.applyRoot,
       signal: ctx.abortSignal,
