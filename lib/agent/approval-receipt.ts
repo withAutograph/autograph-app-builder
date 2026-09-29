@@ -4,6 +4,7 @@ import type {
   ImmutableGitHubSourceReceipt,
 } from "@/lib/repository/github-publication";
 import type { ExistingDraftUpdateProposal } from "@/lib/repository/github-draft-update";
+import type { ExistingDraftReconciliationProposal } from "@/lib/repository/github-draft-reconciliation";
 
 export const gitObjectIdSchema = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -83,14 +84,28 @@ export const approvalTargetFromDraftProposal = (
   repositoryId: proposal.repositoryId,
 });
 
-export const approvalTargetFromExistingDraftUpdate = (
-  proposal: ExistingDraftUpdateProposal,
-): ApprovalTarget => ({
+type DraftHeadApprovalSubject = Pick<
+  ExistingDraftUpdateProposal,
+  "branchName" | "expectedHeadSha" | "name" | "owner" | "repositoryId"
+>;
+
+const approvalTargetFromDraftHead = (proposal: DraftHeadApprovalSubject): ApprovalTarget => ({
   baseRef: `refs/heads/${proposal.branchName}`,
   baseSha: proposal.expectedHeadSha,
   repository: `${proposal.owner}/${proposal.name}`,
   repositoryId: proposal.repositoryId,
 });
+
+export const approvalTargetFromExistingDraftUpdate: (
+  proposal: ExistingDraftUpdateProposal,
+) => ApprovalTarget = approvalTargetFromDraftHead;
+
+export const approvalTargetFromExistingDraftReconciliation: (
+  proposal: Pick<
+    ExistingDraftReconciliationProposal,
+    "branchName" | "expectedHeadSha" | "name" | "owner" | "repositoryId"
+  >,
+) => ApprovalTarget = approvalTargetFromDraftHead;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertApprovalReceipt(input: {
@@ -128,7 +143,7 @@ export function assertApprovalReceipt(input: {
   return actual;
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+// oxlint-disable-next-line eslint/func-style, eslint/complexity -- preserve hoisting across supported approval phases.
 export function publicApprovalDescription(input: unknown, toolName?: string): string | undefined {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     return undefined;
@@ -143,7 +158,7 @@ export function publicApprovalDescription(input: unknown, toolName?: string): st
       expectedPhase = "change_set";
     } else if (toolName === "publish_github_draft_pr") {
       expectedPhase = "publication";
-    } else if (toolName === "update_github_draft_pr") {
+    } else if (toolName === "update_github_draft_pr" || toolName === "reconcile_github_draft_pr") {
       expectedPhase = "draft_update";
     }
     return parsed.success && (expectedPhase === undefined || parsed.data.phase === expectedPhase)

@@ -24,6 +24,10 @@ import { createReviewedChangeSetReceipt } from "./reviewed-change-set";
 import type { NormalizedChangeSet } from "./reviewed-change-set";
 import { compareOverlayPaths } from "./target-apply";
 import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
+import type {
+  ExistingDraftReconciliationProposal,
+  ReconciliationContent,
+} from "./github-draft-reconciliation";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
@@ -1163,6 +1167,165 @@ describe("existing draft update provider", () => {
     recoveredMessage = "A same-content commit from elsewhere";
     await expect(provider.inspectAppliedDraftUpdate(proposal, content, observed)).resolves.toBe(
       false,
+    );
+  });
+});
+
+describe("existing draft reconciliation provider", () => {
+  it("creates a reviewed two-parent merge commit and advances the draft by exact head CAS", async () => {
+    const head = "3".repeat(40);
+    const headTree = "4".repeat(40);
+    const base = "8".repeat(40);
+    const baseTree = "9".repeat(40);
+    const resolvedTree = "7".repeat(40);
+    const mergeCommit = "5".repeat(40);
+    const branchName = `app-builder/review-${"d".repeat(20)}`;
+    const filePath = "apps/demo/page.tsx";
+    const bytes = new TextEncoder().encode("export default null;\n");
+    const fileDigest = createHash("sha256").update(bytes).digest("hex");
+    const changes = [
+      { after: { digest: fileDigest, mode: "644" }, bytes, kind: "added" as const, path: filePath },
+    ];
+    const metadata = changes.map(({ bytes: _bytes, ...change }) => change);
+    const proposal: ExistingDraftReconciliationProposal = {
+      approvedPaths: [filePath],
+      baseBranch: "main",
+      baseChangesDigest: hash(metadata),
+      branchName,
+      digest: "a".repeat(64),
+      expectedBaseSha: base,
+      expectedBaseTree: baseTree,
+      expectedHeadSha: head,
+      expectedHeadTree: headTree,
+      headChangesDigest: "b".repeat(64),
+      idempotencyKey: "c".repeat(64),
+      installationIdentityDigest: "e".repeat(64),
+      intendedOutcome: "reconcile-existing-draft-pull-request",
+      name: "example-app",
+      originMarker: "d".repeat(64),
+      owner: "withAutograph",
+      priorPublicationDigest: "f".repeat(64),
+      pullRequestId: "150000",
+      pullRequestNumber: 1500,
+      repositoryId: "100",
+      resolvedTree,
+      reviewDigest: "0".repeat(64),
+      version: 1,
+    };
+    const content: ReconciliationContent = {
+      changes,
+      kind: "draft-reconciliation",
+      reviewDigest: proposal.reviewDigest,
+      version: 1,
+    };
+    const calls: { url: string; body: unknown }[] = [];
+    let observedHead = head;
+    // oxlint-disable-next-line eslint/complexity, eslint/require-await, sonarjs/cognitive-complexity -- focused GitHub HTTP double
+    const implementation: typeof fetch = async (request, init = {}) => {
+      const url = String(request);
+      const method = init.method ?? "GET";
+      const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
+      calls.push({ body, url });
+      if (url.endsWith("/app")) return json({ id: 123, slug: "autograph-app-builder" });
+      if (url.endsWith("/app/installations/456/access_tokens"))
+        return json(
+          {
+            permissions: (body as { permissions: unknown }).permissions,
+            token: "ghs_operation_scoped_installation_token",
+          },
+          201,
+        );
+      if (url.endsWith("/repositories/100"))
+        return json({
+          default_branch: "main",
+          id: 100,
+          name: "example-app",
+          owner: { login: "withAutograph" },
+          private: true,
+        });
+      if (url.endsWith("/repos/withAutograph/example-app/actions/variables?per_page=100&page=1"))
+        return json({ variables: [] });
+      if (url.endsWith("/repos/withAutograph/example-app/pulls/1500"))
+        return json({
+          base: { ref: "main", repo: { id: 100 } },
+          body: `<!-- App-Builder-Idempotency: ${"d".repeat(64)} -->`,
+          draft: true,
+          head: { ref: branchName, repo: { id: 100 }, sha: observedHead },
+          id: 150_000,
+          number: 1500,
+          state: "open",
+          user: { id: 900, login: "autograph-app-builder[bot]", type: "Bot" },
+        });
+      if (url.endsWith(`/git/ref/heads/${branchName}`))
+        return json({ node_id: "REF_NODE", object: { sha: observedHead } });
+      if (url.endsWith(`/commits/${head}`))
+        return json({
+          commit: {
+            message: `Add demo\n\nApp-Builder-Idempotency: ${"d".repeat(64)}`,
+            tree: { sha: headTree },
+          },
+          sha: head,
+        });
+      if (url.endsWith("/commits/HEAD"))
+        return json({ commit: { tree: { sha: baseTree } }, sha: base });
+      if (url.endsWith(`/commits/${base}`) || url.endsWith("/commits/refs/heads/main"))
+        return json({ commit: { tree: { sha: baseTree } }, sha: base });
+      if (url.endsWith(`/git/commits/${mergeCommit}`))
+        return json({
+          message: `Reconcile draft pull request #1500 with main\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`,
+          parents: [{ sha: head }, { sha: base }],
+          tree: { sha: resolvedTree },
+        });
+      if (url.endsWith(`/commits/${mergeCommit}`))
+        return json({
+          commit: {
+            message: `Reconcile draft pull request #1500 with main\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`,
+            tree: { sha: resolvedTree },
+          },
+          sha: mergeCommit,
+        });
+      if (url.endsWith(`/git/trees/${baseTree}`) && method === "GET")
+        return json({ tree: [], truncated: false });
+      if (url.endsWith("/git/blobs") && method === "POST")
+        return json({ sha: "6".repeat(40) }, 201);
+      if (url.endsWith("/git/trees") && method === "POST") return json({ sha: resolvedTree }, 201);
+      if (url.endsWith("/git/commits") && method === "POST") return json({ sha: mergeCommit }, 201);
+      if (url.endsWith("/repos/withAutograph/example-app") && method === "GET")
+        return json({ id: 100, node_id: "REPO_NODE" });
+      if (url.endsWith("/graphql") && method === "POST") {
+        observedHead = mergeCommit;
+        return json({ data: { updateRefs: { clientMutationId: null } } });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    };
+    const provider = createProvider(implementation);
+    await expect(provider.reconcileExistingDraft(proposal, content)).resolves.toEqual({
+      requestId: "REQUEST_1",
+      status: "accepted",
+    });
+    const mergeBody = calls.find(({ url }) => url.endsWith("/git/commits"))?.body as {
+      parents: string[];
+      tree: string;
+    };
+    expect(mergeBody).toMatchObject({ parents: [head, base], tree: resolvedTree });
+    const graphql = calls.find(({ url }) => url.endsWith("/graphql"))?.body as {
+      query: string;
+      variables: Record<string, string>;
+    };
+    expect(graphql.query).toContain("force: false");
+    expect(graphql.variables).toMatchObject({
+      afterOid: mergeCommit,
+      beforeOid: head,
+      name: `refs/heads/${branchName}`,
+    });
+    const observed = (await provider.inspectExistingDraft({
+      name: proposal.name,
+      number: proposal.pullRequestNumber,
+      owner: proposal.owner,
+      repositoryId: proposal.repositoryId,
+    })) as ExistingDraftObservation;
+    await expect(provider.inspectAppliedDraftReconciliation(proposal, observed)).resolves.toBe(
+      true,
     );
   });
 });

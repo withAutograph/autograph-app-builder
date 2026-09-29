@@ -30,6 +30,10 @@ import {
 } from "./github-target-access-proof";
 import type { GitHubTargetAccessProof } from "./github-target-access-proof";
 import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
+import type {
+  ExistingDraftReconciliationProposal,
+  ReconciliationContent,
+} from "./github-draft-reconciliation";
 
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -260,6 +264,14 @@ export interface GitHubAppInstallationProvider {
     content: GitHubDraftPullRequestContent,
     observed: ExistingDraftObservation,
   ) => Promise<unknown>;
+  reconcileExistingDraft: (
+    proposal: ExistingDraftReconciliationProposal,
+    content: ReconciliationContent,
+  ) => Promise<unknown>;
+  inspectAppliedDraftReconciliation: (
+    proposal: ExistingDraftReconciliationProposal,
+    observed: ExistingDraftObservation,
+  ) => Promise<unknown>;
   inspectInstallation: (input: {
     operation: GitHubOperation;
     requestedPermissions: RequestedPermissions;
@@ -394,6 +406,15 @@ export function createGitHubAppPublicationAdapter(
         ),
       ) as GitHubMutationAcknowledgement;
     },
+    async inspectAppliedDraftReconciliation(proposal, observed) {
+      return z
+        .boolean()
+        .parse(
+          await sanitizedProviderCall(() =>
+            provider.inspectAppliedDraftReconciliation(proposal, observed),
+          ),
+        );
+    },
     async inspectAppliedDraftUpdate(proposal, content, observed) {
       return z
         .boolean()
@@ -470,6 +491,12 @@ export function createGitHubAppPublicationAdapter(
       return parseProviderResponse(
         acknowledgementSchema,
         await sanitizedProviderCall(() => provider.publishDraftPullRequest(proposal, content)),
+      ) as GitHubMutationAcknowledgement;
+    },
+    async reconcileExistingDraft(proposal, content) {
+      return parseProviderResponse(
+        acknowledgementSchema,
+        await sanitizedProviderCall(() => provider.reconcileExistingDraft(proposal, content)),
       ) as GitHubMutationAcknowledgement;
     },
     async updateExistingDraft(proposal, content) {

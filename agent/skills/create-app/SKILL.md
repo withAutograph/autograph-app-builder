@@ -162,10 +162,22 @@ app-owned files and reuse the same component-backed preview flow.
    review again. An unavailable or clean source review never proves runtime
    success. Keep incomplete previews inspectable and report remaining checks;
    do not replace a requested backend outcome with a simulated transition.
-   When revising an existing draft pull request, inspect its current branch and
-   use `seal_github_draft_pr_update` with the current reviewed change set. Ask
-   for a separate approval of that exact PR, branch head, and reviewed diff,
-   then use `update_github_draft_pr`. If its head moves, review and seal again.
+   When revising an existing draft pull request, first use
+   `prepare_github_draft_pr_reconciliation` to inspect its live base and head
+   commits and prepare the private merge candidate. This step determines actual
+   conflicts even when GitHub's mergeability status is stale. Resolve
+   only reported conflicts under the selected app: read each file with
+   `inspect_github_draft_pr_reconciliation`, then write its complete resolved
+   content with `resolve_github_draft_pr_conflict`. Report a platform-owned conflict
+   with its path and leave it for its owner. Run the selected app's schema,
+   repository checks, browser tests, and applicable guard on the reconciled
+   candidate with `validate_github_draft_pr_reconciliation`. Use
+   `review_github_draft_pr_reconciliation`, then page through both complete
+   diffs with `inspect_github_draft_pr_reconciliation`: the final diff against
+   the current base and the delta from the old PR head.
+   Seal that exact result with `seal_github_draft_pr_reconciliation`, then ask
+   for a separate update approval before `reconcile_github_draft_pr`. If the
+   base or PR head moves, prepare, validate, and review the new result again.
 9. Continue to the implemented app's private preview with `start_app_preview`.
    If the repository defines `app:local` for the selected app and the preview
    needs local data, use `prepare-app-local-preview` first in the approved
