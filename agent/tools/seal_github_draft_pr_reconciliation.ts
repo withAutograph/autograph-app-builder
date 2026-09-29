@@ -1,6 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
+import { approvalReceiptForExistingDraftUpdate } from "@/lib/agent/approval-receipt";
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import {
   draftReconciliationState,
@@ -13,7 +14,7 @@ const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 
 export default defineTool({
   description:
-    "Seal a proposal for the exact validated reconciliation of an existing draft PR. The proposal binds the live base, old head, resolved tree, both reviewed diffs, and selected repository. Separate approval is required to move the branch.",
+    "Seal a proposal for the exact validated reconciliation of an existing draft PR. The result includes the exact approvalReceipt for the draft branch head; pass it verbatim to reconcile_github_draft_pr after separate approval. The proposal binds the live base, old head, resolved tree, both reviewed diffs, and selected repository.",
   async execute(input, ctx) {
     const candidate = draftReconciliationState.get();
     const state = appBuilderWorkflowState.get();
@@ -71,7 +72,7 @@ export default defineTool({
       operation: "sealing the resolved draft proposal",
       transition: () => ({ ...candidate, proposal }),
     });
-    return proposal;
+    return { ...proposal, approvalReceipt: approvalReceiptForExistingDraftUpdate(proposal) };
   },
   inputSchema: z.strictObject({ expectedReviewDigest: digest }),
 });

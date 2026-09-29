@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   approvalReceiptSchema,
+  approvalReceiptForExistingDraftUpdate,
   approvalRequestDecision,
   approvalTarget,
   approvalTargetFromDraftProposal,
@@ -98,6 +99,13 @@ describe("approval receipt", () => {
       publicApprovalDescription({ approvalReceipt: updateReceipt }, "reconcile_github_draft_pr"),
     ).toContain("update the existing draft branch refs/heads/app-builder/review-original");
     expect(approvalTargetFromExistingDraftReconciliation(proposal)).toEqual(target);
+    const generated = approvalReceiptForExistingDraftUpdate({
+      ...proposal,
+      digest: receipt.subjectDigest,
+    });
+    expect(generated).toEqual(updateReceipt);
+    expect(generated.baseRef).not.toBe("refs/heads/main");
+    expect(generated.baseSha).not.toBe(receipt.baseSha);
     expect(
       publicApprovalDescription({ approvalReceipt: updateReceipt }, "publish_github_draft_pr"),
     ).toBeUndefined();

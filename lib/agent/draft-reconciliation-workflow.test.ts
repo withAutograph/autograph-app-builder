@@ -60,7 +60,14 @@ describe("draft reconciliation publication review", () => {
       reviewReceipt: { digest },
     };
     mocks.inspect.mockResolvedValue({ resolvedTree: sha, unresolvedConflicts: [] });
-    mocks.seal.mockResolvedValue({ digest: "c".repeat(64) });
+    mocks.seal.mockResolvedValue({
+      branchName: "app-builder/spend-review",
+      digest: "c".repeat(64),
+      expectedHeadSha: sha,
+      name: "arrusted-development",
+      owner: "withAutograph",
+      repositoryId: "1",
+    });
   });
 
   it("refuses to seal until both full diffs were read", async () => {
@@ -89,7 +96,16 @@ describe("draft reconciliation publication review", () => {
     };
     await expect(
       sealReconciliation.execute({ expectedReviewDigest: digest }, context),
-    ).resolves.toMatchObject({ digest: "c".repeat(64) });
+    ).resolves.toMatchObject({
+      approvalReceipt: {
+        baseRef: "refs/heads/app-builder/spend-review",
+        baseSha: sha,
+        outcome: "update-draft-pr",
+        phase: "draft_update",
+        subjectDigest: "c".repeat(64),
+      },
+      digest: "c".repeat(64),
+    });
     expect(mocks.seal).toHaveBeenCalledOnce();
     expect(mocks.candidate).toHaveProperty("proposal.digest", "c".repeat(64));
   });

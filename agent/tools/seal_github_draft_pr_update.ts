@@ -1,6 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
+import { approvalReceiptForExistingDraftUpdate } from "@/lib/agent/approval-receipt";
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import { appBuilderWorkflowState, updateExactWorkflow } from "@/lib/agent/workflow-state";
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
@@ -10,7 +11,7 @@ const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 
 export default defineTool({
   description:
-    "Inspect an existing open draft pull request in the selected GitHub repository and seal a proposal to update its current head with the reviewed app-owned change set. This is read-only; a separate approval is required to move the branch.",
+    "Inspect an existing open draft pull request in the selected GitHub repository and seal a proposal to update its current head with the reviewed app-owned change set. The result includes the exact approvalReceipt for the draft branch head; pass it verbatim to update_github_draft_pr after separate approval. This is read-only.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "reviewed" || state.githubSource === undefined) {
@@ -66,7 +67,7 @@ export default defineTool({
         };
       },
     });
-    return proposal;
+    return { ...proposal, approvalReceipt: approvalReceiptForExistingDraftUpdate(proposal) };
   },
   inputSchema: z.strictObject({
     expectedGitHubSourceDigest: digest,
