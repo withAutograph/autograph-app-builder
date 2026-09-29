@@ -4,6 +4,7 @@ import { z } from "zod";
 import { approvalReceiptForExistingDraftUpdate } from "@/lib/agent/approval-receipt";
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import { appBuilderWorkflowState, updateExactWorkflow } from "@/lib/agent/workflow-state";
+import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
 import { inspectGitHubSourceSandboxWorkspace } from "@/lib/repository/sandbox-github-source";
 
@@ -31,6 +32,7 @@ export default defineTool({
       state.reviewReceipt,
       state.appSpec.appId,
       state.sourceReceipt.sourceKind,
+      appBaselineState.get()?.receipt,
     );
     const checkout = await inspectGitHubSourceSandboxWorkspace({
       githubSource: state.githubSource,

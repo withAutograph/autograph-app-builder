@@ -10,6 +10,7 @@ import {
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import { publicationContentSourceForReviewedWorkflow } from "@/lib/agent/github-publication-content-source";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
 
 export default defineTool({
@@ -42,6 +43,7 @@ export default defineTool({
       state.reviewReceipt,
       state.appSpec.appId,
       state.sourceReceipt.sourceKind,
+      appBaselineState.get()?.receipt,
     );
     const sandbox = await ctx.getSandbox();
     const contentSource = await publicationContentSourceForReviewedWorkflow({

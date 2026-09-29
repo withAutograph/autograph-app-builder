@@ -17,6 +17,10 @@ import {
   prepareDevelopmentSandboxWorkspace,
 } from "@/lib/repository/supported-template";
 
+import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
+import { appBaselineState } from "@/lib/agent/app-baseline-state";
+import { readableAppBaselinePaths } from "@/lib/repository/app-baseline";
+
 const developmentWorkspacePath = "/workspace/repository";
 const sandboxOverviewPaths = [
   "README.md",
@@ -37,7 +41,17 @@ export default defineTool({
       );
     }
     if (paths?.length) {
-      const sandbox = await ctx.getSandbox();
+      const sandbox = await getSourceBoundSandbox(ctx);
+      const readable = await readableAppBaselinePaths(
+        sandbox,
+        appBaselineState.get()?.selection,
+        paths,
+      );
+      if (readable.length !== paths.length) {
+        throw new Error(
+          "A requested release archive is outside the selected app baseline and was not exposed as implementation input.",
+        );
+      }
       const files: { content: string; path: string }[] = [];
       const missingPaths: string[] = [];
       const readRequestedPath = async (index: number): Promise<void> => {

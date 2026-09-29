@@ -63,6 +63,26 @@ const source: ImmutableGitHubSourceReceipt = {
 };
 
 describe("selected GitHub sandbox source restoration", () => {
+  it("recreates baseline compute at the saved platform commit while retaining the publication branch", async () => {
+    const acquireExistingSourceCredential = vi.fn().mockResolvedValue({ token: "fresh-token" });
+    try {
+      restoreSelectedGitHubSandboxSource({
+        accessReceipt: receipt,
+        frozenRevision: "a".repeat(40),
+        githubSource: source,
+        runtime: async () => await Promise.resolve({ acquireExistingSourceCredential }),
+        sessionId: "session-one",
+      });
+      expect(acquireExistingSourceCredential).not.toHaveBeenCalled();
+      expect(await resolveVercelSessionGitSource("session-one")).toMatchObject({
+        revision: "a".repeat(40),
+        token: "fresh-token",
+      });
+      expect(source.resolvedRef).toBe("refs/heads/review/branch");
+    } finally {
+      clearVercelSessionGitSource("session-one");
+    }
+  });
   it("restores a saved app when its older source-state slot is empty", async () => {
     const acquireExistingSourceCredential = vi.fn().mockResolvedValue({ token: "fresh-token" });
     const recovered = selectedGitHubSourceForSandboxRestore({

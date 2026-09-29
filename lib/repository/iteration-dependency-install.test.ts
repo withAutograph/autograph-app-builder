@@ -7,15 +7,18 @@ import { describe, expect, it, vi } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
 import { sandboxApplyCommandExecutor, targetApplyCommandReceiptSchema } from "./target-apply";
 import { targetIterationProposalSchema } from "./target-planning";
+import type { TargetIterationChange } from "./target-planning";
 
 const digest = (content: string) => createHash("sha256").update(content).digest("hex");
 const before = '{"dependencies":{}}';
 const after = '{"dependencies":{"path-to-regexp":"8.4.2"}}';
-const fixture = (options: { stale?: boolean; installFails?: boolean; cueFails?: boolean } = {}) => {
+const fixture = (
+  options: { stale?: boolean; installFails?: boolean; cueFails?: boolean; delete?: boolean } = {},
+) => {
   const events: string[] = [];
   const policies: Parameters<SandboxSession["setNetworkPolicy"]>[0][] = [];
   let cueCommand: string | undefined;
-  let manifest = options.stale === true ? "changed by another writer" : before;
+  let manifest: string | null = options.stale === true ? "changed by another writer" : before;
   const failure = { exitCode: 1, stderr: "package not found", stdout: "" };
   const cueFailure = { exitCode: 1, stderr: "cue source activation failed", stdout: "cue output" };
   const sandbox = {
@@ -23,7 +26,7 @@ const fixture = (options: { stale?: boolean; installFails?: boolean; cueFails?: 
     readBinaryFile: vi.fn<SandboxSession["readBinaryFile"]>(async ({ path }) => {
       await Promise.resolve();
       events.push(`read:${path}`);
-      return Buffer.from(manifest);
+      return manifest === null ? null : Buffer.from(manifest);
     }),
     readFile: vi.fn<SandboxSession["readFile"]>(async () => {
       await Promise.resolve();
@@ -35,13 +38,15 @@ const fixture = (options: { stale?: boolean; installFails?: boolean; cueFails?: 
     }),
     removePath: vi.fn<SandboxSession["removePath"]>(async () => {
       await Promise.resolve();
+      events.push("delete");
+      manifest = null;
     }),
     resolvePath: (path) => path,
     run: vi.fn<SandboxSession["run"]>(async ({ command }) => {
       await Promise.resolve();
       if (command === "bun install") {
         events.push("install");
-        expect(manifest).toBe(after);
+        expect(manifest).toBe(options.delete === true ? null : after);
         return options.installFails === true ? failure : { exitCode: 0, stderr: "", stdout: "" };
       }
       expect(command).toContain('cue_bin="$(mise which cue)"');
@@ -73,13 +78,15 @@ const fixture = (options: { stale?: boolean; installFails?: boolean; cueFails?: 
       manifest = content;
     }),
   } satisfies SandboxSession;
-  const changes = [
-    {
-      after: { content: after, digest: digest(after), mode: "644" },
-      before: { digest: digest(before), mode: "644" },
-      path: "apps/vendor/package.json",
-    },
-  ];
+  const change: TargetIterationChange =
+    options.delete === true
+      ? { before: { digest: digest(before), mode: "644" }, path: "apps/vendor/package.json" }
+      : {
+          after: { content: after, digest: digest(after), mode: "644" },
+          before: { digest: digest(before), mode: "644" },
+          path: "apps/vendor/package.json",
+        };
+  const changes = [change];
   const proposal = targetIterationProposalSchema.parse({
     blockers: [],
     contract: {
@@ -197,6 +204,29 @@ describe("existing-app dependency installation", () => {
     expect(result.exitCode).toBe(2);
     expect(state.sandbox.writeTextFile).not.toHaveBeenCalled();
     expect(state.sandbox.setNetworkPolicy).not.toHaveBeenCalled();
+    expect(state.sandbox.run).not.toHaveBeenCalled();
+  });
+  it("removes the exact planned file and resumes after a later install failure", async () => {
+    const options = { delete: true, installFails: true };
+    const state = fixture(options);
+    expect(await state.execute()).toMatchObject({ exitCode: 1, failedCommand: "bun install" });
+    expect(state.sandbox.removePath).toHaveBeenCalledWith({
+      force: true,
+      path: "repository/apps/vendor/package.json",
+    });
+    options.installFails = false;
+    const result = await state.execute();
+    expect(result.exitCode).toBe(0);
+    expect(state.sandbox.writeTextFile).not.toHaveBeenCalled();
+    expect(state.sandbox.removePath).toHaveBeenCalledTimes(2);
+  });
+  it("does not delete another writer's contents", async () => {
+    const state = fixture({ delete: true, stale: true });
+    expect(await state.execute()).toMatchObject({
+      exitCode: 2,
+      stderr: "stale iteration preimage",
+    });
+    expect(state.sandbox.removePath).not.toHaveBeenCalled();
     expect(state.sandbox.run).not.toHaveBeenCalled();
   });
   it("returns the real installation failure after writes instead of an applied receipt", async () => {

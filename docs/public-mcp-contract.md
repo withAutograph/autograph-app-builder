@@ -23,8 +23,23 @@ handling, lost-response recovery, and cooperative cancellation settlement.
 The internal Eve routes, adapter session identifiers, storage records, and
 transport protocol remain implementation details.
 
-`autograph_get` without `sessionId` returns a tenant-scoped paginated recent
-session index. With `sessionId`, it retains absolute-cursor event pagination.
+`autograph_get` without `sessionId` or `clientRequestId` returns a tenant-scoped
+paginated recent session index. With `sessionId`, it retains absolute-cursor
+event pagination. With the original start's `clientRequestId`, it
+reads only that start operation for the exact issuer, audience, workspace, and
+user, and returns the saved session's current progress. The two lookup fields
+are mutually exclusive. This read never resubmits the start. An unresolved
+submission directs the caller to preserve the original ID and input for an
+exact retry; an unknown result must not lead to a replacement start ID.
+This covers prompt, prepared handoff, and resume starts. Prepared handoffs save
+an original-request alias to their canonical start before dispatch; distinct
+original request IDs for one handoff recover the same bound session. Healthy
+resumes save a receipt for the existing handle. Checkpoint and adapter-recovery
+resumes retain their durable operation receipt. Older handoffs whose original
+ID was never saved require an exact original start retry to establish the alias.
+The alias uses the existing caller-scoped operation journal, so no SQL migration
+is required. Deploy its closed-record reader with its writer; older readers do
+not accept the added alias field. No historical original IDs are fabricated.
 If the durable Eve stream cannot be read within 30 seconds, `autograph_get`
 returns the last saved checkpoint with `session_read_delayed`, identifies it as
 stale, and instructs the caller to retry the same session and cursor. A delayed
@@ -40,6 +55,14 @@ session resumes from its last durable checkpoint as a child session, while a
 missing adapter for otherwise-active work is fenced by adapter generation before
 the same public handle continues. User-visible sessions do not expire with
 their short-lived compute leases.
+
+Local development has a narrower recovery boundary. A missing local stream or
+Eve's explicit inactive-session rejection returns `session_recovery_unavailable`,
+preserves the original public identity and any buffered progress, and removes
+approval controls. The operator must restore the original development workflow
+state or report that run as blocked; it does not start a replacement request.
+The local snapshot API proves retained history, not worker liveness. See the
+[local lifecycle](local-development-lifecycle.md#interrupted-public-sessions).
 
 New hosted checkpoints store the complete public history in tenant-scoped,
 digest-verified pages and publish a versioned manifest only after its chunks

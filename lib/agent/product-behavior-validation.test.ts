@@ -3,15 +3,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import validateAppCreation from "../../agent/tools/validate_app_creation";
 
 const mocks = vi.hoisted(() => ({
+  browser: vi.fn(),
   clear: vi.fn(),
+  describe: vi.fn(),
   execute: vi.fn(),
+  prepare: vi.fn(),
   review: vi.fn(),
   state: { current: {} as Record<string, unknown>, update: vi.fn() },
 }));
 
+vi.mock("../repository/app-description", () => ({ describeSelectedApp: mocks.describe }));
+vi.mock("../../agent/tools/run-app-browser-tests", () => ({ runAppBrowserTests: mocks.browser }));
 vi.mock("./review-applied-product-source", () => ({ reviewAppliedProductSource: mocks.review }));
 vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
-  prepareValidationLocalData: vi.fn().mockResolvedValue(null),
+  prepareValidationLocalData: mocks.prepare,
 }));
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 vi.mock("./workflow-state", () => ({
@@ -61,6 +66,9 @@ const implementationFiles = [{ content: "updated", path: "apps/app/page.tsx" }];
 describe("behavior evidence invalidation during validation repair", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.prepare.mockResolvedValue(null);
+    mocks.describe.mockResolvedValue({ backend: { kind: "static" } });
+    mocks.browser.mockResolvedValue({ status: "passed" });
     vi.stubEnv("DATABASE_URL", "postgres://builder-test.invalid/test");
     mocks.state.update.mockImplementation((change) => {
       mocks.state.current = change(mocks.state.current);
@@ -115,6 +123,45 @@ describe("behavior evidence invalidation during validation repair", () => {
     expect(result).toMatchObject({
       productAcceptance: { productStatus: "unassessed" },
       reused: true,
+    });
+  });
+
+  it("refreshes persistent authorization evidence and reports failed browser validation", async () => {
+    mocks.state.current = workflow("validated");
+    mocks.describe.mockResolvedValue({
+      backend: { kind: "generated-postgres" },
+      validation: { browser: { task: "test-e2e" } },
+    });
+    mocks.browser.mockResolvedValue({ problem: "Assignment revoked", status: "failed" });
+    const result = await validateAppCreation.execute({ implementationFiles: [] }, {
+      callId: "validate",
+      getSandbox: () => Promise.resolve({}),
+      session: { auth: {}, id: "session" },
+    } as never);
+    expect(mocks.prepare).toHaveBeenCalledOnce();
+    expect(mocks.execute).toHaveBeenCalledOnce();
+    expect(mocks.browser).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({
+      backendValidation: { status: "failed" },
+      reused: false,
+      status: "needs_repair",
+      technicalStatus: "passed",
+    });
+  });
+
+  it("keeps preparation failure repairable before compilation", async () => {
+    mocks.state.current = { ...workflow("validated"), phase: "applied" };
+    mocks.prepare.mockRejectedValueOnce(new Error("Checked release differs from CUE"));
+    const result = await validateAppCreation.execute({ implementationFiles: [] }, {
+      callId: "validate",
+      getSandbox: () => Promise.resolve({}),
+      session: { auth: {}, id: "session" },
+    } as never);
+    expect(mocks.state.current.phase).toBe("applied");
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      reason: "authenticated-runtime-preparation",
+      status: "needs_repair",
     });
   });
 

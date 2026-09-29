@@ -13,4 +13,20 @@ describe("existing app planning changes", () => {
     expect(parsed).toHaveLength(40);
     expect(parsed[0]?.content).toHaveLength(300 * 1024);
   });
+  it("accepts explicit removals without interpreting empty content as deletion", () => {
+    expect(
+      existingAppChangesSchema.parse([
+        { operation: "delete", path: "apps/example/server/demo.ts" },
+        { content: "", operation: "upsert", path: "apps/example/server/context.ts" },
+      ]),
+    ).toEqual([
+      { operation: "delete", path: "apps/example/server/demo.ts" },
+      { content: "", operation: "upsert", path: "apps/example/server/context.ts" },
+    ]);
+    expect(
+      existingAppChangesSchema.safeParse([
+        { content: "ambiguous", operation: "delete", path: "apps/example/server/demo.ts" },
+      ]).success,
+    ).toBe(false);
+  });
 });

@@ -9,7 +9,7 @@ import { runSequentiallyUntilAsync } from "../async-sequential.ts";
 
 const projectSchema = z
   .object({
-    framework: z.literal("nextjs"),
+    framework: z.literal("services"),
     id: z.string().min(1),
     link: z
       .object({
@@ -192,9 +192,9 @@ export async function provisionVercelProject(input: {
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
           const created = await vercel({
             body: {
-              framework: "nextjs",
+              framework: "services",
               name: candidate,
-              rootDirectory: `apps/${input.appId}`,
+              rootDirectory: ".",
               ...(linkedRepository
                 ? {
                     gitRepository: {
@@ -253,7 +253,7 @@ export async function provisionVercelProject(input: {
         const project = projectSchema.parse(observed.body);
         if (
           project.name !== candidate ||
-          project.rootDirectory !== `apps/${input.appId}` ||
+          project.rootDirectory !== "." ||
           (linkedRepository !== undefined &&
             `${project.link?.org}/${project.link?.repo}` !== linkedRepository) ||
           (linkedRepository === undefined && project.link !== undefined)
@@ -266,7 +266,7 @@ export async function provisionVercelProject(input: {
         }
         return {
           dashboardUrl: `https://vercel.com/${input.installation.slug}/${project.name}`,
-          framework: "nextjs",
+          framework: "services",
           installationId: input.installation.installationId,
           name: project.name,
           projectId: project.id,

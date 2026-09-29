@@ -34,6 +34,8 @@ import type {
   ExistingDraftReconciliationProposal,
   ReconciliationContent,
 } from "./github-draft-reconciliation";
+import { historicalAppSourceObservationSchema } from "./historical-app-source";
+import type { HistoricalAppSourceSelector } from "./historical-app-source";
 
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -253,6 +255,12 @@ export const createGitHubTargetAccessAdapter = (
 });
 
 export interface GitHubAppInstallationProvider {
+  inspectHistoricalAppSource?: (input: {
+    repositoryId: string;
+    owner: string;
+    name: string;
+    source: HistoricalAppSourceSelector;
+  }) => Promise<unknown>;
   inspectExistingDraft: (input: {
     repositoryId: string;
     owner: string;
@@ -453,7 +461,7 @@ export function createGitHubAppPublicationAdapter(
     );
   }
 
-  return {
+  const adapter: GitHubPublicationAdapter = {
     async createPrivateFreshHistoryRepository(proposal, content) {
       return parseProviderResponse(
         acknowledgementSchema,
@@ -588,6 +596,17 @@ export function createGitHubAppPublicationAdapter(
       ) as GitHubMutationAcknowledgement;
     },
   };
+  const { inspectHistoricalAppSource } = provider;
+  if (inspectHistoricalAppSource !== undefined) {
+    adapter.inspectHistoricalAppSource = async (input) =>
+      historicalAppSourceObservationSchema.parse(
+        await sanitizedProviderCall(
+          () => inspectHistoricalAppSource(input),
+          "inspect the historical App source",
+        ),
+      );
+  }
+  return adapter;
 }
 
 export type GitHubAppSourceResolutionProvider = Pick<

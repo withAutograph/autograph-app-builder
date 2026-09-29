@@ -67,4 +67,18 @@ describe("approved implementation repair staging", () => {
       stageImplementationFiles({ appSpecDigest: "new", files: [], proposalDigest: "new" }),
     ).toEqual([]);
   });
+  it("retains removals across partial repairs and permits an explicit replacement", () => {
+    const binding = { appSpecDigest: "delete", proposalDigest: "delete" };
+    stageImplementationFiles({ ...binding, files: [{ content: "old", path: "old.ts" }] });
+    stageImplementationFiles({ ...binding, files: [{ operation: "delete", path: "old.ts" }] });
+    expect(
+      stageImplementationFiles({ ...binding, files: [{ content: "new", path: "new.ts" }] }),
+    ).toEqual([
+      { operation: "delete", path: "old.ts" },
+      { content: "new", path: "new.ts" },
+    ]);
+    expect(
+      stageImplementationFiles({ ...binding, files: [{ content: "restored", path: "old.ts" }] })[0],
+    ).toEqual({ content: "restored", path: "old.ts" });
+  });
 });

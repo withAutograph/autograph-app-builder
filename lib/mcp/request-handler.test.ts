@@ -171,6 +171,8 @@ describe("branded public tool mapping", () => {
       status: "waiting" as const,
     };
     const service = {
+      // oxlint-disable-next-line eslint/require-await -- Preserve the async alias test interface.
+      bindStartAlias: vi.fn(async () => {}),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async cancel() {
         return result;
@@ -197,6 +199,8 @@ describe("branded public tool mapping", () => {
       async send() {
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- Preserve the async alias test interface.
+      settleStartAlias: vi.fn(async () => {}),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async start(input: Parameters<EveSessionService["start"]>[0]) {
         calls.push({ input, operation: "start" });
@@ -229,7 +233,11 @@ describe("branded public tool mapping", () => {
           });
           expect(handoffId).toBe("123e4567-e89b-42d3-a456-426614174000");
           return redeemed
-            ? { sessionId: "session-one", status: "redeemed" as const }
+            ? {
+                deterministicClientRequestId: `handoff:${"a".repeat(64)}`,
+                sessionId: "session-one",
+                status: "redeemed" as const,
+              }
             : {
                 deterministicClientRequestId: `handoff:${"a".repeat(64)}`,
                 prompt:
@@ -304,6 +312,8 @@ describe("branded public tool mapping", () => {
       status: "waiting" as const,
     };
     const service = {
+      // oxlint-disable-next-line eslint/require-await -- Preserve the async alias test interface.
+      bindStartAlias: vi.fn(async () => {}),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async cancel() {
         return result;
@@ -324,6 +334,8 @@ describe("branded public tool mapping", () => {
       async send() {
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- Preserve the async alias test interface.
+      settleStartAlias: vi.fn(async () => {}),
       start,
     } satisfies EveSessionService;
     const wrapped = withHostedBuilderHandoffs({
@@ -386,6 +398,8 @@ describe("branded public tool mapping", () => {
       status: "ready" as const,
     }));
     const service = {
+      // oxlint-disable-next-line eslint/require-await -- Preserve the async alias test interface.
+      bindStartAlias: vi.fn(async () => {}),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async cancel() {
         return result;
@@ -406,6 +420,8 @@ describe("branded public tool mapping", () => {
       async send() {
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- Preserve the async alias test interface.
+      settleStartAlias: vi.fn(async () => {}),
       start,
     } satisfies EveSessionService;
     const wrapped = withHostedBuilderHandoffs({
@@ -599,6 +615,18 @@ describe("branded public tool mapping", () => {
     expect(result.structuredContent).toEqual(listed);
     expect(service.list).toHaveBeenCalledWith({ cursor: 0, limit: 25 });
     expect(service.get).not.toHaveBeenCalled();
+    // oxlint-disable-next-line eslint/require-await -- Session read test double.
+    const getStart = vi.fn(async () => sessionResult);
+    const recoveringHandler = createAutographMcpHandler({ ...service, getStart });
+    const recovered = await mcpResult<{ structuredContent: unknown }>(
+      await recoveringHandler(
+        mcpToolRequest("autograph_get", { clientRequestId: "lost-start", cursor: 4, limit: 25 }),
+      ),
+    );
+    expect(recovered.structuredContent).toEqual(sessionResult);
+    expect(getStart).toHaveBeenCalledWith({ clientRequestId: "lost-start", cursor: 4, limit: 25 });
+    expect(service.list).toHaveBeenCalledOnce();
+    expect(service.start).not.toHaveBeenCalled();
   });
 
   it("returns a Browser-openable URL without attaching prototype UI", async () => {
@@ -973,7 +1001,7 @@ describe("request-scoped MCP service selection", () => {
       autograph_cancel:
         "Request cancellation of the active App Builder session. This cannot publish, deploy, provision, or modify the user's repository.",
       autograph_get:
-        "List recent app builds, or read the next page of one app build's progress and requests.",
+        "List recent app builds, read one app build's progress, or recover its session using the original autograph_start clientRequestId.",
       autograph_respond:
         "Answer the complete outstanding set of App Builder questions in one response. This cannot publish, deploy, provision, or modify the user's repository without a later in-product approval.",
       autograph_send:

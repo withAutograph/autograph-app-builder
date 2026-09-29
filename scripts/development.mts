@@ -386,7 +386,7 @@ try {
   next = spawn(
     requiredEnvironment("APP_BUILDER_DEV_NODE_BIN"),
     [
-      nodePath.join(repositoryRoot, "node_modules/next/dist/bin/next"),
+      await realpath(nodePath.join(repositoryRoot, "node_modules/next/dist/bin/next")),
       "dev",
       ...(web?.nextArgs ?? []),
       "--hostname",

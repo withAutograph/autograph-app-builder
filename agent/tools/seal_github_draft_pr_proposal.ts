@@ -4,6 +4,7 @@ import { z } from "zod";
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import { appBuilderWorkflowState, updateExactWorkflow } from "@/lib/agent/workflow-state";
 import { sourceReceiptEvidence } from "@/lib/repository/source-receipt";
+import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -28,6 +29,7 @@ export default defineTool({
       state.reviewReceipt,
       state.appSpec.appId,
       state.sourceReceipt.sourceKind,
+      appBaselineState.get()?.receipt,
     );
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
     const proposal = await runtime.sealDraftPullRequestProposal({

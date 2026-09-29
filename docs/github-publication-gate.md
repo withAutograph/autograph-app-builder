@@ -47,6 +47,47 @@ diff; a separate approval and GitHub atomic expected-OID update are required.
 If GitHub provenance cannot be verified, Builder reports that reason and leaves
 the PR branch untouched.
 
+Initial source selection is separate from publication. In a new session,
+`resolve_github_source` accepts a named branch or any open same-repository PR,
+including a PR already marked ready for review. It shows the selected branch
+and PR number and reads the provider's current revision before preparing the
+private checkout. Source inspection grants no publication authority. Draft
+updates and reconciliation still require their existing draft, provenance,
+review, and approval checks. An occupied session keeps its selected repository
+and branch; choosing another source requires a new session.
+
+An initial app baseline can select an older same-repository app while retaining
+the selected platform branch. The ordinary brief identifies the app and either
+a full commit ID or a merged PR. Before inspecting any app implementation,
+Builder passes `appBaseline: { appId, source: { kind: "commit", commitSha } }`
+or `source: { kind: "merged-pr", pullRequestNumber }` to
+`resolve_github_source`. Provider reads verify the historical commit and tree;
+the merged-PR form requires a merged same-repository PR, including one whose
+head branch was deleted. No public MCP fields or evaluator preparation are
+required.
+
+Builder projects only `apps/<app>/` and the conventional
+`.config/app-specs/<app>.cue` and `.md` inputs before returning source for
+inspection. Shared platform and routing files stay on the selected platform.
+Checked `apps/<app>/schema/release/` archives are immutable: existing archives
+are retained, differing bytes at a historical archive path fail preparation,
+and later retained archives are omitted from initial model source inspection.
+The initial schema source and selected-release index come from the historical
+app. An occupied source cannot adopt a new baseline.
+
+The separate durable baseline receipt records the historical app commit/tree,
+actual platform commit/tree and branch, session, source-selection call,
+projection call, scoped source digest, and retained release count. Private
+preimage digests compose the final review against the actual platform base;
+historical baseline restoration and newly authored edits are both in that
+review. Only the selected app and its two conventional spec inputs are eligible
+for publication. An interrupted projection resumes its private plan before
+source exposure; a healthy retry preserves later Builder edits. Replacement
+compute uses the saved platform commit and restores the same app baseline.
+This source provenance does not prove application behavior, production
+readiness, deployment activation, or Builder authorship of historical files.
+Publication retains its separate exact-diff review and approval.
+
 When the current draft head conflicts with its live base, Builder prepares a
 private merge candidate from the exact observed head and base commits. It may
 resolve only conflicts under the selected app. The candidate runs its own

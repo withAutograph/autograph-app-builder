@@ -1,3 +1,5 @@
+import { describeSelectedApp } from "@/lib/repository/app-description";
+import { runAppBrowserTests } from "./run-app-browser-tests";
 import { reviewAppliedProductSource } from "@/lib/agent/review-applied-product-source";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
@@ -5,6 +7,7 @@ import { z } from "zod";
 import { prepareValidationLocalData } from "./prepare-app-local-preview";
 
 import {
+  applyImplementationFiles,
   assertExistingAppImplementationFiles,
   implementationFilesSchema,
 } from "@/lib/agent/apply-implementation-files";
@@ -35,9 +38,41 @@ const validationPhase = (callId: string, phase: string, detail?: string | boolea
   );
 };
 
+const reusableDescription = async (
+  eligible: boolean,
+  input: () => Promise<Parameters<typeof describeSelectedApp>[0]>,
+) =>
+  eligible && !hasTestCapability("simulated-target")
+    ? await describeSelectedApp(await input())
+    : undefined;
+
+const describeValidationApp = async (
+  fixture: boolean,
+  input: Parameters<typeof describeSelectedApp>[0],
+) => (fixture ? undefined : await describeSelectedApp(input));
+
+const validatePersistentBackend = async (
+  description: Awaited<ReturnType<typeof describeSelectedApp>> | undefined,
+  input: Parameters<typeof runAppBrowserTests>[0],
+) => {
+  if (description?.backend.kind !== "generated-postgres") {
+    return { status: "unassessed" as const };
+  }
+  if (description.validation.browser === null) {
+    return {
+      problem: "The persistent app must declare an authenticated test-e2e task before completion.",
+      status: "blocked" as const,
+    };
+  }
+  return await runAppBrowserTests(input);
+};
+
+const backendValidationStatus = (status: string) =>
+  status === "failed" || status === "blocked" ? ("needs_repair" as const) : ("validated" as const);
+
 export default defineTool({
   description:
-    "Run the repository's normal validation commands against the current applied app. Command exit status is the technical validation result; successful checks also return an independent source assessment against the original product request. Neither proves runtime behavior. This does not publish or otherwise change an external repository.",
+    "Run the repository's normal validation commands against the current applied app. Command exit status is the technical validation result; successful checks also return an independent source assessment against the original product request. For persistent apps, also run the declared authenticated browser task against the prepared runtime and report its result separately. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
   // oxlint-disable-next-line eslint/complexity -- The existing workflow phase and receipt branches remain explicit.
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
@@ -51,9 +86,21 @@ export default defineTool({
       throw new Error("Apply the requested changes before running the repository checks.");
     }
     assertExistingAppImplementationFiles(input.implementationFiles, current.proposal.target);
+    const reusableTechnicalValidation =
+      (current.phase === "validated" || current.phase === "reviewed") &&
+      input.implementationFiles.length === 0;
+    const priorDescription = await reusableDescription(reusableTechnicalValidation, async () => ({
+      appId: current.appSpec.appId,
+      root: current.applyReceipt.applyRoot,
+      sandbox: await ctx.getSandbox(),
+      signal: ctx.abortSignal,
+    }));
+    // Persistent runtime observations must be refreshed even when source checks
+    // are unchanged: sessions, assignments, and installations can be revoked.
     if (
       (current.phase === "validated" || current.phase === "reviewed") &&
-      input.implementationFiles.length === 0
+      input.implementationFiles.length === 0 &&
+      priorDescription?.backend.kind !== "generated-postgres"
     ) {
       const evidence = currentProductBehaviorEvidence(
         current.appSpec.digest,
@@ -72,7 +119,9 @@ export default defineTool({
       ctx.abortSignal?.throwIfAborted();
       const productionHandoff = await productionReadinessHandoff({
         appId: current.appSpec.appId,
-        repositoryRoot: current.applyReceipt.applyRoot.replace(/^\/workspace\//u, ""),
+        productBehaviorEvidence: evidence,
+        repositoryRoot: current.applyReceipt.applyRoot,
+        signal: ctx.abortSignal,
         source: await ctx.getSandbox(),
       });
       return {
@@ -99,17 +148,6 @@ export default defineTool({
     const sandbox = await ctx.getSandbox();
     validationPhase(ctx.callId, "sandbox_ready");
     const relativeApplyRoot = current.applyReceipt.applyRoot.replace(/^\/workspace\//u, "");
-    const writeImplementationFiles = async (index: number): Promise<void> => {
-      const file = input.implementationFiles[index];
-      if (file === undefined) {
-        return;
-      }
-      await sandbox.writeTextFile({
-        content: file.content,
-        path: `${relativeApplyRoot}/${file.path}`,
-      });
-      await writeImplementationFiles(index + 1);
-    };
     const fixture = hasTestCapability("simulated-target");
     const attempt = createTargetValidationAttempt(current.applyReceipt, ctx.callId);
     const priorPublishedGitHubDraftProposalDigest =
@@ -139,21 +177,42 @@ export default defineTool({
     if (input.implementationFiles.length > 0) {
       clearProductBehaviorEvidence();
       validationPhase(ctx.callId, "writing_implementation_files");
-      await writeImplementationFiles(0);
+      await applyImplementationFiles(sandbox, relativeApplyRoot, input.implementationFiles);
       validationPhase(ctx.callId, "implementation_files_written");
     }
     // Some repository test tasks start local services. Prepare the declared
     // local data task first so its server inherits the setup log file rather
     // than Turbo's captured test pipe, which would keep Turbo waiting after
     // the tests themselves have finished.
+    let runtime: Awaited<ReturnType<typeof prepareValidationLocalData>> = null;
     if (!fixture) {
       validationPhase(ctx.callId, "preparing_declared_local_data");
-      await prepareValidationLocalData({
-        appId: current.appSpec.appId,
-        root: current.applyReceipt.applyRoot,
-        sandbox,
-        signal: ctx.abortSignal,
-      });
+      try {
+        runtime = await prepareValidationLocalData({
+          appId: current.appSpec.appId,
+          execution: {
+            appId: current.appSpec.appId,
+            root: current.applyReceipt.applyRoot,
+            sandboxId: sandbox.id,
+            sessionAuth: ctx.session.auth,
+            sessionId: ctx.session.id,
+            signal: ctx.abortSignal,
+            state: current,
+          },
+          root: current.applyReceipt.applyRoot,
+          sandbox,
+          signal: ctx.abortSignal,
+        });
+      } catch (error) {
+        ctx.abortSignal?.throwIfAborted();
+        appBuilderWorkflowState.update(() => ({ ...base, phase: "applied" }));
+        return {
+          problem:
+            error instanceof Error ? error.message : "Authenticated runtime preparation failed.",
+          reason: "authenticated-runtime-preparation",
+          status: "needs_repair" as const,
+        };
+      }
       validationPhase(ctx.callId, "declared_local_data_ready");
     }
     validationPhase(ctx.callId, "running_repository_commands");
@@ -169,7 +228,9 @@ export default defineTool({
       apply: current.applyReceipt,
       attempt,
       dependencyLayout: current.dependencyReceipt.dependencyLayout,
-      executor: fixture ? fixtureValidationCommandExecutor() : sandboxValidationCommandExecutor(),
+      executor: fixture
+        ? fixtureValidationCommandExecutor()
+        : sandboxValidationCommandExecutor({ runtime }),
       sandbox,
       ...(databaseUrl === undefined
         ? {}
@@ -209,6 +270,19 @@ export default defineTool({
       current.appSpec.digest,
       current.applyReceipt.digest,
     );
+    const description = await describeValidationApp(fixture, {
+      appId: current.appSpec.appId,
+      root: current.applyReceipt.applyRoot,
+      sandbox,
+      signal: ctx.abortSignal,
+    });
+    const backendValidation = await validatePersistentBackend(description, {
+      appId: current.appSpec.appId,
+      root: current.applyReceipt.applyRoot,
+      runtime,
+      sandbox,
+      signal: ctx.abortSignal,
+    });
     validationPhase(ctx.callId, "reviewing_applied_source");
     const sourceAssessment = await reviewAppliedProductSource({
       abortSignal: ctx.abortSignal,
@@ -223,11 +297,15 @@ export default defineTool({
     validationPhase(ctx.callId, "applied_source_review_finished", sourceAssessment.status);
     const productionHandoff = await productionReadinessHandoff({
       appId: current.appSpec.appId,
-      repositoryRoot: relativeApplyRoot,
+      installationProof: runtime?.installationProof,
+      productBehaviorEvidence: evidence,
+      repositoryRoot: current.applyReceipt.applyRoot,
+      signal: ctx.abortSignal,
       source: sandbox,
     });
     return {
       attemptDigest: result.receipt.attemptDigest,
+      backendValidation,
       commandCount: result.receipt.commands.length,
       logs: result.receipt.commands.map((command) => ({
         name: command.name,
@@ -238,7 +316,7 @@ export default defineTool({
       productionHandoff,
       reused: false,
       sourceAssessment,
-      status: "validated" as const,
+      status: backendValidationStatus(backendValidation.status),
       technicalStatus: "passed" as const,
     };
   },

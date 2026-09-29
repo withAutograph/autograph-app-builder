@@ -35,6 +35,7 @@ const missingRuntimeFile = (error: unknown): null => {
 export const workingPreviewSupervisorSource = (input: {
   gatewaySource: string;
   command: WorkingPreviewCommand;
+  environmentPath?: string;
   cwd: string;
   expiresAt: number;
   failurePath: string;
@@ -53,7 +54,7 @@ await ownershipOperation({kind:"update", attemptId:supervisorOwnership.attemptId
 `
 }${input.gatewaySource}
 import { spawn } from "node:child_process";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync as supervisorReadFileSync, writeFileSync } from "node:fs";
 const launch = ${JSON.stringify({ ...input, gatewaySource: undefined })};
 ${workingPreviewDiagnosticCollectorSource}
 let stderr = "";
@@ -85,7 +86,13 @@ const activation = setInterval(() => {
   }
   if (!existsSync(launch.configurationPath)) return;
   clearInterval(activation);
-  child = spawn(launch.command.executable, launch.command.args, { cwd: launch.cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+  let environment = process.env;
+  if (launch.environmentPath) {
+    try { environment = { ...process.env, ...JSON.parse(supervisorReadFileSync(launch.environmentPath, "utf8")) }; }
+    catch { fail("Prepared authenticated runtime environment is unavailable"); return; }
+    delete environment.APP_RUNTIME_CLUSTER_DATABASE_URL;
+  }
+  child = spawn(launch.command.executable, launch.command.args, { cwd: launch.cwd, env: environment, detached: true, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout.on("data", chunk => { recordPort(chunk); if (launch.diagnosticsPath) appendPreviewDiagnostic("stdout", chunk); process.stdout.write(chunk); });
   child.stderr.on("data", chunk => { recordPort(chunk); if (launch.diagnosticsPath) appendPreviewDiagnostic("stderr", chunk); stderr = (stderr + chunk.toString()).slice(-8192); process.stderr.write(chunk); });
   child.on("error", error => fail(error.message));
@@ -455,6 +462,8 @@ export const startWorkingPreview = async (input: {
   appId: string;
   cwd: string;
   command: WorkingPreviewCommand;
+  environmentPath?: string;
+  prepareAuthenticatedOrigin?: (origin: string) => Promise<void>;
   port: number;
   landingPath: string;
   requestDigest?: string;
@@ -523,6 +532,7 @@ export const startWorkingPreview = async (input: {
         configurationPath,
         cwd: input.cwd,
         diagnosticsPath,
+        environmentPath: input.environmentPath,
         expiresAt,
         failurePath,
         gatewaySource: inactive.source,
@@ -576,6 +586,7 @@ export const startWorkingPreview = async (input: {
       ...accessInput,
       origin: provider.domain(gatewayPort),
     });
+    await input.prepareAuthenticatedOrigin?.(new URL(provider.domain(gatewayPort)).origin);
     await provider.fs.writeFile(configurationPath, access.configuration, { signal });
     await waitForPreview({
       ...waitOptions,

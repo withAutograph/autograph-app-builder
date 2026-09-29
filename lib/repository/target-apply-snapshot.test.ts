@@ -8,7 +8,32 @@ import {
   inspectApplyOverlay,
   OVERLAY_SNAPSHOT_SCRIPT,
   reviewedOverlayTreeDigest,
+  iterationBaselineSnapshot,
+  overlayChanges,
 } from "./target-apply";
+
+it("retains the original removed file in review after an interrupted apply resumes", () => {
+  const retained = { digest: "a".repeat(64), mode: "644", path: "apps/example/app/page.tsx" };
+  const removed = { digest: "b".repeat(64), mode: "644", path: "apps/example/server/demo.ts" };
+  const postimage = { digest: "c".repeat(64), mode: "644", path: "apps/example/server/context.ts" };
+  const after = { files: [retained, postimage], treeDigest: "current" };
+  const changes = [
+    { before: { digest: removed.digest, mode: removed.mode }, path: removed.path },
+    {
+      after: { content: "context", digest: postimage.digest, mode: postimage.mode },
+      path: postimage.path,
+    },
+  ];
+  const baseline = iterationBaselineSnapshot(after, changes);
+  expect(overlayChanges(baseline, after)).toEqual([
+    {
+      after: { digest: postimage.digest, mode: postimage.mode },
+      kind: "added",
+      path: postimage.path,
+    },
+    { before: { digest: removed.digest, mode: removed.mode }, kind: "deleted", path: removed.path },
+  ]);
+});
 
 it("keeps existing-app review stable across unrelated repository edits", () => {
   const appFile = { digest: "a".repeat(64), mode: "644", path: "apps/example/app/page.tsx" };

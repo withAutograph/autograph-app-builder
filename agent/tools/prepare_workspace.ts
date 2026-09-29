@@ -19,6 +19,7 @@ import {
 } from "@/lib/repository/supported-template";
 import { inspectGitHubSourceSandboxWorkspace } from "@/lib/repository/sandbox-github-source";
 import sourceStatus from "./source_status";
+import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 
 export default defineTool({
   description:
@@ -39,7 +40,7 @@ export default defineTool({
     if (!development && source.githubSource !== undefined) {
       assertExactImmutableGitHubSourceReceipt(source.githubSource);
     }
-    const sandbox = await ctx.getSandbox();
+    const sandbox = await getSourceBoundSandbox(ctx);
     let canonicalWorkspace;
     if (!development && source.receipt.version === SOURCE_RECEIPT_VERSION) {
       canonicalWorkspace = await (async () => {

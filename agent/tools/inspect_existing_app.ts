@@ -3,6 +3,9 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
+import { appBaselineState } from "@/lib/agent/app-baseline-state";
+import { readableAppBaselinePaths } from "@/lib/repository/app-baseline";
 import { sourceWorkflowState } from "@/lib/agent/source-state";
 import { safeSourcePath } from "@/lib/repository/source-path";
 import type { SandboxSession } from "eve/sandbox";
@@ -332,11 +335,22 @@ export default defineDynamic({
           if (contentPath !== undefined && !safeSourcePath(contentPath)) {
             throw new Error("The requested source path cannot be read safely.");
           }
-          const sandbox = await ctx.getSandbox();
+          const sandbox = await getSourceBoundSandbox(ctx);
           // The signed-in session supplies this sandbox. Read its current
           // files; source receipts are not prerequisites for inspection.
-          const availablePaths = await listAvailableSourcePaths(state, sandbox, appId, prefix);
+          const selection = appBaselineState.get()?.selection;
+          const availablePaths = await readableAppBaselinePaths(
+            sandbox,
+            selection,
+            await listAvailableSourcePaths(state, sandbox, appId, prefix),
+          );
           const selectedPaths = normalizeRequestedSourcePaths(paths, contentPath, prefix);
+          const readable = await readableAppBaselinePaths(sandbox, selection, selectedPaths);
+          if (readable.length !== selectedPaths.length) {
+            throw new Error(
+              "A requested release archive is outside the selected app baseline and was not exposed as implementation input.",
+            );
+          }
           return await buildSourceInspectionOutput({
             appId,
             availablePaths,

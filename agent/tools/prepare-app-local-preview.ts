@@ -3,35 +3,31 @@ import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { describeSelectedApp } from "@/lib/repository/app-description";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
+import { resolvePreparedRuntimeExecution } from "@/lib/agent/prepared-runtime-execution";
+import type {
+  PreparedRuntimeExecution,
+  PreparedRuntimeExecutionContext,
+} from "@/lib/agent/prepared-runtime-execution";
+
+export { localRuntimeEnvironmentPath } from "@/lib/repository/runtime-environment";
 
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 
 export const localPreviewSetupCommand = (appId: string): string =>
-  `MISE_TASK_RUN_AUTO_INSTALL=true MISE_AUTO_INSTALL=true mise run app:local -- ${appIdSchema.parse(appId)} setup`;
+  `MISE_TASK_RUN_AUTO_INSTALL=true MISE_AUTO_INSTALL=true mise run app:runtime prepare ${appIdSchema.parse(appId)} local`;
 
 export const appDeclaresLocalSetup = async (input: {
   appId: string;
   root: string;
-  sandbox: Pick<SandboxSession, "readTextFile">;
+  sandbox: Pick<SandboxSession, "run">;
 }): Promise<boolean> => {
-  const appId = appIdSchema.parse(input.appId);
-  const [appContract, repositoryTasks] = await Promise.all([
-    input.sandbox.readTextFile({ path: `${input.root}/apps/${appId}/.config/app-spec.md` }),
-    input.sandbox.readTextFile({ path: `${input.root}/.config/mise/config.toml` }),
-  ]);
-  return (
-    appContract?.includes(`mise run app:local -- ${appId} setup`) === true &&
-    repositoryTasks?.includes('[tasks."app:local"]') === true
-  );
+  const description = await describeSelectedApp(input);
+  return description.backend.kind === "generated-postgres";
 };
 
-/** Keep a repository task's background services off the sandbox command output pipe. */
-export const localPreviewExecutionCommand = (appId: string): string => {
-  const task = localPreviewSetupCommand(appId);
-  const log = `/tmp/app-builder-local-setup-${appIdSchema.parse(appId)}.log`;
-  return `set +e\n${task} > '${log}' 2>&1\nstatus=$?\ntail -c 8000 '${log}'\nexit "$status"`;
-};
+export const localPreviewExecutionCommand = localPreviewSetupCommand;
 
 const safeOutput = (value: string): string =>
   value
@@ -56,8 +52,32 @@ export const prepareAppLocalPreview = async (input: {
   root: string;
   sandbox: Pick<SandboxSession, "run">;
   signal?: AbortSignal;
+  authOrigin?: string;
+  execution?: PreparedRuntimeExecutionContext;
 }) => {
-  const command = localPreviewExecutionCommand(input.appId);
+  const runtime = input.execution ? await resolvePreparedRuntimeExecution(input.execution) : null;
+  if (runtime) {
+    if (input.authOrigin !== undefined) {
+      await runtime.prepareAuthenticatedOrigin(input.authOrigin);
+    }
+    return {
+      command: "Restore approved hosted runtime",
+      exitCode: 0,
+      installationProof: runtime.installationProof,
+      status: "prepared" as const,
+      stderr: "",
+      stdout: "",
+    };
+  }
+  const origin =
+    input.authOrigin === undefined
+      ? undefined
+      : z
+          .string()
+          .regex(/^https:\/\/[a-z0-9-]+\.vercel\.run$/u)
+          .parse(input.authOrigin);
+  const prefix = origin === undefined ? "" : `APP_RUNTIME_AUTH_ORIGIN='${origin}' `;
+  const command = prefix + localPreviewExecutionCommand(input.appId);
   try {
     const result =
       input.signal === undefined
@@ -97,11 +117,16 @@ export const prepareAppLocalPreview = async (input: {
 export const prepareValidationLocalData = async (input: {
   appId: string;
   root: string;
-  sandbox: Pick<SandboxSession, "readTextFile" | "run">;
+  sandbox: Pick<SandboxSession, "run">;
   signal?: AbortSignal;
-}): Promise<void> => {
+  execution?: PreparedRuntimeExecutionContext;
+}): Promise<PreparedRuntimeExecution | null> => {
+  const runtime = input.execution ? await resolvePreparedRuntimeExecution(input.execution) : null;
+  if (runtime) {
+    return runtime;
+  }
   if (!(await appDeclaresLocalSetup(input))) {
-    return;
+    return null;
   }
   const setup = await prepareAppLocalPreview(input);
   if (setup.status === "failed") {
@@ -109,17 +134,27 @@ export const prepareValidationLocalData = async (input: {
       `Validation could not prepare the selected app's local data. ${setup.problem}\nCommand: ${setup.command}\n${setup.stderr || setup.stdout || "No command output was returned."}`,
     );
   }
+  return null;
 };
 
 export default defineTool({
   description:
-    "Prepare the selected app's sandbox-local preview data through its repository-owned app:local setup task. Use only when that task exists and the app needs local data before browser verification. It runs in the approved private checkout, does not use a hosted database or publish source, and reports the exact command and bounded diagnostic output. Do not use this for Production resources.",
+    "Prepare the selected app's isolated authenticated PostgreSQL runtime, real Auth identities and app memberships using repository-owned app:describe and app:runtime commands. An approved hosted Preview runtime is restored and verified rather than replaced by local data; this operation grants no hosted mutations. This installs no product demo seeds. Application behavior remains unassessed until its authenticated tests run. Do not use it for Production resources.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     const sandbox = await ctx.getSandbox();
     const selected = await runnableSelectedApp({ appId: input.appId, sandbox, state });
     return await prepareAppLocalPreview({
       appId: selected.appId,
+      execution: {
+        appId: selected.appId,
+        root: selected.root,
+        sandboxId: sandbox.id,
+        sessionAuth: ctx.session.auth,
+        sessionId: ctx.session.id,
+        signal: ctx.abortSignal,
+        state,
+      },
       root: selected.root,
       sandbox,
       signal: ctx.abortSignal,

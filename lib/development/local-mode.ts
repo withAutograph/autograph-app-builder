@@ -494,9 +494,9 @@ export const createDevelopmentSnapshot = async (input: {
         await chmod(join(root, entry.path), entry.mode === "100755" ? 0o700 : 0o600);
       }
     });
-    if ((await fingerprintDevelopmentSource(sourceRoot)) !== fingerprint) {
-      throw new Error("Arrusted source changed while its development snapshot was created.");
-    }
+    // The captured entries identify this planning input. Ordinary checkout
+    // edits during copying are picked up by the source watcher in the next
+    // cycle; they must not terminate development or discard active sessions.
     execFileSync("/usr/bin/git", ["init", "-q"], {
       cwd: root,
       env: gitEnvironment(),
@@ -587,7 +587,9 @@ export const removeDevelopmentSnapshot = async (root: string) => {
       throw error;
     }
   }
-  await rm(root, { force: true, recursive: true });
+  // Git may finish writing owned object files while a stopped cycle is being
+  // removed. Node retries transient ENOTEMPTY errors within this snapshot.
+  await rm(root, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 });
 };
 
 const digestFileOrAbsent = async (path: string) => {

@@ -87,6 +87,27 @@ describe("PostgreSQL hosted Eve row authority", () => {
     ).toThrow();
   });
 
+  it("preserves an original handoff alias in the existing start journal and rejects substitution of its caller index", () => {
+    const startAlias = {
+      canonicalClientRequestId: "canonical-handoff-start",
+      sourceHandoffId: "123e4567-e89b-42d3-a456-426614174001",
+    };
+    const aliasRow = { ...operationRow, record: { ...operationRecord, startAlias } };
+    expect(parseHostedOperationRow(aliasRow)).toMatchObject({ startAlias });
+    expect(() => parseHostedOperationRow({ ...aliasRow, ownerUserId: "another-owner" })).toThrow(
+      "canonically bound",
+    );
+    expect(() =>
+      parseHostedOperationRow({
+        ...aliasRow,
+        record: {
+          ...operationRecord,
+          startAlias: { ...startAlias, canonicalClientRequestId: operationRecord.clientRequestId },
+        },
+      }),
+    ).toThrow("distinct canonical");
+  });
+
   it("accepts only a session whose tenant and adapter index match its record", () => {
     expect(parseHostedSessionRow(sessionRow)).toEqual(sessionRecord);
     expect(() => parseHostedSessionRow({ ...sessionRow, adapterSessionId: "substituted" })).toThrow(

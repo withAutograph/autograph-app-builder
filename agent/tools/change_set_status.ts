@@ -3,13 +3,16 @@ import type { SandboxSession } from "eve/sandbox";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 
-import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { appBaselineState } from "@/lib/agent/app-baseline-state";
+import { appBaselineReviewPreTree } from "@/lib/repository/app-baseline";
 import {
+  canonicalOverlayFiles,
   inspectApplyOverlay,
   inspectFixtureApplyOverlay,
   overlayChanges,
   reviewedOverlayTreeDigest,
 } from "@/lib/repository/target-apply";
+import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import type { OverlayChange } from "@/lib/repository/target-apply";
 import { deriveNormalizedChangeSet } from "@/lib/repository/reviewed-change-set";
 import { hasTestCapability } from "@/lib/testing/test-capability";
@@ -112,11 +115,17 @@ const exportTextPathChunk = async (input: {
   };
 };
 
-export const changedAppTextPaths = (changes: readonly ChangePath[], appId: string): string[] =>
+export const changedAppTextPaths = (
+  changes: readonly ChangePath[],
+  appId: string,
+  extraPaths: readonly string[] = [],
+): string[] =>
   changes
     .filter(
       ({ path, kind }) =>
-        kind !== "deleted" && path.startsWith(`apps/${appId}/`) && isCandidateExportTextPath(path),
+        kind !== "deleted" &&
+        (path.startsWith(`apps/${appId}/`) || extraPaths.includes(path)) &&
+        isCandidateExportTextPath(path),
     )
     .map(({ path }) => path);
 
@@ -140,6 +149,16 @@ export const reviewableChanges = <T extends ChangePath>(
     return !existingApp || path.startsWith(`apps/${appId}/`);
   });
 
+export const baselineReviewableChanges = <T extends ChangePath>(
+  changes: readonly T[],
+  appId: string,
+): T[] => {
+  const allowed = new Set(reviewableChanges(changes, appId, true).map(({ path }) => path));
+  allowed.add(`.config/app-specs/${appId}.cue`);
+  allowed.add(`.config/app-specs/${appId}.md`);
+  return changes.filter(({ path }) => allowed.has(path));
+};
+
 export const changedAppTextExport = async (
   changes: readonly ChangePath[],
   appId: string,
@@ -147,10 +166,14 @@ export const changedAppTextExport = async (
   options: {
     cursor?: { digest: string; offsetBytes: number; path: string };
     envelope?: ChangeSetExportEnvelope;
+    extraPaths?: readonly string[];
   } = {},
 ) => {
-  const appChanges = changes.filter(({ path }) => path.startsWith(`apps/${appId}/`));
-  const paths = changedAppTextPaths(changes, appId);
+  const appChanges = changes.filter(
+    ({ path }) => path.startsWith(`apps/${appId}/`) || options.extraPaths?.includes(path) === true,
+  );
+
+  const paths = changedAppTextPaths(changes, appId, options.extraPaths);
   const exportFiles: ExportFile[] = [];
   const exportOmissions: ExportOmission[] = appChanges
     .filter(({ path, kind }) => kind !== "deleted" && !isCandidateExportTextPath(path))
@@ -213,20 +236,40 @@ export const exactNormalizedChangeSet = async (input: {
         input.state.appSpec.appId,
       )
     : await inspectApplyOverlay(input.sandbox, input.state.applyReceipt.applyRoot);
-  const changes = reviewableChanges(
-    overlayChanges(
-      {
-        files: input.state.applyReceipt.preTree,
-        treeDigest: input.state.applyReceipt.preTreeDigest,
-      },
-      observed,
-    ),
-    input.state.appSpec.appId,
-    isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
+  const baseline = appBaselineState.get();
+  const selectedBaseline =
+    baseline?.receipt?.appId === input.state.appSpec.appId ? baseline : undefined;
+  const preTree =
+    selectedBaseline === undefined
+      ? input.state.applyReceipt.preTree
+      : await appBaselineReviewPreTree(
+          input.sandbox,
+          selectedBaseline.selection,
+          input.state.applyReceipt.preTree,
+        );
+  const completeChanges = overlayChanges(
+    { files: preTree, treeDigest: input.state.applyReceipt.preTreeDigest },
+    observed,
   );
+  const changes =
+    selectedBaseline === undefined
+      ? reviewableChanges(
+          completeChanges,
+          input.state.appSpec.appId,
+          isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
+        )
+      : baselineReviewableChanges(completeChanges, input.state.appSpec.appId);
   return deriveNormalizedChangeSet(
     {
       ...input.state.applyReceipt,
+      ...(selectedBaseline === undefined
+        ? {}
+        : {
+            preTree,
+            preTreeDigest: createHash("sha256")
+              .update(JSON.stringify(canonicalOverlayFiles(preTree)))
+              .digest("hex"),
+          }),
       changedContentDigest: createHash("sha256").update(JSON.stringify(changes)).digest("hex"),
       changes,
       postTree: observed.files,
@@ -258,17 +301,19 @@ const exportAppliedTextFiles = async (input: {
         input.state.appSpec.appId,
       )
     : await inspectApplyOverlay(input.sandbox, input.state.applyReceipt.applyRoot);
-  const changes = reviewableChanges(
-    overlayChanges(
-      {
-        files: input.state.applyReceipt.preTree,
-        treeDigest: input.state.applyReceipt.preTreeDigest,
-      },
-      observed,
-    ),
-    input.state.appSpec.appId,
-    isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
-  );
+  const changes =
+    input.envelope?.changes ??
+    reviewableChanges(
+      overlayChanges(
+        {
+          files: input.state.applyReceipt.preTree,
+          treeDigest: input.state.applyReceipt.preTreeDigest,
+        },
+        observed,
+      ),
+      input.state.appSpec.appId,
+      isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
+    );
   // A complete app checkout can include tens of megabytes of unchanged schema history.
   const exported = await changedAppTextExport(
     changes,
@@ -277,7 +322,17 @@ const exportAppliedTextFiles = async (input: {
       input.sandbox.readTextFile({
         path: `${input.state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "")}/${path}`,
       }),
-    { cursor: input.cursor, envelope: input.envelope },
+    {
+      cursor: input.cursor,
+      envelope: input.envelope,
+      extraPaths: changes
+        .filter(
+          ({ path }) =>
+            path === `.config/app-specs/${input.state.appSpec.appId}.cue` ||
+            path === `.config/app-specs/${input.state.appSpec.appId}.md`,
+        )
+        .map(({ path }) => path),
+    },
   );
   return {
     changes,

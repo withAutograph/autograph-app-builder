@@ -9,6 +9,10 @@ const mocks = vi.hoisted(() => ({
   workspace: { workspaceId: "sandbox", workspacePath: "/workspace/repository" },
 }));
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
+vi.mock("./source-bound-sandbox", () => ({
+  getSourceBoundSandbox: async (ctx: { getSandbox: () => Promise<{ id: string }> }) =>
+    await ctx.getSandbox(),
+}));
 vi.mock("../../agent/tools/source_status", () => ({ default: { execute: mocks.acquire } }));
 vi.mock("./source-state", () => ({ sourceWorkflowState: { get: () => mocks.source } }));
 vi.mock("./workflow-state", () => ({
