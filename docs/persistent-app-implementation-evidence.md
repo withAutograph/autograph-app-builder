@@ -26,7 +26,7 @@ These tests validate shared capabilities. They do not establish that Builder ind
 
 The complete product brief was submitted through `autograph_start` using request ID `1360be49-6d09-42da-a46f-cdc49e5ecc19`. An uncertain response recovered the same session, `wrun_01M3QJPZ2CCNCADMM47F945EBS`. Builder attempted its design/prototype workflow; a nonpublic theme import was rejected. No authenticated application receipt, installed app release or authored application PR was observed.
 
-A development restart interrupted this session. Subsequent public read returned `waiting`, but a public continuation failed with “The session is no longer active.” This is a public recovery defect, not successful completion. Its correction and verification must precede another qualifying run.
+A development restart interrupted this session. Subsequent public read returned `waiting`, but a public continuation failed with “The session is no longer active.” This is a public recovery defect, not successful completion. The local adapter correction preserves buffered progress, removes stale approval controls and returns `session_recovery_unavailable` instead of advertising a usable waiting session. Focused service/MCP tests, types and formatting pass. A public readback attempt after integration was blocked because the watched development runtime exited while observing temporary Git merge conflict markers; this is not runtime proof of the correction. A fresh stable public run is still required.
 
 ### Spend Review: blocked at source authority; application acceptance unassessed
 
