@@ -9,6 +9,21 @@ import {
   targetIdentitySchema,
 } from "./target-planning";
 
+const appDescription = (id: string) =>
+  JSON.stringify({
+    version: 1,
+    app: { id, workspacePath: `apps/${id}`, routes: [`/${id}`] },
+    backend: {
+      kind: "generated-postgres",
+      authorization: "declared-policy",
+      roles: ["member"],
+      release: { id: "v1", artifactHash: "hash", directory: "release" },
+      runtime: { databaseEnvironment: "APP_DATABASE_URL" },
+      schemaReceipt: null,
+    },
+    validation: { check: { task: "check" }, test: { task: "test", shards: 1 }, browser: null },
+  });
+
 describe("planning from the current checkout", () => {
   it("writes a large accepted AppSpec from a bounded stream without a full-content argument", async () => {
     const content = "Product outcome. ".repeat(100_000);
@@ -215,7 +230,11 @@ describe("planning from the current checkout", () => {
       run: vi.fn(async ({ command }: { command: string }) => ({
         exitCode: 0,
         stderr: "",
-        stdout: command.startsWith("stat ") ? "755\n" : "",
+        stdout: command.startsWith("stat ")
+          ? "755\n"
+          : command.startsWith("mise run app:describe ")
+            ? appDescription(command.split(" ").at(-1)!)
+            : "",
       })),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       writeTextFile: vi.fn(async () => {}),
@@ -259,7 +278,11 @@ describe("planning from the current checkout", () => {
       run: vi.fn(async ({ command }: { command: string }) => ({
         exitCode: 0,
         stderr: "",
-        stdout: command.startsWith("stat ") ? "644\n" : "",
+        stdout: command.startsWith("stat ")
+          ? "644\n"
+          : command.startsWith("mise run app:describe ")
+            ? appDescription(command.split(" ").at(-1)!)
+            : "",
       })),
       writeTextFile: vi.fn(async () => {}),
     } as unknown as SandboxSession;
@@ -288,7 +311,7 @@ describe("planning from the current checkout", () => {
     if (!("operation" in result.proposal)) throw new Error("Expected revision");
     expect(result.proposal.iteration.changes[0]).not.toHaveProperty("after");
     expect(sandbox.run).toHaveBeenCalledWith({
-      command: "test -f apps/example/schema/example.cue",
+      command: "mise run app:describe example",
       workingDirectory: "/workspace/repository",
     });
   });

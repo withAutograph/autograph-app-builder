@@ -54,9 +54,24 @@ export default defineTool({
       throw new Error("Apply the requested changes before running the repository checks.");
     }
     assertExistingAppImplementationFiles(input.implementationFiles, current.proposal.target);
+    const reusableTechnicalValidation =
+      (current.phase === "validated" || current.phase === "reviewed") &&
+      input.implementationFiles.length === 0;
+    const reusableDescription =
+      reusableTechnicalValidation && !hasTestCapability("simulated-target")
+        ? await describeSelectedApp({
+            appId: current.appSpec.appId,
+            root: current.applyReceipt.applyRoot,
+            sandbox: await ctx.getSandbox(),
+            signal: ctx.abortSignal,
+          })
+        : undefined;
+    // Persistent runtime observations must be refreshed even when source checks
+    // are unchanged: sessions, assignments, and installations can be revoked.
     if (
       (current.phase === "validated" || current.phase === "reviewed") &&
-      input.implementationFiles.length === 0
+      input.implementationFiles.length === 0 &&
+      reusableDescription?.backend.kind !== "generated-postgres"
     ) {
       const evidence = currentProductBehaviorEvidence(
         current.appSpec.digest,
@@ -142,12 +157,23 @@ export default defineTool({
     // the tests themselves have finished.
     if (!fixture) {
       validationPhase(ctx.callId, "preparing_declared_local_data");
-      await prepareValidationLocalData({
-        appId: current.appSpec.appId,
-        root: current.applyReceipt.applyRoot,
-        sandbox,
-        signal: ctx.abortSignal,
-      });
+      try {
+        await prepareValidationLocalData({
+          appId: current.appSpec.appId,
+          root: current.applyReceipt.applyRoot,
+          sandbox,
+          signal: ctx.abortSignal,
+        });
+      } catch (error) {
+        ctx.abortSignal?.throwIfAborted();
+        appBuilderWorkflowState.update(() => ({ ...base, phase: "applied" }));
+        return {
+          problem:
+            error instanceof Error ? error.message : "Authenticated runtime preparation failed.",
+          reason: "authenticated-runtime-preparation",
+          status: "needs_repair" as const,
+        };
+      }
       validationPhase(ctx.callId, "declared_local_data_ready");
     }
     validationPhase(ctx.callId, "running_repository_commands");
@@ -261,7 +287,10 @@ export default defineTool({
       productionHandoff,
       reused: false,
       sourceAssessment,
-      status: "validated" as const,
+      status:
+        backendValidation.status === "failed" || backendValidation.status === "blocked"
+          ? ("needs_repair" as const)
+          : ("validated" as const),
       technicalStatus: "passed" as const,
     };
   },

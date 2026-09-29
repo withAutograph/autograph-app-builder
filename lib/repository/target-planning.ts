@@ -1,3 +1,4 @@
+import { describeSelectedApp } from "./app-description";
 import { createHash } from "node:crypto";
 
 import { z } from "zod";
@@ -551,15 +552,18 @@ export const executeTargetIdentityAndPlanning = async (input: {
     const schemaChange = input.existingAppChanges.find(
       (change) => change.path === identity.schemaCuePath,
     );
-    const cue =
+    const description =
       schemaChange === undefined
-        ? await input.sandbox.run({
-            command: `test -f ${identity.schemaCuePath}`,
-            workingDirectory: "/workspace/repository",
+        ? await describeSelectedApp({
+            appId: identity.appId,
+            root: "/workspace/repository",
+            sandbox: input.sandbox,
           })
         : undefined;
     const hasSchema =
-      schemaChange === undefined ? cue?.exitCode === 0 : schemaChange.operation !== "delete";
+      schemaChange === undefined
+        ? description?.backend.kind === "generated-postgres"
+        : schemaChange.operation !== "delete";
     const proposal = targetIterationProposalSchemaForTopology("microfrontends.json").parse({
       ...creationPlan(identity, input.appSpecDigest, hasSchema),
       iteration: { changes, digest: iterationDigest },
