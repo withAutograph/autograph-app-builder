@@ -132,10 +132,7 @@ const isDraftPullRequestTool = (toolName?: string) =>
   toolName === "publish_github_draft_pr" || toolName === "publish-github-draft-pr";
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function publicReceiptDescription(
-  receipt: unknown,
-  toolName?: string,
-): string | undefined {
+function publicReceiptDescription(receipt: unknown, toolName?: string): string | undefined {
   const parsed = approvalReceiptSchema.safeParse(receipt);
   let expectedPhase: ApprovalReceipt["phase"] | undefined;
   if (toolName === "accept_app_spec") {
