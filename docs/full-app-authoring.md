@@ -65,3 +65,9 @@ runs this task after repository checks and reports missing tasks as blocked.
 No passing command substitutes for observed hosted readback after a restart and
 a new native deployment. Legacy app-owned roles must be recorded explicitly;
 authenticated runtime preparation cannot guess the accepted role policy.
+
+For approved hosted Preview persistence, follow
+[hosted app runtime preparation](hosted-app-runtime.md). Builder uses the
+owner-selected Vercel installation and existing native Neon branch, keeps
+installer credentials protected, and journals restricted branch bindings and
+private recovery state. A missing native connection is a precise path blocker.

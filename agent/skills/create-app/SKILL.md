@@ -274,8 +274,12 @@ app-owned files and reuse the same component-backed preview flow.
   only when an unresolved role, ownership rule or destructive data change
   materially changes the product. A visual-only request does not authorize a
   backend build.
-- Never publish without the separate publication approval. Never reconcile providers, mutate `amp.yaml`, create secrets or environment
-  configuration, deploy, or claim admission or Production readiness.
+- Never publish without the separate publication approval. Connected Preview
+  database and environment changes use `prepare-app-hosted-runtime` with a
+  separate approval naming the selected project and exact branch; follow
+  `docs/hosted-app-runtime.md`. A missing native Neon connection is a path
+  blocker. Keep credentials out of inputs and output. Never mutate `amp.yaml`,
+  deploy, promote, alias, activate, or claim admission or Production readiness.
 - If the complete command reports stale, conflicting, or ambiguous recovery
   state, reconcile it automatically when safe. Otherwise translate the visible
   product effect into one recommended product choice or an unavailable outcome

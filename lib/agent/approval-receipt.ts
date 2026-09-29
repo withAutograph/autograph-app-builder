@@ -194,6 +194,19 @@ export function publicApprovalDescription(input: unknown, toolName?: string): st
     return undefined;
   }
   const record = input as Record<string, unknown>;
+  if (toolName === "prepare-app-hosted-runtime") {
+    const parsed = z
+      .object({
+        appId,
+        branch: z.string().min(1),
+        environment: z.literal("preview"),
+        projectId: z.string().min(1),
+      })
+      .safeParse(input);
+    return parsed.success
+      ? `Prepare isolated app and authentication databases for ${parsed.data.appId}, and bind restricted runtime credentials to Preview branch ${parsed.data.branch} in Vercel project ${parsed.data.projectId}.`
+      : undefined;
+  }
   if (Object.hasOwn(record, "approvalReceipt")) {
     return publicReceiptDescription(record.approvalReceipt, toolName);
   }

@@ -99,6 +99,14 @@ not write the checkout. Submit the complete `implementationFiles` and product
 summary together so its approval card covers the actual build; do not send an
 empty apply merely to obtain approval and then request another apply for the
 implementation. The tool writes the private checkout only after approval.
+For hosted Preview persistence, use `prepare-app-hosted-runtime` after the
+private implementation is ready and the user requests connected Preview
+resources. Its separate approval must name the app, selected Vercel project
+and exact Preview branch. Use the existing native Neon connection; never ask
+the user or model to paste credentials. Follow `docs/hosted-app-runtime.md` for
+protected recovery and binding. Translate a missing native branch/connection
+into that specific product blocker, and retain the public session. Do not claim
+hosted behavior or activation from database preparation alone.
 After a successful apply, call `validate_app_creation` in the approved private
 checkout. Applied files are not validated files. Successful repository commands
 establish technical validation, not proof that the accepted product behaviors

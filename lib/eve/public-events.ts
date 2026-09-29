@@ -42,6 +42,7 @@ const visibleOperations = new Map([
   ["apply_app_creation", "Building the app in its private workspace"],
   ["compile-app-schema-release", "Compiling the app schema release"],
   ["prepare-app-local-preview", "Preparing the app's local preview dependencies"],
+  ["prepare-app-hosted-runtime", "Preparing the app's hosted database"],
   ["run-app-browser-tests", "Running the app's browser tests"],
   ["start_app_preview", "Starting the app preview"],
   ["validate_app_creation", "Validating the app changes"],
@@ -1020,6 +1021,7 @@ const inputRequest = (request: {
 }): PublicInputRequest | undefined => {
   const approvalTitles = {
     apply_app_creation: "Build this app?",
+    "prepare-app-hosted-runtime": "Prepare this app's Preview database?",
     "publish-github-draft-pr": "Publish the reviewed changes?",
   } as const;
   const toolName = request.action?.toolName;
