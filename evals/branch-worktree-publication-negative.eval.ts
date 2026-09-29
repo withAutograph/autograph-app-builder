@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 
-import { defineEval, type EveEvalTurn } from "eve/evals";
+import { defineEval } from "eve/evals";
 import { includes } from "eve/evals/expect";
 
 import { prepareReviewedWorkflow } from "./support/reviewed-workflow";
@@ -10,16 +10,15 @@ export default defineEval({
   description:
     "A canceled branch-worktree approval creates no branch, worktree, commit, push, or target mutation.",
   async test(t) {
-    let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
     const session = await prepareReviewedWorkflow(t, repository, "branch-publication-cancel");
-    turn = await session.send("Publish reviewed change set to a new branch worktree.");
+    await session.send("Publish reviewed change set to a new branch worktree.");
     session.requireInputRequest({
       toolName: "publish_reviewed_change_set_to_branch_worktree",
     });
-    turn = await session.respondAll("cancel");
+    const turn1 = await session.respondAll("cancel");
     t.succeeded();
-    t.check(turn.message, includes("canceled or rejected"));
+    t.check(turn1.message, includes("canceled or rejected"));
     if (
       execFileSync("git", ["branch", "--list", "app-builder/*"], {
         cwd: repository,

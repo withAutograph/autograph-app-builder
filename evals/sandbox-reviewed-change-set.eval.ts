@@ -1,4 +1,4 @@
-import { defineEval, type EveEvalTurn } from "eve/evals";
+import { defineEval } from "eve/evals";
 import { includes, satisfies } from "eve/evals/expect";
 import { z } from "zod";
 
@@ -31,56 +31,55 @@ export default defineEval({
   tags: ["sandbox-integration", "reviewed-change-set"],
   async test(t) {
     const session = await t.session();
-    let turn: EveEvalTurn;
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
     if (repository === undefined || repository.length === 0) {
       throw new Error("The supported source root is missing.");
     }
 
-    turn = await session.send(`Prepare supported repository at ${repository}`);
+    await session.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
 
-    turn = await session.send(
+    await session.send(
       `Accept build-ready AppSpec for builder-reviewed-proof:\n${BUILD_READY_APP_SPEC}`,
     );
     t.succeeded();
 
-    turn = await session.send("Prepare target dependencies.");
+    await session.send("Prepare target dependencies.");
     t.succeeded();
 
-    turn = await session.send("Run target identity and planning.");
+    await session.send("Run target identity and planning.");
     t.succeeded();
 
-    turn = await session.send("Apply the current creation proposal.");
+    await session.send("Apply the current creation proposal.");
     session.requireInputRequest({ toolName: "apply_app_creation" });
-    turn = await session.respondAll("approve");
+    const turn1 = await session.respondAll("approve");
     t.succeeded();
-    t.check(turn.message, includes("private preview"));
-    t.check(turn.message, staysProductFacing);
+    t.check(turn1.message, includes("private preview"));
+    t.check(turn1.message, staysProductFacing);
 
     const validation = await session.send("Validate the applied creation.");
-    turn = validation;
+
     validation.notEvent("input.requested");
     t.succeeded();
-    t.check(turn.message, includes("quality checks"));
-    t.check(turn.message, staysProductFacing);
+    t.check(validation, includes("quality checks"));
+    t.check(validation, staysProductFacing);
 
-    turn = await session.send("Inspect the validated change set.");
+    await session.send("Inspect the validated change set.");
     t.succeeded();
     t.calledTool("change_set_status", { count: 1 });
 
     const review = await session.send("Accept the displayed change set.");
-    turn = review;
+
     review.notEvent("input.requested");
     t.succeeded();
-    t.check(turn.message, includes("ready for review"));
-    t.check(turn.message, includes("draft pull request"));
-    t.check(turn.message, staysProductFacing);
+    t.check(review, includes("ready for review"));
+    t.check(review, includes("draft pull request"));
+    t.check(review, staysProductFacing);
 
-    turn = await session.send("Report artifact workflow status.");
+    const turn2 = await session.send("Report artifact workflow status.");
     t.succeeded();
     t.calledTool("artifact_workflow_status", { count: 1 });
-    t.check(turn.message, includes('"phase":"reviewed"'));
+    t.check(turn2.message, includes('"phase":"reviewed"'));
 
     session.eventsSatisfy(
       "persisted workflow contains actual planning receipts and successful validation/review",

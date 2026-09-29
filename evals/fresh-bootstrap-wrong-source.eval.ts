@@ -16,8 +16,10 @@ export default defineEval({
   tags: ["fresh-bootstrap-publication"],
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    const session = await prepareReviewedWorkflow(t, repository, "wrong-source-eval");
-    const fixture = await createFreshBootstrapEvalCapability();
+    const [session, fixture] = await Promise.all([
+      prepareReviewedWorkflow(t, repository, "wrong-source-eval"),
+      createFreshBootstrapEvalCapability(),
+    ]);
     try {
       const turn = await withFreshBootstrapTestCapability(fixture.capability, () =>
         session.send(

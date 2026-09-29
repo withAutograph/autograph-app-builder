@@ -1,4 +1,4 @@
-import { defineEval, type EveEvalTurn } from "eve/evals";
+import { defineEval } from "eve/evals";
 import { satisfies } from "eve/evals/expect";
 
 import { validateBuildReadyAppSpec } from "../lib/agent/app-spec-validation";
@@ -24,14 +24,11 @@ export default defineEval({
   tags: ["product-quality"],
   async test(t) {
     const session = await t.session();
-    let turn: EveEvalTurn;
     const vendor = productQualityScenario("vendor-onboarding");
     const repository = createSupportedRepositoryFixture();
-    turn = await session.send(
-      `Supported repository at ${repository}\nProduct brief: ${vendor.brief}`,
-    );
+    await session.send(`Supported repository at ${repository}\nProduct brief: ${vendor.brief}`);
     session.requireInputRequest({ toolName: "apply_app_creation" });
-    turn = await session.respondAll("approve");
+    const turn1 = await session.respondAll("approve");
     t.succeeded();
     t.calledTool("record_prototype_artifact", {
       count: 1,
@@ -131,10 +128,10 @@ Confirmed.
     t.calledTool("apply_app_creation", { count: 1 });
     t.calledTool("validate_app_creation", { count: 1 });
     t.check(
-      turn.message,
+      turn1.message,
       assertQuality(
         evaluateConversationQuality({
-          reply: String(turn.message),
+          reply: String(turn1.message),
           scenario: vendor,
         }),
         vendor.id,
@@ -142,12 +139,12 @@ Confirmed.
     );
 
     const ambiguity = productQualityScenario("material-product-ambiguity");
-    turn = await session.send(`Uncertain vendor workflow brief: ${ambiguity.brief}`);
+    const turn2 = await session.send(`Uncertain vendor workflow brief: ${ambiguity.brief}`);
     t.check(
-      turn.message,
+      turn2.message,
       assertQuality(
         evaluateConversationQuality({
-          reply: String(turn.message),
+          reply: String(turn2.message),
           scenario: ambiguity,
         }),
         ambiguity.id,
@@ -155,12 +152,12 @@ Confirmed.
     );
 
     const preference = productQualityScenario("explicit-preference");
-    turn = await session.send(`Explicit vendor workflow preferences: ${preference.brief}`);
+    const turn3 = await session.send(`Explicit vendor workflow preferences: ${preference.brief}`);
     t.check(
-      turn.message,
+      turn3.message,
       assertQuality(
         evaluateConversationQuality({
-          reply: String(turn.message),
+          reply: String(turn3.message),
           scenario: preference,
         }),
         preference.id,
@@ -168,12 +165,12 @@ Confirmed.
     );
 
     const unavailable = productQualityScenario("unavailable-product-alternative");
-    turn = await session.send(unavailable.brief);
+    const turn4 = await session.send(unavailable.brief);
     t.check(
-      turn.message,
+      turn4.message,
       assertQuality(
         evaluateConversationQuality({
-          reply: String(turn.message),
+          reply: String(turn4.message),
           scenario: unavailable,
         }),
         unavailable.id,

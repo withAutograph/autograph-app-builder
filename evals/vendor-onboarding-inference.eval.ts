@@ -1,4 +1,4 @@
-import { defineEval, type EveEvalTurn } from "eve/evals";
+import { defineEval } from "eve/evals";
 import { includes, satisfies } from "eve/evals/expect";
 
 import { isProductFacing } from "./support/public-conversation";
@@ -9,14 +9,13 @@ export default defineEval({
     "A sparse vendor-onboarding brief infers identity and UX, automatically prepares eligible context, repairs its internal spec, and reaches review-ready app changes without conversation-friction input.",
   async test(t) {
     const session = await t.session();
-    let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
-    turn = await session.send(`Supported repository at ${repository}
+    await session.send(`Supported repository at ${repository}
 Product brief: Build an internal vendor-onboarding workflow for operations to review new vendor submissions, resolve missing information, and involve Finance when tax verification is actually required.`);
 
     session.requireInputRequest({ toolName: "apply_app_creation" });
     t.event("input.requested", { count: 1 });
-    turn = await session.respondAll("approve");
+    const turn1 = await session.respondAll("approve");
     t.succeeded();
     t.toolOrder([
       "inspect_source",
@@ -78,16 +77,16 @@ Product brief: Build an internal vendor-onboarding workflow for operations to re
     t.notCalledTool("agent");
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
-    t.check(turn.message, includes("Vendor Onboarding"));
-    t.check(turn.message, includes("`vendor-onboarding`"));
-    t.check(turn.message, includes("operations review queue"));
-    t.check(turn.message, includes("vendor detail panel"));
-    t.check(turn.message, includes("conditional Finance verification step"));
-    t.check(turn.message, includes("implementation plan and complete app changes"));
-    t.check(turn.message, includes("ready to review"));
-    t.check(turn.message, includes("draft pull request"));
+    t.check(turn1.message, includes("Vendor Onboarding"));
+    t.check(turn1.message, includes("`vendor-onboarding`"));
+    t.check(turn1.message, includes("operations review queue"));
+    t.check(turn1.message, includes("vendor detail panel"));
+    t.check(turn1.message, includes("conditional Finance verification step"));
+    t.check(turn1.message, includes("implementation plan and complete app changes"));
+    t.check(turn1.message, includes("ready to review"));
+    t.check(turn1.message, includes("draft pull request"));
     t.check(
-      turn.message,
+      turn1.message,
       satisfies(
         (reply) =>
           isProductFacing(reply) &&

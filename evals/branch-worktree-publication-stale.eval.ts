@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 
-import { defineEval, type EveEvalTurn } from "eve/evals";
+import { defineEval } from "eve/evals";
 import { includes } from "eve/evals/expect";
 
 import { prepareReviewedWorkflow } from "./support/reviewed-workflow";
@@ -10,20 +10,19 @@ export default defineEval({
   description:
     "A stale branch-worktree proposal is rejected after approval without creating its branch or worktree.",
   async test(t) {
-    let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
     const session = await prepareReviewedWorkflow(t, repository, "branch-publication-stale");
     const head = execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: repository,
       encoding: "utf-8",
     });
-    turn = await session.send("Publish reviewed change set with stale branch preconditions.");
+    await session.send("Publish reviewed change set with stale branch preconditions.");
     session.requireInputRequest({
       toolName: "publish_reviewed_change_set_to_branch_worktree",
     });
-    turn = await session.respondAll("approve");
+    const turn1 = await session.respondAll("approve");
     t.succeeded();
-    t.check(turn.message, includes("rejected without creating a branch or worktree"));
+    t.check(turn1.message, includes("rejected without creating a branch or worktree"));
     if (
       execFileSync("git", ["rev-parse", "HEAD"], {
         cwd: repository,

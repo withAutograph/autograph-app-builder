@@ -1,4 +1,4 @@
-import { defineEval, type EveEvalTurn } from "eve/evals";
+import { defineEval } from "eve/evals";
 import { includes } from "eve/evals/expect";
 import { z } from "zod";
 
@@ -18,30 +18,27 @@ export default defineEval({
   tags: ["sandbox-integration"],
   async test(t) {
     const session = await t.session();
-    let turn: EveEvalTurn;
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
     if (repository === undefined || repository.length === 0) {
       throw new Error("The supported source root is missing.");
     }
 
-    turn = await session.send(`Prepare supported repository at ${repository}`);
+    await session.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
 
-    turn = await session.send(
-      `Accept build-ready AppSpec for builder-proof:\n${BUILD_READY_APP_SPEC}`,
-    );
+    await session.send(`Accept build-ready AppSpec for builder-proof:\n${BUILD_READY_APP_SPEC}`);
     t.succeeded();
 
-    turn = await session.send("Prepare target dependencies.");
+    await session.send("Prepare target dependencies.");
     t.succeeded();
 
-    turn = await session.send("Run target identity and planning.");
+    await session.send("Run target identity and planning.");
     t.succeeded();
 
-    turn = await session.send("Report artifact workflow status.");
+    const turn1 = await session.send("Report artifact workflow status.");
     t.succeeded();
     t.calledTool("artifact_workflow_status", { count: 1 });
-    t.check(turn.message, includes('"phase":"planned"'));
+    t.check(turn1.message, includes('"phase":"planned"'));
 
     session.eventsSatisfy("persisted workflow contains actual planning receipts", (events) =>
       events.some((event) => {

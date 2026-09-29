@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { defineEval, type EveEvalTurn } from "eve/evals";
+import { defineEval } from "eve/evals";
 import { includes, satisfies } from "eve/evals/expect";
 import { z } from "zod";
 
@@ -54,16 +54,14 @@ export default defineEval({
   tags: ["sandbox-integration", "existing-app-iteration"],
   async test(t) {
     const session = await t.session();
-    let turn: EveEvalTurn;
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
     if (repository === undefined || repository.length === 0) {
       throw new Error("The supported source root is missing.");
     }
 
-    turn = await session.send(`Prepare supported repository at ${repository}`);
+    await session.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
-    turn =
-      await session.send(`Update the Vendor review so operations can see when tax verification is required.
+    await session.send(`Update the Vendor review so operations can see when tax verification is required.
 Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
     t.succeeded();
     t.calledTool("inspect_existing_app", { count: 2 });
@@ -73,22 +71,22 @@ Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
         existingAppChanges: (value) => existingChangesSchema.safeParse(value).success,
       },
     });
-    turn = await session.send("Prepare target dependencies.");
+    await session.send("Prepare target dependencies.");
     t.succeeded();
-    turn = await session.send("Run target identity and planning.");
+    const turn1 = await session.send("Run target identity and planning.");
     t.succeeded();
-    t.check(turn.message, includes("tax verification is required"));
-    turn = await session.send("Apply the current creation proposal.");
+    t.check(turn1.message, includes("tax verification is required"));
+    await session.send("Apply the current creation proposal.");
     session.requireInputRequest({ toolName: "apply_app_creation" });
-    turn = await session.respondAll("approve");
+    const turn2 = await session.respondAll("approve");
     t.succeeded();
-    t.check(turn.message, includes("private preview"));
-    t.check(turn.message, staysProductFacing);
+    t.check(turn2.message, includes("private preview"));
+    t.check(turn2.message, staysProductFacing);
     const validation = await session.send("Validate the applied creation.");
-    turn = validation;
+
     validation.notEvent("input.requested");
     t.succeeded();
-    t.check(turn.message, includes("passed its local quality checks"));
+    t.check(validation, includes("passed its local quality checks"));
     const validationCall = validation.requireToolCall("validate_app_creation");
     await t.require(
       validationCall,
@@ -97,17 +95,17 @@ Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
         "current validation receipt passed",
       ),
     );
-    turn = await session.send("Inspect the validated change set.");
+    await session.send("Inspect the validated change set.");
     t.succeeded();
     const review = await session.send("Accept the displayed change set.");
-    turn = review;
+
     review.notEvent("input.requested");
     t.succeeded();
-    t.check(turn.message, includes("ready for review"));
-    turn = await session.send("Report artifact workflow status.");
+    t.check(review, includes("ready for review"));
+    const turn3 = await session.send("Report artifact workflow status.");
     t.succeeded();
     t.calledTool("artifact_workflow_status", { count: 1 });
-    t.check(turn.message, includes('"phase":"reviewed"'));
+    t.check(turn3.message, includes('"phase":"reviewed"'));
 
     session.eventsSatisfy(
       "persisted workflow contains actual planning receipts and successful validation/review",

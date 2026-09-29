@@ -8,7 +8,7 @@ export default defineEval({
   async test(t) {
     const session = await t.session();
     const repository = createSupportedRepositoryFixture();
-    const turn = await session.send(`Prepare fresh template at ${repository}`);
+    await session.send(`Prepare fresh template at ${repository}`);
     t.succeeded();
     t.notEvent("input.requested");
     t.calledTool("approve_source_acquisition", { count: 1 });
