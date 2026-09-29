@@ -175,8 +175,10 @@ app-owned files and reuse the same component-backed preview flow.
    `review_github_draft_pr_reconciliation`, then page through both complete
    diffs with `inspect_github_draft_pr_reconciliation`: the final diff against
    the current base and the delta from the old PR head.
-   Seal that exact result with `seal_github_draft_pr_reconciliation`, then ask
-   for a separate update approval before `reconcile_github_draft_pr`. If the
+   Seal that exact result with `seal_github_draft_pr_reconciliation`. Pass its
+   returned `approvalReceipt` verbatim to `reconcile_github_draft_pr`; the
+   receipt names the existing PR branch head, not the PR's base branch. Ask
+   for a separate update approval before moving the branch. If the
    base or PR head moves, prepare, validate, and review the new result again.
 9. Continue to the implemented app's private preview with `start_app_preview`.
    If the repository defines `app:local` for the selected app and the preview

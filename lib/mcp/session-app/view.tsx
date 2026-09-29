@@ -21,6 +21,7 @@ export interface SessionResponse {
 }
 
 interface DecisionOutcome {
+  error?: string;
   request: PublicInputRequest;
   response: SessionAnswer;
   status: "failed" | "submitting" | "submitted";
@@ -334,7 +335,10 @@ function SessionOutcome({
         <span aria-hidden="true">!</span>
         <div>
           <strong>{heading}</strong>
-          <p>The update could not be completed. Continuing in chat…</p>
+          <p>
+            {decisionOutcome.error ||
+              "Builder could not complete the update. Check chat for the specific diagnostic before retrying."}
+          </p>
         </div>
       </main>
     );
@@ -423,7 +427,7 @@ export function SessionAppView({
   const [answers, setAnswers] = useState<Record<string, SessionAnswer>>({});
   const [state, setState] = useState<"idle" | "submitting" | "submitted">("idle");
   const [authorizationOpened, setAuthorizationOpened] = useState(false);
-  const [error, setError] = useState("");
+  const [submissionError, setSubmissionError] = useState("");
   const [decisionOutcome, setDecisionOutcome] = useState<DecisionOutcome>();
   const requests = result?.inputRequests ?? [];
   const respondable = requests.filter((request) => request.kind !== "authorization");
@@ -440,15 +444,23 @@ export function SessionAppView({
       return;
     }
     setState("submitting");
-    setError("");
+    setSubmissionError("");
     setDecisionOutcome({ request, response, status: "submitting" });
     try {
       await onRespond([{ requestId: request.requestId, response }]);
       setState("submitted");
       setDecisionOutcome({ request, response, status: "submitted" });
-    } catch {
+    } catch (error) {
       setState("idle");
-      setDecisionOutcome({ request, response, status: "failed" });
+      setDecisionOutcome({
+        error:
+          error instanceof Error
+            ? error.message
+            : "Builder could not submit this response. Check chat before retrying.",
+        request,
+        response,
+        status: "failed",
+      });
     }
   }
 
@@ -458,7 +470,7 @@ export function SessionAppView({
       return;
     }
     setState("submitting");
-    setError("");
+    setSubmissionError("");
     try {
       await onRespond(
         respondable.flatMap((request) => {
@@ -469,7 +481,7 @@ export function SessionAppView({
       setState("submitted");
     } catch {
       setState("idle");
-      setError("Your answers could not be submitted. Continue in chat.");
+      setSubmissionError("Your answers could not be submitted. Continue in chat.");
     }
   }
 
@@ -569,9 +581,9 @@ export function SessionAppView({
               {continueGuidance}
             </p>
           ) : null}
-          {error ? (
+          {submissionError ? (
             <p className="error" role="alert">
-              {error}
+              {submissionError}
             </p>
           ) : null}
         </footer>

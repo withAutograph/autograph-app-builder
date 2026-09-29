@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 
 import packageManifest from "../../../package.json";
+import { eveSessionResultSchema } from "../contracts";
 import type { EveSessionResult } from "../contracts";
 import { createBoundedAuthorizationRefresh } from "./automatic-refresh";
 import { SessionAppView } from "./view";
@@ -112,7 +113,11 @@ function SessionAppContainer() {
     });
     const responseRejected = response.isError === true;
     if (responseRejected) {
-      throw new Error("response rejected");
+      const publicResult = eveSessionResultSchema.safeParse(response.structuredContent);
+      throw new Error(
+        (publicResult.success ? publicResult.data.error?.message : undefined) ??
+          "Builder could not submit this response. Check chat for the specific diagnostic before retrying.",
+      );
     }
     if (response.structuredContent) {
       publishResult(response.structuredContent as EveSessionResult);

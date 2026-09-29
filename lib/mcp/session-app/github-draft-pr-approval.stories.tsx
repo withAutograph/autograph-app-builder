@@ -146,7 +146,7 @@ export const DraftPRFailed: Story = {
     await userEvent.click(canvas.getByRole("button", { name: "Accept" }));
     const alert = await canvas.findByRole("alert");
     await expect(alert).toHaveTextContent("Draft PR #1500 could not be updated");
-    await expect(alert).toHaveTextContent("Continuing in chat…");
+    await expect(alert).toHaveTextContent("The draft PR update was rejected.");
     await expect(canvas.queryByRole("button", { name: "Accept" })).not.toBeInTheDocument();
     await expect(canvas.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
   },

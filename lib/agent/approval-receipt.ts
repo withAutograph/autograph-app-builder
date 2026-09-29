@@ -107,6 +107,18 @@ export const approvalTargetFromExistingDraftReconciliation: (
   >,
 ) => ApprovalTarget = approvalTargetFromDraftHead;
 
+/** Give Builder the exact update subject; the model must not infer it from the PR base. */
+export const approvalReceiptForExistingDraftUpdate = (
+  proposal: DraftHeadApprovalSubject & { digest: string },
+): ApprovalReceipt =>
+  approvalReceiptSchema.parse({
+    ...approvalTargetFromDraftHead(proposal),
+    format: "autograph-eve-approval-receipt-v2",
+    outcome: "update-draft-pr",
+    phase: "draft_update",
+    subjectDigest: proposal.digest,
+  });
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertApprovalReceipt(input: {
   actual: ApprovalReceipt;
@@ -136,8 +148,12 @@ export function assertApprovalReceipt(input: {
     .filter(([, actualValue, expectedValue]) => actualValue !== expectedValue)
     .map(([field]) => field);
   if (mismatches.length > 0) {
+    const recovery =
+      input.phase === "draft_update"
+        ? `Draft updates authorize the existing PR head ${input.target.baseRef} at ${input.target.baseSha}, not the PR's base branch. Use the approvalReceipt returned by the current sealed draft proposal and request approval again.`
+        : "Request approval for the current sealed proposal and its observed base commit, then retry publication.";
     throw new Error(
-      `The approval receipt does not match the exact subject: ${mismatches.join(", ")}. Request approval for the current sealed proposal and its observed base commit, then retry publication.`,
+      `The approval receipt does not match the exact subject: ${mismatches.join(", ")}. ${recovery}`,
     );
   }
   return actual;
