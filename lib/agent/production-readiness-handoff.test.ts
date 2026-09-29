@@ -5,6 +5,14 @@ import { productionReadinessHandoff } from "./production-readiness-handoff";
 const root = "repository";
 const app = "spend-review";
 const release = "2026-09-29.production-pilot-v13";
+const handoffContract = (roles: string[]) => ({
+  appId: app,
+  coreRoute: `/${app}`,
+  operatorGuide: "docs/operations/generated-app-production.md",
+  roles,
+  schemaReceiptPath: `/${app}/api/schema`,
+  version: 1,
+});
 const files = new Map<string, string>([
   [`${root}/apps/${app}/schema/index.ts`, `export * from "./release/${release}/data-server";\n`],
   [
@@ -51,6 +59,37 @@ describe("productionReadinessHandoff", () => {
       schemaReceiptPath: `/${app}/api/schema`,
       status: "operator-review-required",
     });
+  });
+
+  it.each([20, 21, 100])(
+    "retains all %i declared roles without a workload ceiling",
+    async (count) => {
+      const changed = new Map(files);
+      const path = `${root}/apps/${app}/.config/production-handoff.json`;
+      const roles = Array.from({ length: count }, (_, index) => `role_${index}`);
+      changed.set(path, JSON.stringify(handoffContract(roles)));
+      const result = await productionReadinessHandoff({
+        appId: app,
+        repositoryRoot: root,
+        source: source(changed),
+      });
+      expect(result.roles).toEqual(roles);
+      expect(result.blockers).toEqual([]);
+      expect(result.status).toBe("operator-review-required");
+    },
+  );
+
+  it("still rejects invalid role identifiers without failing private validation", async () => {
+    const changed = new Map(files);
+    const path = `${root}/apps/${app}/.config/production-handoff.json`;
+    changed.set(path, JSON.stringify(handoffContract(["../invalid"])));
+    const result = await productionReadinessHandoff({
+      appId: app,
+      repositoryRoot: root,
+      source: source(changed),
+    });
+    expect(result.roles).toEqual([]);
+    expect(result.blockers).toContain("The app-owned Production handoff contract needs review.");
   });
 
   it("surfaces missing operator contracts as blockers", async () => {

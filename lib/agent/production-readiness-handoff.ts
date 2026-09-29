@@ -12,7 +12,7 @@ const handoffSchema = z.strictObject({
   appId: appIdSchema,
   coreRoute: z.string().regex(/^\/[a-z][a-z0-9-]*$/u),
   operatorGuide: z.string().startsWith("docs/"),
-  roles: z.array(z.string().regex(/^[a-z][a-z0-9_]*$/u)).max(20),
+  roles: z.array(z.string().regex(/^[a-z][a-z0-9_]*$/u)),
   schemaReceiptPath: z.string().startsWith("/").nullable(),
   version: z.literal(1),
 });

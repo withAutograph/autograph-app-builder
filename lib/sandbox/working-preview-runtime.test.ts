@@ -41,6 +41,7 @@ const setup = () => {
   const events: string[] = [];
   const command = {
     cmdId: "command-1",
+    exitCode: null as number | null,
     kill: vi.fn(async () => {}),
     wait: vi.fn(() => Promise.resolve()),
   };
@@ -65,7 +66,7 @@ const setup = () => {
         return Promise.resolve();
       }),
     },
-    getCommand: vi.fn(),
+    getCommand: vi.fn(() => Promise.resolve(command)),
     runCommand: vi.fn(() => {
       events.push("spawn");
       return Promise.resolve(command);
@@ -123,6 +124,103 @@ describe("shared working preview startup", () => {
     );
   });
 
+  it.each(["listener", "HTTP"])(
+    "keeps one startup past two minutes of %s readiness",
+    async (phase) => {
+      const { options, provider, command } = setup();
+      const originalNow = Date.now();
+      const clock = vi.spyOn(Date, "now");
+      let delayed = false;
+      if (phase === "listener") {
+        provider.fs.readFile.mockImplementation((file) => {
+          if (file.endsWith("listener-ready")) {
+            if (!delayed) {
+              delayed = true;
+              clock.mockReturnValue(originalNow + 120_001);
+              return Promise.resolve("");
+            }
+            return Promise.resolve("ready");
+          }
+          return Promise.reject(Object.assign(new Error("missing"), { code: "ENOENT" }));
+        });
+      }
+      const fetcher = vi.fn<typeof fetch>((url) => {
+        if (String(url).includes("/__autograph_preview_launch")) {
+          return Promise.resolve(launchResponse());
+        }
+        if (phase === "HTTP" && !delayed) {
+          delayed = true;
+          clock.mockReturnValue(originalNow + 120_001);
+          return Promise.resolve(new Response(null, { status: 503 }));
+        }
+        return Promise.resolve(
+          new Response("<main>Ready</main>", { headers: { "content-type": "text/html" } }),
+        );
+      });
+      try {
+        const result = await startWorkingPreview({ ...options, fetch: fetcher });
+        expect(result.receipt.status).toBe("ready");
+        expect(provider.runCommand).toHaveBeenCalledOnce();
+        expect(command.kill).not.toHaveBeenCalled();
+        expect(delayed).toBe(true);
+      } finally {
+        clock.mockRestore();
+      }
+    },
+  );
+
+  it("continues the same supervisor after an individual provider probe times out", async () => {
+    const { options, provider, command } = setup();
+    let reads = 0;
+    provider.fs.readFile.mockImplementation((file, readOptions) => {
+      if (file.endsWith("listener-ready")) {
+        reads += 1;
+        return reads === 1
+          ? delay(100, "ready", { signal: readOptions?.signal })
+          : Promise.resolve("ready");
+      }
+      return Promise.reject(Object.assign(new Error("missing"), { code: "ENOENT" }));
+    });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation((url) =>
+        Promise.resolve(
+          String(url).includes("/__autograph_preview_launch")
+            ? launchResponse()
+            : new Response("<main>Ready</main>", { headers: { "content-type": "text/html" } }),
+        ),
+      );
+    const result = await startWorkingPreview({ ...options, fetch: fetcher, probeTimeoutMs: 20 });
+    expect(result.receipt.status).toBe("ready");
+    expect(reads).toBe(2);
+    expect(provider.runCommand).toHaveBeenCalledOnce();
+    expect(command.kill).not.toHaveBeenCalled();
+  });
+
+  it("reports a supervisor exit even when startup markers were never written", async () => {
+    const { options, provider, command } = setup();
+    provider.getCommand.mockResolvedValue({ ...command, exitCode: 137 });
+    provider.fs.readFile.mockRejectedValue(Object.assign(new Error("missing"), { code: "ENOENT" }));
+    await expect(startWorkingPreview(options)).rejects.toThrow("supervisor exited with code 137");
+    expect(provider.runCommand).toHaveBeenCalledOnce();
+    expect(command.kill).toHaveBeenCalledOnce();
+    expect(provider.update).toHaveBeenLastCalledWith({ ports: [] }, expect.anything());
+  });
+
+  it("ends startup and cleans up when the actual provider lease expires", async () => {
+    const { options, provider, command } = setup();
+    provider.expiresAt = new Date(Date.now() + 100);
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 503 }));
+    await expect(startWorkingPreview({ ...options, fetch: fetcher })).rejects.toThrow(
+      "stopped during application HTTP readiness",
+    );
+    expect(command.kill).toHaveBeenCalledOnce();
+    expect(command.wait).toHaveBeenCalledOnce();
+    // Setup closes ingress, then opens it; expiry adds no ingress mutation.
+    expect(provider.update).toHaveBeenCalledTimes(2);
+    expect(provider.update).toHaveBeenLastCalledWith({ ports: [3001] }, expect.anything());
+  });
+
   it("does not start a preview when the Sandbox has already expired", async () => {
     const { options, provider } = setup();
     provider.expiresAt = new Date(Date.now() - 1);
@@ -159,7 +257,12 @@ describe("shared working preview startup", () => {
     command.kill.mockRejectedValueOnce(new Error("provider kill failed"));
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 503 }));
     await expect(
-      startWorkingPreview({ ...options, fetch: fetcher, readinessTimeoutMs: 100 }),
+      startWorkingPreview({
+        ...options,
+        fetch: fetcher,
+        probeTimeoutMs: 100,
+        signal: AbortSignal.timeout(100),
+      }),
     ).rejects.toThrow("cleanup was incomplete");
     expect(command.kill).toHaveBeenCalled();
     expect(provider.update).toHaveBeenLastCalledWith({ ports: [] }, expect.anything());
@@ -199,15 +302,20 @@ describe("shared working preview startup", () => {
   });
 });
 
-describe("safe startup timeout diagnostics", () => {
+describe("safe interrupted startup diagnostics", () => {
   it("identifies listener startup without exposing a gateway or starting HTTP checks", async () => {
     const { options, provider, command } = setup();
     provider.fs.readFile.mockRejectedValue(Object.assign(new Error("missing"), { code: "ENOENT" }));
     const fetcher = vi.fn<typeof fetch>();
     await expect(
-      startWorkingPreview({ ...options, fetch: fetcher, readinessTimeoutMs: 100 }),
+      startWorkingPreview({
+        ...options,
+        fetch: fetcher,
+        probeTimeoutMs: 100,
+        signal: AbortSignal.timeout(100),
+      }),
     ).rejects.toThrow(
-      "timed out during listener startup. Last observation: Listener readiness marker absent",
+      "stopped during listener startup. Last observation: Listener readiness marker absent",
     );
     expect(fetcher).not.toHaveBeenCalled();
     expect(command.kill).toHaveBeenCalled();
@@ -228,7 +336,8 @@ describe("safe startup timeout diagnostics", () => {
     const failure = await startWorkingPreview({
       ...options,
       fetch: fetcher,
-      readinessTimeoutMs: 100,
+      probeTimeoutMs: 100,
+      signal: AbortSignal.timeout(100),
     }).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(Error);
     const { message } = failure as Error;
@@ -242,7 +351,12 @@ describe("safe startup timeout diagnostics", () => {
       .fn<typeof fetch>()
       .mockRejectedValue(new TypeError("https://preview.example/?token=secret Cookie: private"));
     await expect(
-      startWorkingPreview({ ...options, fetch: fetcher, readinessTimeoutMs: 100 }),
+      startWorkingPreview({
+        ...options,
+        fetch: fetcher,
+        probeTimeoutMs: 100,
+        signal: AbortSignal.timeout(100),
+      }),
     ).rejects.toThrow(
       "application HTTP readiness. Last observation: Readiness transport TypeError.",
     );
@@ -291,7 +405,12 @@ describe("startup ownership recovery", () => {
     const fetcher = vi.fn<typeof fetch>(() => response.promise);
     const first = (async () => {
       try {
-        return await startWorkingPreview({ ...options, fetch: fetcher, readinessTimeoutMs: 100 });
+        return await startWorkingPreview({
+          ...options,
+          fetch: fetcher,
+          probeTimeoutMs: 100,
+          signal: AbortSignal.timeout(100),
+        });
       } catch (error) {
         return error;
       }
@@ -326,7 +445,12 @@ describe("startup ownership recovery", () => {
       return Promise.resolve(new Response(null, { status: 503 }));
     });
     await expect(
-      startWorkingPreview({ ...options, fetch: fetcher, readinessTimeoutMs: 100 }),
+      startWorkingPreview({
+        ...options,
+        fetch: fetcher,
+        probeTimeoutMs: 100,
+        signal: AbortSignal.timeout(100),
+      }),
     ).rejects.toThrow();
     expect(provider.update).toHaveBeenLastCalledWith({ ports: [3001] }, expect.anything());
     expect(ownership.current?.attemptId).toBe("replacement");
@@ -334,7 +458,7 @@ describe("startup ownership recovery", () => {
   });
 });
 
-it("bounds a provider readiness read by the stage deadline", async () => {
+it("bounds each provider readiness read while cancellation ends the startup", async () => {
   const { options, provider, command } = setup();
   provider.fs.readFile.mockImplementation((file, readOptions) =>
     file.endsWith("listener-ready")
@@ -342,9 +466,9 @@ it("bounds a provider readiness read by the stage deadline", async () => {
       : Promise.reject(Object.assign(new Error("missing"), { code: "ENOENT" })),
   );
   const started = Date.now();
-  await expect(startWorkingPreview({ ...options, readinessTimeoutMs: 100 })).rejects.toThrow(
-    "timed out during listener startup",
-  );
+  await expect(
+    startWorkingPreview({ ...options, probeTimeoutMs: 100, signal: AbortSignal.timeout(100) }),
+  ).rejects.toThrow("stopped during listener startup");
   expect(Date.now() - started).toBeLessThan(1000);
   expect(command.wait).toHaveBeenCalledOnce();
 }, 8000);
@@ -365,7 +489,12 @@ it("sanitizes startup error files and keeps the safe cause visible if cleanup fa
   const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 503 }));
   let observed: unknown;
   try {
-    await startWorkingPreview({ ...options, fetch: fetcher, readinessTimeoutMs: 100 });
+    await startWorkingPreview({
+      ...options,
+      fetch: fetcher,
+      probeTimeoutMs: 100,
+      signal: AbortSignal.timeout(100),
+    });
   } catch (error) {
     observed = error;
   }
