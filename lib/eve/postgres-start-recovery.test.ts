@@ -166,6 +166,9 @@ const authorityValues = [
 
 describe("PostgreSQL original start recovery queries", () => {
   it("reads only the original caller key and falls back to an adapter resume receipt without writes", async () => {
+    if (operation.state !== "succeeded") {
+      throw new Error("The resume fixture requires a succeeded operation receipt.");
+    }
     const { sessionRecordDigest, ...resumeBase } = operation;
     void sessionRecordDigest;
     const resume = hostedOperationRecordSchema.parse({ ...resumeBase, kind: "resume" });

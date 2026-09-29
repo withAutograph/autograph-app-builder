@@ -38,7 +38,7 @@ const unresolvedStart = (code = "submission_unknown") => ({
   error: { code, message: "Keep the same original start request." },
   events: [],
   sessionId: "",
-  status: "failed",
+  status: "failed" as const,
 });
 
 describe("public self-reproduction driver", () => {
