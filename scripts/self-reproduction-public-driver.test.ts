@@ -406,6 +406,9 @@ describe("public self-reproduction driver", () => {
         "notifications/initialized",
         "tools/call",
       ]);
+      expect(await transport.call("autograph_cancel", { sessionId: "session-one" })).toEqual(
+        session("completed"),
+      );
       await expect(transport.call("prepare_workspace", {})).rejects.toThrow("Only public");
       await expect(
         makePublicTransport("https://user:password@example.com/mcp", () => {}, 1000),

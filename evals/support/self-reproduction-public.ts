@@ -310,7 +310,13 @@ export const makePublicTransport = async (
   return {
     call: async (name, args) => {
       if (
-        !["autograph_start", "autograph_get", "autograph_respond", "autograph_send"].includes(name)
+        ![
+          "autograph_start",
+          "autograph_get",
+          "autograph_respond",
+          "autograph_send",
+          "autograph_cancel",
+        ].includes(name)
       ) {
         throw new Error("Only public user lifecycle calls are permitted");
       }
