@@ -3,11 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import validateAppCreation from "../../agent/tools/validate_app_creation";
 
 const mocks = vi.hoisted(() => ({
-  prepare: vi.fn(),
   browser: vi.fn(),
-  describe: vi.fn(),
   clear: vi.fn(),
+  describe: vi.fn(),
   execute: vi.fn(),
+  prepare: vi.fn(),
   review: vi.fn(),
   state: { current: {} as Record<string, unknown>, update: vi.fn() },
 }));
@@ -132,7 +132,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       backend: { kind: "generated-postgres" },
       validation: { browser: { task: "test-e2e" } },
     });
-    mocks.browser.mockResolvedValue({ status: "failed", problem: "Assignment revoked" });
+    mocks.browser.mockResolvedValue({ problem: "Assignment revoked", status: "failed" });
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
       getSandbox: () => Promise.resolve({}),

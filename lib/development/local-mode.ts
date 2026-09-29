@@ -587,7 +587,9 @@ export const removeDevelopmentSnapshot = async (root: string) => {
       throw error;
     }
   }
-  await rm(root, { force: true, recursive: true });
+  // Git may finish writing owned object files while a stopped cycle is being
+  // removed. Node retries transient ENOTEMPTY errors within this snapshot.
+  await rm(root, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 });
 };
 
 const digestFileOrAbsent = async (path: string) => {

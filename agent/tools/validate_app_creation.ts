@@ -38,6 +38,38 @@ const validationPhase = (callId: string, phase: string, detail?: string | boolea
   );
 };
 
+const reusableDescription = async (
+  eligible: boolean,
+  input: () => Promise<Parameters<typeof describeSelectedApp>[0]>,
+) =>
+  eligible && !hasTestCapability("simulated-target")
+    ? await describeSelectedApp(await input())
+    : undefined;
+
+const describeValidationApp = async (
+  fixture: boolean,
+  input: Parameters<typeof describeSelectedApp>[0],
+) => (fixture ? undefined : await describeSelectedApp(input));
+
+const validatePersistentBackend = async (
+  description: Awaited<ReturnType<typeof describeSelectedApp>> | undefined,
+  input: Parameters<typeof runAppBrowserTests>[0],
+) => {
+  if (description?.backend.kind !== "generated-postgres") {
+    return { status: "unassessed" as const };
+  }
+  if (description.validation.browser === null) {
+    return {
+      problem: "The persistent app must declare an authenticated test-e2e task before completion.",
+      status: "blocked" as const,
+    };
+  }
+  return await runAppBrowserTests(input);
+};
+
+const backendValidationStatus = (status: string) =>
+  status === "failed" || status === "blocked" ? ("needs_repair" as const) : ("validated" as const);
+
 export default defineTool({
   description:
     "Run the repository's normal validation commands against the current applied app. Command exit status is the technical validation result; successful checks also return an independent source assessment against the original product request. For persistent apps, also run the declared authenticated browser task against the prepared runtime and report its result separately. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
@@ -57,21 +89,18 @@ export default defineTool({
     const reusableTechnicalValidation =
       (current.phase === "validated" || current.phase === "reviewed") &&
       input.implementationFiles.length === 0;
-    const reusableDescription =
-      reusableTechnicalValidation && !hasTestCapability("simulated-target")
-        ? await describeSelectedApp({
-            appId: current.appSpec.appId,
-            root: current.applyReceipt.applyRoot,
-            sandbox: await ctx.getSandbox(),
-            signal: ctx.abortSignal,
-          })
-        : undefined;
+    const priorDescription = await reusableDescription(reusableTechnicalValidation, async () => ({
+      appId: current.appSpec.appId,
+      root: current.applyReceipt.applyRoot,
+      sandbox: await ctx.getSandbox(),
+      signal: ctx.abortSignal,
+    }));
     // Persistent runtime observations must be refreshed even when source checks
     // are unchanged: sessions, assignments, and installations can be revoked.
     if (
       (current.phase === "validated" || current.phase === "reviewed") &&
       input.implementationFiles.length === 0 &&
-      reusableDescription?.backend.kind !== "generated-postgres"
+      priorDescription?.backend.kind !== "generated-postgres"
     ) {
       const evidence = currentProductBehaviorEvidence(
         current.appSpec.digest,
@@ -229,32 +258,18 @@ export default defineTool({
       current.appSpec.digest,
       current.applyReceipt.digest,
     );
-    const description = fixture
-      ? undefined
-      : await describeSelectedApp({
-          appId: current.appSpec.appId,
-          root: current.applyReceipt.applyRoot,
-          sandbox,
-          signal: ctx.abortSignal,
-        });
-    let backendValidation:
-      | Awaited<ReturnType<typeof runAppBrowserTests>>
-      | { status: "blocked" | "unassessed"; problem?: string } = { status: "unassessed" };
-    if (description?.backend.kind === "generated-postgres") {
-      backendValidation = {
-        problem:
-          "The persistent app must declare an authenticated test-e2e task before completion.",
-        status: "blocked",
-      };
-      if (description.validation.browser !== null) {
-        backendValidation = await runAppBrowserTests({
-          appId: current.appSpec.appId,
-          root: current.applyReceipt.applyRoot,
-          sandbox,
-          signal: ctx.abortSignal,
-        });
-      }
-    }
+    const description = await describeValidationApp(fixture, {
+      appId: current.appSpec.appId,
+      root: current.applyReceipt.applyRoot,
+      sandbox,
+      signal: ctx.abortSignal,
+    });
+    const backendValidation = await validatePersistentBackend(description, {
+      appId: current.appSpec.appId,
+      root: current.applyReceipt.applyRoot,
+      sandbox,
+      signal: ctx.abortSignal,
+    });
     validationPhase(ctx.callId, "reviewing_applied_source");
     const sourceAssessment = await reviewAppliedProductSource({
       abortSignal: ctx.abortSignal,
@@ -287,10 +302,7 @@ export default defineTool({
       productionHandoff,
       reused: false,
       sourceAssessment,
-      status:
-        backendValidation.status === "failed" || backendValidation.status === "blocked"
-          ? ("needs_repair" as const)
-          : ("validated" as const),
+      status: backendValidationStatus(backendValidation.status),
       technicalStatus: "passed" as const,
     };
   },

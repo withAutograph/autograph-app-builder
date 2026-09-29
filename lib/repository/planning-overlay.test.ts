@@ -11,18 +11,26 @@ import {
 
 const appDescription = (id: string) =>
   JSON.stringify({
-    version: 1,
-    app: { id, workspacePath: `apps/${id}`, routes: [`/${id}`] },
+    app: { id, routes: [`/${id}`], workspacePath: `apps/${id}` },
     backend: {
-      kind: "generated-postgres",
       authorization: "declared-policy",
+      kind: "generated-postgres",
+      release: { artifactHash: "hash", directory: "release", id: "v1" },
       roles: ["member"],
-      release: { id: "v1", artifactHash: "hash", directory: "release" },
       runtime: { databaseEnvironment: "APP_DATABASE_URL" },
       schemaReceipt: null,
     },
-    validation: { check: { task: "check" }, test: { task: "test", shards: 1 }, browser: null },
+    validation: { browser: null, check: { task: "check" }, test: { shards: 1, task: "test" } },
+    version: 1,
   });
+
+const planningCommandOutput = (command: string, mode: string): string => {
+  if (command.startsWith("stat ")) return `${mode}\n`;
+  if (command.startsWith("mise run app:describe ")) {
+    return appDescription(command.split(" ").at(-1) ?? "missing-app-id");
+  }
+  return "";
+};
 
 describe("planning from the current checkout", () => {
   it("writes a large accepted AppSpec from a bounded stream without a full-content argument", async () => {
@@ -230,11 +238,7 @@ describe("planning from the current checkout", () => {
       run: vi.fn(async ({ command }: { command: string }) => ({
         exitCode: 0,
         stderr: "",
-        stdout: command.startsWith("stat ")
-          ? "755\n"
-          : command.startsWith("mise run app:describe ")
-            ? appDescription(command.split(" ").at(-1)!)
-            : "",
+        stdout: planningCommandOutput(command, "755"),
       })),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       writeTextFile: vi.fn(async () => {}),
@@ -278,11 +282,7 @@ describe("planning from the current checkout", () => {
       run: vi.fn(async ({ command }: { command: string }) => ({
         exitCode: 0,
         stderr: "",
-        stdout: command.startsWith("stat ")
-          ? "644\n"
-          : command.startsWith("mise run app:describe ")
-            ? appDescription(command.split(" ").at(-1)!)
-            : "",
+        stdout: planningCommandOutput(command, "644"),
       })),
       writeTextFile: vi.fn(async () => {}),
     } as unknown as SandboxSession;
