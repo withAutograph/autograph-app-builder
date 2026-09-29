@@ -27,8 +27,8 @@ vi.mock("./workflow-state", () => ({
   },
 }));
 vi.mock("./product-behavior-state", () => ({
-  clearProductBehaviorEvidence: mocks.clear,
   currentProductBehaviorEvidence: () => [],
+  invalidateProductBehaviorEvidence: mocks.clear,
 }));
 vi.mock("../repository/target-validation", () => ({
   createTargetValidationAttempt: () => ({ digest: "attempt" }),
@@ -182,7 +182,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     },
   );
 
-  it("clears evidence before a failed repair write", async () => {
+  it("invalidates evidence before a failed repair write", async () => {
     mocks.state.current = workflow("validated");
     const writeTextFile = vi.fn().mockRejectedValue(new Error("write failed"));
     await expect(

@@ -23,7 +23,7 @@ import { createPostgresValidationLogStore } from "@/lib/repository/postgres-vali
 import { openHostedPostgresDatabase } from "@/lib/mcp/hosted-route";
 import { productionReadinessHandoff } from "@/lib/agent/production-readiness-handoff";
 import {
-  clearProductBehaviorEvidence,
+  invalidateProductBehaviorEvidence,
   currentProductBehaviorEvidence,
 } from "@/lib/agent/product-behavior-state";
 
@@ -175,7 +175,7 @@ export default defineTool({
       validationAttempt: attempt,
     }));
     if (input.implementationFiles.length > 0) {
-      clearProductBehaviorEvidence();
+      invalidateProductBehaviorEvidence("source-repair");
       validationPhase(ctx.callId, "writing_implementation_files");
       await applyImplementationFiles(sandbox, relativeApplyRoot, input.implementationFiles);
       validationPhase(ctx.callId, "implementation_files_written");

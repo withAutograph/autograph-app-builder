@@ -4,7 +4,9 @@ import { z } from "zod";
 import { executeProductReadback } from "@/lib/agent/product-behavior";
 import {
   recordProductBehaviorEvidence,
-  hasCurrentProductBehaviorPreview,
+  captureProductBehaviorProvenance,
+  currentProductBehaviorGeneration,
+  hasCurrentProductBehaviorProvenance,
 } from "@/lib/agent/product-behavior-state";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
@@ -41,13 +43,15 @@ export default defineTool({
     if (!walkthrough.includes(input.acceptedOutcomeText)) {
       throw new Error("The requested outcome text is not present in the accepted walkthrough.");
     }
+    const sourceGeneration = currentProductBehaviorGeneration();
     const sandbox = await ctx.getSandbox();
     await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
     const preview = workingPreviewState.get();
     if (!hasLiveWorkingPreview(preview, sandbox.id) || preview === null) {
       throw new Error("A current working preview in this session's Sandbox is required.");
     }
-    if (!hasCurrentProductBehaviorPreview(preview.commandId)) {
+    const provenance = captureProductBehaviorProvenance(preview.commandId);
+    if (provenance === undefined || provenance.sourceGeneration !== sourceGeneration) {
       throw new Error(
         "Reopen the working preview after implementation changes before verifying behavior.",
       );
@@ -60,19 +64,18 @@ export default defineTool({
       scenario: input.scenario,
       signal: ctx.abortSignal,
     });
-    if (!hasCurrentProductBehaviorPreview(preview.commandId)) {
-      throw new Error(
-        "Implementation changed during observation; reopen preview and verify again.",
-      );
-    }
     recordProductBehaviorEvidence({
       acceptedOutcomeText: input.acceptedOutcomeText,
       appSpecDigest: current.appSpec.digest,
       applyDigest: current.applyReceipt.digest,
       observedAt: new Date().toISOString(),
+      provenance,
       result,
     });
     return {
+      eligibility: hasCurrentProductBehaviorProvenance(provenance)
+        ? ("current" as const)
+        : ("historical-only" as const),
       evidence: result,
       productStatus: "unassessed" as const,
       reason:

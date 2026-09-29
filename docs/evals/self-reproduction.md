@@ -285,6 +285,25 @@ readback remains a failure even when the write returned success. Evaluator-owned
 observations must still exercise the delivered app as a user; Builder's partial
 checks do not replace that comparison.
 
+Completed observations are append-only history, including failed and blocked
+attempts. Each new observation carries source generation, preview generation,
+and preview command identity alongside its accepted-specification and apply
+receipt digests. Apply and repair invalidate current eligibility before source
+writes; preview replacement and release invalidate it before discarding the
+runtime. An append-only invalidation journal records those boundaries. Reusing
+the same running preview preserves eligibility; starting a replacement does not
+turn old action/readback evidence into restart proof.
+
+`currentProductBehaviorEvidence` returns only observations matching the current
+specification, apply receipt, source generation, and preview binding. Legacy
+observations without provenance remain readable history but cannot earn current
+credit. An observation completing after invalidation retains its original verdict
+and provenance; `verify_app_behavior` returns `eligibility: "historical-only"`
+instead of discarding it or crediting the replacement. A current observation
+returns `eligibility: "current"`; both retain overall `productStatus: "unassessed"`.
+Provenance and the invalidation journal contain no capability URLs, cookies,
+credentials, application response bodies, or synthetic marker values.
+
 ## Resume and cross-eval coverage
 
 See [the handoff](self-reproduction-handoff.md) for the frozen baseline, landed repairs, and ordered remaining work. The [cross-eval assessment](cross-eval-regression-2026-09-14.md) records exact-revision CI evidence, additional executions, and coverage limits across other products. Shared repairs must preserve those capability families; self-reproduction results do not replace their checks.

@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => {
   return {
     bind: vi.fn(),
     dependencies: vi.fn().mockResolvedValue({ status: "reused" }),
+    invalidate: vi.fn(),
     prepare: vi.fn().mockResolvedValue({ status: "prepared" }),
     runtime: vi.fn().mockResolvedValue(null),
     start: vi
@@ -34,6 +35,7 @@ vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 vi.mock("./product-behavior-state", () => ({
   bindProductBehaviorPreview: mocks.bind,
   currentProductBehaviorGeneration: () => 3,
+  invalidateProductBehaviorPreview: mocks.invalidate,
 }));
 vi.mock("./workflow-state", () => ({
   appBuilderWorkflowState: {
@@ -213,6 +215,8 @@ describe("preview command working directory", () => {
       toolName: "start_app_preview",
     });
     expect(mocks.bind).toHaveBeenCalledWith("preview-command", 3);
+    expect(mocks.invalidate).toHaveBeenCalledWith("preview-replaced");
+    expect(mocks.invalidate).toHaveBeenCalledBefore(mocks.start);
     expect(mocks.start).toHaveBeenCalledWith(
       expect.objectContaining({
         command: input.command,

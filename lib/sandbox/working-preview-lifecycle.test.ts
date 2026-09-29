@@ -5,10 +5,14 @@ import type { WorkingPreviewRuntime } from "./working-preview-runtime";
 
 const mocks = vi.hoisted(() => ({
   hosted: false,
+  invalidate: vi.fn(),
   preview: null as WorkingPreviewRuntime | null,
   provider: vi.fn(),
   release: vi.fn(),
   stop: vi.fn(),
+}));
+vi.mock("../agent/product-behavior-state", () => ({
+  invalidateProductBehaviorPreview: mocks.invalidate,
 }));
 vi.mock("eve/hooks", () => ({ defineHook: (value: unknown) => value }));
 vi.mock("eve/context", () => ({
@@ -62,12 +66,15 @@ describe.each([false, true])("preview completion lifecycle hosted=%s", (hosted) 
       expect(mocks.preview).not.toBeNull();
       expect(mocks.stop).not.toHaveBeenCalled();
       expect(mocks.release).not.toHaveBeenCalled();
+      expect(mocks.invalidate).not.toHaveBeenCalled();
     },
   );
   it.each(["turn.cancelled", "turn.failed", "session.failed"])("releases on %s", async (event) => {
     await events[event]({}, context);
     expect(mocks.preview).toBeNull();
     expect(hosted ? mocks.release : mocks.stop).toHaveBeenCalledOnce();
+    expect(mocks.invalidate).toHaveBeenCalledWith("preview-released");
+    expect(mocks.invalidate).toHaveBeenCalledBefore(hosted ? mocks.release : mocks.stop);
     expect(mocks.provider).not.toHaveBeenCalled();
   });
   it("does not preserve a preview from a replaced provider session", async () => {
@@ -79,6 +86,8 @@ describe.each([false, true])("preview completion lifecycle hosted=%s", (hosted) 
     await events["turn.completed"]({}, context);
     expect(mocks.preview).toBeNull();
     expect(hosted ? mocks.release : mocks.stop).toHaveBeenCalledOnce();
+    expect(mocks.invalidate).toHaveBeenCalledWith("preview-released");
+    expect(mocks.invalidate).toHaveBeenCalledBefore(hosted ? mocks.release : mocks.stop);
   });
   it("releases a stopped preview command", async () => {
     mocks.provider.mockResolvedValue({
@@ -89,5 +98,7 @@ describe.each([false, true])("preview completion lifecycle hosted=%s", (hosted) 
     await events["turn.completed"]({}, context);
     expect(mocks.preview).toBeNull();
     expect(hosted ? mocks.release : mocks.stop).toHaveBeenCalledOnce();
+    expect(mocks.invalidate).toHaveBeenCalledWith("preview-released");
+    expect(mocks.invalidate).toHaveBeenCalledBefore(hosted ? mocks.release : mocks.stop);
   });
 });
