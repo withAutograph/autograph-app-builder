@@ -174,6 +174,10 @@ app-owned files and reuse the same component-backed preview flow.
    with its path and leave it for its owner. Run the selected app's schema,
    repository checks, browser tests, and applicable guard on the reconciled
    candidate with `validate_github_draft_pr_reconciliation`. For long
+   If CI reports app formatting defects, run the repository-owned formatter
+   with `format_github_draft_pr_candidate` on the isolated candidate before
+   validation. It may change only the selected app. Revalidate and review both
+   diffs after formatting; earlier validation and review no longer apply. For long
    reconciliation checks, set `incremental: true` and pass
    `expectedCommand: "mise exec -- bun install --frozen-lockfile"` on the first
    call. Each successful call returns the completed command and `nextCommand`;
