@@ -85,7 +85,14 @@ const fixture = (platformConflict = false) => {
           stdout: "https://github.com/withAutograph/arrusted-development.git\n",
         };
       }
-      const result = spawnSync("/bin/sh", ["-c", input.command], { cwd: root, encoding: "utf-8" });
+      const result = spawnSync("/bin/sh", ["-c", input.command], {
+        cwd: root,
+        encoding: "utf-8",
+        env: {
+          ...process.env,
+          PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ""}`,
+        },
+      });
       return {
         exitCode: result.status ?? 1,
         stderr: result.stderr,
