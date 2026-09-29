@@ -1,9 +1,13 @@
 import { defineHook } from "eve/hooks";
 import type { HookContext } from "eve/hooks";
 import { sourceWorkflowState } from "../../lib/agent/source-state";
+import { appBuilderWorkflowState } from "../../lib/agent/workflow-state";
 import { repositoryAccessReceiptState } from "../../lib/agent/repository-access-state";
 import { repositoryAccessRuntimeForSession } from "../../lib/agent/deployment-repository-access-runtime";
-import { restoreSelectedGitHubSandboxSource } from "../../lib/agent/restore-selected-github-sandbox-source";
+import {
+  restoreSelectedGitHubSandboxSource,
+  selectedGitHubSourceForSandboxRestore,
+} from "../../lib/agent/restore-selected-github-sandbox-source";
 import {
   hasLiveWorkingPreview,
   workingPreviewState,
@@ -96,7 +100,11 @@ export default defineHook({
         return;
       }
       const source = sourceWorkflowState.get();
-      const githubSource = source.phase === "empty" ? undefined : source.githubSource;
+      const workflow = appBuilderWorkflowState.get();
+      const githubSource = selectedGitHubSourceForSandboxRestore({
+        sourceState: source.phase === "empty" ? undefined : source.githubSource,
+        workflowState: workflow.phase === "empty" ? undefined : workflow.githubSource,
+      });
       if (githubSource !== undefined) {
         restoreSelectedGitHubSandboxSource({
           accessReceipt: repositoryAccessReceiptState.get(),

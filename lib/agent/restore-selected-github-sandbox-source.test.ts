@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
 import { recordRepositoryAccessReceipt } from "./repository-access-state";
-import { restoreSelectedGitHubSandboxSource } from "./restore-selected-github-sandbox-source";
+import {
+  restoreSelectedGitHubSandboxSource,
+  selectedGitHubSourceForSandboxRestore,
+} from "./restore-selected-github-sandbox-source";
 import {
   clearVercelSessionGitSource,
   configureVercelSessionGitSource,
@@ -60,6 +63,45 @@ const source: ImmutableGitHubSourceReceipt = {
 };
 
 describe("selected GitHub sandbox source restoration", () => {
+  it("restores a saved app when its older source-state slot is empty", async () => {
+    const acquireExistingSourceCredential = vi.fn().mockResolvedValue({ token: "fresh-token" });
+    const recovered = selectedGitHubSourceForSandboxRestore({
+      // oxlint-disable-next-line sonarjs/no-undefined-assignment -- model an old session without a source-state receipt.
+      sourceState: undefined,
+      workflowState: source,
+    });
+    try {
+      restoreSelectedGitHubSandboxSource({
+        accessReceipt: receipt,
+        githubSource: recovered,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        runtime: async () => ({ acquireExistingSourceCredential }),
+        sessionId: "session-one",
+      });
+      expect(await resolveVercelSessionGitSource("session-one")).toMatchObject({
+        revision: "review/branch",
+        token: "fresh-token",
+      });
+    } finally {
+      clearVercelSessionGitSource("session-one");
+    }
+    expect(() =>
+      selectedGitHubSourceForSandboxRestore({
+        sourceState: source,
+        workflowState: {
+          ...source,
+          repository: { ...source.repository, repositoryId: "999" },
+        },
+      }),
+    ).toThrow("different GitHub repositories");
+    expect(() =>
+      selectedGitHubSourceForSandboxRestore({
+        sourceState: source,
+        workflowState: { ...source, resolvedRef: "refs/heads/another-branch" },
+      }),
+    ).toThrow("different GitHub repositories or branches");
+  });
+
   it("refreshes the selected repository and branch before replacement compute opens", async () => {
     const acquireExistingSourceCredential = vi.fn().mockResolvedValue({ token: "fresh-token" });
     configureVercelSessionGitSource({
