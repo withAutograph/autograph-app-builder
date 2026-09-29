@@ -182,8 +182,9 @@ denial, closed response schemas, and the distinction between
 proven pre-dispatch rejection and uncertain network submission. The in-memory
 store remains test/local scaffolding.
 
-The hosted sandbox command adapter bounds every template and live-session
-command. Durable execution leasing is a separately dormant source capability,
+The Builder sandbox provider checks command authority before each live-session
+`run` or `spawn`. Provider preparation records managed resource files without
+creating a sandbox; session startup uses the supported Vercel SDK. Durable execution leasing is a separately dormant source capability,
 enabled only by the exact `EVE_HOSTED_SANDBOX_EXECUTION=enabled-v1` deployment
 gate. It acquires at `turn.started`, reasserts the current PostgreSQL epoch
 before each command, and releases at terminal turn boundaries rather than at

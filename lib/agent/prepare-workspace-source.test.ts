@@ -43,10 +43,24 @@ const selectedSource = () => ({
   receipt: { sourcePath: "/workspace/repository", version: 4 },
 });
 const execute = () =>
-  prepareWorkspace.execute({}, {
-    callId: "prepare",
-    getSandbox: () => Promise.resolve({ id: "sandbox" }),
-  } as Parameters<typeof prepareWorkspace.execute>[1]);
+  prepareWorkspace.execute(
+    {},
+    {
+      abortSignal: new AbortController().signal,
+      callId: "prepare",
+      getSandbox: vi.fn().mockResolvedValue({ id: "sandbox" }),
+      getToken: vi.fn(),
+      requireAuth: (): never => {
+        throw new Error("Unexpected auth request");
+      },
+      session: {
+        auth: { current: null, initiator: null },
+        id: "session",
+        turn: { id: "turn", sequence: 0 },
+      },
+      toolName: "prepare_workspace",
+    },
+  );
 
 describe("hosted workspace source acquisition", () => {
   beforeEach(() => {
