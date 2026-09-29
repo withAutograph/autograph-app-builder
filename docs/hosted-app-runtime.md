@@ -39,8 +39,11 @@ provider operations; a working code adapter does not establish those effects.
    in the existing provisioning journal. Only one mutating continuation holds
    its renewable lease. GitHub/Vercel provisioning retries do not select these
    `app-runtime` records.
-3. Run repository `app:runtime plan <app> preview` through the official Sandbox
-   structured command API. The repository writes its private resource identities
+3. Create a separate installer Sandbox through project OIDC. Transfer the
+   current checkout and installed dependency symlink closure through supported
+   file APIs in bounded chunks; an old snapshot alone cannot supply current
+   source. The control handle never enters Eve or model tools. Run repository
+   `app:runtime plan <app> preview` through its structured command API. The repository writes its private resource identities
    and random credentials before any database mutation. Encrypt and checkpoint
    its JSON state using the existing provider credential key and tenant-bound
    associated data.
@@ -53,7 +56,10 @@ provider operations; a working code adapter does not establish those effects.
    checked schema through the repository task.
 5. Recheck access before binding `<APP>_DATABASE_URL`,
    `PLATFORM_AUTH_DATABASE_URL`, `BETTER_AUTH_APP_NAME` and `BETTER_AUTH_SECRET`
-   as encrypted variables for the approved Preview branch. Read their exact IDs
+   as encrypted variables for the approved Preview branch. Existing bindings
+   must have this runtime's ownership marker. Another app or session's branch
+   Auth binding blocks preparation before database writes; a concurrent
+   provider creator cannot be overwritten. Read their exact IDs
    and values back to establish the effect. Partial or uncertain writes stay
    unfinished and retry the same values. Preserve integration-owned
    `DATABASE_URL_UNPOOLED` and the native auth origin. Sandbox fixture origins
@@ -62,18 +68,59 @@ provider operations; a working code adapter does not establish those effects.
 The protected journal contains ciphertext and provider references. Plaintext
 installer credentials, runtime passwords, cookies and private file contents
 are never tool inputs, public events, model results, repository files or command
-arguments. Sandbox execution receives secrets through SDK `env`, and private
-state is restored through SDK file APIs outside the checkout. The private app
-launch uses the restricted auth binding; installer credentials remain confined
-to the protected preparation task.
+arguments. Installer execution receives secrets through SDK `env`, and private
+state is restored only in the separate control Sandbox. Application Sandboxes
+receive only restricted environment, identity and browser session files. They
+never receive installer `state.json`, including during fresh verification of an
+already running app. Control compute is deleted after each operation; a
+renewable provider timeout bounds stranded compute after a process crash
+without limiting valid operation duration. Encrypted journal checkpoints
+support a replacement control Sandbox. App children do not inherit the private
+state-directory driver variable.
+
+## Approved teardown
+
+`cleanup-app-hosted-runtime` requires its own approval naming the same app,
+selected project and Preview branch. It claims the durable runtime mutation
+lease, rechecks owner access and native endpoint isolation, and reads every
+owned environment ID, owner marker and current value before deleting any
+binding. Native integration, global, Production and unrelated variables remain
+untouched. A changed binding for a previously bound runtime blocks cleanup.
+A preparation that never obtained full branch bindings can remove its own
+partial variables and databases while preserving a concurrent winner's Auth.
+
+After environment removal, the isolated installer runs repository
+`app:runtime cleanup`, which checks database and role ownership markers before
+its first destructive statement. This drops the dedicated databases and roles,
+revoking their issued credentials. Failures retain encrypted recovery state;
+retries continue the same resources and tolerate already removed variables.
+Successful cleanup leaves a tombstone and clears credential/session ciphertext.
+Cleanup does not deploy or alter deployment selection. Existing Preview
+processes using the removed resources will lose database access.
+
+Turn stops and replacement Sandboxes preserve persistent resources. Provider
+connection removal or workspace revocation blocks future Builder access but
+does not itself revoke credentials already issued to a deployment. Cleanup
+requires an active authorized owner connection; reauthorize before removing
+resources when that connection has been revoked.
 
 ## Evidence boundaries
 
+The current provider adapter binds restricted credentials at project and Preview
+branch scope. It preserves native integration-owned `DATABASE_URL_UNPOOLED` and
+does not configure service-specific environment filtering. Selecting an
+app-specific restricted database URL does not establish that a native Services
+app process cannot also read the installer credential. Native application
+process isolation remains a blocker until supported service-scoped bindings or
+an equivalent provider capability is configured and verified. Inspect the
+actual service's credential availability without exposing values; private
+Sandbox isolation cannot establish this native deployment fact.
+
 Preview launch, local preparation and validation consumers preserve an approved
 hosted selection. They recheck membership, installation, native isolation and
-the dedicated branch environment values, restore the encrypted private files
-into replacement Sandboxes, and use the protected state directory for app and
-browser commands. An incomplete or revoked hosted binding blocks these paths;
+the dedicated branch environment values, verify through a separate installer
+Sandbox, and restore only runtime/session files into application Sandboxes.
+The trusted command driver reads that environment for app and browser commands. An incomplete or revoked hosted binding blocks these paths;
 it never silently becomes a disposable local database. Private gateway origin
 updates preserve the existing database and session tokens, and checkpoint the
 updated auth origin and cookie domains in encrypted state without rerunning
@@ -102,4 +149,5 @@ Provider contracts:
 [create a Services project](https://vercel.com/docs/rest-api/projects/create-a-new-project),
 [list project environment variables](https://vercel.com/docs/rest-api/projects/retrieve-the-environment-variables-of-a-project-by-id-or-name),
 [read one decrypted variable](https://vercel.com/docs/rest-api/projects/retrieve-the-decrypted-value-of-an-environment-variable-of-a-project-by-id),
+[remove an owned environment variable](https://vercel.com/docs/rest-api/projects/remove-an-environment-variable),
 and [bind branch environment variables](https://vercel.com/docs/rest-api/projects/create-one-or-more-environment-variables).

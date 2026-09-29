@@ -107,6 +107,11 @@ the user or model to paste credentials. Follow `docs/hosted-app-runtime.md` for
 protected recovery and binding. Translate a missing native branch/connection
 into that specific product blocker, and retain the public session. Do not claim
 hosted behavior or activation from database preparation alone.
+Use `cleanup-app-hosted-runtime` only for a separately approved removal of the
+named Preview resources. Disconnecting a provider prevents new Builder access;
+it does not revoke database credentials already issued to a deployment. Never
+use turn cleanup to remove persistent databases or overwrite another app's
+shared branch authentication bindings.
 After a successful apply, call `validate_app_creation` in the approved private
 checkout. Applied files are not validated files. Successful repository commands
 establish technical validation, not proof that the accepted product behaviors

@@ -20,12 +20,13 @@ import type {
   HostedRuntimeTarget,
 } from "./hosted-runtime-journal";
 import {
+  assertHostedRuntimeCluster,
   createHostedRuntimeVercelProvider,
   HostedRuntimeProviderError,
 } from "./hosted-runtime-provider";
 
 export type PrivateRuntimeFiles = Record<string, string>;
-export type HostedRuntimeOperation = "plan" | "prepare" | "verify";
+export type HostedRuntimeOperation = "plan" | "prepare" | "verify" | "cleanup";
 export type HostedRuntimeProof = z.infer<typeof hostedRuntimeProofSchema>;
 const privateFilesSchema = z.record(z.string().regex(/^[A-Za-z0-9_.-]+\.json$/u), z.string());
 export interface HostedRuntimeExecutor {
@@ -153,6 +154,9 @@ export const hostedRuntimeExecutionEnvironment = (files: PrivateRuntimeFiles, ap
   const bindings = hostedRuntimeBindings(files, appId);
   const environment = z.record(z.string(), z.string()).parse(JSON.parse(files["environment.json"]));
   const runtime = { ...environment, ...bindings };
+  delete runtime.APP_RUNTIME_STATE_DIR;
+  delete runtime.APP_RUNTIME_CLUSTER_DATABASE_URL;
+  runtime.DATABASE_URL = bindings.PLATFORM_AUTH_DATABASE_URL;
   runtime.DATABASE_URL_UNPOOLED = bindings.PLATFORM_AUTH_DATABASE_URL;
   return runtime;
 };
@@ -252,6 +256,15 @@ export const prepareHostedRuntime = async (input: {
       target,
     });
     await provider.assertProject();
+    await provider.assertEnvironmentAvailability(
+      [
+        `${target.appId.toUpperCase().replaceAll("-", "_")}_DATABASE_URL`,
+        "PLATFORM_AUTH_DATABASE_URL",
+        "BETTER_AUTH_APP_NAME",
+        "BETTER_AUTH_SECRET",
+      ],
+      identity.runtimeId,
+    );
     await input.store.reserve({
       approvedByCallId: input.approvedByCallId,
       authority: input.authority,
@@ -269,6 +282,7 @@ export const prepareHostedRuntime = async (input: {
       return {
         ...record,
         approvedByCallId: input.approvedByCallId,
+        environmentBound: record.environmentBound ?? record.step === "bound",
         leaseExpiresAt: new Date(now() + leaseDuration).toISOString(),
         leaseId,
         status: "pending",
@@ -328,12 +342,14 @@ export const prepareHostedRuntime = async (input: {
     if (!prepareCredential) {
       throw new HostedRuntimeProviderError("authorization_required");
     }
-    await createHostedRuntimeVercelProvider({
+    const prepareProvider = createHostedRuntimeVercelProvider({
       credential: prepareCredential,
       fetch: input.fetch,
       signal: executionSignal,
       target,
-    }).assertProject();
+    });
+    await prepareProvider.assertProject();
+    await assertHostedRuntimeCluster(prepareProvider, cluster.clusterUrl);
     await input.executor.run({
       clusterUrl: cluster.clusterUrl,
       operation: "prepare",
@@ -375,8 +391,14 @@ export const prepareHostedRuntime = async (input: {
       target,
     });
     await bindingProvider.assertProject();
-    const keys = await bindingProvider.bindEnvironment(bindings);
-    await ownedUpdate((record) => ({ ...record, status: "prepared", step: "bound" }));
+    await assertHostedRuntimeCluster(bindingProvider, cluster.clusterUrl);
+    const keys = await bindingProvider.bindEnvironment(bindings, { runtimeId: identity.runtimeId });
+    await ownedUpdate((record) => ({
+      ...record,
+      environmentBound: true,
+      status: "prepared",
+      step: "bound",
+    }));
     return {
       appId: target.appId,
       branch: target.branch,

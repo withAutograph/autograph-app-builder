@@ -43,20 +43,30 @@ const encryptedStateSchema = z.strictObject({
 
 export const hostedRuntimeJournalRecordSchema = z.strictObject({
   approvedByCallId: z.string().min(1),
+  cleanupApprovedByCallId: z.string().min(1).optional(),
   credentialReference: z
     .strictObject({
       configurationId: z.string().min(1),
       environmentId: z.string().min(1),
     })
     .optional(),
+  environmentBound: z.boolean().optional(),
   kind: z.literal("app-runtime"),
   leaseExpiresAt: z.iso.datetime({ offset: true }).optional(),
   leaseId: z.uuid().optional(),
   privateState: encryptedStateSchema.optional(),
   proof: hostedRuntimeProofSchema.optional(),
   request: hostedRuntimeTargetSchema,
-  status: z.enum(["pending", "prepared", "failed"]),
-  step: z.enum(["reserved", "planned", "prepared", "verified", "bound"]),
+  status: z.enum(["pending", "prepared", "failed", "cleaning", "cleaned"]),
+  step: z.enum([
+    "reserved",
+    "planned",
+    "prepared",
+    "verified",
+    "bound",
+    "environment-removed",
+    "cleaned",
+  ]),
   version: z.literal(1),
 });
 

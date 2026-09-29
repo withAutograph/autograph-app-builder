@@ -15,6 +15,7 @@ import { HostedRuntimeProviderError } from "../provisioning/hosted-runtime-provi
 const mocks = {
   assertAuthority: vi.fn<PreparedRuntimeExecutionDependencies["assertAuthority"]>(),
   getProvider: vi.fn<PreparedRuntimeExecutionDependencies["getProvider"]>(),
+  observeInstallation: vi.fn<PreparedRuntimeExecutionDependencies["observeInstallation"]>(),
   readBinding: vi.fn<PreparedRuntimeExecutionDependencies["readBinding"]>(),
 };
 
@@ -22,7 +23,7 @@ const proof = {
   actors: 8,
   appId: "spend-review",
   artifactHash: "a".repeat(64),
-  authenticatedBehavior: "unassessed",
+  authenticatedBehavior: "unassessed" as const,
   environment: "preview",
   releaseId: "release_1",
   tenants: 2,
@@ -108,14 +109,17 @@ const transport = (description = descriptor, chunks = ["8 passed synthetic-auth-
   };
   const runCommand = vi
     .fn<RuntimeTransport["runCommand"]>()
-    .mockResolvedValueOnce({ ...command, exitCode: 0, stdout: async () => JSON.stringify(proof) })
     .mockResolvedValueOnce({
       ...command,
       exitCode: 0,
       stdout: async () => JSON.stringify(description),
     })
     .mockResolvedValue(command);
-  return { close, command, provider: { fs: { mkdir: vi.fn() }, runCommand, writeFiles: vi.fn() } };
+  return {
+    close,
+    command,
+    provider: { fs: { mkdir: vi.fn(), rm: vi.fn() }, runCommand, writeFiles: vi.fn() },
+  };
 };
 const context = {
   appId: "spend-review",
@@ -131,7 +135,16 @@ const selection = {
   projectId: "prj_owned",
   sessionId: context.sessionId,
 };
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.observeInstallation.mockResolvedValue({
+    actors: proof.actors,
+    artifactHash: proof.artifactHash,
+    authenticatedBehavior: proof.authenticatedBehavior,
+    releaseId: proof.releaseId,
+    tenants: proof.tenants,
+  });
+});
 
 describe("approved hosted runtime consumers", () => {
   it("redacts a session token split across provider log chunks before durable output", async () => {
@@ -143,6 +156,12 @@ describe("approved hosted runtime consumers", () => {
     const runtime = await restorePreparedRuntimeExecution({
       appId: context.appId,
       binding: binding(),
+      observeInstallation: async () =>
+        await mocks.observeInstallation({
+          ...context,
+          files: files(),
+          stateDirectory: "/private-state",
+        }),
       provider: fixture.provider,
       root: context.root,
     });
@@ -159,9 +178,20 @@ describe("approved hosted runtime consumers", () => {
     const runtime = await resolvePreparedRuntimeExecution(context, selection, mocks);
     expect(fixture.provider.writeFiles).toHaveBeenCalledWith(
       expect.arrayContaining([
-        expect.objectContaining({ mode: 0o600, path: "/private-state/state.json" }),
+        expect.objectContaining({ mode: 0o600, path: "/private-state/environment.json" }),
       ]),
       expect.anything(),
+    );
+    expect(JSON.stringify(fixture.provider.writeFiles.mock.calls)).not.toContain(
+      "private-installer-url",
+    );
+    expect(JSON.stringify(fixture.provider.writeFiles.mock.calls)).not.toContain("state.json");
+    expect(fixture.provider.fs.rm).toHaveBeenCalledWith(
+      "/private-state/state.json",
+      expect.objectContaining({ force: true }),
+    );
+    expect(mocks.observeInstallation).toHaveBeenCalledWith(
+      expect.objectContaining({ files: original.files, sandboxId: context.sandboxId }),
     );
     expect(runtime?.installationProof).toMatchObject({
       ...proof,
@@ -190,6 +220,12 @@ describe("approved hosted runtime consumers", () => {
     const runtime = await restorePreparedRuntimeExecution({
       appId: context.appId,
       binding: original,
+      observeInstallation: async () =>
+        await mocks.observeInstallation({
+          ...context,
+          files: files(),
+          stateDirectory: "/private-state",
+        }),
       provider: fixture.provider,
       root: context.root,
     });
@@ -205,7 +241,7 @@ describe("approved hosted runtime consumers", () => {
     expect(
       z.record(z.string(), z.string()).parse(JSON.parse(saved["environment.json"])).BETTER_AUTH_URL,
     ).toBe("https://new-gateway.vercel.run");
-    expect(fixture.provider.runCommand).toHaveBeenCalledTimes(2);
+    expect(fixture.provider.runCommand).toHaveBeenCalledTimes(1);
     expect(() => runtimeFilesForOrigin(original.files, "https://unowned.example")).toThrow();
   });
   it("blocks a changed selected release rather than reporting journal metadata as installation proof", async () => {
@@ -220,6 +256,12 @@ describe("approved hosted runtime consumers", () => {
       restorePreparedRuntimeExecution({
         appId: context.appId,
         binding: binding(),
+        observeInstallation: async () =>
+          await mocks.observeInstallation({
+            ...context,
+            files: files(),
+            stateDirectory: "/private-state",
+          }),
         provider: fixture.provider,
         root: context.root,
       }),

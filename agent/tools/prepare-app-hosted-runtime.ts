@@ -9,6 +9,7 @@ import { resolveHostedRuntimeDeployment } from "@/lib/provisioning/hosted-runtim
 import { HostedRuntimeProviderError } from "@/lib/provisioning/hosted-runtime-provider";
 import { createHostedRuntimeSandboxExecutor } from "@/lib/provisioning/hosted-runtime-sandbox";
 import { prepareHostedRuntime } from "@/lib/provisioning/hosted-runtime-service";
+import { withHostedInstallerSandbox } from "@/lib/provisioning/hosted-runtime-installer";
 import { assertHostedSandboxCommandAuthority } from "@/lib/sandbox/deployment-execution-lease";
 import { getVercelPreviewProvider } from "@/lib/sandbox/vercel-preview-provider";
 
@@ -53,19 +54,29 @@ export default defineTool({
       }));
       await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
       const provider = await getVercelPreviewProvider(sandbox.id, ctx.abortSignal);
-      return await prepareHostedRuntime({
-        ...runtime,
-        approvedByCallId: ctx.callId,
-        executor: createHostedRuntimeSandboxExecutor({
-          appId: selected.appId,
-          authOrigin: provider.domain(input.port),
-          provider,
-          roles: input.roles,
-          root: selected.root,
-          signal: ctx.abortSignal,
-          stateDirectory: runtime.stateDirectory,
-        }),
+      await provider.fs.rm(`${runtime.stateDirectory}/state.json`, {
+        force: true,
         signal: ctx.abortSignal,
+      });
+      return await withHostedInstallerSandbox({
+        root: selected.root,
+        run: async (control, signal) =>
+          await prepareHostedRuntime({
+            ...runtime,
+            approvedByCallId: ctx.callId,
+            executor: createHostedRuntimeSandboxExecutor({
+              appId: selected.appId,
+              authOrigin: provider.domain(input.port),
+              provider: control,
+              roles: input.roles,
+              root: selected.root,
+              signal,
+              stateDirectory: runtime.stateDirectory,
+            }),
+            signal,
+          }),
+        signal: ctx.abortSignal,
+        source: provider,
       });
     } catch (error) {
       if (error instanceof HostedRuntimeProviderError) {

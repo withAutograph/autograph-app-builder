@@ -61,6 +61,7 @@ const credential = {
 const clusterUrl =
   "postgresql://installer:fixture-admin-secret@ep-owner.us-east-1.aws.neon.tech/neondb?sslmode=verify-full";
 const native = {
+  comment: "Native integration",
   configurationId: "icfg_neon",
   gitBranch: target.branch,
   id: "env_native",
@@ -159,6 +160,7 @@ const providerFixture = () => {
       const values = z
         .array(
           z.object({
+            comment: z.string(),
             gitBranch: z.string(),
             key: z.string(),
             target: z.array(z.string()),
@@ -242,6 +244,8 @@ describe("durable hosted runtime preparation", () => {
       target,
     });
     expect(result.status).toBe("prepared");
+    // Branch bindings select restricted app URLs; native service env filtering remains unverified.
+    expect(environments.find((value) => value.id === native.id)?.value).toBe(clusterUrl);
     expect(operations).toEqual(["plan", "prepare", "verify"]);
     expect(result).toMatchObject({ proof: { authenticatedBehavior: "unassessed" } });
     expect(JSON.stringify(result)).not.toMatch(/fixture-(?:admin|auth|app|session)-secret/u);
@@ -263,7 +267,17 @@ describe("durable hosted runtime preparation", () => {
         target,
       }),
     ).toThrow();
-    const bindings = hostedRuntimeExecutionEnvironment(runtimeFiles(), target.appId);
+    const data = runtimeFiles();
+    data["environment.json"] = JSON.stringify({
+      ...z.record(z.string(), z.string()).parse(JSON.parse(data["environment.json"])),
+      APP_RUNTIME_CLUSTER_DATABASE_URL: clusterUrl,
+      APP_RUNTIME_STATE_DIR: "/private-installer-state",
+      DATABASE_URL: clusterUrl,
+    });
+    const bindings = hostedRuntimeExecutionEnvironment(data, target.appId);
+    expect(bindings.APP_RUNTIME_CLUSTER_DATABASE_URL).toBeUndefined();
+    expect(bindings.APP_RUNTIME_STATE_DIR).toBeUndefined();
+    expect(bindings.DATABASE_URL).toBe(bindings.PLATFORM_AUTH_DATABASE_URL);
     expect(bindings.DATABASE_URL_UNPOOLED).toBe(bindings.PLATFORM_AUTH_DATABASE_URL);
     expect(Object.values(bindings).some((value) => value.includes("fixture-admin-secret"))).toBe(
       false,

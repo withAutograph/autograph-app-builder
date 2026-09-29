@@ -278,7 +278,11 @@ app-owned files and reuse the same component-backed preview flow.
   database and environment changes use `prepare-app-hosted-runtime` with a
   separate approval naming the selected project and exact branch; follow
   `docs/hosted-app-runtime.md`. A missing native Neon connection is a path
-  blocker. Keep credentials out of inputs and output. Never mutate `amp.yaml`,
+  blocker. Preview teardown uses separately approved `cleanup-app-hosted-runtime`
+  with the same selected app, project and branch. Preserve recoverable resources
+  across ordinary turn stops. Another runtime's shared branch Auth bindings
+  block preparation; do not replace them.
+  Keep credentials out of inputs and output. Never mutate `amp.yaml`,
   deploy, promote, alias, activate, or claim admission or Production readiness.
 - If the complete command reports stale, conflicting, or ambiguous recovery
   state, reconcile it automatically when safe. Otherwise translate the visible

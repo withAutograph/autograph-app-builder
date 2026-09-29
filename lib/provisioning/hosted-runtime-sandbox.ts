@@ -12,7 +12,7 @@ type HostedRuntimeSandboxTransport = Pick<Sandbox, "runCommand" | "writeFiles"> 
 /** Protected files and env go through the official Sandbox SDK, never shell text or tool output. */
 export const createHostedRuntimeSandboxExecutor = (input: {
   appId: string;
-  authOrigin: string;
+  authOrigin?: string;
   provider: HostedRuntimeSandboxTransport;
   root: string;
   stateDirectory: string;
@@ -44,7 +44,7 @@ export const createHostedRuntimeSandboxExecutor = (input: {
   },
   async run({ clusterUrl, operation, productionDatabaseIdentity, runtimeId, signal }) {
     const env = {
-      APP_RUNTIME_AUTH_ORIGIN: input.authOrigin,
+      APP_RUNTIME_AUTH_ORIGIN: input.authOrigin ?? "",
       APP_RUNTIME_CLUSTER_DATABASE_URL: clusterUrl,
       APP_RUNTIME_ID: runtimeId,
       APP_RUNTIME_ROLES: input.roles?.join(",") ?? "",

@@ -190,6 +190,7 @@ export const createHostedRuntimeVercelProvider = (input: {
     observed: z.infer<typeof environmentsSchema>,
     keys: readonly string[],
     runtimeId?: string,
+    preserveForeign = false,
   ) => {
     const comment = runtimeId === undefined ? undefined : runtimeComment(runtimeId);
     const selected = new Map<string, z.infer<typeof environmentSchema>>();
@@ -209,10 +210,15 @@ export const createHostedRuntimeVercelProvider = (input: {
       }
       const integrationOwned = match.configurationId !== undefined && match.configurationId !== "";
       const wrongOwner = comment !== undefined && match.comment !== comment;
-      if (!exactPreviewVariable(match, input.target.branch) || integrationOwned || wrongOwner) {
+      if (!exactPreviewVariable(match, input.target.branch) || integrationOwned) {
         throw new HostedRuntimeProviderError("resource_mismatch");
       }
-      selected.set(key, match);
+      if (wrongOwner && !preserveForeign) {
+        throw new HostedRuntimeProviderError("resource_mismatch");
+      }
+      if (!wrongOwner) {
+        selected.set(key, match);
+      }
     }
     if (new Set([...selected.values()].map(({ id }) => id)).size !== selected.size) {
       throw new HostedRuntimeProviderError("resource_mismatch");
@@ -384,13 +390,18 @@ export const createHostedRuntimeVercelProvider = (input: {
     },
     async removeEnvironmentBindings(
       values: Readonly<Record<string, string>>,
-      options: { runtimeId: string },
+      options: { runtimeId: string; preserveForeign?: boolean },
     ) {
       const keys = Object.keys(values);
       if (keys.length === 0) {
         return [];
       }
-      const selected = selectedBindings(await environments(), keys, options.runtimeId);
+      const selected = selectedBindings(
+        await environments(),
+        keys,
+        options.runtimeId,
+        options.preserveForeign,
+      );
       // Validate the complete removal before the first effect. A retry may observe keys
       // already removed by an earlier attempt, while every remaining key must still belong.
       await Promise.all(
@@ -421,18 +432,24 @@ export const createHostedRuntimeVercelProvider = (input: {
         throw failed.reason;
       }
       const remaining = await environments();
-      const selectedKeys = new Set(keys);
       if (
-        remaining.some(
-          (environment) =>
-            selectedKeys.has(environment.key) &&
-            environment.gitBranch === input.target.branch &&
-            hasPreviewTarget(environment),
-        )
+        selectedBindings(remaining, keys, options.runtimeId, options.preserveForeign).size !== 0
       ) {
         throw new HostedRuntimeProviderError("resource_mismatch");
       }
-      return keys;
+      return options.preserveForeign === true ? [...selected.keys()] : keys;
     },
   };
+};
+
+/** Re-read native isolation immediately before each approved provider/database effect. */
+export const assertHostedRuntimeCluster = async (
+  provider: Pick<ReturnType<typeof createHostedRuntimeVercelProvider>, "readClusterCredential">,
+  expectedClusterUrl: string,
+) => {
+  const cluster = await provider.readClusterCredential();
+  if (cluster.clusterUrl !== expectedClusterUrl) {
+    throw new HostedRuntimeProviderError("resource_mismatch");
+  }
+  return cluster;
 };

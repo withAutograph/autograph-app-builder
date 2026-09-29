@@ -131,7 +131,9 @@ export const readHostedRuntimeExecutionBinding = async (
     }
     const published = hostedRuntimeBindings(files, input.appId);
     delete published.BETTER_AUTH_URL;
-    await provider.assertEnvironmentBindings(published);
+    await provider.assertEnvironmentBindings(published, {
+      runtimeId: hostedRuntimeIdentity(runtime.authority, runtime.target).runtimeId,
+    });
   }
   return {
     branch: runtime.target.branch,

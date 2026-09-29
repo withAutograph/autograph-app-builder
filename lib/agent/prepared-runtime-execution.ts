@@ -3,7 +3,12 @@ import { z } from "zod";
 
 import { readHostedRuntimeExecutionBinding } from "../provisioning/hosted-runtime-deployment";
 import { HostedRuntimeProviderError } from "../provisioning/hosted-runtime-provider";
-import type { PrivateRuntimeFiles } from "../provisioning/hosted-runtime-service";
+import type {
+  PrivateRuntimeFiles,
+  HostedRuntimeProof,
+} from "../provisioning/hosted-runtime-service";
+import { createHostedRuntimeSandboxExecutor } from "../provisioning/hosted-runtime-sandbox";
+import { withHostedInstallerSandbox } from "../provisioning/hosted-runtime-installer";
 import { hostedRuntimeProofSchema } from "../provisioning/hosted-runtime-journal";
 import { appDescriptionSchema } from "../repository/app-description";
 import { assertHostedSandboxCommandAuthority } from "../sandbox/deployment-execution-lease";
@@ -22,7 +27,7 @@ interface RuntimeCommand {
   kill: (signal: "SIGTERM", options?: { abortSignal?: AbortSignal }) => Promise<void>;
 }
 export type RuntimeTransport = Pick<Sandbox, "writeFiles"> & {
-  fs: Pick<Sandbox["fs"], "mkdir">;
+  fs: Pick<Sandbox["fs"], "mkdir" | "rm">;
   runCommand: (input: {
     args: string[];
     cmd: string;
@@ -112,6 +117,7 @@ export const restorePreparedRuntimeExecution = async (input: {
   root: string;
   binding: NonNullable<Awaited<ReturnType<typeof readHostedRuntimeExecutionBinding>>>;
   provider: RuntimeTransport;
+  observeInstallation: (files: PrivateRuntimeFiles) => Promise<HostedRuntimeProof>;
   signal?: AbortSignal;
 }): Promise<PreparedRuntimeExecution> => {
   const environmentPath = `${input.binding.stateDirectory}/environment.json`;
@@ -119,56 +125,33 @@ export const restorePreparedRuntimeExecution = async (input: {
     ...input.binding.files,
     "environment.json": JSON.stringify({
       ...input.binding.environment,
-      APP_RUNTIME_STATE_DIR: input.binding.stateDirectory,
     }),
   };
   const restore = async () => {
+    // Remove installer files left by an older consumer before reusing its app Sandbox.
+    await input.provider.fs.rm(`${input.binding.stateDirectory}/state.json`, {
+      force: true,
+      signal: input.signal,
+    });
     await input.provider.fs.mkdir(input.binding.stateDirectory, {
       recursive: true,
       signal: input.signal,
     });
     await input.provider.writeFiles(
-      Object.entries(files).map(([name, content]) => ({
-        content,
-        mode: 0o600,
-        path: `${input.binding.stateDirectory}/${name}`,
-      })),
+      Object.entries(files).flatMap(([name, content]) =>
+        name === "environment.json" || name === "identities.json" || name.endsWith(".storage.json")
+          ? [{ content, mode: 0o600, path: `${input.binding.stateDirectory}/${name}` }]
+          : [],
+      ),
       { signal: input.signal },
     );
   };
   await restore();
-  const privatePlan = z
-    .object({
-      plan: z.object({
-        appId: z.literal(input.appId),
-        environment: z.literal("preview"),
-        roles: z.array(z.string()),
-        runtimeId: z.string(),
-      }),
-    })
-    .parse(JSON.parse(files["state.json"] ?? "null")).plan;
-  const verification = await input.provider.runCommand({
-    args: ["run", "app:runtime", "verify", input.appId, "preview"],
-    cmd: "mise",
-    cwd: input.root,
-    env: {
-      APP_RUNTIME_ID: privatePlan.runtimeId,
-      APP_RUNTIME_ROLES: privatePlan.roles.join(","),
-      APP_RUNTIME_STATE_DIR: input.binding.stateDirectory,
-    },
-    signal: input.signal,
-  });
-  if (verification.exitCode !== 0) {
-    throw new HostedRuntimeProviderError("resource_mismatch");
-  }
-  const verificationOutput = await verification.stdout({ signal: input.signal });
-  const proof = z
-    .object({
-      ...hostedRuntimeProofSchema.shape,
-      appId: z.literal(input.appId),
-      environment: z.literal("preview"),
-    })
-    .parse(JSON.parse(verificationOutput.trim().split("\n").at(-1) ?? "null"));
+  const proof = {
+    ...hostedRuntimeProofSchema.parse(await input.observeInstallation(files)),
+    appId: input.appId,
+    environment: "preview" as const,
+  };
   const described = await input.provider.runCommand({
     args: ["run", "app:describe", input.appId],
     cmd: "mise",
@@ -311,10 +294,53 @@ export interface PreparedRuntimeExecutionDependencies {
   readBinding: typeof readHostedRuntimeExecutionBinding;
   assertAuthority: typeof assertHostedSandboxCommandAuthority;
   getProvider: (id: string, signal?: AbortSignal) => Promise<RuntimeTransport>;
+  observeInstallation: (input: {
+    appId: string;
+    files: PrivateRuntimeFiles;
+    root: string;
+    sandboxId: string;
+    stateDirectory: string;
+    signal?: AbortSignal;
+  }) => Promise<HostedRuntimeProof>;
 }
 const executionDependencies: PreparedRuntimeExecutionDependencies = {
   assertAuthority: assertHostedSandboxCommandAuthority,
   getProvider: getVercelPreviewProvider,
+  async observeInstallation(input) {
+    const source = await getVercelPreviewProvider(input.sandboxId, input.signal);
+    const state = z
+      .object({
+        clusterUrl: z.string(),
+        plan: z.object({ roles: z.array(z.string()), runtimeId: z.string() }),
+        productionDatabaseIdentity: z.string(),
+      })
+      .parse(JSON.parse(input.files["state.json"] ?? "null"));
+    return await withHostedInstallerSandbox({
+      root: input.root,
+      run: async (control, signal) => {
+        const executor = createHostedRuntimeSandboxExecutor({
+          appId: input.appId,
+          provider: control,
+          roles: state.plan.roles,
+          root: input.root,
+          signal,
+          stateDirectory: input.stateDirectory,
+        });
+        await executor.restore(input.files);
+        return hostedRuntimeProofSchema.parse(
+          await executor.run({
+            clusterUrl: state.clusterUrl,
+            operation: "verify",
+            productionDatabaseIdentity: state.productionDatabaseIdentity,
+            runtimeId: state.plan.runtimeId,
+            signal,
+          }),
+        );
+      },
+      signal: input.signal,
+      source,
+    });
+  },
   readBinding: readHostedRuntimeExecutionBinding,
 };
 
@@ -362,6 +388,15 @@ export const resolvePreparedRuntimeExecution = async (
   return await restorePreparedRuntimeExecution({
     appId: input.appId,
     binding,
+    observeInstallation: async (files) =>
+      await dependencies.observeInstallation({
+        appId: input.appId,
+        files,
+        root: input.root,
+        sandboxId: input.sandboxId,
+        signal: input.signal,
+        stateDirectory: binding.stateDirectory,
+      }),
     provider,
     root: input.root,
     signal: input.signal,

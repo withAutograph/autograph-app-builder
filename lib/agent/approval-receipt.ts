@@ -194,7 +194,7 @@ export function publicApprovalDescription(input: unknown, toolName?: string): st
     return undefined;
   }
   const record = input as Record<string, unknown>;
-  if (toolName === "prepare-app-hosted-runtime") {
+  if (toolName === "prepare-app-hosted-runtime" || toolName === "cleanup-app-hosted-runtime") {
     const parsed = z
       .object({
         appId,
@@ -203,9 +203,10 @@ export function publicApprovalDescription(input: unknown, toolName?: string): st
         projectId: z.string().min(1),
       })
       .safeParse(input);
-    return parsed.success
-      ? `Prepare isolated app and authentication databases for ${parsed.data.appId}, and bind restricted runtime credentials to Preview branch ${parsed.data.branch} in Vercel project ${parsed.data.projectId}.`
-      : undefined;
+    if (!parsed.success) return undefined;
+    return toolName === "cleanup-app-hosted-runtime"
+      ? `Remove this session's owned runtime variables, app and authentication databases, and database roles for ${parsed.data.appId} on Preview branch ${parsed.data.branch} in Vercel project ${parsed.data.projectId}. Existing Preview deployments using these resources will lose access.`
+      : `Prepare isolated app and authentication databases for ${parsed.data.appId}, and bind restricted runtime credentials to Preview branch ${parsed.data.branch} in Vercel project ${parsed.data.projectId}.`;
   }
   if (Object.hasOwn(record, "approvalReceipt")) {
     return publicReceiptDescription(record.approvalReceipt, toolName);
