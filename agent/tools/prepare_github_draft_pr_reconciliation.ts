@@ -11,7 +11,7 @@ import {
 } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { repositoryAccessReceiptState } from "@/lib/agent/repository-access-state";
-import { githubSandboxCredentialPolicy } from "@/lib/repository/github-sandbox-credentials";
+import { prepareWithVerifiedGitHubFetchRecovery } from "@/lib/agent/verified-github-fetch-recovery";
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
 import { prepareDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
 import type { DraftReconciliationInput } from "@/lib/repository/sandbox-draft-reconciliation";
@@ -86,22 +86,20 @@ export default defineTool({
       request.unpublished = unpublished;
     }
     const accessRuntime = await repositoryAccessRuntimeForSession(ctx.session.auth);
-    const credential = await accessRuntime.acquireExistingSourceCredential({
-      installationId: accessReceipt.scope.installationId,
-      repository: {
-        name: accessReceipt.repository.name,
-        owner: accessReceipt.repository.owner,
-        repositoryId: accessReceipt.repository.repositoryId,
-      },
-      sessionId: accessReceipt.sessionId,
+    const { prepared, retriedGitFetch } = await prepareWithVerifiedGitHubFetchRecovery({
+      acquireCredential: async () =>
+        await accessRuntime.acquireExistingSourceCredential({
+          installationId: accessReceipt.scope.installationId,
+          repository: {
+            name: accessReceipt.repository.name,
+            owner: accessReceipt.repository.owner,
+            repositoryId: accessReceipt.repository.repositoryId,
+          },
+          sessionId: accessReceipt.sessionId,
+        }),
+      prepare: async () => await prepareDraftReconciliation(request),
+      sandbox,
     });
-    let prepared: Awaited<ReturnType<typeof prepareDraftReconciliation>>;
-    try {
-      await sandbox.setNetworkPolicy(githubSandboxCredentialPolicy(credential.token));
-      prepared = await prepareDraftReconciliation(request);
-    } finally {
-      await sandbox.setNetworkPolicy("allow-all");
-    }
     const { created, ...preparedCandidate } = prepared;
     const candidate = {
       ...preparedCandidate,
@@ -123,14 +121,19 @@ export default defineTool({
       root: prepared.root,
       status: prepared.conflicts.length === 0 ? "ready_for_validation" : "needs_resolution",
     };
+    const output: typeof result & {
+      recovery?: string;
+      gitTransportRecovery?: string;
+    } = result;
     if (created && original !== null) {
-      return {
-        ...result,
-        recovery:
-          "Builder rebuilt the private merge candidate from the currently verified draft and base commits because the saved candidate was unavailable. Any uncommitted resolutions or edits from the old sandbox must be reapplied. Previous validation, diff review, and update approval are void; resolve current conflicts, rerun checks, review both complete diffs, and request new approval before updating the PR.",
-      };
+      output.recovery =
+        "Builder rebuilt the private merge candidate from the currently verified draft and base commits because the saved candidate was unavailable. Any uncommitted resolutions or edits from the old sandbox must be reapplied. Previous validation, diff review, and update approval are void; resolve current conflicts, rerun checks, review both complete diffs, and request new approval before updating the PR.";
     }
-    return result;
+    if (retriedGitFetch) {
+      output.gitTransportRecovery =
+        "The first sandbox Git fetch was rejected even though GitHub installation access was verified. Builder reacquired the installation credential and the private fetch succeeded on retry.";
+    }
+    return output;
   },
   inputSchema: z.strictObject({ pullRequestNumber: z.number().int().positive() }),
 });
