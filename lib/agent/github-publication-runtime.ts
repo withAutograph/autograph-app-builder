@@ -39,6 +39,10 @@ import type {
 import { approvalTargetFromDraftProposal, assertApprovalReceipt } from "./approval-receipt";
 import type { ApprovalReceipt } from "./approval-receipt";
 import type { HostedGitHubTenantAuthority } from "../repository/postgres-github-installation-store";
+import type {
+  HistoricalAppSourceObservation,
+  HistoricalAppSourceSelector,
+} from "../repository/historical-app-source";
 
 const supportedOperations = [
   "resolve-immutable-existing-source",
@@ -129,6 +133,12 @@ export interface GitHubPublicationRuntime {
     name: string;
     branch: string;
   }) => Promise<{ branch: string; headSha: string; headTree: string }>;
+  inspectHistoricalAppSource: (input: {
+    repositoryId: string;
+    owner: string;
+    name: string;
+    source: HistoricalAppSourceSelector;
+  }) => Promise<HistoricalAppSourceObservation>;
   inspectExistingDraftReconciliationSource: (input: {
     repositoryId: string;
     owner: string;
@@ -206,6 +216,12 @@ function disabledRuntime(): GitHubPublicationRuntime {
     // oxlint-disable-next-line eslint/require-await -- Keep the runtime interface.
     async inspectSourceBranch() {
       return unavailable();
+    },
+    // oxlint-disable-next-line eslint/require-await -- Keep the runtime interface.
+    async inspectHistoricalAppSource() {
+      throw new Error(
+        "Historical App source inspection is unavailable because the GitHub App provider is not configured. Connect GitHub with repository read access, then retry.",
+      );
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async inspectExistingDraftReconciliationSource() {
@@ -357,6 +373,14 @@ export function composeGitHubPublicationRuntime(input: {
         throw new Error("The selected branch belongs to a different GitHub repository.");
       }
       return { branch: request.branch, headSha: observed.headSha, headTree: observed.headTree };
+    },
+    async inspectHistoricalAppSource(request) {
+      if (adapter.inspectHistoricalAppSource === undefined) {
+        throw new Error(
+          "Historical App source inspection is unavailable from this GitHub provider. Upgrade the GitHub provider, reconnect GitHub with repository read access, then retry.",
+        );
+      }
+      return await adapter.inspectHistoricalAppSource(request);
     },
     async inspectOpenPullRequestSource(request) {
       const observed = await adapter.inspectExistingDraft({

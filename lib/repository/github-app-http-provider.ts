@@ -23,6 +23,10 @@ import type {
   ExistingDraftReconciliationProposal,
   ReconciliationContent,
 } from "./github-draft-reconciliation";
+import {
+  historicalAppSourceSelectorSchema,
+} from "./historical-app-source";
+import type { HistoricalAppSourceObservation } from "./historical-app-source";
 
 const reconciliationCommitMessage = (proposal: ExistingDraftReconciliationProposal): string =>
   `Reconcile draft pull request #${proposal.pullRequestNumber} with ${proposal.baseBranch}\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`;
@@ -111,6 +115,12 @@ export interface GitHubPublicationFile {
 export interface GitHubAppHttpProvider
   extends GitHubAppInstallationProvider, GitHubTargetAccessProvider {
   inspectRepositoryByName: (input: { owner: string; name: string }) => Promise<unknown | undefined>;
+  inspectHistoricalAppSource: (input: {
+    repositoryId: string;
+    owner: string;
+    name: string;
+    source: unknown;
+  }) => Promise<HistoricalAppSourceObservation>;
   acquireRepositoryReadCredential: (input: { repositoryId: string }) => Promise<{
     token: string;
   }>;
@@ -766,6 +776,89 @@ export const createGitHubAppHttpProvider = (input: {
     };
   };
 
+  const inspectHistoricalAppSource = async (sourceRequest: {
+    repositoryId: string;
+    owner: string;
+    name: string;
+    source: unknown;
+  }): Promise<HistoricalAppSourceObservation> => {
+    const source = historicalAppSourceSelectorSchema.parse(sourceRequest.source);
+    const authorization = await repositoryReadToken(sourceRequest.repositoryId);
+    const repositoryResponse = await github({
+      authorization,
+      expected: [200],
+      path: `/repositories/${encodeURIComponent(sourceRequest.repositoryId)}`,
+    });
+    const repositoryId = decimalProperty(repositoryResponse.body, "id");
+    const repositoryOwner = stringProperty(property(repositoryResponse.body, "owner"), "login");
+    const repositoryName = stringProperty(repositoryResponse.body, "name");
+    if (
+      repositoryId !== sourceRequest.repositoryId ||
+      repositoryOwner !== sourceRequest.owner ||
+      repositoryName !== sourceRequest.name
+    ) {
+      throw new Error("historical-source-repository-mismatch");
+    }
+
+    let commitSha: string;
+    let pullRequestNumber: number | undefined;
+    if (source.kind === "commit") {
+      const { commitSha: selectedCommitSha } = source;
+      commitSha = selectedCommitSha;
+    } else {
+      const pull = await github({
+        authorization,
+        expected: [200],
+        path: `/repos/${encodeURIComponent(repositoryOwner)}/${encodeURIComponent(repositoryName)}/pulls/${source.pullRequestNumber}`,
+      });
+      const base = property(pull.body, "base");
+      const head = property(pull.body, "head");
+      const baseRepository = property(base, "repo");
+      const headRepository = property(head, "repo");
+      const baseOwner = stringProperty(property(baseRepository, "owner"), "login");
+      const headOwner = stringProperty(property(headRepository, "owner"), "login");
+      const baseName = stringProperty(baseRepository, "name");
+      const headName = stringProperty(headRepository, "name");
+      const headSha = objectId.parse(stringProperty(head, "sha"));
+      if (
+        stringProperty(pull.body, "state") !== "closed" ||
+        typeof property(pull.body, "merged_at") !== "string" ||
+        decimalProperty(pull.body, "number") !== String(source.pullRequestNumber) ||
+        decimalProperty(baseRepository, "id") !== repositoryId ||
+        decimalProperty(headRepository, "id") !== repositoryId ||
+        baseOwner !== repositoryOwner ||
+        headOwner !== repositoryOwner ||
+        baseName !== repositoryName ||
+        headName !== repositoryName
+      ) {
+        throw new Error("historical-source-pull-request-not-merged-in-repository");
+      }
+      commitSha = headSha;
+      const { pullRequestNumber: selectedPullRequestNumber } = source;
+      pullRequestNumber = selectedPullRequestNumber;
+    }
+
+    const commit = await github({
+      authorization,
+      expected: [200],
+      path: `/repos/${encodeURIComponent(repositoryOwner)}/${encodeURIComponent(repositoryName)}/commits/${commitSha}`,
+    });
+    if (objectId.parse(stringProperty(commit.body, "sha")) !== commitSha) {
+      throw new Error("historical-source-commit-mismatch");
+    }
+    const treeSha = objectId.parse(
+      stringProperty(property(property(commit.body, "commit"), "tree"), "sha"),
+    );
+    return {
+      commitSha,
+      name: repositoryName,
+      owner: repositoryOwner,
+      ...(pullRequestNumber === undefined ? {} : { pullRequestNumber }),
+      repositoryId,
+      treeSha,
+    };
+  };
+
   const inspectedUpdateTree = async (
     proposal: ExistingDraftUpdateProposal,
     content: GitHubDraftPullRequestContent,
@@ -1124,6 +1217,7 @@ export const createGitHubAppHttpProvider = (input: {
         repository,
       };
     },
+    inspectHistoricalAppSource,
     async inspectInstallation({ requestedPermissions }) {
       const identity = await installation();
       const selectedRepositoryIds = await selectedRepositories(requestedPermissions);
