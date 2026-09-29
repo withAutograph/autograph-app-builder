@@ -1,137 +1,119 @@
-import { z } from "zod";
+import type { SandboxSession } from "eve/sandbox";
 
-const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
-const releasePointer =
-  /^export \* from "\.\/release\/(?<release>[A-Za-z0-9._-]+)\/data-server";\s*$/u;
-const releaseManifestSchema = z.object({
-  app: appIdSchema,
-  hashes: z.object({ schema: z.string().regex(/^sha256:[a-f0-9]{64}$/u) }),
-  schema_version: z.string().min(1),
-});
-const handoffSchema = z.strictObject({
-  appId: appIdSchema,
-  coreRoute: z.string().regex(/^\/[a-z][a-z0-9-]*$/u),
-  operatorGuide: z.string().startsWith("docs/"),
-  roles: z.array(z.string().regex(/^[a-z][a-z0-9_]*$/u)).max(20),
-  schemaReceiptPath: z.string().startsWith("/").nullable(),
-  version: z.literal(1),
-});
+import { describeSelectedApp } from "@/lib/repository/app-description";
+import type { AppDescription } from "@/lib/repository/app-description";
+import type { ProductBehaviorEvidence } from "./product-behavior-state";
 
-interface SourceReader {
-  readTextFile?: (input: { path: string }) => PromiseLike<string | null>;
+interface SourceDescriptionRunner {
+  run?: SandboxSession["run"];
 }
 
-const readOptionalSource = async (source: SourceReader, path: string): Promise<string | null> => {
-  if (source.readTextFile === undefined) {
-    return null;
+const sourceDescription = async (input: {
+  appId: string;
+  repositoryRoot: string;
+  source: SourceDescriptionRunner;
+  signal?: AbortSignal;
+}): Promise<{ description: AppDescription | null; blockers: string[] }> => {
+  const { run } = input.source;
+  if (run === undefined) {
+    return {
+      blockers: [
+        "The selected app has not been described by its repository's app:describe command.",
+      ],
+      description: null,
+    };
   }
   try {
-    return await source.readTextFile({ path });
-  } catch {
-    return null;
+    const description = await describeSelectedApp({
+      appId: input.appId,
+      root: input.repositoryRoot,
+      sandbox: { run: async (command) => await run.call(input.source, command) },
+      signal: input.signal,
+    });
+    return { blockers: [], description };
+  } catch (error) {
+    input.signal?.throwIfAborted();
+    return {
+      blockers: [
+        `The repository's app:describe command could not describe the selected app: ${error instanceof Error ? error.message : "No command diagnostic was available."}`,
+      ],
+      description: null,
+    };
   }
 };
 
-const checkedReleaseFromSource = async (input: {
-  appId: string;
-  appRoot: string;
-  pointer: string;
-  source: SourceReader;
-}) => {
-  const match = releasePointer.exec(input.pointer.trim());
-  if (match?.groups?.release === undefined) {
-    throw new Error("checked release pointer");
-  }
-  const source = await readOptionalSource(
-    input.source,
-    `${input.appRoot}/schema/release/${match.groups.release}/release-manifest.json`,
-  );
-  if (source === null) {
-    throw new Error("checked release manifest");
-  }
-  const manifest = releaseManifestSchema.parse(JSON.parse(source));
-  if (manifest.app !== input.appId || manifest.schema_version !== match.groups.release) {
-    throw new Error("checked release identity");
-  }
-  return { artifactHash: manifest.hashes.schema, releaseId: manifest.schema_version };
+const runtimeEvidence = (
+  backend: AppDescription["backend"] | undefined,
+  behaviorEvidence: readonly ProductBehaviorEvidence[],
+) => {
+  const generatedBackend = backend?.kind === "generated-postgres" ? backend : null;
+  const staticApp = backend?.kind === "static";
+  return {
+    authenticatedSchemaReceipt: {
+      contract: generatedBackend?.schemaReceipt?.contract ?? null,
+      path: generatedBackend?.schemaReceipt?.path ?? null,
+      reason: staticApp
+        ? "The repository describes this app as static."
+        : "A declared receipt route does not establish authenticated access or its response behavior.",
+      status: staticApp ? ("not-applicable" as const) : ("unassessed" as const),
+    },
+    behavior: {
+      coverage:
+        behaviorEvidence.length === 0 ? ("unassessed" as const) : ("action-readback-only" as const),
+      results: behaviorEvidence,
+      unassessed: [
+        "authentication",
+        "tenant-isolation",
+        "revocation",
+        "concurrent-decisions",
+        "idempotent-submission",
+        "audit-history",
+        "restart-durability",
+      ],
+    },
+    installedRelease: {
+      reason: staticApp
+        ? "The repository describes this app as static."
+        : "A checked source release does not establish installation in the selected database.",
+      status: staticApp ? ("not-applicable" as const) : ("unassessed" as const),
+    },
+  };
 };
 
-const productionContractFromSource = (metadata: string, appId: string) => {
-  const contract = handoffSchema.parse(JSON.parse(metadata));
-  if (
-    contract.appId !== appId ||
-    contract.coreRoute !== `/${appId}` ||
-    (contract.schemaReceiptPath !== null && !contract.schemaReceiptPath.startsWith(`/${appId}/`))
-  ) {
-    throw new Error("Production handoff identity");
-  }
-  return contract;
-};
-
-/** Credential-free handoff derived only from the validated app source. */
+/** Source capabilities and recorded observations, never an activation or readiness decision. */
 export const productionReadinessHandoff = async (input: {
   appId: string;
   repositoryRoot: string;
-  source: SourceReader;
+  source: SourceDescriptionRunner;
+  productBehaviorEvidence?: readonly ProductBehaviorEvidence[];
+  signal?: AbortSignal;
 }) => {
-  const appId = appIdSchema.parse(input.appId);
-  const appRoot = `${input.repositoryRoot}/apps/${appId}`;
-  const [pointer, metadata, taskConfig] = await Promise.all([
-    readOptionalSource(input.source, `${appRoot}/schema/index.ts`),
-    readOptionalSource(input.source, `${appRoot}/.config/production-handoff.json`),
-    readOptionalSource(input.source, `${input.repositoryRoot}/.config/mise/config.toml`),
-  ]);
-  const blockers: string[] = [];
-  let checkedRelease: { releaseId: string; artifactHash: string } | null = null;
-  if (pointer !== null) {
-    try {
-      checkedRelease = await checkedReleaseFromSource({
-        appId,
-        appRoot,
-        pointer,
-        source: input.source,
-      });
-    } catch {
-      blockers.push(
-        "The checked release pointer and manifest need review before Production preparation.",
-      );
-    }
-  }
-  let contract: z.infer<typeof handoffSchema> | null = null;
-  if (metadata !== null) {
-    try {
-      contract = productionContractFromSource(metadata, appId);
-    } catch {
-      blockers.push("The app-owned Production handoff contract needs review.");
-    }
-  }
-  const operatorTaskAvailable = taskConfig?.includes('[tasks."app:production"]') === true;
+  const { description, blockers } = await sourceDescription(input);
+  const backend = description?.backend;
+  const generatedBackend = backend?.kind === "generated-postgres" ? backend : null;
+  const routes = description?.app.routes ?? [];
   return {
-    appId,
-    blockers: [
-      ...blockers,
-      ...(contract === null
-        ? ["App-owned Production roles and core workflow have not been declared."]
-        : []),
-      ...(checkedRelease === null
-        ? ["No checked data release exists for a data-backed Production workflow."]
-        : []),
-      ...(operatorTaskAvailable
-        ? []
-        : ["The source repository has no app:production operator task."]),
-    ],
-    checkedRelease,
+    appId: input.appId,
+    blockers,
+    checkedRelease:
+      generatedBackend === null
+        ? null
+        : {
+            artifactHash: generatedBackend.release.artifactHash,
+            releaseId: generatedBackend.release.id,
+          },
+    description,
+    evidence: runtimeEvidence(backend, input.productBehaviorEvidence ?? []),
     nextSteps: [
-      "Review this app source and its Production policy separately from the Builder draft PR.",
-      "Name the organization and actors; prepare the checked release with protected operator credentials.",
-      "Exercise the protected Preview workflow and denied access paths.",
-      "Use native provider activation, then check the public Gateway and semantic read-only Production proof.",
+      "Review this app's source, declared capabilities, and recorded runtime observations.",
+      "Verify the selected database's installed release and authenticated schema receipt.",
+      "Exercise authenticated product outcomes, denied access, tenant isolation, and durable persistence in Preview.",
+      "Obtain separate operator approval for hosted preparation and provider activation, then run semantic read-only Production proof.",
     ],
-    operatorGuide: contract?.operatorGuide ?? null,
-    operatorTask: operatorTaskAvailable ? "mise run app:production -- plan" : null,
-    roles: contract?.roles ?? [],
-    route: contract?.coreRoute ?? `/${appId}`,
-    schemaReceiptPath: contract?.schemaReceiptPath ?? null,
+    roles: generatedBackend?.roles ?? [],
+    route: routes[0] ?? null,
+    routes,
+    schemaReceiptPath: generatedBackend?.schemaReceipt?.path ?? null,
     status: "operator-review-required" as const,
   };
 };
