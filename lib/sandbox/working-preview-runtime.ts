@@ -187,67 +187,79 @@ const waitForPreview = async (input: {
   check: (observe: (observation: string) => void, signal: AbortSignal) => Promise<boolean>;
   phase: "listener startup" | "application HTTP readiness";
   failurePath: string;
-  signal?: AbortSignal;
-  readinessTimeoutMs: number;
+  commandId: string;
+  signal: AbortSignal;
+  probeTimeoutMs: number;
 }) => {
-  const deadline = Date.now() + input.readinessTimeoutMs;
-  const stageSignal = AbortSignal.any([
-    AbortSignal.timeout(input.readinessTimeoutMs),
-    ...(input.signal === undefined ? [] : [input.signal]),
-  ]);
   let observation = "No readiness observation completed";
   const observe = (value: string) => {
     observation = value;
   };
-  while (!stageSignal.aborted && Date.now() < deadline) {
-    input.signal?.throwIfAborted();
-    try {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- Observe one startup; never rerun it on a polling timeout.
-      if (await input.check(observe, stageSignal)) {
-        stageSignal.throwIfAborted();
-        return;
-      }
-    } catch (error) {
-      input.signal?.throwIfAborted();
-      if (stageSignal.aborted) {
-        break;
-      }
-      // Report only known classes, never messages, URLs, headers, or custom names.
-      observe(
-        error instanceof TypeError ? "Readiness transport TypeError" : "Readiness check Error",
-      );
-      // Connection refusal is normal during startup. Check its actual diagnostics below.
-    }
-    input.signal?.throwIfAborted();
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Read this same attempt's startup diagnostics.
-    const failure = await input.provider.fs
-      .readFile(input.failurePath, {
-        encoding: "utf-8",
-        signal: stageSignal,
-      })
-      .catch((error: unknown) => {
-        input.signal?.throwIfAborted();
-        if (stageSignal.aborted) {
+  const probeSignal = () =>
+    AbortSignal.any([input.signal, AbortSignal.timeout(input.probeTimeoutMs)]);
+  try {
+    // The provider lease and cancellation own this startup's lifetime. A slow
+    // application keeps the same supervisor; only individual probes time out.
+    while (true) {
+      input.signal.throwIfAborted();
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Observe the existing supervisor without collecting output.
+      const supervisor = await input.provider
+        .getCommand(input.commandId, { signal: probeSignal() })
+        .catch(() => {
+          input.signal.throwIfAborted();
           return null;
+        });
+      if (supervisor !== null && supervisor.exitCode !== null) {
+        throw new Error(
+          `The application preview supervisor exited with code ${supervisor.exitCode}.`,
+        );
+      }
+      const readinessSignal = probeSignal();
+      try {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Observe one startup without relaunching it.
+        if (await input.check(observe, readinessSignal)) {
+          input.signal.throwIfAborted();
+          return;
         }
-        return missingRuntimeFile(error);
-      });
-    if (failure) {
+      } catch (error) {
+        input.signal.throwIfAborted();
+        // Report known classes, never messages, URLs, headers, or custom names.
+        let diagnostic = "Readiness check Error";
+        if (readinessSignal.aborted) {
+          diagnostic = "Readiness probe timed out";
+        } else if (error instanceof TypeError) {
+          diagnostic = "Readiness transport TypeError";
+        }
+        observe(diagnostic);
+      }
+      const diagnosticSignal = probeSignal();
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Read the same attempt's startup diagnostics.
+      const failure = await input.provider.fs
+        .readFile(input.failurePath, { encoding: "utf-8", signal: diagnosticSignal })
+        .catch((error: unknown) => {
+          input.signal.throwIfAborted();
+          if (diagnosticSignal.aborted) {
+            return null;
+          }
+          return missingRuntimeFile(error);
+        });
+      if (failure) {
+        throw new Error(
+          `The application server failed to start. ${workingPreviewDiagnosticExcerpt(failure) || "No safe process diagnostic was available."}`,
+        );
+      }
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Wait for this startup, never launch a replacement.
+      await delay(500, undefined, { signal: input.signal });
+    }
+  } catch (error) {
+    if (input.signal.aborted) {
       throw new Error(
-        `The application server failed to start. ${workingPreviewDiagnosticExcerpt(failure) || "No safe process diagnostic was available."}`,
+        `The application preview stopped during ${input.phase}. Last observation: ${observation}.`,
+        { cause: error },
       );
     }
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Wait for the current startup without launching a new one.
-    await delay(500, undefined, { signal: stageSignal }).catch((error: unknown) => {
-      if (!stageSignal.aborted) {
-        throw error;
-      }
-    });
-    input.signal?.throwIfAborted();
+    throw error;
   }
-  throw new Error(
-    `The application preview timed out during ${input.phase}. Last observation: ${observation}.`,
-  );
 };
 
 /** A successful signal request is not evidence that its listener has terminated. */
@@ -457,7 +469,7 @@ export const startWorkingPreview = async (input: {
   requestDigest?: string;
   previous?: WorkingPreviewRuntime | null;
   fetch?: typeof fetch;
-  readinessTimeoutMs?: number;
+  probeTimeoutMs?: number;
   signal?: AbortSignal;
   onAttempt?: (attempt: PreviewAttempt | null) => void;
 }): Promise<WorkingPreviewRuntime> => {
@@ -545,9 +557,10 @@ export const startWorkingPreview = async (input: {
     );
     input.onAttempt?.(attempt);
     const waitOptions = {
+      commandId: command.cmdId,
       failurePath,
+      probeTimeoutMs: input.probeTimeoutMs ?? 10_000,
       provider,
-      readinessTimeoutMs: input.readinessTimeoutMs ?? 120_000,
       signal,
     };
     await waitForPreview({

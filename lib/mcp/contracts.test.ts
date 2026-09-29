@@ -160,6 +160,31 @@ const response = (requestId: string) => ({
 });
 
 describe("eveRespondInputSchema", () => {
+  it.each([32, 33, 1000])("accepts a complete valid batch of %s answers", (count) => {
+    const responses = Array.from({ length: count }, (_, index) => response(`request-${index}`));
+    const parsed = eveRespondInputSchema.parse({
+      clientRequestId: "large-batch",
+      responses,
+      sessionId: "session_1",
+    });
+    expect(parsed.responses).toEqual(responses);
+  });
+
+  it("preserves the untrusted answer size boundary", () => {
+    const input = {
+      clientRequestId: "answer-size",
+      responses: [{ requestId: "one", response: { kind: "answer", value: "a".repeat(16_000) } }],
+      sessionId: "session_1",
+    };
+    expect(eveRespondInputSchema.safeParse(input).success).toBe(true);
+    expect(
+      eveRespondInputSchema.safeParse({
+        ...input,
+        responses: [{ requestId: "one", response: { kind: "answer", value: "a".repeat(16_001) } }],
+      }).success,
+    ).toBe(false);
+  });
+
   it("accepts only one non-empty unique response batch", () => {
     expect(
       eveRespondInputSchema

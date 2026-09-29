@@ -57,6 +57,17 @@ describe("productionReadinessHandoff", () => {
     });
   });
 
+  it.each([20, 21, 100])(
+    "retains all %i source-declared roles without a workload ceiling",
+    async (count) => {
+      const roles = Array.from({ length: count }, (_, index) => `role_${index}`);
+      const selected = { ...description, backend: { ...description.backend, roles } };
+      const result = await handoff(source(JSON.stringify(selected)));
+      expect(result.roles).toEqual(roles);
+      expect(result.operatorChecklist.accessGrants.declaredRoles).toEqual(roles);
+    },
+  );
+
   it("does not infer database installation, authenticated receipt behavior or product behavior from source", async () => {
     const result = await handoff();
     expect(result.evidence.installedRelease.status).toBe("unassessed");

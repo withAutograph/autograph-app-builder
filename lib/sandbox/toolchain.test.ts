@@ -23,6 +23,20 @@ describe("sandbox toolchain contract", () => {
     ).toBeUndefined();
   });
 
+  it.each(["preview", "production"])(
+    "ignores irrelevant image settings in hosted %s despite a stale development flag",
+    (deployment) => {
+      expect(
+        configuredToolchainImage({
+          APP_BUILDER_EXECUTION_MODE: "development",
+          APP_BUILDER_SANDBOX_IMAGE: "retired-local-image:latest",
+          VERCEL: "1",
+          VERCEL_ENV: deployment,
+        }),
+      ).toBeUndefined();
+    },
+  );
+
   it("accepts a content-keyed local image only in explicit development mode", () => {
     const developmentImage = `app-builder-autograph-dev:${"b".repeat(64)}-${"c".repeat(16)}-linux-arm64`;
     expect(

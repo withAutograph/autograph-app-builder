@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { eveRespondInputSchema } from "../mcp/contracts";
+
 import { hostedEveOperationScopes, HostedAuthorizationError } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
 import {
@@ -1499,6 +1501,39 @@ describe("hosted Eve service core", () => {
       }),
     ).rejects.toBeInstanceOf(HostedIdempotencyConflictError);
     expect(adapter.start).toHaveBeenCalledTimes(1);
+  });
+
+  it("submits more than 32 complete answers once and preserves batch integrity", async () => {
+    const requestIds = Array.from({ length: 33 }, (_, index) => `request-${index}`);
+    const adapter = transport({
+      get: vi.fn(async () => await Promise.resolve(approvalSnapshot(requestIds))),
+    });
+    const { service, result } = await started({ transport: adapter });
+    const responses = requestIds.map((requestId) => ({
+      requestId,
+      response: { kind: "approve" as const },
+    }));
+    const request = eveRespondInputSchema.parse({
+      clientRequestId: "large_complete_batch",
+      responses,
+      sessionId: result.sessionId,
+    });
+    await expect(
+      service.respond({
+        ...request,
+        clientRequestId: "large_partial_batch",
+        responses: responses.slice(0, 32),
+      }),
+    ).rejects.toMatchObject({ code: "input_batch_changed" });
+    expect(adapter.respond).not.toHaveBeenCalled();
+    await service.respond(request);
+    await service.respond(request);
+    expect(adapter.respond).toHaveBeenCalledTimes(1);
+    expect(adapter.respond).toHaveBeenCalledWith(expect.objectContaining({ responses }));
+    await expect(
+      service.respond({ ...request, responses: responses.toReversed() }),
+    ).rejects.toBeInstanceOf(HostedIdempotencyConflictError);
+    expect(adapter.respond).toHaveBeenCalledTimes(1);
   });
 
   it("binds respond idempotency to the exact ordered full batch", async () => {

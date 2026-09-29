@@ -114,3 +114,38 @@ stream through a bounded scanner; a line containing a credential marker is
 redacted when its value cannot be safely delimited. Total command output has no
 Builder ceiling. Legacy reconciliation checks still use whole-result Sandbox
 commands and remain a separate streaming follow-up.
+
+## Audit after Arrusted/Builder alignment (September 29, 2026)
+
+Audited the merged Arrusted `33c8bb6c` and Builder `7c3e7431` source paths,
+public response contracts, compute lifecycle, preview startup, and provisioning.
+The following implementation-owned ceilings had no correctness or provider basis:
+
+| Removed prerequisite or ceiling                               | Result and retained boundary                                                                                                                                                                |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Validating an ignored author image in hosted Vercel execution | Hosted planning ignores that local setting before parsing it. Non-hosted image validation remains at its actual image authority.                                                            |
+| At most 32 responses to an outstanding question batch         | Complete valid batches can exceed 32; exact batch membership/order, unique request IDs, idempotent dispatch, untrusted answer-size and transport bounds remain.                             |
+| Three automatic authorization refreshes                       | The same pending request can refresh again when focus returns; minimum interval and current-request binding still prevent bursts and stale refreshes.                                       |
+| Two-minute listener/HTTP startup deadline                     | Poll the same supervisor with bounded individual probes until readiness, actual process failure, cancellation, or provider lease expiry. A probe timeout never restarts a valid startup.    |
+| At most 20 declared Production roles                          | Report the complete app-owned role list; role identifiers and app/release identity remain validated. Handoff is still an operator review, not Production readiness or a private build gate. |
+
+Current supported hosted source acquisition does not consume template CI or
+fixed-layout eligibility. Local development treats source edits as live input.
+Legacy source recovery checks are not new-acquisition prerequisites. The public
+creation/identity contract remains Arrusted-owned; there is no new framework
+adapter or topology contract.
+
+Compute idle/lifetime expiry and provider execution leases still reclaim
+resources while retaining public session identity and durable progress.
+Provisioning retries retain backoff without a total attempt ceiling. Source,
+artifact, checkpoint, and validation-log pages/chunks bound individual operations,
+not the complete repository, history, or command output. Reviewed mutation,
+path/tenant ownership, credential secrecy, and publication approvals remain.
+
+Two follow-up gaps require their own transport/storage work rather than relaxing
+security or rewriting successful recovery here: exceptionally large complete
+answer batches need staging if they exceed a request's transport/body boundary;
+replacement-compute dependency setup currently returns a truncated failure excerpt
+without a durable full-log reference. Legacy inline checkpoint stores also retain
+the compatibility bounds described above. These are limitations, not evidence
+that all workloads have an unbounded end-to-end transport.

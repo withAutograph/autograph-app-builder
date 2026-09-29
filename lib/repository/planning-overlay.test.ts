@@ -7,6 +7,7 @@ import {
   materializePlanningOverlay,
   sandboxTargetCommandExecutor,
   targetIdentitySchema,
+  targetExecutionBinding,
 } from "./target-planning";
 
 const appDescription = (id: string) =>
@@ -33,6 +34,21 @@ const planningCommandOutput = (command: string, mode: string): string => {
 };
 
 describe("planning from the current checkout", () => {
+  it("plans with checkout execution despite an irrelevant hosted image setting", () => {
+    expect(
+      targetExecutionBinding(undefined, {
+        APP_BUILDER_EXECUTION_MODE: "development",
+        APP_BUILDER_SANDBOX_IMAGE: "retired-local-image:latest",
+        VERCEL: "1",
+        VERCEL_ENV: "preview",
+      }),
+    ).toEqual({
+      dependencyCacheDigest: "checkout",
+      fixture: false,
+      imageDigest: "vercel-sandbox",
+    });
+  });
+
   it("writes a large accepted AppSpec from a bounded stream without a full-content argument", async () => {
     const content = "Product outcome. ".repeat(100_000);
     const pieces = content.match(/[\s\S]{1,65536}/gu) ?? [];

@@ -329,8 +329,7 @@ export const eveRespondInputSchema = z
           response: eveResponseSchema,
         }),
       )
-      .min(1)
-      .max(32),
+      .min(1),
     sessionId: z.string().min(1),
   })
   .strict()
