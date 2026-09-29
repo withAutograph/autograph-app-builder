@@ -24,6 +24,16 @@ export interface DraftReconciliationCandidate {
     commands: readonly { command: string; exitCode: number }[];
     validatedByCallId: string;
   };
+  validationRun?: {
+    steps: readonly {
+      // oxlint-disable-next-line sonarjs/max-union-size -- Each command category has distinct execution handling.
+      kind: "install" | "schema" | "local" | "check" | "browser" | "additional";
+      command: string;
+    }[];
+    nextIndex: number;
+    commands: readonly { command: string; exitCode: number }[];
+    resolvedTree: string;
+  };
   review?: ReconciliationReviewReceipt;
   reviewReadProgress?: {
     reviewDigest: string;
