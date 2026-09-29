@@ -493,6 +493,71 @@ export const readDraftReconciliationConflict = async (input: {
   }
 };
 
+/** Read a current app-owned text file in the isolated candidate for a precise follow-up edit. */
+export const readDraftReconciliationCandidateFile = async (input: {
+  sandbox: SandboxSession;
+  prepared: PreparedDraftReconciliation;
+  path: string;
+}): Promise<{ content: string; digest: string }> => {
+  const { prepared, path } = input;
+  if (!appPath(prepared.appId, path)) {
+    throw new Error(`Builder cannot read ${path}: it is outside apps/${prepared.appId}/.`);
+  }
+  await checked(
+    input.sandbox,
+    `verify the candidate file path ${path}`,
+    `node -e ${quote(safeResolutionProgram)} ${quote(prepared.root)} ${quote(path)}`,
+  );
+  const relative = `${prepared.root.slice(prepared.workspaceRoot.length + 1)}/${path}`;
+  let content: string;
+  try {
+    const observed = await input.sandbox.readTextFile({ path: relative });
+    if (observed === null) {
+      throw new Error("The file is absent or is not a readable text file.");
+    }
+    content = observed;
+  } catch (error) {
+    throw new Error(
+      `Builder could not read the current candidate file ${path}. Inspect the file path and retry. Cause: ${redact(error instanceof Error ? error.message : String(error)) || "The sandbox returned no detail."}`,
+      { cause: error },
+    );
+  }
+  return { content, digest: createHash("sha256").update(content).digest("hex") };
+};
+
+/** Apply one exact text replacement against the observed candidate bytes. */
+export const replaceDraftReconciliationCandidateText = async (input: {
+  sandbox: SandboxSession;
+  prepared: PreparedDraftReconciliation;
+  path: string;
+  expectedDigest: string;
+  oldText: string;
+  newText: string;
+}): Promise<{ digest: string }> => {
+  const current = await readDraftReconciliationCandidateFile(input);
+  if (current.digest !== input.expectedDigest) {
+    throw new Error(
+      `Builder cannot edit ${input.path}: its content changed since inspection. Read the current file, then retry the exact edit.`,
+    );
+  }
+  if (!input.oldText || input.oldText === input.newText) {
+    throw new Error(`Builder cannot edit ${input.path}: supply a nonempty old text and a change.`);
+  }
+  const first = current.content.indexOf(input.oldText);
+  if (first === -1 || current.content.includes(input.oldText, first + input.oldText.length)) {
+    throw new Error(
+      `Builder cannot edit ${input.path}: the old text must occur exactly once. Read the current file and choose a unique exact passage.`,
+    );
+  }
+  const content =
+    current.content.slice(0, first) +
+    input.newText +
+    current.content.slice(first + input.oldText.length);
+  const relative = `${input.prepared.root.slice(input.prepared.workspaceRoot.length + 1)}/${input.path}`;
+  await input.sandbox.writeTextFile({ content, path: relative });
+  return { digest: createHash("sha256").update(content).digest("hex") };
+};
+
 const diffPageProgram = String.raw`
 const { spawnSync } = require("node:child_process");
 const { closeSync, fstatSync, mkdtempSync, openSync, readSync, rmSync } = require("node:fs");
