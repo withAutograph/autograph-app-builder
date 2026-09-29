@@ -387,9 +387,6 @@ const observeOriginalStart = async (
     observe(
       await transport.call("autograph_get", { clientRequestId: originalStart.clientRequestId }),
     );
-  if (state.unresolvedStartResult && !canRecoverStart(state.unresolvedStartResult)) {
-    return false;
-  }
   if (state.startSubmitted) {
     if (await recover()) {
       return true;

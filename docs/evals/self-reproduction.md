@@ -91,6 +91,10 @@ and resume starts. An older handoff without a saved original-ID alias can recove
 through an exact original start retry, which establishes that alias. Empty handles are retained as unresolved responses rather
 than used for session polling. The private transcript preserves those original
 public responses separately from the recovered session.
+A retained no-handle transport or internal error does not permanently park the
+run: resuming first rechecks the original request ID. It retries the unchanged
+start only when that current lookup is unresolved or has no saved session; a
+current deterministic rejection remains blocked.
 
 `startRequestSha256` records the canonical accepted start request and
 `promptSha256` records a supplied product brief. `driverRevision` identifies the

@@ -206,6 +206,47 @@ describe("public self-reproduction driver", () => {
     expect(current.answered).toEqual([]);
     expect(current.outcome).toBe("input_required");
   });
+  it.each(["bound", "not_found", "rejected"] as const)(
+    "rechecks the original request after a retained internal error when lookup is %s",
+    async (lookup) => {
+      const current = state();
+      const original = {
+        clientRequestId: "saved-before-refusal",
+        prompt: "Build Inventory Counts.",
+      };
+      current.originalStart = original;
+      current.startSubmitted = true;
+      current.outcome = "blocked_missing_public_session";
+      current.unresolvedStartResult = unresolvedStart("internal_error");
+      const calls: { name: string; args: Record<string, unknown> }[] = [];
+      await runPublicSession({
+        pollMs: 1,
+        save: () => {},
+        state: current,
+        timeoutMs: 1000,
+        transport: {
+          call: async (name, args) => {
+            calls.push({ args, name });
+            if (name === "autograph_start" || lookup === "bound") {
+              return session("completed");
+            }
+            return unresolvedStart(
+              lookup === "not_found" ? "start_request_not_found" : "operation_rejected",
+            );
+          },
+        },
+      });
+      expect(calls).toEqual([
+        { args: { clientRequestId: original.clientRequestId }, name: "autograph_get" },
+        ...(lookup === "not_found" ? [{ args: original, name: "autograph_start" }] : []),
+      ]);
+      expect(current.originalStart).toEqual(original);
+      expect(current.session?.sessionId).toBe(lookup === "rejected" ? undefined : "one-session");
+      expect(current.outcome).toBe(
+        lookup === "rejected" ? "blocked_missing_public_session" : "completed",
+      );
+    },
+  );
   it("preserves an unresolved no-handle response without ever polling an empty session", async () => {
     const current = state();
     const calls: { name: string; args: Record<string, unknown> }[] = [];
