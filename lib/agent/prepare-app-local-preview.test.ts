@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import type { z } from "zod";
+import type { appDescriptionSchema } from "../repository/app-description";
 
 import {
   appDeclaresLocalSetup,
@@ -8,22 +10,22 @@ import {
   prepareValidationLocalData,
 } from "../../agent/tools/prepare-app-local-preview";
 
+const descriptor = (backend: z.infer<typeof appDescriptionSchema>["backend"]) =>
+  JSON.stringify({
+    app: { id: "spend-review", routes: ["/spend-review"], workspacePath: "apps/spend-review" },
+    backend,
+    validation: { browser: null, check: { task: "check" }, test: { shards: 1, task: "test" } },
+    version: 1,
+  });
+const generated: z.infer<typeof appDescriptionSchema>["backend"] = {
+  authorization: "declared-policy",
+  kind: "generated-postgres",
+  release: { artifactHash: "hash", directory: "release", id: "v1" },
+  roles: ["member"],
+  runtime: { databaseEnvironment: "SPEND_REVIEW_DATABASE_URL" },
+  schemaReceipt: null,
+};
 describe("private local preview setup", () => {
-  const descriptor = (backend: unknown) =>
-    JSON.stringify({
-      version: 1,
-      app: { id: "spend-review", workspacePath: "apps/spend-review", routes: ["/spend-review"] },
-      backend,
-      validation: { check: { task: "check" }, test: { task: "test", shards: 1 }, browser: null },
-    });
-  const generated = {
-    kind: "generated-postgres",
-    authorization: "declared-policy",
-    roles: ["member"],
-    release: { id: "v1", artifactHash: "hash", directory: "release" },
-    runtime: { databaseEnvironment: "SPEND_REVIEW_DATABASE_URL" },
-    schemaReceipt: null,
-  };
   it("discovers the source-derived backend rather than a demo setup declaration", async () => {
     const run = vi
       .fn()

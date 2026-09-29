@@ -104,8 +104,8 @@ describe("approval-bound implementation files", () => {
   });
   it("applies explicit removal non-recursively and retries an absent file safely", async () => {
     const sandbox = {
-      removePath: vi.fn().mockResolvedValue(undefined),
-      writeTextFile: vi.fn().mockResolvedValue(undefined),
+      removePath: vi.fn().mockResolvedValue(),
+      writeTextFile: vi.fn().mockResolvedValue(),
     };
     const files = implementationFilesSchema.parse([
       { operation: "delete", path: "apps/example/server/demo.ts" },

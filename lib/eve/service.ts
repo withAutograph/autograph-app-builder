@@ -138,6 +138,7 @@ interface LocalEveRuntimeState {
   recoveries: Map<string, Promise<void>>;
   /** One durable tail reader per locally active public session. */
   tailPumps: Map<string, Promise<void>>;
+  tailControllers: Map<string, AbortController>;
   metadata: Map<string, { title: string; createdAtEpochMs: number; updatedAtEpochMs: number }>;
 }
 
@@ -180,6 +181,7 @@ const localRuntimeGlobal = globalThis as typeof globalThis & {
 function localRuntimeState(generation: string): LocalEveRuntimeState {
   const existing = localRuntimeGlobal[localEveRuntimeStateKey];
   if (existing !== undefined && existing.generation === generation) {
+    existing.tailControllers ??= new Map();
     return existing;
   }
   return (localRuntimeGlobal[localEveRuntimeStateKey] = {
@@ -193,6 +195,7 @@ function localRuntimeState(generation: string): LocalEveRuntimeState {
     restartInterrupted: new Set(),
     sessionEvents: new Map(),
     sessionHandles: new Map(),
+    tailControllers: new Map(),
     tailPumps: new Map(),
   });
 }
@@ -300,6 +303,7 @@ function consumeResponse(
   },
 ): void {
   const events = state.sessionEvents.get(sessionId) ?? [];
+  const responseGeneration = state.restartGeneration;
   state.sessionEvents.set(sessionId, events);
   state.activeResponses.set(sessionId, response);
   let modelTurnTimer: ReturnType<typeof setTimeout> | undefined;
@@ -372,21 +376,28 @@ function consumeResponse(
   void (async () => {
     try {
       for await (const event of response) {
+        if (state.restartGeneration !== responseGeneration) {
+          return;
+        }
         events.push(event);
         observeEvent(event);
       }
     } catch {
       state.recoveryRequired.add(sessionId);
     } finally {
-      // Eve's response iterator can close after its transport reconnect budget
-      // while the durable turn is still running. Keep the turn timer alive and
-      // continue from the raw durable tail instead of treating that close as a
-      // settled boundary.
-      if (deriveInstalledEveStatus(events) === "working") {
-        state.recoveryRequired.add(sessionId);
-        options.consumeDurableTail(observeEvent);
+      if (state.restartGeneration === responseGeneration) {
+        // Eve's response iterator can close after its transport reconnect budget
+        // while the durable turn is still running. Keep the turn timer alive and
+        // continue from the raw durable tail instead of treating that close as a
+        // settled boundary.
+        if (deriveInstalledEveStatus(events) === "working") {
+          state.recoveryRequired.add(sessionId);
+          options.consumeDurableTail(observeEvent);
+        } else {
+          settleResponseBoundary();
+        }
       } else {
-        settleResponseBoundary();
+        clearModelTurnTimer();
       }
     }
   })();
@@ -418,7 +429,13 @@ export function createLocalEveSessionService(
     state.restartGeneration !== undefined &&
     state.restartGeneration !== options.restartGeneration
   ) {
-    for (const sessionId of localActiveResponses.keys()) {
+    for (const [sessionId, events] of localSessionEvents) {
+      if (deriveInstalledEveStatus(events) !== "working") {
+        continue;
+      }
+      state.tailControllers.get(sessionId)?.abort();
+      state.tailControllers.delete(sessionId);
+      state.tailPumps.delete(sessionId);
       localActiveResponses.delete(sessionId);
       // This handle belongs to the child being replaced. The next operation
       // must attach from a fresh durable snapshot, not its buffered tail.
@@ -492,11 +509,16 @@ export function createLocalEveSessionService(
     if (state.tailPumps.has(sessionId)) {
       return;
     }
+    const controller = new AbortController();
+    state.tailControllers.set(sessionId, controller);
     const pump = (async () => {
       // MessageResponse has a bounded reconnect policy. A durable session may
       // outlive that HTTP response, so continue from the raw event cursor until
       // it reports a real boundary.
-      while (deriveInstalledEveStatus(localSessionEvents.get(sessionId) ?? []) === "working") {
+      while (
+        !controller.signal.aborted &&
+        deriveInstalledEveStatus(localSessionEvents.get(sessionId) ?? []) === "working"
+      ) {
         try {
           const events = localSessionEvents.get(sessionId) ?? [];
           const session = client.sessions.attach(sessionId, {
@@ -504,7 +526,10 @@ export function createLocalEveSessionService(
           });
           localSessionHandles.set(sessionId, session);
           // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-          for await (const event of session.stream()) {
+          for await (const event of session.stream({ signal: controller.signal })) {
+            if (controller.signal.aborted) {
+              return;
+            }
             events.push(event);
             observeEvent(event);
             if (deriveInstalledEveStatus(events) !== "working") {
@@ -515,7 +540,10 @@ export function createLocalEveSessionService(
           // HMR can briefly interrupt the local child. Buffered public events
           // remain readable while the durable tail is retried.
         }
-        if (deriveInstalledEveStatus(localSessionEvents.get(sessionId) ?? []) !== "working") {
+        if (
+          controller.signal.aborted ||
+          deriveInstalledEveStatus(localSessionEvents.get(sessionId) ?? []) !== "working"
+        ) {
           return;
         }
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
@@ -523,7 +551,12 @@ export function createLocalEveSessionService(
       }
       // Remove the tail pump entry regardless of its terminal outcome.
       // oxlint-disable-next-line promise/prefer-await-to-then
-    })().finally(() => state.tailPumps.delete(sessionId));
+    })().finally(() => {
+      if (state.tailPumps.get(sessionId) === pump) {
+        state.tailPumps.delete(sessionId);
+        state.tailControllers.delete(sessionId);
+      }
+    });
     state.tailPumps.set(sessionId, pump);
   }
 

@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
+import { once } from "node:events";
 
 import type { MessageStreamEvent } from "eve/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { createLocalEveSessionService, toEveInputResponse } from "./service";
+import { HostedCancellationUnsettledError } from "./hosted-errors";
 
 describe("Eve input response mapping", () => {
   it("maps the public denial to Eve's cancel approval option", () => {
@@ -451,6 +453,55 @@ describe("local Eve acceptance", () => {
       sessionId: started.sessionId,
       status: "working",
     });
+  });
+
+  it("fences disconnected tail readers after cancellation and a child restart", async () => {
+    const events = [{ data: { turnId: "old-turn" }, type: "step.started" }] as MessageStreamEvent[];
+    const tailOpened = Promise.withResolvers<AbortSignal>();
+    const response = {
+      cancel: vi.fn(() => Promise.reject(new HostedCancellationUnsettledError())),
+      async *[Symbol.asyncIterator]() {
+        yield* events;
+      },
+    };
+    const session = {
+      cancel: vi.fn(() => Promise.resolve({ status: "accepted" })),
+      snapshot: vi.fn(() =>
+        Promise.resolve({ events, session: { sessionId: "tail-restart", streamIndex: 1 } }),
+      ),
+      state: { sessionId: "tail-restart" },
+      async *stream({ signal }: { signal: AbortSignal }) {
+        tailOpened.resolve(signal);
+        await once(signal, "abort");
+        yield* events;
+      },
+    };
+    const client = {
+      sessions: {
+        attach: vi.fn(() => session),
+        create: vi.fn(() => Promise.resolve({ response, session })),
+      } as never,
+    };
+    const first = createLocalEveSessionService(client, {
+      restartGeneration: "child-one",
+      stateGeneration: "tail-restart",
+    });
+    await first.start({ clientRequestId: "tail-start", prompt: "Build" });
+    const signal = await tailOpened.promise;
+    await expect(first.cancel({ sessionId: "tail-restart" })).rejects.toBeInstanceOf(
+      HostedCancellationUnsettledError,
+    );
+    const restarted = createLocalEveSessionService(client, {
+      restartGeneration: "child-two",
+      stateGeneration: "tail-restart",
+    });
+    expect(signal.aborted).toBe(true);
+    await expect(
+      restarted.get({ cursor: 0, limit: 100, sessionId: "tail-restart" }),
+    ).resolves.toMatchObject({ cursor: 1, status: "waiting" });
+    await expect(
+      restarted.getStart?.({ clientRequestId: "tail-start", cursor: 0, limit: 100 }),
+    ).resolves.toMatchObject({ sessionId: "tail-restart", status: "waiting" });
   });
 
   it("makes an active local turn resumable after its Eve child restarts", async () => {
