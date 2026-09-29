@@ -18,6 +18,7 @@ import {
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import { createPostgresValidationLogStore } from "@/lib/repository/postgres-validation-log-store";
 import { openHostedPostgresDatabase } from "@/lib/mcp/hosted-route";
+import { productionReadinessHandoff } from "@/lib/agent/production-readiness-handoff";
 import {
   clearProductBehaviorEvidence,
   currentProductBehaviorEvidence,
@@ -69,6 +70,11 @@ export default defineTool({
         sessionId: ctx.session.id,
       });
       ctx.abortSignal?.throwIfAborted();
+      const productionHandoff = await productionReadinessHandoff({
+        appId: current.appSpec.appId,
+        repositoryRoot: current.applyReceipt.applyRoot.replace(/^\/workspace\//u, ""),
+        source: await ctx.getSandbox(),
+      });
       return {
         attemptDigest: current.validationReceipt.attemptDigest,
         commandCount: current.validationReceipt.commands.length,
@@ -82,6 +88,7 @@ export default defineTool({
           sourceAssessment,
         ),
         productBehaviorEvidence: evidence,
+        productionHandoff,
         reused: true,
         sourceAssessment,
         status: "validated" as const,
@@ -214,6 +221,11 @@ export default defineTool({
       sessionId: ctx.session.id,
     });
     validationPhase(ctx.callId, "applied_source_review_finished", sourceAssessment.status);
+    const productionHandoff = await productionReadinessHandoff({
+      appId: current.appSpec.appId,
+      repositoryRoot: relativeApplyRoot,
+      source: sandbox,
+    });
     return {
       attemptDigest: result.receipt.attemptDigest,
       commandCount: result.receipt.commands.length,
@@ -223,6 +235,7 @@ export default defineTool({
       })),
       productAcceptance: productAcceptanceObligations(current.appSpec, evidence, sourceAssessment),
       productBehaviorEvidence: evidence,
+      productionHandoff,
       reused: false,
       sourceAssessment,
       status: "validated" as const,
