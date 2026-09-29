@@ -280,7 +280,8 @@ export const materializePlanningOverlay = async (input: {
   sandbox: SandboxSession;
   artifactRevision: string;
   appId: string;
-  appSpecContent: string;
+  appSpecContent?: string;
+  appSpecStream?: ReadableStream<Uint8Array>;
   appSpecDigest: string;
 }) => {
   planningMarker("planning-overlay", "start");
@@ -316,10 +317,20 @@ export const materializePlanningOverlay = async (input: {
     );
   }
   const appSpecPath = `prototype/${input.appId}/app-spec.md`;
-  await input.sandbox.writeTextFile({
-    content: input.appSpecContent,
-    path: `${root}/${appSpecPath}`,
-  });
+  if (input.appSpecStream === undefined) {
+    if (input.appSpecContent === undefined) {
+      throw new Error("The accepted AppSpec content or stream is unavailable for planning.");
+    }
+    await input.sandbox.writeTextFile({
+      content: input.appSpecContent,
+      path: `${root}/${appSpecPath}`,
+    });
+  } else {
+    await input.sandbox.writeFile({
+      content: input.appSpecStream,
+      path: `${root}/${appSpecPath}`,
+    });
+  }
   const contract = {
     appId: input.appId,
     appSpec: { path: appSpecPath, sha256: input.appSpecDigest },
@@ -427,7 +438,8 @@ export const executeTargetIdentityAndPlanning = async (input: {
   sandbox: SandboxSession;
   executor: TargetCommandExecutor;
   appId: string;
-  appSpecContent: string;
+  appSpecContent?: string;
+  appSpecStream?: ReadableStream<Uint8Array>;
   appSpecDigest: string;
   artifactRevision: string;
   existingAppChanges?: readonly { path: string; content: string }[];

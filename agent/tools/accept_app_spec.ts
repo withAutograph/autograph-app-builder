@@ -19,6 +19,10 @@ import { existingAppChangesSchema } from "@/lib/agent/existing-app-changes";
 import { prepareAppCreation } from "@/lib/agent/prepare-app-creation";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import type { AcceptedAppSpec } from "@/lib/agent/workflow-state";
+import { inspectCanonicalAppSpec } from "@/lib/agent/accepted-app-spec-stream";
+import { isPrototypeArtifactV2 } from "@/lib/agent/prototype-artifacts";
+import { createHostedPrototypeChunkStore } from "@/lib/agent/hosted-prototype-chunk-store";
+import { openHostedPostgresDatabase } from "@/lib/mcp/hosted-route";
 
 const acceptanceResult = (appSpec: AcceptedAppSpec, reused: boolean) => ({
   ...appSpec,
@@ -70,7 +74,7 @@ export default defineTool({
     if (artifact === undefined) {
       throw new Error("Create a product design before creating its implementation plan.");
     }
-    if (artifact.mediaType !== "text/markdown" || artifact.version === 2) {
+    if (artifact.mediaType !== "text/markdown" || artifact.transfer !== undefined) {
       throw new Error("The accepted AppSpec artifact media type is invalid.");
     }
     // A resumed acceptance is bound to the recorded artifact revision. New
@@ -85,18 +89,40 @@ export default defineTool({
       await planAcceptedAppSpec(ctx, existingAppChanges);
       return acceptanceResult(current.appSpec, true);
     }
-    const content = normalizeBuildReadyAppSpec(artifact.content);
-    const validation = validateBuildReadyAppSpec(content);
-    if (!validation.valid) {
-      throw new Error(appSpecRepairDiagnostic(validation));
+    let content: string | undefined;
+    let digest: string;
+    let walkthrough: string | undefined;
+    if (isPrototypeArtifactV2(artifact)) {
+      const store = createHostedPrototypeChunkStore({
+        db: openHostedPostgresDatabase(process.env.DATABASE_URL ?? ""),
+        sessionAuth: ctx.session.auth,
+        sessionId: ctx.session.id,
+      });
+      const inspection = await inspectCanonicalAppSpec({
+        artifact,
+        readChunk: async (chunkIndex) =>
+          await store.get({
+            chunkIndex,
+            path: artifact.path,
+            transferDigest: artifact.digest,
+          }),
+      });
+      ({ digest, walkthrough } = inspection);
+    } else {
+      content = normalizeBuildReadyAppSpec(artifact.content);
+      const validation = validateBuildReadyAppSpec(content);
+      if (!validation.valid) {
+        throw new Error(appSpecRepairDiagnostic(validation));
+      }
+      digest = sha256(content);
     }
-    const accepted = {
+    const accepted: AcceptedAppSpec = {
       acceptedByCallId: ctx.callId,
       appId,
       artifactPath: artifact.path,
       artifactRevision: artifact.revision,
-      content,
-      digest: sha256(content),
+      ...(content === undefined ? { version: 2, walkthrough } : { content }),
+      digest,
       ...(current.phase === "ui_accepted" ? { uiRevision: current.uiPreview.revision } : {}),
     };
     if (

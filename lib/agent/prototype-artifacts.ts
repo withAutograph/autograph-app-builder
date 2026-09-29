@@ -41,7 +41,12 @@ export const shouldRecordHostedPrototypeDurably = (input: {
   expectedDigest?: string;
   existing?: StoredPrototypeArtifact;
 }): boolean => {
-  if (!input.hosted || (input.mediaType !== "text/html" && !input.path.endsWith("/decisions.md"))) {
+  if (
+    !input.hosted ||
+    (input.mediaType !== "text/html" &&
+      !input.path.endsWith("/decisions.md") &&
+      !input.path.endsWith("/app-spec.md"))
+  ) {
     return false;
   }
   return !(

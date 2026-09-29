@@ -24,8 +24,11 @@ export default defineTool({
       abortSignal: ctx.abortSignal,
       appSpec: state.appSpec,
       applyReceipt: state.applyReceipt,
+      artifacts: state.artifacts,
       callId: ctx.callId,
       getSandbox: async () => await ctx.getSandbox(),
+      sessionAuth: ctx.session.auth,
+      sessionId: ctx.session.id,
     });
     ctx.abortSignal?.throwIfAborted();
     if (state.phase === "reviewed") {

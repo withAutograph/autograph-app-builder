@@ -69,6 +69,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
       getSandbox: () => Promise.resolve({}),
+      session: { auth: {}, id: "session" },
     } as never);
     expect(mocks.execute).toHaveBeenCalledBefore(mocks.review);
     expect(mocks.review).toHaveBeenCalledOnce();
@@ -85,6 +86,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
       getSandbox: () => Promise.resolve({}),
+      session: { auth: {}, id: "session" },
     } as never);
     expect(mocks.review).not.toHaveBeenCalled();
   });
@@ -94,6 +96,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
       getSandbox: () => Promise.resolve({}),
+      session: { auth: {}, id: "session" },
     } as never);
     expect(mocks.execute).not.toHaveBeenCalled();
     expect(mocks.review).toHaveBeenCalledOnce();
@@ -111,6 +114,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       const result = await validateAppCreation.execute({ implementationFiles }, {
         callId: "repair",
         getSandbox: () => Promise.resolve({ writeTextFile }),
+        session: { auth: {}, id: "session" },
       } as never);
       expect(mocks.clear).toHaveBeenCalledBefore(writeTextFile);
       expect(writeTextFile).toHaveBeenCalledOnce();
@@ -144,6 +148,7 @@ describe("behavior evidence invalidation during validation repair", () => {
         {
           callId: "repair",
           getSandbox: () => Promise.resolve({ writeTextFile }),
+          session: { auth: {}, id: "session" },
         } as never,
       ),
     ).rejects.toThrow("Existing-app implementation files must stay inside the app workspace.");
@@ -162,6 +167,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       const context = {
         callId: "repair",
         getSandbox: () => Promise.resolve({ writeTextFile }),
+        session: { auth: {}, id: "session" },
       } as never;
       await expect(
         validateAppCreation.execute(

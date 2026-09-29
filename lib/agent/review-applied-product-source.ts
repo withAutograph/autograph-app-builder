@@ -17,7 +17,8 @@ import type {
   ProductSourceReviewInput,
 } from "@/lib/agent/product-source-review";
 import type { SandboxSession } from "eve/sandbox";
-import type { AcceptedAppSpec } from "./workflow-state";
+import type { AcceptedAppSpec, StoredPrototypeArtifact } from "./workflow-state";
+import { acceptedAppSpecTextParts } from "./accepted-app-spec-content";
 import type { TargetApplyReceipt } from "../repository/target-apply";
 
 export interface AppliedSourceObservation {
@@ -85,6 +86,9 @@ export const reviewAppliedProductSource = async (input: {
   getSandbox: () => Promise<SandboxSession>;
   abortSignal?: AbortSignal;
   callId?: string;
+  artifacts?: readonly StoredPrototypeArtifact[];
+  sessionAuth?: unknown;
+  sessionId?: string;
 }): Promise<ProductSourceAssessment> => {
   const logPhase = (
     phase: string,
@@ -107,7 +111,7 @@ export const reviewAppliedProductSource = async (input: {
   };
   const request = productRequestState.get();
   const reviewInput: ProductSourceReviewInput = {
-    appSpec: input.appSpec.content,
+    appSpec: input.appSpec.content ?? "",
     appSpecDigest: input.appSpec.digest,
     clarifications: request.clarifications,
     files: [],
@@ -168,7 +172,7 @@ export const reviewAppliedProductSource = async (input: {
       changedPathGroups,
     });
     const assessedInput = { ...currentInput, omissions: source.omissions };
-    const assessment = await assessProductSourcePages(assessedInput, source.pages, {
+    const reviewOptions: NonNullable<Parameters<typeof assessProductSourcePages>[2]> = {
       abortSignal: input.abortSignal,
       onProgress(progress) {
         console.info(
@@ -179,7 +183,17 @@ export const reviewAppliedProductSource = async (input: {
           }),
         );
       },
-    });
+    };
+    if (input.appSpec.version === 2) {
+      reviewOptions.reviewAppSpecParts = () =>
+        acceptedAppSpecTextParts({
+          accepted: input.appSpec,
+          artifacts: input.artifacts ?? [],
+          sessionAuth: input.sessionAuth,
+          sessionId: input.sessionId ?? "",
+        });
+    }
+    const assessment = await assessProductSourcePages(assessedInput, source.pages, reviewOptions);
     logPhase("changed_source_review_finished", { status: assessment.status });
     input.abortSignal?.throwIfAborted();
     const latest = await inspectApplyOverlay(sandbox, input.applyReceipt.applyRoot);

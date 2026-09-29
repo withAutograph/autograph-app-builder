@@ -121,7 +121,34 @@ export default defineTool({
           },
         });
       }
-      return durablePrototypeToolReceipt(recorded);
+      const receipt = durablePrototypeToolReceipt(recorded);
+      const recordedArtifacts = [
+        ...current.artifacts.filter((artifact) => artifact.path !== path),
+        recorded.artifact,
+      ];
+      if (
+        recorded.complete &&
+        path.endsWith("/app-spec.md") &&
+        ["/index.html", "/decisions.md"].every((suffix) =>
+          recordedArtifacts.some(
+            (artifact) =>
+              artifact.path === `prototype/${appId}${suffix}` && artifact.transfer === undefined,
+          ),
+        )
+      ) {
+        const planning = await continuePrototypePlanning(async () => {
+          await acceptAppSpec.execute(
+            {
+              appId,
+              expectedArtifactDigest: recorded.artifact.digest,
+              expectedArtifactRevision: recorded.artifact.revision,
+            },
+            ctx,
+          );
+        });
+        return { ...receipt, ...planning };
+      }
+      return receipt;
     }
     const artifactInput = {
       artifacts: current.artifacts,

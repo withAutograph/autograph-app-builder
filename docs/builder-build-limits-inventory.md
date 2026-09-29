@@ -44,12 +44,18 @@ compatibility path still holds the provider result in memory. Historical
 events discarded by an older checkpoint cannot be reconstructed; its
 truncation marker remains visible during recovery.
 
-`app-spec.md` remains a v1 whole-content artifact. Its accepted content is
-normalised, validated, and passed to planning and source review as a string.
-Moving this path to durable chunks requires a versioned accepted-spec reference,
-incremental Markdown validation, and scoped downstream reads. A writer-only
-switch would break acceptance. This is a remaining Builder memory boundary,
-not a provider limit.
+New hosted `app-spec.md` writes use the same immutable v2 chunks as other
+prototype artifacts. Acceptance verifies the complete manifest, scans the
+canonical headings and terminal handoff incrementally, and saves a versioned
+artifact reference, digest, and acceptance walkthrough without a second copy
+of the full AppSpec in workflow state. V2 requires canonical LF and the exact
+status-only handoff bytes; noncanonical drafts must be rewritten before
+acceptance. Existing v1 receipts and accepted snapshots retain their original
+normalisation and readback behavior. Planning writes verified chunks through
+the sandbox's streamed file API. Independent source review reopens verified
+chunks for bounded requirement excerpts against each source page. The public
+AppSpec tool readback remains paged by exact digest and revision. See
+[the streamed AppSpec contract](app-spec-stream-contract.md).
 
 Automatic provisioning retries cover settled transient failures with a known
 outcome and a durable next retry time. An expired in-flight lease with an

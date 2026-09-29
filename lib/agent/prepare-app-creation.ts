@@ -1,4 +1,8 @@
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
+import {
+  resolveAcceptedAppSpecContent,
+  resolveAcceptedAppSpecStream,
+} from "@/lib/agent/accepted-app-spec-content";
 import type { ToolContext } from "eve/tools";
 
 import { prepareOrReuseDependencies } from "@/lib/agent/target-dependency-preparation";
@@ -71,9 +75,19 @@ export const prepareAppCreation = async (
   let identityReceipt: TargetIdentityReceipt | undefined =
     current.phase === "identity_resolved" ? current.identityReceipt : undefined;
   let workflowBeforeProposal = current;
+  const appSpecReference = {
+    accepted: current.appSpec,
+    artifacts: current.artifacts,
+    sessionAuth: ctx.session.auth,
+    sessionId: ctx.session.id,
+  };
+  const appSpecSource =
+    current.appSpec.version === 2
+      ? { appSpecStream: resolveAcceptedAppSpecStream(appSpecReference) }
+      : { appSpecContent: await resolveAcceptedAppSpecContent(appSpecReference) };
   const result = await executeTargetIdentityAndPlanning({
     appId: current.appSpec.appId,
-    appSpecContent: current.appSpec.content,
+    ...appSpecSource,
     appSpecDigest: current.appSpec.digest,
     artifactRevision: current.appSpec.artifactRevision,
     environment: process.env,
