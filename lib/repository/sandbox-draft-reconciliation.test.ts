@@ -10,8 +10,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   inspectDraftReconciliation,
   prepareDraftReconciliation,
+  readDraftReconciliationCandidateFile,
   readDraftReconciliationConflict,
   readDraftReconciliationDiff,
+  replaceDraftReconciliationCandidateText,
   writeDraftReconciliationResolution,
 } from "./sandbox-draft-reconciliation";
 
@@ -117,6 +119,75 @@ const fixture = (platformConflict = false) => {
 };
 
 describe("isolated draft reconciliation", () => {
+  it("makes an exact app-owned candidate edit without rewriting other test coverage", async () => {
+    const { root, sandbox, headSha, baseSha } = fixture();
+    const prepared = await prepareDraftReconciliation({
+      appId: "demo",
+      baseBranch: "main",
+      baseSha,
+      headBranch: "draft",
+      headSha,
+      repository: { name: "arrusted-development", owner: "withAutograph" },
+      sandbox,
+      workspaceRoot: root,
+    });
+    await writeDraftReconciliationResolution({
+      content: "main\ndraft\n",
+      path: "apps/demo/tests/journey.spec.ts",
+      prepared,
+      sandbox,
+    });
+    const file = await readDraftReconciliationCandidateFile({
+      path: "apps/demo/tests/journey.spec.ts",
+      prepared,
+      sandbox,
+    });
+    expect(file).toEqual({ content: "main\ndraft\n", digest: digest("main\ndraft\n") });
+    await expect(
+      replaceDraftReconciliationCandidateText({
+        expectedDigest: file.digest,
+        newText: "draft with wait",
+        oldText: "draft",
+        path: "apps/demo/tests/journey.spec.ts",
+        prepared,
+        sandbox,
+      }),
+    ).resolves.toEqual({ digest: digest("main\ndraft with wait\n") });
+    const edited = await readDraftReconciliationCandidateFile({
+      path: "apps/demo/tests/journey.spec.ts",
+      prepared,
+      sandbox,
+    });
+    expect(edited.content).toBe("main\ndraft with wait\n");
+    await expect(
+      replaceDraftReconciliationCandidateText({
+        expectedDigest: edited.digest,
+        newText: "different",
+        oldText: "a",
+        path: "apps/demo/tests/journey.spec.ts",
+        prepared,
+        sandbox,
+      }),
+    ).rejects.toThrow("must occur exactly once");
+    await expect(
+      replaceDraftReconciliationCandidateText({
+        expectedDigest: file.digest,
+        newText: "other",
+        oldText: "main",
+        path: "apps/demo/tests/journey.spec.ts",
+        prepared,
+        sandbox,
+      }),
+    ).rejects.toThrow("changed since inspection");
+    await expect(
+      readDraftReconciliationCandidateFile({
+        path: "docs/platform.md",
+        prepared,
+        sandbox,
+      }),
+    ).rejects.toThrow("outside apps/demo/");
+  });
+
   it("does not replay reviewed files already published to the draft head", async () => {
     const { root, sandbox, headSha, baseSha } = fixture();
     const prepared = await prepareDraftReconciliation({
