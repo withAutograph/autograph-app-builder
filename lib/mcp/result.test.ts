@@ -86,7 +86,7 @@ describe("safe MCP tool errors", () => {
     [new HostedSessionNotFoundError(), "Check the session ID"],
     [new HostedAuthorizationError("insufficient_scope"), "Sign in with the account"],
     [new HostedIdempotencyConflictError(), "new clientRequestId"],
-    [new HostedSubmissionUnknownError(), "autograph_get before sending"],
+    [new HostedSubmissionUnknownError(), "original start clientRequestId"],
     [new HostedRejectedOperationError(), "retry only if the action was not applied"],
     // Vitest's table test API is callback-based.
     // oxlint-disable-next-line promise/prefer-await-to-callbacks
@@ -103,6 +103,17 @@ describe("safe MCP tool errors", () => {
     expect(result.structuredContent.error?.code).toBe("submission_unknown");
     expect(result.structuredContent.error?.message).toContain("Do not submit the response again");
     expect(result.structuredContent.error?.message).toContain("same session with autograph_get");
+  });
+
+  it("gives a recoverable lookup when a start has no session ID", () => {
+    const result = safeToolError(new HostedSubmissionUnknownError(), "", "autograph_start");
+    expect(result.structuredContent.error?.message).toContain(
+      "autograph_get with the original start clientRequestId",
+    );
+    expect(result.structuredContent.error?.message).toContain("same ID and original start input");
+    expect(result.structuredContent.error?.message).toContain(
+      "do not create a replacement request",
+    );
   });
 
   it("makes a provider outage retryable without a new OAuth challenge", () => {

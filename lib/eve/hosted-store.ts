@@ -565,6 +565,11 @@ export type ReserveOperationResult = z.infer<typeof reserveOperationResultSchema
  * optional new session and the terminal operation result.
  */
 export interface HostedEveStore {
+  /** Exact caller-owned start lookup; never searches another tenant or user. */
+  getStartOperation?: (
+    principal: z.infer<typeof hostedPrincipalSchema>,
+    clientRequestId: string,
+  ) => Promise<HostedOperationRecord | null>;
   reserveOperation: (
     principal: z.infer<typeof hostedPrincipalSchema>,
     candidate: HostedOperationRecord,
@@ -672,6 +677,20 @@ export interface HostedEveStore {
 export class InMemoryHostedEveStore implements HostedEveStore {
   private readonly operations = new Map<string, HostedOperationRecord>();
   private readonly sessions = new Map<string, HostedSessionRecord>();
+
+  // oxlint-disable-next-line eslint/require-await -- Keep the durable store interface.
+  async getStartOperation(
+    principal: z.infer<typeof hostedPrincipalSchema>,
+    clientRequestId: string,
+  ): Promise<HostedOperationRecord | null> {
+    const operation = [...this.operations.values()].find(
+      (candidate) =>
+        candidate.kind === "start" &&
+        candidate.clientRequestId === clientRequestId &&
+        tenantKeyFor(candidate.principal) === tenantKeyFor(principal),
+    );
+    return operation === undefined ? null : structuredClone(operation);
+  }
 
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async reserveOperation(

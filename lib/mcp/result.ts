@@ -25,6 +25,16 @@ type McpOperation =
   | "autograph_respond"
   | "autograph_cancel";
 
+const unknownSubmissionMessage = (operation: McpOperation, sessionId: string): string => {
+  if (operation === "autograph_respond") {
+    return "The response may have been accepted, but Builder could not confirm its settlement before the session read deadline. Do not submit the response again. Read the same session with autograph_get to see whether the input resolved; if its read is delayed, retry that read with the same session ID and cursor.";
+  }
+  if (operation === "autograph_start" || sessionId.length === 0) {
+    return "Builder could not confirm whether the start was saved. Call autograph_get with the original start clientRequestId to recover its session. Keep the same ID and original start input for an exact retry; do not create a replacement request.";
+  }
+  return "The service could not confirm whether the last submission was saved, so it was not replayed. Read the same session with autograph_get before sending another request.";
+};
+
 const safeUnexpectedCause = (error: unknown): string => {
   const messages: string[] = [];
   let current = error;
@@ -134,10 +144,7 @@ export function safeToolError(
       "This client request ID was already used for a different operation. Read the current session state, then send the new request with a new clientRequestId.";
   } else if (unknown) {
     code = "submission_unknown";
-    message =
-      operation === "autograph_respond"
-        ? "The response may have been accepted, but Builder could not confirm its settlement before the session read deadline. Do not submit the response again. Read the same session with autograph_get to see whether the input resolved; if its read is delayed, retry that read with the same session ID and cursor."
-        : "The service could not confirm whether the last submission was saved, so it was not replayed. Read the same session with autograph_get before sending another request.";
+    message = unknownSubmissionMessage(operation, sessionId);
   } else if (cancellationUnsettled) {
     code = "cancellation_unsettled";
     message = "Cancellation was accepted but has not settled. Continue with autograph_get.";

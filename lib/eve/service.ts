@@ -33,13 +33,18 @@ export interface EveSessionService {
     clientRequestId: string;
   }) => Promise<EveSessionResult>;
   /** Internal lost-response recovery for an already-bound start operation. */
-  /** Internal lost-response recovery for an already-bound start operation. */
   recoverStart?: (input: {
     sessionId: string;
     cursor: number;
     limit: number;
   }) => Promise<EveSessionResult>;
   list: (input: { cursor: number; limit: number }) => Promise<EveSessionListResult>;
+  /** Read the result of this caller's original start without submitting it again. */
+  getStart?: (input: {
+    clientRequestId: string;
+    cursor: number;
+    limit: number;
+  }) => Promise<EveSessionResult>;
   get: (input: { sessionId: string; cursor: number; limit: number }) => Promise<EveSessionResult>;
   send: (input: {
     sessionId: string;
@@ -664,6 +669,13 @@ export function createLocalEveSessionService(
       limit,
       localResultOptions(sessionId),
     );
+  };
+  service.getStart = async ({ clientRequestId, cursor, limit }) => {
+    const sessionId = localRequests.get(`start:${clientRequestId}`);
+    if (sessionId === undefined) {
+      throw new Error("The start request was not found in this local Builder service.");
+    }
+    return await service.get({ cursor, limit, sessionId });
   };
   service.send = async ({ sessionId, message, clientRequestId }) => {
     const key = `send:${sessionId}:${clientRequestId}`;

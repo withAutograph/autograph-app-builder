@@ -1,4 +1,5 @@
 import { createMcpHandler } from "mcp-handler";
+import type { z } from "zod";
 
 import { authorizeHostedPrincipal, HostedAuthorizationError } from "../eve/hosted-auth";
 import type { HostedPrincipal } from "../eve/hosted-auth";
@@ -124,6 +125,31 @@ export interface HostedMcpRuntime {
   beforeRead?: Parameters<typeof createHostedEveSessionService>[0]["beforeRead"];
   now?: () => number;
 }
+
+const readBuilderProgress = async (
+  service: EveSessionService,
+  input: z.infer<typeof eveGetInputSchema>,
+): Promise<EveSessionResult | EveSessionListResult> => {
+  if (input.clientRequestId !== undefined) {
+    const { getStart } = service;
+    if (getStart === undefined) {
+      throw new Error("Start request recovery is unavailable in this Builder service.");
+    }
+    return await getStart({
+      clientRequestId: input.clientRequestId,
+      cursor: input.cursor,
+      limit: input.limit,
+    });
+  }
+  if (input.sessionId !== undefined) {
+    return await service.get({
+      cursor: input.cursor,
+      limit: input.limit,
+      sessionId: input.sessionId,
+    });
+  }
+  return await service.list({ cursor: input.cursor, limit: input.limit });
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function withHostedBuilderHandoffs(input: {
@@ -273,7 +299,7 @@ export function createAutographMcpHandler(
           readOnlyHint: true,
         },
         description:
-          "List recent app builds, or read the next page of one app build's progress and requests.",
+          "List recent app builds, read one app build's progress, or recover its session using the original autograph_start clientRequestId.",
         inputSchema: eveGetInputSchema,
         outputSchema: eveGetResultSchema,
         title: "Check App Builder progress",
@@ -281,14 +307,7 @@ export function createAutographMcpHandler(
       },
       async (input) => {
         try {
-          const result =
-            input.sessionId === undefined
-              ? await service.list({ cursor: input.cursor, limit: input.limit })
-              : await service.get({
-                  cursor: input.cursor,
-                  limit: input.limit,
-                  sessionId: input.sessionId,
-                });
+          const result = await readBuilderProgress(service, input);
           return toolResult(
             present(result),
             "kind" in result

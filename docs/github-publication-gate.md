@@ -47,6 +47,15 @@ diff; a separate approval and GitHub atomic expected-OID update are required.
 If GitHub provenance cannot be verified, Builder reports that reason and leaves
 the PR branch untouched.
 
+Initial source selection is separate from publication. In a new session,
+`resolve_github_source` accepts a named branch or any open same-repository PR,
+including a PR already marked ready for review. It shows the selected branch
+and PR number and reads the provider's current revision before preparing the
+private checkout. Source inspection grants no publication authority. Draft
+updates and reconciliation still require their existing draft, provenance,
+review, and approval checks. An occupied session keeps its selected repository
+and branch; choosing another source requires a new session.
+
 When the current draft head conflicts with its live base, Builder prepares a
 private merge candidate from the exact observed head and base commits. It may
 resolve only conflicts under the selected app. The candidate runs its own

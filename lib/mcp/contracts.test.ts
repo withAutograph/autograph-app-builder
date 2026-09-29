@@ -9,6 +9,17 @@ import {
 } from "./contracts";
 
 describe("durable session discovery contracts", () => {
+  it("looks up an original start separately from a known session", () => {
+    expect(eveGetInputSchema.parse({ clientRequestId: "lost-start" })).toEqual({
+      clientRequestId: "lost-start",
+      cursor: 0,
+      limit: 100,
+    });
+    expect(
+      eveGetInputSchema.safeParse({ clientRequestId: "lost-start", sessionId: "session-one" })
+        .success,
+    ).toBe(false);
+  });
   it("lists without a session and requires exactly one new, handoff, or resume start", () => {
     expect(eveGetInputSchema.parse({})).toEqual({ cursor: 0, limit: 100 });
     expect(

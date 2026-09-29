@@ -1596,6 +1596,42 @@ export function createHostedEveSessionService(input: {
       requireHostedOperationScope(principal, "get");
       return readSession({ cursor, limit, sessionId });
     },
+    async getStart({ clientRequestId, cursor, limit }) {
+      requireHostedOperationScope(principal, "get");
+      if (input.store.getStartOperation === undefined) {
+        throw new HostedSubmissionUnknownError();
+      }
+      const stored = await input.store.getStartOperation(principal, clientRequestId);
+      if (stored === null) {
+        return {
+          cursor: 0,
+          error: {
+            code: "start_request_not_found",
+            message:
+              "No start result is saved for this account and clientRequestId. Check the original request ID and signed-in account. If they are correct, retry autograph_start with exactly the original ID and input.",
+          },
+          events: [],
+          sessionId: "",
+          status: "failed" as const,
+        };
+      }
+      const operation = hostedOperationRecordSchema.parse(stored);
+      if (
+        operation.kind !== "start" ||
+        operation.clientRequestId !== clientRequestId ||
+        tenantKeyFor(operation.principal) !== tenantKeyFor(principal)
+      ) {
+        throw new HostedSubmissionUnknownError();
+      }
+      if (operation.state === "rejected") {
+        throw new HostedRejectedOperationError(operation.safeErrorCode);
+      }
+      if (operation.state !== "succeeded") {
+        throw new HostedSubmissionUnknownError();
+      }
+      const session = await requireBoundSucceededStartSession(operation);
+      return readSession({ cursor, limit, sessionId: session.sessionId });
+    },
     async list({ cursor, limit }) {
       requireHostedOperationScope(principal, "get");
       const listed = await input.store.listSessions({

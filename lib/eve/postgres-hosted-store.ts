@@ -285,6 +285,11 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       return sessionById(database, principal, sessionId);
     },
 
+    async getStartOperation(principalInput, clientRequestId) {
+      const principal = hostedPrincipalSchema.parse(principalInput);
+      return await operationByRequest(database, principal, "start", clientRequestId);
+    },
+
     async listSessions(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
       const rows = await database
