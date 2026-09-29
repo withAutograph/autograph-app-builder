@@ -64,6 +64,8 @@ const fixture = (platformConflict = false) => {
   const baseSha = git(checkout, "rev-parse", "HEAD");
   git(checkout, "push", "origin", "main");
   git(checkout, "switch", "draft");
+  git(checkout, "config", "--unset", "user.name");
+  git(checkout, "config", "--unset", "user.email");
   // SAFETY: The fake implements only SandboxSession methods used by this module.
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- focused sandbox fixture.
   const sandbox = {
@@ -90,6 +92,9 @@ const fixture = (platformConflict = false) => {
         encoding: "utf-8",
         env: {
           ...process.env,
+          GIT_CONFIG_GLOBAL: "/dev/null",
+          GIT_CONFIG_NOSYSTEM: "1",
+          HOME: root,
           PATH: `${path.dirname(process.execPath)}:${process.env.PATH ?? ""}`,
         },
       });

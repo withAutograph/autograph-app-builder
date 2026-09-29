@@ -27,6 +27,17 @@ const quote = (value: string) => {
 };
 const git = (root: string, args: readonly string[]) =>
   `git -c core.hooksPath=/dev/null -c commit.gpgsign=false -C ${quote(root)} ${args.map(quote).join(" ")}`;
+const mergeBase = (root: string, baseSha: string) =>
+  git(root, [
+    "-c",
+    "user.name=Autograph App Builder",
+    "-c",
+    "user.email=builder@autograph.so",
+    "merge",
+    "--no-commit",
+    "--no-ff",
+    baseSha,
+  ]);
 const records = (value: string) => value.split("\0").filter((part) => part !== "");
 const redact = (value: string) =>
   value
@@ -339,7 +350,7 @@ export const prepareDraftReconciliation = async (
     const merge = await run(
       sandbox,
       "merge the base into the private draft candidate",
-      git(root, ["merge", "--no-commit", "--no-ff", input.baseSha]),
+      mergeBase(root, input.baseSha),
     );
     const conflictOutput = await checked(
       sandbox,
@@ -367,7 +378,7 @@ export const prepareDraftReconciliation = async (
       const retry = await run(
         sandbox,
         "resume the base merge in the saved candidate",
-        git(root, ["merge", "--no-commit", "--no-ff", input.baseSha]),
+        mergeBase(root, input.baseSha),
       );
       const conflicts = records(
         await checked(sandbox, "inspect resumed merge conflicts", git(root, UNMERGED_PATHS)),
