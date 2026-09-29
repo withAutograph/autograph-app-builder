@@ -28,6 +28,7 @@ vi.mock("../repository/sandbox-draft-reconciliation", () => ({
   inspectDraftReconciliation: mocks.inspect,
 }));
 vi.mock("../repository/target-validation", () => ({
+  sanitizeValidationDiagnosticText: (value: string) => value,
   validationOutputExcerpt: (stdout: string, stderr: string) => ({ stderr, stdout }),
 }));
 

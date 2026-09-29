@@ -8,7 +8,10 @@ import {
 } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { inspectDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
-import { validationOutputExcerpt } from "@/lib/repository/target-validation";
+import {
+  sanitizeValidationDiagnosticText,
+  validationOutputExcerpt,
+} from "@/lib/repository/target-validation";
 
 const command = "mise run --skip-tools format:app";
 
@@ -59,7 +62,7 @@ export default defineTool({
       });
     } catch (error) {
       throw new Error(
-        `Builder could not run ${command} in the isolated draft candidate. Check the sandbox and repository formatting task, then retry. Cause: ${error instanceof Error ? error.message : String(error)}`,
+        `Builder could not run ${command} in the isolated draft candidate. Check the sandbox and repository formatting task, then retry. Cause: ${sanitizeValidationDiagnosticText(error instanceof Error ? error.message : String(error))}`,
         { cause: error },
       );
     }
