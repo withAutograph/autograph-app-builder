@@ -35,6 +35,30 @@ describe("Eve input response mapping", () => {
 });
 
 describe("local Eve acceptance", () => {
+  it("returns an actionable missing original request result without touching the adapter", async () => {
+    const attach = vi.fn();
+    const create = vi.fn();
+    const service = createLocalEveSessionService(
+      { sessions: { attach, create } as never },
+      { stateGeneration: "missing-original-start" },
+    );
+    await expect(
+      service.getStart?.({ clientRequestId: "missing-original", cursor: 0, limit: 100 }),
+    ).resolves.toEqual({
+      cursor: 0,
+      error: {
+        code: "start_request_not_found",
+        message:
+          "No start result is saved for this account and clientRequestId. Check the original request ID and signed-in account. If they are correct, retry autograph_start with exactly the original ID and input.",
+      },
+      events: [],
+      sessionId: "",
+      status: "failed",
+    });
+    expect(attach).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("lists recent work and resumes the selected local session", async () => {
     const events = [{ data: {}, type: "session.waiting" }] as MessageStreamEvent[];
     const response = {

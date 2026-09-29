@@ -683,7 +683,17 @@ export function createLocalEveSessionService(
   service.getStart = async ({ clientRequestId, cursor, limit }) => {
     const sessionId = localRequests.get(`start:${clientRequestId}`);
     if (sessionId === undefined) {
-      throw new Error("The start request was not found in this local Builder service.");
+      return {
+        cursor: 0,
+        error: {
+          code: "start_request_not_found",
+          message:
+            "No start result is saved for this account and clientRequestId. Check the original request ID and signed-in account. If they are correct, retry autograph_start with exactly the original ID and input.",
+        },
+        events: [],
+        sessionId: "",
+        status: "failed" as const,
+      };
     }
     return await service.get({ cursor, limit, sessionId });
   };
