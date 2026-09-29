@@ -21,4 +21,8 @@ until curl --fail --insecure --silent "https://127.0.0.1:${APP_BUILDER_LOCAL_POR
   fi
   sleep 1
 done
-mise run auth-e2e:test
+if [ "$#" -gt 0 ]; then
+  mise run auth-e2e:test -- "$@"
+else
+  mise run auth-e2e:test
+fi

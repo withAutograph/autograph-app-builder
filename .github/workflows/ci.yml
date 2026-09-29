@@ -120,11 +120,14 @@ jobs:
       - run: mise run ci-package-build
 
   auth-e2e-emulated:
+    name: auth-e2e-emulated (shard ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
-    # Playwright installs Chromium's system dependencies through apt. On the
-    # first attempt for PR #555, fetching 23.9 MB took 8m33s; the rerun fetched
-    # the same packages in 1s. Budget for that observed mirror variance, the
-    # 12-minute Playwright suite bound, and job/app setup and cleanup.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    # Each shard has a 12-minute Playwright suite bound; leave time for runner
+    # startup, browser install, app readiness, and cleanup before the job stop.
     timeout-minutes: 22
     env:
       APP_BUILDER_DATABASE_PORT: "54329"
@@ -153,7 +156,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
       - run: mise run dependencies:install
-      - run: mise run ci-auth-e2e-emulated
+      - run: mise run ci-auth-e2e-emulated -- --shard=${{ matrix.shard }}/2
 
   production-navigation:
     runs-on: ubuntu-latest
