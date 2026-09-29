@@ -27,8 +27,10 @@ context, not prerequisites to acquiring a fresh starter. A missing named
 “Template readiness” check does not prevent acquisition. Invoke supported
 operations when needed and report their actual command failures with repair
 instructions. Acquisition receipts record source identity, not successful CI. Existing
-serialized receipt fields and recovery parsing remain unchanged; the historical
-`readinessDigest` field is opaque source bookkeeping, not a CI attestation.
+serialized receipt fields and recovery parsing remain unchanged. Current
+acquisitions use `readinessDigest` for source identity; older stored values that
+hashed check evidence remain unchanged. The field alone does not establish
+current CI or product readiness.
 
 Architecture observations are advisory. Repository checks and exercised product
 behavior establish whether persistence, authentication, and tenant isolation work.
