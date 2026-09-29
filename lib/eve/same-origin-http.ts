@@ -39,7 +39,7 @@ const SESSION_READ_TIMEOUT_MS = 30_000;
 const SESSION_SETTLEMENT_POLL_INTERVAL_MS = 200;
 const VERCEL_TRUSTED_OIDC_HEADER = "x-vercel-trusted-oidc-idp-token";
 const EVE_STREAM_FORMAT = "ndjson";
-const EVE_STREAM_VERSION = "23";
+const EVE_STREAM_VERSION = "25";
 
 const sameOriginConfigSchema = z
   .object({
@@ -68,6 +68,7 @@ const sameOriginConfigSchema = z
 
 const acceptedTurnSchema = z
   .object({
+    deliveryId: z.string().min(1).max(500).optional(),
     ok: z.literal(true),
     sessionId: z.string().min(1).max(500),
     status: z.literal("accepted"),
@@ -162,13 +163,15 @@ async function readJson(response: Response): Promise<unknown> {
       { expectedLiteral: "true", pointer: "/ok" },
       { capture: true, optional: true, pointer: "/sessionId" },
       { capture: true, pointer: "/status" },
+      { capture: true, optional: true, pointer: "/deliveryId" },
     ],
-    { allowedRootKeys: ["ok", "sessionId", "status"] },
+    { allowedRootKeys: ["ok", "sessionId", "status", "deliveryId"] },
   );
   return {
     ok: parsed.matches[0],
     ...(parsed.values[1] === undefined ? {} : { sessionId: parsed.values[1] }),
     ...(parsed.values[2] === undefined ? {} : { status: parsed.values[2] }),
+    ...(parsed.values[3] === undefined ? {} : { deliveryId: parsed.values[3] }),
   };
 }
 
@@ -220,7 +223,11 @@ async function postMutation(input: {
     if (response.status !== 202) {
       throw new Error("Unexpected response status.");
     }
-    return acceptedTurnSchema.parse(body);
+    const accepted = acceptedTurnSchema.parse(body);
+    if (input.path !== "/eve/v1/session" && accepted.deliveryId === undefined) {
+      throw new Error("Canonical Eve omitted the accepted delivery identity.");
+    }
+    return accepted;
   } catch (error) {
     if (error instanceof SubmissionRejectedBeforeDispatchError) {
       throw error;
@@ -718,6 +725,24 @@ async function readSnapshot(
   };
 }
 
+/** A create reply may name a losing candidate; only its started stream proves ownership. */
+const confirmStartedSession = async (input: Parameters<typeof streamSameOriginEveEvents>[0]) => {
+  const signal = AbortSignal.timeout(SESSION_READ_TIMEOUT_MS);
+  while (true) {
+    signal.throwIfAborted();
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Startup is observed on the same candidate only.
+    for await (const event of streamSameOriginEveEvents({ ...input, readSignal: signal })) {
+      if (event.type === "session.started") {
+        return;
+      }
+    }
+    // No event can be treated as a replacement ownership receipt. Retry only
+    // this read; another create before startup can allocate another candidate.
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Preserve bounded sequential startup observation.
+    await delay(SESSION_SETTLEMENT_POLL_INTERVAL_MS, undefined, { signal });
+  }
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function activeTurnId(events: readonly MessageStreamEvent[]): string | undefined {
   let active: string | undefined;
@@ -1179,13 +1204,18 @@ export function createSameOriginEveTransport(input: {
         principal: request.principal,
         sourceHandoffId: request.sourceHandoffId,
       });
+      try {
+        await confirmStartedSession({ ...common, sessionId: accepted.sessionId });
+      } catch {
+        // The create was dispatched, but a candidate ID alone does not prove
+        // it claimed the authenticated operation. Keep the reserved operation
+        // uncertain so an exact later retry can resolve its canonical owner.
+        throw new SubmissionOutcomeUnknownError();
+      }
       return {
         adapterSessionId: accepted.sessionId,
-        // The create reply is the durable acceptance point. A live Eve stream
-        // can remain open while the first turn runs, so reading it here can
-        // keep autograph_start open until the hosting request times out. The
-        // public session is persisted from this provisional snapshot and the
-        // first autograph_get observes the actual stream.
+        // Ownership is established; the model may still be running. Persist
+        // the provisional public session and observe the turn on autograph_get.
         snapshot: { events: [], status: "working" },
       };
     },

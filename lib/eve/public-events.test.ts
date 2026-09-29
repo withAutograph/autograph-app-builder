@@ -11,6 +11,7 @@ import {
   projectInstalledEveEvents,
   projectInstalledEveEvent,
   pendingBuilderOperation,
+  outstandingInstalledEveRequests,
   toPublicEvent,
 } from "./public-events";
 import {
@@ -126,7 +127,73 @@ describe("toPublicEvent", () => {
   });
 });
 
-describe("installed Eve 0.43 projection", () => {
+describe("installed Eve 0.68 projection", () => {
+  it("uses a question request identity independently of its tool call and resolves ignored input", () => {
+    const requested = installedEvent({
+      data: {
+        requests: [
+          {
+            action: {
+              callId: "call_question",
+              input: {},
+              kind: "tool-call",
+              toolName: "ask_question",
+            },
+            allowFreeform: true,
+            kind: "question",
+            prompt: "Which workspace?",
+            requestId: "request_question",
+          },
+        ],
+        sequence: 0,
+        stepIndex: 0,
+        turnId: "turn_1",
+      },
+      type: "input.requested",
+    });
+    expect(outstandingInstalledEveRequests([requested])).toMatchObject([
+      { requestId: "request_question", title: "Which workspace?" },
+    ]);
+    const ignored = installedEvent({
+      data: {
+        resolutions: [{ kind: "question", outcome: "ignored", requestId: "request_question" }],
+        sequence: 1,
+        stepIndex: 0,
+        turnId: "turn_1",
+      },
+      type: "input.resolved",
+    });
+    expect(projectInstalledEveEvent(ignored, 1)).toEqual([
+      { index: 1, requestIds: ["request_question"], type: "input.resolved" },
+    ]);
+    expect(outstandingInstalledEveRequests([requested, ignored])).toEqual([]);
+    expect(
+      deriveInstalledEveStatus([
+        requested,
+        ignored,
+        installedEvent({ data: {}, type: "session.waiting" }),
+      ]),
+    ).toBe("waiting");
+  });
+
+  it("projects finalized assistant text while omitting v25 deltas and private tool input", () => {
+    const events = [
+      installedEvent({ data: { messageDelta: "Hel", turnId: "turn_1" }, type: "message.appended" }),
+      installedEvent({ data: { messageDelta: "lo", turnId: "turn_1" }, type: "message.appended" }),
+      installedEvent({
+        data: { reasoningDelta: "private", turnId: "turn_1" },
+        type: "reasoning.appended",
+      }),
+      installedEvent({
+        data: { callId: "call_1", inputTextDelta: "private", toolName: "tool", turnId: "turn_1" },
+        type: "action.input.appended",
+      }),
+      installedEvent({ data: { message: "Hello", turnId: "turn_1" }, type: "message.completed" }),
+    ];
+    expect(projectInstalledEveEvents(events)).toEqual([
+      { index: 0, text: "Hello", turnId: "turn_1", type: "assistant_message" },
+    ]);
+  });
   it("reports a failed Builder step with its operation and redacted cause", () => {
     const events = projectInstalledEveEvents([
       installedEvent({

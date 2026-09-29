@@ -1073,7 +1073,7 @@ const inputRequest = (request: {
   };
 };
 
-/** Converts only the installed Eve 0.43 events that belong in the public MCP projection. */
+/** Converts only the installed Eve 0.68 events that belong in the public MCP projection. */
 export const projectInstalledEveEvent = (
   event: MessageStreamEvent,
   index: number,

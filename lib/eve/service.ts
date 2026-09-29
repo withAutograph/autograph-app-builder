@@ -1,4 +1,4 @@
-import { Client, ClientError } from "eve/client";
+import { Client, ClientError, parseInputResponses } from "eve/client";
 import type { ClientSession, MessageStreamEvent } from "eve/client";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -112,7 +112,9 @@ export function toEveInputResponse(
 export function toEveInputResponses(
   responses: Parameters<EveSessionService["respond"]>[0]["responses"],
 ) {
-  return responses.map(({ requestId, response }) => toEveInputResponse(requestId, response));
+  return parseInputResponses(
+    responses.map(({ requestId, response }) => toEveInputResponse(requestId, response)),
+  );
 }
 
 type CancellableResponse = AsyncIterable<MessageStreamEvent> & {

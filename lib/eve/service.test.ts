@@ -5,11 +5,22 @@ import type { MessageStreamEvent } from "eve/client";
 import { ClientError } from "eve/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { createLocalEveSessionService, toEveInputResponse } from "./service";
+import { createLocalEveSessionService, toEveInputResponse, toEveInputResponses } from "./service";
 import { HostedCancellationUnsettledError } from "./hosted-errors";
 import { LocalSessionRecoveryUnavailableError } from "./local-session-recovery";
 
 describe("Eve input response mapping", () => {
+  it("validates dynamic batches against installed Eve's strict response contract", () => {
+    expect(
+      toEveInputResponses([
+        { requestId: "request_question", response: { kind: "answer", value: "Finance" } },
+        { requestId: "request_approval", response: { kind: "approve" } },
+      ]),
+    ).toEqual([
+      { requestId: "request_question", text: "Finance" },
+      { optionId: "approve", requestId: "request_approval" },
+    ]);
+  });
   it("maps the public denial to Eve's cancel approval option", () => {
     expect(toEveInputResponse("request-1", { kind: "deny" })).toEqual({
       optionId: "cancel",
