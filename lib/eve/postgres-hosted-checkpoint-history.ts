@@ -419,11 +419,13 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
       metadata: unknown;
       events: AsyncIterable<PublicEveEvent>;
       nowEpochMs: number;
+      transaction?: Transaction;
     }) {
       const principal = hostedPrincipalSchema.parse(input.principal);
+      const writer = input.transaction ?? database;
       const checkpointId = randomUUID();
       const key = tenant(principal, input.sessionId, checkpointId);
-      const session = await database
+      const session = await writer
         .select({ sessionId: agentSessions.sessionId })
         .from(agentSessions)
         .where(
@@ -439,7 +441,7 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
       if (session.length !== 1) {
         throw new Error("Hosted checkpoint session was not found for this tenant.");
       }
-      await database.insert(agentSessionCheckpointManifests).values({
+      await writer.insert(agentSessionCheckpointManifests).values({
         ...key,
         createdAt: new Date(input.nowEpochMs),
         updatedAt: new Date(input.nowEpochMs),
@@ -455,14 +457,14 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
         let buffer = Buffer.alloc(0);
         // eslint-disable-next-line eslint/func-style -- Flush chunks one at a time.
         const flush = async (bytes: Buffer) => {
-          await database.insert(agentSessionCheckpointChunks).values({
+          await writer.insert(agentSessionCheckpointChunks).values({
             ...key,
             chunkDigest: hashBytes(bytes),
             itemIndex,
             partIndex: partCount,
             payload: bytes.toString("base64"),
           });
-          await database
+          await writer
             .update(agentSessionCheckpointManifests)
             .set({ updatedAt: new Date() })
             .where(and(manifestWhere(key), isNull(agentSessionCheckpointManifests.publishedAt)));
@@ -491,7 +493,7 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
           await flush(buffer);
         }
         const itemDigest = `sha256:${itemHash.digest("hex")}`;
-        await database.insert(agentSessionCheckpointItems).values({
+        await writer.insert(agentSessionCheckpointItems).values({
           ...key,
           byteLength,
           digest: itemDigest,
@@ -523,7 +525,7 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
           eventCount += 1;
         }
       } catch (error) {
-        await database.delete(agentSessionCheckpointManifests).where(manifestWhere(key));
+        await writer.delete(agentSessionCheckpointManifests).where(manifestWhere(key));
         throw error;
       }
       return {

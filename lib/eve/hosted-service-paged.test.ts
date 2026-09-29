@@ -180,6 +180,7 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
   return {
     adapter,
     base,
+    getPagedEventCount: () => eventCount,
     getSession,
     observeSessionPaged,
     readCheckpointPage,
@@ -190,6 +191,89 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
 };
 
 describe("paged hosted session observation", () => {
+  it("atomically settles a new session with more than 512 paged checkpoint events", async () => {
+    const base = new InMemoryHostedEveStore();
+    const events = Array.from({ length: 520 }, (_, index) => ({
+      index,
+      text: `event ${index}`,
+      turnId: "turn_start",
+      type: "assistant_message" as const,
+    }));
+    const adapter = transport(
+      // oxlint-disable-next-line eslint/require-await -- Transport mocks preserve the asynchronous adapter contract.
+      vi.fn(async () => ({
+        artifactProjectionRequiresLegacyReadback: false,
+        installedEventCount: 0,
+        pendingRequests: [],
+        publicEventCount: 0,
+        status: "waiting" as const,
+      })),
+    );
+    // oxlint-disable-next-line eslint/require-await -- Start mocks preserve the asynchronous adapter contract.
+    adapter.start = vi.fn(async () => ({
+      adapterSessionId: "adapter_large_start",
+      snapshot: {
+        events: events.map(({ index, text, turnId }) => ({
+          index,
+          text,
+          turnId,
+          type: "assistant.message",
+        })),
+        status: "waiting" as const,
+      },
+    }));
+    const settleSucceededPaged = vi.fn<NonNullable<HostedEveStore["settleSucceededPaged"]>>(
+      async (input) => {
+        const stagedEvents: PublicEveEvent[] = [];
+        for await (const event of input.events) {
+          stagedEvents.push(event);
+        }
+        expect(stagedEvents).toHaveLength(520);
+        const checkpointDigest = `sha256:${"e".repeat(64)}`;
+        return await base.settleSucceeded({
+          ...input,
+          session: durableHostedSessionRecordSchema.parse({
+            ...input.session,
+            checkpointDigest,
+            checkpointProgressDigest: `sha256:${"f".repeat(64)}`,
+            checkpointRef: {
+              digest: checkpointDigest,
+              eventCount: stagedEvents.length,
+              id: randomUUID(),
+            },
+          }),
+        });
+      },
+    );
+    const store: HostedEveStore = {
+      getSession: base.getSession.bind(base),
+      listSessions: base.listSessions.bind(base),
+      readCheckpointPage: vi.fn(() => {
+        throw new Error("New-session verification must use its saved session record.");
+      }),
+      reserveOperation: base.reserveOperation.bind(base),
+      settleSucceeded: base.settleSucceeded.bind(base),
+      settleSucceededPaged,
+      settleUnsuccessful: base.settleUnsuccessful.bind(base),
+    };
+    const service = createHostedEveSessionService({
+      now: () => 10_000,
+      principal,
+      store,
+      transport: adapter,
+    });
+
+    const result = await service.start({
+      clientRequestId: randomUUID(),
+      prompt: "Build a large app",
+    });
+    const saved = await base.getSession(principal, result.sessionId);
+
+    expect(result.sessionId).toBeTruthy();
+    expect(saved?.version === 2 && saved.checkpointRef?.eventCount).toBe(520);
+    expect(settleSucceededPaged).toHaveBeenCalledOnce();
+  });
+
   it("returns a paged no-op cancellation without dispatch when no turn is active", async () => {
     const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async () => {
       await Promise.resolve();
@@ -541,7 +625,7 @@ describe("paged hosted session observation", () => {
     expect(observe).toHaveBeenCalledTimes(1);
   });
 
-  it("uses the existing verified snapshot path when an artifact receipt is present", async () => {
+  it("pages the complete compatibility snapshot when a legacy artifact needs readback", async () => {
     // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous observation contract.
     const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async () => ({
       artifactProjectionRequiresLegacyReadback: true,
@@ -550,10 +634,40 @@ describe("paged hosted session observation", () => {
       publicEventCount: 0,
       status: "waiting",
     }));
-    const { adapter, observeSessionPaged, service, sessionId } = await fixture(observe);
+    const { adapter, getPagedEventCount, observeSessionPaged, service, sessionId } =
+      await fixture(observe);
+    const events = [
+      ...Array.from({ length: 520 }, (_, index) => ({
+        index,
+        text: `event ${index}`,
+        turnId: "turn_legacy",
+        type: "assistant.message",
+      })),
+      ...Array.from({ length: 40 }, (_, index) => ({
+        index: index + 520,
+        request: {
+          allowFreeform: true,
+          description: `Question ${index}: ${"x".repeat(16_000)}`,
+          kind: "question",
+          requestId: `legacy_request_${index}`,
+          title: `Question ${index}`,
+        },
+        type: "input.requested",
+      })),
+    ];
+    adapter.get = vi.fn(async () => {
+      await Promise.resolve();
+      return { events, status: "input_required" as const };
+    });
     const result = await service.get({ cursor: 0, limit: 1, sessionId });
-    expect(result.status).toBe("waiting");
+    expect(result.status).toBe("input_required");
     expect(adapter.get).toHaveBeenCalledOnce();
-    expect(observeSessionPaged).not.toHaveBeenCalled();
+    expect(observeSessionPaged).toHaveBeenCalledOnce();
+    expect(getPagedEventCount()).toBe(560);
+    expect(observeSessionPaged.mock.calls[0]?.[0].metadata.inputRequests).toHaveLength(40);
+    expect(
+      new TextEncoder().encode(JSON.stringify(observeSessionPaged.mock.calls[0]?.[0].metadata))
+        .byteLength,
+    ).toBeGreaterThan(512 * 1024);
   });
 });

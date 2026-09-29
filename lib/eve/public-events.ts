@@ -93,7 +93,7 @@ const draftValidationLabel = (
   return draftValidationCommandLabel(command) ?? visibleOperations.get(toolName);
 };
 
-export const pendingBuilderOperation = (events: readonly PublicEveEvent[]): string => {
+export const pendingBuilderOperation = (events: Iterable<PublicEveEvent>): string => {
   const pending = new Set<string>();
   for (const event of events) {
     if (event.type === "status" && ["cancelled", "completed", "failed"].includes(event.status)) {

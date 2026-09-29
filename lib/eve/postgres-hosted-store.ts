@@ -23,6 +23,8 @@ import { createPostgresHostedCheckpointHistory } from "./postgres-hosted-checkpo
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 const SESSION_NOT_FOUND = "Hosted session was not found.";
+const OPERATION_CANNOT_SETTLE = "Hosted operation cannot settle at this digest.";
+const OPERATION_SETTLEMENT_NOT_DURABLE = "Hosted operation settlement was not durable.";
 
 const sessionRowSchema = z
   .object({
@@ -769,12 +771,12 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       return database.transaction(async (transaction) => {
         const operation = await operationById(transaction, principal, input.operationId, true);
         if (operation === null || operation.requestDigest !== input.requestDigest) {
-          throw new Error("Hosted operation cannot settle at this digest.");
+          throw new Error(OPERATION_CANNOT_SETTLE);
         }
         const replayableStart =
           operation.kind === "start" && operation.state === "submission_unknown";
         if (operation.state !== "reserved" && !replayableStart) {
-          throw new Error("Hosted operation cannot settle at this digest.");
+          throw new Error(OPERATION_CANNOT_SETTLE);
         }
         const result = eveSessionResultSchema.parse(input.result);
         const session =
@@ -827,9 +829,111 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           )
           .returning();
         if (updated.length !== 1) {
-          throw new Error("Hosted operation settlement was not durable.");
+          throw new Error(OPERATION_SETTLEMENT_NOT_DURABLE);
         }
         return parseHostedOperationRow(updated[0]);
+      });
+    },
+
+    // oxlint-disable-next-line eslint/require-await -- Async keeps this Promise-returning store contract consistent.
+    async settleSucceededPaged(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      const base = durableHostedSessionRecordSchema.parse(input.session);
+      if (
+        base.version !== 2 ||
+        base.checkpoint !== undefined ||
+        base.checkpointRef !== undefined ||
+        base.checkpointDigest !== undefined ||
+        base.checkpointProgressDigest !== undefined ||
+        tenantKeyFor(base.principal) !== tenantKeyFor(principal)
+      ) {
+        throw new Error("Paged hosted session creation needs an uncheckpointed tenant session.");
+      }
+      return database.transaction(async (transaction) => {
+        const operation = await operationById(transaction, principal, input.operationId, true);
+        if (operation === null || operation.requestDigest !== input.requestDigest) {
+          throw new Error(OPERATION_CANNOT_SETTLE);
+        }
+        const replayableStart =
+          operation.kind === "start" && operation.state === "submission_unknown";
+        if (operation.state !== "reserved" && !replayableStart) {
+          throw new Error(OPERATION_CANNOT_SETTLE);
+        }
+        if (operation.kind !== "start") {
+          throw new Error("Only start may atomically create a paged hosted session.");
+        }
+        const result = eveSessionResultSchema.parse(input.result);
+        if (result.sessionId !== base.sessionId) {
+          throw new Error("Hosted operation result session mismatch.");
+        }
+        const insertedBase = await transaction
+          .insert(agentSessions)
+          .values(sessionValues(base))
+          .returning();
+        if (insertedBase.length !== 1) {
+          throw new Error("Hosted session creation was not durable.");
+        }
+        parseHostedSessionRow(insertedBase[0]);
+        const staged = await checkpointHistory.stage({
+          events: input.events,
+          metadata: input.metadata,
+          nowEpochMs: input.nowEpochMs,
+          principal,
+          sessionId: base.sessionId,
+          transaction,
+        });
+        const session = durableHostedSessionRecordSchema.parse({
+          ...base,
+          checkpointDigest: staged.checkpointDigest,
+          checkpointProgressDigest: staged.checkpointProgressDigest,
+          checkpointRef: {
+            digest: staged.checkpointDigest,
+            eventCount: staged.eventCount,
+            id: staged.checkpointId,
+          },
+        });
+        const updatedSession = await transaction
+          .update(agentSessions)
+          .set(sessionValues(session))
+          .where(and(tenantPredicate(principal), eq(agentSessions.sessionId, session.sessionId)))
+          .returning();
+        if (updatedSession.length !== 1) {
+          throw new Error("Hosted session checkpoint pointer was not durable.");
+        }
+        parseHostedSessionRow(updatedSession[0]);
+        await checkpointHistory.publishInTransaction(transaction, {
+          checkpointDigest: staged.checkpointDigest,
+          checkpointId: staged.checkpointId,
+          eventCount: staged.eventCount,
+          itemCount: staged.itemCount,
+          nowEpochMs: input.nowEpochMs,
+          principal,
+          sessionId: session.sessionId,
+        });
+        const settledOperation = hostedOperationRecordSchema.parse({
+          ...withoutHostedOperationError(operation),
+          result,
+          sessionId: result.sessionId,
+          sessionRecordDigest: hostedSessionCreationDigest(session),
+          state: "succeeded",
+          updatedAtEpochMs: input.nowEpochMs,
+        });
+        const updatedOperation = await transaction
+          .update(agentOperations)
+          .set(operationValues(settledOperation))
+          .where(
+            and(
+              tenantPredicate(principal),
+              eq(agentOperations.operationId, input.operationId),
+              inArray(agentOperations.state, ["reserved", "submission_unknown"]),
+              eq(agentOperations.requestDigest, input.requestDigest),
+            ),
+          )
+          .returning();
+        if (updatedOperation.length !== 1) {
+          throw new Error(OPERATION_SETTLEMENT_NOT_DURABLE);
+        }
+        return parseHostedOperationRow(updatedOperation[0]);
       });
     },
 
@@ -858,7 +962,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           )
           .returning();
         if (updated.length !== 1) {
-          throw new Error("Hosted operation settlement was not durable.");
+          throw new Error(OPERATION_SETTLEMENT_NOT_DURABLE);
         }
         return parseHostedOperationRow(updated[0]);
       });

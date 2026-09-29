@@ -9,7 +9,7 @@ a ceiling on the total number of files, events, or retry attempts.
 | GitHub repository enumeration      | Provider pagination                                        | Default hosted target access checks request the selected repository directly. Legacy adapters that lack target access proof still enumerate and accumulate IDs; durable cursor and streamed compatibility work remains open. |
 | Repository candidate names         | GitHub name availability                                   | Generate names lazily. Only a confirmed collision advances to another name; permission, validation, quota, and service failures retain their distinct diagnostics.                                                           |
 | GitHub recursive trees             | Provider 100,000-entry or 7 MB recursive response boundary | On `truncated`, walk nonrecursive subtrees. A truncated individual directory fails with repository, revision, and path; it is never accepted as complete.                                                                    |
-| GitHub files                       | Provider 100 MiB per-file ceiling                          | Report the rejected operation and path. Suggest a smaller source file or a user-approved storage alternative; do not silently redesign storage.                                                                              |
+| GitHub files                       | Provider 100 MiB per-file ceiling                          | Report the rejected operation and path, including the 413 status and byte count when supplied. Suggest reducing the file or reviewing Git LFS or another storage provider; do not silently redesign storage.                 |
 | Eve event messages                 | Transport envelope                                         | Size each artifact chunk against the serialized envelope, including escaping and metadata. Continue with another chunk; do not impose a total artifact ceiling.                                                              |
 | Model review context               | Provider context capacity                                  | Review source in scoped, digest-verified pages. Report the path and line when the smallest page is rejected.                                                                                                                 |
 | Postgres checkpoint stage          | Database transaction and memory pressure                   | Write immutable 64 KiB byte chunks and publish the manifest atomically with the session pointer. The chunk size limits one read or write, not history length.                                                                |
@@ -21,11 +21,12 @@ a ceiling on the total number of files, events, or retry attempts.
 ## Live and compatibility paths
 
 Hosted reads and mutations use streamed Eve observation and paged checkpoints
-for sessions whose installed actions require no prototype receipt readback.
-The `start` call stores a provisional empty session; the next read stages its
-durable history under that tenant session. Each checkpoint publishes its
-manifest with the session pointer in one transaction, leaving the prior
-checkpoint usable if staging fails. New hosted HTML previews and design
+when the store exposes the paged checkpoint API. A new hosted session stages
+its initial event history before atomically publishing the session, operation
+result, and checkpoint manifest. Existing compatibility stores that do not
+expose paged checkpoint APIs continue to use bounded inline checkpoints. Each
+checkpoint publishes its manifest with the session pointer in one transaction,
+leaving the prior checkpoint usable if staging fails. New hosted HTML previews and design
 decisions use tenant-bound immutable chunks once the additive schema is
 present. The Browser validates their complete manifest and digest before
 streaming HTML. Identical retries of existing v1 artifacts retain their v1
@@ -42,7 +43,10 @@ compatibility checkpoint, which retains those three bounds. The materialized
 snapshot validator no longer imposes a 100,000-event ceiling, though that
 compatibility path still holds the provider result in memory. Historical
 events discarded by an older checkpoint cannot be reconstructed; its
-truncation marker remains visible during recovery.
+truncation marker remains visible during recovery. Legacy inline schema bounds
+remain only for stores without paged checkpoint support and for reading older
+stored checkpoints; those bounds must not be used as a ceiling for new hosted
+Postgres sessions.
 
 New hosted `app-spec.md` writes use the same immutable v2 chunks as other
 prototype artifacts. Acceptance verifies the complete manifest, scans the

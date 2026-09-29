@@ -1976,6 +1976,9 @@ const publicationRejectionMessage = (
       acknowledgement.providerStatus === undefined
         ? ""
         : ` (GitHub HTTP ${acknowledgement.providerStatus})`;
+    if (acknowledgement.providerStatus === 413) {
+      return `GitHub rejected ${acknowledgement.operation} for ${acknowledgement.path} (${acknowledgement.bytes} bytes)${providerStatus}. Check whether the file exceeds GitHub's 100 MiB per-file limit. Reduce the file and review the updated content, or request approval for Git LFS or another storage provider; then rerun validation and approve the updated publication.`;
+    }
     return `GitHub could not complete ${acknowledgement.operation} for ${acknowledgement.path} (${acknowledgement.bytes} bytes)${providerStatus}. Check the repository's current GitHub limits and retry after correcting the file or provider issue; then validate and approve the updated publication.`;
   }
   if (acknowledgement.code === "reviewed-path-changed" && "path" in acknowledgement) {
