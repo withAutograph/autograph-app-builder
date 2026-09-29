@@ -1,3 +1,4 @@
+import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
@@ -149,7 +150,7 @@ export default defineTool({
       execution: {
         appId: selected.appId,
         root: selected.root,
-        sandboxId: sandbox.id,
+        sandboxId: getBuilderSandboxId(sandbox),
         sessionAuth: ctx.session.auth,
         sessionId: ctx.session.id,
         signal: ctx.abortSignal,

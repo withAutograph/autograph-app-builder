@@ -1,45 +1,30 @@
 import { Sandbox } from "@vercel/sandbox";
-import type { SandboxBackend, SandboxBackendHandle } from "eve/sandbox";
 
-// This association comes from the authenticated Eve backend, never tool input.
-const handles = new Map<string, SandboxBackendHandle<unknown>>();
+// Authenticated provider handles own this association, never tool input.
+const providers = new Map<string, Sandbox>();
 
-export const withVercelPreviewProvider = <BO, SO>(
-  backend: SandboxBackend<BO, SO>,
-): SandboxBackend<BO, SO> => ({
-  ...backend,
-  async create(input) {
-    const handle = await backend.create(input);
-    const registered = handle as SandboxBackendHandle<unknown>;
-    handles.set(handle.session.id, registered);
-    const close = async (operation: "stop" | "shutdown") => {
-      try {
-        await handle[operation]();
-      } finally {
-        if (handles.get(handle.session.id) === registered) {
-          handles.delete(handle.session.id);
-        }
-      }
-    };
-    return { ...handle, shutdown: () => close("shutdown"), stop: () => close("stop") };
-  },
-});
+export const registerVercelPreviewProvider = (id: string, provider: Sandbox) => {
+  providers.set(id, provider);
+  return () => {
+    if (providers.get(id) === provider) {
+      providers.delete(id);
+    }
+  };
+};
 
-/** Uses the official SDK with the project's existing OIDC credentials. */
+/** Uses the same authenticated SDK instance and project-scoped OIDC boundary. */
 export const getVercelPreviewProvider = async (
   sandboxId: string,
   signal?: AbortSignal,
   resume = true,
 ): Promise<Sandbox> => {
   signal?.throwIfAborted();
-  const handle = handles.get(sandboxId);
-  if (!handle) {
+  const provider = providers.get(sandboxId);
+  if (!provider) {
     throw new Error("The current App Builder sandbox is not connected for preview startup.");
   }
-  const { metadata } = await handle.captureState();
-  if (typeof metadata.sandboxName !== "string") {
-    throw new TypeError("The Vercel backend did not return its sandbox name for preview startup.");
+  if (resume && provider.status !== "running") {
+    return await Sandbox.get({ name: provider.name, resume, signal });
   }
-  signal?.throwIfAborted();
-  return Sandbox.get({ name: metadata.sandboxName, resume, signal });
+  return provider;
 };

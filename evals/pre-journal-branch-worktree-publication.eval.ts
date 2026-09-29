@@ -14,21 +14,25 @@ export default defineEval({
     "A branch-worktree interruption before durable intent preserves the reviewed workflow and creates no branch.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(t, repository, "branch-publication-pre-journal-interruption");
+    const session = await prepareReviewedWorkflow(
+      t,
+      repository,
+      "branch-publication-pre-journal-interruption",
+    );
 
-    await t.send("Publish reviewed change set to a new branch worktree.");
-    t.requireInputRequest({
+    await session.send("Publish reviewed change set to a new branch worktree.");
+    session.requireInputRequest({
       toolName: "publish_reviewed_change_set_to_branch_worktree",
     });
-    await t.respondAll("approve");
+    const turn1 = await session.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("reviewed receipt was preserved"));
+    t.check(turn1.message, includes("reviewed receipt was preserved"));
     if (git(repository, ["branch", "--list", "app-builder/*"]).trim() !== "") {
       throw new Error("Pre-journal interruption created a branch.");
     }
 
-    await t.send("Report artifact workflow status.");
-    t.check(t.reply, includes('"phase":"reviewed"'));
+    const turn2 = await session.send("Report artifact workflow status.");
+    t.check(turn2.message, includes('"phase":"reviewed"'));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
   },

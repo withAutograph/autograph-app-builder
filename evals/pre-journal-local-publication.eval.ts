@@ -9,17 +9,21 @@ export default defineEval({
     "A workflow-pending crash before journal creation is readable and never redispatched.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(t, repository, "publication-pre-journal-interruption");
-    await t.send("Publish reviewed change set locally.");
-    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
-    await t.respondAll("approve");
+    const session = await prepareReviewedWorkflow(
+      t,
+      repository,
+      "publication-pre-journal-interruption",
+    );
+    await session.send("Publish reviewed change set locally.");
+    session.requireInputRequest({ toolName: "publish_reviewed_change_set" });
+    await session.respondAll("approve");
     t.succeeded();
 
-    await t.send("Retry local publication after a lost response.");
+    const turn1 = await session.send("Retry local publication after a lost response.");
     t.succeeded();
-    t.check(t.reply, includes("not redispatched automatically"));
-    await t.send("Report artifact workflow status.");
-    t.check(t.reply, includes('"phase":"publication_pending"'));
+    t.check(turn1.message, includes("not redispatched automatically"));
+    const turn2 = await session.send("Report artifact workflow status.");
+    t.check(turn2.message, includes('"phase":"publication_pending"'));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
   },

@@ -100,7 +100,6 @@ describe("preview command working directory", () => {
           id: "sandbox_replacement",
           readTextFile: () => Promise.resolve("{}"),
         }),
-        getSkill: vi.fn(),
         getToken: vi.fn(),
         requireAuth: (): never => {
           throw new Error("Unexpected auth request");
@@ -147,7 +146,6 @@ describe("preview command working directory", () => {
           abortSignal: new AbortController().signal,
           callId: "prepared-preview",
           getSandbox: vi.fn().mockResolvedValue({ id: "sandbox", readTextFile }),
-          getSkill: vi.fn(),
           getToken: vi.fn(),
           requireAuth: (): never => {
             throw new Error("Unexpected auth request");
@@ -200,7 +198,6 @@ describe("preview command working directory", () => {
       getSandbox: vi
         .fn()
         .mockResolvedValue({ id: "sandbox", readTextFile: () => Promise.resolve(null) }),
-      getSkill: vi.fn(),
       getToken: vi.fn(),
       requireAuth: (): never => {
         throw new Error("Unexpected auth request in preview test");
@@ -245,7 +242,6 @@ describe("preview command working directory", () => {
       abortSignal: new AbortController().signal,
       callId: "call",
       getSandbox: vi.fn().mockResolvedValue(sandbox),
-      getSkill: vi.fn(),
       getToken: vi.fn(),
       requireAuth: (): never => {
         throw new Error("Unexpected auth request in preview test");
@@ -306,7 +302,6 @@ describe("preview command working directory", () => {
               );
             },
           }),
-          getSkill: vi.fn(),
           getToken: vi.fn(),
           requireAuth: (): never => {
             throw new Error("Unexpected auth request in preview test");

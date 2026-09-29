@@ -1,4 +1,4 @@
-import type { SandboxSession } from "eve/sandbox";
+import type { BuilderSandboxSession } from "../sandbox/builder-sandbox";
 
 import { githubSandboxCredentialPolicy } from "../repository/github-sandbox-credentials";
 
@@ -11,7 +11,7 @@ const verifiedRepositoryFetchRejected = (error: Error): boolean =>
 export const prepareWithVerifiedGitHubFetchRecovery = async <T>(input: {
   acquireCredential: () => Promise<{ token: string }>;
   prepare: () => Promise<T>;
-  sandbox: Pick<SandboxSession, "setNetworkPolicy">;
+  sandbox: Pick<BuilderSandboxSession, "setNetworkPolicy">;
 }): Promise<{ prepared: T; retriedGitFetch: boolean }> => {
   const attempt = async (): Promise<T> => {
     const credential = await input.acquireCredential();

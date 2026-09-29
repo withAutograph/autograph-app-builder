@@ -48,6 +48,20 @@ describe("closed Eve worker environment", () => {
     expect(nested.headersTimeout).toBe("360000");
   });
 
+  it("preserves Eve 0.68 default delivery timeouts through nested workers", () => {
+    const envelope = captureEveWorkerEnvelope(
+      trustedSource({
+        WORKFLOW_LOCAL_BODY_TIMEOUT_MS: "0",
+        WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS: "0",
+      }),
+      appRoot,
+    );
+    const environment: Record<string, string | undefined> = {};
+    installEveWorkerEnvelope(environment, envelope, appRoot);
+    expect(environment.WORKFLOW_LOCAL_BODY_TIMEOUT_MS).toBe("0");
+    expect(environment.WORKFLOW_LOCAL_HEADERS_TIMEOUT_MS).toBe("0");
+  });
+
   it.each([
     ["non-loopback", { WORKFLOW_LOCAL_BASE_URL: "http://192.0.2.1:43123" }],
     ["credential", { WORKFLOW_LOCAL_BASE_URL: "http://user@127.0.0.1:43123" }],

@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
+import type { SandboxProviderSessionContext } from "eve/sandbox/provider";
 import path from "node:path";
 
 import {
@@ -12,7 +14,7 @@ import {
   readOwnerBoundLocalFile,
   validateLocalVercelOidcToken,
 } from "../../../../lib/eve/local-vercel-oidc";
-import { createHostedVercelBackend } from "../../../../lib/sandbox/vercel-backend";
+import { createBuilderVercelProvider } from "../../../../lib/sandbox/vercel-backend";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../../../../");
 if (
@@ -67,33 +69,35 @@ process.env.VERCEL_OIDC_TOKEN = token;
 for (const key of requiredEnvironmentKeys)
   process.env[key] = parseQuotedEnvironmentValue(localEnvironment, key);
 
-const backend = createHostedVercelBackend({
-  runtimeRecoveryPrewarmInput: () => ({
-    bootstrap: async ({ use }) => {
-      // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
-      await use();
-    },
-    seedFiles: [],
-  }),
-});
+const provider = createBuilderVercelProvider();
 const sessionKey = `starter-clone-prove-${randomUUID()}`;
-let handle: Awaited<ReturnType<typeof backend.create>> | undefined;
+const context: SandboxProviderSessionContext = {
+  host: {
+    loadOptionalPackage: async ({ importModule }) => await importModule(),
+    resolveProjectPath: (filePath) => path.resolve(repositoryRoot, filePath),
+  },
+  session: {
+    auth: { current: null, initiator: null },
+    id: sessionKey,
+    turn: { id: sessionKey, sequence: 0 },
+  },
+  storagePath: path.join(tmpdir(), sessionKey),
+};
+let handle: Awaited<ReturnType<typeof provider.start>>["handle"] | undefined;
 
 try {
-  handle = await backend.create({
-    runtimeContext: { appRoot: repositoryRoot },
-    sessionKey,
-    templateKey: null,
-  });
+  // This diagnostic owns no managed workspace or skill resources. The provider
+  // still supplies the same authenticated command authority and lifecycle.
+  ({ handle } = await provider.start(context, undefined, { files: [] }));
   const receipt = await acquireCanonicalArrustedTemplate({
     callId: sessionKey,
-    sandbox: handle.session,
+    sandbox: handle.sandbox,
   });
   if (receipt.version !== 4)
     throw new Error("The canonical starter did not produce a cloned receipt.");
   const workspace = await inspectCanonicalArrustedSandboxWorkspace({
     receipt,
-    sandbox: handle.session,
+    sandbox: handle.sandbox,
   });
   process.stdout.write(
     `${JSON.stringify({
@@ -109,7 +113,7 @@ try {
   );
 } finally {
   try {
-    await handle?.shutdown();
+    await handle?.onRuntimeShutdown();
   } finally {
     delete process.env.VERCEL_OIDC_TOKEN;
     for (const key of requiredEnvironmentKeys) Reflect.deleteProperty(process.env, key);

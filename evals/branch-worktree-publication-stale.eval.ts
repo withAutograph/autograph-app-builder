@@ -11,18 +11,18 @@ export default defineEval({
     "A stale branch-worktree proposal is rejected after approval without creating its branch or worktree.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(t, repository, "branch-publication-stale");
+    const session = await prepareReviewedWorkflow(t, repository, "branch-publication-stale");
     const head = execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: repository,
       encoding: "utf-8",
     });
-    await t.send("Publish reviewed change set with stale branch preconditions.");
-    t.requireInputRequest({
+    await session.send("Publish reviewed change set with stale branch preconditions.");
+    session.requireInputRequest({
       toolName: "publish_reviewed_change_set_to_branch_worktree",
     });
-    await t.respondAll("approve");
+    const turn1 = await session.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("rejected without creating a branch or worktree"));
+    t.check(turn1.message, includes("rejected without creating a branch or worktree"));
     if (
       execFileSync("git", ["rev-parse", "HEAD"], {
         cwd: repository,

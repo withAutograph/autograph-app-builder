@@ -77,7 +77,7 @@ export const resolveInstalledEveCli = (repositoryRootInput: string): string => {
   if (
     nodePath.isAbsolute(rawTarget) ||
     rawTarget.split("/").includes("..") ||
-    !/^\.pnpm\/eve@0\.44\.4(?:_[^/]+)?\/node_modules\/eve$/u.test(rawTarget)
+    !/^\.pnpm\/eve@0\.68\.0(?:_[^/]+)?\/node_modules\/eve$/u.test(rawTarget)
   ) {
     throw new Error("Installed Eve package link was invalid.");
   }
@@ -85,7 +85,7 @@ export const resolveInstalledEveCli = (repositoryRootInput: string): string => {
   const relativePackageRoot = nodePath.relative(pnpmRoot, packageRoot);
   if (
     !isContainedPath(pnpmRoot, packageRoot) ||
-    !/^eve@0\.44\.4(?:_[^/]+)?\/node_modules\/eve$/u.test(relativePackageRoot)
+    !/^eve@0\.68\.0(?:_[^/]+)?\/node_modules\/eve$/u.test(relativePackageRoot)
   ) {
     throw new Error("Installed Eve resolved outside the pinned pnpm package.");
   }
@@ -117,7 +117,7 @@ export const resolveInstalledEveCli = (repositoryRootInput: string): string => {
     "Installed Eve package",
   );
   const bin = closedObject(metadata.bin, "Installed Eve bin");
-  if (metadata.name !== "eve" || metadata.version !== "0.44.4" || bin.eve !== "./bin/eve.js") {
+  if (metadata.name !== "eve" || metadata.version !== "0.68.0" || bin.eve !== "./bin/eve.js") {
     throw new Error("Installed Eve package identity was invalid.");
   }
   const rootMetadata = closedObject(
@@ -125,8 +125,8 @@ export const resolveInstalledEveCli = (repositoryRootInput: string): string => {
     "Repository package",
   );
   const dependencies = closedObject(rootMetadata.dependencies, "Repository dependencies");
-  if (dependencies.eve !== "0.44.4") {
-    throw new Error("Repository Eve dependency was not pinned to 0.44.4.");
+  if (dependencies.eve !== "0.68.0") {
+    throw new Error("Repository Eve dependency was not pinned to 0.68.0.");
   }
   return cli;
 };

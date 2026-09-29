@@ -1,3 +1,4 @@
+import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
@@ -85,7 +86,7 @@ export default defineTool({
         cache === undefined ? "unverified" : dependencyCacheReceiptDigest(cache),
       imageConfiguration: execution === undefined ? "unconfigured" : "configured",
       required,
-      sandboxId: sandbox.id,
+      sandboxId: getBuilderSandboxId(sandbox),
       toolchainReady:
         execution !== undefined && cache !== undefined && required.every((tool) => tool.matches),
       tools,

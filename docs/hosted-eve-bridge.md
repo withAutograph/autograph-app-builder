@@ -34,7 +34,7 @@ boundaries:
    read. It is intentionally outside tenant retention: pending or terminal
    provider mutation authority must not disappear and permit redispatch.
 4. The same-origin HTTPS adapter implements `HostedEveTransport` against the
-   canonical API emitted by installed Eve 0.44.4 and `withEve(nextConfig)`. It
+   canonical API emitted by installed Eve 0.68.0 and `withEve(nextConfig)`. It
    obtains a fresh Vercel project OIDC token for every hop, uses only the
    canonical create, continuation/input-response, stream, and cancel routes,
    and never forwards the user's Bearer token. The verified OAuth principal
@@ -42,7 +42,14 @@ boundaries:
    accepted from one exact Vercel team/project/environment subject. Every MCP
    request must also match the exact configured resource URL before the
    adapter can open storage or send project identity, and stream reads require
-   the pinned Eve 0.44.4 session, format, and protocol-version headers. The
+   the pinned Eve 0.68.0 session, NDJSON format, and version 25 headers. Current
+   Eve normalizes history written by older deployments to version 25 on replay;
+   Builder does not interpret an old server's version 23 stream as current.
+   Public messages use finalized `message.completed` text, while delta events,
+   reasoning, and raw tool-input deltas remain private. Continuation acceptance
+   requires Eve's `deliveryId`; create and cancel replies retain their separate
+   closed contracts. Questions use `requestId` independently of `action.callId`,
+   and all terminal `input.resolved` outcomes remove the addressed input. The
    service exposes only `start`, `get`, `send`, `respond`, and `cancel`, and
    projects only public allowlisted events. Reasoning, tool results, system
    instructions, malformed events, continuation credentials, and adapter
@@ -92,7 +99,7 @@ gate. The durable start reservation still serializes a mutating continuation
 for one session, which is a correctness constraint rather than a usage cap.
 
 The MCP-side contract accepts no continuation credential and the durable store
-schema has no field for one. Canonical Eve 0.44.4 routes use durable session IDs
+schema has no field for one. Canonical Eve 0.68.0 routes use durable session IDs
 and likewise require no continuation credential. Adding any new credential
 field requires a new closed contract and migration rather than reusing `record`
 as an opaque secret container.
@@ -121,12 +128,22 @@ operation remains resumable. A `reserved` start becomes eligible for the same
 recovery after the 300-second hosting request deadline. Eve can expire its
 operation ownership once the run is no longer resumable, so an exact retry at
 that point may start a new run. `send` and `respond` remain non-replayable when
-their outcome is unknown. An accepted start persists a provisional `working`
-session immediately; `get` observes the live event stream afterward.
-This relies on the pinned `eve@0.44.4` authenticated create-once contract in
-`node_modules/eve/docs/channels/eve.mdx` (lines 48-52). The local test proves
-that Builder reuses the exact operation ID; it does not substitute for Eve's
-provider-owned deduplication guarantee.
+their outcome is unknown. Eve 0.68.0 returns a create candidate as soon as Workflow accepts the run.
+Concurrent requests for one authenticated operation can return different
+candidate IDs; only the candidate that claims the operation runs the initial
+turn. Builder observes the returned candidate through the canonical stream and
+persists its provisional `working` session only after `session.started` proves
+startup. The observation shares one 30-second read deadline and never dispatches
+another create while waiting. A missing, empty, terminal-only, incompatible, or
+unavailable candidate stream cannot establish ownership and leaves the operation
+`submission_unknown`. An exact later retry uses the same operation ID to recover
+the active owner. `get` observes the turn afterward; startup confirmation does not
+wait for model output, tools, or the first turn to settle.
+This relies on the pinned `eve@0.68.0` authenticated create-once contract in
+`node_modules/eve/docs/channels/eve.mdx` and the published runtime's operation
+claim before its `session.started` event. The local tests prove the guarded
+candidate handling and exact operation reuse with simulated responses; they do
+not substitute for provider-owned deduplication or live upgrade evidence.
 Reservation responses and unsuccessful settlements are parsed as closed
 runtime discriminated unions and rebound to the exact principal, kind, client
 request ID, request digest, state, and session before they grant any authority.
@@ -165,8 +182,9 @@ denial, closed response schemas, and the distinction between
 proven pre-dispatch rejection and uncertain network submission. The in-memory
 store remains test/local scaffolding.
 
-The hosted sandbox command adapter bounds every template and live-session
-command. Durable execution leasing is a separately dormant source capability,
+The Builder sandbox provider checks command authority before each live-session
+`run` or `spawn`. Provider preparation records managed resource files without
+creating a sandbox; session startup uses the supported Vercel SDK. Durable execution leasing is a separately dormant source capability,
 enabled only by the exact `EVE_HOSTED_SANDBOX_EXECUTION=enabled-v1` deployment
 gate. It acquires at `turn.started`, reasserts the current PostgreSQL epoch
 before each command, and releases at terminal turn boundaries rather than at
@@ -197,7 +215,8 @@ Hosted activation still requires separately authorized work:
   read-only drift and honestly leaves the provider restore point `not-proven`;
 - configure the exact Vercel team slug, project name, and environment used by
   the authored Eve channel's trusted-forwarder predicate, then prove project
-  OIDC and installed Eve 0.44.4 event projection in Preview;
+  OIDC and installed Eve 0.68.0 event projection in Preview. Earlier Eve 0.44.4
+  Preview evidence remains historical and does not prove the upgraded runtime;
 - deploy and prove hosted authentication, persistence, cancellation, and
   lost-response behavior; and
 - publish an immutable Agent Plugins package pointing at that proven endpoint, and run
@@ -216,7 +235,9 @@ The closed `autograph-ext-bld-05-evidence-v1` receipt aggregates only accepted
 digest references for the exact source SHA/tree: a two-subject live lifecycle,
 membership revocation, retention, drained tenant deletion, public-response plus
 provider-log disclosure scans, and exact-source validation of timeout and Eve
-0.43 session-ID-only continuation semantics. It contains no subject, workspace,
+0.43 session-ID-only continuation semantics. Those are historical receipts;
+the 0.68.0 migration does not reissue them or establish compatibility for
+previously deployed live sessions. It contains no subject, workspace,
 endpoint, token, or database value and explicitly cannot claim Production
 readiness.
 

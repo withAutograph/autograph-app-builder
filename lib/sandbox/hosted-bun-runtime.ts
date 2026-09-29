@@ -65,7 +65,7 @@ cc --version`,
 export function createHostedRuntimeInstaller() {
   const installs = new Map<string, Promise<void>>();
 
-  return (sandbox: Pick<SandboxSession, "id" | "run">) => {
+  return (sandbox: Pick<SandboxSession, "run"> & { readonly id: string }) => {
     const existing = installs.get(sandbox.id);
     if (existing !== undefined) {
       return existing;

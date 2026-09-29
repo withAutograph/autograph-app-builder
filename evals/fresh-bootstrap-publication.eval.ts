@@ -16,18 +16,23 @@ export default defineEval({
   tags: ["fresh-bootstrap-publication"],
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(t, repository, "fresh-eval", "fresh-template");
-    const fixture = await createFreshBootstrapEvalCapability();
+    const [session, fixture] = await Promise.all([
+      prepareReviewedWorkflow(t, repository, "fresh-eval", "fresh-template"),
+      createFreshBootstrapEvalCapability(),
+    ]);
     try {
       const destination = path.join(fixture.allowedRoot, "absent");
       const publication = await withFreshBootstrapTestCapability(fixture.capability, () =>
-        t.send(`Publish fresh repository bootstrap at ${destination}.`),
+        session.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
-      t.requireInputRequest({ toolName: "publish_fresh_repository" });
+
+      session.requireInputRequest({ toolName: "publish_fresh_repository" });
       publication.event("input.requested", { count: 1 });
-      await withFreshBootstrapTestCapability(fixture.capability, () => t.respondAll("approve"));
+      const turn1 = await withFreshBootstrapTestCapability(fixture.capability, () =>
+        session.respondAll("approve"),
+      );
       t.succeeded();
-      t.check(t.reply, includes("one parentless SHA-1 local repository"));
+      t.check(turn1.message, includes("one parentless SHA-1 local repository"));
       t.calledTool("fresh_bootstrap_status", { count: 1 });
       t.calledTool("publish_fresh_repository", { count: 1 });
       t.notCalledTool("bash");

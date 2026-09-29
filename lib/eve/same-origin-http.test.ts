@@ -34,16 +34,22 @@ function identity(token = "project-oidc-token"): HostedWorkloadIdentity {
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function accepted(sessionId = "wrun_1") {
-  return Response.json(
-    { ok: true, sessionId, status: "accepted" },
-    { headers: { "x-eve-session-id": sessionId }, status: 202 },
-  );
+function accepted(sessionId = "wrun_1", continuation = true) {
+  const body = {
+    ok: true,
+    sessionId,
+    status: "accepted",
+  };
+  return Response.json(continuation ? { ...body, deliveryId: "delivery_1" } : body, {
+    headers: { "x-eve-session-id": sessionId },
+    status: 202,
+  });
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function stream(
   events: unknown[] = [
+    { data: {}, type: "session.started" },
     {
       data: {},
       meta: { at: 1, id: "evt_1" },
@@ -57,7 +63,7 @@ function stream(
       "x-eve-session-id": "wrun_1",
       "x-eve-stream-format": "ndjson",
       "x-eve-stream-tail-index": String(events.length - 1),
-      "x-eve-stream-version": "23",
+      "x-eve-stream-version": "25",
     },
     status: 200,
   });
@@ -496,7 +502,7 @@ describe("incremental canonical Eve stream", () => {
         "x-eve-session-id": "wrun_1",
         "x-eve-stream-format": "ndjson",
         "x-eve-stream-tail-index": String(total - 1),
-        "x-eve-stream-version": "23",
+        "x-eve-stream-version": "25",
       },
       status: 200,
     });
@@ -686,7 +692,7 @@ describe("same-origin canonical Eve transport", () => {
     expect(snapshot.events).toEqual([{ index: 0, status: "completed", type: "status" }]);
   });
 
-  it("returns the accepted session without waiting for its live stream", async () => {
+  it("confirms startup without waiting for the live turn boundary", async () => {
     const workloadIdentity = identity();
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
@@ -732,34 +738,124 @@ describe("same-origin canonical Eve transport", () => {
     expect(fetchImplementation.mock.calls[0]?.[0]).toBe(
       "https://builder.example.test/eve/v1/session",
     );
-    expect(fetchImplementation).toHaveBeenCalledOnce();
-    expect(workloadIdentity.token).toHaveBeenCalledOnce();
+    expect(fetchImplementation).toHaveBeenCalledTimes(2);
+    expect(workloadIdentity.token).toHaveBeenCalledTimes(2);
     await expect(transport.get({ adapterSessionId: "wrun_1", principal })).resolves.toEqual({
       events: [{ index: 0, status: "waiting", type: "status" }],
       status: "waiting",
     });
-    expect(fetchImplementation.mock.calls[1]?.[0]).toBe(
+    expect(fetchImplementation.mock.calls[2]?.[0]).toBe(
       "https://builder.example.test/eve/v1/session/wrun_1/stream?startIndex=0&includeTailIndex=1",
     );
   });
 
-  it("persists a start receipt even when the canonical stream never settles", async () => {
-    const pendingStream = Promise.withResolvers<Response>();
+  it("keeps an unconfirmed create candidate uncertain without dispatching another create", async () => {
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+    // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
     const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
-      String(url).includes("/stream?") ? await pendingStream.promise : accepted(),
+      String(url).includes("/stream?") ? stream([]) : accepted("wrun_1", false),
     );
+    try {
+      const transport = createSameOriginEveTransport({
+        config,
+        fetchImplementation,
+        workloadIdentity: identity(),
+      });
+      const pending = transport.start({
+        operationId: "op_hung_stream",
+        principal,
+        prompt: "Build",
+      });
+      const rejected = expect(pending).rejects.toBeInstanceOf(SubmissionOutcomeUnknownError);
+      await vi.waitFor(() => {
+        expect(fetchImplementation).toHaveBeenCalledTimes(2);
+      });
+      controller.abort();
+      await rejected;
+      expect(
+        fetchImplementation.mock.calls.filter(([url]) => String(url).endsWith("/eve/v1/session")),
+      ).toHaveLength(1);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
+  it("returns at the winning candidate's startup event while its turn stream remains open", async () => {
+    const cancelled = vi.fn();
+    const startup = new Response(
+      new ReadableStream({
+        cancel: cancelled,
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"data":{},"type":"session.started"}\n'));
+        },
+      }),
+      {
+        headers: {
+          "content-type": "application/x-ndjson",
+          "x-eve-session-id": "wrun_1",
+          "x-eve-stream-format": "ndjson",
+          "x-eve-stream-tail-index": "1",
+          "x-eve-stream-version": "25",
+        },
+      },
+    );
+    // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
+    const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
+      String(url).includes("/stream?") ? startup : accepted("wrun_1", false),
+    );
+    await expect(
+      createSameOriginEveTransport({
+        config,
+        fetchImplementation,
+        workloadIdentity: identity(),
+      }).start({ operationId: "op_winner", principal, prompt: "Build" }),
+    ).resolves.toMatchObject({ adapterSessionId: "wrun_1" });
+    expect(cancelled).toHaveBeenCalledOnce();
+  });
+
+  it("preserves the operation on an uncertain loser and resolves the owner on a later exact retry", async () => {
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+    const createBodies: unknown[] = [];
+    let retry = false;
+    // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
+    const fetchImplementation = vi.fn<typeof fetch>(async (url, init) => {
+      if (String(url).endsWith("/eve/v1/session")) {
+        createBodies.push(JSON.parse(String(init?.body)));
+        return accepted(retry ? "wrun_owner" : "wrun_loser", false);
+      }
+      const response = stream(
+        retry ? [{ data: {}, type: "session.started" }] : [{ data: {}, type: "session.completed" }],
+      );
+      response.headers.set("x-eve-session-id", retry ? "wrun_owner" : "wrun_loser");
+      return response;
+    });
     const transport = createSameOriginEveTransport({
       config,
       fetchImplementation,
       workloadIdentity: identity(),
     });
-    await expect(
-      transport.start({ operationId: "op_hung_stream", principal, prompt: "Build" }),
-    ).resolves.toMatchObject({
-      adapterSessionId: "wrun_1",
-      snapshot: { events: [], status: "working" },
-    });
-    expect(fetchImplementation).toHaveBeenCalledOnce();
+    const request = { operationId: "op_original", principal, prompt: "Build" };
+    try {
+      const pending = transport.start(request);
+      const rejected = expect(pending).rejects.toBeInstanceOf(SubmissionOutcomeUnknownError);
+      await vi.waitFor(() => {
+        expect(fetchImplementation).toHaveBeenCalledTimes(2);
+      });
+      controller.abort();
+      await rejected;
+      expect(createBodies).toHaveLength(1);
+      timeout.mockRestore();
+      retry = true;
+      await expect(transport.start(request)).resolves.toMatchObject({
+        adapterSessionId: "wrun_owner",
+      });
+      expect(createBodies).toHaveLength(2);
+      expect(createBodies[1]).toEqual(createBodies[0]);
+    } finally {
+      timeout.mockRestore();
+    }
   });
 
   it("aborts a stalled durable read and reports a retryable read timeout", async () => {
@@ -811,7 +907,7 @@ describe("same-origin canonical Eve transport", () => {
             "x-eve-session-id": "wrun_1",
             "x-eve-stream-format": "ndjson",
             "x-eve-stream-tail-index": "0",
-            "x-eve-stream-version": "23",
+            "x-eve-stream-version": "25",
           },
           status: 200,
         });
@@ -855,7 +951,7 @@ describe("same-origin canonical Eve transport", () => {
               "x-eve-session-id": "wrun_1",
               "x-eve-stream-format": "ndjson",
               "x-eve-stream-tail-index": "0",
-              "x-eve-stream-version": "23",
+              "x-eve-stream-version": "25",
             },
             status: 200,
           },
@@ -1294,6 +1390,53 @@ describe("same-origin canonical Eve transport", () => {
     ).rejects.toBeInstanceOf(SubmissionOutcomeUnknownError);
   });
 
+  it.each([
+    { ok: true, sessionId: "wrun_1", status: "accepted" },
+    { deliveryId: "", ok: true, sessionId: "wrun_1", status: "accepted" },
+    { deliveryId: 42, ok: true, sessionId: "wrun_1", status: "accepted" },
+    {
+      deliveryId: "delivery_1",
+      extra: "unexpected",
+      ok: true,
+      sessionId: "wrun_1",
+      status: "accepted",
+    },
+  ])("keeps malformed accepted continuation replies uncertain: %j", async (body) => {
+    // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
+    const fetchImplementation = vi.fn(async () => Response.json(body, { status: 202 }));
+    const transport = createSameOriginEveTransport({
+      config,
+      fetchImplementation,
+      workloadIdentity: identity(),
+    });
+    await expect(
+      transport.sendAccepted?.({
+        adapterSessionId: "wrun_1",
+        message: "Continue",
+        operationId: "op_2",
+        principal,
+      }),
+    ).rejects.toBeInstanceOf(SubmissionOutcomeUnknownError);
+    expect(fetchImplementation).toHaveBeenCalledOnce();
+  });
+
+  it("accepts a create reply without a continuation delivery identity", async () => {
+    // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
+    const fetchImplementation = vi.fn(async (url) =>
+      String(url).includes("/stream?") ? stream() : accepted("wrun_1", false),
+    );
+    await expect(
+      createSameOriginEveTransport({
+        config,
+        fetchImplementation,
+        workloadIdentity: identity(),
+      }).start({ operationId: "op_create", principal, prompt: "Build" }),
+    ).resolves.toMatchObject({
+      adapterSessionId: "wrun_1",
+    });
+    expect(fetchImplementation).toHaveBeenCalledTimes(2);
+  });
+
   it("reads generated-code histories larger than 2 MiB without exposing tool input", async () => {
     const generatedSource = "private-generated-source".repeat(140_000);
     const events = [
@@ -1352,7 +1495,7 @@ describe("same-origin canonical Eve transport", () => {
               "x-eve-session-id": "wrun_1",
               "x-eve-stream-format": "ndjson",
               "x-eve-stream-tail-index": "9007199254740992",
-              "x-eve-stream-version": "23",
+              "x-eve-stream-version": "25",
             },
             status: 200,
           }),
@@ -1364,7 +1507,7 @@ describe("same-origin canonical Eve transport", () => {
     );
   });
 
-  it("rejects a stream that is not bound to the pinned Eve 0.43 protocol", async () => {
+  it("rejects a stream that is not bound to the pinned Eve 0.68 protocol", async () => {
     for (const headers of [
       { "x-eve-session-id": "wrun_other" },
       { "x-eve-stream-format": "sse" },

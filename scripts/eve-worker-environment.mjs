@@ -82,7 +82,8 @@ function validateWorkflowTimeout(value, field) {
   if (value === undefined) {
     return;
   }
-  if (value !== "360000") {
+  // Eve 0.68 explicitly sets zero for its default unbounded local delivery.
+  if (value !== "0" && value !== "360000") {
     fail(field);
   }
   return value;

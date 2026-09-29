@@ -53,14 +53,15 @@ export default defineEval({
     "The current Vercel Sandbox inspects and edits the existing Vendor application through review without publication.",
   tags: ["sandbox-integration", "existing-app-iteration"],
   async test(t) {
+    const session = await t.session();
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
     if (repository === undefined || repository.length === 0) {
       throw new Error("The supported source root is missing.");
     }
 
-    await t.send(`Prepare supported repository at ${repository}`);
+    await session.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
-    await t.send(`Update the Vendor review so operations can see when tax verification is required.
+    await session.send(`Update the Vendor review so operations can see when tax verification is required.
 Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
     t.succeeded();
     t.calledTool("inspect_existing_app", { count: 2 });
@@ -70,21 +71,22 @@ Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
         existingAppChanges: (value) => existingChangesSchema.safeParse(value).success,
       },
     });
-    await t.send("Prepare target dependencies.");
+    await session.send("Prepare target dependencies.");
     t.succeeded();
-    await t.send("Run target identity and planning.");
+    const turn1 = await session.send("Run target identity and planning.");
     t.succeeded();
-    t.check(t.reply, includes("tax verification is required"));
-    await t.send("Apply the current creation proposal.");
-    t.requireInputRequest({ toolName: "apply_app_creation" });
-    await t.respondAll("approve");
+    t.check(turn1.message, includes("tax verification is required"));
+    await session.send("Apply the current creation proposal.");
+    session.requireInputRequest({ toolName: "apply_app_creation" });
+    const turn2 = await session.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("private preview"));
-    t.check(t.reply, staysProductFacing);
-    const validation = await t.send("Validate the applied creation.");
+    t.check(turn2.message, includes("private preview"));
+    t.check(turn2.message, staysProductFacing);
+    const validation = await session.send("Validate the applied creation.");
+
     validation.notEvent("input.requested");
     t.succeeded();
-    t.check(t.reply, includes("passed its local quality checks"));
+    t.check(validation.message, includes("passed its local quality checks"));
     const validationCall = validation.requireToolCall("validate_app_creation");
     await t.require(
       validationCall,
@@ -93,18 +95,19 @@ Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
         "current validation receipt passed",
       ),
     );
-    await t.send("Inspect the validated change set.");
+    await session.send("Inspect the validated change set.");
     t.succeeded();
-    const review = await t.send("Accept the displayed change set.");
+    const review = await session.send("Accept the displayed change set.");
+
     review.notEvent("input.requested");
     t.succeeded();
-    t.check(t.reply, includes("ready for review"));
-    await t.send("Report artifact workflow status.");
+    t.check(review.message, includes("ready for review"));
+    const turn3 = await session.send("Report artifact workflow status.");
     t.succeeded();
     t.calledTool("artifact_workflow_status", { count: 1 });
-    t.check(t.reply, includes('"phase":"reviewed"'));
+    t.check(turn3.message, includes('"phase":"reviewed"'));
 
-    t.eventsSatisfy(
+    session.eventsSatisfy(
       "persisted workflow contains actual planning receipts and successful validation/review",
       (events) =>
         events.some((event) => {
@@ -119,7 +122,7 @@ Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
         }),
     );
 
-    t.eventsSatisfy(
+    session.eventsSatisfy(
       "reviewed Vendor diff contains the requested tax-verification change",
       (events) => {
         const inspected: { path: string; content: string }[] = [];

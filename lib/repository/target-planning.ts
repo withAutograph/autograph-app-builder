@@ -1,3 +1,4 @@
+import { setBuilderSandboxNetworkPolicy } from "../sandbox/builder-sandbox";
 import { describeSelectedApp } from "./app-description";
 import { createHash } from "node:crypto";
 
@@ -379,7 +380,7 @@ export const sandboxTargetCommandExecutor =
       return result;
     }
 
-    await sandbox.setNetworkPolicy("allow-all");
+    await setBuilderSandboxNetworkPolicy(sandbox, "allow-all");
     const setup = await sandbox.run({
       command: "bun install --ignore-scripts --filter @autograph/platform-microfrontends",
       workingDirectory: planningRoot,

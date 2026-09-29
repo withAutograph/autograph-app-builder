@@ -8,44 +8,47 @@ export default defineEval({
   description:
     "An interrupted command records a durable timeout failure; explicit retry reattempts the command and retains failure while the timeout persists.",
   async test(t) {
+    const session = await t.session();
     const repository = createSupportedRepositoryFixture();
-    await t.send(`Prepare supported repository at ${repository}`);
-    await t.send(
+    await session.send(`Prepare supported repository at ${repository}`);
+    await session.send(
       `Accept build-ready AppSpec for validation-interruption:\n${BUILD_READY_APP_SPEC}`,
     );
-    await t.send("Prepare offline target dependencies.");
-    await t.send("Run target identity and planning.");
-    await t.send("Apply the current creation proposal.");
-    t.requireInputRequest({ toolName: "apply_app_creation" });
-    await t.respondAll("approve");
+    await session.send("Prepare offline target dependencies.");
+    await session.send("Run target identity and planning.");
+    await session.send("Apply the current creation proposal.");
+    session.requireInputRequest({ toolName: "apply_app_creation" });
+    await session.respondAll("approve");
     t.succeeded();
 
-    const validation = await t.send("Validate the applied creation.");
+    const validation = await session.send("Validate the applied creation.");
+
     t.succeeded();
     validation.notEvent("input.requested");
     validation.calledTool("validate_app_creation", { count: 1 });
-    t.check(t.reply, includes("did not pass its quality checks"));
-    t.check(t.reply, includes("needs another revision"));
+    t.check(validation.message, includes("did not pass its quality checks"));
+    t.check(validation.message, includes("needs another revision"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Report artifact workflow status.");
+    const turn1 = await session.send("Report artifact workflow status.");
     t.succeeded();
-    t.check(t.reply, includes('"phase":"validation_failed"'));
-    t.check(t.reply, includes('"recoveryRequired":true'));
-    t.check(t.reply, includes('"reason":"command-timeout"'));
+    t.check(turn1.message, includes('"phase":"validation_failed"'));
+    t.check(turn1.message, includes('"recoveryRequired":true'));
+    t.check(turn1.message, includes('"reason":"command-timeout"'));
 
-    const retry = await t.send("Retry target validation after a lost response.");
+    const retry = await session.send("Retry target validation after a lost response.");
+
     t.succeeded();
     retry.notEvent("input.requested");
     retry.calledTool("validate_app_creation", { count: 1 });
-    t.check(t.reply, includes("did not pass its quality checks"));
+    t.check(retry.message, includes("did not pass its quality checks"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
-    await t.send("Report artifact workflow status.");
-    t.check(t.reply, includes('"phase":"validation_failed"'));
-    t.check(t.reply, includes('"reason":"command-timeout"'));
-    t.check(t.reply, includes('"recoveryRequired":true'));
+    const turn2 = await session.send("Report artifact workflow status.");
+    t.check(turn2.message, includes('"phase":"validation_failed"'));
+    t.check(turn2.message, includes('"reason":"command-timeout"'));
+    t.check(turn2.message, includes('"recoveryRequired":true'));
     t.calledTool("validate_app_creation", { count: 2 });
   },
 });

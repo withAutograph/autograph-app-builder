@@ -8,14 +8,15 @@ export default defineEval({
   description:
     "Offline dependency preparation is automatic internal planning and emits no user-input prompt.",
   async test(t) {
+    const session = await t.session();
     const repository = createSupportedRepositoryFixture();
-    await t.send(`Prepare supported repository at ${repository}`);
-    await t.send(`Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`);
+    await session.send(`Prepare supported repository at ${repository}`);
+    await session.send(`Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`);
     t.succeeded();
 
-    await t.send("Report artifact workflow status.");
+    const turn1 = await session.send("Report artifact workflow status.");
     t.succeeded();
-    const recordedStatus = t.reply;
+    const recordedStatus = turn1.message;
     t.check(
       recordedStatus,
       satisfies((reply) => {
@@ -33,7 +34,8 @@ export default defineEval({
       }, "planning recorded a durable dependency receipt"),
     );
 
-    const preparation = await t.send("Prepare offline target dependencies.");
+    const preparation = await session.send("Prepare offline target dependencies.");
+
     t.succeeded();
     preparation.notEvent("input.requested");
     t.notCalledTool("prepare_target_dependencies");
@@ -41,9 +43,9 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Report artifact workflow status.");
+    const turn2 = await session.send("Report artifact workflow status.");
     t.succeeded();
-    t.check(t.reply, includes('"phase":"planned"'));
-    t.check(t.reply, equals(recordedStatus));
+    t.check(turn2.message, includes('"phase":"planned"'));
+    t.check(turn2.message, equals(recordedStatus));
   },
 });

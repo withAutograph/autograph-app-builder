@@ -11,14 +11,14 @@ export default defineEval({
     "A fresh publication proposal rejects dirty approved-path overlap before approval or mutation.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(t, repository, "publication-overlap");
+    const session = await prepareReviewedWorkflow(t, repository, "publication-overlap");
     const appPath = path.join(repository, "apps/publication-overlap/app");
     await mkdir(appPath, { recursive: true });
     await writeFile(path.join(appPath, "page.tsx"), "concurrent overlap\n");
 
-    await t.send("Publish reviewed change set locally with dirty overlap.");
+    const turn = await session.send("Publish reviewed change set locally with dirty overlap.");
     t.succeeded();
-    t.check(t.reply, includes("rejected before approval or destination mutation"));
+    t.check(turn.message, includes("rejected before approval or destination mutation"));
     t.notCalledTool("publish_reviewed_change_set");
     t.notCalledTool("bash");
     t.notCalledTool("write_file");

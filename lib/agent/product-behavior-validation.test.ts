@@ -85,7 +85,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     mocks.state.current = { ...workflow("validated"), phase: "applied" };
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
-      getSandbox: () => Promise.resolve({}),
+      getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
       session: { auth: {}, id: "session" },
     } as never);
     expect(mocks.execute).toHaveBeenCalledBefore(mocks.review);
@@ -105,7 +105,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     });
     await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
-      getSandbox: () => Promise.resolve({}),
+      getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
       session: { auth: {}, id: "session" },
     } as never);
     expect(mocks.review).not.toHaveBeenCalled();
@@ -115,7 +115,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     mocks.review.mockResolvedValue({ findings: [], reviewCompleted: true, status: "passed" });
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
-      getSandbox: () => Promise.resolve({}),
+      getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
       session: { auth: {}, id: "session" },
     } as never);
     expect(mocks.execute).not.toHaveBeenCalled();
@@ -135,7 +135,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     mocks.browser.mockResolvedValue({ problem: "Assignment revoked", status: "failed" });
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
-      getSandbox: () => Promise.resolve({}),
+      getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
       session: { auth: {}, id: "session" },
     } as never);
     expect(mocks.prepare).toHaveBeenCalledOnce();
@@ -154,7 +154,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     mocks.prepare.mockRejectedValueOnce(new Error("Checked release differs from CUE"));
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
-      getSandbox: () => Promise.resolve({}),
+      getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
       session: { auth: {}, id: "session" },
     } as never);
     expect(mocks.state.current.phase).toBe("applied");
@@ -172,7 +172,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       const writeTextFile = vi.fn();
       const result = await validateAppCreation.execute({ implementationFiles }, {
         callId: "repair",
-        getSandbox: () => Promise.resolve({ writeTextFile }),
+        getSandbox: () => Promise.resolve({ id: "validation-sandbox", writeTextFile }),
         session: { auth: {}, id: "session" },
       } as never);
       expect(mocks.clear).toHaveBeenCalledBefore(writeTextFile);
@@ -188,7 +188,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     await expect(
       validateAppCreation.execute({ implementationFiles }, {
         callId: "repair",
-        getSandbox: () => Promise.resolve({ writeTextFile }),
+        getSandbox: () => Promise.resolve({ id: "validation-sandbox", writeTextFile }),
         session: { auth: {}, id: "session" },
       } as never),
     ).rejects.toThrow("write failed");
@@ -207,7 +207,7 @@ describe("behavior evidence invalidation during validation repair", () => {
         },
         {
           callId: "repair",
-          getSandbox: () => Promise.resolve({ writeTextFile }),
+          getSandbox: () => Promise.resolve({ id: "validation-sandbox", writeTextFile }),
           session: { auth: {}, id: "session" },
         } as never,
       ),
@@ -226,7 +226,7 @@ describe("behavior evidence invalidation during validation repair", () => {
         .mockRejectedValueOnce(new Error("second write failed"));
       const context = {
         callId: "repair",
-        getSandbox: () => Promise.resolve({ writeTextFile }),
+        getSandbox: () => Promise.resolve({ id: "validation-sandbox", writeTextFile }),
         session: { auth: {}, id: "session" },
       } as never;
       await expect(

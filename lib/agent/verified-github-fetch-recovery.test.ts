@@ -1,4 +1,4 @@
-import type { SandboxSession } from "eve/sandbox";
+import type { BuilderSandboxSession } from "../sandbox/builder-sandbox";
 import { describe, expect, it, vi } from "vitest";
 
 import { prepareWithVerifiedGitHubFetchRecovery } from "./verified-github-fetch-recovery";
@@ -16,7 +16,7 @@ const fixture = () => {
     .mockResolvedValueOnce({ token: "second-private-token" });
   return {
     acquireCredential,
-    sandbox: { setNetworkPolicy } satisfies Pick<SandboxSession, "setNetworkPolicy">,
+    sandbox: { setNetworkPolicy } satisfies Pick<BuilderSandboxSession, "setNetworkPolicy">,
     setNetworkPolicy,
   };
 };

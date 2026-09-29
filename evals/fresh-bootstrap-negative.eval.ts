@@ -16,25 +16,29 @@ export default defineEval({
   tags: ["fresh-bootstrap-publication"],
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(t, repository, "fresh-negative-eval", "fresh-template");
-    const fixture = await createFreshBootstrapEvalCapability();
+    const [session, fixture] = await Promise.all([
+      prepareReviewedWorkflow(t, repository, "fresh-negative-eval", "fresh-template"),
+      createFreshBootstrapEvalCapability(),
+    ]);
     try {
       const destination = path.join(fixture.allowedRoot, "canceled");
       await withFreshBootstrapTestCapability(fixture.capability, () =>
-        t.send(`Publish fresh repository bootstrap at ${destination}.`),
+        session.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
-      t.requireInputRequest({ toolName: "publish_fresh_repository" });
-      await withFreshBootstrapTestCapability(fixture.capability, () => t.respondAll("cancel"));
+      session.requireInputRequest({ toolName: "publish_fresh_repository" });
+      const turn1 = await withFreshBootstrapTestCapability(fixture.capability, () =>
+        session.respondAll("cancel"),
+      );
       t.succeeded();
-      t.check(t.reply, includes("canceled, stale, or recovery-required"));
+      t.check(turn1.message, includes("canceled, stale, or recovery-required"));
 
-      await withFreshBootstrapTestCapability(fixture.capability, () =>
-        t.send(
+      const turn2 = await withFreshBootstrapTestCapability(fixture.capability, () =>
+        session.send(
           `Inspect fresh repository bootstrap at ${path.join(fixture.allowedRoot, "stale")} with stale review.`,
         ),
       );
       t.succeeded();
-      t.check(t.reply, includes("rejected without target mutation"));
+      t.check(turn2.message, includes("rejected without target mutation"));
       t.notCalledTool("bash");
       t.notCalledTool("write_file");
       t.notCalledTool("publish_reviewed_change_set");

@@ -1,3 +1,4 @@
+import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { createHash } from "node:crypto";
 
 import {
@@ -77,11 +78,11 @@ export default defineTool({
     const launch = resolvePreviewPackageManager(input.command, rootManifest);
     const evidenceGeneration = currentProductBehaviorGeneration();
     await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
-    const provider = await getVercelPreviewProvider(sandbox.id, ctx.abortSignal);
+    const provider = await getVercelPreviewProvider(getBuilderSandboxId(sandbox), ctx.abortSignal);
     const runtime = await resolvePreparedRuntimeExecution({
       appId: selected.appId,
       root: selected.root,
-      sandboxId: sandbox.id,
+      sandboxId: getBuilderSandboxId(sandbox),
       sessionAuth: ctx.session.auth,
       sessionId: ctx.session.id,
       signal: ctx.abortSignal,
@@ -106,7 +107,7 @@ export default defineTool({
     if (
       selected.reusable &&
       previous?.requestDigest === requestDigest &&
-      hasLiveWorkingPreview(previous, sandbox.id) &&
+      hasLiveWorkingPreview(previous, getBuilderSandboxId(sandbox)) &&
       previous.providerSessionId === provider.currentSession().sessionId
     ) {
       const command = await provider.getCommand(previous.commandId, { signal: ctx.abortSignal });
@@ -182,7 +183,7 @@ export default defineTool({
       previous,
       provider,
       requestDigest,
-      sandboxId: sandbox.id,
+      sandboxId: getBuilderSandboxId(sandbox),
       signal: ctx.abortSignal,
     });
     workingPreviewState.update(() => preview);

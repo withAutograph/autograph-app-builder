@@ -16,28 +16,35 @@ export default defineEval({
   tags: ["fresh-bootstrap-publication"],
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(t, repository, "fresh-recovery-eval", "fresh-template");
-    const fixture = await createFreshBootstrapEvalCapability();
+    const [session, fixture] = await Promise.all([
+      prepareReviewedWorkflow(t, repository, "fresh-recovery-eval", "fresh-template"),
+      createFreshBootstrapEvalCapability(),
+    ]);
     try {
       const destination = path.join(fixture.allowedRoot, "recovery");
       await withFreshBootstrapTestCapability(fixture.capability, () =>
-        t.send(`Publish fresh repository bootstrap at ${destination}.`),
+        session.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
-      t.requireInputRequest({ toolName: "publish_fresh_repository" });
-      await withFreshBootstrapTestCapability(fixture.capability, () => t.respondAll("approve"));
+      session.requireInputRequest({ toolName: "publish_fresh_repository" });
+      await withFreshBootstrapTestCapability(fixture.capability, () =>
+        session.respondAll("approve"),
+      );
       t.succeeded();
 
       await withFreshBootstrapTestCapability(fixture.capability, () =>
-        t.send("Recover fresh repository bootstrap after partial failure."),
+        session.send("Recover fresh repository bootstrap after partial failure."),
       );
-      t.requireInputRequest({ toolName: "recover_fresh_repository" });
-      await withFreshBootstrapTestCapability(fixture.capability, () => t.respondAll("approve"));
+      session.requireInputRequest({ toolName: "recover_fresh_repository" });
+      const turn1 = await withFreshBootstrapTestCapability(fixture.capability, () =>
+        session.respondAll("approve"),
+      );
       t.succeeded();
-      t.check(t.reply, includes("separately approved exact"));
+      t.check(turn1.message, includes("separately approved exact"));
 
       const retry = await withFreshBootstrapTestCapability(fixture.capability, () =>
-        t.send("Retry fresh repository recovery after a lost response."),
+        session.send("Retry fresh repository recovery after a lost response."),
       );
+
       t.succeeded();
       // Assert idempotent behavior instead of a particular summary sentence.
       retry.notCalledTool("recover_fresh_repository");

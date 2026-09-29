@@ -14,18 +14,18 @@ export default defineEval({
     "A separate approval creates only a deterministic uncommitted branch worktree and preserves the exact source checkout.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(t, repository, "branch-publication-success");
+    const session = await prepareReviewedWorkflow(t, repository, "branch-publication-success");
     const beforeHead = git(repository, ["rev-parse", "HEAD"]);
     const beforeStatus = git(repository, ["status", "--porcelain=v2", "--untracked-files=all"]);
 
-    await t.send("Publish reviewed change set to a new branch worktree.");
-    t.requireInputRequest({
+    await session.send("Publish reviewed change set to a new branch worktree.");
+    session.requireInputRequest({
       toolName: "publish_reviewed_change_set_to_branch_worktree",
     });
-    await t.respondAll("approve");
+    const turn1 = await session.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("new deterministic branch worktree"));
-    t.check(t.reply, includes("no commit, push, GitHub, provider"));
+    t.check(turn1.message, includes("new deterministic branch worktree"));
+    t.check(turn1.message, includes("no commit, push, GitHub, provider"));
     if (git(repository, ["rev-parse", "HEAD"]) !== beforeHead) {
       throw new Error("The original checkout HEAD changed.");
     }

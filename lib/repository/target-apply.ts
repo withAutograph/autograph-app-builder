@@ -1,3 +1,4 @@
+import { setBuilderSandboxNetworkPolicy } from "../sandbox/builder-sandbox";
 import { createHash } from "node:crypto";
 
 import { z } from "zod";
@@ -689,7 +690,7 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
     // roots at all. Let Bun establish the repository's actual dependency state
     // after iteration writes or before invoking its generator, and treat Bun's
     // real result as authority. Failed installs retain partial-apply evidence.
-    await sandbox.setNetworkPolicy("allow-all");
+    await setBuilderSandboxNetworkPolicy(sandbox, "allow-all");
     const install = await sandbox.run({
       command: "bun install",
       workingDirectory: applyRoot,

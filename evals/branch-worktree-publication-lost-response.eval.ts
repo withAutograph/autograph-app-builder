@@ -9,20 +9,24 @@ export default defineEval({
     "A lost response after branch-worktree side effects is read back from durable intent and recovered without creating a second identity.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(t, repository, "branch-publication-lost-response");
-    await t.send("Publish reviewed change set to a new branch worktree.");
-    t.requireInputRequest({
+    const session = await prepareReviewedWorkflow(
+      t,
+      repository,
+      "branch-publication-lost-response",
+    );
+    await session.send("Publish reviewed change set to a new branch worktree.");
+    session.requireInputRequest({
       toolName: "publish_reviewed_change_set_to_branch_worktree",
     });
-    await t.respondAll("approve");
+    const turn1 = await session.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("recovery-required"));
+    t.check(turn1.message, includes("recovery-required"));
 
-    await t.send("Recover branch worktree publication.");
-    t.requireInputRequest({ toolName: "recover_branch_worktree_publication" });
-    await t.respondAll("approve");
+    await session.send("Recover branch worktree publication.");
+    session.requireInputRequest({ toolName: "recover_branch_worktree_publication" });
+    const turn2 = await session.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("separately approved recovery completed"));
+    t.check(turn2.message, includes("separately approved recovery completed"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
   },

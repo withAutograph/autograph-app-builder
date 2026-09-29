@@ -1,3 +1,4 @@
+import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { defineHook } from "eve/hooks";
 import type { HookContext } from "eve/hooks";
 import { sourceWorkflowState } from "../../lib/agent/source-state";
@@ -42,9 +43,13 @@ async function release(
     const sandbox = await ctx.getSandbox();
     if (
       (reason === "turn-completed" || reason === "session-completed") &&
-      hasLiveWorkingPreview(preview, sandbox.id)
+      hasLiveWorkingPreview(preview, getBuilderSandboxId(sandbox))
     ) {
-      const provider = await getVercelPreviewProvider(sandbox.id, undefined, false);
+      const provider = await getVercelPreviewProvider(
+        getBuilderSandboxId(sandbox),
+        undefined,
+        false,
+      );
       const command =
         preview !== null &&
         provider.status === "running" &&

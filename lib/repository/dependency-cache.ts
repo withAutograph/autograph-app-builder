@@ -1,3 +1,4 @@
+import { setBuilderSandboxNetworkPolicy } from "../sandbox/builder-sandbox";
 import { createHash } from "node:crypto";
 
 import { z } from "zod";
@@ -1092,7 +1093,7 @@ export const bootstrapLiveTemplateDependencies =
     await ensureSandboxDirectories(input.sandbox, [
       `${LIVE_TEMPLATE_DEPENDENCY_CACHE_ROOT}/${identity.dependencyKey}/${platform}`,
     ]);
-    await input.sandbox.setNetworkPolicy("allow-all");
+    await setBuilderSandboxNetworkPolicy(input.sandbox, "allow-all");
     const result = await input.sandbox.run({
       command: liveTemplateBootstrapCommand(identity),
       workingDirectory: "/workspace",

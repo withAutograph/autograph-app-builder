@@ -10,38 +10,41 @@ export default defineEval({
   description:
     "Internal product-plan validation and fixed read-only planning are automatic while target mutation remains approval-bound.",
   async test(t) {
+    const session = await t.session();
     const repository = createSupportedRepositoryFixture();
 
-    await t.send(`Prepare supported repository at ${repository}`);
+    await session.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
 
-    await t.send("Assess workspace readiness before planning.");
+    const turn1 = await session.send("Assess workspace readiness before planning.");
     t.succeeded();
     t.calledTool("workspace_readiness_status", { count: 1 });
-    t.check(t.reply, includes("not ready for target execution"));
+    t.check(turn1.message, includes("not ready for target execution"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send(`Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`);
+    const turn2 = await session.send(
+      `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`,
+    );
     t.succeeded();
-    t.check(t.reply, includes("ready for automatic implementation planning"));
+    t.check(turn2.message, includes("ready for automatic implementation planning"));
 
-    await t.send("Prepare offline target dependencies.");
+    const turn3 = await session.send("Prepare offline target dependencies.");
     t.succeeded();
-    t.check(t.reply, includes("Checkout-backed dependency metadata"));
+    t.check(turn3.message, includes("Checkout-backed dependency metadata"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Prepare offline target dependencies after a lost response.");
+    const turn4 = await session.send("Prepare offline target dependencies after a lost response.");
     t.succeeded();
-    t.check(t.reply, includes("reused the exact durable dependency-preparation receipt"));
+    t.check(turn4.message, includes("reused the exact durable dependency-preparation receipt"));
 
-    await t.send("Run target identity and planning.");
+    const turn5 = await session.send("Run target identity and planning.");
     t.succeeded();
     t.calledTool("accept_app_spec", { count: 1 });
-    t.check(t.reply, includes("private preview"));
+    t.check(turn5.message, includes("private preview"));
     t.check(
-      t.reply,
+      turn5.message,
       satisfies(
         (reply) =>
           typeof reply === "string" &&
@@ -52,121 +55,126 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Retry target planning after a lost response.");
+    const turn6 = await session.send("Retry target planning after a lost response.");
     t.succeeded();
-    t.check(t.reply, includes("reused the exact durable target-planning receipt"));
+    t.check(turn6.message, includes("reused the exact durable target-planning receipt"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Read recorded prototype artifact.");
-    t.succeeded();
-    t.calledTool("get_prototype_artifact", { count: 1 });
-    t.check(t.reply, includes("content-addressed prototype artifact was read"));
-    t.notCalledTool("bash");
-    t.notCalledTool("write_file");
-
-    await t.send("Read recorded prototype artifact with stale digest.");
+    const turn7 = await session.send("Read recorded prototype artifact.");
     t.succeeded();
     t.calledTool("get_prototype_artifact", { count: 1 });
-    t.check(t.reply, includes("digest was rejected as stale"));
+    t.check(turn7.message, includes("content-addressed prototype artifact was read"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Apply the current creation proposal.");
-    t.requireInputRequest({ toolName: "apply_app_creation" });
-    await t.respondAll("approve");
+    const turn8 = await session.send("Read recorded prototype artifact with stale digest.");
     t.succeeded();
-    t.check(t.reply, includes("private preview"));
-    t.check(t.reply, includes("quality checks"));
+    t.calledTool("get_prototype_artifact", { count: 1 });
+    t.check(turn8.message, includes("digest was rejected as stale"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    const retryApply = await t.send("Retry target apply after a lost response.");
+    await session.send("Apply the current creation proposal.");
+    session.requireInputRequest({ toolName: "apply_app_creation" });
+    const turn9 = await session.respondAll("approve");
+    t.succeeded();
+    t.check(turn9.message, includes("private preview"));
+    t.check(turn9.message, includes("quality checks"));
+    t.notCalledTool("bash");
+    t.notCalledTool("write_file");
+
+    const retryApply = await session.send("Retry target apply after a lost response.");
+
     t.succeeded();
     retryApply.notEvent("input.requested");
     retryApply.calledTool("apply_app_creation", { count: 1 });
-    t.check(t.reply, includes("prepared app is unchanged"));
+    t.check(retryApply.message, includes("prepared app is unchanged"));
 
-    const validation = await t.send("Validate the applied creation.");
+    const validation = await session.send("Validate the applied creation.");
+
     t.succeeded();
     validation.notEvent("input.requested");
-    t.check(t.reply, includes("quality checks"));
-    t.check(t.reply, includes("ready for review"));
+    t.check(validation.message, includes("quality checks"));
+    t.check(validation.message, includes("ready for review"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    const retryValidation = await t.send("Retry target validation after a lost response.");
+    const retryValidation = await session.send("Retry target validation after a lost response.");
+
     t.succeeded();
     retryValidation.notEvent("input.requested");
-    t.check(t.reply, includes("quality checks are still passing"));
+    t.check(retryValidation.message, includes("quality checks are still passing"));
 
-    await t.send("Inspect the validated change set.");
+    const turn10 = await session.send("Inspect the validated change set.");
     t.succeeded();
     t.calledTool("change_set_status", { count: 1 });
-    t.check(t.reply, includes("completed app changes are ready for review"));
+    t.check(turn10.message, includes("completed app changes are ready for review"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    const review = await t.send("Accept the displayed change set.");
+    const review = await session.send("Accept the displayed change set.");
+
     t.succeeded();
     review.notEvent("input.requested");
-    t.check(t.reply, includes("completed app changes are ready for review"));
-    t.check(t.reply, includes("draft pull request"));
+    t.check(review.message, includes("completed app changes are ready for review"));
+    t.check(review.message, includes("draft pull request"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    const retryReview = await t.send("Retry change-set acceptance after a lost response.");
+    const retryReview = await session.send("Retry change-set acceptance after a lost response.");
+
     t.succeeded();
     retryReview.notEvent("input.requested");
-    t.check(t.reply, includes("same completed app changes remain ready"));
+    t.check(retryReview.message, includes("same completed app changes remain ready"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Publish reviewed change set locally.");
-    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
-    await t.respondAll("cancel");
+    await session.send("Publish reviewed change set locally.");
+    session.requireInputRequest({ toolName: "publish_reviewed_change_set" });
+    const turn11 = await session.respondAll("cancel");
     t.succeeded();
-    t.check(t.reply, includes("canceled or rejected"));
+    t.check(turn11.message, includes("canceled or rejected"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Publish reviewed change set locally after cancellation.");
-    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
-    await t.respondAll("approve");
+    await session.send("Publish reviewed change set locally after cancellation.");
+    session.requireInputRequest({ toolName: "publish_reviewed_change_set" });
+    const turn12 = await session.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("named existing local checkout"));
-    t.check(t.reply, includes("No commit, branch, GitHub publication"));
+    t.check(turn12.message, includes("named existing local checkout"));
+    t.check(turn12.message, includes("No commit, branch, GitHub publication"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Retry local publication after a lost response.");
-    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
-    await t.respondAll("approve");
+    await session.send("Retry local publication after a lost response.");
+    session.requireInputRequest({ toolName: "publish_reviewed_change_set" });
+    const turn13 = await session.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("reused the exact durable local-publication receipt"));
+    t.check(turn13.message, includes("reused the exact durable local-publication receipt"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Publish reviewed change set with stale review digest.");
-    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
-    await t.respondAll("approve");
+    await session.send("Publish reviewed change set with stale review digest.");
+    session.requireInputRequest({ toolName: "publish_reviewed_change_set" });
+    const turn14 = await session.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("Stale local publication was rejected"));
+    t.check(turn14.message, includes("Stale local publication was rejected"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Record a replacement prototype artifact.");
+    const turn15 = await session.send("Record a replacement prototype artifact.");
     t.succeeded();
-    t.check(t.reply, includes("durable state was not changed"));
+    t.check(turn15.message, includes("durable state was not changed"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Report artifact workflow status.");
+    const turn16 = await session.send("Report artifact workflow status.");
     t.succeeded();
     t.calledTool("artifact_workflow_status", { count: 2 });
-    t.check(t.reply, includes('"phase":"published_local"'));
+    t.check(turn16.message, includes('"phase":"published_local"'));
     t.check(
-      t.reply,
+      turn16.message,
       satisfies(
         (reply) =>
           typeof reply === "string" &&
@@ -175,24 +183,24 @@ export default defineEval({
         "published workflow retains exact review and publication receipts",
       ),
     );
-    const afterRevision = t.reply;
+    const afterRevision = turn16.message;
 
-    await t.send("Retry recording the exact replacement prototype artifact.");
+    const turn17 = await session.send("Retry recording the exact replacement prototype artifact.");
     t.succeeded();
-    t.check(t.reply, includes("durable state was not changed"));
+    t.check(turn17.message, includes("durable state was not changed"));
 
-    await t.send("Report artifact workflow status.");
+    const turn18 = await session.send("Report artifact workflow status.");
     t.succeeded();
-    t.check(t.reply, equals(afterRevision));
+    t.check(turn18.message, equals(afterRevision));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
     const topologyPath = path.join(repository, "microfrontends.json");
     const topologyBeforeOverlap = await readFile(topologyPath);
     await writeFile(topologyPath, "concurrent overlap\n");
-    await t.send("Publish reviewed change set locally with dirty overlap.");
+    const turn19 = await session.send("Publish reviewed change set locally with dirty overlap.");
     t.succeeded();
-    t.check(t.reply, includes("preconditions were rejected"));
+    t.check(turn19.message, includes("preconditions were rejected"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
     await writeFile(topologyPath, topologyBeforeOverlap);

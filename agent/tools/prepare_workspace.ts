@@ -1,3 +1,4 @@
+import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
@@ -76,7 +77,7 @@ export default defineTool({
       !development &&
       source.githubSource === undefined &&
       currentWorkspace !== undefined &&
-      currentWorkspace.workspaceId !== sandbox.id
+      currentWorkspace.workspaceId !== getBuilderSandboxId(sandbox)
     ) {
       throw new Error("This app build already owns a different workspace.");
     }

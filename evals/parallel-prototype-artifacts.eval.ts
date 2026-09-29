@@ -7,22 +7,23 @@ export default defineEval({
   description:
     "Three session-scoped prototype artifacts record automatically without losing state or requesting input.",
   async test(t) {
+    const session = await t.session();
     const repository = createSupportedRepositoryFixture();
-    await t.send(`Prepare supported repository at ${repository}`);
+    await session.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
 
-    await t.send("Record three prototype artifacts in parallel.");
+    const turn1 = await session.send("Record three prototype artifacts in parallel.");
     t.succeeded();
     t.notEvent("input.requested");
     t.calledTool("record_prototype_artifact", { count: 3 });
-    t.check(t.reply, includes("All three prototype artifacts were recorded"));
+    t.check(turn1.message, includes("All three prototype artifacts were recorded"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Report artifact workflow status.");
+    const turn2 = await session.send("Report artifact workflow status.");
     t.succeeded();
-    t.check(t.reply, includes("app-spec.md"));
-    t.check(t.reply, includes("decisions.md"));
-    t.check(t.reply, includes("index.html"));
+    t.check(turn2.message, includes("app-spec.md"));
+    t.check(turn2.message, includes("decisions.md"));
+    t.check(turn2.message, includes("index.html"));
   },
 });

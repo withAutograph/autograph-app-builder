@@ -4,7 +4,7 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import nodePath from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { SandboxSession } from "eve/sandbox";
+import type { BuilderSandboxSession } from "../sandbox/builder-sandbox";
 import { sandboxApplyCommandExecutor, targetApplyCommandReceiptSchema } from "./target-apply";
 import { targetIterationProposalSchema } from "./target-planning";
 import type { TargetIterationChange } from "./target-planning";
@@ -16,33 +16,33 @@ const fixture = (
   options: { stale?: boolean; installFails?: boolean; cueFails?: boolean; delete?: boolean } = {},
 ) => {
   const events: string[] = [];
-  const policies: Parameters<SandboxSession["setNetworkPolicy"]>[0][] = [];
+  const policies: Parameters<BuilderSandboxSession["setNetworkPolicy"]>[0][] = [];
   let cueCommand: string | undefined;
   let manifest: string | null = options.stale === true ? "changed by another writer" : before;
   const failure = { exitCode: 1, stderr: "package not found", stdout: "" };
   const cueFailure = { exitCode: 1, stderr: "cue source activation failed", stdout: "cue output" };
   const sandbox = {
     id: "fixture",
-    readBinaryFile: vi.fn<SandboxSession["readBinaryFile"]>(async ({ path }) => {
+    readBinaryFile: vi.fn<BuilderSandboxSession["readBinaryFile"]>(async ({ path }) => {
       await Promise.resolve();
       events.push(`read:${path}`);
       return manifest === null ? null : Buffer.from(manifest);
     }),
-    readFile: vi.fn<SandboxSession["readFile"]>(async () => {
+    readFile: vi.fn<BuilderSandboxSession["readFile"]>(async () => {
       await Promise.resolve();
       throw new Error("The dependency installation fixture does not read streams.");
     }),
-    readTextFile: vi.fn<SandboxSession["readTextFile"]>(async () => {
+    readTextFile: vi.fn<BuilderSandboxSession["readTextFile"]>(async () => {
       await Promise.resolve();
       throw new Error("The dependency installation fixture does not read text files.");
     }),
-    removePath: vi.fn<SandboxSession["removePath"]>(async () => {
+    removePath: vi.fn<BuilderSandboxSession["removePath"]>(async () => {
       await Promise.resolve();
       events.push("delete");
       manifest = null;
     }),
     resolvePath: (path) => path,
-    run: vi.fn<SandboxSession["run"]>(async ({ command }) => {
+    run: vi.fn<BuilderSandboxSession["run"]>(async ({ command }) => {
       await Promise.resolve();
       if (command === "bun install") {
         events.push("install");
@@ -56,28 +56,28 @@ const fixture = (
       cueCommand = command;
       return options.cueFails === true ? cueFailure : { exitCode: 0, stderr: "", stdout: "" };
     }),
-    setNetworkPolicy: vi.fn<SandboxSession["setNetworkPolicy"]>(async (policy) => {
+    setNetworkPolicy: vi.fn<BuilderSandboxSession["setNetworkPolicy"]>(async (policy) => {
       await Promise.resolve();
       policies.push(policy);
     }),
-    spawn: vi.fn<SandboxSession["spawn"]>(async () => {
+    spawn: vi.fn<BuilderSandboxSession["spawn"]>(async () => {
       await Promise.resolve();
       throw new Error("The dependency installation fixture does not spawn processes.");
     }),
-    writeBinaryFile: vi.fn<SandboxSession["writeBinaryFile"]>(async () => {
+    writeBinaryFile: vi.fn<BuilderSandboxSession["writeBinaryFile"]>(async () => {
       await Promise.resolve();
       throw new Error("The dependency installation fixture does not write binary files.");
     }),
-    writeFile: vi.fn<SandboxSession["writeFile"]>(async () => {
+    writeFile: vi.fn<BuilderSandboxSession["writeFile"]>(async () => {
       await Promise.resolve();
       throw new Error("The dependency installation fixture does not write streams.");
     }),
-    writeTextFile: vi.fn<SandboxSession["writeTextFile"]>(async ({ content }) => {
+    writeTextFile: vi.fn<BuilderSandboxSession["writeTextFile"]>(async ({ content }) => {
       await Promise.resolve();
       events.push("write");
       manifest = content;
     }),
-  } satisfies SandboxSession;
+  } satisfies BuilderSandboxSession;
   const change: TargetIterationChange =
     options.delete === true
       ? { before: { digest: digest(before), mode: "644" }, path: "apps/vendor/package.json" }

@@ -9,28 +9,28 @@ export default defineEval({
     "A durable pending local publication is never redispatched and blocks every upstream mutation.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(t, repository, "publication-interruption");
+    const session = await prepareReviewedWorkflow(t, repository, "publication-interruption");
 
-    await t.send("Publish reviewed change set locally.");
-    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
-    await t.respondAll("approve");
+    await session.send("Publish reviewed change set locally.");
+    session.requireInputRequest({ toolName: "publish_reviewed_change_set" });
+    await session.respondAll("approve");
     t.succeeded();
 
-    await t.send("Report artifact workflow status.");
+    const turn1 = await session.send("Report artifact workflow status.");
     t.succeeded();
-    t.check(t.reply, includes('"phase":"publication_pending"'));
+    t.check(turn1.message, includes('"phase":"publication_pending"'));
 
-    await t.send("Retry local publication after a lost response.");
+    const turn2 = await session.send("Retry local publication after a lost response.");
     t.succeeded();
-    t.check(t.reply, includes("not redispatched automatically"));
+    t.check(turn2.message, includes("not redispatched automatically"));
 
-    await t.send("Report artifact workflow status.");
+    const turn3 = await session.send("Report artifact workflow status.");
     t.succeeded();
-    t.check(t.reply, includes('"phase":"publication_pending"'));
+    t.check(turn3.message, includes('"phase":"publication_pending"'));
 
-    await t.send("Record a replacement prototype artifact.");
+    const turn4 = await session.send("Record a replacement prototype artifact.");
     t.succeeded();
-    t.check(t.reply, includes("durable state was not changed"));
+    t.check(turn4.message, includes("durable state was not changed"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
   },

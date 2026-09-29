@@ -9,19 +9,19 @@ export default defineEval({
     "A durable success written before workflow CAS is verified and terminalized without mutation redispatch.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(t, repository, "publication-success-recovery");
-    await t.send("Publish reviewed change set locally.");
-    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
-    await t.respondAll("approve");
+    const session = await prepareReviewedWorkflow(t, repository, "publication-success-recovery");
+    await session.send("Publish reviewed change set locally.");
+    session.requireInputRequest({ toolName: "publish_reviewed_change_set" });
+    await session.respondAll("approve");
     t.succeeded();
 
-    await t.send("Retry local publication after a lost response.");
-    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
-    await t.respondAll("approve");
+    await session.send("Retry local publication after a lost response.");
+    session.requireInputRequest({ toolName: "publish_reviewed_change_set" });
+    const turn1 = await session.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("reused the exact durable"));
-    await t.send("Report artifact workflow status.");
-    t.check(t.reply, includes('"phase":"published_local"'));
+    t.check(turn1.message, includes("reused the exact durable"));
+    const turn2 = await session.send("Report artifact workflow status.");
+    t.check(turn2.message, includes('"phase":"published_local"'));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
   },

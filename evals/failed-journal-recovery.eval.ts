@@ -9,18 +9,18 @@ export default defineEval({
     "A durable failure written before workflow CAS is terminalized without mutation redispatch.",
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(t, repository, "publication-failure-recovery");
-    await t.send("Publish reviewed change set locally.");
-    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
-    await t.respondAll("approve");
+    const session = await prepareReviewedWorkflow(t, repository, "publication-failure-recovery");
+    await session.send("Publish reviewed change set locally.");
+    session.requireInputRequest({ toolName: "publish_reviewed_change_set" });
+    await session.respondAll("approve");
     t.succeeded();
 
-    await t.send("Retry local publication after a lost response.");
-    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
-    await t.respondAll("approve");
+    await session.send("Retry local publication after a lost response.");
+    session.requireInputRequest({ toolName: "publish_reviewed_change_set" });
+    await session.respondAll("approve");
     t.succeeded();
-    await t.send("Report artifact workflow status.");
-    t.check(t.reply, includes('"phase":"publication_failed"'));
+    const turn1 = await session.send("Report artifact workflow status.");
+    t.check(turn1.message, includes('"phase":"publication_failed"'));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
   },

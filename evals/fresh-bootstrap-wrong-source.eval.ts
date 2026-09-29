@@ -16,16 +16,18 @@ export default defineEval({
   tags: ["fresh-bootstrap-publication"],
   async test(t) {
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(t, repository, "wrong-source-eval");
-    const fixture = await createFreshBootstrapEvalCapability();
+    const [session, fixture] = await Promise.all([
+      prepareReviewedWorkflow(t, repository, "wrong-source-eval"),
+      createFreshBootstrapEvalCapability(),
+    ]);
     try {
-      await withFreshBootstrapTestCapability(fixture.capability, () =>
-        t.send(
+      const turn = await withFreshBootstrapTestCapability(fixture.capability, () =>
+        session.send(
           `Inspect fresh repository bootstrap at ${path.join(fixture.allowedRoot, "wrong-source")}.`,
         ),
       );
       t.succeeded();
-      t.check(t.reply, includes("rejected without target mutation"));
+      t.check(turn.message, includes("rejected without target mutation"));
       t.notCalledTool("publish_fresh_repository");
       t.notCalledTool("recover_fresh_repository");
       t.notCalledTool("bash");
