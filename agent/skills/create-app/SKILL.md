@@ -69,7 +69,7 @@ app-owned files and reuse the same component-backed preview flow.
    version while retaining current shared platform capabilities, select that
    baseline in this first `resolve_github_source` call, before reading any app
    source. Use `appBaseline: { appId, source: { kind: "merged-pr",
-   pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
+pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    for an explicitly supplied full commit. The platform branch/open PR remains
    the ordinary source selection. Builder verifies and projects the app itself;
    never ask the evaluator to restore files or manually construct a baseline.

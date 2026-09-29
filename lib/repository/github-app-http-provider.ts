@@ -23,9 +23,7 @@ import type {
   ExistingDraftReconciliationProposal,
   ReconciliationContent,
 } from "./github-draft-reconciliation";
-import {
-  historicalAppSourceSelectorSchema,
-} from "./historical-app-source";
+import { historicalAppSourceSelectorSchema } from "./historical-app-source";
 import type { HistoricalAppSourceObservation } from "./historical-app-source";
 
 const reconciliationCommitMessage = (proposal: ExistingDraftReconciliationProposal): string =>

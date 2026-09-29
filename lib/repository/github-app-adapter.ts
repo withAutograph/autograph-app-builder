@@ -34,12 +34,8 @@ import type {
   ExistingDraftReconciliationProposal,
   ReconciliationContent,
 } from "./github-draft-reconciliation";
-import {
-  historicalAppSourceObservationSchema,
-} from "./historical-app-source";
-import type {
-  HistoricalAppSourceSelector,
-} from "./historical-app-source";
+import { historicalAppSourceObservationSchema } from "./historical-app-source";
+import type { HistoricalAppSourceSelector } from "./historical-app-source";
 
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);

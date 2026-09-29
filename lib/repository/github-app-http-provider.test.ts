@@ -309,7 +309,10 @@ function historicalProviderFetch(input?: {
     const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
     calls.push({ body, method, url });
     if (url.endsWith("/app/installations/456/access_tokens")) {
-      return json({ permissions: { contents: "read" }, token: "ghs_operation_scoped_read_token" }, 201);
+      return json(
+        { permissions: { contents: "read" }, token: "ghs_operation_scoped_read_token" },
+        201,
+      );
     }
     if (url.endsWith("/repositories/100")) {
       return json({
@@ -367,11 +370,11 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       `https://api.github.com/repos/withAutograph/example-app/commits/${"a".repeat(40)}`,
     );
     expect(mock.calls.some(({ url }) => url.includes("/git/ref/heads/"))).toBe(false);
-    expect(mock.calls.every(({ method, url }) => method === "GET" || url.endsWith("/access_tokens"))).toBe(true);
-    expect(JSON.stringify(mock.calls)).not.toContain("private-key-material");
     expect(
-      mock.calls.find(({ url }) => url.endsWith("/access_tokens"))?.body,
-    ).toMatchObject({
+      mock.calls.every(({ method, url }) => method === "GET" || url.endsWith("/access_tokens")),
+    ).toBe(true);
+    expect(JSON.stringify(mock.calls)).not.toContain("private-key-material");
+    expect(mock.calls.find(({ url }) => url.endsWith("/access_tokens"))?.body).toMatchObject({
       permissions: { contents: "read" },
       repository_ids: [100],
     });

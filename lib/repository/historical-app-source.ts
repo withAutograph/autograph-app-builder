@@ -25,6 +25,4 @@ export const historicalAppSourceObservationSchema = z.strictObject({
 });
 
 export type HistoricalAppSourceSelector = z.infer<typeof historicalAppSourceSelectorSchema>;
-export type HistoricalAppSourceObservation = z.infer<
-  typeof historicalAppSourceObservationSchema
->;
+export type HistoricalAppSourceObservation = z.infer<typeof historicalAppSourceObservationSchema>;

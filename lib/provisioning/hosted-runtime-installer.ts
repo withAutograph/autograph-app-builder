@@ -136,9 +136,7 @@ export const withHostedInstallerSandbox = async <T>(input: {
     const names = await input.source.fs.readdir(staging, { signal: operationSignal });
     const parts = names
       .filter((name) => /^[0-9]+\.part$/u.test(name))
-      .toSorted((left, right) =>
-        BigInt(left.slice(0, -5)) < BigInt(right.slice(0, -5)) ? -1 : 1,
-      );
+      .toSorted((left, right) => (BigInt(left.slice(0, -5)) < BigInt(right.slice(0, -5)) ? -1 : 1));
     if (parts.length === 0) {
       throw new HostedRuntimeProviderError("provider_unavailable");
     }
