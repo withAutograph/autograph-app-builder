@@ -19,6 +19,9 @@ commits, clean trees, receipt chains, or offline dependency inventories.
 Cache misses fall back to normal execution. Preserve user isolation and
 credential protection, and ask before outward effects.
 
+For the full source selection, setup, validation, recovery, and publication
+sequence, see the [Arrusted build guide](arrusted-app-builder-guide.md).
+
 ## Choose a composition, not a lookalike
 
 Start with Arrusted's existing `docs/app-builder-ui-catalog.json` and its linked

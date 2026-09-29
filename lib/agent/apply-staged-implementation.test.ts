@@ -71,19 +71,40 @@ describe("apply tool staged repair integration", () => {
     vi.clearAllMocks();
     mocks.execute.mockResolvedValue({ ok: true, receipt: { changes: [] } });
   });
-  it("stages full UI before rejection and supplies it with the partial repair to executor", async () => {
+  it("stages full UI through command failure and supplies it with the partial repair", async () => {
     mocks.current = state("repair");
+    const getSandbox = vi.fn().mockResolvedValue({});
+    const context = { callId: "apply", getSandbox, session: { id: "session" } } as never;
+    expect(await approval(context)).toBe("user-approval");
+    mocks.execute.mockResolvedValueOnce({
+      ok: false,
+      receipt: {
+        command: { exitCode: 1, name: "create" },
+        output: { stderr: "fixture command failure" },
+      },
+    });
+    await expect(
+      applyAppCreation.execute({ implementationFiles: [page] }, context),
+    ).rejects.toThrow("fixture command failure");
+    expect(getSandbox).toHaveBeenCalledOnce();
+    expect(mocks.execute).toHaveBeenCalledOnce();
+    expect(await approval(context)).toBe("approved");
+    await applyAppCreation.execute({ implementationFiles: [action] }, context);
+    expect(mocks.wrap.mock.calls[1][1]).toEqual([page, action]);
+    expect(mocks.execute).toHaveBeenCalledTimes(2);
+  });
+  it("applies an approved partial submission with advisory architecture diagnostics", async () => {
+    mocks.current = state("advisory");
     const getSandbox = vi.fn().mockResolvedValue({});
     const context = { callId: "apply", getSandbox, session: { id: "session" } } as never;
     expect(await approval(context)).toBe("user-approval");
     await expect(
       applyAppCreation.execute({ implementationFiles: [page] }, context),
-    ).rejects.toThrow("no Server Action");
-    expect(getSandbox).not.toHaveBeenCalled();
-    expect(mocks.execute).not.toHaveBeenCalled();
-    expect(await approval(context)).toBe("approved");
-    await applyAppCreation.execute({ implementationFiles: [action] }, context);
-    expect(mocks.wrap.mock.calls[0][1]).toEqual([page, action]);
+    ).resolves.toMatchObject({
+      architectureDiagnostics: [expect.stringContaining("No Server Action")],
+      status: "applied",
+    });
+    expect(mocks.wrap.mock.calls[0][1]).toEqual([page]);
     expect(mocks.execute).toHaveBeenCalledOnce();
   });
   it("already-applied reuse does not request sandbox or stage unused input", async () => {

@@ -2,13 +2,9 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import nodePath from "node:path";
 
-import {
-  inspectBuilderOwnedSupportedRepository,
-  SUPPORTED_TEMPLATE_ADAPTER,
-  SUPPORTED_TEMPLATE_INPUT_PATHS,
-} from "./supported-template";
+import { SUPPORTED_TEMPLATE_ADAPTER, SUPPORTED_TEMPLATE_INPUT_PATHS } from "./supported-template";
 import type { SupportedTemplateSnapshot } from "./supported-template";
-import { captureProcessStdout, digestProcessStdout } from "./captured-process-output";
+import { captureProcessStdout } from "./captured-process-output";
 
 export type SourceKind = "existing-repository" | "fresh-template";
 
@@ -63,74 +59,6 @@ const fixedGit = function fixedGit(
   );
   return encoding === "utf-8" ? output.toString("utf-8") : output;
 } as FixedGit;
-
-export const inspectSourceContractDigest = async (
-  sourcePath: string,
-  sourceSha: string,
-  contractPaths: readonly string[] = SUPPORTED_TEMPLATE_INPUT_PATHS,
-): Promise<string> => {
-  const executable = existsSync("/usr/bin/git") ? "/usr/bin/git" : "/bin/git";
-  const contract = await Promise.all(
-    contractPaths.map(async (contractPath) => {
-      const entry = fixedGit(
-        sourcePath,
-        ["ls-tree", sourceSha, "--", contractPath],
-        "utf-8",
-      ).trim();
-      const match = /^(?<mode>100644|100755) blob (?<objectId>[0-9a-f]{40,64})\t(?<path>.+)$/u.exec(
-        entry,
-      );
-      if (match === null || match[3] !== contractPath) {
-        throw new Error(
-          `Repository contract path is not a regular blob at ${sourceSha}: ${contractPath}`,
-        );
-      }
-      return {
-        mode: match[1],
-        objectId: match[2],
-        path: contractPath,
-        sha256: await digestProcessStdout(
-          executable,
-          [
-            "-c",
-            "core.hooksPath=/dev/null",
-            "-c",
-            "core.fsmonitor=false",
-            "-c",
-            "core.attributesfile=/dev/null",
-            "-c",
-            "credential.helper=",
-            "-c",
-            "protocol.allow=never",
-            "-C",
-            sourcePath,
-            "show",
-            `${sourceSha}:${contractPath}`,
-          ],
-          {
-            env: {
-              GIT_ATTR_NOSYSTEM: "1",
-              GIT_CONFIG_GLOBAL: "/dev/null",
-              GIT_CONFIG_NOSYSTEM: "1",
-              GIT_CONFIG_SYSTEM: "/dev/null",
-              GIT_NO_LAZY_FETCH: "1",
-              GIT_TERMINAL_PROMPT: "0",
-              HOME: "/dev/null",
-              LANG: "C.UTF-8",
-              LC_ALL: "C.UTF-8",
-              NODE_ENV: process.env.NODE_ENV ?? "production",
-              PATH: "/usr/bin:/bin",
-              SSH_ASKPASS: "/usr/bin/false",
-              TMPDIR: "/tmp",
-              XDG_CONFIG_HOME: "/dev/null",
-            },
-          },
-        ),
-      };
-    }),
-  );
-  return sha256(JSON.stringify(contract));
-};
 
 export const LEGACY_SOURCE_RECEIPT_VERSION = 3 as const;
 export const SOURCE_RECEIPT_VERSION = 4 as const;
@@ -415,50 +343,10 @@ export const inspectSourceReceipt = async (
   });
 };
 
-/** Creates the V4 receipt used only for the builder-owned canonical clone. */
-export const inspectClonedTemplateSourceReceipt = async (input: {
-  path: string;
-  readinessDigest: string;
-}): Promise<SourceReceipt> => {
-  const eligibility = await inspectBuilderOwnedSupportedRepository(input.path);
-  if (!eligibility.eligible || eligibility.sourceSha === undefined) {
-    throw new Error(`Cloned template is not eligible: ${eligibility.failures.join("; ")}`);
-  }
-  const evidence = {
-    adapter: SUPPORTED_TEMPLATE_ADAPTER as typeof SUPPORTED_TEMPLATE_ADAPTER,
-    contractDigest: await inspectSourceContractDigest(
-      eligibility.sourcePath,
-      eligibility.sourceSha,
-    ),
-    eligibilityDigest: eligibility.digest,
-    provenance: {
-      method: "git-clone-v1" as const,
-      readinessDigest: input.readinessDigest,
-      ref: ARRUSTED_TEMPLATE_REF,
-      repository: ARRUSTED_TEMPLATE_REPOSITORY,
-    },
-    releaseEnabled: false as const,
-    sourceKind: "fresh-template" as const,
-    sourceSha: eligibility.sourceSha,
-    sourceTree: fixedGit(
-      eligibility.sourcePath,
-      ["rev-parse", `${eligibility.sourceSha}^{tree}`],
-      "utf-8",
-    ).trim(),
-    version: SOURCE_RECEIPT_VERSION,
-  };
-  return parseSourceReceipt({
-    ...evidence,
-    digest: sourceReceiptDigest(evidence),
-    sourcePath: eligibility.sourcePath,
-  });
-};
-
 /**
- * Construct the V4 receipt from observations gathered inside the one
- * canonical sandbox clone. The host receives no second checkout; it only
- * evaluates the closed adapter snapshot and contract entries emitted by that
- * detached clone.
+ * Construct the existing V4 receipt from canonical clone observations. The
+ * readinessDigest field is preserved for stored-receipt compatibility; current
+ * acquisition records source identity there, not a claim that CI passed.
  */
 export const inspectCanonicalTemplateSnapshotReceipt = (input: {
   snapshot: CanonicalTemplateSnapshot;

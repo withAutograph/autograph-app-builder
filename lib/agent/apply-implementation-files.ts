@@ -41,13 +41,15 @@ export function assertExistingAppImplementationFiles(
   }
 }
 
+/** Submission-only heuristics are advisory; repository and behavior checks own validation. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function assertImplementationArchitecture(
+export function implementationArchitectureDiagnostics(
   files: readonly ImplementationFile[],
   schemaKind: "kernel" | "none",
 ) {
+  const diagnostics: string[] = [];
   if (schemaKind !== "kernel") {
-    return;
+    return diagnostics;
   }
   const applicationFiles = files.filter(
     (file): file is Extract<ImplementationFile, { content: string }> =>
@@ -59,8 +61,8 @@ export function assertImplementationArchitecture(
       /(?:^|\/)route\.[cm]?[jt]s$/u.test(file.path),
   );
   if (!hasServerWrite) {
-    throw new Error(
-      "This app owns durable data, but its implementation has no Server Action or route handler. Add the server-authorized write path required by the accepted product design.",
+    diagnostics.push(
+      "No Server Action or route handler was recognized in the submitted files. Verify the complete app has the server-authorized persistence required by the accepted design.",
     );
   }
   const clientPersistence = applicationFiles.find(
@@ -69,8 +71,8 @@ export function assertImplementationArchitecture(
       /localStorage|sessionStorage/u.test(file.content),
   );
   if (clientPersistence) {
-    throw new Error(
-      `This app owns durable data, but ${clientPersistence.path} uses browser storage as application persistence. Keep only transient presentation state in the browser and use the server-owned store.`,
+    diagnostics.push(
+      `${clientPersistence.path} references browser storage. Verify it holds only transient presentation state and durable writes use the server-owned store.`,
     );
   }
   const clientRoute = applicationFiles.find(
@@ -79,10 +81,11 @@ export function assertImplementationArchitecture(
       /^\s*["']use client["']/mu.test(file.content),
   );
   if (clientRoute) {
-    throw new Error(
-      `Keep ${clientRoute.path} as a Server Component and move interaction into a narrow client leaf.`,
+    diagnostics.push(
+      `${clientRoute.path} is a Client Component. Review server-rendered initial state and narrow interactive leaves where appropriate.`,
     );
   }
+  return diagnostics;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

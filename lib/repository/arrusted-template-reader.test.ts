@@ -39,7 +39,6 @@ function readerFetch(input?: {
         {
           expires_at: "2026-08-31T18:00:00Z",
           permissions: input?.permissions ?? {
-            checks: "read",
             contents: "read",
             metadata: "read",
           },
@@ -92,7 +91,7 @@ describe("Arrusted private template reader", () => {
       url.endsWith("/app/installations/456/access_tokens"),
     );
     expect(JSON.parse(String(tokenCall?.init.body))).toEqual({
-      permissions: { checks: "read", contents: "read" },
+      permissions: { contents: "read" },
       repository_ids: [ARRUSTED_TEMPLATE_REPOSITORY_ID],
     });
     expect(

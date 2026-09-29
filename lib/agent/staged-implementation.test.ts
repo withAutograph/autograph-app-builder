@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { assertImplementationArchitecture } from "./apply-implementation-files";
+import { implementationArchitectureDiagnostics } from "./apply-implementation-files";
 import { stageImplementationFiles } from "./staged-implementation";
 
 vi.mock("eve/context", () => ({
@@ -15,21 +15,23 @@ vi.mock("eve/context", () => ({
 }));
 
 describe("approved implementation repair staging", () => {
-  it("preserves full UI submission after architecture rejection and partial backend repair", () => {
+  it("preserves full UI submission after advisory diagnostics and partial backend repair", () => {
     const binding = { appSpecDigest: "spec", proposalDigest: "proposal" };
     const page = {
       content: "export default function Page() { return <main>Workspace</main>; }",
       path: "apps/example/app/page.tsx",
     };
     const first = stageImplementationFiles({ ...binding, files: [page] });
-    expect(() => assertImplementationArchitecture(first, "kernel")).toThrow();
+    expect(implementationArchitectureDiagnostics(first, "kernel")).toEqual([
+      expect.stringContaining("No Server Action"),
+    ]);
     const repair = {
       content: '"use server"; export async function save() {}',
       path: "apps/example/app/actions.ts",
     };
     const merged = stageImplementationFiles({ ...binding, files: [repair] });
     expect(merged).toEqual([page, repair]);
-    expect(() => assertImplementationArchitecture(merged, "kernel")).not.toThrow();
+    expect(implementationArchitectureDiagnostics(merged, "kernel")).toEqual([]);
   });
   it("replaces supplied paths while retaining omitted files", () => {
     const binding = { appSpecDigest: "replace", proposalDigest: "replace" };

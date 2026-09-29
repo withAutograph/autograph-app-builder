@@ -12,7 +12,6 @@ const installationIdSchema = z.string().regex(/^[1-9]\d*$/u);
 const tokenSchema = z.string().min(20).max(1024);
 
 const requestedPermissions = {
-  checks: "read" as const,
   contents: "read" as const,
 };
 
@@ -52,11 +51,7 @@ function readOnlyReaderPermissions(value: unknown) {
   if (!record(value)) {
     return false;
   }
-  if (
-    value.contents !== "read" ||
-    value.checks !== "read" ||
-    (value.metadata !== undefined && value.metadata !== "read")
-  ) {
+  if (value.contents !== "read" || (value.metadata !== undefined && value.metadata !== "read")) {
     return false;
   }
   return Object.values(value).every((permission) => permission === "read");

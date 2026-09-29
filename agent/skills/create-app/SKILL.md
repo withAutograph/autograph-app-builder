@@ -55,6 +55,15 @@ app-owned files and reuse the same component-backed preview flow.
    the runtime's local or hosted source directly without asking for internal
    paths. Inspect useful files and components opportunistically. Do not request
    approval for source inspection, workspace preparation, or prototypes.
+   Source-layout and preflight observations are diagnostic. Fresh acquisition
+   does not require a named template CI check or a guessed package scope. Keep
+   the identity command's required fields and repository-owned project name;
+   ignore additional producer metadata. Source receipts are not CI evidence.
+   Use `inspect_repository` to read the selected checkout's
+   `docs/guides/building-apps-with-app-builder.md`, then the app's `README.md`
+   and `AGENTS.md`. For CUE-backed features, read `docs/generated-data-operations.md`
+   and `docs/schema-compiler.md`. Follow current repository docs and actual
+   commands; missing documentation is context to investigate, not a build gate.
    Preserve unrelated changes.
    For a hosted existing repository named as `owner/name`, use only
    `resolve_github_source` with `selectedInstallationId: null`; it owns the
@@ -113,6 +122,10 @@ app-owned files and reuse the same component-backed preview flow.
    the CUE model and policies from the accepted product decisions, compile the
    checked release, and implement the authenticated server reads and actions.
    The user supplies product meaning, not schema source or backend code.
+   Preserve `catalog:` and `workspace:*` references. The generator profile owns
+   the standard scaffold toolset, not every app-specific dependency. Additional
+   dependencies need the appropriate reviewed app manifest/lockfile changes,
+   rather than an automatic shared-profile change.
    Implement production workflows as production behavior: durable drafts and
    recovery use server-owned storage and Server Actions or route handlers;
    provider returns use real callback routes and the repository's emulator or
@@ -124,10 +137,11 @@ app-owned files and reuse the same component-backed preview flow.
    gap; do not substitute filesystem or browser persistence for a hosted app.
    Browser storage, timers, and local state may
    support transient presentation, but never stand in for those outcomes.
-   Keep route pages and layouts as Server Components and put `"use client"`
-   only on the smallest interactive leaves. A single client component that
-   owns routing, persistence, provider state, and the whole application shell
-   is not an acceptable implementation.
+   Prefer Server Component route shells and small interactive client leaves.
+   Architecture source-pattern observations are advisory, not rejection gates.
+   Verify durable writes, authentication, and tenant isolation through the
+   repository checks and exercised behavior; client presentation alone does
+   not establish server-owned persistence.
 
    Pass those
    model-authored files as `implementationFiles` to `apply_app_creation` with
@@ -184,7 +198,7 @@ app-owned files and reuse the same component-backed preview flow.
    content with `resolve_github_draft_pr_conflict`. Report a platform-owned conflict
    with its path and leave it for its owner. Run the selected app's schema,
    repository checks, browser tests, and applicable guard on the reconciled
-   candidate with `validate_github_draft_pr_reconciliation`. For long
+   candidate with `validate_github_draft_pr_reconciliation`.
    If CI reports app formatting defects, run the repository-owned formatter
    with `format_github_draft_pr_candidate` on the isolated candidate before
    validation. It may change only the selected app. Revalidate and review both
@@ -246,6 +260,14 @@ app-owned files and reuse the same component-backed preview flow.
    `run-app-browser-tests` for browser-only workflows that `verify_app_behavior`
    cannot exercise. Prepare required sandbox-local data first. Report the exact
    cases the tests covered and any missing behavior separately.
+
+   When validation returns `productionHandoff`, include its declared app route,
+   roles, checked release, operator guide, and blockers in the result. Keep it
+   separate from private validation and GitHub checks: a protected operator
+   owns tenant preparation, access grants, and hosted activation. Missing
+   Production metadata is not a private build failure. Preserve the selected
+   app's authentication requirements; do not reintroduce a retired local-demo
+   bypass to obtain a passing walkthrough.
 
    Deliver the actual private preview with a concise account of what works,
    what was checked, and any remaining incomplete or unverified outcomes.
