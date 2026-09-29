@@ -20,6 +20,45 @@ export interface SessionResponse {
   response: SessionAnswer;
 }
 
+interface DecisionOutcome {
+  request: PublicInputRequest;
+  response: SessionAnswer;
+  status: "failed" | "submitting" | "submitted";
+}
+
+// A binary confirmation is an action choice. Keep ordinary two-option
+// questions (such as account selection) in the standard choice control.
+const binaryDecisionOptions = (request: PublicInputRequest) => {
+  if (request.kind !== "question" || request.options?.length !== 2) {
+    return null;
+  }
+  const positive = /^(?:accept|approve|confirm|publish|update|yes)\b/iu;
+  const negative = /^(?:cancel|decline|deny|no|do not|don't)\b/iu;
+  const [first, second] = request.options;
+  if (!first || !second) {
+    return null;
+  }
+  if (positive.test(first.label) && negative.test(second.label)) {
+    return [first, second] as const;
+  }
+  if (positive.test(second.label) && negative.test(first.label)) {
+    return [second, first] as const;
+  }
+  return null;
+};
+
+const answerForOption = (option: { id: string; label: string }): SessionAnswer => ({
+  kind: "answer",
+  optionId: option.id,
+  value: option.label,
+});
+
+const draftPullRequestNumber = (title: string) =>
+  /\bdraft PR (?<number>#\d+)/iu.exec(title)?.groups?.number;
+
+const isDecisionRequest = (request?: PublicInputRequest) =>
+  request !== undefined && (request.kind === "approval" || binaryDecisionOptions(request) !== null);
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function InputControl({
   answer,
@@ -174,18 +213,18 @@ function SessionRequestControl({
   answer,
   canOpenLinks,
   isSubmitting,
-  onlyApproval,
+  onlyDecision,
   onAnswer,
-  onApproval,
+  onDecision,
   onOpenLink,
   request,
 }: {
   answer?: SessionAnswer;
   canOpenLinks: boolean;
   isSubmitting: boolean;
-  onlyApproval: boolean;
+  onlyDecision: boolean;
   onAnswer: (answer: SessionAnswer) => void;
-  onApproval: (response: Extract<SessionAnswer, { kind: "approve" | "deny" }>) => void;
+  onDecision: (response: SessionAnswer) => void;
   onOpenLink: (url: string) => Promise<void>;
   request: PublicInputRequest;
 }) {
@@ -196,10 +235,33 @@ function SessionRequestControl({
         answer={answer}
         isSubmitting={isSubmitting}
         onAnswer={(response) => {
-          if (onlyApproval && (response.kind === "approve" || response.kind === "deny")) {
-            onApproval(response);
+          if (onlyDecision) {
+            onDecision(response);
           } else {
             onAnswer(response);
+          }
+        }}
+      />
+    );
+  }
+  const decisionOptions = binaryDecisionOptions(request);
+  if (decisionOptions !== null) {
+    const [acceptOption, cancelOption] = decisionOptions;
+    return (
+      <ApprovalRequest
+        title={request.title}
+        description={request.description}
+        isSubmitting={isSubmitting}
+        primaryLabel="Accept"
+        secondaryLabel="Cancel"
+        onAnswer={(response) => {
+          const responseAnswer = answerForOption(
+            response.kind === "approve" ? acceptOption : cancelOption,
+          );
+          if (onlyDecision) {
+            onDecision(responseAnswer);
+          } else {
+            onAnswer(responseAnswer);
           }
         }}
       />
@@ -253,16 +315,35 @@ function guidanceForAnswers(canCallTools: boolean, unansweredCount: number) {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function SessionOutcome({
   authorizationOpened,
+  decisionOutcome,
   result,
   submitted,
 }: {
   authorizationOpened: boolean;
+  decisionOutcome?: DecisionOutcome;
   result: EveSessionResult;
   submitted: boolean;
 }) {
+  if (decisionOutcome?.status === "failed") {
+    const pullRequestNumber = draftPullRequestNumber(decisionOutcome.request.title);
+    const heading = pullRequestNumber
+      ? `Draft PR ${pullRequestNumber} could not be updated`
+      : "Your response could not be submitted";
+    return (
+      <main className="mcpApp shell outcome outcome--failure" role="alert">
+        <span aria-hidden="true">!</span>
+        <div>
+          <strong>{heading}</strong>
+          <p>The update could not be completed. Continuing in chat…</p>
+        </div>
+      </main>
+    );
+  }
+
   if (result.status === "failed") {
     return (
-      <main className="mcpApp shell success" role="alert">
+      <main className="mcpApp shell outcome outcome--failure" role="alert">
+        <span aria-hidden="true">!</span>
         <div>
           <strong>{authorizationOpened ? "GitHub connection failed" : "Request failed"}</strong>
           <p>
@@ -272,10 +353,45 @@ function SessionOutcome({
       </main>
     );
   }
+
+  if (
+    decisionOutcome?.status === "submitted" ||
+    (decisionOutcome?.status === "submitting" && result.status !== "input_required")
+  ) {
+    const decisionOptions = binaryDecisionOptions(decisionOutcome.request);
+    const canceled =
+      decisionOutcome.response.kind === "deny" ||
+      (decisionOutcome.response.kind === "answer" &&
+        decisionOptions?.[1]?.id === decisionOutcome.response.optionId);
+    if (canceled) {
+      return (
+        <main className="mcpApp shell outcome outcome--neutral" role="status">
+          <strong>Continuing in chat…</strong>
+        </main>
+      );
+    }
+
+    const pullRequestNumber = draftPullRequestNumber(decisionOutcome.request.title);
+    if (pullRequestNumber) {
+      return (
+        <main className="mcpApp shell outcome outcome--success" role="status">
+          <span aria-hidden="true">✓</span>
+          <div>
+            <strong>Draft PR {pullRequestNumber} updated</strong>
+            <p>
+              The reviewed changes are in the draft PR. It remains a draft and will not merge or
+              deploy.
+            </p>
+          </div>
+        </main>
+      );
+    }
+  }
+
   if (submitted || result.status !== "input_required") {
     return (
-      <main className="mcpApp shell success" role="status">
-        <span>✓</span>
+      <main className="mcpApp shell outcome outcome--success" role="status">
+        <span aria-hidden="true">✓</span>
         <div>
           <strong>{authorizationOpened ? "GitHub response received" : "Response received"}</strong>
           <p>
@@ -308,6 +424,7 @@ export function SessionAppView({
   const [state, setState] = useState<"idle" | "submitting" | "submitted">("idle");
   const [authorizationOpened, setAuthorizationOpened] = useState(false);
   const [error, setError] = useState("");
+  const [decisionOutcome, setDecisionOutcome] = useState<DecisionOutcome>();
   const requests = result?.inputRequests ?? [];
   const respondable = requests.filter((request) => request.kind !== "authorization");
   const complete = useMemo(
@@ -318,21 +435,20 @@ export function SessionAppView({
   const continueGuidance = guidanceForAnswers(canCallTools, unansweredCount);
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-  async function submitApproval(
-    request: PublicInputRequest,
-    response: Extract<SessionAnswer, { kind: "approve" | "deny" }>,
-  ) {
+  async function submitDecision(request: PublicInputRequest, response: SessionAnswer) {
     if (!result || !canCallTools || state === "submitting") {
       return;
     }
     setState("submitting");
     setError("");
+    setDecisionOutcome({ request, response, status: "submitting" });
     try {
       await onRespond([{ requestId: request.requestId, response }]);
       setState("submitted");
+      setDecisionOutcome({ request, response, status: "submitted" });
     } catch {
       setState("idle");
-      setError("Your response could not be submitted. Continue in chat.");
+      setDecisionOutcome({ request, response, status: "failed" });
     }
   }
 
@@ -373,15 +489,22 @@ export function SessionAppView({
   const outcome = (
     <SessionOutcome
       authorizationOpened={authorizationOpened}
+      decisionOutcome={decisionOutcome}
       result={result}
       submitted={state === "submitted"}
     />
   );
-  if (result.status === "failed" || state === "submitted" || result.status !== "input_required") {
+  if (
+    result.status === "failed" ||
+    decisionOutcome?.status === "failed" ||
+    state === "submitted" ||
+    result.status !== "input_required"
+  ) {
     return outcome;
   }
 
-  const onlyApproval = requests.length === 1 && requests[0]?.kind === "approval";
+  const onlyRequest = requests.length === 1 ? requests[0] : undefined;
+  const onlyDecision = isDecisionRequest(onlyRequest);
   const singleAuthorization =
     requests.length === 1 && requests[0]?.kind === "authorization" ? requests[0] : undefined;
   if (singleAuthorization) {
@@ -399,14 +522,16 @@ export function SessionAppView({
   }
 
   return (
-    <main className={`mcpApp shell${onlyApproval ? " approval-shell" : ""}`}>
-      {onlyApproval ? null : (
+    <main className={`mcpApp shell${onlyDecision ? " approval-shell" : ""}`}>
+      {onlyDecision ? null : (
         <header>
           <div>
             <strong>Autograph App Builder</strong>
-            <p>Complete the requested details</p>
+            <p>Review the request and choose how to proceed.</p>
           </div>
-          <span>{requests.length} requested</span>
+          <span>
+            {requests.length} {requests.length === 1 ? "request" : "requests"}
+          </span>
         </header>
       )}
       <div className="request-list">
@@ -417,18 +542,18 @@ export function SessionAppView({
             answer={answers[request.requestId]}
             canOpenLinks={canOpenLinks}
             isSubmitting={state === "submitting"}
-            onlyApproval={onlyApproval}
+            onlyDecision={onlyDecision}
             onAnswer={(answer) => {
               setAnswers((current) => ({ ...current, [request.requestId]: answer }));
             }}
-            onApproval={(answer) => {
-              void submitApproval(request, answer);
+            onDecision={(answer) => {
+              void submitDecision(request, answer);
             }}
             onOpenLink={openAuthorization}
           />
         ))}
       </div>
-      {respondable.length && !onlyApproval ? (
+      {respondable.length && !onlyDecision ? (
         <footer>
           <button
             type="button"
