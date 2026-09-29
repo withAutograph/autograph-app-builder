@@ -54,7 +54,8 @@ const runtimeEvidence = (
     installationProof !== undefined &&
     generatedBackend !== null &&
     installationProof.releaseId === generatedBackend.release.id &&
-    installationProof.artifactHash === generatedBackend.release.artifactHash;
+    installationProof.artifactHash.replace(/^sha256:/u, "") ===
+      generatedBackend.release.artifactHash.replace(/^sha256:/u, "");
   return {
     authenticatedSchemaReceipt: {
       contract: generatedBackend?.schemaReceipt?.contract ?? null,

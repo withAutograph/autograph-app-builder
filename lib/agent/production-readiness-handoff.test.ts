@@ -69,20 +69,20 @@ describe("productionReadinessHandoff", () => {
   it.each([
     {
       appId: app,
-      artifactHash: `sha256:${"a".repeat(64)}`,
+      artifactHash: "a".repeat(64),
       expected: "passed",
       releaseId: release,
     },
     {
       appId: "other-app",
-      artifactHash: `sha256:${"a".repeat(64)}`,
+      artifactHash: "a".repeat(64),
       expected: "unassessed",
       releaseId: release,
     },
     { appId: app, artifactHash: "different", expected: "unassessed", releaseId: release },
     {
       appId: app,
-      artifactHash: `sha256:${"a".repeat(64)}`,
+      artifactHash: "a".repeat(64),
       expected: "unassessed",
       releaseId: "predecessor",
     },
