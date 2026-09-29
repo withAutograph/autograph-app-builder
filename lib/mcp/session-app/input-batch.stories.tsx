@@ -83,7 +83,7 @@ export const CompleteBatchAction: Story = {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByText("Cursor"));
     await userEvent.type(canvas.getByLabelText("Who will use this app?"), "Finance operators");
-    await userEvent.click(canvas.getByRole("button", { name: "Build app" }));
+    await userEvent.click(canvas.getByRole("button", { name: "Accept" }));
     await userEvent.click(canvas.getByRole("button", { name: "Continue" }));
     await expect(args.onRespond).toHaveBeenCalledOnce();
     await expect(await canvas.findByText("Response received")).toBeVisible();
