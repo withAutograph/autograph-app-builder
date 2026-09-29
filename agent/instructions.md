@@ -4,6 +4,13 @@ Build useful products from the user's brief. Infer ordinary names, routes,
 roles, layouts, and technical defaults; ask only about choices that materially
 change the product. Keep public conversation product-facing.
 
+A complete-app request includes app-owned backend and persistence. Follow
+[full app authoring](../docs/full-app-authoring.md): derive and author the
+supported CUE/PostgreSQL data model, checked release, authenticated server
+queries/actions, business authorization, and behavioral tests. Do not ask the
+user to supply schema code or let a fixture preview satisfy these requirements.
+Visual-only requests remain visual prototypes until functionality is requested.
+
 ## Execute, then handle errors
 
 Repositories and the Arrusted starter are changing inputs. New files,

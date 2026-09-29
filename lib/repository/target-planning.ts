@@ -16,6 +16,7 @@ import { developmentExecutionArtifactDigest } from "../sandbox/development-toolc
 import { hostedExecutionArtifactDigest } from "../sandbox/hosted-artifact";
 import type { SourceReceipt } from "./source-receipt";
 import { ExistingApplicationChangesRequiredError } from "./target-planning-errors";
+import type { ApplicationFileChange } from "./application-file-change";
 
 export {
   ExistingApplicationChangesRequiredError,
@@ -84,20 +85,31 @@ const targetCreationProposalSchemaForTopology = (topologyOwner: string) =>
 export const targetCreationProposalSchema =
   targetCreationProposalSchemaForTopology("microfrontends.json");
 
-const iterationChangeSchema = z.strictObject({
-  after: z.strictObject({
-    content: z.string(),
-    digest,
-    mode: z.string().regex(/^[0-7]{3,4}$/u),
-  }),
-  before: z
-    .strictObject({
-      digest,
-      mode: z.string().regex(/^[0-7]{3,4}$/u),
-    })
-    .optional(),
-  path: repositoryPath,
-});
+const iterationChangeSchema = z
+  .strictObject({
+    after: z
+      .strictObject({
+        content: z.string(),
+        digest,
+        mode: z.string().regex(/^[0-7]{3,4}$/u),
+      })
+      .optional(),
+    before: z
+      .strictObject({
+        digest,
+        mode: z.string().regex(/^[0-7]{3,4}$/u),
+      })
+      .optional(),
+    path: repositoryPath,
+  })
+  .superRefine((change, context) => {
+    if (change.after === undefined && change.before === undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "Deleting a file requires its observed preimage.",
+      });
+    }
+  });
 
 const targetIterationProposalSchemaForTopology = (topologyOwner: string) =>
   targetCreationProposalSchemaForTopology(topologyOwner)
@@ -442,7 +454,7 @@ export const executeTargetIdentityAndPlanning = async (input: {
   appSpecStream?: ReadableStream<Uint8Array>;
   appSpecDigest: string;
   artifactRevision: string;
-  existingAppChanges?: readonly { path: string; content: string }[];
+  existingAppChanges?: readonly ApplicationFileChange[];
   sourceReceipt?: SourceReceipt;
   environment?: Readonly<Record<string, string | undefined>>;
   onIdentity?: (identity: TargetIdentity) => void | Promise<void>;
@@ -507,12 +519,19 @@ export const executeTargetIdentityAndPlanning = async (input: {
         observedMode?.exitCode === 0 && /^[0-7]{3,4}$/u.test(observedMode.stdout.trim())
           ? observedMode.stdout.trim()
           : "644";
+      if (requested.operation === "delete" && before === null) {
+        continue;
+      }
       changes.push({
-        after: {
-          content: requested.content,
-          digest: sha256(requested.content),
-          mode,
-        },
+        ...(requested.operation === "delete"
+          ? {}
+          : {
+              after: {
+                content: requested.content,
+                digest: sha256(requested.content),
+                mode,
+              },
+            }),
         ...(before === null
           ? {}
           : {
@@ -529,8 +548,20 @@ export const executeTargetIdentityAndPlanning = async (input: {
     }
     const iterationDigest = sha256(JSON.stringify(changes));
     await input.onIdentity?.(identity);
+    const schemaChange = input.existingAppChanges.find(
+      (change) => change.path === identity.schemaCuePath,
+    );
+    const cue =
+      schemaChange === undefined
+        ? await input.sandbox.run({
+            command: `test -f ${identity.schemaCuePath}`,
+            workingDirectory: "/workspace/repository",
+          })
+        : undefined;
+    const hasSchema =
+      schemaChange === undefined ? cue?.exitCode === 0 : schemaChange.operation !== "delete";
     const proposal = targetIterationProposalSchemaForTopology("microfrontends.json").parse({
-      ...creationPlan(identity, input.appSpecDigest, false),
+      ...creationPlan(identity, input.appSpecDigest, hasSchema),
       iteration: { changes, digest: iterationDigest },
       operation: "iterate-existing-app",
     });

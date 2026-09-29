@@ -107,15 +107,22 @@ app-owned files and reuse the same component-backed preview flow.
    duplicate frontend entrypoints in `implementationFiles` for a new app. Use
    the dependency versions and scripts already present in the prepared
    workspace; never guess or pin framework versions from model knowledge.
+   For a complete app, Builder owns the backend and persistence implementation
+   as well as the UI. Follow [full app authoring](../../../docs/full-app-authoring.md).
+   Use the Arrusted CUE/PostgreSQL data boundary for owned durable data: derive
+   the CUE model and policies from the accepted product decisions, compile the
+   checked release, and implement the authenticated server reads and actions.
+   The user supplies product meaning, not schema source or backend code.
    Implement production workflows as production behavior: durable drafts and
    recovery use server-owned storage and Server Actions or route handlers;
    provider returns use real callback routes and the repository's emulator or
    provider boundary; creation, cancellation, retry, and preview access use the
    app's real orchestration path. The generated app must own its backend and
    orchestration; do not delegate its product behavior to App Builder itself.
-   SQLite or server-owned files are valid persistence choices when appropriate
-   to the product and available runtime; a hosted database is not a prerequisite
-   for an independent private implementation. Browser storage, timers, and local state may
+   An explicitly requested alternative backend requires a supported repository
+   runtime and persistence lifecycle. If unavailable, report that capability
+   gap; do not substitute filesystem or browser persistence for a hosted app.
+   Browser storage, timers, and local state may
    support transient presentation, but never stand in for those outcomes.
    Keep route pages and layouts as Server Components and put `"use client"`
    only on the smallest interactive leaves. A single client component that
@@ -126,7 +133,11 @@ app-owned files and reuse the same component-backed preview flow.
    model-authored files as `implementationFiles` to `apply_app_creation` with
    the concise product summary. For an existing-app iteration, the planned
    changes already carry the implementation and `implementationFiles` may be
-   empty. This produces the first normal user prompt: **Build this app?** Do not request approval before this point for
+   empty. File changes use `{path, content}` or `{path, operation: "upsert", content}`
+   for complete contents and `{path, operation: "delete"}` for removal. Rename
+   by deleting the old path and adding the new path in the same proposal.
+   Preserve unrelated files; do not leave retired backend/demo modules behind.
+   This produces the first normal user prompt: **Build this app?** Do not request approval before this point for
    session work, source access, inspection, design, prototypes, internal
    drafting, or planning. Never invoke the target command through generic shell
    access.
@@ -258,7 +269,11 @@ app-owned files and reuse the same component-backed preview flow.
   reviewed changes, without effect-based approval for that exact outcome.
 - Never use `$scaffold-app-workspace` as the apply step for a planned route-owned
   app; the complete command owns contract, workspace, and topology composition.
-- Never create schema contents merely because the product brief describes durable data.
+- For a complete app, author the CUE schema from accepted product requirements;
+  infer mechanical fields, relationships, indexes and technical defaults. Ask
+  only when an unresolved role, ownership rule or destructive data change
+  materially changes the product. A visual-only request does not authorize a
+  backend build.
 - Never publish without the separate publication approval. Never reconcile providers, mutate `amp.yaml`, create secrets or environment
   configuration, deploy, or claim admission or Production readiness.
 - If the complete command reports stale, conflicting, or ambiguous recovery

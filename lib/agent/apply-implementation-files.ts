@@ -2,34 +2,15 @@ import { z } from "zod";
 
 import type { ApplyCommandExecutor } from "@/lib/repository/target-apply";
 import type { TargetProposal } from "@/lib/repository/target-planning";
-import { runSequentially } from "@/lib/async-sequential";
+import {
+  applicationFileChangeSchema,
+  applyApplicationFileChanges,
+} from "../repository/application-file-change";
 
-const implementationFilePathSchema = z
-  .string()
-  .min(1)
-  .superRefine((value, context) => {
-    if (value.startsWith("/") || value.includes("\\") || value.includes("\0")) {
-      context.addIssue({
-        code: "custom",
-        message: "Implementation file paths must be relative POSIX paths.",
-      });
-      return;
-    }
-    if (value.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
-      context.addIssue({
-        code: "custom",
-        message: "Implementation file paths must stay inside the repository checkout.",
-      });
-    }
-  });
+export { applyApplicationFileChanges as applyImplementationFiles } from "../repository/application-file-change";
 
 export const implementationFilesSchema = z
-  .array(
-    z.strictObject({
-      content: z.string(),
-      path: implementationFilePathSchema,
-    }),
-  )
+  .array(applicationFileChangeSchema)
   .superRefine((files, context) => {
     const paths = new Set<string>();
     for (const [index, file] of files.entries()) {
@@ -68,7 +49,10 @@ export function assertImplementationArchitecture(
   if (schemaKind !== "kernel") {
     return;
   }
-  const applicationFiles = files.filter((file) => /(?:^|\/)app\//u.test(file.path));
+  const applicationFiles = files.filter(
+    (file): file is Extract<ImplementationFile, { content: string }> =>
+      file.operation !== "delete" && /(?:^|\/)app\//u.test(file.path),
+  );
   const hasServerWrite = applicationFiles.some(
     (file) =>
       /^\s*["']use server["']/mu.test(file.content) ||
@@ -112,24 +96,17 @@ export function withImplementationFiles(
     const cuePath = `.config/app-specs/${input.appId}.cue`;
     const cue = files.find((file) => file.path === cuePath);
     if (cue !== undefined) {
-      await input.sandbox.writeTextFile({
-        content: cue.content,
-        path: `${relativeApplyRoot}/${cue.path}`,
-      });
+      await applyApplicationFileChanges(input.sandbox, relativeApplyRoot, [cue]);
     }
     const result = await executor(input);
     if (result.exitCode !== 0) {
       return result;
     }
 
-    await runSequentially(
+    await applyApplicationFileChanges(
+      input.sandbox,
+      relativeApplyRoot,
       files.filter((file) => file.path !== cuePath),
-      async (file) => {
-        await input.sandbox.writeTextFile({
-          content: file.content,
-          path: `${relativeApplyRoot}/${file.path}`,
-        });
-      },
     );
     return result;
   };

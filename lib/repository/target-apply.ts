@@ -8,7 +8,7 @@ import { ensureSandboxDirectories } from "./sandbox-filesystem";
 import { safeSourcePath } from "./source-path";
 import { planningOverlayRoot } from "./dependency-cache";
 import type { ExecutionDependencyLayout } from "./dependency-cache";
-import type { TargetProposal } from "./target-planning";
+import type { TargetProposal, TargetIterationChange } from "./target-planning";
 
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
 const repositoryPath = z
@@ -61,6 +61,26 @@ export function canonicalOverlayFiles(files: readonly OverlayFile[]): OverlayFil
     .map(({ path, mode, digest }) => ({ digest, mode, path }))
     .toSorted((left, right) => compareOverlayPaths(left.path, right.path));
 }
+
+/** Keep the planned preimages when a retry resumes after some writes succeeded. */
+export const iterationBaselineSnapshot = (
+  snapshot: OverlaySnapshot,
+  changes: readonly TargetIterationChange[],
+): OverlaySnapshot => {
+  const files = new Map(snapshot.files.map((file) => [file.path, file]));
+  for (const change of changes) {
+    if (change.before === undefined) {
+      files.delete(change.path);
+    } else {
+      files.set(change.path, { path: change.path, ...change.before });
+    }
+  }
+  const normalized = canonicalOverlayFiles([...files.values()]);
+  return {
+    files: normalized,
+    treeDigest: createHash("sha256").update(JSON.stringify(normalized)).digest("hex"),
+  };
+};
 
 // Existing-app review follows the selected app. Unrelated repository or
 // planning-file edits must not invalidate a reviewed app change set.
@@ -638,10 +658,13 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
           path: `${relativeRoot}/${change.path}`,
         });
         if (
-          (change.before === undefined
+          ((change.before === undefined
             ? current !== null
-            : current === null || sha256(current) !== change.before.digest) ||
-          change.after.digest !== sha256(change.after.content)
+            : current === null || sha256(current) !== change.before.digest) &&
+            (change.after === undefined
+              ? current !== null
+              : current === null || sha256(current) !== change.after.digest)) ||
+          (change.after !== undefined && change.after.digest !== sha256(change.after.content))
         ) {
           return {
             exitCode: 2,
@@ -653,10 +676,12 @@ export function sandboxApplyCommandExecutor(): ApplyCommandExecutor {
       }
       for (const change of proposal.iteration.changes) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        await sandbox.writeTextFile({
-          content: change.after.content,
-          path: `${relativeRoot}/${change.path}`,
-        });
+        await (change.after === undefined
+          ? sandbox.removePath({ force: true, path: `${relativeRoot}/${change.path}` })
+          : sandbox.writeTextFile({
+              content: change.after.content,
+              path: `${relativeRoot}/${change.path}`,
+            }));
       }
     }
     // The writable checkout is the execution environment. Prepared dependency
@@ -753,10 +778,12 @@ export function fixtureApplyCommandExecutor(): ApplyCommandExecutor {
     if ("operation" in proposal) {
       for (const change of proposal.iteration.changes) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
-        await sandbox.writeTextFile({
-          content: change.after.content,
-          path: `${relativeRoot}/${change.path}`,
-        });
+        await (change.after === undefined
+          ? sandbox.removePath({ force: true, path: `${relativeRoot}/${change.path}` })
+          : sandbox.writeTextFile({
+              content: change.after.content,
+              path: `${relativeRoot}/${change.path}`,
+            }));
       }
       const oldDigest = proposal.plan.topology.currentDigest ?? "0".repeat(64);
       const receipt: TargetApplyCommandReceipt = {
@@ -885,6 +912,9 @@ export async function executeProposalBoundApply(input: {
       sandbox: input.sandbox,
     });
     before = await snapshotter(input.sandbox, overlay.applyRoot);
+    if ("operation" in input.proposal) {
+      before = iterationBaselineSnapshot(before, input.proposal.iteration.changes);
+    }
     await stageAcceptedAppSpec({
       acceptedAppSpec: overlay.acceptedAppSpec,
       appSpecPath: `.config/app-specs/${input.proposal.contract.appId}.md`,

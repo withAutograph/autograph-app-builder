@@ -248,6 +248,50 @@ describe("planning from the current checkout", () => {
       path: "repository/microfrontends.json",
     });
   });
+  it("discovers an existing backend and plans removal plus replacement with original preimages", async () => {
+    const sandbox = {
+      // oxlint-disable-next-line eslint/require-await -- Sandbox fixture preserves its asynchronous file API.
+      readBinaryFile: vi.fn(async ({ path }: { path: string }) =>
+        path.endsWith("demo.ts") ? Buffer.from("demo") : null,
+      ),
+      removePath: vi.fn(async () => {}),
+      // oxlint-disable-next-line eslint/require-await -- Sandbox fixture preserves its asynchronous command API.
+      run: vi.fn(async ({ command }: { command: string }) => ({
+        exitCode: 0,
+        stderr: "",
+        stdout: command.startsWith("stat ") ? "644\n" : "",
+      })),
+      writeTextFile: vi.fn(async () => {}),
+    } as unknown as SandboxSession;
+    const result = await executeTargetIdentityAndPlanning({
+      appId: "example",
+      appSpecContent: "Authenticated Example",
+      appSpecDigest: "b".repeat(64),
+      artifactRevision: "a".repeat(64),
+      executor: fixtureTargetCommandExecutor(),
+      existingAppChanges: [
+        { operation: "delete", path: "apps/example/server/demo.ts" },
+        { content: "authenticated", path: "apps/example/server/context.ts" },
+      ],
+      sandbox,
+    });
+    expect(result.proposal).toMatchObject({
+      iteration: {
+        changes: [
+          { before: { mode: "644" }, path: "apps/example/server/demo.ts" },
+          { after: { content: "authenticated" }, path: "apps/example/server/context.ts" },
+        ],
+      },
+      operation: "iterate-existing-app",
+      plan: { source: { schema: { kind: "kernel", path: "apps/example/schema/example.cue" } } },
+    });
+    if (!("operation" in result.proposal)) throw new Error("Expected revision");
+    expect(result.proposal.iteration.changes[0]).not.toHaveProperty("after");
+    expect(sandbox.run).toHaveBeenCalledWith({
+      command: "test -f apps/example/schema/example.cue",
+      workingDirectory: "/workspace/repository",
+    });
+  });
   it.each([null, "invalid old inventory"])(
     "copies current files without requiring an inspection manifest (%s)",
     async (manifest) => {

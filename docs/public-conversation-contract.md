@@ -25,10 +25,12 @@ During UI review, the builder MUST make connected pages, links, controls,
 filters, dialogs, visible fixture state, and accessible narrow layouts usable
 without claiming persistence or live integrations. It MUST defer data sources,
 persistence, providers, tenancy, schemas, and backend choices unless they
-materially change the visible experience. Positive feedback is not permission
-to implement functionality. The builder MAY offer to finalize functionality,
-but begins production planning only after an explicit request to do so for the
-current UI revision. A later UI revision returns the session to review and
+materially change the visible experience. Positive feedback on a visual-only
+request is not permission to implement functionality. For a complete-app brief,
+the original request already includes backend and persistence planning;
+continue to the normal **Build this app?** approval after the preview and
+implementation plan. For a visual-only brief, begin functionality planning only
+when it is requested. A later UI revision returns the session to review and
 invalidates downstream planning.
 
 ## Keep internal orchestration invisible

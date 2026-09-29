@@ -81,14 +81,20 @@ export default defineTool({
       files: input.implementationFiles,
       proposalDigest: current.proposal.digest,
     });
-    assertImplementationArchitecture(
-      implementationFiles,
-      implementationFiles.some(
-        (file) => file.path === `.config/app-specs/${current.appSpec.appId}.cue`,
-      )
-        ? "kernel"
-        : current.proposal.target.plan.source.schema.kind,
-    );
+    // Existing-app submissions are deltas: unchanged actions remain in the
+    // checkout and cannot be assessed from replacement files alone.
+    if (!("operation" in current.proposal.target)) {
+      assertImplementationArchitecture(
+        implementationFiles,
+        implementationFiles.some(
+          (file) =>
+            file.operation !== "delete" &&
+            file.path === `.config/app-specs/${current.appSpec.appId}.cue`,
+        )
+          ? "kernel"
+          : current.proposal.target.plan.source.schema.kind,
+      );
+    }
     const sandbox = await ctx.getSandbox();
     const fixture = hasTestCapability("simulated-target");
     const binding = {
