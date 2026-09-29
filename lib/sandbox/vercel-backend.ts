@@ -158,6 +158,14 @@ fi`;
         (createInput.tags?.sessionId !== undefined &&
           hasVercelSessionGitSource(createInput.tags.sessionId)) ||
         hasVercelSessionGitSource(createInput.sessionKey);
+      console.info(
+        JSON.stringify({
+          event: "autograph.sandbox.source-selection",
+          selectedGitSource,
+          sessionKeySource: hasVercelSessionGitSource(createInput.sessionKey),
+          taggedSource: hasVercelSessionGitSource(createInput.tags?.sessionId ?? ""),
+        }),
+      );
       const providerCreateInput = {
         ...createInput,
         // Eve replaces a session source with the template snapshot when a
@@ -171,6 +179,7 @@ fi`;
           return handle;
         }
         const status = await selectedCheckoutStatus(handle);
+        console.info(JSON.stringify({ event: "autograph.sandbox.selected-checkout", status }));
         if (status === "found") {
           return handle;
         }
@@ -202,7 +211,14 @@ fi`;
             sessionId: providerCreateInput.tags?.sessionId ?? createInput.sessionKey,
           },
         });
-        if ((await selectedCheckoutStatus(replacement)) !== "found") {
+        const replacementStatus = await selectedCheckoutStatus(replacement);
+        console.info(
+          JSON.stringify({
+            event: "autograph.sandbox.replacement-checkout",
+            status: replacementStatus,
+          }),
+        );
+        if (replacementStatus !== "found") {
           await replacement.stop();
           throw new Error(
             "Vercel created a replacement sandbox without the selected GitHub checkout. Verify the installation's repository access and the provider Git source request, then retry this session.",
@@ -352,6 +368,12 @@ export function createHostedVercelBackend(
     sessionCreateOptions: async (context) => {
       const source =
         context === undefined ? undefined : await resolveVercelSessionGitSource(context.session.id);
+      console.info(
+        JSON.stringify({
+          event: "autograph.sandbox.provider-create-options",
+          selectedGitSource: source !== undefined,
+        }),
+      );
       return {
         networkPolicy: "allow-all" as const,
         ...(source === undefined

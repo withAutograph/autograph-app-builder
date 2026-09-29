@@ -101,11 +101,22 @@ export default defineHook({
       }
       const source = sourceWorkflowState.get();
       const workflow = appBuilderWorkflowState.get();
+      console.info(
+        JSON.stringify({
+          event: "autograph.sandbox.restore-source-state",
+          sourceHasGitHubBinding: source.phase !== "empty" && source.githubSource !== undefined,
+          sourcePhase: source.phase,
+          workflowHasGitHubBinding:
+            workflow.phase !== "empty" && workflow.githubSource !== undefined,
+          workflowPhase: workflow.phase,
+        }),
+      );
       const githubSource = selectedGitHubSourceForSandboxRestore({
         sourceState: source.phase === "empty" ? undefined : source.githubSource,
         workflowState: workflow.phase === "empty" ? undefined : workflow.githubSource,
       });
       if (githubSource !== undefined) {
+        console.info(JSON.stringify({ event: "autograph.sandbox.restore-source-selected" }));
         restoreSelectedGitHubSandboxSource({
           accessReceipt: repositoryAccessReceiptState.get(),
           githubSource,
