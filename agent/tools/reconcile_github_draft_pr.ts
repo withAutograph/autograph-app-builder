@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { defineTool } from "eve/tools";
+import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
 
@@ -52,7 +53,7 @@ export default defineTool({
       subjectDigest: proposal.digest,
       target: approvalTargetFromExistingDraftReconciliation(proposal),
     });
-    const sandbox = await ctx.getSandbox();
+    const sandbox = await getSourceBoundSandbox(ctx);
     const observed = await inspectDraftReconciliation({ prepared: candidate, sandbox });
     if (
       observed.unresolvedConflicts.length > 0 ||

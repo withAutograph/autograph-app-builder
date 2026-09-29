@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { z } from "zod";
 
 import {
@@ -27,7 +28,7 @@ export default defineTool({
         "The prepared draft candidate no longer matches the selected app and source review. Prepare reconciliation again before editing.",
       );
     }
-    const sandbox = await ctx.getSandbox();
+    const sandbox = await getSourceBoundSandbox(ctx);
     if (input.kind === "read") {
       return {
         ...(await readDraftReconciliationCandidateFile({

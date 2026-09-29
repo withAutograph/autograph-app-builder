@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { z } from "zod";
 
 import { approvalReceiptForExistingDraftUpdate } from "@/lib/agent/approval-receipt";
@@ -39,7 +40,7 @@ export default defineTool({
     }
     const observed = await inspectDraftReconciliation({
       prepared: candidate,
-      sandbox: await ctx.getSandbox(),
+      sandbox: await getSourceBoundSandbox(ctx),
     });
     if (
       observed.unresolvedConflicts.length > 0 ||

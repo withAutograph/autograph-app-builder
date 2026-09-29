@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { z } from "zod";
 
 import { prototypeArtifactReceipt } from "@/lib/agent/prototype-artifacts";
@@ -157,7 +158,7 @@ export default defineTool({
             workspace: workflowWorkspace(durable),
           };
     }
-    const sandbox = await ctx.getSandbox();
+    const sandbox = await getSourceBoundSandbox(ctx);
     if (durable.phase === "empty") {
       const observed = await inspectPreparedSandboxWorkspace(sandbox);
       if (observed.state === "absent") {

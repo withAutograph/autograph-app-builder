@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { z } from "zod";
 
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
@@ -34,7 +35,7 @@ export default defineTool({
       state.appSpec.appId,
       state.sourceReceipt.sourceKind,
     );
-    const sandbox = await ctx.getSandbox();
+    const sandbox = await getSourceBoundSandbox(ctx);
     const accessReceipt = repositoryAccessReceiptState.get();
     if (
       // oxlint-disable-next-line sonarjs/expression-complexity -- bind all access receipt dimensions to this session and repository.

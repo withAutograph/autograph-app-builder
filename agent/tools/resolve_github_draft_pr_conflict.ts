@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { z } from "zod";
 
 import {
@@ -28,7 +29,7 @@ export default defineTool({
       content: input.content,
       path: input.path,
       prepared: candidate,
-      sandbox: await ctx.getSandbox(),
+      sandbox: await getSourceBoundSandbox(ctx),
     });
     updateExactDraftReconciliation({
       expected: candidate,
