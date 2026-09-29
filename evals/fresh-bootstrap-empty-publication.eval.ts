@@ -17,7 +17,12 @@ export default defineEval({
   async test(t) {
     let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
-    const session = await prepareReviewedWorkflow(t, repository, "fresh-empty-eval", "fresh-template");
+    const session = await prepareReviewedWorkflow(
+      t,
+      repository,
+      "fresh-empty-eval",
+      "fresh-template",
+    );
     const fixture = await createFreshBootstrapEvalCapability();
     try {
       const destination = path.join(fixture.allowedRoot, "exact-empty");
@@ -26,7 +31,9 @@ export default defineEval({
         session.send(`Publish fresh repository bootstrap at ${destination} exact-empty.`),
       );
       session.requireInputRequest({ toolName: "publish_fresh_repository" });
-      turn = await withFreshBootstrapTestCapability(fixture.capability, () => session.respondAll("approve"));
+      turn = await withFreshBootstrapTestCapability(fixture.capability, () =>
+        session.respondAll("approve"),
+      );
       t.succeeded();
       t.check(turn.message, includes("one parentless SHA-1 local repository"));
       t.calledTool("fresh_bootstrap_status", { count: 1 });

@@ -1,4 +1,4 @@
-import { defineEval, type EveEvalTurn } from "eve/evals";
+import { defineEval } from "eve/evals";
 import { includes } from "eve/evals/expect";
 
 export default defineEval({
@@ -7,8 +7,7 @@ export default defineEval({
   tags: ["github-publication-disabled"],
   async test(t) {
     const session = await t.session();
-    let turn: EveEvalTurn;
-    turn = await session.send("Report GitHub publication status.");
+    const turn = await session.send("Report GitHub publication status.");
     t.succeeded();
     t.calledTool("github_publication_status");
     t.check(turn.message, includes("GitHub publication is fail-closed"));

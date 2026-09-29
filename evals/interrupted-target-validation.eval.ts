@@ -22,7 +22,8 @@ export default defineEval({
     turn = await session.respondAll("approve");
     t.succeeded();
 
-    const validation = turn = await session.send("Validate the applied creation.");
+    const validation = await session.send("Validate the applied creation.");
+    turn = validation;
     t.succeeded();
     validation.notEvent("input.requested");
     validation.calledTool("validate_app_creation", { count: 1 });
@@ -37,7 +38,8 @@ export default defineEval({
     t.check(turn.message, includes('"recoveryRequired":true'));
     t.check(turn.message, includes('"reason":"command-timeout"'));
 
-    const retry = turn = await session.send("Retry target validation after a lost response.");
+    const retry = await session.send("Retry target validation after a lost response.");
+    turn = retry;
     t.succeeded();
     retry.notEvent("input.requested");
     retry.calledTool("validate_app_creation", { count: 1 });

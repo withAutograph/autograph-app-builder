@@ -12,7 +12,9 @@ export default defineEval({
     let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
     turn = await session.send(`Prepare supported repository at ${repository}`);
-    turn = await session.send(`Accept build-ready AppSpec for apply-failure:\n${BUILD_READY_APP_SPEC}`);
+    turn = await session.send(
+      `Accept build-ready AppSpec for apply-failure:\n${BUILD_READY_APP_SPEC}`,
+    );
     turn = await session.send("Prepare offline target dependencies.");
     turn = await session.send("Run target identity and planning.");
     t.succeeded();
@@ -31,7 +33,8 @@ export default defineEval({
     t.check(turn.message, includes('"phase":"apply_failed"'));
     t.check(turn.message, includes('"recoveryRequired":true'));
 
-    const retryApply = turn = await session.send("Retry target apply after a lost response.");
+    const retryApply = await session.send("Retry target apply after a lost response.");
+    turn = retryApply;
     t.succeeded();
     retryApply.notEvent("input.requested");
     retryApply.calledTool("apply_app_creation", { count: 1, status: "failed" });

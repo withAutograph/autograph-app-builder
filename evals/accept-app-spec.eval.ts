@@ -24,7 +24,9 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    turn = await session.send(`Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`);
+    turn = await session.send(
+      `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`,
+    );
     t.succeeded();
     t.check(turn.message, includes("ready for automatic implementation planning"));
 
@@ -83,13 +85,15 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    const retryApply = turn = await session.send("Retry target apply after a lost response.");
+    const retryApply = await session.send("Retry target apply after a lost response.");
+    turn = retryApply;
     t.succeeded();
     retryApply.notEvent("input.requested");
     retryApply.calledTool("apply_app_creation", { count: 1 });
     t.check(turn.message, includes("prepared app is unchanged"));
 
-    const validation = turn = await session.send("Validate the applied creation.");
+    const validation = await session.send("Validate the applied creation.");
+    turn = validation;
     t.succeeded();
     validation.notEvent("input.requested");
     t.check(turn.message, includes("quality checks"));
@@ -97,7 +101,8 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    const retryValidation = turn = await session.send("Retry target validation after a lost response.");
+    const retryValidation = await session.send("Retry target validation after a lost response.");
+    turn = retryValidation;
     t.succeeded();
     retryValidation.notEvent("input.requested");
     t.check(turn.message, includes("quality checks are still passing"));
@@ -109,7 +114,8 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    const review = turn = await session.send("Accept the displayed change set.");
+    const review = await session.send("Accept the displayed change set.");
+    turn = review;
     t.succeeded();
     review.notEvent("input.requested");
     t.check(turn.message, includes("completed app changes are ready for review"));
@@ -117,7 +123,8 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    const retryReview = turn = await session.send("Retry change-set acceptance after a lost response.");
+    const retryReview = await session.send("Retry change-set acceptance after a lost response.");
+    turn = retryReview;
     t.succeeded();
     retryReview.notEvent("input.requested");
     t.check(turn.message, includes("same completed app changes remain ready"));

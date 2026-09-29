@@ -40,7 +40,9 @@ export default defineEval({
     turn = await session.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
 
-    turn = await session.send(`Accept build-ready AppSpec for builder-reviewed-proof:\n${BUILD_READY_APP_SPEC}`);
+    turn = await session.send(
+      `Accept build-ready AppSpec for builder-reviewed-proof:\n${BUILD_READY_APP_SPEC}`,
+    );
     t.succeeded();
 
     turn = await session.send("Prepare target dependencies.");
@@ -56,7 +58,8 @@ export default defineEval({
     t.check(turn.message, includes("private preview"));
     t.check(turn.message, staysProductFacing);
 
-    const validation = turn = await session.send("Validate the applied creation.");
+    const validation = await session.send("Validate the applied creation.");
+    turn = validation;
     validation.notEvent("input.requested");
     t.succeeded();
     t.check(turn.message, includes("quality checks"));
@@ -66,7 +69,8 @@ export default defineEval({
     t.succeeded();
     t.calledTool("change_set_status", { count: 1 });
 
-    const review = turn = await session.send("Accept the displayed change set.");
+    const review = await session.send("Accept the displayed change set.");
+    turn = review;
     review.notEvent("input.requested");
     t.succeeded();
     t.check(turn.message, includes("ready for review"));

@@ -12,7 +12,9 @@ export default defineEval({
     let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
     turn = await session.send(`Prepare supported repository at ${repository}`);
-    turn = await session.send(`Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`);
+    turn = await session.send(
+      `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`,
+    );
     t.succeeded();
 
     turn = await session.send("Report artifact workflow status.");
@@ -35,7 +37,8 @@ export default defineEval({
       }, "planning recorded a durable dependency receipt"),
     );
 
-    const preparation = turn = await session.send("Prepare offline target dependencies.");
+    const preparation = await session.send("Prepare offline target dependencies.");
+    turn = preparation;
     t.succeeded();
     preparation.notEvent("input.requested");
     t.notCalledTool("prepare_target_dependencies");

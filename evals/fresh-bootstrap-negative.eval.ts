@@ -17,7 +17,12 @@ export default defineEval({
   async test(t) {
     let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
-    const session = await prepareReviewedWorkflow(t, repository, "fresh-negative-eval", "fresh-template");
+    const session = await prepareReviewedWorkflow(
+      t,
+      repository,
+      "fresh-negative-eval",
+      "fresh-template",
+    );
     const fixture = await createFreshBootstrapEvalCapability();
     try {
       const destination = path.join(fixture.allowedRoot, "canceled");
@@ -25,7 +30,9 @@ export default defineEval({
         session.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
       session.requireInputRequest({ toolName: "publish_fresh_repository" });
-      turn = await withFreshBootstrapTestCapability(fixture.capability, () => session.respondAll("cancel"));
+      turn = await withFreshBootstrapTestCapability(fixture.capability, () =>
+        session.respondAll("cancel"),
+      );
       t.succeeded();
       t.check(turn.message, includes("canceled, stale, or recovery-required"));
 

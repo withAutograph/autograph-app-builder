@@ -27,7 +27,9 @@ export default defineEval({
     let turn: EveEvalTurn;
     const vendor = productQualityScenario("vendor-onboarding");
     const repository = createSupportedRepositoryFixture();
-    turn = await session.send(`Supported repository at ${repository}\nProduct brief: ${vendor.brief}`);
+    turn = await session.send(
+      `Supported repository at ${repository}\nProduct brief: ${vendor.brief}`,
+    );
     session.requireInputRequest({ toolName: "apply_app_creation" });
     turn = await session.respondAll("approve");
     t.succeeded();

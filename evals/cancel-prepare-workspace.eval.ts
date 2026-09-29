@@ -1,4 +1,4 @@
-import { defineEval, type EveEvalTurn } from "eve/evals";
+import { defineEval } from "eve/evals";
 import { includes } from "eve/evals/expect";
 
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
@@ -8,10 +8,9 @@ export default defineEval({
     "Eligible source preparation completes automatically without a workspace-approval prompt.",
   async test(t) {
     const session = await t.session();
-    let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
 
-    turn = await session.send(`Prepare supported repository at ${repository}`);
+    const turn = await session.send(`Prepare supported repository at ${repository}`);
     t.calledTool("inspect_source", { count: 1 });
     t.succeeded();
     t.notEvent("input.requested");

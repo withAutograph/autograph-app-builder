@@ -10,7 +10,11 @@ export default defineEval({
   async test(t) {
     let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
-    const session = await prepareReviewedWorkflow(t, repository, "branch-publication-lost-response");
+    const session = await prepareReviewedWorkflow(
+      t,
+      repository,
+      "branch-publication-lost-response",
+    );
     turn = await session.send("Publish reviewed change set to a new branch worktree.");
     session.requireInputRequest({
       toolName: "publish_reviewed_change_set_to_branch_worktree",

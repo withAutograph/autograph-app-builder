@@ -10,7 +10,11 @@ export default defineEval({
   async test(t) {
     let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
-    const session = await prepareReviewedWorkflow(t, repository, "publication-pre-journal-interruption");
+    const session = await prepareReviewedWorkflow(
+      t,
+      repository,
+      "publication-pre-journal-interruption",
+    );
     turn = await session.send("Publish reviewed change set locally.");
     session.requireInputRequest({ toolName: "publish_reviewed_change_set" });
     turn = await session.respondAll("approve");

@@ -12,7 +12,9 @@ export default defineEval({
     let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
     turn = await session.send(`Prepare supported repository at ${repository}`);
-    turn = await session.send(`Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`);
+    turn = await session.send(
+      `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`,
+    );
     t.succeeded();
     turn = await session.send("Prepare offline target dependencies.");
     t.succeeded();

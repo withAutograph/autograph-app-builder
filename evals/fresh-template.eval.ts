@@ -1,4 +1,4 @@
-import { defineEval, type EveEvalTurn } from "eve/evals";
+import { defineEval } from "eve/evals";
 import { includes } from "eve/evals/expect";
 
 import { createSupportedRepositoryFixture } from "./support/supported-repository";
@@ -8,9 +8,8 @@ export default defineEval({
     "A fresh local template binds and prepares automatically without internal approval prompts.",
   async test(t) {
     const session = await t.session();
-    let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
-    turn = await session.send(`Prepare fresh template at ${repository}`);
+    const turn = await session.send(`Prepare fresh template at ${repository}`);
     t.calledTool("inspect_source", { count: 1 });
     t.succeeded();
     t.notEvent("input.requested");

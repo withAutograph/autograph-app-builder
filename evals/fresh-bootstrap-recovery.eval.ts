@@ -17,7 +17,12 @@ export default defineEval({
   async test(t) {
     let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
-    const session = await prepareReviewedWorkflow(t, repository, "fresh-recovery-eval", "fresh-template");
+    const session = await prepareReviewedWorkflow(
+      t,
+      repository,
+      "fresh-recovery-eval",
+      "fresh-template",
+    );
     const fixture = await createFreshBootstrapEvalCapability();
     try {
       const destination = path.join(fixture.allowedRoot, "recovery");
@@ -25,20 +30,25 @@ export default defineEval({
         session.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
       session.requireInputRequest({ toolName: "publish_fresh_repository" });
-      turn = await withFreshBootstrapTestCapability(fixture.capability, () => session.respondAll("approve"));
+      turn = await withFreshBootstrapTestCapability(fixture.capability, () =>
+        session.respondAll("approve"),
+      );
       t.succeeded();
 
       turn = await withFreshBootstrapTestCapability(fixture.capability, () =>
         session.send("Recover fresh repository bootstrap after partial failure."),
       );
       session.requireInputRequest({ toolName: "recover_fresh_repository" });
-      turn = await withFreshBootstrapTestCapability(fixture.capability, () => session.respondAll("approve"));
+      turn = await withFreshBootstrapTestCapability(fixture.capability, () =>
+        session.respondAll("approve"),
+      );
       t.succeeded();
       t.check(turn.message, includes("separately approved exact"));
 
-      const retry = turn = await withFreshBootstrapTestCapability(fixture.capability, () =>
+      const retry = await withFreshBootstrapTestCapability(fixture.capability, () =>
         session.send("Retry fresh repository recovery after a lost response."),
       );
+      turn = retry;
       t.succeeded();
       // Assert idempotent behavior instead of a particular summary sentence.
       retry.notCalledTool("recover_fresh_repository");

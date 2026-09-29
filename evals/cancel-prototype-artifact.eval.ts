@@ -15,7 +15,9 @@ export default defineEval({
     turn = await session.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
 
-    turn = await session.send(`Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`);
+    turn = await session.send(
+      `Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`,
+    );
     t.succeeded();
 
     turn = await session.send("Report artifact workflow status.");

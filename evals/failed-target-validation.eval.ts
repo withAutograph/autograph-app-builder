@@ -12,7 +12,9 @@ export default defineEval({
     let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
     turn = await session.send(`Prepare supported repository at ${repository}`);
-    turn = await session.send(`Accept build-ready AppSpec for validation-failure:\n${BUILD_READY_APP_SPEC}`);
+    turn = await session.send(
+      `Accept build-ready AppSpec for validation-failure:\n${BUILD_READY_APP_SPEC}`,
+    );
     turn = await session.send("Prepare offline target dependencies.");
     turn = await session.send("Run target identity and planning.");
     turn = await session.send("Apply the current creation proposal.");
@@ -20,7 +22,8 @@ export default defineEval({
     turn = await session.respondAll("approve");
     t.succeeded();
 
-    const validation = turn = await session.send("Validate the applied creation.");
+    const validation = await session.send("Validate the applied creation.");
+    turn = validation;
     t.succeeded();
     validation.notEvent("input.requested");
     t.check(turn.message, includes("did not pass its quality checks"));
@@ -33,7 +36,8 @@ export default defineEval({
     t.check(turn.message, includes('"phase":"validation_failed"'));
     t.check(turn.message, includes('"recoveryRequired":true'));
 
-    const retry = turn = await session.send("Retry target validation after a lost response.");
+    const retry = await session.send("Retry target validation after a lost response.");
+    turn = retry;
     t.succeeded();
     retry.notEvent("input.requested");
     t.check(turn.message, includes("did not pass its quality checks"));

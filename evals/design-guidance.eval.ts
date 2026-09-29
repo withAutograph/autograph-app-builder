@@ -1,4 +1,4 @@
-import { defineEval, type EveEvalTurn } from "eve/evals";
+import { defineEval } from "eve/evals";
 import { includes, satisfies } from "eve/evals/expect";
 
 import { renewalReviewDesignPrompt } from "../lib/testing/prompt-driven-design";
@@ -11,12 +11,11 @@ export default defineEval({
   tags: ["product-quality", "design-guidance", "sandbox-integration"],
   async test(t) {
     const session = await t.session();
-    let turn: EveEvalTurn;
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
     if (repository === undefined || repository.length === 0) {
       throw new Error("The supported source root is missing.");
     }
-    turn = await session.send(`Supported repository at ${repository}
+    const turn = await session.send(`Supported repository at ${repository}
 ${renewalReviewDesignPrompt}`);
 
     t.succeeded();

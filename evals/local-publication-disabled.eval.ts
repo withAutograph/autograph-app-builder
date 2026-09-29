@@ -1,4 +1,4 @@
-import { defineEval, type EveEvalTurn } from "eve/evals";
+import { defineEval } from "eve/evals";
 import { includes, satisfies } from "eve/evals/expect";
 
 export default defineEval({
@@ -7,8 +7,7 @@ export default defineEval({
   tags: ["disabled-local-publication"],
   async test(t) {
     const session = await t.session();
-    let turn: EveEvalTurn;
-    turn = await session.send("What are your app builder capabilities?");
+    const turn = await session.send("What are your app builder capabilities?");
     t.succeeded();
     t.check(turn.message, includes("usable visual prototype"));
     t.check(turn.message, includes("reviewable implementation plan"));

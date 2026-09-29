@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { defineEval, type EveEvalTurn } from "eve/evals";
+import { defineEval } from "eve/evals";
 import { includes } from "eve/evals/expect";
 
 const requiredCommands = ["bash", "git", "mise", "bun", "node"] as const;
@@ -49,8 +49,7 @@ export default defineEval({
   tags: ["sandbox-toolchain", "sandbox-integration"],
   async test(t) {
     const session = await t.session();
-    let turn: EveEvalTurn;
-    turn = await session.send("Inspect the sandbox toolchain.");
+    const turn = await session.send("Inspect the sandbox toolchain.");
     t.succeeded();
     t.calledTool("inspect_sandbox_toolchain", { count: 1 });
     t.check(turn.message, includes("Sandbox toolchain receipt"));

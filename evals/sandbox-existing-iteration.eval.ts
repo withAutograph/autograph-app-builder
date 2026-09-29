@@ -62,7 +62,8 @@ export default defineEval({
 
     turn = await session.send(`Prepare supported repository at ${repository}`);
     t.succeeded();
-    turn = await session.send(`Update the Vendor review so operations can see when tax verification is required.
+    turn =
+      await session.send(`Update the Vendor review so operations can see when tax verification is required.
 Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
     t.succeeded();
     t.calledTool("inspect_existing_app", { count: 2 });
@@ -83,7 +84,8 @@ Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
     t.succeeded();
     t.check(turn.message, includes("private preview"));
     t.check(turn.message, staysProductFacing);
-    const validation = turn = await session.send("Validate the applied creation.");
+    const validation = await session.send("Validate the applied creation.");
+    turn = validation;
     validation.notEvent("input.requested");
     t.succeeded();
     t.check(turn.message, includes("passed its local quality checks"));
@@ -97,7 +99,8 @@ Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
     );
     turn = await session.send("Inspect the validated change set.");
     t.succeeded();
-    const review = turn = await session.send("Accept the displayed change set.");
+    const review = await session.send("Accept the displayed change set.");
+    turn = review;
     review.notEvent("input.requested");
     t.succeeded();
     t.check(turn.message, includes("ready for review"));
