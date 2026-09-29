@@ -31,6 +31,58 @@ never borrows its own Production guard or deployment identity. Installing Neon, 
 native branch and supplying missing provider permissions remain explicit
 provider operations; a working code adapter does not establish those effects.
 
+## Native Services blocker and recovery
+
+The current adapter has two concrete native provider gaps. First, Services
+shares project environment variables and its documented
+[service configuration](https://vercel.com/docs/services/config-reference)
+has no environment allowlist. An integration-owned installer URL delivered to
+the project can therefore also reach app services, even when app code selects
+its restricted URL. Removing a variable from `process.env` inside app code
+does not establish that the provider withheld the credential from that process.
+
+Second, the [Neon Vercel-managed integration contract](https://github.com/neondatabase/website/blob/main/content/docs/guides/vercel-managed-integration.md)
+injects branch credentials during each Preview deployment; those variables
+override Preview settings and are not stored in project environment settings.
+Consequently, the adapter's exact branch project-env lookup is a required
+readback it may not obtain from the native integration. A missing lookup must
+remain blocked; a global Preview URL does not identify that deployment's
+isolated branch. The guide also lists raw password and legacy connection
+variables, so checking only `DATABASE_URL_UNPOOLED` is insufficient for a
+future native credential-isolation proof.
+
+The public [Get Integration Resource API](https://vercel.com/docs/integrations/create-integration/marketplace-api/reference/vercel/get-integration-resource)
+documents resource state and metadata, with no secret-read response. The
+[Partner Get Resource API](https://vercel.com/docs/integrations/create-integration/marketplace-api/reference/partner/get-resource)
+is called by Vercel on the provider's server. It is not an owner-authorized Neon
+credential issuer for Builder's separate integration. No such issuer is wired
+in this repository; do not substitute an ambient Neon key or assume a different
+integration's credential grants that authority.
+
+Recovery preserves the single Services project and needs one reviewed provider
+contract change:
+
+- Obtain a supported native integration capability that exports restricted
+  runtime roles while giving a separately authorized installer access to the
+  same verified branch. Confirm all credential variables received by each
+  service without printing their values.
+- Migrate the connection to the [Neon-managed integration](https://github.com/neondatabase/website/blob/main/content/docs/guides/neon-managed-vercel-integration.md),
+  which supports selecting the PostgreSQL role and injected variable names.
+  It cannot coexist with the Vercel-managed integration. Installer authority
+  still needs its own protected owner-scoped issuer, and role grants plus the
+  actual service environment must be verified after migration.
+- Disconnect the native project connection through the provider's supported
+  lifecycle, retain the database, and bind only restricted runtime variables.
+  Disconnection stops automatic creation of new native Preview branches, so a
+  provider-owned branch lifecycle and protected installer issuer are additional
+  prerequisites. Existing deployments require separate replacement and old
+  credentials require separate revocation; an environment edit cannot erase
+  credentials already issued to a running deployment.
+
+These are recovery options, not completed capabilities or provider effects.
+Until an option is implemented and observed, private Sandbox validation can
+continue while native application-process installer isolation remains blocked.
+
 ## Approved sequence and recovery
 
 1. Resolve the owner-selected project and installation, check live membership,
