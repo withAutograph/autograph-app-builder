@@ -61,8 +61,8 @@ export default defineEval({
 
     validation.notEvent("input.requested");
     t.succeeded();
-    t.check(validation, includes("quality checks"));
-    t.check(validation, staysProductFacing);
+    t.check(validation.message, includes("quality checks"));
+    t.check(validation.message, staysProductFacing);
 
     await session.send("Inspect the validated change set.");
     t.succeeded();
@@ -72,9 +72,9 @@ export default defineEval({
 
     review.notEvent("input.requested");
     t.succeeded();
-    t.check(review, includes("ready for review"));
-    t.check(review, includes("draft pull request"));
-    t.check(review, staysProductFacing);
+    t.check(review.message, includes("ready for review"));
+    t.check(review.message, includes("draft pull request"));
+    t.check(review.message, staysProductFacing);
 
     const turn2 = await session.send("Report artifact workflow status.");
     t.succeeded();

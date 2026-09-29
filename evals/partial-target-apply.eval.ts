@@ -35,7 +35,7 @@ export default defineEval({
     t.succeeded();
     retryApply.notEvent("input.requested");
     retryApply.calledTool("apply_app_creation", { count: 1, status: "failed" });
-    t.check(retryApply, includes("couldn't finish preparing the app safely"));
+    t.check(retryApply.message, includes("couldn't finish preparing the app safely"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 

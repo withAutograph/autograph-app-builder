@@ -26,8 +26,8 @@ export default defineEval({
     t.succeeded();
     validation.notEvent("input.requested");
     validation.calledTool("validate_app_creation", { count: 1 });
-    t.check(validation, includes("did not pass its quality checks"));
-    t.check(validation, includes("needs another revision"));
+    t.check(validation.message, includes("did not pass its quality checks"));
+    t.check(validation.message, includes("needs another revision"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
@@ -42,7 +42,7 @@ export default defineEval({
     t.succeeded();
     retry.notEvent("input.requested");
     retry.calledTool("validate_app_creation", { count: 1 });
-    t.check(retry, includes("did not pass its quality checks"));
+    t.check(retry.message, includes("did not pass its quality checks"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
     const turn2 = await session.send("Report artifact workflow status.");

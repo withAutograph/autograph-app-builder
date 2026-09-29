@@ -86,7 +86,7 @@ Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
 
     validation.notEvent("input.requested");
     t.succeeded();
-    t.check(validation, includes("passed its local quality checks"));
+    t.check(validation.message, includes("passed its local quality checks"));
     const validationCall = validation.requireToolCall("validate_app_creation");
     await t.require(
       validationCall,
@@ -101,7 +101,7 @@ Accept build-ready AppSpec for vendor:\n${BUILD_READY_APP_SPEC}`);
 
     review.notEvent("input.requested");
     t.succeeded();
-    t.check(review, includes("ready for review"));
+    t.check(review.message, includes("ready for review"));
     const turn3 = await session.send("Report artifact workflow status.");
     t.succeeded();
     t.calledTool("artifact_workflow_status", { count: 1 });

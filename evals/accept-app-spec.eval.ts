@@ -89,14 +89,14 @@ export default defineEval({
     t.succeeded();
     retryApply.notEvent("input.requested");
     retryApply.calledTool("apply_app_creation", { count: 1 });
-    t.check(retryApply, includes("prepared app is unchanged"));
+    t.check(retryApply.message, includes("prepared app is unchanged"));
 
     const validation = await session.send("Validate the applied creation.");
 
     t.succeeded();
     validation.notEvent("input.requested");
-    t.check(validation, includes("quality checks"));
-    t.check(validation, includes("ready for review"));
+    t.check(validation.message, includes("quality checks"));
+    t.check(validation.message, includes("ready for review"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
@@ -104,7 +104,7 @@ export default defineEval({
 
     t.succeeded();
     retryValidation.notEvent("input.requested");
-    t.check(retryValidation, includes("quality checks are still passing"));
+    t.check(retryValidation.message, includes("quality checks are still passing"));
 
     const turn10 = await session.send("Inspect the validated change set.");
     t.succeeded();
@@ -117,8 +117,8 @@ export default defineEval({
 
     t.succeeded();
     review.notEvent("input.requested");
-    t.check(review, includes("completed app changes are ready for review"));
-    t.check(review, includes("draft pull request"));
+    t.check(review.message, includes("completed app changes are ready for review"));
+    t.check(review.message, includes("draft pull request"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
