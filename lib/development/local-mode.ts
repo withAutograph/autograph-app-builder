@@ -494,9 +494,9 @@ export const createDevelopmentSnapshot = async (input: {
         await chmod(join(root, entry.path), entry.mode === "100755" ? 0o700 : 0o600);
       }
     });
-    if ((await fingerprintDevelopmentSource(sourceRoot)) !== fingerprint) {
-      throw new Error("Arrusted source changed while its development snapshot was created.");
-    }
+    // The captured entries identify this planning input. Ordinary checkout
+    // edits during copying are picked up by the source watcher in the next
+    // cycle; they must not terminate development or discard active sessions.
     execFileSync("/usr/bin/git", ["init", "-q"], {
       cwd: root,
       env: gitEnvironment(),
