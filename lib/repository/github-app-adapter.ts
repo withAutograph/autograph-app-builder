@@ -292,11 +292,36 @@ export interface GitHubAppInstallationProvider {
 
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
+const providerStatus = z.object({ status: z.number().int().min(400).max(599) }).passthrough();
+
+// eslint-disable-next-line eslint/func-style -- Keep provider errors free of URLs, headers, and tokens.
+function safeProviderStatus(error: unknown): number | undefined {
+  const direct = providerStatus.safeParse(error);
+  if (direct.success) {
+    return direct.data.status;
+  }
+  const cause = error instanceof Error ? error.cause : undefined;
+  const nested = providerStatus.safeParse(cause);
+  return nested.success ? nested.data.status : undefined;
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-async function sanitizedProviderCall(operation: () => Promise<unknown>): Promise<unknown> {
+async function sanitizedProviderCall(
+  operation: () => Promise<unknown>,
+  action?: string,
+): Promise<unknown> {
   try {
     return await operation();
-  } catch {
+  } catch (error) {
+    if (action !== undefined) {
+      const status = safeProviderStatus(error);
+      const statusSuffix = status === undefined ? "" : ` (HTTP ${status})`;
+      // oxlint-disable-next-line eslint/preserve-caught-error -- Raw provider errors may contain authorization headers or request URLs.
+      throw new Error(
+        `GitHub could not ${action}${statusSuffix}. Check GitHub availability and repository access, then inspect the current PR before retrying.`,
+      );
+    }
+    // oxlint-disable-next-line eslint/preserve-caught-error -- Raw provider errors may contain authorization headers or request URLs.
     throw new Error("GitHub provider operation failed.");
   }
 }
@@ -454,7 +479,10 @@ export function createGitHubAppPublicationAdapter(
     async inspectExistingDraft(input) {
       return parseProviderResponse(
         existingDraftSchema,
-        await sanitizedProviderCall(() => provider.inspectExistingDraft(input)),
+        await sanitizedProviderCall(
+          () => provider.inspectExistingDraft(input),
+          "inspect the existing draft PR",
+        ),
       ) as ExistingDraftObservation;
     },
     async inspectFreshRepositoryOutcome(proposal) {
@@ -496,7 +524,10 @@ export function createGitHubAppPublicationAdapter(
     async reconcileExistingDraft(proposal, content) {
       return parseProviderResponse(
         acknowledgementSchema,
-        await sanitizedProviderCall(() => provider.reconcileExistingDraft(proposal, content)),
+        await sanitizedProviderCall(
+          () => provider.reconcileExistingDraft(proposal, content),
+          "update the existing draft PR",
+        ),
       ) as GitHubMutationAcknowledgement;
     },
     async updateExistingDraft(proposal, content) {
