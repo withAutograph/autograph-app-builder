@@ -51,7 +51,7 @@ const runtimeEvidence = (
   const generatedBackend = backend?.kind === "generated-postgres" ? backend : null;
   const staticApp = backend?.kind === "static";
   const matchingInstallation =
-    installationProof &&
+    installationProof !== undefined &&
     generatedBackend !== null &&
     installationProof.releaseId === generatedBackend.release.id &&
     installationProof.artifactHash === generatedBackend.release.artifactHash;
