@@ -110,24 +110,6 @@ function gitBlobSha(bytes: Uint8Array) {
 export function starterSourceBinding(source: StarterSource) {
   if (source.provenance !== undefined) {
     if (source.provenance.method === "git-clone-v1") {
-      if (source.provenance.receiptVersion === 5) {
-        return {
-          sourceSha: objectId.parse(source.provenance.sourceSha),
-          sourceTree: objectId.parse(source.provenance.sourceTree),
-          starter: {
-            contractDigest: digest.parse(source.provenance.contractDigest),
-            eligibilityDigest: digest.parse(source.provenance.eligibilityDigest),
-            method: source.provenance.method,
-            receiptVersion: source.provenance.receiptVersion,
-            ref: source.provenance.ref,
-            repository: source.provenance.repository,
-            sourceDigest: digest.parse(source.provenance.sourceDigest),
-            sourceReceiptDigest: digest.parse(source.provenance.sourceReceiptDigest),
-            sourceSha: objectId.parse(source.provenance.sourceSha),
-            sourceTree: objectId.parse(source.provenance.sourceTree),
-          },
-        };
-      }
       if (
         source.provenance.receiptVersion !== 4 ||
         [

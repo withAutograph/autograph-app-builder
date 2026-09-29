@@ -3,9 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   inspectCanonicalTemplateSnapshotReceipt,
   inspectExistingRepositorySnapshotReceipt,
-  inspectSourceOnlyTemplateSnapshotReceipt,
   parseSourceReceipt,
-  sourceIdentityDigest,
   sourceReceiptEvidence,
 } from "./source-receipt";
 
@@ -52,26 +50,17 @@ describe("source receipt versions", () => {
     expect(parseSourceReceipt(structuredClone(receipt))).toEqual(receipt);
   });
 
-  it("records V5 source identity without claiming readiness or requiring layout", () => {
-    const receipt = inspectSourceOnlyTemplateSnapshotReceipt(snapshot);
+  it("records a V4 source snapshot without requiring layout or CI evidence", () => {
+    const readinessDigest = sha256(
+      JSON.stringify({ sourceSha: snapshot.sourceSha, sourceTree: snapshot.sourceTree }),
+    );
+    const receipt = inspectCanonicalTemplateSnapshotReceipt({ readinessDigest, snapshot });
     expect(receipt).toMatchObject({
-      provenance: { sourceDigest: sourceIdentityDigest(snapshot.sourceSha, snapshot.sourceTree) },
-      version: 5,
+      contractDigest: readinessDigest,
+      eligibilityDigest: readinessDigest,
+      provenance: { readinessDigest },
+      version: 4,
     });
-    expect(receipt).not.toHaveProperty("provenance.readinessDigest");
     expect(parseSourceReceipt(structuredClone(receipt))).toEqual(receipt);
-    if (receipt.version !== 5) {
-      throw new Error("Expected source-only receipt");
-    }
-    expect(() =>
-      parseSourceReceipt({
-        ...receipt,
-        provenance: {
-          ...receipt.provenance,
-          readinessDigest: "c".repeat(64),
-        },
-      }),
-    ).toThrow();
-    expect(() => parseSourceReceipt({ ...receipt, sourceSha: "d".repeat(40) })).toThrow();
   });
 });

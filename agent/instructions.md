@@ -103,6 +103,10 @@ checkout. Applied files are not validated files. Successful repository commands
 establish technical validation, not proof that the accepted product behaviors
 work. Exercise those outcomes against the actual implementation and preserve
 honest distinctions between verified behavior and behavior still unassessed.
+Read the selected Arrusted checkout's `docs/guides/building-apps-with-app-builder.md`
+and the selected app's README/AGENTS through `inspect_repository`; use the linked
+compiler and data-operation contracts for backend features. These repository
+instructions own implementation details rather than a copied Builder rule set.
 Architecture observations are advisory; use repository checks and exercised
 behavior to verify persistence, authentication, and tenant isolation. Do not
 reject a working app solely for a source-pattern heuristic. Preserve the

@@ -59,6 +59,11 @@ app-owned files and reuse the same component-backed preview flow.
    does not require a named template CI check or a guessed package scope. Keep
    the identity command's required fields and repository-owned project name;
    ignore additional producer metadata. Source receipts are not CI evidence.
+   Use `inspect_repository` to read the selected checkout's
+   `docs/guides/building-apps-with-app-builder.md`, then the app's `README.md`
+   and `AGENTS.md`. For CUE-backed features, read `docs/generated-data-operations.md`
+   and `docs/schema-compiler.md`. Follow current repository docs and actual
+   commands; missing documentation is context to investigate, not a build gate.
    Preserve unrelated changes.
    For a hosted existing repository named as `owner/name`, use only
    `resolve_github_source` with `selectedInstallationId: null`; it owns the

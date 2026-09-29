@@ -206,12 +206,12 @@ describe("source-only starter clone", () => {
       });
       expect(source.files.map((file) => file.path)).toEqual(["README.md", "tools/create-app.ts"]);
       expect(source.provenance).toMatchObject({
-        receiptVersion: 5,
+        receiptVersion: 4,
         sourceSha: git(["rev-parse", "HEAD"]),
         sourceTree: git(["rev-parse", "HEAD^{tree}"]),
       });
-      expect(source.provenance).toHaveProperty("sourceDigest");
-      expect(source.provenance).not.toHaveProperty("readinessDigest");
+      expect(source.provenance).toHaveProperty("readinessDigest");
+      expect(source.provenance).not.toHaveProperty("sourceDigest");
       expect(fetch).not.toHaveBeenCalled();
     } finally {
       fetch.mockRestore();

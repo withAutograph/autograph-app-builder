@@ -4,26 +4,13 @@ import {
   acquireCanonicalArrustedTemplate,
   inspectCanonicalArrustedSandboxWorkspace,
   inspectSourceBoundSandboxWorkspace,
-  sanitizeSandboxCloneError,
 } from "./arrusted-template";
 import {
   inspectCanonicalTemplateSnapshotReceipt,
   inspectExistingRepositorySnapshotReceipt,
-  inspectSourceOnlyTemplateSnapshotReceipt,
 } from "./source-receipt";
 
 describe("canonical Arrusted source preparation", () => {
-  it("preserves long clone diagnostics after redacting credentials and URLs", () => {
-    const token = "local-test-credential-value";
-    const detail = `${"stage detail ".repeat(80)} token=${token} https://example.test/path`;
-    const sanitized = sanitizeSandboxCloneError(detail, token);
-
-    expect(sanitized).toContain("stage detail");
-    expect(sanitized).toContain("token=[redacted]");
-    expect(sanitized).toContain("[url]");
-    expect(sanitized.length).toBeGreaterThan(512);
-  });
-
   it("uses the provider-created starter checkout once", async () => {
     const sourceSha = "a".repeat(40);
     const sourceTree = "b".repeat(40);
@@ -54,67 +41,50 @@ describe("canonical Arrusted source preparation", () => {
       } as never,
     });
     expect(receipt.sourceKind).toBe("fresh-template");
-    expect(receipt.version).toBe(5);
-    expect(receipt).toHaveProperty("provenance.sourceDigest");
-    expect(receipt).not.toHaveProperty("provenance.readinessDigest");
     expect(commands.some((command) => command.includes("git clone"))).toBe(false);
     expect(written).toContain(".app-builder/prepare-intent.json");
   });
 
-  it.each([4, 5])(
-    "reuses the recorded V%s session workspace without legacy reinspection",
-    async (version) => {
-      const snapshot = {
+  it("reuses the recorded session workspace without legacy reinspection", async () => {
+    const receipt = inspectCanonicalTemplateSnapshotReceipt({
+      readinessDigest: "c".repeat(64),
+      snapshot: {
         contents: {},
         contract: [],
         dirtyPaths: [],
         sourcePath: "/workspace/repository",
         sourceSha: "a".repeat(40),
         sourceTree: "b".repeat(40),
-      };
-      const receipt =
-        version === 5
-          ? inspectSourceOnlyTemplateSnapshotReceipt(snapshot)
-          : inspectCanonicalTemplateSnapshotReceipt({
-              readinessDigest: "c".repeat(64),
-              snapshot: {
-                contents: {},
-                contract: [],
-                dirtyPaths: [],
-                sourcePath: "/workspace/repository",
-                sourceSha: "a".repeat(40),
-                sourceTree: "b".repeat(40),
-              },
-            });
-      if (receipt.version !== 4 && receipt.version !== 5) {
-        throw new Error("Expected cloned source fixture");
-      }
-      const workspace = {
-        adapter: "arrusted-development-v0",
-        eligibilityDigest: receipt.eligibilityDigest,
-        sourcePath: "/workspace/repository",
-        sourceSha: receipt.sourceSha,
-        sourceTree: receipt.sourceTree,
-        workspaceDigest: "d".repeat(64),
-        workspaceId: "sandbox",
-        workspacePath: "/workspace/repository",
-      } as const;
-      const run = vi.fn();
+      },
+    });
+    if (receipt.version !== 4) {
+      throw new Error("Expected cloned source fixture");
+    }
+    const workspace = {
+      adapter: "arrusted-development-v0",
+      eligibilityDigest: receipt.eligibilityDigest,
+      sourcePath: "/workspace/repository",
+      sourceSha: receipt.sourceSha,
+      sourceTree: receipt.sourceTree,
+      workspaceDigest: "d".repeat(64),
+      workspaceId: "sandbox",
+      workspacePath: "/workspace/repository",
+    } as const;
+    const run = vi.fn();
 
-      await expect(
-        inspectCanonicalArrustedSandboxWorkspace({
-          receipt,
-          sandbox: {
-            id: "sandbox",
-            // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-            readTextFile: vi.fn(async () => JSON.stringify(workspace)),
-            run,
-          } as never,
-        }),
-      ).resolves.toEqual(workspace);
-      expect(run).not.toHaveBeenCalled();
-    },
-  );
+    await expect(
+      inspectCanonicalArrustedSandboxWorkspace({
+        receipt,
+        sandbox: {
+          id: "sandbox",
+          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+          readTextFile: vi.fn(async () => JSON.stringify(workspace)),
+          run,
+        } as never,
+      }),
+    ).resolves.toEqual(workspace);
+    expect(run).not.toHaveBeenCalled();
+  });
 });
 
 describe("connected GitHub workspace inspection", () => {

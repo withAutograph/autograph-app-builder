@@ -111,50 +111,34 @@ describe("fresh bootstrap source workspace", () => {
     expect(readBinaryFile).not.toHaveBeenCalled();
   });
 
-  it.each([4, 5] as const)(
-    "re-verifies V%s canonical state before reading its prepared manifest",
-    async (version) => {
-      const receipt: SourceReceipt =
-        version === 4
-          ? canonicalReceipt
-          : {
-              ...canonicalReceipt,
-              provenance: {
-                method: "git-clone-v1",
-                ref: "refs/heads/main",
-                repository: "https://github.com/withAutograph/arrusted-development.git",
-                sourceDigest: "1".repeat(64),
-              },
-              version: 5,
-            };
-      const calls: string[] = [];
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      mocks.inspectSourceBoundSandboxWorkspace.mockImplementation(async () => {
-        calls.push("reverify");
-      });
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      mocks.readPreparedSandboxSourceManifest.mockImplementation(async () => {
-        calls.push("manifest");
-        return [];
-      });
-      const { sandbox } = sandboxFixture();
+  it("re-verifies V4 canonical state before reading its prepared manifest", async () => {
+    const calls: string[] = [];
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    mocks.inspectSourceBoundSandboxWorkspace.mockImplementation(async () => {
+      calls.push("reverify");
+    });
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    mocks.readPreparedSandboxSourceManifest.mockImplementation(async () => {
+      calls.push("manifest");
+      return [];
+    });
+    const { sandbox } = sandboxFixture();
 
-      const source = await freshBootstrapSourceWorkspace({
-        receipt,
-        sandbox,
-        workspace,
-      });
+    const source = await freshBootstrapSourceWorkspace({
+      receipt: canonicalReceipt,
+      sandbox,
+      workspace,
+    });
 
-      expect(source).toBeDefined();
-      expect(calls).toEqual(["reverify", "manifest"]);
-      expect(mocks.inspectSourceBoundSandboxWorkspace).toHaveBeenCalledWith({
-        expectedWorkspace: workspace,
-        receipt,
-        sandbox,
-      });
-      expect(mocks.readPreparedSandboxSourceManifest).toHaveBeenCalledWith(sandbox, workspace);
-    },
-  );
+    expect(source).toBeDefined();
+    expect(calls).toEqual(["reverify", "manifest"]);
+    expect(mocks.inspectSourceBoundSandboxWorkspace).toHaveBeenCalledWith({
+      expectedWorkspace: workspace,
+      receipt: canonicalReceipt,
+      sandbox,
+    });
+    expect(mocks.readPreparedSandboxSourceManifest).toHaveBeenCalledWith(sandbox, workspace);
+  });
 
   it("reads repository-relative source paths as binary data", async () => {
     const { readBinaryFile, readFile, sandbox } = sandboxFixture();

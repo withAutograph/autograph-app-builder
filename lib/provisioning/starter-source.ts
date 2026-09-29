@@ -11,7 +11,8 @@ import { z } from "zod";
 
 import { ARRUSTED_TARGET_SHA, ARRUSTED_TARGET_TREE } from "../repository/dependency-cache";
 import {
-  inspectSourceOnlyClonedTemplateReceipt,
+  inspectCanonicalTemplateSnapshotReceipt,
+  sourceIdentityDigest,
   ARRUSTED_TEMPLATE_REPOSITORY,
 } from "../repository/source-receipt";
 import { deploymentArrustedTemplateReader } from "../repository/arrusted-template-reader";
@@ -71,14 +72,6 @@ export type StarterSourceProvenance = StarterSourceProvenanceBase &
         method: "git-clone-v1";
         readinessDigest: string;
         receiptVersion: 4;
-        sourceReceiptDigest: string;
-        eligibilityDigest: string;
-        contractDigest: string;
-      }
-    | {
-        method: "git-clone-v1";
-        sourceDigest: string;
-        receiptVersion: 5;
         sourceReceiptDigest: string;
         eligibilityDigest: string;
         contractDigest: string;
@@ -450,9 +443,22 @@ export async function cloneStarterSource(input?: {
     if (!/^[0-9a-f]{40}$/u.test(tree)) {
       throw new Error("starter-source-tree-invalid");
     }
-    const sourceReceipt = inspectSourceOnlyClonedTemplateReceipt(checkout);
+    // Match the established hosted V4 source receipt: this digest records the
+    // acquired Git identity, not a named CI check or a source-layout assertion.
+    const readinessDigest = sourceIdentityDigest(sha, tree);
+    const sourceReceipt = inspectCanonicalTemplateSnapshotReceipt({
+      readinessDigest,
+      snapshot: {
+        contents: {},
+        contract: [],
+        dirtyPaths: [],
+        sourcePath: checkout,
+        sourceSha: sha,
+        sourceTree: tree,
+      },
+    });
     if (
-      sourceReceipt.version !== 5 ||
+      sourceReceipt.version !== 4 ||
       sourceReceipt.sourceSha !== sha ||
       sourceReceipt.sourceTree !== tree
     ) {
@@ -487,10 +493,10 @@ export async function cloneStarterSource(input?: {
         contractDigest: sourceReceipt.contractDigest,
         eligibilityDigest: sourceReceipt.eligibilityDigest,
         method: "git-clone-v1",
+        readinessDigest,
         receiptVersion: sourceReceipt.version,
         ref: "refs/heads/main",
         repository: ARRUSTED_TEMPLATE_REPOSITORY,
-        sourceDigest: sourceReceipt.provenance.sourceDigest,
         sourceReceiptDigest: sourceReceipt.digest,
         sourceSha: sha,
         sourceTree: tree,

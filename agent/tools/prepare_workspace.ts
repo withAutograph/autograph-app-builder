@@ -9,7 +9,7 @@ import {
   workflowWorkspace,
 } from "@/lib/agent/workflow-state";
 import { sourceWorkflowState } from "@/lib/agent/source-state";
-import { isClonedTemplateSourceReceipt } from "@/lib/repository/source-receipt";
+import { SOURCE_RECEIPT_VERSION } from "@/lib/repository/source-receipt";
 import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
 import { assertExactImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
 import {
@@ -41,7 +41,7 @@ export default defineTool({
     }
     const sandbox = await ctx.getSandbox();
     let canonicalWorkspace;
-    if (!development && isClonedTemplateSourceReceipt(source.receipt)) {
+    if (!development && source.receipt.version === SOURCE_RECEIPT_VERSION) {
       canonicalWorkspace = await (async () => {
         const observed = await readPreparedSandboxWorkspaceRecord(sandbox);
         if (observed === undefined) {
@@ -89,7 +89,7 @@ export default defineTool({
       );
     } else if (githubWorkspace !== undefined) {
       workspace = githubWorkspace;
-    } else if (isClonedTemplateSourceReceipt(currentReceipt)) {
+    } else if (currentReceipt.version === SOURCE_RECEIPT_VERSION) {
       if (canonicalWorkspace === undefined) {
         throw new Error("The canonical Arrusted workspace is missing.");
       }

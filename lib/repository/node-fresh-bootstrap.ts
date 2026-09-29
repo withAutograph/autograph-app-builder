@@ -51,11 +51,7 @@ import type {
 } from "./fresh-bootstrap";
 import { assertExactReviewedChangeSet, pathsOverlap, stableDigest } from "./local-publication";
 import type { ReviewedChangeSetReceipt } from "./reviewed-change-set";
-import {
-  inspectSourceReceipt,
-  parseSourceReceipt,
-  isClonedTemplateSourceReceipt,
-} from "./source-receipt";
+import { inspectSourceReceipt, parseSourceReceipt, SOURCE_RECEIPT_VERSION } from "./source-receipt";
 import type { SourceReceipt } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import type { PreparedSourceFile } from "./supported-template";
@@ -1236,7 +1232,7 @@ const exactResultTree = async (input: {
   ) {
     throw new Error("The reviewed change set no longer matches its source receipt.");
   }
-  if (!isClonedTemplateSourceReceipt(receipt)) {
+  if (receipt.version !== SOURCE_RECEIPT_VERSION) {
     const current = await inspectSourceReceipt(receipt.sourceKind, receipt.sourcePath);
     if (current.digest !== receipt.digest) {
       throw new Error("The fresh-template source changed after review.");
@@ -1245,7 +1241,7 @@ const exactResultTree = async (input: {
     throw new Error("The canonical fresh-template workspace is required for bootstrap.");
   }
   let sourceFiles: readonly ExactFile[];
-  if (isClonedTemplateSourceReceipt(receipt)) {
+  if (receipt.version === SOURCE_RECEIPT_VERSION) {
     const { sourceWorkspace } = input;
     if (sourceWorkspace === undefined) {
       throw new Error("The canonical fresh-template workspace is required for bootstrap.");
@@ -1429,15 +1425,16 @@ export const deriveFreshBootstrapProposal = async (input: {
 }): Promise<FreshBootstrapProposal> => {
   const capability = await assertCapability(input.capability);
   const sourceReceipt = parseSourceReceipt(input.sourceReceipt);
-  const sourceGit = isClonedTemplateSourceReceipt(sourceReceipt)
-    ? undefined
-    : await realpath(
-        git(capability, sourceReceipt.sourcePath, [
-          "rev-parse",
-          "--path-format=absolute",
-          "--git-common-dir",
-        ]).trim(),
-      );
+  const sourceGit =
+    sourceReceipt.version === SOURCE_RECEIPT_VERSION
+      ? undefined
+      : await realpath(
+          git(capability, sourceReceipt.sourcePath, [
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+          ]).trim(),
+        );
   const protectedPaths = [
     ...input.protectedPaths,
     sourceReceipt.sourcePath,
@@ -1574,7 +1571,7 @@ const assertSourceUnchanged = async (
   sourceWorkspace?: FreshBootstrapSourceWorkspace,
 ): Promise<void> => {
   const receipt = parseSourceReceipt(sourceReceipt);
-  if (isClonedTemplateSourceReceipt(receipt)) {
+  if (receipt.version === SOURCE_RECEIPT_VERSION) {
     if (sourceWorkspace === undefined) {
       throw new Error("The canonical fresh-template workspace is required for bootstrap.");
     }

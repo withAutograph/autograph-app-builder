@@ -3,7 +3,7 @@ import type { SandboxSession } from "eve/sandbox";
 import type { PreparedSandboxWorkspace } from "../repository/supported-template";
 import { readPreparedSandboxSourceManifest } from "../repository/supported-template";
 import { inspectSourceBoundSandboxWorkspace } from "../repository/arrusted-template";
-import { isClonedTemplateSourceReceipt } from "../repository/source-receipt";
+import { SOURCE_RECEIPT_VERSION } from "../repository/source-receipt";
 import type { SourceReceipt } from "../repository/source-receipt";
 import type { FreshBootstrapSourceWorkspace } from "../repository/node-fresh-bootstrap";
 
@@ -17,7 +17,7 @@ export async function freshBootstrapSourceWorkspace(input: {
   receipt: SourceReceipt;
   workspace: PreparedSandboxWorkspace;
 }): Promise<FreshBootstrapSourceWorkspace | undefined> {
-  if (!isClonedTemplateSourceReceipt(input.receipt)) {
+  if (input.receipt.version !== SOURCE_RECEIPT_VERSION) {
     return undefined;
   }
   const reverify = async () => {

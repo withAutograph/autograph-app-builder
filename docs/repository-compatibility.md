@@ -26,8 +26,9 @@ Source inspection, layout observations, and preflight results are diagnostic
 context, not prerequisites to acquiring a fresh starter. A missing named
 “Template readiness” check does not prevent acquisition. Invoke supported
 operations when needed and report their actual command failures with repair
-instructions. A source-only V5 receipt records acquisition, not successful CI;
-legacy V3/V4 receipts retain their original fields, digests, and recovery parsing.
+instructions. Acquisition receipts record source identity, not successful CI. Existing
+serialized receipt fields and recovery parsing remain unchanged; the historical
+`readinessDigest` field is opaque source bookkeeping, not a CI attestation.
 
 Architecture observations are advisory. Repository checks and exercised product
 behavior establish whether persistence, authentication, and tenant isolation work.

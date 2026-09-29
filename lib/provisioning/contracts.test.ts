@@ -107,16 +107,6 @@ describe("builder provisioning contracts", () => {
       url: "https://github.com/withAutograph/vendor-credit-portal",
       visibility: "private",
     } as const;
-    const { readinessDigest, ...sourceOnly } = cloned.starter;
-    const v5 = {
-      ...cloned,
-      starter: { ...sourceOnly, receiptVersion: 5, sourceDigest: readinessDigest },
-    };
-    expect(githubProvisionSuccessSchema.safeParse(v5).success).toBe(true);
-    expect(
-      githubProvisionSuccessSchema.safeParse({ ...v5, starter: { ...v5.starter, readinessDigest } })
-        .success,
-    ).toBe(false);
     expect(githubProvisionSuccessSchema.safeParse(cloned).success).toBe(true);
     expect(
       githubProvisionSuccessSchema.safeParse({
