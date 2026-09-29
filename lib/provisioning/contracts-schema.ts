@@ -101,6 +101,11 @@ const githubClonedStarterSchema = githubStarterBaseSchema
   })
   .strict();
 
+const githubSourceOnlyStarterSchema = githubClonedStarterSchema
+  .omit({ readinessDigest: true })
+  .extend({ receiptVersion: z.literal(5), sourceDigest: sha256 })
+  .strict();
+
 const githubLegacyStarterSchema = githubStarterBaseSchema
   .extend({
     archiveBytes: z.number().int().positive().optional(),
@@ -129,7 +134,11 @@ export const githubProvisionSuccessSchema = z
         type: z.enum(["organization", "user"]),
       })
       .strict(),
-    starter: z.union([githubClonedStarterSchema, githubLegacyStarterSchema]),
+    starter: z.union([
+      githubSourceOnlyStarterSchema,
+      githubClonedStarterSchema,
+      githubLegacyStarterSchema,
+    ]),
     status: z.literal("succeeded"),
     url: z.string().url().startsWith("https://github.com/"),
     visibility: z.enum(["public", "private"]),

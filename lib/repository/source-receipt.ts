@@ -134,6 +134,8 @@ export const inspectSourceContractDigest = async (
 
 export const LEGACY_SOURCE_RECEIPT_VERSION = 3 as const;
 export const SOURCE_RECEIPT_VERSION = 4 as const;
+/** New acquisitions record source identity, never template CI readiness. */
+export const SOURCE_ONLY_RECEIPT_VERSION = 5 as const;
 
 export const ARRUSTED_TEMPLATE_REPOSITORY =
   "https://github.com/withAutograph/arrusted-development.git" as const;
@@ -144,6 +146,13 @@ export interface ClonedTemplateProvenance {
   ref: typeof ARRUSTED_TEMPLATE_REF;
   method: "git-clone-v1";
   readinessDigest: string;
+}
+
+export interface SourceOnlyTemplateProvenance {
+  repository: typeof ARRUSTED_TEMPLATE_REPOSITORY;
+  ref: typeof ARRUSTED_TEMPLATE_REF;
+  method: "git-clone-v1";
+  sourceDigest: string;
 }
 
 interface SourceReceiptEvidenceBase {
@@ -172,7 +181,15 @@ type ClonedSourceReceiptEvidence = SourceReceiptEvidenceBase & {
   provenance: ClonedTemplateProvenance;
 };
 
-export type SourceReceiptEvidence = LegacySourceReceiptEvidence | ClonedSourceReceiptEvidence;
+type SourceOnlyReceiptEvidence = SourceReceiptEvidenceBase & {
+  version: typeof SOURCE_ONLY_RECEIPT_VERSION;
+  provenance: SourceOnlyTemplateProvenance;
+};
+
+export type SourceReceiptEvidence =
+  | LegacySourceReceiptEvidence
+  | ClonedSourceReceiptEvidence
+  | SourceOnlyReceiptEvidence;
 
 export type SourceReceipt = SourceReceiptEvidence & {
   /** Local runtime locator only. It is deliberately excluded from `digest`. */
@@ -273,7 +290,8 @@ export const parseCanonicalTemplateSnapshot = (value: unknown): CanonicalTemplat
 
 type UnsignedSourceReceiptEvidence =
   | Omit<LegacySourceReceiptEvidence, "digest">
-  | Omit<ClonedSourceReceiptEvidence, "digest">;
+  | Omit<ClonedSourceReceiptEvidence, "digest">
+  | Omit<SourceOnlyReceiptEvidence, "digest">;
 
 const legacySourceReceiptEvidenceKeys = [
   "adapter",
@@ -308,9 +326,9 @@ const sourceReceiptDigest = (receipt: UnsignedSourceReceiptEvidence): string => 
   };
   return sha256(
     JSON.stringify(
-      receipt.version === SOURCE_RECEIPT_VERSION
-        ? { ...common, provenance: receipt.provenance }
-        : common,
+      receipt.version === LEGACY_SOURCE_RECEIPT_VERSION
+        ? common
+        : { ...common, provenance: receipt.provenance },
     ),
   );
 };
@@ -323,6 +341,17 @@ const validProvenance = (value: unknown): value is ClonedTemplateProvenance =>
   value.method === "git-clone-v1" &&
   isDigest(value.readinessDigest);
 
+export const sourceIdentityDigest = (sourceSha: string, sourceTree: string): string =>
+  sha256(JSON.stringify({ sourceSha, sourceTree }));
+
+const validSourceOnlyProvenance = (value: unknown): value is SourceOnlyTemplateProvenance =>
+  isRecord(value) &&
+  hasExactKeys(value, ["method", "sourceDigest", "ref", "repository"]) &&
+  value.repository === ARRUSTED_TEMPLATE_REPOSITORY &&
+  value.ref === ARRUSTED_TEMPLATE_REF &&
+  value.method === "git-clone-v1" &&
+  isDigest(value.sourceDigest);
+
 export const parseSourceReceiptEvidence = (value: unknown): SourceReceiptEvidence => {
   if (!isRecord(value)) {
     throw new Error("Source receipt evidence is invalid or has an unsupported schema.");
@@ -331,14 +360,17 @@ export const parseSourceReceiptEvidence = (value: unknown): SourceReceiptEvidenc
   if (
     (version === LEGACY_SOURCE_RECEIPT_VERSION &&
       !hasExactKeys(value, legacySourceReceiptEvidenceKeys)) ||
-    (version === SOURCE_RECEIPT_VERSION && !hasExactKeys(value, clonedSourceReceiptEvidenceKeys)) ||
-    (version !== LEGACY_SOURCE_RECEIPT_VERSION && version !== SOURCE_RECEIPT_VERSION)
+    ((version === SOURCE_RECEIPT_VERSION || version === SOURCE_ONLY_RECEIPT_VERSION) &&
+      !hasExactKeys(value, clonedSourceReceiptEvidenceKeys)) ||
+    (version !== LEGACY_SOURCE_RECEIPT_VERSION &&
+      version !== SOURCE_RECEIPT_VERSION &&
+      version !== SOURCE_ONLY_RECEIPT_VERSION)
   ) {
     throw new Error("Source receipt evidence is invalid or has an unsupported schema.");
   }
   if (
     (value.sourceKind !== "existing-repository" && value.sourceKind !== "fresh-template") ||
-    (version === SOURCE_RECEIPT_VERSION && value.sourceKind !== "fresh-template") ||
+    (version !== LEGACY_SOURCE_RECEIPT_VERSION && value.sourceKind !== "fresh-template") ||
     !isGitObjectId(value.sourceSha) ||
     !isGitObjectId(value.sourceTree) ||
     value.adapter !== SUPPORTED_TEMPLATE_ADAPTER ||
@@ -346,7 +378,10 @@ export const parseSourceReceiptEvidence = (value: unknown): SourceReceiptEvidenc
     !isDigest(value.contractDigest) ||
     value.releaseEnabled !== false ||
     !isDigest(value.digest) ||
-    (version === SOURCE_RECEIPT_VERSION && !validProvenance(value.provenance))
+    (version === SOURCE_RECEIPT_VERSION && !validProvenance(value.provenance)) ||
+    (version === SOURCE_ONLY_RECEIPT_VERSION &&
+      (!validSourceOnlyProvenance(value.provenance) ||
+        value.provenance.sourceDigest !== sourceIdentityDigest(value.sourceSha, value.sourceTree)))
   ) {
     throw new Error("Source receipt evidence is invalid.");
   }
@@ -363,7 +398,9 @@ export const sourceReceiptEvidence = (receipt: SourceReceipt): SourceReceiptEvid
     contractDigest: receipt.contractDigest,
     digest: receipt.digest,
     eligibilityDigest: receipt.eligibilityDigest,
-    ...(receipt.version === SOURCE_RECEIPT_VERSION ? { provenance: receipt.provenance } : {}),
+    ...(receipt.version === LEGACY_SOURCE_RECEIPT_VERSION
+      ? {}
+      : { provenance: receipt.provenance }),
     releaseEnabled: receipt.releaseEnabled,
     sourceKind: receipt.sourceKind,
     sourceSha: receipt.sourceSha,
@@ -376,7 +413,8 @@ export const parseSourceReceipt = (value: unknown): SourceReceipt => {
     !isRecord(value) ||
     (value.version === LEGACY_SOURCE_RECEIPT_VERSION &&
       !hasExactKeys(value, legacySourceReceiptKeys)) ||
-    (value.version === SOURCE_RECEIPT_VERSION && !hasExactKeys(value, clonedSourceReceiptKeys))
+    ((value.version === SOURCE_RECEIPT_VERSION || value.version === SOURCE_ONLY_RECEIPT_VERSION) &&
+      !hasExactKeys(value, clonedSourceReceiptKeys))
   ) {
     throw new Error("Source receipt has an unsupported schema.");
   }
@@ -386,9 +424,6 @@ export const parseSourceReceipt = (value: unknown): SourceReceipt => {
   const { sourcePath, ...evidenceInput } = value;
   return { ...parseSourceReceiptEvidence(evidenceInput), sourcePath };
 };
-
-export const sourceIdentityDigest = (sourceSha: string, sourceTree: string): string =>
-  sha256(JSON.stringify({ sourceSha, sourceTree }));
 
 // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
 export const inspectSourceReceipt = async (
@@ -525,4 +560,44 @@ export const inspectExistingRepositorySnapshotReceipt = (
     digest: sourceReceiptDigest(evidence),
     sourcePath: snapshot.sourcePath,
   });
+};
+
+/** Source-only V5 constructor. No layout inspection or CI assertion is performed. */
+export const inspectSourceOnlyTemplateSnapshotReceipt = (
+  snapshot: Pick<CanonicalTemplateSnapshot, "sourcePath" | "sourceSha" | "sourceTree">,
+): SourceReceipt => {
+  const sourceDigest = sourceIdentityDigest(snapshot.sourceSha, snapshot.sourceTree);
+  const evidence = {
+    adapter: SUPPORTED_TEMPLATE_ADAPTER as typeof SUPPORTED_TEMPLATE_ADAPTER,
+    contractDigest: sourceDigest,
+    eligibilityDigest: sourceDigest,
+    provenance: {
+      method: "git-clone-v1" as const,
+      ref: ARRUSTED_TEMPLATE_REF,
+      repository: ARRUSTED_TEMPLATE_REPOSITORY,
+      sourceDigest,
+    },
+    releaseEnabled: false as const,
+    sourceKind: "fresh-template" as const,
+    sourceSha: snapshot.sourceSha,
+    sourceTree: snapshot.sourceTree,
+    version: SOURCE_ONLY_RECEIPT_VERSION,
+  };
+  return parseSourceReceipt({
+    ...evidence,
+    digest: sourceReceiptDigest(evidence),
+    sourcePath: snapshot.sourcePath,
+  });
+};
+
+export const isClonedTemplateSourceReceipt = (
+  receipt: SourceReceipt,
+): receipt is Extract<SourceReceipt, { version: 4 | 5 }> =>
+  receipt.version === SOURCE_RECEIPT_VERSION || receipt.version === SOURCE_ONLY_RECEIPT_VERSION;
+
+/** Inspect only Git identity for a new clone; repository commands own compatibility. */
+export const inspectSourceOnlyClonedTemplateReceipt = (path: string): SourceReceipt => {
+  const sourceSha = fixedGit(path, ["rev-parse", "HEAD"], "utf-8").trim();
+  const sourceTree = fixedGit(path, ["rev-parse", `${sourceSha}^{tree}`], "utf-8").trim();
+  return inspectSourceOnlyTemplateSnapshotReceipt({ sourcePath: path, sourceSha, sourceTree });
 };

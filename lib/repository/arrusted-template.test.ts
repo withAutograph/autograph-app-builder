@@ -9,6 +9,7 @@ import {
 import {
   inspectCanonicalTemplateSnapshotReceipt,
   inspectExistingRepositorySnapshotReceipt,
+  inspectSourceOnlyTemplateSnapshotReceipt,
 } from "./source-receipt";
 
 describe("canonical Arrusted source preparation", () => {
@@ -53,50 +54,67 @@ describe("canonical Arrusted source preparation", () => {
       } as never,
     });
     expect(receipt.sourceKind).toBe("fresh-template");
+    expect(receipt.version).toBe(5);
+    expect(receipt).toHaveProperty("provenance.sourceDigest");
+    expect(receipt).not.toHaveProperty("provenance.readinessDigest");
     expect(commands.some((command) => command.includes("git clone"))).toBe(false);
     expect(written).toContain(".app-builder/prepare-intent.json");
   });
 
-  it("reuses the recorded session workspace without legacy reinspection", async () => {
-    const receipt = inspectCanonicalTemplateSnapshotReceipt({
-      readinessDigest: "c".repeat(64),
-      snapshot: {
+  it.each([4, 5])(
+    "reuses the recorded V%s session workspace without legacy reinspection",
+    async (version) => {
+      const snapshot = {
         contents: {},
         contract: [],
         dirtyPaths: [],
         sourcePath: "/workspace/repository",
         sourceSha: "a".repeat(40),
         sourceTree: "b".repeat(40),
-      },
-    });
-    if (receipt.version !== 4) {
-      throw new Error("Expected cloned source fixture");
-    }
-    const workspace = {
-      adapter: "arrusted-development-v0",
-      eligibilityDigest: receipt.eligibilityDigest,
-      sourcePath: "/workspace/repository",
-      sourceSha: receipt.sourceSha,
-      sourceTree: receipt.sourceTree,
-      workspaceDigest: "d".repeat(64),
-      workspaceId: "sandbox",
-      workspacePath: "/workspace/repository",
-    } as const;
-    const run = vi.fn();
+      };
+      const receipt =
+        version === 5
+          ? inspectSourceOnlyTemplateSnapshotReceipt(snapshot)
+          : inspectCanonicalTemplateSnapshotReceipt({
+              readinessDigest: "c".repeat(64),
+              snapshot: {
+                contents: {},
+                contract: [],
+                dirtyPaths: [],
+                sourcePath: "/workspace/repository",
+                sourceSha: "a".repeat(40),
+                sourceTree: "b".repeat(40),
+              },
+            });
+      if (receipt.version !== 4 && receipt.version !== 5) {
+        throw new Error("Expected cloned source fixture");
+      }
+      const workspace = {
+        adapter: "arrusted-development-v0",
+        eligibilityDigest: receipt.eligibilityDigest,
+        sourcePath: "/workspace/repository",
+        sourceSha: receipt.sourceSha,
+        sourceTree: receipt.sourceTree,
+        workspaceDigest: "d".repeat(64),
+        workspaceId: "sandbox",
+        workspacePath: "/workspace/repository",
+      } as const;
+      const run = vi.fn();
 
-    await expect(
-      inspectCanonicalArrustedSandboxWorkspace({
-        receipt,
-        sandbox: {
-          id: "sandbox",
-          // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-          readTextFile: vi.fn(async () => JSON.stringify(workspace)),
-          run,
-        } as never,
-      }),
-    ).resolves.toEqual(workspace);
-    expect(run).not.toHaveBeenCalled();
-  });
+      await expect(
+        inspectCanonicalArrustedSandboxWorkspace({
+          receipt,
+          sandbox: {
+            id: "sandbox",
+            // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+            readTextFile: vi.fn(async () => JSON.stringify(workspace)),
+            run,
+          } as never,
+        }),
+      ).resolves.toEqual(workspace);
+      expect(run).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("connected GitHub workspace inspection", () => {

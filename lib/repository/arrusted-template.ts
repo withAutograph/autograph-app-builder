@@ -8,10 +8,10 @@ import { canAutoSelectDevelopmentSource } from "./development-source";
 import {
   ARRUSTED_TEMPLATE_REF,
   ARRUSTED_TEMPLATE_REPOSITORY,
-  inspectCanonicalTemplateSnapshotReceipt,
+  inspectSourceOnlyTemplateSnapshotReceipt,
+  isClonedTemplateSourceReceipt,
   parseCanonicalTemplateSnapshot,
   parseSourceReceipt,
-  SOURCE_RECEIPT_VERSION,
 } from "./source-receipt";
 import type { SourceReceipt } from "./source-receipt";
 import {
@@ -39,7 +39,7 @@ const SANDBOX_CLONE_INSPECTOR = ".arrusted-template-inspect.cjs";
 
 export { ARRUSTED_TEMPLATE_REF, ARRUSTED_TEMPLATE_REPOSITORY } from "./source-receipt";
 
-type ClonedTemplateReceipt = Extract<SourceReceipt, { version: 4 }>;
+type ClonedTemplateReceipt = Extract<SourceReceipt, { version: 4 | 5 }>;
 
 type TemplateAcquisitionFailureStage =
   | "reader"
@@ -409,7 +409,7 @@ async function cloneCanonicalArrustedWorkspace(input: { sandbox: SandboxSession;
 
 /**
  * The fresh-template transport: exactly one detached clone, directly in the
- * session workspace. Its closed inspection snapshot produces the V4 receipt
+ * session workspace. Its closed inspection snapshot produces the source-only V5 receipt
  * and the same checkout is sealed for later target commands.
  */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -440,10 +440,7 @@ export async function acquireCanonicalArrustedTemplate(input: {
     sourceSha: snapshot.sourceSha,
     sourceTree: snapshot.sourceTree,
   });
-  const receipt = inspectCanonicalTemplateSnapshotReceipt({
-    readinessDigest: workspaceDigest,
-    snapshot,
-  });
+  const receipt = inspectSourceOnlyTemplateSnapshotReceipt(snapshot);
   await acquisitionStage("workspace_record", () =>
     recordPreparedSandboxWorkspace({
       callId: input.callId,
@@ -467,7 +464,7 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
   let receipt: ClonedTemplateReceipt;
   try {
     const parsed = parseSourceReceipt(input.receipt);
-    if (parsed.version !== 4) {
+    if (!isClonedTemplateSourceReceipt(parsed)) {
       throw new Error("not a cloned receipt");
     }
     receipt = parsed;
@@ -483,7 +480,9 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
     !SHA.test(receipt.sourceSha) ||
     !SHA.test(receipt.sourceTree) ||
     !DIGEST.test(receipt.eligibilityDigest) ||
-    !DIGEST.test(receipt.provenance.readinessDigest)
+    !DIGEST.test(
+      receipt.version === 4 ? receipt.provenance.readinessDigest : receipt.provenance.sourceDigest,
+    )
   ) {
     throw new Error("Canonical Arrusted clone receipt is invalid.");
   }
@@ -537,7 +536,7 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
   }
   const receipt = parseSourceReceipt(input.receipt);
   let observed: PreparedSandboxWorkspace;
-  if (receipt.version === SOURCE_RECEIPT_VERSION) {
+  if (isClonedTemplateSourceReceipt(receipt)) {
     observed = await inspectCanonicalArrustedSandboxWorkspace({
       receipt,
       sandbox: input.sandbox,

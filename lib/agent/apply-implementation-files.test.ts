@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   assertExistingAppImplementationFiles,
-  assertImplementationArchitecture,
+  implementationArchitectureDiagnostics,
   implementationFilesSchema,
   withImplementationFiles,
 } from "./apply-implementation-files";
@@ -102,9 +102,9 @@ describe("approval-bound implementation files", () => {
     ).not.toThrow();
   });
 
-  it("rejects client-only persistence for apps that own kernel data", () => {
-    expect(() =>
-      assertImplementationArchitecture(
+  it("reports submission heuristics without blocking apply", () => {
+    expect(
+      implementationArchitectureDiagnostics(
         [
           {
             content:
@@ -114,12 +114,16 @@ describe("approval-bound implementation files", () => {
         ],
         "kernel",
       ),
-    ).toThrow(/no Server Action or route handler/u);
+    ).toEqual([
+      expect.stringContaining("No Server Action"),
+      expect.stringContaining("browser storage"),
+      expect.stringContaining("Client Component"),
+    ]);
   });
 
   it("accepts a server route with a narrow interactive leaf for kernel data", () => {
-    expect(() =>
-      assertImplementationArchitecture(
+    expect(
+      implementationArchitectureDiagnostics(
         [
           {
             content:
@@ -134,6 +138,6 @@ describe("approval-bound implementation files", () => {
         ],
         "kernel",
       ),
-    ).not.toThrow();
+    ).toEqual([]);
   });
 });

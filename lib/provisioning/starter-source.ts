@@ -11,10 +11,9 @@ import { z } from "zod";
 
 import { ARRUSTED_TARGET_SHA, ARRUSTED_TARGET_TREE } from "../repository/dependency-cache";
 import {
-  inspectClonedTemplateSourceReceipt,
+  inspectSourceOnlyClonedTemplateReceipt,
   ARRUSTED_TEMPLATE_REPOSITORY,
 } from "../repository/source-receipt";
-import { templateReadinessAttestationDigest } from "../repository/arrusted-template";
 import { deploymentArrustedTemplateReader } from "../repository/arrusted-template-reader";
 import type { ArrustedTemplateReader } from "../repository/arrusted-template-reader";
 import { safeSourcePath } from "../repository/source-path";
@@ -72,6 +71,14 @@ export type StarterSourceProvenance = StarterSourceProvenanceBase &
         method: "git-clone-v1";
         readinessDigest: string;
         receiptVersion: 4;
+        sourceReceiptDigest: string;
+        eligibilityDigest: string;
+        contractDigest: string;
+      }
+    | {
+        method: "git-clone-v1";
+        sourceDigest: string;
+        receiptVersion: 5;
         sourceReceiptDigest: string;
         eligibilityDigest: string;
         contractDigest: string;
@@ -390,7 +397,10 @@ export async function loadStarterSource(input: {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function cloneStarterSource(input?: {
   reader?: ArrustedTemplateReader;
+  /** Injectable command transport; the canonical origin and source checks still apply. */
+  git?: typeof restrictedGit;
 }): Promise<StarterSource> {
+  const executeGit = input?.git ?? restrictedGit;
   const access = await (input?.reader ?? deploymentArrustedTemplateReader()).acquire();
   const root = await mkdtemp(nodePath.join(tmpdir(), "autograph-app-builder-starter-"));
   const checkout = nodePath.join(root, "repository");
@@ -411,7 +421,7 @@ export async function cloneStarterSource(input?: {
       ].join("\n"),
       { mode: 0o700 },
     );
-    await restrictedGit(
+    await executeGit(
       [
         "clone",
         "--no-checkout",
@@ -425,43 +435,30 @@ export async function cloneStarterSource(input?: {
       { askpassFile, credentialFile },
     );
     await Promise.all([rm(credentialFile, { force: true }), rm(askpassFile, { force: true })]);
-    const origin = await restrictedGit(["-C", checkout, "config", "--get", "remote.origin.url"]);
+    const origin = await executeGit(["-C", checkout, "config", "--get", "remote.origin.url"]);
     if (origin.stdout.trim() !== ARRUSTED_TEMPLATE_REPOSITORY) {
       throw new Error("starter-source-origin-drifted");
     }
-    const shaResult = await restrictedGit([
-      "-C",
-      checkout,
-      "rev-parse",
-      "refs/remotes/origin/main",
-    ]);
+    const shaResult = await executeGit(["-C", checkout, "rev-parse", "refs/remotes/origin/main"]);
     const sha = shaResult.stdout.trim();
     if (!/^[0-9a-f]{40}$/u.test(sha)) {
       throw new Error("starter-source-ref-invalid");
     }
-    await restrictedGit(["-C", checkout, "checkout", "--detach", "--quiet", sha]);
-    const treeResult = await restrictedGit(["-C", checkout, "rev-parse", `${sha}^{tree}`]);
+    await executeGit(["-C", checkout, "checkout", "--detach", "--quiet", sha]);
+    const treeResult = await executeGit(["-C", checkout, "rev-parse", `${sha}^{tree}`]);
     const tree = treeResult.stdout.trim();
     if (!/^[0-9a-f]{40}$/u.test(tree)) {
       throw new Error("starter-source-tree-invalid");
     }
-    const readinessDigest = await templateReadinessAttestationDigest({
-      sha,
-      token: access.token,
-      tree,
-    });
-    const sourceReceipt = await inspectClonedTemplateSourceReceipt({
-      path: checkout,
-      readinessDigest,
-    });
+    const sourceReceipt = inspectSourceOnlyClonedTemplateReceipt(checkout);
     if (
-      sourceReceipt.version !== 4 ||
+      sourceReceipt.version !== 5 ||
       sourceReceipt.sourceSha !== sha ||
       sourceReceipt.sourceTree !== tree
     ) {
       throw new Error("starter-source-receipt-mismatch");
     }
-    const listing = await restrictedGit(["-C", checkout, "ls-files", "-z"]);
+    const listing = await executeGit(["-C", checkout, "ls-files", "-z"]);
     const paths = listing.stdout.split("\0").filter(Boolean);
     if (paths.length === 0) {
       throw new Error("starter-source-file-count-invalid");
@@ -490,10 +487,10 @@ export async function cloneStarterSource(input?: {
         contractDigest: sourceReceipt.contractDigest,
         eligibilityDigest: sourceReceipt.eligibilityDigest,
         method: "git-clone-v1",
-        readinessDigest,
         receiptVersion: sourceReceipt.version,
         ref: "refs/heads/main",
         repository: ARRUSTED_TEMPLATE_REPOSITORY,
+        sourceDigest: sourceReceipt.provenance.sourceDigest,
         sourceReceiptDigest: sourceReceipt.digest,
         sourceSha: sha,
         sourceTree: tree,

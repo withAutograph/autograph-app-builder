@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { provisionGitHubRepository, starterSourceBinding } from "./github-provider";
 import type { GitHubUserCredentialStore } from "./github-user-credential";
 import type { StarterSource } from "./starter-source";
+import { sourceIdentityDigest } from "../repository/source-receipt";
 import { ARRUSTED_TARGET_SHA, ARRUSTED_TARGET_TREE } from "../repository/dependency-cache";
 
 const authority = {
@@ -73,6 +74,30 @@ function credentialStore(): GitHubUserCredentialStore {
 }
 
 describe("GitHub starter repository provisioning", () => {
+  it("binds V5 source-only provenance without adding readiness evidence", () => {
+    const canonical: StarterSource = {
+      files: source.files,
+      provenance: {
+        contractDigest: "4".repeat(64),
+        eligibilityDigest: "3".repeat(64),
+        method: "git-clone-v1",
+        receiptVersion: 5,
+        ref: "refs/heads/main",
+        repository: "https://github.com/withAutograph/arrusted-development.git",
+        sourceDigest: sourceIdentityDigest(ARRUSTED_TARGET_SHA, ARRUSTED_TARGET_TREE),
+        sourceReceiptDigest: "2".repeat(64),
+        sourceSha: ARRUSTED_TARGET_SHA,
+        sourceTree: ARRUSTED_TARGET_TREE,
+      },
+    };
+    const binding = starterSourceBinding(canonical);
+    expect(binding.starter).toMatchObject({
+      receiptVersion: 5,
+      sourceDigest: sourceIdentityDigest(ARRUSTED_TARGET_SHA, ARRUSTED_TARGET_TREE),
+    });
+    expect(binding.starter).not.toHaveProperty("readinessDigest");
+  });
+
   it("binds cloned starter creation to complete V4 source provenance", () => {
     const canonical: StarterSource = {
       files: source.files,

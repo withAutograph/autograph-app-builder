@@ -24,7 +24,6 @@ vi.mock("../repository/development-source", () => ({
 vi.mock("../repository/github-publication", () => ({
   assertExactImmutableGitHubSourceReceipt: vi.fn(),
 }));
-vi.mock("../repository/source-receipt", () => ({ SOURCE_RECEIPT_VERSION: 4 }));
 vi.mock("../repository/supported-template", () => ({
   prepareDevelopmentSandboxWorkspace: vi.fn(),
   prepareSupportedSandboxWorkspace: vi.fn(),
