@@ -126,7 +126,7 @@ export default defineEval({
 
     t.succeeded();
     retryReview.notEvent("input.requested");
-    t.check(retryReview, includes("same completed app changes remain ready"));
+    t.check(retryReview.message, includes("same completed app changes remain ready"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
