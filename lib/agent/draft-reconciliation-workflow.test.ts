@@ -26,6 +26,9 @@ vi.mock("./draft-reconciliation-state", () => ({
 vi.mock("./workflow-state", () => ({
   appBuilderWorkflowState: { get: () => mocks.workflow },
 }));
+vi.mock("./source-bound-sandbox", () => ({
+  getSourceBoundSandbox: (ctx: { getSandbox: () => Promise<unknown> }) => ctx.getSandbox(),
+}));
 vi.mock("../repository/sandbox-draft-reconciliation", () => ({
   inspectDraftReconciliation: mocks.inspect,
 }));
