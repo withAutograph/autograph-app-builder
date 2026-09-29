@@ -64,6 +64,31 @@ describe("productionReadinessHandoff", () => {
     expect(result.evidence.behavior).toMatchObject({ coverage: "unassessed", results: [] });
     expect(result.evidence.behavior.unassessed).toContain("tenant-isolation");
     expect(result.evidence.behavior.unassessed).toContain("restart-durability");
+    expect(result.operatorChecklist.accessGrants).toMatchObject({
+      appId: app,
+      authorization: "declared-policy",
+      declaredRoles: ["requester", "reviewer"],
+      status: "unassessed",
+    });
+    expect(result.operatorChecklist.configuration).toMatchObject({
+      databaseEnvironment: "SPEND_REVIEW_DATABASE_URL",
+      routes: [`/${app}`],
+      status: "unassessed",
+    });
+    expect(result.operatorChecklist.migration).toMatchObject({
+      observedInstallation: null,
+      selectedRelease:
+        description.backend.kind === "generated-postgres" ? description.backend.release : null,
+      status: "unassessed",
+    });
+    expect(result.operatorChecklist.backupRecovery.status).toBe("unassessed");
+    expect(result.operatorChecklist.nativeInstallerIsolation.status).toBe("blocked");
+    expect(result.operatorChecklist.approvals.required).toEqual([
+      { effect: "hosted-preparation", status: "unassessed" },
+      { effect: "access-grants", status: "unassessed" },
+      { effect: "provider-activation", status: "unassessed" },
+      { effect: "recovery-or-cleanup", status: "unassessed" },
+    ]);
   });
 
   it.each([
@@ -109,6 +134,15 @@ describe("productionReadinessHandoff", () => {
       expect(result.evidence.installedRelease.status).toBe(value.expected);
       expect(result.evidence.authenticatedSchemaReceipt.status).toBe("unassessed");
       expect(result.evidence.behavior.coverage).toBe("unassessed");
+      expect(result.operatorChecklist.migration.status).toBe("unassessed");
+      expect(result.operatorChecklist.migration.observedInstallation?.environment ?? null).toBe(
+        value.expected === "passed" ? "preview" : null,
+      );
+      expect(result.operatorChecklist.accessGrants.status).toBe("unassessed");
+      expect(result.operatorChecklist.configuration.status).toBe("unassessed");
+      expect(result.operatorChecklist.backupRecovery.status).toBe("unassessed");
+      expect(result.operatorChecklist.nativeInstallerIsolation.status).toBe("blocked");
+      expect(result.operatorChecklist.approvals.status).toBe("unassessed");
     },
   );
 
@@ -151,6 +185,22 @@ describe("productionReadinessHandoff", () => {
     expect(result.evidence.installedRelease.status).toBe("not-applicable");
     expect(result.evidence.authenticatedSchemaReceipt.status).toBe("not-applicable");
     expect(result.evidence.behavior.coverage).toBe("unassessed");
+    expect(result.operatorChecklist.migration).toMatchObject({
+      observedInstallation: null,
+      requiredEvidence: [],
+      selectedRelease: null,
+      status: "not-applicable",
+    });
+    expect(result.operatorChecklist.backupRecovery).toMatchObject({
+      requiredEvidence: [],
+      status: "not-applicable",
+    });
+    expect(result.operatorChecklist.nativeInstallerIsolation).toMatchObject({
+      requiredEvidence: [],
+      status: "not-applicable",
+    });
+    expect(result.operatorChecklist.accessGrants.status).toBe("unassessed");
+    expect(result.nextSteps.join(" ")).not.toContain("selected database");
   });
 
   it("does not invent a route or authenticated receipt when the descriptor lacks them", async () => {
@@ -205,6 +255,12 @@ describe("productionReadinessHandoff", () => {
     expect(result.description).toBeNull();
     expect(result.blockers).toHaveLength(1);
     expect(result.evidence.behavior.coverage).toBe("unassessed");
+    expect(result.operatorChecklist.configuration.databaseEnvironment).toBeNull();
+    expect(result.operatorChecklist.accessGrants.authorization).toBeNull();
+    expect(result.operatorChecklist.accessGrants.declaredRoles).toEqual([]);
+    expect(result.operatorChecklist.migration.selectedRelease).toBeNull();
+    expect(result.operatorChecklist.migration.status).toBe("unassessed");
+    expect(result.operatorChecklist.nativeInstallerIsolation.status).toBe("unassessed");
   });
 
   it("propagates caller cancellation instead of turning it into a source assessment", async () => {

@@ -158,6 +158,17 @@ resources when that connection has been revoked.
 
 ## Evidence boundaries
 
+The validation handoff includes an operator checklist for access grants,
+configuration, migration, backup/recovery, native installer isolation and
+separate effect approvals. It derives app, routes, role declarations, runtime
+variable and selected release from `app:describe`; matching database proof is
+shown only as the observed Preview installation. That observation does not
+assess Production migration, grant access, prove backups or approve an effect.
+Database migration, backup/recovery and installer isolation are not applicable
+to a repository-described static app. Platform access and configuration still
+require operator evidence. A generated app explicitly retains the native
+installer-isolation blocker even after a successful private database check.
+
 The current provider adapter binds restricted credentials at project and Preview
 branch scope. It preserves native integration-owned `DATABASE_URL_UNPOOLED` and
 does not configure service-specific environment filtering. Selecting an
