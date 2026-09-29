@@ -18,6 +18,7 @@ export class HostedRuntimeProviderError extends Error {
 }
 
 const environmentSchema = z.looseObject({
+  comment: z.string().nullable().optional(),
   configurationId: z.string().optional(),
   gitBranch: z.string().nullable().optional(),
   id: z.string().min(1),
@@ -94,6 +95,7 @@ export const createHostedRuntimeVercelProvider = (input: {
     path: string,
     query: Record<string, string> = {},
     body?: RuntimeVariableInput[],
+    method: "GET" | "POST" | "DELETE" = body === undefined ? "GET" : "POST",
   ) => {
     const url = new URL(path, "https://api.vercel.com");
     if (binding.scopeType === "team") {
@@ -111,7 +113,7 @@ export const createHostedRuntimeVercelProvider = (input: {
           Authorization: `Bearer ${input.credential.token}`,
           "Content-Type": "application/json",
         },
-        method: body === undefined ? "GET" : "POST",
+        method,
         redirect: "error",
         signal: input.signal
           ? AbortSignal.any([input.signal, AbortSignal.timeout(20_000)])
@@ -126,6 +128,9 @@ export const createHostedRuntimeVercelProvider = (input: {
     }
     if (!response.ok) {
       await response.body?.cancel();
+      if (method === "DELETE" && response.status === 404) {
+        return null;
+      }
       if ([401, 403].includes(response.status)) {
         throw new HostedRuntimeProviderError("authorization_required");
       }
@@ -133,6 +138,10 @@ export const createHostedRuntimeVercelProvider = (input: {
         throw new HostedRuntimeProviderError("connection_required");
       }
       throw new HostedRuntimeProviderError("provider_unavailable");
+    }
+    if (method === "DELETE") {
+      await response.body?.cancel();
+      return null;
     }
     try {
       return providerJsonSchema.parse(await response.json());
@@ -171,7 +180,52 @@ export const createHostedRuntimeVercelProvider = (input: {
     }
     return result.data;
   };
-  const assertEnvironmentBindings = async (values: Readonly<Record<string, string>>) => {
+  const runtimeComment = (runtimeId: string) => {
+    if (runtimeId === "") {
+      throw new HostedRuntimeProviderError("resource_mismatch");
+    }
+    return `App Builder runtime ${runtimeId}`;
+  };
+  const selectedBindings = (
+    observed: z.infer<typeof environmentsSchema>,
+    keys: readonly string[],
+    runtimeId?: string,
+  ) => {
+    const comment = runtimeId === undefined ? undefined : runtimeComment(runtimeId);
+    const selected = new Map<string, z.infer<typeof environmentSchema>>();
+    for (const key of keys) {
+      const matches = observed.filter(
+        (environment) =>
+          environment.key === key &&
+          environment.gitBranch === input.target.branch &&
+          hasPreviewTarget(environment),
+      );
+      const [match] = matches;
+      if (matches.length > 1) {
+        throw new HostedRuntimeProviderError("resource_mismatch");
+      }
+      if (match === undefined) {
+        continue;
+      }
+      const integrationOwned = match.configurationId !== undefined && match.configurationId !== "";
+      const wrongOwner = comment !== undefined && match.comment !== comment;
+      if (!exactPreviewVariable(match, input.target.branch) || integrationOwned || wrongOwner) {
+        throw new HostedRuntimeProviderError("resource_mismatch");
+      }
+      selected.set(key, match);
+    }
+    if (new Set([...selected.values()].map(({ id }) => id)).size !== selected.size) {
+      throw new HostedRuntimeProviderError("resource_mismatch");
+    }
+    return selected;
+  };
+  const assertEnvironmentAvailability = async (keys: string[], runtimeId: string) => {
+    selectedBindings(await environments(), keys, runtimeId);
+  };
+  const assertEnvironmentBindings = async (
+    values: Readonly<Record<string, string>>,
+    options?: { runtimeId: string },
+  ) => {
     const observed = await environments();
     await Promise.all(
       Object.keys(values).map(async (key) => {
@@ -187,10 +241,18 @@ export const createHostedRuntimeVercelProvider = (input: {
         if (secret.key !== key || secret.value !== values[key]) {
           throw new HostedRuntimeProviderError("resource_mismatch");
         }
+        if (
+          options !== undefined &&
+          (selectedBindings([match], [key], options.runtimeId).size !== 1 ||
+            selectedBindings([secret], [key], options.runtimeId).size !== 1)
+        ) {
+          throw new HostedRuntimeProviderError("resource_mismatch");
+        }
       }),
     );
   };
   return {
+    assertEnvironmentAvailability,
     assertEnvironmentBindings,
     async assertProject() {
       const project = z
@@ -210,21 +272,49 @@ export const createHostedRuntimeVercelProvider = (input: {
         throw new HostedRuntimeProviderError("resource_mismatch");
       }
     },
-    async bindEnvironment(values: Readonly<Record<string, string>>) {
+    async bindEnvironment(
+      values: Readonly<Record<string, string>>,
+      options?: { runtimeId: string },
+    ) {
       const keys = Object.keys(values);
-      await request(
-        `/v10/projects/${projectPath}/env`,
-        { upsert: "true" },
-        keys.map((key) => ({
-          comment: `App Builder isolated runtime for ${input.target.appId}`,
-          gitBranch: input.target.branch,
-          key,
-          target: ["preview"],
-          type: "encrypted",
-          value: values[key],
-        })),
-      );
-      await assertEnvironmentBindings(values);
+      if (keys.length === 0) {
+        return [];
+      }
+      const selected = selectedBindings(await environments(), keys, options?.runtimeId);
+      const write = async (selectedKeys: string[], upsert: boolean) => {
+        if (selectedKeys.length === 0) {
+          return;
+        }
+        await request(
+          `/v10/projects/${projectPath}/env`,
+          { upsert: String(upsert) },
+          selectedKeys.map((key) => ({
+            comment:
+              options === undefined
+                ? `App Builder isolated runtime for ${input.target.appId}`
+                : runtimeComment(options.runtimeId),
+            gitBranch: input.target.branch,
+            key,
+            target: ["preview"],
+            type: "encrypted",
+            value: values[key],
+          })),
+        );
+      };
+      if (options === undefined) {
+        await write(keys, true);
+      } else {
+        // A concurrent creator cannot acquire ownership by overwriting an existing key.
+        await write(
+          keys.filter((key) => !selected.has(key)),
+          false,
+        );
+        await write(
+          keys.filter((key) => selected.has(key)),
+          true,
+        );
+      }
+      await assertEnvironmentBindings(values, options);
       return keys;
     },
     async readClusterCredential() {
@@ -291,6 +381,58 @@ export const createHostedRuntimeVercelProvider = (input: {
           environmentId: reference.id,
         },
       };
+    },
+    async removeEnvironmentBindings(
+      values: Readonly<Record<string, string>>,
+      options: { runtimeId: string },
+    ) {
+      const keys = Object.keys(values);
+      if (keys.length === 0) {
+        return [];
+      }
+      const selected = selectedBindings(await environments(), keys, options.runtimeId);
+      // Validate the complete removal before the first effect. A retry may observe keys
+      // already removed by an earlier attempt, while every remaining key must still belong.
+      await Promise.all(
+        [...selected].map(async ([key, match]) => {
+          const secret = await decrypted(match.id);
+          if (
+            secret.key !== key ||
+            secret.value !== values[key] ||
+            selectedBindings([secret], [key], options.runtimeId).size !== 1
+          ) {
+            throw new HostedRuntimeProviderError("resource_mismatch");
+          }
+        }),
+      );
+      const removals = await Promise.allSettled(
+        [...selected.values()].map(
+          async ({ id }) =>
+            await request(
+              `/v9/projects/${projectPath}/env/${encodeURIComponent(id)}`,
+              {},
+              undefined,
+              "DELETE",
+            ),
+        ),
+      );
+      const failed = removals.find((result) => result.status === "rejected");
+      if (failed?.status === "rejected") {
+        throw failed.reason;
+      }
+      const remaining = await environments();
+      const selectedKeys = new Set(keys);
+      if (
+        remaining.some(
+          (environment) =>
+            selectedKeys.has(environment.key) &&
+            environment.gitBranch === input.target.branch &&
+            hasPreviewTarget(environment),
+        )
+      ) {
+        throw new HostedRuntimeProviderError("resource_mismatch");
+      }
+      return keys;
     },
   };
 };

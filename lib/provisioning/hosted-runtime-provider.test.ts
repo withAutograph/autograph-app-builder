@@ -48,6 +48,22 @@ const guard = {
 };
 const clusterUrl =
   "postgresql://installer:fixture-secret@ep-owner.us-east-1.aws.neon.tech/neondb?sslmode=require";
+const runtimeId = "builder_runtime_1";
+const ownerComment = `App Builder runtime ${runtimeId}`;
+const ownedApp = {
+  comment: ownerComment,
+  gitBranch: target.branch,
+  id: "env_app",
+  key: "SPEND_REVIEW_DATABASE_URL",
+  target: ["preview"],
+  value: "restricted-app-value",
+};
+const ownedAuth = {
+  ...ownedApp,
+  id: "env_auth",
+  key: "PLATFORM_AUTH_DATABASE_URL",
+  value: "restricted-auth-value",
+};
 
 describe("owner-bound native Neon runtime adapter", () => {
   it("rechecks dedicated bindings with read-only calls before a consumer launches", async () => {
@@ -258,7 +274,7 @@ describe("owner-bound native Neon runtime adapter", () => {
         target,
       }).bindEnvironment(values),
     ).toEqual(Object.keys(values));
-    expect(request).toHaveBeenCalledTimes(4);
+    expect(request).toHaveBeenCalledTimes(5);
   });
 
   it("treats partial writes as unfinished until secret readback agrees", async () => {
@@ -275,5 +291,208 @@ describe("owner-bound native Neon runtime adapter", () => {
         SPEND_REVIEW_DATABASE_URL: "fixture",
       }),
     ).rejects.toMatchObject({ code: "resource_mismatch" });
+  });
+
+  it.each([
+    { ...ownedApp, comment: null },
+    { ...ownedApp, comment: "App Builder runtime another_runtime" },
+    { ...ownedApp, configurationId: "icfg_native" },
+    { ...ownedApp, target: ["preview", "production"] },
+  ])("rejects an unowned or integration-owned binding before any write", async (variable) => {
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider fixture.
+    const request = vi.fn<typeof fetch>(async () => Response.json({ envs: [variable] }));
+    const provider = createHostedRuntimeVercelProvider({ credential, fetch: request, target });
+    await expect(
+      provider.assertEnvironmentAvailability([ownedApp.key], runtimeId),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    await expect(
+      provider.bindEnvironment({ [ownedApp.key]: "new-value" }, { runtimeId }),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(request.mock.calls.every(([, options]) => options?.method === "GET")).toBe(true);
+  });
+
+  it("rejects duplicate branch bindings before writing or deleting", async () => {
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider fixture.
+    const request = vi.fn<typeof fetch>(async () =>
+      Response.json({ envs: [ownedApp, { ...ownedApp, id: "env_duplicate" }] }),
+    );
+    const provider = createHostedRuntimeVercelProvider({ credential, fetch: request, target });
+    await expect(
+      provider.bindEnvironment({ [ownedApp.key]: ownedApp.value }, { runtimeId }),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    await expect(
+      provider.removeEnvironmentBindings({ [ownedApp.key]: ownedApp.value }, { runtimeId }),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(request.mock.calls.every(([, options]) => options?.method === "GET")).toBe(true);
+  });
+
+  it("updates and reads back bindings owned by the same runtime", async () => {
+    const environment = { ...ownedApp };
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider fixture.
+    const request = vi.fn<typeof fetch>(async (resource, options) => {
+      const url = new URL(resource instanceof Request ? resource.url : resource.toString());
+      expect(url.searchParams.get("teamId")).toBe(target.scopeId);
+      if (options?.method === "POST") {
+        expect(url.searchParams.get("upsert")).toBe("true");
+        const [written] = z
+          .array(z.object({ comment: z.string(), key: z.string(), value: z.string() }))
+          .parse(JSON.parse(z.string().parse(options.body)));
+        expect(written).toEqual({ comment: ownerComment, key: ownedApp.key, value: "updated" });
+        environment.value = written?.value ?? "";
+        return Response.json({ created: [environment], failed: [] });
+      }
+      return Response.json(
+        url.pathname.endsWith(`/env/${environment.id}`) ? environment : { envs: [environment] },
+      );
+    });
+    const provider = createHostedRuntimeVercelProvider({ credential, fetch: request, target });
+    await provider.assertEnvironmentAvailability([ownedApp.key], runtimeId);
+    expect(await provider.bindEnvironment({ [ownedApp.key]: "updated" }, { runtimeId })).toEqual([
+      ownedApp.key,
+    ]);
+    expect(environment.value).toBe("updated");
+  });
+
+  it("does not upsert a key claimed by another runtime after the availability read", async () => {
+    const foreign = { ...ownedApp, comment: "App Builder runtime another_runtime" };
+    let observed: (typeof foreign)[] = [];
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider fixture.
+    const request = vi.fn<typeof fetch>(async (resource, options) => {
+      const url = new URL(resource instanceof Request ? resource.url : resource.toString());
+      if (options?.method === "POST") {
+        expect(url.searchParams.get("upsert")).toBe("false");
+        observed = [foreign];
+        return Response.json({ created: [], failed: [{ error: { code: "ENV_ALREADY_EXISTS" } }] });
+      }
+      return Response.json(
+        url.pathname.endsWith(`/env/${foreign.id}`) ? foreign : { envs: observed },
+      );
+    });
+    await expect(
+      createHostedRuntimeVercelProvider({ credential, fetch: request, target }).bindEnvironment(
+        { [ownedApp.key]: "new-value" },
+        { runtimeId },
+      ),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(observed).toEqual([foreign]);
+  });
+
+  it("protects native integration values even when the legacy binding API is used", async () => {
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider fixture.
+    const request = vi.fn<typeof fetch>(async () => Response.json({ envs: [native] }));
+    await expect(
+      createHostedRuntimeVercelProvider({ credential, fetch: request, target }).bindEnvironment({
+        DATABASE_URL_UNPOOLED: "replacement",
+      }),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0]?.[1]?.method).toBe("GET");
+  });
+
+  it.each([
+    { ...ownedAuth, value: "changed-outside-builder" },
+    { ...ownedAuth, comment: "App Builder runtime another_runtime" },
+    { ...ownedAuth, configurationId: "icfg_native" },
+    { ...ownedAuth, gitBranch: "another-branch" },
+  ])("verifies every decrypted cleanup binding before the first delete", async (changed) => {
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider fixture.
+    const request = vi.fn<typeof fetch>(async (resource) => {
+      const url = new URL(resource instanceof Request ? resource.url : resource.toString());
+      if (url.pathname.endsWith(`/env/${ownedAuth.id}`)) {
+        return Response.json(changed);
+      }
+      if (url.pathname.endsWith(`/env/${ownedApp.id}`)) {
+        return Response.json(ownedApp);
+      }
+      return Response.json({ envs: [ownedApp, ownedAuth] });
+    });
+    await expect(
+      createHostedRuntimeVercelProvider({
+        credential,
+        fetch: request,
+        target,
+      }).removeEnvironmentBindings(
+        { [ownedApp.key]: ownedApp.value, [ownedAuth.key]: ownedAuth.value },
+        { runtimeId },
+      ),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(request.mock.calls.every(([, options]) => options?.method === "GET")).toBe(true);
+  });
+
+  it("retries partial cleanup and preserves native, unknown, global and Production bindings", async () => {
+    const preserved = [
+      { ...ownedApp, comment: "operator", id: "env_unknown", key: "UNKNOWN_DATABASE_URL" },
+      { ...native, value: clusterUrl },
+      { ...ownedApp, gitBranch: null, id: "env_global" },
+      { ...ownedApp, id: "env_production", target: ["production"] },
+      { ...ownedApp, gitBranch: "another-branch", id: "env_other_branch" },
+    ];
+    let observed = [...preserved, ownedApp, ownedAuth];
+    let failAuthDeletion = true;
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider fixture.
+    const request = vi.fn<typeof fetch>(async (resource, options) => {
+      const url = new URL(resource instanceof Request ? resource.url : resource.toString());
+      expect(url.searchParams.get("teamId")).toBe(target.scopeId);
+      if (options?.method === "DELETE") {
+        expect(url.pathname).toMatch(/^\/v9\/projects\/prj_services\/env\/(?:env_app|env_auth)$/u);
+        if (url.pathname.endsWith(`/env/${ownedAuth.id}`) && failAuthDeletion) {
+          failAuthDeletion = false;
+          return Response.json({}, { status: 503 });
+        }
+        observed = observed.filter(
+          (environment) => !url.pathname.endsWith(`/env/${environment.id}`),
+        );
+        return Response.json([]);
+      }
+      const selected = observed.find((environment) =>
+        url.pathname.endsWith(`/env/${environment.id}`),
+      );
+      if (selected !== undefined) {
+        return Response.json(selected);
+      }
+      expect(url.pathname).toBe("/v10/projects/prj_services/env");
+      expect(url.searchParams.get("gitBranch")).toBe(target.branch);
+      return Response.json({ envs: observed });
+    });
+    const provider = createHostedRuntimeVercelProvider({ credential, fetch: request, target });
+    const values = { [ownedApp.key]: ownedApp.value, [ownedAuth.key]: ownedAuth.value };
+    await expect(provider.removeEnvironmentBindings(values, { runtimeId })).rejects.toMatchObject({
+      code: "provider_unavailable",
+    });
+    expect(observed).toEqual([...preserved, ownedAuth]);
+    expect(await provider.removeEnvironmentBindings(values, { runtimeId })).toEqual(
+      Object.keys(values),
+    );
+    expect(observed).toEqual(preserved);
+    expect(await provider.removeEnvironmentBindings(values, { runtimeId })).toEqual(
+      Object.keys(values),
+    );
+    expect(observed).toEqual(preserved);
+    expect(
+      request.mock.calls.every(([, options]) => ["GET", "DELETE"].includes(options?.method ?? "")),
+    ).toBe(true);
+  });
+
+  it.each([200, 404])("requires actual absence after a %s deletion response", async (status) => {
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider fixture.
+    const request = vi.fn<typeof fetch>(async (resource, options) => {
+      if (options?.method === "DELETE") {
+        return Response.json({}, { status });
+      }
+      const url = new URL(resource instanceof Request ? resource.url : resource.toString());
+      return Response.json(
+        url.pathname.endsWith(`/env/${ownedApp.id}`) ? ownedApp : { envs: [ownedApp] },
+      );
+    });
+    await expect(
+      createHostedRuntimeVercelProvider({
+        credential,
+        fetch: request,
+        target,
+      }).removeEnvironmentBindings({ [ownedApp.key]: ownedApp.value }, { runtimeId }),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(request.mock.calls.filter(([, options]) => options?.method === "DELETE")).toHaveLength(
+      1,
+    );
   });
 });
