@@ -82,13 +82,13 @@ state and both transcripts, including provider echoes and transport errors.
 An HTTP 401 remains an authentication blocker; refresh authorization outside
 the driver and resume the same saved run with the current environment token.
 
-If a prompt-start response is lost or returns no session handle, recovery reads
+If a start response is lost or returns no session handle, recovery reads
 `autograph_get` with the original `clientRequestId`. A bound session continues
 without another start. If that operation remains unresolved or has no bound
 session, a later resume can retry the exact original start request; it never
-creates a replacement ID. Prepared handoffs and checkpoint resumes use their
-exact original start retry because prompt request lookup does not describe their
-canonical binding. Empty handles are retained as unresolved responses rather
+creates a replacement ID. This recovery applies to prompt, prepared handoff,
+and resume starts. An older handoff without a saved original-ID alias can recover
+through an exact original start retry, which establishes that alias. Empty handles are retained as unresolved responses rather
 than used for session polling. The private transcript preserves those original
 public responses separately from the recovered session.
 

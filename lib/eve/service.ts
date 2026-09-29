@@ -45,6 +45,16 @@ export interface EveSessionService {
     cursor: number;
     limit: number;
   }) => Promise<EveSessionResult>;
+  /** Internal only: bind the caller's opaque handoff request before canonical start dispatch. */
+  bindStartAlias?: (input: {
+    clientRequestId: string;
+    canonicalClientRequestId: string;
+    sourceHandoffId: string;
+  }) => Promise<void>;
+  settleStartAlias?: (input: {
+    clientRequestId: string;
+    canonicalClientRequestId: string;
+  }) => Promise<void>;
   get: (input: { sessionId: string; cursor: number; limit: number }) => Promise<EveSessionResult>;
   send: (input: {
     sessionId: string;

@@ -25,15 +25,21 @@ transport protocol remain implementation details.
 
 `autograph_get` without `sessionId` or `clientRequestId` returns a tenant-scoped
 paginated recent session index. With `sessionId`, it retains absolute-cursor
-event pagination. With the original prompt start's `clientRequestId`, it
+event pagination. With the original start's `clientRequestId`, it
 reads only that start operation for the exact issuer, audience, workspace, and
 user, and returns the saved session's current progress. The two lookup fields
 are mutually exclusive. This read never resubmits the start. An unresolved
 submission directs the caller to preserve the original ID and input for an
 exact retry; an unknown result must not lead to a replacement start ID.
-Prepared web handoffs retain their canonical handoff request key. Recover those
-with an exact repeat of the original `autograph_start` handoff input; the
-handoff service returns its bound session rather than starting a replacement.
+This covers prompt, prepared handoff, and resume starts. Prepared handoffs save
+an original-request alias to their canonical start before dispatch; distinct
+original request IDs for one handoff recover the same bound session. Healthy
+resumes save a receipt for the existing handle. Checkpoint and adapter-recovery
+resumes retain their durable operation receipt. Older handoffs whose original
+ID was never saved require an exact original start retry to establish the alias.
+The alias uses the existing caller-scoped operation journal, so no SQL migration
+is required. Deploy its closed-record reader with its writer; older readers do
+not accept the added alias field. No historical original IDs are fabricated.
 If the durable Eve stream cannot be read within 30 seconds, `autograph_get`
 returns the last saved checkpoint with `session_read_delayed`, identifies it as
 stale, and instructs the caller to retry the same session and cursor. A delayed

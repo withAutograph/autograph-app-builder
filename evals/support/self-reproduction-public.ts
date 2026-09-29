@@ -390,7 +390,7 @@ const observeOriginalStart = async (
   if (state.unresolvedStartResult && !canRecoverStart(state.unresolvedStartResult)) {
     return false;
   }
-  if (state.startSubmitted && originalStart.prompt !== undefined) {
+  if (state.startSubmitted) {
     if (await recover()) {
       return true;
     }
@@ -403,11 +403,7 @@ const observeOriginalStart = async (
   if (observe(await transport.call("autograph_start", originalStart))) {
     return true;
   }
-  if (
-    originalStart.prompt !== undefined &&
-    state.unresolvedStartResult &&
-    canRecoverStart(state.unresolvedStartResult)
-  ) {
+  if (state.unresolvedStartResult && canRecoverStart(state.unresolvedStartResult)) {
     return await recover();
   }
   return false;

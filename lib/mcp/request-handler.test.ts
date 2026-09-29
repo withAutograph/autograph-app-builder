@@ -171,6 +171,8 @@ describe("branded public tool mapping", () => {
       status: "waiting" as const,
     };
     const service = {
+      // oxlint-disable-next-line eslint/require-await -- Preserve the async alias test interface.
+      bindStartAlias: vi.fn(async () => {}),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async cancel() {
         return result;
@@ -197,6 +199,8 @@ describe("branded public tool mapping", () => {
       async send() {
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- Preserve the async alias test interface.
+      settleStartAlias: vi.fn(async () => {}),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async start(input: Parameters<EveSessionService["start"]>[0]) {
         calls.push({ input, operation: "start" });
@@ -229,7 +233,11 @@ describe("branded public tool mapping", () => {
           });
           expect(handoffId).toBe("123e4567-e89b-42d3-a456-426614174000");
           return redeemed
-            ? { sessionId: "session-one", status: "redeemed" as const }
+            ? {
+                deterministicClientRequestId: `handoff:${"a".repeat(64)}`,
+                sessionId: "session-one",
+                status: "redeemed" as const,
+              }
             : {
                 deterministicClientRequestId: `handoff:${"a".repeat(64)}`,
                 prompt:
@@ -304,6 +312,8 @@ describe("branded public tool mapping", () => {
       status: "waiting" as const,
     };
     const service = {
+      // oxlint-disable-next-line eslint/require-await -- Preserve the async alias test interface.
+      bindStartAlias: vi.fn(async () => {}),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async cancel() {
         return result;
@@ -324,6 +334,8 @@ describe("branded public tool mapping", () => {
       async send() {
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- Preserve the async alias test interface.
+      settleStartAlias: vi.fn(async () => {}),
       start,
     } satisfies EveSessionService;
     const wrapped = withHostedBuilderHandoffs({
@@ -386,6 +398,8 @@ describe("branded public tool mapping", () => {
       status: "ready" as const,
     }));
     const service = {
+      // oxlint-disable-next-line eslint/require-await -- Preserve the async alias test interface.
+      bindStartAlias: vi.fn(async () => {}),
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       async cancel() {
         return result;
@@ -406,6 +420,8 @@ describe("branded public tool mapping", () => {
       async send() {
         return result;
       },
+      // oxlint-disable-next-line eslint/require-await -- Preserve the async alias test interface.
+      settleStartAlias: vi.fn(async () => {}),
       start,
     } satisfies EveSessionService;
     const wrapped = withHostedBuilderHandoffs({

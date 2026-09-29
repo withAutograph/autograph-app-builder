@@ -1526,6 +1526,52 @@ export function createHostedEveSessionService(input: {
   }
 
   return {
+    async bindStartAlias(request) {
+      requireHostedOperationScope(principal, "start");
+      if (request.clientRequestId === request.canonicalClientRequestId) {
+        return;
+      }
+      const timestamp = now();
+      const candidate = hostedOperationRecordSchema.parse({
+        clientRequestId: request.clientRequestId,
+        createdAtEpochMs: timestamp,
+        kind: "start",
+        operationId: stableId("op", {
+          clientRequestId: request.clientRequestId,
+          kind: "start",
+          tenant: [
+            principal.issuer,
+            principal.audience,
+            principal.workspaceId,
+            principal.ownerUserId,
+          ],
+        }),
+        principal,
+        requestDigest: digest(
+          Object.fromEntries([
+            ["kind", "start"],
+            [
+              "request",
+              { clientRequestId: request.clientRequestId, handoffId: request.sourceHandoffId },
+            ],
+            ["sessionId", undefined],
+          ]),
+        ),
+        startAlias: {
+          canonicalClientRequestId: request.canonicalClientRequestId,
+          sourceHandoffId: request.sourceHandoffId,
+        },
+        state: "reserved",
+        updatedAtEpochMs: timestamp,
+        version: 1,
+      });
+      const reservation = reserveOperationResultSchema.parse(
+        await input.store.reserveOperation(principal, candidate),
+      );
+      if (reservation.disposition !== "reserved" && reservation.disposition !== "existing") {
+        throw new HostedIdempotencyConflictError();
+      }
+    },
     async cancel({ sessionId, turnId }) {
       requireHostedOperationScope(principal, "cancel");
       const session = await requireSession(sessionId);
@@ -1615,13 +1661,32 @@ export function createHostedEveSessionService(input: {
           status: "failed" as const,
         };
       }
-      const operation = hostedOperationRecordSchema.parse(stored);
+      let operation = hostedOperationRecordSchema.parse(stored);
       if (
-        operation.kind !== "start" ||
+        (operation.kind !== "start" && operation.kind !== "resume") ||
         operation.clientRequestId !== clientRequestId ||
         tenantKeyFor(operation.principal) !== tenantKeyFor(principal)
       ) {
         throw new HostedSubmissionUnknownError();
+      }
+      const { startAlias } = operation;
+      if (startAlias !== undefined && operation.state !== "succeeded") {
+        const canonicalStart = await input.store.getStartOperation(
+          principal,
+          startAlias.canonicalClientRequestId,
+        );
+        if (canonicalStart === null) {
+          throw new HostedSubmissionUnknownError();
+        }
+        operation = hostedOperationRecordSchema.parse(canonicalStart);
+        if (
+          operation.kind !== "start" ||
+          operation.clientRequestId !== startAlias.canonicalClientRequestId ||
+          operation.startAlias !== undefined ||
+          tenantKeyFor(operation.principal) !== tenantKeyFor(principal)
+        ) {
+          throw new HostedSubmissionUnknownError();
+        }
       }
       if (operation.state === "rejected") {
         throw new HostedRejectedOperationError(operation.safeErrorCode);
@@ -1629,7 +1694,16 @@ export function createHostedEveSessionService(input: {
       if (operation.state !== "succeeded") {
         throw new HostedSubmissionUnknownError();
       }
-      const session = await requireBoundSucceededStartSession(operation);
+      const session =
+        operation.kind === "start"
+          ? await requireBoundSucceededStartSession(operation)
+          : await requireSession(operation.sessionId);
+      if (
+        startAlias !== undefined &&
+        (session.version !== 2 || session.sourceHandoffId !== startAlias.sourceHandoffId)
+      ) {
+        throw new HostedSubmissionUnknownError();
+      }
       return readSession({ cursor, limit, sessionId: session.sessionId });
     },
     async list({ cursor, limit }) {
@@ -1765,8 +1839,44 @@ export function createHostedEveSessionService(input: {
         sessionId: request.sessionId,
       });
     },
+    async settleStartAlias(request) {
+      requireHostedOperationScope(principal, "start");
+      if (request.clientRequestId === request.canonicalClientRequestId) {
+        return;
+      }
+      if (input.store.settleStartAlias === undefined) {
+        throw new HostedSubmissionUnknownError();
+      }
+      await input.store.settleStartAlias({ ...request, principal });
+    },
+
     async start(request) {
       requireHostedOperationScope(principal, "start");
+      const prior = await input.store.getStartOperation?.(principal, request.clientRequestId);
+      if (prior !== undefined && prior !== null) {
+        const operation = hostedOperationRecordSchema.parse(prior);
+        const expectedDigest = digest(
+          Object.fromEntries([
+            ["kind", operation.kind],
+            ["request", request],
+            ["sessionId", operation.kind === "resume" ? request.resumeSessionId : undefined],
+          ]),
+        );
+        if (
+          (operation.kind !== "start" && operation.kind !== "resume") ||
+          operation.clientRequestId !== request.clientRequestId ||
+          tenantKeyFor(operation.principal) !== tenantKeyFor(principal) ||
+          operation.requestDigest !== expectedDigest
+        ) {
+          throw new HostedIdempotencyConflictError();
+        }
+        if (operation.state === "succeeded") {
+          await (operation.kind === "start"
+            ? requireBoundSucceededStartSession(operation)
+            : requireSession(operation.sessionId));
+          return operation.result;
+        }
+      }
       if (request.resumeSessionId !== undefined) {
         const stored = await requireSession(request.resumeSessionId);
         let existing = toDurableHostedSessionRecord(stored);
@@ -1862,12 +1972,48 @@ export function createHostedEveSessionService(input: {
         }
         if (!terminal) {
           try {
-            return await readSession({
+            const result = await readSession({
               cursor: 0,
               limit: 100,
               recoverUnavailable: false,
               sessionId: existing.sessionId,
             });
+            if (input.store.bindExistingStart === undefined) {
+              throw new HostedSubmissionUnknownError();
+            }
+            const boundSession = await requireSession(existing.sessionId);
+            const timestamp = now();
+            const candidate = hostedOperationRecordSchema.parse({
+              clientRequestId: request.clientRequestId,
+              createdAtEpochMs: timestamp,
+              kind: "start",
+              operationId: stableId("op", {
+                clientRequestId: request.clientRequestId,
+                kind: "start",
+                tenant: [
+                  principal.issuer,
+                  principal.audience,
+                  principal.workspaceId,
+                  principal.ownerUserId,
+                ],
+              }),
+              principal,
+              requestDigest: digest(
+                Object.fromEntries([
+                  ["kind", "start"],
+                  ["request", request],
+                  ["sessionId", undefined],
+                ]),
+              ),
+              result,
+              sessionId: existing.sessionId,
+              sessionRecordDigest: hostedSessionCreationDigest(boundSession),
+              state: "succeeded",
+              updatedAtEpochMs: timestamp,
+              version: 1,
+            });
+            await input.store.bindExistingStart(principal, candidate);
+            return result;
           } catch (error) {
             if (!(error instanceof HostedAdapterSessionUnavailableError)) {
               throw error;

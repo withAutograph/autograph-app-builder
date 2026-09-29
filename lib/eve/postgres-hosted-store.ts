@@ -16,6 +16,8 @@ import {
   hostedSessionRecordSchema,
   toDurableHostedSessionRecord,
   withoutHostedOperationError,
+  succeededStartAlias,
+  assertExistingStartSession,
 } from "./hosted-store";
 import type { HostedEveStore, HostedOperationRecord, HostedSessionRecord } from "./hosted-store";
 import { createPostgresHostedCheckpointHistory } from "./postgres-hosted-checkpoint-history";
@@ -252,8 +254,11 @@ function isExactReservation(existing: HostedOperationRecord, candidate: HostedOp
     existing.requestDigest === candidate.requestDigest &&
     existing.kind === candidate.kind &&
     existing.clientRequestId === candidate.clientRequestId &&
-    existing.sessionId === candidate.sessionId &&
-    existing.resumeSessionId === candidate.resumeSessionId
+    (candidate.kind === "start" || existing.sessionId === candidate.sessionId) &&
+    existing.resumeSessionId === candidate.resumeSessionId &&
+    existing.startAlias?.canonicalClientRequestId ===
+      candidate.startAlias?.canonicalClientRequestId &&
+    existing.startAlias?.sourceHandoffId === candidate.startAlias?.sourceHandoffId
   );
 }
 
@@ -279,6 +284,42 @@ function assertReserved(
 export function createPostgresHostedEveStore(database: Database): HostedEveStore {
   const checkpointHistory = createPostgresHostedCheckpointHistory(database);
   return {
+    async bindExistingStart(principalInput, candidateInput) {
+      const principal = hostedPrincipalSchema.parse(principalInput);
+      const candidate = hostedOperationRecordSchema.parse(candidateInput);
+      if (
+        candidate.sessionId === undefined ||
+        tenantKeyFor(principal) !== tenantKeyFor(candidate.principal)
+      ) {
+        throw new Error("Hosted store principal mismatch.");
+      }
+      const { sessionId } = candidate;
+      return await database.transaction(async (transaction) => {
+        const session = await sessionById(transaction, principal, sessionId, true);
+        if (session === null) {
+          throw new Error(SESSION_NOT_FOUND);
+        }
+        assertExistingStartSession(candidate, session);
+        const inserted = await transaction
+          .insert(agentOperations)
+          .values(operationValues(candidate))
+          .onConflictDoNothing()
+          .returning();
+        if (inserted[0] !== undefined) {
+          return parseHostedOperationRow(inserted[0]);
+        }
+        const existing = await operationByRequest(
+          transaction,
+          principal,
+          "start",
+          candidate.clientRequestId,
+        );
+        if (existing === null || !isExactReservation(existing, candidate)) {
+          throw new Error("The existing-session start request conflicts with its saved receipt.");
+        }
+        return existing;
+      });
+    },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async getSession(principalInput, sessionId) {
       const principal = hostedPrincipalSchema.parse(principalInput);
@@ -287,7 +328,10 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
 
     async getStartOperation(principalInput, clientRequestId) {
       const principal = hostedPrincipalSchema.parse(principalInput);
-      return await operationByRequest(database, principal, "start", clientRequestId);
+      return (
+        (await operationByRequest(database, principal, "start", clientRequestId)) ??
+        (await operationByRequest(database, principal, "resume", clientRequestId))
+      );
     },
 
     async listSessions(input) {
@@ -771,6 +815,36 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     },
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async settleStartAlias(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      await database.transaction(async (transaction) => {
+        const [alias, canonical] = await Promise.all([
+          operationByRequest(transaction, principal, "start", input.clientRequestId),
+          operationByRequest(transaction, principal, "start", input.canonicalClientRequestId),
+        ]);
+        if (alias === null || canonical === null) {
+          throw new Error("The original start request binding is unavailable.");
+        }
+        const settled = succeededStartAlias(alias, canonical);
+        const updated = await transaction
+          .update(agentOperations)
+          .set(operationValues(settled))
+          .where(
+            and(
+              tenantPredicate(principal),
+              eq(agentOperations.operationId, alias.operationId),
+              eq(agentOperations.requestDigest, alias.requestDigest),
+            ),
+          )
+          .returning();
+        if (updated.length !== 1) {
+          throw new Error("The original start request binding was not durable.");
+        }
+        parseHostedOperationRow(updated[0]);
+      });
+    },
+
+    // oxlint-disable-next-line eslint/require-await -- Preserve the existing Promise-returning store interface.
     async settleSucceeded(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
       return database.transaction(async (transaction) => {

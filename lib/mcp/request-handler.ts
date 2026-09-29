@@ -72,6 +72,7 @@ export interface HostedBuilderHandoffRuntime {
     | {
         status: "redeemed";
         sessionId: string;
+        deterministicClientRequestId: string;
       }
     | {
         status: "unredeemed";
@@ -169,18 +170,32 @@ export function withHostedBuilderHandoffs(input: {
       if (request.handoffId === undefined) {
         return input.service.start(request);
       }
+      if (
+        input.service.bindStartAlias === undefined ||
+        input.service.settleStartAlias === undefined
+      ) {
+        throw new Error("Durable handoff start request recovery is unavailable.");
+      }
       const resolved = await input.handoffs.resolve({
         authority,
         handoffId: request.handoffId,
       });
+      const alias = {
+        canonicalClientRequestId: resolved.deterministicClientRequestId,
+        clientRequestId: request.clientRequestId,
+      };
+      await input.service.bindStartAlias({ ...alias, sourceHandoffId: request.handoffId });
       if (resolved.status === "redeemed") {
-        return input.service.recoverStart === undefined
-          ? Promise.reject(new Error("handoff-start-recovery-unavailable"))
-          : input.service.recoverStart({
-              cursor: 0,
-              limit: 100,
-              sessionId: resolved.sessionId,
-            });
+        if (input.service.recoverStart === undefined) {
+          throw new Error("handoff-start-recovery-unavailable");
+        }
+        const result = await input.service.recoverStart({
+          cursor: 0,
+          limit: 100,
+          sessionId: resolved.sessionId,
+        });
+        await input.service.settleStartAlias(alias);
+        return result;
       }
       const resolvedRepository = resolved.record.intent.repository.resolvedFullName;
       if (resolvedRepository !== undefined) {
@@ -198,6 +213,7 @@ export function withHostedBuilderHandoffs(input: {
         prompt: resolved.prompt,
         sourceHandoffId: request.handoffId,
       });
+      await input.service.settleStartAlias(alias);
       await input.handoffs.bindSession({
         authority,
         handoffId: request.handoffId,

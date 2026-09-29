@@ -27,7 +27,7 @@ Resume the same session and answer its outstanding product questions:
   mise run eval:self-reproduction -- --endpoint http://127.0.0.1:64613/mcp --output-dir /tmp/self-reproduction --resume --responses-file /tmp/responses.json
 Resume retains the saved original start request. A lost prompt-start response
 is read through autograph_get with its original clientRequestId before an
-exact same-request retry. Prepared handoffs use the exact original start retry.
+exact same-request retry. Lookup covers prompt, prepared handoff, and resume starts.
 
 Compare the unchanged output afterward:
   mise run eval:self-reproduction -- --report-only --candidate-root PATH [comparison options]

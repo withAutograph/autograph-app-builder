@@ -307,7 +307,7 @@ describe("public self-reproduction driver", () => {
       rmSync(output, { force: true, recursive: true });
     }
   });
-  it("uses exact public handoff retries without claiming prompt request lookup works for them", async () => {
+  it("recovers a prepared handoff by its original public request ID without another start", async () => {
     const current = state();
     const original = parsePublicStartFile(
       JSON.stringify({
@@ -330,7 +330,9 @@ describe("public self-reproduction driver", () => {
         },
       },
     });
-    expect(calls).toEqual([{ args: original, name: "autograph_start" }]);
+    expect(calls).toEqual([
+      { args: { clientRequestId: original.clientRequestId }, name: "autograph_get" },
+    ]);
     expect(() =>
       parsePublicStartFile(JSON.stringify({ ...original, source: { branch: "other" } })),
     ).toThrow();
