@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   check,
   foreignKey,
@@ -575,7 +576,7 @@ export const agentSessionCheckpointItems = pgTable(
   "agent_session_checkpoint_item",
   {
     audience: text("audience").notNull(),
-    byteLength: integer("byte_length").notNull(),
+    byteLength: bigint("byte_length", { mode: "number" }).notNull(),
     checkpointId: text("checkpoint_id").notNull(),
     digest: text("digest").notNull(),
     issuer: text("issuer").notNull(),
@@ -1492,6 +1493,75 @@ export const prototypeArtifactChunks = pgTable(
     check(
       "prototype_artifact_chunk_digest_check",
       sql`${table.chunkDigest} ~ '^[0-9a-f]{64}$' AND ${table.transferDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
+/** Staged immutable validation output; manifests make completed logs visible. */
+export const validationLogChunks = pgTable(
+  "validation_log_chunk",
+  {
+    audience: text("audience").notNull(),
+    chunkDigest: text("chunk_digest").notNull(),
+    chunkIndex: bigint("chunk_index", { mode: "number" }).notNull(),
+    command: text("command").notNull(),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    issuer: text("issuer").notNull(),
+    logId: text("log_id").notNull(),
+    ownerUserId: text("owner_user_id").notNull(),
+    sessionId: text("session_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.sessionId,
+        table.logId,
+        table.chunkIndex,
+      ],
+      name: "validation_log_chunk_tenant_pk",
+    }),
+    check("validation_log_chunk_index_check", sql`${table.chunkIndex} >= 0`),
+  ],
+);
+
+export const validationLogManifests = pgTable(
+  "validation_log_manifest",
+  {
+    attemptDigest: text("attempt_digest").notNull(),
+    audience: text("audience").notNull(),
+    byteLength: integer("byte_length").notNull(),
+    channel: text("channel").notNull(),
+    chunkCount: bigint("chunk_count", { mode: "number" }).notNull(),
+    command: text("command").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    digest: text("digest").notNull(),
+    issuer: text("issuer").notNull(),
+    logId: text("log_id").notNull(),
+    ownerUserId: text("owner_user_id").notNull(),
+    sessionId: text("session_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.sessionId,
+        table.logId,
+      ],
+      name: "validation_log_manifest_tenant_pk",
+    }),
+    check(
+      "validation_log_manifest_size_check",
+      sql`${table.byteLength} >= 0 AND ${table.chunkCount} >= 0`,
     ),
   ],
 );

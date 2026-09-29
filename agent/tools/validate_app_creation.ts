@@ -16,6 +16,8 @@ import {
   sandboxValidationCommandExecutor,
 } from "@/lib/repository/target-validation";
 import { hasTestCapability } from "@/lib/testing/test-capability";
+import { createPostgresValidationLogStore } from "@/lib/repository/postgres-validation-log-store";
+import { openHostedPostgresDatabase } from "@/lib/mcp/hosted-route";
 import {
   clearProductBehaviorEvidence,
   currentProductBehaviorEvidence,
@@ -35,6 +37,7 @@ const validationPhase = (callId: string, phase: string, detail?: string | boolea
 export default defineTool({
   description:
     "Run the repository's normal validation commands against the current applied app. Command exit status is the technical validation result; successful checks also return an independent source assessment against the original product request. Neither proves runtime behavior. This does not publish or otherwise change an external repository.",
+  // oxlint-disable-next-line eslint/complexity -- The existing workflow phase and receipt branches remain explicit.
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
     if (
@@ -64,7 +67,12 @@ export default defineTool({
       });
       ctx.abortSignal?.throwIfAborted();
       return {
+        attemptDigest: current.validationReceipt.attemptDigest,
         commandCount: current.validationReceipt.commands.length,
+        logs: current.validationReceipt.commands.map((command) => ({
+          name: command.name,
+          ...(command.logs === undefined ? {} : { logs: command.logs }),
+        })),
         productAcceptance: productAcceptanceObligations(
           current.appSpec,
           evidence,
@@ -139,13 +147,30 @@ export default defineTool({
       validationPhase(ctx.callId, "declared_local_data_ready");
     }
     validationPhase(ctx.callId, "running_repository_commands");
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!fixture && (databaseUrl === undefined || databaseUrl.length === 0)) {
+      throw new Error(
+        "Durable validation log storage is unavailable. Configure the hosted database, then retry validation.",
+      );
+    }
     const result = await executeProposalBoundValidation({
+      abortSignal: ctx.abortSignal,
       appId: current.appSpec.appId,
       apply: current.applyReceipt,
       attempt,
       dependencyLayout: current.dependencyReceipt.dependencyLayout,
       executor: fixture ? fixtureValidationCommandExecutor() : sandboxValidationCommandExecutor(),
       sandbox,
+      ...(databaseUrl === undefined
+        ? {}
+        : {
+            logStore: createPostgresValidationLogStore({
+              db: openHostedPostgresDatabase(databaseUrl),
+              sessionAuth: ctx.session.auth,
+              sessionId: ctx.session.id,
+            }),
+            sessionId: ctx.session.id,
+          }),
     });
     validationPhase(ctx.callId, "repository_commands_finished", result.ok);
     if (!result.ok) {
@@ -155,8 +180,10 @@ export default defineTool({
         validationFailure: result.receipt,
       }));
       return {
+        attemptDigest: result.receipt.attemptDigest,
         commandFailure: result.receipt.commandFailure,
         diagnostics: result.receipt.diagnostics ?? [],
+        logs: result.receipt.commands.at(-1)?.logs,
         output: result.receipt.output,
         reason: result.receipt.reason,
         reused: false,
@@ -182,7 +209,12 @@ export default defineTool({
     });
     validationPhase(ctx.callId, "applied_source_review_finished", sourceAssessment.status);
     return {
+      attemptDigest: result.receipt.attemptDigest,
       commandCount: result.receipt.commands.length,
+      logs: result.receipt.commands.map((command) => ({
+        name: command.name,
+        ...(command.logs === undefined ? {} : { logs: command.logs }),
+      })),
       productAcceptance: productAcceptanceObligations(current.appSpec, evidence, sourceAssessment),
       productBehaviorEvidence: evidence,
       reused: false,

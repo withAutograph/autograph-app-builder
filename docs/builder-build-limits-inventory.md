@@ -93,10 +93,14 @@ because its persistence adapter loads and parses the state as one JSON value.
 It is local test infrastructure, not the hosted Builder source or publication
 path. Removing that limit safely requires a paged emulator state format.
 
-Validation command diagnostics remain a separate incomplete path. The sandbox
-command API returns complete stdout and stderr as strings, and validation
-persists only sanitized matching lines in its receipt. The receipt now marks
-that filtering as truncation. Complete sanitized output is not yet retrievable
-after the sandbox is released. Closing this gap needs streaming command output,
-tenant-scoped durable log chunks, and an authenticated paged read API; removing
-the excerpt flag alone would hide lost information.
+Hosted app validation streams stdout and stderr with awaited chunk writes, so
+command output does not accumulate in one Sandbox result or process buffer.
+The validated tenant and session own immutable sanitized 32 KiB log chunks and
+their manifest. The receipt carries channel references; `get_validation_log`
+returns one authenticated page per call with a digest-bound continuation cursor.
+The filtered repair excerpt marks omitted output as truncated, while the full
+sanitized log remains readable after Sandbox cleanup. Long unseparated lines
+stream through a bounded scanner; a line containing a credential marker is
+redacted when its value cannot be safely delimited. Total command output has no
+Builder ceiling. Legacy reconciliation checks still use whole-result Sandbox
+commands and remain a separate streaming follow-up.

@@ -97,6 +97,9 @@ checkout. Applied files are not validated files. Successful repository commands
 establish technical validation, not proof that the accepted product behaviors
 work. Exercise those outcomes against the actual implementation and preserve
 honest distinctions between verified behavior and behavior still unassessed.
+When validation returns a truncated repair excerpt, use `get_validation_log`
+with the exact returned reference and each continuation cursor to inspect the
+complete sanitized command output before deciding on a repair.
 After technical validation, use `start_app_preview` with the repository's actual
 development command and the implemented app's route. It returns a private,
 expiring browser URL only after the running app answers an HTTP readiness check.
