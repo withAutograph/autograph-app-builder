@@ -8,7 +8,7 @@ import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 
 export const localPreviewSetupCommand = (appId: string): string =>
-  `mise run --skip-tools app:local -- ${appIdSchema.parse(appId)} setup`;
+  `MISE_TASK_RUN_AUTO_INSTALL=true MISE_AUTO_INSTALL=true mise run app:local -- ${appIdSchema.parse(appId)} setup`;
 
 export const appDeclaresLocalSetup = async (input: {
   appId: string;
@@ -30,7 +30,7 @@ export const appDeclaresLocalSetup = async (input: {
 export const localPreviewExecutionCommand = (appId: string): string => {
   const task = localPreviewSetupCommand(appId);
   const log = `/tmp/app-builder-local-setup-${appIdSchema.parse(appId)}.log`;
-  return `set +e\nTERM=dumb\nexport TERM\n${task} > '${log}' 2>&1\nstatus=$?\ntail -c 8000 '${log}'\nexit "$status"`;
+  return `set +e\n${task} > '${log}' 2>&1\nstatus=$?\ntail -c 8000 '${log}'\nexit "$status"`;
 };
 
 const safeOutput = (value: string): string =>
@@ -59,7 +59,7 @@ export const prepareAppLocalPreview = async (input: {
 }) => {
   const command = localPreviewExecutionCommand(input.appId);
   try {
-    let result =
+    const result =
       input.signal === undefined
         ? await input.sandbox.run({ command, workingDirectory: input.root })
         : await input.sandbox.run({
@@ -67,37 +67,13 @@ export const prepareAppLocalPreview = async (input: {
             command,
             workingDirectory: input.root,
           });
-    if (result.exitCode !== 0 && /\binitdb failed\b/iu.test(`${result.stdout}\n${result.stderr}`)) {
-      const probe = await input.sandbox.run({
-        command: "command -v initdb",
-        workingDirectory: input.root,
-      });
-      if (probe.exitCode !== 0) {
-        const install = await input.sandbox.run({
-          command: "TERM=dumb mise install conda:postgresql",
-          workingDirectory: input.root,
-        });
-        if (install.exitCode !== 0) {
-          return {
-            command: "TERM=dumb mise install conda:postgresql",
-            exitCode: install.exitCode,
-            problem:
-              "Local setup needs initdb, but it is absent from the selected checkout's runtime and mise could not install the repository-pinned PostgreSQL tool. Check the PostgreSQL declaration in .config/mise/config.toml, mise's conda backend, and the sandbox network, then retry.",
-            status: "failed" as const,
-            stderr: safeOutput(install.stderr),
-            stdout: safeOutput(install.stdout),
-          };
-        }
-        result = await input.sandbox.run({ command, workingDirectory: input.root });
-      }
-    }
     const stdout = safeOutput(result.stdout);
     const stderr = safeOutput(result.stderr);
     if (result.exitCode !== 0) {
       return {
         command,
         exitCode: result.exitCode,
-        problem: `The selected app's repository-owned local setup exited with status ${result.exitCode}. Inspect the output for a missing local PostgreSQL executable, database startup failure, or schema error. Repair that cause in the private sandbox and retry setup before opening the app preview.`,
+        problem: `The selected app's repository-owned local setup exited with status ${result.exitCode}. Inspect the output for a repository-pinned tool installation failure, local database startup failure, or schema error. Repair that cause in the private sandbox and retry setup before opening the app preview.`,
         status: "failed" as const,
         stderr,
         stdout,
