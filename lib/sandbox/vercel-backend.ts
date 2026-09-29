@@ -1,6 +1,7 @@
 import { SandboxTemplateNotProvisionedError } from "eve/sandbox";
 import type { SandboxBackend, SandboxBackendHandle, SandboxBackendPrewarmInput } from "eve/sandbox";
 import { vercel } from "eve/sandbox/vercel";
+import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { assertHostedSandboxCommandAuthority } from "./deployment-execution-lease";
@@ -127,6 +128,27 @@ function createRuntimeRecoveringBackend<BO, SO>(input: {
       : (input.providerTemplateKey?.(authoredTemplateKey) ?? authoredTemplateKey);
   const providerPrewarmTemplateKey = (authoredTemplateKey: string) =>
     input.providerTemplateKey?.(authoredTemplateKey) ?? authoredTemplateKey;
+  const selectedCheckoutCommand = `if test -e /workspace/repository || test -L /workspace/repository; then
+  if git -C /workspace/repository rev-parse --is-inside-work-tree >/dev/null 2>&1; then echo found; else echo occupied; fi
+elif git -C /vercel/sandbox rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo found
+elif find /workspace -mindepth 2 -maxdepth 2 -name .git -print -quit | grep -q .; then
+  echo found
+else
+  echo missing
+fi`;
+  const selectedCheckoutStatus = async (handle: SandboxBackendHandle<SO>) => {
+    const result = await handle.session.run({
+      command: selectedCheckoutCommand,
+      workingDirectory: "/workspace",
+    });
+    if (result.exitCode !== 0) {
+      throw new Error(
+        `Builder could not inspect the selected GitHub checkout in its Vercel sandbox (exit ${result.exitCode}). Check the sandbox command logs and retry.`,
+      );
+    }
+    return result.stdout.trim();
+  };
   return {
     async create(createInput) {
       // Eve may tag a provider attempt with a different identifier than its
@@ -144,7 +166,58 @@ function createRuntimeRecoveringBackend<BO, SO>(input: {
         templateKey: selectedGitSource ? null : providerTemplateKey(createInput.templateKey),
       };
       try {
-        return await input.backend.create(providerCreateInput);
+        const handle = await input.backend.create(providerCreateInput);
+        if (!selectedGitSource) {
+          return handle;
+        }
+        const status = await selectedCheckoutStatus(handle);
+        if (status === "found") {
+          return handle;
+        }
+        if (status === "occupied") {
+          throw new Error(
+            "Builder cannot restore its selected GitHub source: /workspace/repository is occupied by a non-Git directory. Review that sandbox before replacing it.",
+          );
+        }
+        if (status !== "missing") {
+          throw new Error(
+            `Builder received an invalid selected-checkout inspection result: ${status}.`,
+          );
+        }
+        const replacementKey = `app-builder-git-${createHash("sha256").update(createInput.sessionKey).digest("hex").slice(0, 40)}`;
+        const current = await handle.captureState();
+        if (current.metadata.sandboxName === replacementKey) {
+          throw new Error(
+            "Vercel reopened the selected GitHub sandbox without its checkout. The replacement also has no repository; inspect GitHub source options and provider creation logs before retrying.",
+          );
+        }
+        await handle.stop();
+        const replacement = await input.backend.create({
+          ...providerCreateInput,
+          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- a replacement must not reopen the stale provider sandbox named in Eve's metadata.
+          existingMetadata: undefined,
+          sessionKey: replacementKey,
+          tags: {
+            ...providerCreateInput.tags,
+            sessionId: providerCreateInput.tags?.sessionId ?? createInput.sessionKey,
+          },
+        });
+        if ((await selectedCheckoutStatus(replacement)) !== "found") {
+          await replacement.stop();
+          throw new Error(
+            "Vercel created a replacement sandbox without the selected GitHub checkout. Verify the installation's repository access and the provider Git source request, then retry this session.",
+          );
+        }
+        return {
+          captureState: async () => ({
+            ...(await replacement.captureState()),
+            sessionKey: createInput.sessionKey,
+          }),
+          session: replacement.session,
+          shutdown: () => replacement.shutdown(),
+          stop: () => replacement.stop(),
+          useSessionFn: replacement.useSessionFn,
+        } satisfies SandboxBackendHandle<SO>;
       } catch (error) {
         if (
           providerCreateInput.templateKey === null ||

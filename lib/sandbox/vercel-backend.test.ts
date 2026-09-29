@@ -431,7 +431,10 @@ describe("provider-native Vercel source", () => {
       url: "https://github.com/acme/private.git",
     });
     configureVercelSessionGitSourceResolver({ resolve, sessionId: "resumed-session" });
-    const session = { id: "resumed-session" } as SandboxSession;
+    const session = {
+      ...({ id: "resumed-session" } as SandboxSession),
+      run: vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "found" }),
+    };
     const handle = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       captureState: async () => ({ backendName: "vercel", metadata: {}, sessionKey: session.id }),
@@ -481,7 +484,10 @@ describe("provider-native Vercel source", () => {
   });
 
   it("bypasses the template snapshot for a selected Git source", async () => {
-    const session = { id: "source-session" } as SandboxSession;
+    const session = {
+      ...({ id: "source-session" } as SandboxSession),
+      run: vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "found" }),
+    };
     const handle = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       captureState: async () => ({ backendName: "vercel", metadata: {}, sessionKey: session.id }),
@@ -513,7 +519,10 @@ describe("provider-native Vercel source", () => {
   });
 
   it("uses the selected source when a provider tag differs from the durable session key", async () => {
-    const session = { id: "selected-session" } as SandboxSession;
+    const session = {
+      ...({ id: "selected-session" } as SandboxSession),
+      run: vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "found" }),
+    };
     const handle = {
       // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
       captureState: async () => ({ backendName: "vercel", metadata: {}, sessionKey: session.id }),
@@ -544,6 +553,83 @@ describe("provider-native Vercel source", () => {
       expect(create).toHaveBeenCalledWith(expect.objectContaining({ templateKey: null }));
     } finally {
       clearVercelSessionGitSource(session.id);
+    }
+  });
+
+  it("replaces an empty named sandbox with a provider-created selected Git checkout", async () => {
+    const staleStop = vi.fn().mockResolvedValue(null);
+    const staleSession = {
+      ...({ id: "selected-session" } as SandboxSession),
+      run: vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "missing" }),
+    };
+    const replacementSession = {
+      ...({ id: "replacement-session" } as SandboxSession),
+      run: vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "found" }),
+    };
+    const stale = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      captureState: async () => ({
+        backendName: "vercel",
+        metadata: { sandboxName: "old-sandbox" },
+        sessionKey: "selected-session",
+      }),
+      session: staleSession,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      shutdown: async () => {},
+      stop: staleStop,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      useSessionFn: async () => staleSession,
+    } satisfies SandboxBackendHandle;
+    const replacement = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      captureState: async () => ({
+        backendName: "vercel",
+        metadata: { sandboxName: "replacement" },
+        sessionKey: "replacement-session",
+      }),
+      session: replacementSession,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      shutdown: async () => {},
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      stop: async () => {},
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      useSessionFn: async () => replacementSession,
+    } satisfies SandboxBackendHandle;
+    let attempts = 0;
+    const create = vi.fn(
+      (_input: Parameters<ReturnType<HostedVercelBackendFactory>["create"]>[0]) => {
+        attempts += 1;
+        return Promise.resolve(attempts === 1 ? stale : replacement);
+      },
+    );
+    configureVercelSessionGitSource({
+      sessionId: "selected-session",
+      source: { token: "provider-only-token", url: "https://github.com/acme/private.git" },
+    });
+    try {
+      const backend = createHostedVercelBackend({
+        factory: backendFactory({ create, prewarm: vi.fn() }),
+      });
+      const handle = await backend.create({
+        existingMetadata: { sandboxName: "old-sandbox" },
+        runtimeContext,
+        sessionKey: "selected-session",
+        templateKey,
+      });
+      expect(create).toHaveBeenCalledTimes(2);
+      expect(create.mock.calls[1]?.[0].sessionKey).toMatch(/^app-builder-git-[0-9a-f]{40}$/u);
+      expect(create.mock.calls[1]?.[0]).toMatchObject({
+        tags: { sessionId: "selected-session" },
+        templateKey: null,
+      });
+      expect(create.mock.calls[1]?.[0].existingMetadata).toBeUndefined();
+      expect(staleStop).toHaveBeenCalledOnce();
+      expect(await handle.captureState()).toMatchObject({
+        metadata: { sandboxName: "replacement" },
+        sessionKey: "selected-session",
+      });
+    } finally {
+      clearVercelSessionGitSource("selected-session");
     }
   });
 
