@@ -31,6 +31,7 @@ import type {
   HostedOperationKind,
   HostedOperationRecord,
   HostedPagedCheckpointMetadata,
+  HostedPagedSessionBase,
   HostedSessionCheckpoint,
   HostedSessionRecord,
   HostedSessionTimeoutPolicy,
@@ -512,12 +513,114 @@ async function recoveryPrompt(input: {
   });
 }
 
-interface PagedObservationSpool {
+interface PagedEventSpool {
   directory: string;
   path: string;
   eventCount: number;
   digest: string;
+}
+
+interface PagedObservationSpool extends PagedEventSpool {
   observation: Awaited<ReturnType<NonNullable<HostedEveTransport["observe"]>>>;
+}
+
+// eslint-disable-next-line eslint/func-style -- Snapshot transports still return one materialized value, but durable persistence is paged.
+async function spoolSnapshotEvents(snapshot: HostedEngineSnapshot): Promise<PagedEventSpool> {
+  let directory: string;
+  try {
+    directory = await mkdtemp(nodePath.join(tmpdir(), "app-builder-checkpoint-"));
+  } catch (error) {
+    throw new Error(
+      "Builder could not create private Eve checkpoint material. Check available local disk space and retry this saved session.",
+      { cause: error },
+    );
+  }
+  const path = nodePath.join(directory, "events.ndjson");
+  let file: Awaited<ReturnType<typeof open>> | null = null;
+  try {
+    file = await open(path, "wx", 0o600);
+    const hash = createHash("sha256");
+    let eventCount = 0;
+    for (const candidate of snapshot.events) {
+      if (candidate === null || typeof candidate !== "object") {
+        continue;
+      }
+      const projected = toPublicEvent(candidate as InternalEveEvent);
+      if (projected === null) {
+        continue;
+      }
+      const parsed = publicEveEventSchema.safeParse({ ...projected, index: eventCount });
+      if (!parsed.success) {
+        continue;
+      }
+      const line = `${JSON.stringify(parsed.data)}\n`;
+      try {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Checkpoint spool writes must preserve backpressure.
+        await file.writeFile(line);
+      } catch (error) {
+        throw new Error(
+          `Builder could not write private Eve checkpoint material at ${path}. Free local disk space and retry this saved session.`,
+          { cause: error },
+        );
+      }
+      hash.update(line);
+      eventCount += 1;
+    }
+    await file.sync();
+    await file.close();
+    file = null;
+    return { digest: hash.digest("hex"), directory, eventCount, path };
+  } catch (error) {
+    if (file !== null) {
+      try {
+        await file.close();
+      } catch {
+        // The original spool or stream error remains authoritative.
+      }
+    }
+    await rm(directory, { force: true, recursive: true });
+    throw error;
+  }
+}
+
+const checkpointMetadataForSnapshot = (
+  snapshot: HostedEngineSnapshot,
+  capturedAtEpochMs: number,
+  truncatedBeforeIndex?: number,
+): HostedPagedCheckpointMetadata => {
+  const internalEvents = snapshot.events.filter(
+    (event): event is InternalEveEvent => event !== null && typeof event === "object",
+  );
+  const inputRequests = outstandingInternalEveRequests(internalEvents);
+  return {
+    capturedAtEpochMs,
+    ...(inputRequests.length === 0 ? {} : { inputRequests }),
+    ...(snapshot.prototype === undefined ? {} : { prototype: snapshot.prototype }),
+    status: snapshot.status,
+    ...(truncatedBeforeIndex === undefined ? {} : { truncatedBeforeIndex }),
+    ...(snapshot.uiPreview === undefined ? {} : { uiPreview: snapshot.uiPreview }),
+    version: 1,
+    ...(snapshot.workingPreview === undefined ? {} : { workingPreview: snapshot.workingPreview }),
+  };
+};
+
+// eslint-disable-next-line eslint/func-style -- Project snapshot events lazily for progress recovery.
+function* publicSnapshotEvents(snapshot: HostedEngineSnapshot) {
+  let eventCount = 0;
+  for (const candidate of snapshot.events) {
+    if (candidate === null || typeof candidate !== "object") {
+      continue;
+    }
+    const projected = toPublicEvent(candidate as InternalEveEvent);
+    if (projected === null) {
+      continue;
+    }
+    const parsed = publicEveEventSchema.safeParse({ ...projected, index: eventCount });
+    if (parsed.success) {
+      eventCount += 1;
+      yield parsed.data;
+    }
+  }
 }
 
 // eslint-disable-next-line eslint/func-style -- The spool is consumed only after Eve's durable tail is verified.
@@ -593,7 +696,7 @@ async function spoolObservedSession(input: {
 }
 
 // eslint-disable-next-line eslint/func-style -- Each verified line is released after staging.
-async function* readSpoolEvents(spool: PagedObservationSpool) {
+async function* readSpoolEvents(spool: PagedEventSpool) {
   const hash = createHash("sha256");
   let count = 0;
   const lines = createInterface({ crlfDelay: Infinity, input: createReadStream(spool.path) });
@@ -719,6 +822,12 @@ export function createHostedEveSessionService(input: {
     dispatch: (operationId: string) => Promise<{
       result: EveSessionResult;
       newSession?: z.infer<typeof hostedSessionRecordSchema>;
+      newSessionPaged?: {
+        session: HostedPagedSessionBase;
+        metadata: HostedPagedCheckpointMetadata;
+        events: AsyncIterable<z.infer<typeof publicEveEventSchema>>;
+        cleanup: () => Promise<void>;
+      };
     }>;
   }): Promise<EveSessionResult> {
     const requestDigest = digest({
@@ -833,6 +942,12 @@ export function createHostedEveSessionService(input: {
     let dispatched: {
       result: EveSessionResult;
       newSession?: z.infer<typeof hostedSessionRecordSchema>;
+      newSessionPaged?: {
+        session: HostedPagedSessionBase;
+        metadata: HostedPagedCheckpointMetadata;
+        events: AsyncIterable<z.infer<typeof publicEveEventSchema>>;
+        cleanup: () => Promise<void>;
+      };
     };
     try {
       dispatched = await options.dispatch(operationId);
@@ -885,22 +1000,45 @@ export function createHostedEveSessionService(input: {
         dispatched.newSession === undefined
           ? undefined
           : hostedSessionRecordSchema.parse(dispatched.newSession);
+      const dispatchedPagedSession = dispatched.newSessionPaged;
+      const dispatchedSessionId =
+        dispatchedSession?.sessionId ?? dispatchedPagedSession?.session.sessionId;
       if (
-        (options.kind === "start" && dispatchedSession === undefined) ||
-        (options.kind !== "start" && dispatchedSession !== undefined) ||
+        (dispatchedSession !== undefined && dispatchedPagedSession !== undefined) ||
+        (options.kind === "start" && dispatchedSessionId === undefined) ||
+        (options.kind !== "start" && dispatchedSessionId !== undefined) ||
         (dispatchedSession !== undefined &&
-          dispatchedResult.sessionId !== dispatchedSession.sessionId)
+          dispatchedResult.sessionId !== dispatchedSession.sessionId) ||
+        (dispatchedPagedSession !== undefined &&
+          dispatchedResult.sessionId !== dispatchedPagedSession.session.sessionId)
       ) {
         throw new HostedSubmissionUnknownError();
       }
-      const settled = await input.store.settleSucceeded({
-        nowEpochMs: now(),
-        operationId,
-        principal,
-        requestDigest,
-        result: dispatchedResult,
-        ...(dispatchedSession === undefined ? {} : { session: dispatchedSession }),
-      });
+      let settled: HostedOperationRecord;
+      if (dispatchedPagedSession === undefined) {
+        settled = await input.store.settleSucceeded({
+          nowEpochMs: now(),
+          operationId,
+          principal,
+          requestDigest,
+          result: dispatchedResult,
+          ...(dispatchedSession === undefined ? {} : { session: dispatchedSession }),
+        });
+      } else {
+        if (input.store.settleSucceededPaged === undefined) {
+          throw new HostedSubmissionUnknownError();
+        }
+        settled = await input.store.settleSucceededPaged({
+          events: dispatchedPagedSession.events,
+          metadata: dispatchedPagedSession.metadata,
+          nowEpochMs: now(),
+          operationId,
+          principal,
+          requestDigest,
+          result: dispatchedResult,
+          session: dispatchedPagedSession.session,
+        });
+      }
       const verified = requireOwnedOperation(settled, {
         clientRequestId: options.request.clientRequestId,
         kind: options.kind,
@@ -926,11 +1064,38 @@ export function createHostedEveSessionService(input: {
         if (verified.sessionRecordDigest !== hostedSessionCreationDigest(dispatchedSession)) {
           throw new HostedSubmissionUnknownError();
         }
-        const verifiedSession = await requireBoundSucceededStartSession(verified);
+        const verifiedSession = toDurableHostedSessionRecord(
+          await requireBoundSucceededStartSession(verified),
+        );
         if (
           hostedSessionRecordDigest(verifiedSession) !==
             hostedSessionRecordDigest(dispatchedSession) ||
           canonical(verifiedSession) !== canonical(dispatchedSession)
+        ) {
+          throw new HostedSubmissionUnknownError();
+        }
+      }
+      if (dispatchedPagedSession !== undefined) {
+        if (verifiedResult.sessionId !== dispatchedPagedSession.session.sessionId) {
+          throw new HostedSubmissionUnknownError();
+        }
+        const verifiedSession = toDurableHostedSessionRecord(
+          await requireBoundSucceededStartSession(verified),
+        );
+        const {
+          checkpoint: _checkpoint,
+          checkpointDigest: _checkpointDigest,
+          checkpointProgressDigest: _checkpointProgressDigest,
+          checkpointRef: _checkpointRef,
+          ...verifiedBase
+        } = verifiedSession;
+        void _checkpoint;
+        void _checkpointDigest;
+        void _checkpointProgressDigest;
+        void _checkpointRef;
+        if (
+          verifiedSession.checkpointRef === undefined ||
+          canonical(verifiedBase) !== canonical(dispatchedPagedSession.session)
         ) {
           throw new HostedSubmissionUnknownError();
         }
@@ -964,6 +1129,10 @@ export function createHostedEveSessionService(input: {
       // Mutations other than start remain non-replayable. If the transaction
       // committed and only its response was lost, exact retry reads the result.
       throw new HostedSubmissionUnknownError();
+    } finally {
+      if (dispatched.newSessionPaged !== undefined) {
+        await dispatched.newSessionPaged.cleanup();
+      }
     }
   }
 
@@ -971,21 +1140,79 @@ export function createHostedEveSessionService(input: {
   async function observeSnapshot(
     sessionId: string,
     snapshot: HostedEngineSnapshot,
-    resumability: "live" | "terminal" = ["completed", "failed", "cancelled"].includes(
-      snapshot.status,
-    )
+    resumability: "live" | "terminal" | "checkpoint" = [
+      "completed",
+      "failed",
+      "cancelled",
+    ].includes(snapshot.status)
       ? "terminal"
       : "live",
+    capturedAtEpochMs = now(),
   ) {
-    const timestamp = now();
     const completeResult = projectSnapshot(sessionId, snapshot, 0, 100);
-    const checkpoint = checkpointForSnapshot(sessionId, snapshot, timestamp);
+    if (
+      input.store.observeSessionPaged !== undefined &&
+      input.store.readCheckpointPage !== undefined
+    ) {
+      const current = toDurableHostedSessionRecord(await requireSession(sessionId));
+      let truncatedBeforeIndex = current.checkpoint?.truncatedBeforeIndex;
+      if (current.checkpointRef !== undefined) {
+        const priorPage = await input.store.readCheckpointPage({
+          checkpointRef: current.checkpointRef,
+          cursor: 0,
+          limit: 1,
+          principal,
+          sessionId,
+        });
+        ({ truncatedBeforeIndex } = priorPage.metadata);
+      }
+      const metadata = checkpointMetadataForSnapshot(
+        snapshot,
+        capturedAtEpochMs,
+        truncatedBeforeIndex,
+      );
+      const spool = await spoolSnapshotEvents(snapshot);
+      try {
+        const summary = eveSessionResultSchema.parse({
+          cursor: 0,
+          events: [],
+          ...(metadata.inputRequests === undefined
+            ? {}
+            : { inputRequests: metadata.inputRequests }),
+          ...(metadata.prototype === undefined ? {} : { prototype: metadata.prototype }),
+          sessionId,
+          status: metadata.status,
+          ...(metadata.uiPreview === undefined ? {} : { uiPreview: metadata.uiPreview }),
+          ...(metadata.workingPreview === undefined
+            ? {}
+            : { workingPreview: metadata.workingPreview }),
+        });
+        const observed = await input.store.observeSessionPaged({
+          ...(summary.uiPreview?.appId === undefined ? {} : { appId: summary.uiPreview.appId }),
+          events: readSpoolEvents(spool),
+          expectedCheckpointDigest: current.checkpointDigest,
+          metadata,
+          nowEpochMs: capturedAtEpochMs,
+          principal,
+          resumability,
+          sessionId,
+          stage: stageForResult(summary),
+        });
+        if (observed.status === "cancelled") {
+          return completeResult;
+        }
+        return completeResult;
+      } finally {
+        await rm(spool.directory, { force: true, recursive: true });
+      }
+    }
+    const checkpoint = checkpointForSnapshot(sessionId, snapshot, capturedAtEpochMs);
     const observed = await input.store.observeSession?.({
       checkpoint,
       ...(completeResult.uiPreview?.appId === undefined
         ? {}
         : { appId: completeResult.uiPreview.appId }),
-      nowEpochMs: timestamp,
+      nowEpochMs: capturedAtEpochMs,
       principal,
       resumability,
       sessionId,
@@ -1179,15 +1406,32 @@ export function createHostedEveSessionService(input: {
         principal,
       });
       const observedAt = now();
-      const observedCheckpoint = checkpointForSnapshot(sessionId, snapshot, observedAt);
-      if (
+      const canPageCheckpoint =
+        input.store.observeSessionPaged !== undefined &&
+        input.store.readCheckpointPage !== undefined;
+      const legacyCheckpoint = canPageCheckpoint
+        ? undefined
+        : checkpointForSnapshot(sessionId, snapshot, observedAt);
+      const observed = await observeSnapshot(sessionId, snapshot, "live", observedAt);
+      const current = toDurableHostedSessionRecord(await requireSession(sessionId));
+      const progressUnchanged = canPageCheckpoint
+        ? current.checkpointProgressDigest !== undefined &&
+          current.checkpointProgressDigest === session.checkpointProgressDigest
+        : legacyCheckpoint !== undefined &&
+          session.checkpointProgressDigest ===
+            hostedSessionCheckpointProgressDigest(legacyCheckpoint);
+      const idleCheckpointDue =
         snapshot.status === "working" &&
-        session.checkpointProgressDigest ===
-          hostedSessionCheckpointProgressDigest(observedCheckpoint) &&
-        observedAt >= session.lastProgressAtEpochMs + sessionTimeoutPolicy.idleTimeoutMs
-      ) {
-        const checkpoint = session.checkpoint ?? observedCheckpoint;
-        const observed = await input.store.observeSession?.({
+        progressUnchanged &&
+        observedAt >= session.lastProgressAtEpochMs + sessionTimeoutPolicy.idleTimeoutMs;
+      if (idleCheckpointDue && canPageCheckpoint) {
+        await observeSnapshot(sessionId, snapshot, "checkpoint", observedAt);
+        const checkpointed = toDurableHostedSessionRecord(await requireSession(sessionId));
+        return resultFromDurableCheckpoint(sessionId, checkpointed, cursor, limit);
+      }
+      if (idleCheckpointDue && legacyCheckpoint !== undefined) {
+        const checkpoint = session.checkpoint ?? legacyCheckpoint;
+        const checkpointed = await input.store.observeSession?.({
           ...(session.appId === undefined ? {} : { appId: session.appId }),
           checkpoint,
           nowEpochMs: observedAt,
@@ -1196,33 +1440,27 @@ export function createHostedEveSessionService(input: {
           sessionId,
           stage: session.stage,
         });
-        const retained = observed && toDurableHostedSessionRecord(observed).checkpoint;
+        const retained = checkpointed && toDurableHostedSessionRecord(checkpointed).checkpoint;
         return resultFromHostedCheckpoint(sessionId, retained ?? checkpoint, cursor, limit);
       }
-      const observed = await observeSnapshot(sessionId, snapshot);
       if (observed.status === "cancelled") {
         const durable = toDurableHostedSessionRecord(await requireSession(sessionId));
         if (durable.checkpoint) {
           return resultFromHostedCheckpoint(sessionId, durable.checkpoint, cursor, limit);
         }
+        if (durable.checkpointRef !== undefined) {
+          return resultFromDurableCheckpoint(sessionId, durable, cursor, limit);
+        }
       }
       const result = projectSnapshot(sessionId, snapshot, cursor, limit);
       if (
         result.status !== "working" ||
-        session.checkpointProgressDigest !==
-          hostedSessionCheckpointProgressDigest(observedCheckpoint) ||
+        !progressUnchanged ||
         observedAt - session.lastProgressAtEpochMs < HOSTED_PROGRESS_NOTICE_MS
       ) {
         return result;
       }
-      const recentEvents = snapshot.events.slice(-512).flatMap((event) => {
-        if (event === null || typeof event !== "object") {
-          return [];
-        }
-        const projected = toPublicEvent(event as InternalEveEvent);
-        return projected === null ? [] : [projected];
-      });
-      const operation = pendingBuilderOperation(recentEvents);
+      const operation = pendingBuilderOperation(publicSnapshotEvents(snapshot));
       const elapsedMinutes = Math.max(
         1,
         Math.floor((observedAt - session.lastProgressAtEpochMs) / 60_000),
@@ -1523,35 +1761,54 @@ export function createHostedEveSessionService(input: {
               );
               const result = projectSnapshot(sessionId, response.snapshot);
               const timestamp = now();
+              const sessionBase: HostedPagedSessionBase = {
+                adapterGeneration: 1,
+                adapterSessionId: response.adapterSessionId,
+                ...(result.uiPreview?.appId === undefined && existing.appId === undefined
+                  ? {}
+                  : { appId: result.uiPreview?.appId ?? existing.appId }),
+                createdAtEpochMs: timestamp,
+                lastProgressAtEpochMs: timestamp,
+                originAdapterSessionId: response.adapterSessionId,
+                parentSessionId: existing.sessionId,
+                principal,
+                resumability: ["completed", "failed", "cancelled"].includes(result.status)
+                  ? "terminal"
+                  : "live",
+                sessionId,
+                ...(existing.sourceHandoffId ? { sourceHandoffId: existing.sourceHandoffId } : {}),
+                stage: stageForResult(result),
+                status: result.status,
+                title: existing.title,
+                updatedAtEpochMs: timestamp,
+                version: 2,
+              };
+              if (
+                input.store.settleSucceededPaged !== undefined &&
+                input.store.readCheckpointPage !== undefined
+              ) {
+                const spool = await spoolSnapshotEvents(response.snapshot);
+                return {
+                  newSessionPaged: {
+                    cleanup: () => rm(spool.directory, { force: true, recursive: true }),
+                    events: readSpoolEvents(spool),
+                    metadata: checkpointMetadataForSnapshot(response.snapshot, timestamp),
+                    session: sessionBase,
+                  },
+                  result,
+                };
+              }
               const checkpoint = checkpointForSnapshot(sessionId, response.snapshot, timestamp);
               const { appId: existingAppId } = existing;
               const { appId: implementationAppId } = result.uiPreview ?? {};
               const appId = implementationAppId ?? existingAppId;
               return {
                 newSession: durableHostedSessionRecordSchema.parse({
-                  adapterGeneration: 1,
-                  adapterSessionId: response.adapterSessionId,
+                  ...sessionBase,
                   ...(appId === undefined ? {} : { appId }),
                   checkpoint,
                   checkpointDigest: hostedSessionCheckpointDigest(checkpoint),
                   checkpointProgressDigest: hostedSessionCheckpointProgressDigest(checkpoint),
-                  createdAtEpochMs: timestamp,
-                  lastProgressAtEpochMs: timestamp,
-                  originAdapterSessionId: response.adapterSessionId,
-                  parentSessionId: existing.sessionId,
-                  principal,
-                  resumability: ["completed", "failed", "cancelled"].includes(result.status)
-                    ? "terminal"
-                    : "live",
-                  sessionId,
-                  ...(existing.sourceHandoffId
-                    ? { sourceHandoffId: existing.sourceHandoffId }
-                    : {}),
-                  stage: stageForResult(result),
-                  status: result.status,
-                  title: existing.title,
-                  updatedAtEpochMs: timestamp,
-                  version: 2,
                 }),
                 result,
               };
@@ -1578,12 +1835,16 @@ export function createHostedEveSessionService(input: {
         if (
           (existing.checkpoint === undefined && existing.checkpointRef === undefined) ||
           existing.checkpointDigest === undefined ||
-          input.store.replaceSessionAdapter === undefined
+          (input.store.replaceSessionAdapter === undefined &&
+            input.store.replaceSessionAdapterPaged === undefined)
         ) {
           throw new HostedSessionRecoveryUnavailableError();
         }
         const { replaceSessionAdapter } = input.store;
-        if (replaceSessionAdapter === undefined) {
+        if (
+          replaceSessionAdapter === undefined &&
+          input.store.replaceSessionAdapterPaged === undefined
+        ) {
           throw new HostedSessionRecoveryUnavailableError();
         }
         return mutate({
@@ -1684,6 +1945,63 @@ export function createHostedEveSessionService(input: {
             }
             const result = projectSnapshot(existing.sessionId, response.snapshot);
             const timestamp = now();
+            if (
+              input.store.replaceSessionAdapterPaged !== undefined &&
+              input.store.readCheckpointPage !== undefined
+            ) {
+              let truncatedBeforeIndex = existing.checkpoint?.truncatedBeforeIndex;
+              if (existing.checkpointRef !== undefined) {
+                const priorPage = await input.store.readCheckpointPage({
+                  checkpointRef: existing.checkpointRef,
+                  cursor: 0,
+                  limit: 1,
+                  principal,
+                  sessionId: existing.sessionId,
+                });
+                ({ truncatedBeforeIndex } = priorPage.metadata);
+              }
+              const metadata = checkpointMetadataForSnapshot(
+                response.snapshot,
+                timestamp,
+                truncatedBeforeIndex,
+              );
+              const spool = await spoolSnapshotEvents(response.snapshot);
+              try {
+                const replaced = await input.store.replaceSessionAdapterPaged({
+                  adapterSessionId: response.adapterSessionId,
+                  ...(result.uiPreview?.appId === undefined
+                    ? {}
+                    : { appId: result.uiPreview.appId }),
+                  events: readSpoolEvents(spool),
+                  expectedAdapterGeneration: existing.adapterGeneration,
+                  expectedCheckpointDigest: existing.checkpointDigest,
+                  metadata,
+                  nowEpochMs: timestamp,
+                  principal,
+                  resumability: ["completed", "failed", "cancelled"].includes(result.status)
+                    ? "terminal"
+                    : "live",
+                  sessionId: existing.sessionId,
+                  stage: stageForResult(result),
+                });
+                const durable = toDurableHostedSessionRecord(replaced);
+                if (
+                  durable.adapterSessionId !== response.adapterSessionId ||
+                  durable.adapterGeneration !== existing.adapterGeneration + 1 ||
+                  durable.checkpointRef === undefined
+                ) {
+                  throw new HostedSubmissionUnknownError();
+                }
+                return {
+                  result: await resultFromDurableCheckpoint(existing.sessionId, replaced, 0, 100),
+                };
+              } finally {
+                await rm(spool.directory, { force: true, recursive: true });
+              }
+            }
+            if (replaceSessionAdapter === undefined) {
+              throw new HostedSessionRecoveryUnavailableError();
+            }
             const checkpoint = checkpointForSnapshot(
               existing.sessionId,
               response.snapshot,
@@ -1741,29 +2059,47 @@ export function createHostedEveSessionService(input: {
           );
           const result = projectSnapshot(sessionId, response.snapshot);
           const timestamp = now();
+          const sessionBase: HostedPagedSessionBase = {
+            adapterGeneration: 1,
+            adapterSessionId: response.adapterSessionId,
+            ...(result.uiPreview?.appId === undefined ? {} : { appId: result.uiPreview.appId }),
+            createdAtEpochMs: timestamp,
+            lastProgressAtEpochMs: timestamp,
+            originAdapterSessionId: response.adapterSessionId,
+            principal,
+            resumability: ["completed", "failed", "cancelled"].includes(result.status)
+              ? "terminal"
+              : "live",
+            sessionId,
+            ...(request.sourceHandoffId ? { sourceHandoffId: request.sourceHandoffId } : {}),
+            stage: stageForResult(result),
+            status: result.status,
+            title: titleFromPrompt(prompt),
+            updatedAtEpochMs: timestamp,
+            version: 2,
+          };
+          if (
+            input.store.settleSucceededPaged !== undefined &&
+            input.store.readCheckpointPage !== undefined
+          ) {
+            const spool = await spoolSnapshotEvents(response.snapshot);
+            return {
+              newSessionPaged: {
+                cleanup: () => rm(spool.directory, { force: true, recursive: true }),
+                events: readSpoolEvents(spool),
+                metadata: checkpointMetadataForSnapshot(response.snapshot, timestamp),
+                session: sessionBase,
+              },
+              result,
+            };
+          }
           const checkpoint = checkpointForSnapshot(sessionId, response.snapshot, timestamp);
           return {
             newSession: durableHostedSessionRecordSchema.parse({
-              adapterGeneration: 1,
-              adapterSessionId: response.adapterSessionId,
-              ...(result.uiPreview?.appId === undefined ? {} : { appId: result.uiPreview.appId }),
+              ...sessionBase,
               checkpoint,
               checkpointDigest: hostedSessionCheckpointDigest(checkpoint),
               checkpointProgressDigest: hostedSessionCheckpointProgressDigest(checkpoint),
-              createdAtEpochMs: timestamp,
-              lastProgressAtEpochMs: timestamp,
-              originAdapterSessionId: response.adapterSessionId,
-              principal,
-              resumability: ["completed", "failed", "cancelled"].includes(result.status)
-                ? "terminal"
-                : "live",
-              sessionId,
-              ...(request.sourceHandoffId ? { sourceHandoffId: request.sourceHandoffId } : {}),
-              stage: stageForResult(result),
-              status: result.status,
-              title: titleFromPrompt(prompt),
-              updatedAtEpochMs: timestamp,
-              version: 2,
             }),
             result,
           };

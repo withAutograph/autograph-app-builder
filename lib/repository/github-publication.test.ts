@@ -1076,7 +1076,7 @@ describe("closed GitHub publication contract", () => {
         store,
       }),
     ).rejects.toThrow(
-      /create-blob for apps\/demo\/large\.tsx \(12345 bytes\) \(GitHub HTTP 413\).*repository's current GitHub limits/u,
+      /create-blob for apps\/demo\/large\.tsx \(12345 bytes\) \(GitHub HTTP 413\).*GitHub's 100 MiB per-file limit.*Git LFS or another storage provider/u,
     );
     const failure = await store.read(proposal.digest);
     expect(failure).toMatchObject({ providerCode: "github-file-write-failed", status: "failed" });

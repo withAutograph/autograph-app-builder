@@ -318,6 +318,10 @@ export const hostedSessionRecordSchema = z.discriminatedUnion("version", [
 
 export type HostedSessionRecord = z.infer<typeof hostedSessionRecordSchema>;
 export type DurableHostedSessionRecord = z.infer<typeof durableHostedSessionRecordSchema>;
+export type HostedPagedSessionBase = Omit<
+  Extract<DurableHostedSessionRecord, { version: 2 }>,
+  "checkpoint" | "checkpointDigest" | "checkpointProgressDigest" | "checkpointRef"
+>;
 
 const legacySessionStage = (
   status: z.infer<typeof sessionStatusSchema>,
@@ -571,6 +575,16 @@ export interface HostedEveStore {
     requestDigest: string;
     result: z.infer<typeof eveSessionResultSchema>;
     session?: HostedSessionRecord;
+    nowEpochMs: number;
+  }) => Promise<HostedOperationRecord>;
+  settleSucceededPaged?: (input: {
+    principal: z.infer<typeof hostedPrincipalSchema>;
+    operationId: string;
+    requestDigest: string;
+    result: z.infer<typeof eveSessionResultSchema>;
+    session: HostedPagedSessionBase;
+    metadata: HostedPagedCheckpointMetadata;
+    events: AsyncIterable<z.infer<typeof publicEveEventSchema>>;
     nowEpochMs: number;
   }) => Promise<HostedOperationRecord>;
   settleUnsuccessful: (input: {
