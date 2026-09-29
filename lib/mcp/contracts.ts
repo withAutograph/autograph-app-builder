@@ -290,11 +290,20 @@ export const eveStartInputSchema = z
   });
 export const eveGetInputSchema = z
   .object({
+    clientRequestId: z.string().min(1).max(200).optional(),
     cursor: z.number().int().nonnegative().default(0),
     limit: z.number().int().min(1).max(250).default(100),
     sessionId: z.string().min(1).max(200).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine(({ clientRequestId, sessionId }, context) => {
+    if (clientRequestId !== undefined && sessionId !== undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "Provide either sessionId or the original start clientRequestId, not both.",
+      });
+    }
+  });
 export const eveSendInputSchema = z.object({
   clientRequestId: z.string().min(1).max(200),
   message: z.string().trim().min(1).max(32_000),

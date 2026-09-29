@@ -12,6 +12,7 @@ import type { SandboxSession } from "eve/sandbox";
 import type { TargetApplyReceipt } from "./target-apply";
 import type { ValidationCommandExecutor } from "./target-validation";
 import type { ValidationLogStore } from "./validation-log";
+import type { PreparedRuntimeExecution } from "../agent/prepared-runtime-execution";
 import { readValidationLogPage } from "./validation-log";
 import {
   createTargetValidationAttempt,
@@ -89,6 +90,43 @@ function sandboxFixture() {
 }
 
 describe("target validation", () => {
+  it("uses the owned hosted execution for repository checks rather than probing a local environment", async () => {
+    const { sandbox } = sandboxFixture();
+    const runTask = vi
+      .fn<PreparedRuntimeExecution["runTask"]>()
+      .mockResolvedValue({ exitCode: 0, stderr: "", stdout: "checks passed" });
+    const runtime: PreparedRuntimeExecution = {
+      environmentPath: "/private-state/environment.json",
+      installationProof: {
+        actors: 8,
+        appId: "example",
+        artifactHash: "a".repeat(64),
+        authenticatedBehavior: "unassessed",
+        branch: "builder/example",
+        environment: "preview",
+        observation: "database-verification",
+        observedAt: "2026-09-29T12:00:00Z",
+        releaseId: "release_1",
+        tenants: 2,
+      },
+      prepareAuthenticatedOrigin: vi.fn(),
+      runTask,
+      stateDirectory: "/private-state",
+    };
+    const executor = sandboxValidationCommandExecutor({ runtime });
+    const onChunk = vi.fn();
+    const result = await executor({
+      appId: "example",
+      command: "mise run --skip-tools app:check example",
+      onChunk,
+      sandbox,
+      validationRoot: "/workspace/repository",
+    });
+    expect(result).toMatchObject({ exitCode: 0, stdout: "checks passed" });
+    expect(runTask).toHaveBeenCalledWith(
+      expect.objectContaining({ onChunk, task: "repository-check" }),
+    );
+  });
   it("links a filtered failure receipt to its complete sanitized durable log", async () => {
     const { sandbox } = sandboxFixture();
     const chunks = new Map<string, { content: string; digest: string }>();
@@ -481,7 +519,7 @@ describe("target validation", () => {
     expect(run).toHaveBeenCalledExactlyOnceWith({
       command: `set +e
 log=$(mktemp /tmp/app-builder-validation.XXXXXX) || exit $?
-${command} > "$log" 2>&1
+if [ -f '/tmp/autograph-app-runtime/b7a886d0cdd17479/example/environment.json' ]; then mise run app:runtime run example ${command.includes(" app:check ") ? "repository-check" : "repository-test 1/1"}; else ${command}; fi > "$log" 2>&1
 status=$?
 cat "$log"
 rm -f "$log"

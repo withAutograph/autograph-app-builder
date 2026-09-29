@@ -1,4 +1,5 @@
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
+import type { ExistingAppChange } from "./existing-app-changes";
 import {
   resolveAcceptedAppSpecContent,
   resolveAcceptedAppSpecStream,
@@ -23,7 +24,7 @@ import {
 } from "@/lib/repository/target-planning";
 
 export const prepareAppCreation = async (
-  { existingAppChanges }: { existingAppChanges?: { path: string; content: string }[] },
+  { existingAppChanges }: { existingAppChanges?: ExistingAppChange[] },
   ctx: ToolContext,
 ) => {
   const state = appBuilderWorkflowState.get();

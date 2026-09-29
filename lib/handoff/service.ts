@@ -260,6 +260,7 @@ export function createBuilderHandoffService(input: {
       const record = await read(value);
       if (record.sessionId !== undefined) {
         return {
+          deterministicClientRequestId: `handoff:${record.requestDigest}`,
           record,
           sessionId: record.sessionId,
           status: "redeemed" as const,

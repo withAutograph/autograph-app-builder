@@ -10,6 +10,7 @@ import {
 export const restoreSelectedGitHubSandboxSource = (input: {
   sessionId: string;
   githubSource: ImmutableGitHubSourceReceipt | undefined;
+  frozenRevision?: string;
   accessReceipt: RepositoryAccessReceipt | undefined;
   runtime: () => Promise<Pick<RepositoryAccessRuntime, "acquireExistingSourceCredential">>;
 }): void => {
@@ -49,7 +50,7 @@ export const restoreSelectedGitHubSandboxSource = (input: {
         sessionId,
       });
       return {
-        revision: githubSource.resolvedRef.slice(branchPrefix.length),
+        revision: input.frozenRevision ?? githubSource.resolvedRef.slice(branchPrefix.length),
         token: credential.token,
         url: `https://github.com/${repository.owner}/${repository.name}.git`,
       };

@@ -43,6 +43,8 @@ import {
 } from "../repository/sandbox-github-source";
 import { inspectExistingRepositorySnapshotReceipt } from "../repository/source-receipt";
 import type { SourceReceipt } from "../repository/source-receipt";
+import { assertAppBaselineAuthority, projectAppBaseline } from "../repository/app-baseline";
+import type { AppBaselineReceipt, AppBaselineSelection } from "../repository/app-baseline";
 import { recordPreparedSandboxWorkspace } from "../repository/supported-template";
 import type { PreparedSandboxWorkspace } from "../repository/supported-template";
 import {
@@ -88,6 +90,12 @@ function exactPrincipal(
   }
 }
 
+const selectedCloneRevision = (
+  baseline: AppBaselineSelection | undefined,
+  branch: string | undefined,
+  platformSha: string,
+): string | undefined => (baseline === undefined ? branch : platformSha);
+
 export interface RepositoryAccessRuntime {
   classify: (input: {
     repository: string;
@@ -120,9 +128,11 @@ export interface RepositoryAccessRuntime {
     /** Resolves the Eve sandbox only after provider source is configured. */
     sandbox: SandboxSession | (() => Promise<SandboxSession>);
     currentGitHubSource?: ImmutableGitHubSourceReceipt;
+    appBaseline?: AppBaselineSelection;
     revision?: { branch: string; headSha: string; headTree: string };
   }) => Promise<{
     accessReceipt: RepositoryAccessReceipt;
+    appBaseline?: AppBaselineReceipt;
     githubSource: ImmutableGitHubSourceReceipt;
     sourceReceipt: SourceReceipt;
     workspace: PreparedSandboxWorkspace;
@@ -417,6 +427,13 @@ export function createRepositoryAccessRuntime(input: {
     },
     classify,
     async prepareExistingSource(value) {
+      if (value.appBaseline !== undefined) {
+        assertAppBaselineAuthority({
+          repository: value.access.repository,
+          selection: value.appBaseline,
+          sessionId: value.sessionId,
+        });
+      }
       const initialAccessReceipt = recordRepositoryAccessReceipt({
         access: value.access,
         confirmedByCallId: value.callId,
@@ -479,12 +496,17 @@ export function createRepositoryAccessRuntime(input: {
       const credential = await provider.acquireRepositoryReadCredential({
         repositoryId: value.access.repository.repositoryId,
       });
+      const cloneRevision = selectedCloneRevision(
+        value.appBaseline,
+        value.revision?.branch,
+        githubSource.resolvedSha,
+      );
       configureVercelSessionGitSource({
         sessionId: value.sessionId,
         source: {
           token: credential.token,
           url: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
-          ...(value.revision === undefined ? {} : { revision: value.revision.branch }),
+          ...(cloneRevision === undefined ? {} : { revision: cloneRevision }),
         },
       });
       // The Vercel backend supplies this source directly to Sandbox.create.
@@ -493,6 +515,20 @@ export function createRepositoryAccessRuntime(input: {
       const snapshot = await readSandboxGitHubSourceSnapshot(sandbox, {
         repository: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
       });
+      const appBaseline =
+        value.appBaseline === undefined
+          ? undefined
+          : await projectAppBaseline({
+              callId: value.callId,
+              platform: {
+                commitSha: snapshot.sourceSha,
+                ref: githubSource.resolvedRef,
+                treeSha: snapshot.sourceTree,
+              },
+              sandbox,
+              selection: value.appBaseline,
+              token: credential.token,
+            });
       const workspaceDigest = await writeSandboxGitHubSourceManifest(sandbox, {
         sourceSha: snapshot.sourceSha,
         sourceTree: snapshot.sourceTree,
@@ -548,7 +584,13 @@ export function createRepositoryAccessRuntime(input: {
         sourceTree: sourceReceipt.sourceTree,
         workspaceDigest: cloned.workspaceDigest,
       });
-      return { accessReceipt, githubSource, sourceReceipt, workspace };
+      return {
+        accessReceipt,
+        ...(appBaseline === undefined ? {} : { appBaseline }),
+        githubSource,
+        sourceReceipt,
+        workspace,
+      };
     },
     async resumeAuthorizedForSession(value) {
       const candidates = await input.continuations.authorizedForSession({

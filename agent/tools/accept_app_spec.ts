@@ -15,6 +15,7 @@ import {
 } from "@/lib/agent/workflow-state";
 import { planAcceptedAppSpec as continueAcceptedAppSpec } from "@/lib/agent/accepted-spec-planning";
 import { existingAppChangesSchema } from "@/lib/agent/existing-app-changes";
+import type { ExistingAppChange } from "@/lib/agent/existing-app-changes";
 
 import { prepareAppCreation } from "@/lib/agent/prepare-app-creation";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
@@ -37,7 +38,7 @@ const acceptanceResult = (appSpec: AcceptedAppSpec, reused: boolean) => ({
  */
 const planAcceptedAppSpec = async (
   ctx: Parameters<typeof prepareAppCreation>[1],
-  existingAppChanges?: { path: string; content: string }[],
+  existingAppChanges?: ExistingAppChange[],
 ) => {
   const latest = appBuilderWorkflowState.get();
   await continueAcceptedAppSpec({

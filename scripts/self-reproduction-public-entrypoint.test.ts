@@ -91,6 +91,23 @@ it("launches only the public driver without provisioning infrastructure", () => 
   expect(result.calls).not.toContain("local:ensure-oidc");
 });
 
+it.each([
+  ["--brief-file", "/tmp/brief.md"],
+  ["--start-file", "/tmp/start.json"],
+])("forwards the supplied public input %j without private setup", (...input) => {
+  const result = invoke([
+    "--endpoint",
+    "https://builder.example.test/mcp",
+    "--output-dir",
+    "/tmp/evidence",
+    ...input,
+  ]);
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.calls).toContain(input.join(" "));
+  expect(result.calls).toContain("scripts/self-reproduction-public.mts");
+  expect(result.calls).not.toContain("local:ensure-oidc");
+});
+
 it("rejects ambiguous public-driving and comparison modes", () => {
   const result = invoke(["--endpoint", "http://127.0.0.1:64613/mcp", "--report-only"]);
   expect(result.status).toBe(64);

@@ -4,6 +4,7 @@ import {
   assertExistingAppImplementationFiles,
   implementationArchitectureDiagnostics,
   implementationFilesSchema,
+  applyImplementationFiles,
   withImplementationFiles,
 } from "./apply-implementation-files";
 
@@ -100,6 +101,46 @@ describe("approval-bound implementation files", () => {
         proposal,
       ),
     ).not.toThrow();
+  });
+  it("applies explicit removal non-recursively and retries an absent file safely", async () => {
+    const sandbox = {
+      removePath: vi.fn(() => Promise.resolve()),
+      writeTextFile: vi.fn(() => Promise.resolve()),
+    };
+    const files = implementationFilesSchema.parse([
+      { operation: "delete", path: "apps/example/server/demo.ts" },
+      { content: "authenticated context", path: "apps/example/server/context.ts" },
+    ]);
+    await applyImplementationFiles(sandbox, "/workspace/repository", files);
+    await applyImplementationFiles(sandbox, "/workspace/repository", files);
+    expect(sandbox.removePath).toHaveBeenCalledWith({
+      force: true,
+      path: "repository/apps/example/server/demo.ts",
+    });
+    expect(sandbox.writeTextFile).toHaveBeenCalledWith({
+      content: "authenticated context",
+      path: "repository/apps/example/server/context.ts",
+    });
+    expect(sandbox.removePath).toHaveBeenCalledTimes(2);
+  });
+  it("rejects escaping removal paths and duplicate mixed operations", () => {
+    for (const path of [
+      "../outside",
+      "/outside",
+      "apps//example",
+      "apps/\0example",
+      "apps/example/.",
+    ]) {
+      expect(implementationFilesSchema.safeParse([{ operation: "delete", path }]).success).toBe(
+        false,
+      );
+    }
+    expect(
+      implementationFilesSchema.safeParse([
+        { operation: "delete", path: "apps/example/file.ts" },
+        { content: "replacement", path: "apps/example/file.ts" },
+      ]).success,
+    ).toBe(false);
   });
 
   it("reports submission heuristics without blocking apply", () => {

@@ -39,6 +39,10 @@ import type {
 import { approvalTargetFromDraftProposal, assertApprovalReceipt } from "./approval-receipt";
 import type { ApprovalReceipt } from "./approval-receipt";
 import type { HostedGitHubTenantAuthority } from "../repository/postgres-github-installation-store";
+import type {
+  HistoricalAppSourceObservation,
+  HistoricalAppSourceSelector,
+} from "../repository/historical-app-source";
 
 const supportedOperations = [
   "resolve-immutable-existing-source",
@@ -122,6 +126,19 @@ export interface GitHubPublicationRuntime {
     name: string;
     pullRequestNumber: number;
   }) => Promise<ExistingDraftObservation>;
+  inspectOpenPullRequestSource: GitHubPublicationRuntime["inspectExistingDraftSource"];
+  inspectSourceBranch: (input: {
+    repositoryId: string;
+    owner: string;
+    name: string;
+    branch: string;
+  }) => Promise<{ branch: string; headSha: string; headTree: string }>;
+  inspectHistoricalAppSource: (input: {
+    repositoryId: string;
+    owner: string;
+    name: string;
+    source: HistoricalAppSourceSelector;
+  }) => Promise<HistoricalAppSourceObservation>;
   inspectExistingDraftReconciliationSource: (input: {
     repositoryId: string;
     owner: string;
@@ -191,6 +208,20 @@ function disabledRuntime(): GitHubPublicationRuntime {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async inspectExistingDraftSource() {
       return unavailable();
+    },
+    // oxlint-disable-next-line eslint/require-await -- Keep the runtime interface.
+    async inspectOpenPullRequestSource() {
+      return unavailable();
+    },
+    // oxlint-disable-next-line eslint/require-await -- Keep the runtime interface.
+    async inspectSourceBranch() {
+      return unavailable();
+    },
+    // oxlint-disable-next-line eslint/require-await -- Keep the runtime interface.
+    async inspectHistoricalAppSource() {
+      throw new Error(
+        "Historical App source inspection is unavailable because the GitHub App provider is not configured. Connect GitHub with repository read access, then retry.",
+      );
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async inspectExistingDraftReconciliationSource() {
@@ -328,7 +359,30 @@ export function composeGitHubPublicationRuntime(input: {
         store: receipts,
       });
     },
-    async inspectExistingDraftSource(request) {
+    async inspectSourceBranch(request) {
+      const observed = await adapter.inspectRepository({
+        operation: "resolve-existing-source",
+        ref: `refs/heads/${request.branch}`,
+        repositoryId: request.repositoryId,
+      });
+      if (
+        observed.repositoryId !== request.repositoryId ||
+        observed.owner !== request.owner ||
+        observed.name !== request.name
+      ) {
+        throw new Error("The selected branch belongs to a different GitHub repository.");
+      }
+      return { branch: request.branch, headSha: observed.headSha, headTree: observed.headTree };
+    },
+    async inspectHistoricalAppSource(request) {
+      if (adapter.inspectHistoricalAppSource === undefined) {
+        throw new Error(
+          "Historical App source inspection is unavailable from this GitHub provider. Upgrade the GitHub provider, reconnect GitHub with repository read access, then retry.",
+        );
+      }
+      return await adapter.inspectHistoricalAppSource(request);
+    },
+    async inspectOpenPullRequestSource(request) {
       const observed = await adapter.inspectExistingDraft({
         name: request.name,
         number: request.pullRequestNumber,
@@ -342,7 +396,6 @@ export function composeGitHubPublicationRuntime(input: {
           observed.name,
           observed.number,
           observed.state,
-          observed.draft,
           observed.headRepositoryId,
           observed.baseRepositoryId,
         ],
@@ -352,14 +405,22 @@ export function composeGitHubPublicationRuntime(input: {
           request.name,
           request.pullRequestNumber,
           "open",
-          true,
           request.repositoryId,
           request.repositoryId,
         ],
       );
       if (!matchesSelection) {
         throw new Error(
-          "The selected PR is not an open draft with a branch in this connected GitHub repository. Choose the correct draft PR, then retry source selection.",
+          "The selected PR is not open with a branch in this connected GitHub repository. Choose the correct open PR, then retry source selection.",
+        );
+      }
+      return observed;
+    },
+    async inspectExistingDraftSource(request) {
+      const observed = await this.inspectOpenPullRequestSource(request);
+      if (!observed.draft) {
+        throw new Error(
+          "The selected PR is not an open draft. Source inspection does not authorize updating a non-draft PR.",
         );
       }
       return observed;

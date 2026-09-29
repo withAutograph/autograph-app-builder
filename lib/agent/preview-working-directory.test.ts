@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => {
     bind: vi.fn(),
     dependencies: vi.fn().mockResolvedValue({ status: "reused" }),
     prepare: vi.fn().mockResolvedValue({ status: "prepared" }),
+    runtime: vi.fn().mockResolvedValue(null),
     start: vi
       .fn()
       .mockResolvedValue({ commandId: "preview-command", receipt: { status: "ready" } }),
@@ -48,6 +49,7 @@ vi.mock("../sandbox/deployment-execution-lease", () => ({
 }));
 vi.mock("../sandbox/vercel-preview-provider", () => ({ getVercelPreviewProvider: vi.fn() }));
 vi.mock("../sandbox/working-preview-runtime", () => ({ startWorkingPreview: mocks.start }));
+vi.mock("./prepared-runtime-execution", () => ({ resolvePreparedRuntimeExecution: mocks.runtime }));
 vi.mock("./checkout-dependencies", () => ({ ensureCheckoutDependencies: mocks.dependencies }));
 vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
   appDeclaresLocalSetup: async ({
@@ -74,6 +76,54 @@ vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
 const parseDirectory = (value?: string) => previewWorkingDirectorySchema.parse(value);
 
 describe("preview command working directory", () => {
+  it("restores approved hosted persistence and updates the private gateway origin without local setup", async () => {
+    const prepareAuthenticatedOrigin = vi.fn();
+    mocks.runtime.mockResolvedValueOnce({
+      environmentPath: "/private-state/environment.json",
+      installationProof: { releaseId: "release_1" },
+      prepareAuthenticatedOrigin,
+      stateDirectory: "/private-state",
+    });
+    mocks.prepare.mockClear();
+    mocks.start.mockClear();
+    await startAppPreview.execute(
+      {
+        command: { args: ["run", "dev"], executable: "bun" },
+        landingPath: "/app",
+        port: 3000,
+        workingDirectory: "apps/app",
+      },
+      {
+        abortSignal: new AbortController().signal,
+        callId: "hosted-preview",
+        getSandbox: vi.fn().mockResolvedValue({
+          id: "sandbox_replacement",
+          readTextFile: () => Promise.resolve("{}"),
+        }),
+        getSkill: vi.fn(),
+        getToken: vi.fn(),
+        requireAuth: (): never => {
+          throw new Error("Unexpected auth request");
+        },
+        session: {
+          auth: { current: null, initiator: null },
+          id: "session",
+          turn: { id: "turn", sequence: 0 },
+        },
+        toolName: "start_app_preview",
+      },
+    );
+    expect(mocks.prepare).not.toHaveBeenCalled();
+    expect(mocks.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        environmentPath: "/private-state/environment.json",
+        prepareAuthenticatedOrigin,
+      }),
+    );
+    expect(mocks.runtime).toHaveBeenCalledWith(
+      expect.objectContaining({ sandboxId: "sandbox_replacement", sessionId: "session" }),
+    );
+  });
   it("opens an existing selected app before an implementation proposal", async () => {
     mocks.workflowState = {
       githubSource: { digest: "selected-source" },

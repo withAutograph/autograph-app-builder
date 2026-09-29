@@ -419,6 +419,33 @@ export const hostedSessionCreationDigest = (record: HostedSessionRecord): string
     .digest("hex")}`;
 };
 
+const hostedStartAliasSchema = z
+  .object({
+    canonicalClientRequestId: z.string().min(1).max(200),
+    sourceHandoffId: z.string().uuid(),
+  })
+  .strict();
+
+const reportInvalidStartAlias = (
+  record: {
+    clientRequestId: string;
+    kind: HostedOperationKind;
+    startAlias?: z.infer<typeof hostedStartAliasSchema>;
+  },
+  context: z.RefinementCtx,
+): void => {
+  if (
+    record.startAlias !== undefined &&
+    (record.kind !== "start" ||
+      record.startAlias.canonicalClientRequestId === record.clientRequestId)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "Only a start may alias a distinct canonical start request.",
+    });
+  }
+};
+
 const hostedOperationCommonShape = {
   clientRequestId: z.string().min(1).max(200),
   createdAtEpochMs: z.number().int().nonnegative(),
@@ -427,6 +454,7 @@ const hostedOperationCommonShape = {
   principal: hostedPrincipalSchema,
   requestDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
   resumeSessionId: z.string().min(1).max(200).optional(),
+  startAlias: hostedStartAliasSchema.optional(),
   updatedAtEpochMs: z.number().int().nonnegative(),
   version: z.literal(1),
 };
@@ -470,6 +498,7 @@ export const hostedOperationRecordSchema = z
       .strict(),
   ])
   .superRefine((record, context) => {
+    reportInvalidStartAlias(record, context);
     if (record.state === "succeeded" && record.result.sessionId !== record.sessionId) {
       context.addIssue({
         code: "custom",
@@ -522,6 +551,62 @@ export const hostedOperationRecordSchema = z
   });
 
 export type HostedOperationRecord = z.infer<typeof hostedOperationRecordSchema>;
+const START_ALIAS_CANNOT_BIND = "The original start request cannot bind this canonical result.";
+
+/** Copy a proven canonical start binding; this does not dispatch or create a second session. */
+export const succeededStartAlias = (
+  alias: HostedOperationRecord,
+  canonical: HostedOperationRecord,
+): HostedOperationRecord => {
+  if (
+    alias.kind !== "start" ||
+    alias.startAlias === undefined ||
+    !["reserved", "succeeded"].includes(alias.state)
+  ) {
+    throw new Error(START_ALIAS_CANNOT_BIND);
+  }
+  if (
+    canonical.kind !== "start" ||
+    canonical.startAlias !== undefined ||
+    canonical.state !== "succeeded"
+  ) {
+    throw new Error(START_ALIAS_CANNOT_BIND);
+  }
+  if (
+    canonical.clientRequestId !== alias.startAlias.canonicalClientRequestId ||
+    tenantKeyFor(alias.principal) !== tenantKeyFor(canonical.principal)
+  ) {
+    throw new Error(START_ALIAS_CANNOT_BIND);
+  }
+  return hostedOperationRecordSchema.parse({
+    ...alias,
+    result: canonical.result,
+    sessionId: canonical.sessionId,
+    sessionRecordDigest: canonical.sessionRecordDigest,
+    state: "succeeded",
+    updatedAtEpochMs: Math.max(alias.updatedAtEpochMs, canonical.updatedAtEpochMs),
+  });
+};
+
+export const assertExistingStartSession = (
+  operation: HostedOperationRecord,
+  session: HostedSessionRecord,
+): void => {
+  if (
+    operation.kind !== "start" ||
+    operation.state !== "succeeded" ||
+    operation.startAlias !== undefined
+  ) {
+    throw new Error("The request is not a read-only existing-session start receipt.");
+  }
+  if (
+    operation.sessionId !== session.sessionId ||
+    tenantKeyFor(operation.principal) !== tenantKeyFor(session.principal) ||
+    operation.sessionRecordDigest !== hostedSessionCreationDigest(session)
+  ) {
+    throw new Error("The existing-session start receipt does not bind this session.");
+  }
+};
 
 const SESSION_NOT_FOUND = "Hosted session was not found.";
 
@@ -565,6 +650,20 @@ export type ReserveOperationResult = z.infer<typeof reserveOperationResultSchema
  * optional new session and the terminal operation result.
  */
 export interface HostedEveStore {
+  bindExistingStart?: (
+    principal: z.infer<typeof hostedPrincipalSchema>,
+    candidate: HostedOperationRecord,
+  ) => Promise<HostedOperationRecord>;
+  /** Exact caller-owned start lookup; never searches another tenant or user. */
+  getStartOperation?: (
+    principal: z.infer<typeof hostedPrincipalSchema>,
+    clientRequestId: string,
+  ) => Promise<HostedOperationRecord | null>;
+  settleStartAlias?: (input: {
+    principal: z.infer<typeof hostedPrincipalSchema>;
+    clientRequestId: string;
+    canonicalClientRequestId: string;
+  }) => Promise<void>;
   reserveOperation: (
     principal: z.infer<typeof hostedPrincipalSchema>,
     candidate: HostedOperationRecord,
@@ -673,6 +772,50 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   private readonly operations = new Map<string, HostedOperationRecord>();
   private readonly sessions = new Map<string, HostedSessionRecord>();
 
+  async bindExistingStart(
+    principal: z.infer<typeof hostedPrincipalSchema>,
+    candidateInput: HostedOperationRecord,
+  ): Promise<HostedOperationRecord> {
+    const candidate = hostedOperationRecordSchema.parse(candidateInput);
+    if (
+      tenantKeyFor(principal) !== tenantKeyFor(candidate.principal) ||
+      candidate.sessionId === undefined
+    ) {
+      throw new Error("Hosted store principal mismatch.");
+    }
+    const session = await this.getSession(principal, candidate.sessionId);
+    if (session === null) throw new Error(SESSION_NOT_FOUND);
+    assertExistingStartSession(candidate, session);
+    const key = InMemoryHostedEveStore.operationKey(principal, candidate.operationId);
+    const existing = this.operations.get(key);
+    if (existing !== undefined) {
+      if (
+        existing.requestDigest !== candidate.requestDigest ||
+        existing.resumeSessionId !== candidate.resumeSessionId ||
+        existing.sessionId !== candidate.sessionId
+      ) {
+        throw new Error("The existing-session start request conflicts with its saved receipt.");
+      }
+      return structuredClone(existing);
+    }
+    this.operations.set(key, structuredClone(candidate));
+    return structuredClone(candidate);
+  }
+
+  // oxlint-disable-next-line eslint/require-await -- Keep the durable store interface.
+  async getStartOperation(
+    principal: z.infer<typeof hostedPrincipalSchema>,
+    clientRequestId: string,
+  ): Promise<HostedOperationRecord | null> {
+    const operation = [...this.operations.values()].find(
+      (candidate) =>
+        (candidate.kind === "start" || candidate.kind === "resume") &&
+        candidate.clientRequestId === clientRequestId &&
+        tenantKeyFor(candidate.principal) === tenantKeyFor(principal),
+    );
+    return operation === undefined ? null : structuredClone(operation);
+  }
+
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   async reserveOperation(
     principal: z.infer<typeof hostedPrincipalSchema>,
@@ -685,9 +828,14 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     const key = InMemoryHostedEveStore.operationKey(principal, parsed.operationId);
     const existing = this.operations.get(key);
     if (existing !== undefined) {
-      return existing.requestDigest === parsed.requestDigest &&
+      const sameRequest =
+        existing.requestDigest === parsed.requestDigest &&
         existing.kind === parsed.kind &&
-        existing.clientRequestId === parsed.clientRequestId
+        existing.clientRequestId === parsed.clientRequestId;
+      return sameRequest &&
+        existing.startAlias?.canonicalClientRequestId ===
+          parsed.startAlias?.canonicalClientRequestId &&
+        existing.startAlias?.sourceHandoffId === parsed.startAlias?.sourceHandoffId
         ? { disposition: "existing", operation: structuredClone(existing) }
         : { disposition: "conflict" };
     }
@@ -717,6 +865,23 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     }
     this.operations.set(key, structuredClone(parsed));
     return { disposition: "reserved", operation: structuredClone(parsed) };
+  }
+
+  async settleStartAlias(
+    input: Parameters<NonNullable<HostedEveStore["settleStartAlias"]>>[0],
+  ): Promise<void> {
+    const [alias, canonical] = await Promise.all([
+      this.getStartOperation(input.principal, input.clientRequestId),
+      this.getStartOperation(input.principal, input.canonicalClientRequestId),
+    ]);
+    if (alias === null || canonical === null) {
+      throw new Error("The original start request binding is unavailable.");
+    }
+    const settled = succeededStartAlias(alias, canonical);
+    this.operations.set(
+      InMemoryHostedEveStore.operationKey(input.principal, alias.operationId),
+      structuredClone(settled),
+    );
   }
 
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract

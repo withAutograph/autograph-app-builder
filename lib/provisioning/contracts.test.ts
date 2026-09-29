@@ -5,6 +5,7 @@ import {
   builderProvisionRequestSchema,
   builderProvisionResponseSchema,
   githubProvisionSuccessSchema,
+  vercelProvisionSuccessSchema,
 } from "./contracts";
 import { deriveBuilderAppId, suffixedProviderName } from "./names";
 
@@ -21,6 +22,26 @@ const request = {
 } as const;
 
 describe("builder provisioning contracts", () => {
+  it("reads both Services projects and historical app-root receipts", () => {
+    const project = {
+      dashboardUrl: "https://vercel.com/owner/apps-spend-review",
+      framework: "services",
+      installationId: "icfg_owner",
+      name: "apps-spend-review",
+      projectId: "prj_services",
+      rootDirectory: ".",
+      scope: { id: "team_owner", slug: "owner", type: "team" },
+      status: "succeeded",
+    };
+    expect(vercelProvisionSuccessSchema.safeParse(project).success).toBe(true);
+    expect(
+      vercelProvisionSuccessSchema.safeParse({
+        ...project,
+        framework: "nextjs",
+        rootDirectory: "apps/spend-review",
+      }).success,
+    ).toBe(true);
+  });
   it("derives the exact target-planning app ID and bounded provider suffixes", () => {
     expect(deriveBuilderAppId(request.appName)).toBe("vendor-and-credit-portal");
     expect(

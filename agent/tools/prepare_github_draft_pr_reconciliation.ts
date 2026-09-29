@@ -12,6 +12,7 @@ import {
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { repositoryAccessReceiptState } from "@/lib/agent/repository-access-state";
 import { prepareWithVerifiedGitHubFetchRecovery } from "@/lib/agent/verified-github-fetch-recovery";
+import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
 import { prepareDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
 import type { DraftReconciliationInput } from "@/lib/repository/sandbox-draft-reconciliation";
@@ -34,6 +35,7 @@ export default defineTool({
       state.reviewReceipt,
       state.appSpec.appId,
       state.sourceReceipt.sourceKind,
+      appBaselineState.get()?.receipt,
     );
     const sandbox = await getSourceBoundSandbox(ctx);
     const accessReceipt = repositoryAccessReceiptState.get();

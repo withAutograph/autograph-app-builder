@@ -45,10 +45,10 @@ describe("Vercel project provisioning", () => {
     // oxlint-disable-next-line eslint/require-await -- Promise-returning provider test double.
     const request = vi.fn<typeof fetch>(async () =>
       Response.json({
-        framework: "nextjs",
+        framework: "services",
         id: "prj_existing",
         name: "apps-vendor-portal",
-        rootDirectory: "apps/vendor-portal",
+        rootDirectory: ".",
       }),
     );
     const result = await provisionVercelProject({
@@ -82,10 +82,10 @@ describe("Vercel project provisioning", () => {
       }
       return created
         ? Response.json({
-            framework: "nextjs",
+            framework: "services",
             id: "prj_new",
             name: "apps-vendor-portal",
-            rootDirectory: "apps/vendor-portal",
+            rootDirectory: ".",
           })
         : Response.json({}, { status: 404 });
     });
@@ -158,10 +158,10 @@ describe("Vercel project provisioning", () => {
           : Response.json({}, { status: 404 });
       }
       return Response.json({
-        framework: "nextjs",
+        framework: "services",
         id: "prj_7",
         name,
-        rootDirectory: "apps/vendor-portal",
+        rootDirectory: ".",
       });
     });
     const result = await provisionVercelProject({
@@ -199,19 +199,19 @@ describe("Vercel project provisioning", () => {
           created = true;
           const body = JSON.parse(String(init.body));
           expect(body).toMatchObject({
-            framework: "nextjs",
+            framework: "services",
             gitRepository: {
               repo: "withAutograph/vendor-portal",
               type: "github",
             },
             name: "apps-vendor-portal",
-            rootDirectory: "apps/vendor-portal",
+            rootDirectory: ".",
           });
           return Response.json({ id: "prj_1" }, { status: 201 });
         }
         return created
           ? Response.json({
-              framework: "nextjs",
+              framework: "services",
               id: "prj_1",
               link: {
                 org: "withAutograph",
@@ -219,7 +219,7 @@ describe("Vercel project provisioning", () => {
                 type: "github",
               },
               name: "apps-vendor-portal",
-              rootDirectory: "apps/vendor-portal",
+              rootDirectory: ".",
             })
           : Response.json({}, { status: 404 });
       });
@@ -331,10 +331,10 @@ describe("Vercel project provisioning", () => {
       }
       return created
         ? Response.json({
-            framework: "nextjs",
+            framework: "services",
             id: "prj_2",
             name: "apps-vendor-portal-a1b2c3",
-            rootDirectory: "apps/vendor-portal",
+            rootDirectory: ".",
           })
         : Response.json({}, { status: 404 });
     });

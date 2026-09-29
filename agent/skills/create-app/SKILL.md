@@ -65,6 +65,19 @@ app-owned files and reuse the same component-backed preview flow.
    and `docs/schema-compiler.md`. Follow current repository docs and actual
    commands; missing documentation is context to investigate, not a build gate.
    Preserve unrelated changes.
+   When the brief requests an existing app revision from an agreed historical
+   version while retaining current shared platform capabilities, select that
+   baseline in this first `resolve_github_source` call, before reading any app
+   source. Use `appBaseline: { appId, source: { kind: "merged-pr",
+pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
+   for an explicitly supplied full commit. The platform branch/open PR remains
+   the ordinary source selection. Builder verifies and projects the app itself;
+   never ask the evaluator to restore files or manually construct a baseline.
+   Retry the saved selection after a preparation failure. Report the receipt's
+   historical app source and actual platform base separately from newly authored
+   changes. Retained later release archives are not initial implementation input;
+   do not inspect them to copy a later revision. A baseline is provenance only,
+   and grants no publication, deployment, or readiness authority.
    For a hosted existing repository named as `owner/name`, use only
    `resolve_github_source` with `selectedInstallationId: null`; it owns the
    current access readback, source inspection, and isolated preparation without
@@ -116,6 +129,12 @@ app-owned files and reuse the same component-backed preview flow.
    duplicate frontend entrypoints in `implementationFiles` for a new app. Use
    the dependency versions and scripts already present in the prepared
    workspace; never guess or pin framework versions from model knowledge.
+   For a complete app, Builder owns the backend and persistence implementation
+   as well as the UI. Follow [full app authoring](../../../docs/full-app-authoring.md).
+   Use the Arrusted CUE/PostgreSQL data boundary for owned durable data: derive
+   the CUE model and policies from the accepted product decisions, compile the
+   checked release, and implement the authenticated server reads and actions.
+   The user supplies product meaning, not schema source or backend code.
    Preserve `catalog:` and `workspace:*` references. The generator profile owns
    the standard scaffold toolset, not every app-specific dependency. Additional
    dependencies need the appropriate reviewed app manifest/lockfile changes,
@@ -126,9 +145,10 @@ app-owned files and reuse the same component-backed preview flow.
    provider boundary; creation, cancellation, retry, and preview access use the
    app's real orchestration path. The generated app must own its backend and
    orchestration; do not delegate its product behavior to App Builder itself.
-   SQLite or server-owned files are valid persistence choices when appropriate
-   to the product and available runtime; a hosted database is not a prerequisite
-   for an independent private implementation. Browser storage, timers, and local state may
+   An explicitly requested alternative backend requires a supported repository
+   runtime and persistence lifecycle. If unavailable, report that capability
+   gap; do not substitute filesystem or browser persistence for a hosted app.
+   Browser storage, timers, and local state may
    support transient presentation, but never stand in for those outcomes.
    Prefer Server Component route shells and small interactive client leaves.
    Architecture source-pattern observations are advisory, not rejection gates.
@@ -140,7 +160,11 @@ app-owned files and reuse the same component-backed preview flow.
    model-authored files as `implementationFiles` to `apply_app_creation` with
    the concise product summary. For an existing-app iteration, the planned
    changes already carry the implementation and `implementationFiles` may be
-   empty. This produces the first normal user prompt: **Build this app?** Do not request approval before this point for
+   empty. File changes use `{path, content}` or `{path, operation: "upsert", content}`
+   for complete contents and `{path, operation: "delete"}` for removal. Rename
+   by deleting the old path and adding the new path in the same proposal.
+   Preserve unrelated files; do not leave retired backend/demo modules behind.
+   This produces the first normal user prompt: **Build this app?** Do not request approval before this point for
    session work, source access, inspection, design, prototypes, internal
    drafting, or planning. Never invoke the target command through generic shell
    access.
@@ -280,9 +304,21 @@ app-owned files and reuse the same component-backed preview flow.
   reviewed changes, without effect-based approval for that exact outcome.
 - Never use `$scaffold-app-workspace` as the apply step for a planned route-owned
   app; the complete command owns contract, workspace, and topology composition.
-- Never create schema contents merely because the product brief describes durable data.
-- Never publish without the separate publication approval. Never reconcile providers, mutate `amp.yaml`, create secrets or environment
-  configuration, deploy, or claim admission or Production readiness.
+- For a complete app, author the CUE schema from accepted product requirements;
+  infer mechanical fields, relationships, indexes and technical defaults. Ask
+  only when an unresolved role, ownership rule or destructive data change
+  materially changes the product. A visual-only request does not authorize a
+  backend build.
+- Never publish without the separate publication approval. Connected Preview
+  database and environment changes use `prepare-app-hosted-runtime` with a
+  separate approval naming the selected project and exact branch; follow
+  `docs/hosted-app-runtime.md`. A missing native Neon connection is a path
+  blocker. Preview teardown uses separately approved `cleanup-app-hosted-runtime`
+  with the same selected app, project and branch. Preserve recoverable resources
+  across ordinary turn stops. Another runtime's shared branch Auth bindings
+  block preparation; do not replace them.
+  Keep credentials out of inputs and output. Never mutate `amp.yaml`,
+  deploy, promote, alias, activate, or claim admission or Production readiness.
 - If the complete command reports stale, conflicting, or ambiguous recovery
   state, reconcile it automatically when safe. Otherwise translate the visible
   product effect into one recommended product choice or an unavailable outcome

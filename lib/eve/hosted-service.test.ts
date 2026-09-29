@@ -235,6 +235,105 @@ describe("prepared handoff session continuity", () => {
   });
 });
 
+describe("public start request recovery", () => {
+  it("recovers current progress after service recreation without dispatching another start", async () => {
+    const store = new InMemoryHostedEveStore();
+    const adapter = transport();
+    const request = { clientRequestId: "lost-public-start", prompt: "Build an authenticated app" };
+    const first = await createHostedEveSessionService({
+      principal,
+      store,
+      transport: adapter,
+    }).start(request);
+    const reader = createHostedEveSessionService({
+      principal: { ...principal, scopes: ["autograph:get"] },
+      store,
+      transport: adapter,
+    });
+    const recovered = await reader.getStart?.({
+      clientRequestId: request.clientRequestId,
+      cursor: 1,
+      limit: 1,
+    });
+    expect(recovered).toMatchObject({ cursor: 2, sessionId: first.sessionId });
+    expect(adapter.start).toHaveBeenCalledOnce();
+    await expect(
+      createHostedEveSessionService({ principal, store, transport: adapter }).start({
+        ...request,
+        prompt: "Different app",
+      }),
+    ).rejects.toBeInstanceOf(HostedIdempotencyConflictError);
+    expect(adapter.start).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { ownerUserId: "another-user" },
+    { workspaceId: "another-workspace" },
+    { issuer: "https://another-issuer.example.test" },
+    { audience: "another-audience" },
+  ])("does not reveal the same request ID across caller authority %j", async (changed) => {
+    const store = new InMemoryHostedEveStore();
+    const adapter = transport();
+    await createHostedEveSessionService({ principal, store, transport: adapter }).start({
+      clientRequestId: "shared-id",
+      prompt: "Private app",
+    });
+    const reader = createHostedEveSessionService({
+      principal: { ...principal, ...changed },
+      store,
+      transport: adapter,
+    });
+    expect(
+      await reader.getStart?.({ clientRequestId: "shared-id", cursor: 0, limit: 100 }),
+    ).toMatchObject({ error: { code: "start_request_not_found" }, events: [], sessionId: "" });
+    expect(adapter.get).not.toHaveBeenCalled();
+    expect(adapter.start).toHaveBeenCalledOnce();
+  });
+
+  it("reads an uncertain submission without replay and preserves its exact retry key", async () => {
+    const store = new InMemoryHostedEveStore();
+    const adapter = transport({
+      start: vi
+        .fn()
+        .mockRejectedValueOnce(new SubmissionOutcomeUnknownError())
+        .mockResolvedValue({ adapterSessionId: "eve_1", snapshot }),
+    });
+    const service = createHostedEveSessionService({ principal, store, transport: adapter });
+    const request = { clientRequestId: "unknown-start", prompt: "Build an app" };
+    await expect(service.start(request)).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    await expect(
+      service.getStart?.({ clientRequestId: request.clientRequestId, cursor: 0, limit: 100 }),
+    ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    expect(adapter.start).toHaveBeenCalledOnce();
+    const retried = await service.start(request);
+    expect(
+      await service.getStart?.({ clientRequestId: request.clientRequestId, cursor: 0, limit: 100 }),
+    ).toMatchObject({ sessionId: retried.sessionId });
+    const { calls } = vi.mocked(adapter.start).mock;
+    expect(calls[1]?.[0].operationId).toBe(calls[0]?.[0].operationId);
+  });
+
+  it("rejects a store result from another user before reading its session", async () => {
+    const store = new InMemoryHostedEveStore();
+    const adapter = transport();
+    await createHostedEveSessionService({ principal, store, transport: adapter }).start({
+      clientRequestId: "owned-start",
+      prompt: "Build",
+    });
+    const operation = await store.getStartOperation(principal, "owned-start");
+    if (operation === null) throw new Error("Missing test operation");
+    vi.spyOn(store, "getStartOperation").mockResolvedValue({
+      ...operation,
+      principal: { ...principal, ownerUserId: "foreign-user" },
+    });
+    const reader = createHostedEveSessionService({ principal, store, transport: adapter });
+    await expect(
+      reader.getStart?.({ clientRequestId: "owned-start", cursor: 0, limit: 100 }),
+    ).rejects.toBeInstanceOf(HostedSubmissionUnknownError);
+    expect(adapter.get).not.toHaveBeenCalled();
+  });
+});
+
 const reservationStore = function reservationStore(
   makeReservation: (candidate: HostedOperationRecord) => unknown,
 ): HostedEveStore {

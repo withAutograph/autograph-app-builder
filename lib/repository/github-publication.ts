@@ -17,6 +17,10 @@ import type {
   ExistingDraftReconciliationProposal,
   ReconciliationContent,
 } from "./github-draft-reconciliation";
+import type {
+  HistoricalAppSourceObservation,
+  HistoricalAppSourceSelector,
+} from "./historical-app-source";
 
 export const GITHUB_PUBLICATION_VERSION = 2 as const;
 export const REPOSITORY_RELEASE_GATE = "REPOSITORY_RELEASE_ENABLED" as const;
@@ -352,6 +356,12 @@ export interface GitHubTargetSourceResolutionAdapter {
 }
 
 export interface GitHubPublicationAdapter extends GitHubSourceResolutionAdapter {
+  inspectHistoricalAppSource?: (input: {
+    repositoryId: string;
+    owner: string;
+    name: string;
+    source: HistoricalAppSourceSelector;
+  }) => Promise<HistoricalAppSourceObservation>;
   /** Available when the provider can prove access to one repository without listing the installation. */
   targetSourceAdapter?: GitHubTargetSourceResolutionAdapter;
   inspectExistingDraft: (input: {

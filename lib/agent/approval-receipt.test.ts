@@ -26,6 +26,58 @@ const receipt = {
 };
 
 describe("approval receipt", () => {
+  it("requires a separate effect-specific Preview cleanup approval", () => {
+    expect(
+      publicApprovalDescription(
+        {
+          appId: "spend-review",
+          branch: "builder/spend-review",
+          environment: "preview",
+          projectId: "prj_services",
+        },
+        "cleanup-app-hosted-runtime",
+      ),
+    ).toBe(
+      "Remove this session's owned runtime variables, app and authentication databases, and database roles for spend-review on Preview branch builder/spend-review in Vercel project prj_services. Existing Preview deployments using these resources will lose access.",
+    );
+    expect(
+      publicApprovalDescription(
+        {
+          appId: "spend-review",
+          branch: "main",
+          environment: "production",
+          projectId: "prj_services",
+        },
+        "cleanup-app-hosted-runtime",
+      ),
+    ).toBeUndefined();
+  });
+  it("names the app, selected project and exact Preview branch for database approval", () => {
+    expect(
+      publicApprovalDescription(
+        {
+          appId: "spend-review",
+          branch: "builder/spend-review",
+          environment: "preview",
+          projectId: "prj_services",
+        },
+        "prepare-app-hosted-runtime",
+      ),
+    ).toBe(
+      "Prepare isolated app and authentication databases for spend-review, and bind restricted runtime credentials to Preview branch builder/spend-review in Vercel project prj_services.",
+    );
+    expect(
+      publicApprovalDescription(
+        {
+          appId: "spend-review",
+          branch: "main",
+          environment: "production",
+          projectId: "prj_services",
+        },
+        "prepare-app-hosted-runtime",
+      ),
+    ).toBeUndefined();
+  });
   const githubSource = {
     digest: "f".repeat(64),
     repository: {

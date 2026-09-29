@@ -139,12 +139,15 @@ export const githubProvisionSuccessSchema = z
 export const vercelProvisionSuccessSchema = z
   .object({
     dashboardUrl: z.string().url().startsWith("https://vercel.com/"),
-    framework: z.literal("nextjs"),
+    // Keep historical Next.js app-root receipts readable; new projects use Services.
+    framework: z.enum(["services", "nextjs"]),
     installationId: z.string().min(1),
     linkedGitHubRepository: z.string().min(3).optional(),
     name: z.string().min(1),
     projectId: z.string().min(1),
-    rootDirectory: z.string().regex(/^apps\/[a-z][a-z0-9-]*$/u),
+    // Existing journals can describe the retired app-root topology. New
+    // provisioning always uses the repository root for native Services.
+    rootDirectory: z.union([z.literal("."), z.string().regex(/^apps\/[a-z][a-z0-9-]*$/u)]),
     scope: z
       .object({
         id: z.string().min(1),

@@ -3,19 +3,28 @@ import { setTimeout as delay } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, chmodSync, existsSync } from "node:fs";
 import path from "node:path";
-import { eveRespondInputSchema, eveSessionResultSchema } from "../../lib/mcp/contracts";
+import {
+  eveRespondInputSchema,
+  eveSessionResultSchema,
+  eveStartInputSchema,
+} from "../../lib/mcp/contracts";
 import type { EveSessionResult } from "../../lib/mcp/contracts";
+import type { z } from "zod";
 import { sanitizeEvidence } from "./self-reproduction-evidence";
 
 export type Responses = {
   requestId: string;
   response: { kind: "approve" | "deny" } | { kind: "answer"; value: string; optionId?: string };
 }[];
+export type PublicStartInput = z.infer<typeof eveStartInputSchema>;
 export interface PublicState {
   version: 1;
   endpoint: string;
   prompt: string;
   clientRequestId: string;
+  originalStart?: PublicStartInput;
+  startSubmitted?: boolean;
+  unresolvedStartResult?: EveSessionResult;
   startedAt: string;
   session?: EveSessionResult;
   pendingMessage?: { clientRequestId: string; message: string };
@@ -25,10 +34,22 @@ export interface PublicState {
   error?: string;
   promptSha256?: string;
   sourceRevision?: string;
+  driverRevision?: string;
+  startRequestSha256?: string;
 }
 export interface PublicTransport {
   call: (name: string, args: Record<string, unknown>) => Promise<unknown>;
 }
+
+/** Canonical public input is saved before dispatch and reused unchanged on every retry. */
+export const originalPublicStart = (state: PublicState): PublicStartInput =>
+  eveStartInputSchema.parse(
+    state.originalStart ?? { clientRequestId: state.clientRequestId, prompt: state.prompt },
+  );
+
+/** The CLI may supply any existing public start shape; it cannot add private source instructions. */
+export const parsePublicStartFile = (contents: string): PublicStartInput =>
+  eveStartInputSchema.parse(JSON.parse(contents));
 
 const redactObservationUrls = (entry: unknown): unknown => {
   if (typeof entry === "string") {
@@ -133,30 +154,83 @@ export const validatePublicEndpoint = (endpoint: string) => {
   return url;
 };
 
+const redactTransportToken = (value: unknown, bearerToken: string | undefined): unknown => {
+  if (bearerToken === undefined) {
+    return value;
+  }
+  if (typeof value === "string") {
+    return value.replaceAll(bearerToken, "[REDACTED TOKEN]");
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactTransportToken(entry, bearerToken));
+  }
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [
+        key.replaceAll(bearerToken, "[REDACTED TOKEN]"),
+        redactTransportToken(entry, bearerToken),
+      ]),
+    );
+  }
+  return value;
+};
+
+interface PublicTransportOptions {
+  /** Supplied from the CLI's server-side environment, never from the brief or persisted state. */
+  bearerToken?: string;
+}
+
+const publicRequestHeaders = (
+  session: string | undefined,
+  bearerToken: string | undefined,
+): Headers => {
+  const headers = new Headers({
+    Accept: "application/json, text/event-stream",
+    "Content-Type": "application/json",
+    "MCP-Protocol-Version": "2025-03-26",
+  });
+  if (session !== undefined) {
+    headers.set("Mcp-Session-Id", session);
+  }
+  if (bearerToken !== undefined) {
+    headers.set("Authorization", `Bearer ${bearerToken}`);
+  }
+  return headers;
+};
+
 export const makePublicTransport = async (
   endpoint: string,
   record: (value: unknown) => void,
   timeoutMs: number,
+  options: PublicTransportOptions = {},
 ): Promise<PublicTransport> => {
   const url = validatePublicEndpoint(endpoint);
+  const { bearerToken } = options;
+  if (bearerToken !== undefined && (!bearerToken || /[\r\n]/u.test(bearerToken))) {
+    throw new Error("The public MCP access token must be nonempty and contain no line breaks.");
+  }
+  const recordSafely = (value: unknown) => {
+    record(redactTransportToken(value, bearerToken));
+  };
   let session: string | undefined;
   let sequence = 0;
-  const rpc = async (method: string, params: unknown, notification = false): Promise<unknown> => {
+  const performRpc = async (
+    method: string,
+    params: unknown,
+    notification = false,
+  ): Promise<unknown> => {
     sequence += 1;
     const id = sequence;
     const response = await fetch(url, {
       body: JSON.stringify({ jsonrpc: "2.0", ...(notification ? {} : { id }), method, params }),
-      headers: {
-        Accept: "application/json, text/event-stream",
-        "Content-Type": "application/json",
-        "MCP-Protocol-Version": "2025-03-26",
-        ...(session ? { "Mcp-Session-Id": session } : {}),
-      },
+      credentials: "omit",
+      headers: publicRequestHeaders(session, bearerToken),
       method: "POST",
       redirect: "error",
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) {
+      await response.body?.cancel();
       throw new Error(`Public MCP HTTP ${response.status}`);
     }
     session = response.headers.get("mcp-session-id") ?? session;
@@ -209,9 +283,23 @@ export const makePublicTransport = async (
       envelope = (await response.json()) as typeof envelope;
     }
     if (envelope.error) {
-      throw new Error(`Public MCP error: ${JSON.stringify(envelope.error)}`);
+      throw new Error(
+        `Public MCP error: ${JSON.stringify(redactTransportToken(envelope.error, bearerToken))}`,
+      );
     }
     return envelope.result;
+  };
+  const rpc = async (method: string, params: unknown, notification = false): Promise<unknown> => {
+    try {
+      return await performRpc(method, params, notification);
+    } catch (error) {
+      // oxlint-disable-next-line eslint/preserve-caught-error -- A raw provider cause can echo credentials; only sanitized text leaves the transport boundary.
+      throw new Error(
+        String(
+          redactTransportToken(error instanceof Error ? error.message : String(error), bearerToken),
+        ),
+      );
+    }
   };
   await rpc("initialize", {
     capabilities: {},
@@ -222,23 +310,37 @@ export const makePublicTransport = async (
   return {
     call: async (name, args) => {
       if (
-        !["autograph_start", "autograph_get", "autograph_respond", "autograph_send"].includes(name)
+        ![
+          "autograph_start",
+          "autograph_get",
+          "autograph_respond",
+          "autograph_send",
+          "autograph_cancel",
+        ].includes(name)
       ) {
         throw new Error("Only public user lifecycle calls are permitted");
       }
-      record({ arguments: args, at: new Date().toISOString(), direction: "request", name });
+      recordSafely({ arguments: args, at: new Date().toISOString(), direction: "request", name });
       const result = (await rpc("tools/call", { arguments: args, name })) as {
         isError?: boolean;
         structuredContent?: unknown;
         content?: { type: string; text?: string }[];
       };
-      record({ at: new Date().toISOString(), direction: "response", name, result });
+      recordSafely({ at: new Date().toISOString(), direction: "response", name, result });
       if (result.isError && !eveSessionResultSchema.safeParse(result.structuredContent).success) {
         throw new Error("Public App Builder tool returned an error; see transcript");
       }
-      return (
+      return redactTransportToken(
         result.structuredContent ??
-        JSON.parse(result.content?.find((item) => item.type === "text")?.text ?? "null")
+          JSON.parse(
+            String(
+              redactTransportToken(
+                result.content?.find((item) => item.type === "text")?.text ?? "null",
+                bearerToken,
+              ),
+            ),
+          ),
+        bearerToken,
       );
     },
   };
@@ -257,6 +359,59 @@ interface SessionOptions {
 }
 
 type AcceptSession = (raw: unknown) => void;
+
+const canRecoverStart = (result: EveSessionResult): boolean =>
+  result.error?.code === "submission_unknown" || result.error?.code === "start_request_not_found";
+
+/** A missing handle is an unresolved start result, never a usable session or replacement request. */
+const observeOriginalStart = async (
+  options: SessionOptions,
+  accept: AcceptSession,
+): Promise<boolean> => {
+  const { state, transport, save } = options;
+  const originalStart = originalPublicStart(state);
+  state.originalStart = originalStart;
+  const observe = (raw: unknown): boolean => {
+    const result = eveSessionResultSchema.parse(raw);
+    if (result.sessionId.length > 0) {
+      accept(result);
+      delete state.unresolvedStartResult;
+      save();
+      return true;
+    }
+    state.unresolvedStartResult = result;
+    state.outcome = canRecoverStart(result)
+      ? "start_submission_unresolved"
+      : "blocked_missing_public_session";
+    state.error =
+      result.error?.message ??
+      "Builder did not return a public session handle. Preserve the original start request and inspect the retained response.";
+    save();
+    return false;
+  };
+  const recover = async () =>
+    observe(
+      await transport.call("autograph_get", { clientRequestId: originalStart.clientRequestId }),
+    );
+  if (state.startSubmitted) {
+    if (await recover()) {
+      return true;
+    }
+    if (!state.unresolvedStartResult || !canRecoverStart(state.unresolvedStartResult)) {
+      return false;
+    }
+  }
+  state.startSubmitted = true;
+  save();
+  if (observe(await transport.call("autograph_start", originalStart))) {
+    return true;
+  }
+  if (state.unresolvedStartResult && canRecoverStart(state.unresolvedStartResult)) {
+    return await recover();
+  }
+  return false;
+};
+
 const sendPendingMessage = async (options: SessionOptions, accept: AcceptSession) => {
   const { state, save, transport } = options;
   if (options.message !== undefined && !state.pendingMessage) {
@@ -345,6 +500,12 @@ const prepareResponse = (options: SessionOptions, session: EveSessionResult): bo
 
 export const runPublicSession = async (options: SessionOptions) => {
   const { state, transport, save } = options;
+  if (state.session?.sessionId === "") {
+    state.unresolvedStartResult = state.session;
+    state.startSubmitted = true;
+    delete state.session;
+    save();
+  }
   if (options.message !== undefined && !state.session) {
     throw new Error("An ordinary message requires an existing public session");
   }
@@ -353,7 +514,13 @@ export const runPublicSession = async (options: SessionOptions) => {
   }
   const deadline = Date.now() + options.timeoutMs;
   const accept = (raw: unknown) => {
-    state.session = eveSessionResultSchema.parse(raw);
+    const result = eveSessionResultSchema.parse(raw);
+    if (!result.sessionId) {
+      throw new Error(
+        "Builder returned no public session handle. The prior session and exact pending request are preserved; inspect the retained response before resuming.",
+      );
+    }
+    state.session = result;
     state.outcome = state.session.status;
     delete state.error;
     save();
@@ -375,12 +542,9 @@ export const runPublicSession = async (options: SessionOptions) => {
     save();
   };
   if (!state.session) {
-    accept(
-      await transport.call("autograph_start", {
-        clientRequestId: state.clientRequestId,
-        prompt: state.prompt,
-      }),
-    );
+    if (!(await observeOriginalStart(options, accept))) {
+      return;
+    }
   } else if (!state.pendingResponse && !state.pendingMessage) {
     accept(
       await transport.call("autograph_get", {

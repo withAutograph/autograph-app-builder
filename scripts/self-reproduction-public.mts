@@ -19,12 +19,15 @@ import {
   sanitizePublicObservation,
   runPublicSession,
   validatePublicEndpoint,
+  originalPublicStart,
+  parsePublicStartFile,
 } from "../evals/support/self-reproduction-public.ts";
 import type { PublicState, Responses } from "../evals/support/self-reproduction-public.ts";
 
 const { isAbsolute, relative, resolve } = pathModule;
 const { values } = parseArgs({
   options: {
+    "brief-file": { type: "string" },
     endpoint: { type: "string" },
     help: { type: "boolean" },
     "message-file": { type: "string" },
@@ -33,13 +36,14 @@ const { values } = parseArgs({
     "poll-ms": { default: "2000", type: "string" },
     "responses-file": { type: "string" },
     resume: { default: false, type: "boolean" },
+    "start-file": { type: "string" },
     "timeout-ms": { default: "120000", type: "string" },
   },
   strict: true,
 });
 if (values.help) {
   console.log(
-    "Submit the fixed product brief through public MCP. --endpoint URL --output-dir PATH [--resume] [--responses-file PATH | --message-file PATH] [--timeout-ms 120000] [--poll-ms 2000]. Responses file is an array of exact {requestId,response} entries. No approvals are inferred. Resume uses the same session and idempotency keys. Comparison remains separate. Preview capture starts automatically; --no-preview-observation disables it.",
+    "Submit a product brief through public MCP. --endpoint URL --output-dir PATH [--brief-file PATH | --start-file PATH] [--resume] [--responses-file PATH | --message-file PATH] [--timeout-ms 120000] [--poll-ms 2000]. start-file contains an exact existing autograph_start input, including its clientRequestId. Hosted calls may use APP_BUILDER_PUBLIC_MCP_TOKEN from the server-side environment; it is never persisted. Responses file is an array of exact {requestId,response} entries. No approvals are inferred. Resume uses the same original start, session and idempotency keys. Comparison remains separate. Preview capture starts automatically; --no-preview-observation disables it.",
   );
   process.exit(0);
 }
@@ -48,6 +52,14 @@ if (!values.endpoint || !values["output-dir"]) {
 }
 if (values["message-file"] && !values.resume) {
   throw new Error("--message-file requires --resume");
+}
+if (values["brief-file"] && values["start-file"]) {
+  throw new Error("Choose one brief file or exact public start file.");
+}
+if (values.resume && (values["brief-file"] || values["start-file"])) {
+  throw new Error(
+    "Resume uses the saved original start request; do not replace it with a new brief or start file.",
+  );
 }
 validatePublicEndpoint(values.endpoint);
 const repo = realpathSync(resolve(import.meta.dirname, ".."));
@@ -81,18 +93,39 @@ if (existsSync(path) !== values.resume) {
     "Use a new output directory for one baseline, or --resume for its existing state",
   );
 }
+const newState = (endpoint: string): PublicState => {
+  const originalStart = values["start-file"]
+    ? parsePublicStartFile(readFileSync(values["start-file"], "utf-8"))
+    : parsePublicStartFile(
+        JSON.stringify({
+          clientRequestId: randomUUID(),
+          prompt: readFileSync(
+            values["brief-file"] ?? resolve(repo, "evals/self-reproduction/brief.md"),
+            "utf-8",
+          ),
+        }),
+      );
+  return {
+    answered: [],
+    clientRequestId: originalStart.clientRequestId,
+    endpoint,
+    originalStart,
+    outcome: "starting",
+    prompt: originalStart.prompt ?? "",
+    startedAt: new Date().toISOString(),
+    version: 1,
+  };
+};
 const state: PublicState = values.resume
   ? (JSON.parse(readFileSync(path, "utf-8")) as PublicState)
-  : {
-      answered: [],
-      clientRequestId: randomUUID(),
-      endpoint: values.endpoint,
-      outcome: "starting",
-      prompt: readFileSync(resolve(repo, "evals/self-reproduction/brief.md"), "utf-8"),
-      startedAt: new Date().toISOString(),
-      version: 1,
-    };
-state.promptSha256 = createHash("sha256").update(state.prompt).digest("hex");
+  : newState(values.endpoint);
+state.originalStart = originalPublicStart(state);
+state.startRequestSha256 = createHash("sha256")
+  .update(JSON.stringify(state.originalStart))
+  .digest("hex");
+if (state.originalStart.prompt !== undefined) {
+  state.promptSha256 = createHash("sha256").update(state.originalStart.prompt).digest("hex");
+}
 if (!state.sourceRevision) {
   try {
     state.sourceRevision = execFileSync("git", ["rev-parse", "HEAD"], {
@@ -103,6 +136,7 @@ if (!state.sourceRevision) {
     state.sourceRevision = "unavailable";
   }
 }
+state.driverRevision ??= state.sourceRevision;
 if (state.endpoint !== values.endpoint) {
   throw new Error("Resume must use the original endpoint");
 }
@@ -142,6 +176,7 @@ try {
     values.endpoint,
     (record) => recordPublicObservation(output, record),
     timeoutMs,
+    { bearerToken: process.env.APP_BUILDER_PUBLIC_MCP_TOKEN },
   );
   const responses = values["responses-file"]
     ? (JSON.parse(readFileSync(values["responses-file"], "utf-8")) as Responses)

@@ -282,7 +282,145 @@ function createProvider(fetchImplementation: typeof fetch) {
   });
 }
 
+const historicalRepository = (id: number) => ({
+  id,
+  name: "example-app",
+  owner: { login: "withAutograph" },
+});
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting.
+function historicalProviderFetch(input?: {
+  pull?: {
+    baseRepositoryId?: number;
+    headRepositoryId?: number;
+    merged?: boolean;
+    number?: number;
+    state?: "closed" | "open";
+  };
+  repositoryId?: number;
+  owner?: string;
+  name?: string;
+}) {
+  const calls: { method: string; url: string; body: unknown }[] = [];
+  // oxlint-disable-next-line eslint/complexity, eslint/require-await -- Keep this fake HTTP router next to its call log.
+  const implementation: typeof fetch = async (request, init = {}) => {
+    const url = String(request);
+    const method = init.method ?? "GET";
+    const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
+    calls.push({ body, method, url });
+    if (url.endsWith("/app/installations/456/access_tokens")) {
+      return json(
+        { permissions: { contents: "read" }, token: "ghs_operation_scoped_read_token" },
+        201,
+      );
+    }
+    if (url.endsWith("/repositories/100")) {
+      return json({
+        id: input?.repositoryId ?? 100,
+        name: input?.name ?? "example-app",
+        owner: { login: input?.owner ?? "withAutograph" },
+      });
+    }
+    if (url.endsWith("/pulls/42")) {
+      const pull = input?.pull;
+      return json({
+        base: { ref: "main", repo: historicalRepository(pull?.baseRepositoryId ?? 100) },
+        head: {
+          ref: "deleted-feature-branch",
+          repo: historicalRepository(pull?.headRepositoryId ?? 100),
+          sha: "a".repeat(40),
+        },
+        merged_at: pull?.merged === false ? null : "2026-09-01T00:00:00Z",
+        number: pull?.number ?? 42,
+        state: pull?.state ?? "closed",
+      });
+    }
+    if (url.endsWith(`/commits/${"a".repeat(40)}`) || url.endsWith(`/commits/${"b".repeat(40)}`)) {
+      const sha = url.split("/").at(-1);
+      return json({
+        commit: { tree: { sha: "c".repeat(40) } },
+        sha,
+      });
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  };
+  return { calls, implementation };
+}
+
 describe("GitHub App fixed-origin HTTP provider", () => {
+  it("resolves a merged PR's retained commit after its source branch is deleted", async () => {
+    const mock = historicalProviderFetch();
+    const provider = createProvider(mock.implementation);
+    await expect(
+      provider.inspectHistoricalAppSource({
+        name: "example-app",
+        owner: "withAutograph",
+        repositoryId: "100",
+        source: { kind: "merged-pr", pullRequestNumber: 42 },
+      }),
+    ).resolves.toEqual({
+      commitSha: "a".repeat(40),
+      name: "example-app",
+      owner: "withAutograph",
+      pullRequestNumber: 42,
+      repositoryId: "100",
+      treeSha: "c".repeat(40),
+    });
+    expect(mock.calls.map(({ url }) => url)).toContain(
+      `https://api.github.com/repos/withAutograph/example-app/commits/${"a".repeat(40)}`,
+    );
+    expect(mock.calls.some(({ url }) => url.includes("/git/ref/heads/"))).toBe(false);
+    expect(
+      mock.calls.every(({ method, url }) => method === "GET" || url.endsWith("/access_tokens")),
+    ).toBe(true);
+    expect(JSON.stringify(mock.calls)).not.toContain("private-key-material");
+    expect(mock.calls.find(({ url }) => url.endsWith("/access_tokens"))?.body).toMatchObject({
+      permissions: { contents: "read" },
+      repository_ids: [100],
+    });
+  });
+
+  it("reads exactly the selected immutable commit and returns only verified metadata", async () => {
+    const mock = historicalProviderFetch();
+    const provider = createProvider(mock.implementation);
+    await expect(
+      provider.inspectHistoricalAppSource({
+        name: "example-app",
+        owner: "withAutograph",
+        repositoryId: "100",
+        source: { commitSha: "b".repeat(40), kind: "commit" },
+      }),
+    ).resolves.toEqual({
+      commitSha: "b".repeat(40),
+      name: "example-app",
+      owner: "withAutograph",
+      repositoryId: "100",
+      treeSha: "c".repeat(40),
+    });
+    expect(mock.calls.at(-1)?.url).toMatch(new RegExp(`/commits/${"b".repeat(40)}$`, "u"));
+  });
+
+  it.each([
+    [{ pull: { headRepositoryId: 101 } }, "not-merged-in-repository"],
+    [{ pull: { baseRepositoryId: 101 } }, "not-merged-in-repository"],
+    [{ pull: { merged: false } }, "not-merged-in-repository"],
+    [{ pull: { state: "open" } }, "not-merged-in-repository"],
+    [{ repositoryId: 101 }, "repository-mismatch"],
+    [{ owner: "other-owner" }, "repository-mismatch"],
+    [{ name: "other-app" }, "repository-mismatch"],
+  ] as const)("rejects an invalid historical source %j", async (input, reason) => {
+    const mock = historicalProviderFetch(input);
+    const provider = createProvider(mock.implementation);
+    await expect(
+      provider.inspectHistoricalAppSource({
+        name: "example-app",
+        owner: "withAutograph",
+        repositoryId: "100",
+        source: { kind: "merged-pr", pullRequestNumber: 42 },
+      }),
+    ).rejects.toThrow(reason);
+  });
+
   it("proves target repository access without enumerating installation repositories", async () => {
     const mock = providerFetch({
       repositoryPages: Array.from({ length: 101 }, (_unusedPage, page) =>
