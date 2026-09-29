@@ -121,9 +121,11 @@ jobs:
 
   auth-e2e-emulated:
     runs-on: ubuntu-latest
-    # Playwright and the app readiness probe have their own timeouts, but the
-    # parent server/cleanup lifecycle also needs a job-level bound.
-    timeout-minutes: 15
+    # Playwright installs Chromium's system dependencies through apt. On the
+    # first attempt for PR #555, fetching 23.9 MB took 8m33s; the rerun fetched
+    # the same packages in 1s. Budget for that observed mirror variance, the
+    # 12-minute Playwright suite bound, and job/app setup and cleanup.
+    timeout-minutes: 22
     env:
       APP_BUILDER_DATABASE_PORT: "54329"
       APP_BUILDER_EXTERNAL_DATABASE: "1"
