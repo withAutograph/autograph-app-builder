@@ -102,8 +102,9 @@ export default defineTool({
     } finally {
       await sandbox.setNetworkPolicy("allow-all");
     }
+    const { created, ...preparedCandidate } = prepared;
     const candidate = {
-      ...prepared,
+      ...preparedCandidate,
       githubSourceDigest: state.githubSource.digest,
       originalReviewDigest: state.reviewReceipt.digest,
       pullRequestNumber: input.pullRequestNumber,
@@ -115,13 +116,21 @@ export default defineTool({
       operation: "preparing the isolated merge candidate",
       transition: () => candidate,
     });
-    return {
+    const result = {
       baseSha: prepared.baseSha,
       conflicts: prepared.conflicts,
       headSha: prepared.headSha,
       root: prepared.root,
       status: prepared.conflicts.length === 0 ? "ready_for_validation" : "needs_resolution",
     };
+    if (created && original !== null) {
+      return {
+        ...result,
+        recovery:
+          "Builder rebuilt the private merge candidate from the currently verified draft and base commits because the saved candidate was unavailable. Any uncommitted resolutions or edits from the old sandbox must be reapplied. Previous validation, diff review, and update approval are void; resolve current conflicts, rerun checks, review both complete diffs, and request new approval before updating the PR.",
+      };
+    }
+    return result;
   },
   inputSchema: z.strictObject({ pullRequestNumber: z.number().int().positive() }),
 });
