@@ -18,7 +18,7 @@ import type { InternalEveEvent } from "./public-events";
 
 const hostedSnapshotSchema = z
   .object({
-    events: z.array(z.unknown()).max(100_000),
+    events: z.array(z.unknown()),
     prototype: publicPrototypeSchema.optional(),
     status: sessionStatusSchema,
     uiPreview: publicUiPreviewSchema.optional(),

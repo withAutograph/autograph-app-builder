@@ -639,6 +639,19 @@ export interface HostedEveStore {
     appId?: string;
     nowEpochMs: number;
   }) => Promise<HostedSessionRecord>;
+  replaceSessionAdapterPaged?: (input: {
+    principal: z.infer<typeof hostedPrincipalSchema>;
+    sessionId: string;
+    expectedAdapterGeneration: number;
+    expectedCheckpointDigest?: string;
+    adapterSessionId: string;
+    metadata: HostedPagedCheckpointMetadata;
+    events: AsyncIterable<z.infer<typeof publicEveEventSchema>>;
+    stage: z.infer<typeof publicSessionStageSchema>;
+    resumability: z.infer<typeof publicSessionResumabilitySchema>;
+    appId?: string;
+    nowEpochMs: number;
+  }) => Promise<HostedSessionRecord>;
 }
 
 /** Test/local conformance store. Hosted deployment must supply durable storage. */

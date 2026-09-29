@@ -389,8 +389,36 @@ describe("incremental canonical Eve stream", () => {
       });
     const v2Observed = await observe([...v2Artifact, ...v2Read, ...v2UiPreview]);
     expect(v2Observed.artifactProjectionRequiresLegacyReadback).toBe(false);
+    expect(v2Observed.prototypeRef).toMatchObject({ digest, path, version: 2 });
     const mixedMarkdownObserved = await observe([...v1Markdown, ...v2Artifact, ...v2UiPreview]);
     expect(mixedMarkdownObserved.artifactProjectionRequiresLegacyReadback).toBe(false);
+    const legacyObserved = await observe([
+      v1Request,
+      {
+        data: {
+          result: {
+            callId: "legacy",
+            kind: "tool-result",
+            output: {
+              appId: "spend-review",
+              digest,
+              mediaType: "text/html",
+              path,
+              recordedByCallId: "legacy",
+              reused: false,
+              revision,
+              sessionId: "wrun_1",
+              size: Buffer.byteLength(content),
+            },
+            toolName: "record_prototype_artifact",
+          },
+          status: "completed",
+        },
+        type: "action.result",
+      },
+    ]);
+    expect(legacyObserved.artifactProjectionRequiresLegacyReadback).toBe(true);
+    expect(legacyObserved.prototype).toMatchObject({ content, digest, path });
     const partialV2 = [
       {
         data: {
