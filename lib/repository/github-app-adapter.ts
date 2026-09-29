@@ -227,7 +227,11 @@ export const createGitHubTargetAccessAdapter = (
   ): Promise<GitHubTargetAccessProof> {
     const requestedPermissions = githubPermissionsFor(operation);
     const observed = targetAccessObservationSchema.parse(
-      await provider.inspectTargetAccess({ operation, repositoryId, requestedPermissions }),
+      // eslint-disable-next-line eslint/no-use-before-define -- Function declaration is hoisted; the adapter uses the shared sanitization boundary.
+      await sanitizedProviderCall(
+        () => provider.inspectTargetAccess({ operation, repositoryId, requestedPermissions }),
+        "verify the selected repository's GitHub installation access",
+      ),
     );
     return issueGitHubTargetAccessProof({
       authority,
@@ -291,6 +295,7 @@ export interface GitHubAppInstallationProvider {
 }
 
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const inspectSelectedRepositoryRevisionAction = "inspect the selected repository revision";
 
 const providerStatus = z.object({ status: z.number().int().min(400).max(599) }).passthrough();
 
@@ -305,24 +310,41 @@ function safeProviderStatus(error: unknown): number | undefined {
   return nested.success ? nested.data.status : undefined;
 }
 
+const safeProviderRecovery = (status: number | undefined): string => {
+  if (status === 401) {
+    return "Reconnect GitHub access, then retry.";
+  }
+  if (status === 403) {
+    return "Check that the GitHub App installation has the required repository permission and that GitHub has not rate limited the request. Retry after access is restored.";
+  }
+  if (status === 404) {
+    return "Check that the repository and PR still exist and that the GitHub App installation can access them. Reconnect or select the repository again if needed.";
+  }
+  if (status === 409 || status === 422) {
+    return "The repository or PR may have changed. Reinspect its current state, rebuild and review the proposal, then retry.";
+  }
+  if (status === 429) {
+    return "GitHub rate limited the request. Wait for the limit to reset, then retry.";
+  }
+  if (status !== undefined && status >= 500) {
+    return "GitHub is unavailable. Retry after the service recovers; inspect the current state before repeating a write.";
+  }
+  return "Check GitHub availability and repository access. Inspect the current state before retrying a write.";
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 async function sanitizedProviderCall(
   operation: () => Promise<unknown>,
-  action?: string,
+  action: string,
 ): Promise<unknown> {
   try {
     return await operation();
   } catch (error) {
-    if (action !== undefined) {
-      const status = safeProviderStatus(error);
-      const statusSuffix = status === undefined ? "" : ` (HTTP ${status})`;
-      // oxlint-disable-next-line eslint/preserve-caught-error -- Raw provider errors may contain authorization headers or request URLs.
-      throw new Error(
-        `GitHub could not ${action}${statusSuffix}. Check GitHub availability and repository access, then inspect the current PR before retrying.`,
-      );
-    }
+    const status = safeProviderStatus(error);
+    const statusSuffix = status === undefined ? "" : ` (HTTP ${status})`;
+    const recovery = safeProviderRecovery(status);
     // oxlint-disable-next-line eslint/preserve-caught-error -- Raw provider errors may contain authorization headers or request URLs.
-    throw new Error("GitHub provider operation failed.");
+    throw new Error(`GitHub could not ${action}${statusSuffix}. ${recovery}`);
   }
 }
 
@@ -369,7 +391,10 @@ export const createGitHubTargetSourceResolutionAdapter = (
         throw new Error("github-target-access-proof-mismatch");
       }
       return repositoryObservation(
-        await provider.inspectRepository({ ref, repositoryId }),
+        await sanitizedProviderCall(
+          () => provider.inspectRepository({ ref, repositoryId }),
+          inspectSelectedRepositoryRevisionAction,
+        ),
         proof.digest,
       );
     },
@@ -392,11 +417,13 @@ export function createGitHubAppPublicationAdapter(
     const expected = githubPermissionsFor(operation);
     const snapshot = parseProviderResponse(
       installationSnapshotSchema,
-      await sanitizedProviderCall(() =>
-        provider.inspectInstallation({
-          operation,
-          requestedPermissions: expected,
-        }),
+      await sanitizedProviderCall(
+        () =>
+          provider.inspectInstallation({
+            operation,
+            requestedPermissions: expected,
+          }),
+        "inspect the GitHub App installation",
       ),
     );
     if (JSON.stringify(snapshot.grantedPermissions) !== JSON.stringify(expected)) {
@@ -417,17 +444,22 @@ export function createGitHubAppPublicationAdapter(
   async function observationFor(
     operation: GitHubOperation,
     snapshotOperation: () => Promise<unknown>,
+    action: string,
   ) {
     const identity = await inspectInstallation(operation);
-    return repositoryObservation(await sanitizedProviderCall(snapshotOperation), identity.digest);
+    return repositoryObservation(
+      await sanitizedProviderCall(snapshotOperation, action),
+      identity.digest,
+    );
   }
 
   return {
     async createPrivateFreshHistoryRepository(proposal, content) {
       return parseProviderResponse(
         acknowledgementSchema,
-        await sanitizedProviderCall(() =>
-          provider.createPrivateFreshHistoryRepository(proposal, content),
+        await sanitizedProviderCall(
+          () => provider.createPrivateFreshHistoryRepository(proposal, content),
+          "create the private repository",
         ),
       ) as GitHubMutationAcknowledgement;
     },
@@ -435,8 +467,9 @@ export function createGitHubAppPublicationAdapter(
       return z
         .boolean()
         .parse(
-          await sanitizedProviderCall(() =>
-            provider.inspectAppliedDraftReconciliation(proposal, observed),
+          await sanitizedProviderCall(
+            () => provider.inspectAppliedDraftReconciliation(proposal, observed),
+            "verify whether the draft PR reconciliation was applied",
           ),
         );
     },
@@ -444,13 +477,17 @@ export function createGitHubAppPublicationAdapter(
       return z
         .boolean()
         .parse(
-          await sanitizedProviderCall(() =>
-            provider.inspectAppliedDraftUpdate(proposal, content, observed),
+          await sanitizedProviderCall(
+            () => provider.inspectAppliedDraftUpdate(proposal, content, observed),
+            "verify whether the draft PR update was applied",
           ),
         );
     },
     async inspectDestination(input) {
-      const raw = await sanitizedProviderCall(() => provider.inspectDestination(input));
+      const raw = await sanitizedProviderCall(
+        () => provider.inspectDestination(input),
+        "inspect the repository destination",
+      );
       if (raw === "absent") {
         return "absent";
       }
@@ -460,7 +497,10 @@ export function createGitHubAppPublicationAdapter(
     async inspectDraftPublication(proposal) {
       const snapshot = parseProviderResponse(
         draftReadBackSchema,
-        await sanitizedProviderCall(() => provider.inspectDraftPublication(proposal)),
+        await sanitizedProviderCall(
+          () => provider.inspectDraftPublication(proposal),
+          "inspect the draft PR publication result",
+        ),
       );
       const identity = await inspectInstallation("publish-draft-pull-request");
       const unsigned = {
@@ -486,8 +526,9 @@ export function createGitHubAppPublicationAdapter(
       ) as ExistingDraftObservation;
     },
     async inspectFreshRepositoryOutcome(proposal) {
-      const raw = await sanitizedProviderCall(() =>
-        provider.inspectFreshRepositoryOutcome(proposal),
+      const raw = await sanitizedProviderCall(
+        () => provider.inspectFreshRepositoryOutcome(proposal),
+        "inspect the repository creation result",
       );
       if (raw === undefined) {
         return;
@@ -513,12 +554,19 @@ export function createGitHubAppPublicationAdapter(
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async inspectRepository(input) {
       const { operation, repositoryId, ref } = input;
-      return observationFor(operation, () => provider.inspectRepository({ ref, repositoryId }));
+      return observationFor(
+        operation,
+        () => provider.inspectRepository({ ref, repositoryId }),
+        inspectSelectedRepositoryRevisionAction,
+      );
     },
     async publishDraftPullRequest(proposal, content) {
       return parseProviderResponse(
         acknowledgementSchema,
-        await sanitizedProviderCall(() => provider.publishDraftPullRequest(proposal, content)),
+        await sanitizedProviderCall(
+          () => provider.publishDraftPullRequest(proposal, content),
+          "publish the draft PR",
+        ),
       ) as GitHubMutationAcknowledgement;
     },
     async reconcileExistingDraft(proposal, content) {
@@ -533,7 +581,10 @@ export function createGitHubAppPublicationAdapter(
     async updateExistingDraft(proposal, content) {
       return parseProviderResponse(
         acknowledgementSchema,
-        await sanitizedProviderCall(() => provider.updateExistingDraft(proposal, content)),
+        await sanitizedProviderCall(
+          () => provider.updateExistingDraft(proposal, content),
+          "update the existing draft PR",
+        ),
       ) as GitHubMutationAcknowledgement;
     },
   };
@@ -554,11 +605,13 @@ export function createGitHubAppSourceResolutionAdapter(
     const requestedPermissions = githubPermissionsFor(operation);
     const snapshot = parseProviderResponse(
       installationSnapshotSchema,
-      await sanitizedProviderCall(() =>
-        provider.inspectInstallation({
-          operation,
-          requestedPermissions,
-        }),
+      await sanitizedProviderCall(
+        () =>
+          provider.inspectInstallation({
+            operation,
+            requestedPermissions,
+          }),
+        "inspect the GitHub App installation",
       ),
     );
     if (JSON.stringify(snapshot.grantedPermissions) !== JSON.stringify(requestedPermissions)) {
@@ -580,7 +633,10 @@ export function createGitHubAppSourceResolutionAdapter(
     async inspectRepository({ operation, repositoryId, ref }) {
       const identity = await inspectInstallation(operation);
       return repositoryObservation(
-        await sanitizedProviderCall(() => provider.inspectRepository({ ref, repositoryId })),
+        await sanitizedProviderCall(
+          () => provider.inspectRepository({ ref, repositoryId }),
+          inspectSelectedRepositoryRevisionAction,
+        ),
         identity.digest,
       );
     },

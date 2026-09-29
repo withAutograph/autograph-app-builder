@@ -80,4 +80,31 @@ describe("target-bound existing source resolution", () => {
       }),
     ).rejects.toThrow("github-target-access-proof-invalid");
   });
+
+  it("identifies a failed repository revision inspection without leaking provider details", async () => {
+    const adapter = createGitHubTargetSourceResolutionAdapter(
+      {
+        ...provider,
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        async inspectRepository() {
+          throw Object.assign(new Error("secret-token https://github.example/private"), {
+            status: 404,
+          });
+        },
+      },
+      authority,
+    );
+    const proof = await adapter.inspectTargetAccess("200");
+    let message = "unexpected success";
+    try {
+      await adapter.inspectRepository({ proof, ref: "refs/heads/main", repositoryId: "200" });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain(
+      "GitHub could not inspect the selected repository revision (HTTP 404).",
+    );
+    expect(message).toContain("Reconnect or select the repository again");
+    expect(message).not.toMatch(/secret-token|github\.example/u);
+  });
 });
