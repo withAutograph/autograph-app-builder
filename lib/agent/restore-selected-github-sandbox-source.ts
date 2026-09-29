@@ -57,3 +57,20 @@ export const restoreSelectedGitHubSandboxSource = (input: {
     sessionId,
   });
 };
+
+/** Recover pre-migration sessions whose accepted app retained the source after source state was reset. */
+export const selectedGitHubSourceForSandboxRestore = (input: {
+  sourceState: ImmutableGitHubSourceReceipt | undefined;
+  workflowState: ImmutableGitHubSourceReceipt | undefined;
+}): ImmutableGitHubSourceReceipt | undefined => {
+  if (
+    input.sourceState !== undefined &&
+    input.workflowState !== undefined &&
+    input.sourceState.repository.repositoryId !== input.workflowState.repository.repositoryId
+  ) {
+    throw new Error(
+      "Builder cannot restore a saved checkout: source and accepted app refer to different GitHub repositories. Reopen the intended repository in a new Builder session.",
+    );
+  }
+  return input.sourceState ?? input.workflowState;
+};
