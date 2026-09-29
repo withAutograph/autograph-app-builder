@@ -76,3 +76,12 @@ for the remaining compatibility boundaries.
 Hosted authorization advertises the matching `autograph:*` scopes. A caller
 must hold `autograph:session` before the request-scoped tenant service is
 constructed; operation-specific scope checks remain inside the shared service.
+
+Large response batches use one complete direct submission. Oversized resumable
+response uploads are deferred; `autograph_respond` has no staging modes. Do not
+split a question batch into ordinary response calls: the pinned Eve version can
+resolve the batch and mark omitted answers ignored. Preserve the existing
+uncertain-submission recovery behavior described above. The
+[released-feature findings and transport decision](plans/2026-09-29-resumable-response-transport.md)
+assume no new upstream Eve features. Bounded pending-request readback is separate
+work and does not solve complete-batch response submission.
