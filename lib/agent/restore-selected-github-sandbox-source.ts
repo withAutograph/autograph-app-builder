@@ -66,10 +66,11 @@ export const selectedGitHubSourceForSandboxRestore = (input: {
   if (
     input.sourceState !== undefined &&
     input.workflowState !== undefined &&
-    input.sourceState.repository.repositoryId !== input.workflowState.repository.repositoryId
+    (input.sourceState.repository.repositoryId !== input.workflowState.repository.repositoryId ||
+      input.sourceState.resolvedRef !== input.workflowState.resolvedRef)
   ) {
     throw new Error(
-      "Builder cannot restore a saved checkout: source and accepted app refer to different GitHub repositories. Reopen the intended repository in a new Builder session.",
+      "Builder cannot restore a saved checkout: source and accepted app refer to different GitHub repositories or branches. Reopen the intended repository branch in a new Builder session.",
     );
   }
   return input.sourceState ?? input.workflowState;

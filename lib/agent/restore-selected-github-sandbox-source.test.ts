@@ -94,6 +94,12 @@ describe("selected GitHub sandbox source restoration", () => {
         },
       }),
     ).toThrow("different GitHub repositories");
+    expect(() =>
+      selectedGitHubSourceForSandboxRestore({
+        sourceState: source,
+        workflowState: { ...source, resolvedRef: "refs/heads/another-branch" },
+      }),
+    ).toThrow("different GitHub repositories or branches");
   });
 
   it("refreshes the selected repository and branch before replacement compute opens", async () => {
