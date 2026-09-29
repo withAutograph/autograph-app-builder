@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { localRuntimeEnvironmentPath } from "./runtime-environment";
+import type { PreparedRuntimeExecution } from "../agent/prepared-runtime-execution";
 
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
@@ -402,7 +403,7 @@ const attemptBinding = (attempt: TargetValidationAttemptReceipt): TargetValidati
 });
 
 export const sandboxValidationCommandExecutor =
-  (): ValidationCommandExecutor =>
+  (options?: { runtime?: PreparedRuntimeExecution | null }): ValidationCommandExecutor =>
   async ({ sandbox, appId, command, validationRoot, onChunk, abortSignal }) => {
     if (!supportedValidationCommands(appId).some((planned) => planned.command === command)) {
       throw new Error("The repository validation command is not supported.");
@@ -412,6 +413,14 @@ export const sandboxValidationCommandExecutor =
     // pipe open after the validation task exits.
     const runtimeTask = command.includes(" app:check ") ? "repository-check" : "repository-test";
     const shard = command.includes(" app:test ") ? ` ${command.split(" ").at(-1)}` : "";
+    if (options?.runtime) {
+      return await options.runtime.runTask({
+        task: runtimeTask,
+        ...(shard ? { shard: shard.trim() } : {}),
+        onChunk,
+        signal: abortSignal,
+      });
+    }
     const executionCommand = `if [ -f '${localRuntimeEnvironmentPath(validationRoot, appId)}' ]; then mise run app:runtime run ${appId} ${runtimeTask}${shard}; else ${command}; fi`;
     const detachedCommand = `set +e
 log=$(mktemp /tmp/app-builder-validation.XXXXXX) || exit $?

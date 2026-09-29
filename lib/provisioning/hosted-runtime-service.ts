@@ -57,6 +57,20 @@ const associatedData = (authority: BuilderProvisionAuthority, target: HostedRunt
     purpose: "app-runtime-private-state-v1",
   });
 
+export const encryptHostedRuntimeFiles = (input: {
+  authority: BuilderProvisionAuthority;
+  target: HostedRuntimeTarget;
+  files: PrivateRuntimeFiles;
+  config: VercelIntegrationConfig;
+}) => ({
+  ...encryptVercelToken({
+    associatedData: associatedData(input.authority, input.target),
+    key: input.config.tokenKey,
+    token: JSON.stringify(privateFilesSchema.parse(input.files)),
+  }),
+  keyVersion: input.config.tokenKeyVersion,
+});
+
 export const decryptHostedRuntimeFiles = (input: {
   authority: BuilderProvisionAuthority;
   target: HostedRuntimeTarget;

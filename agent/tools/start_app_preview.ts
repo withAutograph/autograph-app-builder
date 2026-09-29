@@ -15,11 +15,9 @@ import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 import { resolvePreviewPackageManager } from "@/lib/agent/preview-package-manager";
 import { ensureCheckoutDependencies } from "@/lib/agent/checkout-dependencies";
-import {
-  appDeclaresLocalSetup,
-  prepareAppLocalPreview,
-  localRuntimeEnvironmentPath,
-} from "./prepare-app-local-preview";
+import { resolvePreparedRuntimeExecution } from "@/lib/agent/prepared-runtime-execution";
+import { appDeclaresLocalSetup, prepareAppLocalPreview } from "./prepare-app-local-preview";
+import { localRuntimeEnvironmentPath } from "@/lib/repository/runtime-environment";
 import {
   hasLiveWorkingPreview,
   workingPreviewState,
@@ -80,6 +78,15 @@ export default defineTool({
     const evidenceGeneration = currentProductBehaviorGeneration();
     await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
     const provider = await getVercelPreviewProvider(sandbox.id, ctx.abortSignal);
+    const runtime = await resolvePreparedRuntimeExecution({
+      appId: selected.appId,
+      root: selected.root,
+      sandboxId: sandbox.id,
+      sessionAuth: ctx.session.auth,
+      sessionId: ctx.session.id,
+      signal: ctx.abortSignal,
+      state: current,
+    });
     const previous = workingPreviewState.get();
     const validationDigest = validationAttemptDigest(current);
     const requestDigest = createHash("sha256")
@@ -91,6 +98,7 @@ export default defineTool({
           landingPath: input.landingPath,
           port: input.port,
           revision: selected.revision,
+          runtimeStateDirectory: runtime?.stateDirectory,
           validationDigest,
         }),
       )
@@ -104,7 +112,11 @@ export default defineTool({
       const command = await provider.getCommand(previous.commandId, { signal: ctx.abortSignal });
       if (command.exitCode === null) {
         bindProductBehaviorPreview(previous.commandId, evidenceGeneration);
-        return { commandAdjustment: launch.adjustment, workingPreview: previous.receipt };
+        return {
+          commandAdjustment: launch.adjustment,
+          installationProof: runtime?.installationProof,
+          workingPreview: previous.receipt,
+        };
       }
     }
     const { appId } = selected;
@@ -119,8 +131,8 @@ export default defineTool({
         ? { ...dependencyInput, requiredExecutable: "next" }
         : dependencyInput,
     );
-    let environmentPath: string | undefined;
-    if (await appDeclaresLocalSetup({ appId, root: selected.root, sandbox })) {
+    let environmentPath = runtime?.environmentPath;
+    if (!runtime && (await appDeclaresLocalSetup({ appId, root: selected.root, sandbox }))) {
       const setup = await prepareAppLocalPreview({
         appId,
         root: selected.root,
@@ -136,8 +148,8 @@ export default defineTool({
     }
     workingPreviewState.update(() => null);
     let ownedAttemptId: string | undefined;
-    let prepareAuthenticatedOrigin: ((origin: string) => Promise<void>) | undefined;
-    if (environmentPath !== undefined) {
+    let prepareAuthenticatedOrigin = runtime?.prepareAuthenticatedOrigin;
+    if (!runtime && environmentPath !== undefined) {
       prepareAuthenticatedOrigin = async (authOrigin) => {
         const setup = await prepareAppLocalPreview({
           appId,
@@ -175,7 +187,11 @@ export default defineTool({
     });
     workingPreviewState.update(() => preview);
     bindProductBehaviorPreview(preview.commandId, evidenceGeneration);
-    return { commandAdjustment: launch.adjustment, workingPreview: preview.receipt };
+    return {
+      commandAdjustment: launch.adjustment,
+      installationProof: runtime?.installationProof,
+      workingPreview: preview.receipt,
+    };
   },
   inputSchema: z.object({
     appId: z

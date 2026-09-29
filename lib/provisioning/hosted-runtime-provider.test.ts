@@ -50,6 +50,29 @@ const clusterUrl =
   "postgresql://installer:fixture-secret@ep-owner.us-east-1.aws.neon.tech/neondb?sslmode=require";
 
 describe("owner-bound native Neon runtime adapter", () => {
+  it("rechecks dedicated bindings with read-only calls before a consumer launches", async () => {
+    const expected = { SPEND_REVIEW_DATABASE_URL: "restricted-value" };
+    const environment = {
+      ...native,
+      id: "env_app",
+      key: "SPEND_REVIEW_DATABASE_URL",
+      value: "restricted-value",
+    };
+    // oxlint-disable-next-line eslint/require-await -- Promise-returning provider fixture.
+    const request = vi.fn<typeof fetch>(async (resource) => {
+      const url = new URL(resource instanceof Request ? resource.url : resource.toString());
+      return Response.json(
+        url.pathname.endsWith("/env/env_app") ? environment : { envs: [environment] },
+      );
+    });
+    const provider = createHostedRuntimeVercelProvider({ credential, fetch: request, target });
+    await provider.assertEnvironmentBindings(expected);
+    expect(request.mock.calls.every(([, options]) => options?.method === "GET")).toBe(true);
+    environment.value = "changed-outside-builder";
+    await expect(provider.assertEnvironmentBindings(expected)).rejects.toMatchObject({
+      code: "resource_mismatch",
+    });
+  });
   it("uses only the selected project, exact Preview branch and native env ID", async () => {
     // oxlint-disable-next-line eslint/require-await -- Promise-returning provider fixture.
     const request = vi.fn<typeof fetch>(async (resource) => {

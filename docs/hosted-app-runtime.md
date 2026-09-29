@@ -69,6 +69,24 @@ to the protected preparation task.
 
 ## Evidence boundaries
 
+Preview launch, local preparation and validation consumers preserve an approved
+hosted selection. They recheck membership, installation, native isolation and
+the dedicated branch environment values, restore the encrypted private files
+into replacement Sandboxes, and use the protected state directory for app and
+browser commands. An incomplete or revoked hosted binding blocks these paths;
+it never silently becomes a disposable local database. Private gateway origin
+updates preserve the existing database and session tokens, and checkpoint the
+updated auth origin and cookie domains in encrypted state without rerunning
+database installation.
+
+Each restored consumer reruns repository `app:runtime verify` and compares its
+database observation with `app:describe` for the current selected release and
+artifact. Its safe `installationProof` includes the app, Preview branch,
+release, artifact, actor/tenant counts and observation time. This proves the
+observed database installation; it does not prove native deployment or the
+authenticated HTTP receipt. Browser/validation logs stream with backpressure
+and credential redaction across provider chunk boundaries.
+
 The public result names only the app, project, branch, changed variable keys,
 and repository proof fields: release/artifact identities, tenant and actor
 counts, and `authenticatedBehavior: "unassessed"`. Successful preparation

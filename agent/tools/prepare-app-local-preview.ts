@@ -5,6 +5,11 @@ import { z } from "zod";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { describeSelectedApp } from "@/lib/repository/app-description";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
+import { resolvePreparedRuntimeExecution } from "@/lib/agent/prepared-runtime-execution";
+import type {
+  PreparedRuntimeExecution,
+  PreparedRuntimeExecutionContext,
+} from "@/lib/agent/prepared-runtime-execution";
 
 export { localRuntimeEnvironmentPath } from "@/lib/repository/runtime-environment";
 
@@ -48,7 +53,22 @@ export const prepareAppLocalPreview = async (input: {
   sandbox: Pick<SandboxSession, "run">;
   signal?: AbortSignal;
   authOrigin?: string;
+  execution?: PreparedRuntimeExecutionContext;
 }) => {
+  const runtime = input.execution ? await resolvePreparedRuntimeExecution(input.execution) : null;
+  if (runtime) {
+    if (input.authOrigin !== undefined) {
+      await runtime.prepareAuthenticatedOrigin(input.authOrigin);
+    }
+    return {
+      command: "Restore approved hosted runtime",
+      exitCode: 0,
+      installationProof: runtime.installationProof,
+      status: "prepared" as const,
+      stderr: "",
+      stdout: "",
+    };
+  }
   const origin =
     input.authOrigin === undefined
       ? undefined
@@ -99,9 +119,14 @@ export const prepareValidationLocalData = async (input: {
   root: string;
   sandbox: Pick<SandboxSession, "run">;
   signal?: AbortSignal;
-}): Promise<void> => {
+  execution?: PreparedRuntimeExecutionContext;
+}): Promise<PreparedRuntimeExecution | null> => {
+  const runtime = input.execution ? await resolvePreparedRuntimeExecution(input.execution) : null;
+  if (runtime) {
+    return runtime;
+  }
   if (!(await appDeclaresLocalSetup(input))) {
-    return;
+    return null;
   }
   const setup = await prepareAppLocalPreview(input);
   if (setup.status === "failed") {
@@ -109,17 +134,27 @@ export const prepareValidationLocalData = async (input: {
       `Validation could not prepare the selected app's local data. ${setup.problem}\nCommand: ${setup.command}\n${setup.stderr || setup.stdout || "No command output was returned."}`,
     );
   }
+  return null;
 };
 
 export default defineTool({
   description:
-    "Prepare the selected app's isolated authenticated PostgreSQL runtime, real Auth identities and app memberships using repository-owned app:describe and app:runtime commands. This installs no product demo seeds. Application behavior remains unassessed until its authenticated tests run. Do not use this local operation for hosted or Production resources.",
+    "Prepare the selected app's isolated authenticated PostgreSQL runtime, real Auth identities and app memberships using repository-owned app:describe and app:runtime commands. An approved hosted Preview runtime is restored and verified rather than replaced by local data; this operation grants no hosted mutations. This installs no product demo seeds. Application behavior remains unassessed until its authenticated tests run. Do not use it for Production resources.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     const sandbox = await ctx.getSandbox();
     const selected = await runnableSelectedApp({ appId: input.appId, sandbox, state });
     return await prepareAppLocalPreview({
       appId: selected.appId,
+      execution: {
+        appId: selected.appId,
+        root: selected.root,
+        sandboxId: sandbox.id,
+        sessionAuth: ctx.session.auth,
+        sessionId: ctx.session.id,
+        signal: ctx.abortSignal,
+        state,
+      },
       root: selected.root,
       sandbox,
       signal: ctx.abortSignal,

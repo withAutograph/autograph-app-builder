@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { preparedRuntimeSelections } from "@/lib/agent/prepared-runtime-selection";
 import { resolveHostedRuntimeDeployment } from "@/lib/provisioning/hosted-runtime-deployment";
 import { HostedRuntimeProviderError } from "@/lib/provisioning/hosted-runtime-provider";
 import { createHostedRuntimeSandboxExecutor } from "@/lib/provisioning/hosted-runtime-sandbox";
@@ -41,6 +42,15 @@ export default defineTool({
       if (runtime.target.projectId !== input.projectId) {
         throw new HostedRuntimeProviderError("resource_mismatch");
       }
+      preparedRuntimeSelections.update((selections) => ({
+        ...selections,
+        [selected.appId]: {
+          appId: selected.appId,
+          branch: input.branch,
+          projectId: input.projectId,
+          sessionId: ctx.session.id,
+        },
+      }));
       await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
       const provider = await getVercelPreviewProvider(sandbox.id, ctx.abortSignal);
       return await prepareHostedRuntime({

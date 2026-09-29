@@ -4,6 +4,11 @@ import { z } from "zod";
 
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
+import { resolvePreparedRuntimeExecution } from "@/lib/agent/prepared-runtime-execution";
+import type {
+  PreparedRuntimeExecution,
+  PreparedRuntimeExecutionContext,
+} from "@/lib/agent/prepared-runtime-execution";
 
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 
@@ -33,17 +38,27 @@ export const runAppBrowserTests = async (input: {
   root: string;
   sandbox: Pick<SandboxSession, "run">;
   signal?: AbortSignal;
+  execution?: PreparedRuntimeExecutionContext;
+  runtime?: PreparedRuntimeExecution | null;
 }) => {
   const command = appBrowserTestCommand(input.appId);
   try {
-    let result =
-      input.signal === undefined
+    const runtime =
+      input.runtime ??
+      (input.execution ? await resolvePreparedRuntimeExecution(input.execution) : null);
+    const runTask = async () => {
+      if (runtime) {
+        return await runtime.runTask({ signal: input.signal, task: "test-e2e" });
+      }
+      return input.signal === undefined
         ? await input.sandbox.run({ command, workingDirectory: input.root })
         : await input.sandbox.run({
             abortSignal: input.signal,
             command,
             workingDirectory: input.root,
           });
+    };
+    let result = await runTask();
     if (
       result.exitCode !== 0 &&
       /error while loading shared libraries: [A-Za-z0-9_.+-]+\.so/iu.test(
@@ -67,7 +82,7 @@ export const runAppBrowserTests = async (input: {
           stdout: safeOutput(dependencies.stdout),
         };
       }
-      result = await input.sandbox.run({ command, workingDirectory: input.root });
+      result = await runTask();
     }
     const stdout = safeOutput(result.stdout);
     const stderr = safeOutput(result.stderr);
@@ -110,6 +125,15 @@ export default defineTool({
     const selected = await runnableSelectedApp({ appId: input.appId, sandbox, state });
     return await runAppBrowserTests({
       appId: selected.appId,
+      execution: {
+        appId: selected.appId,
+        root: selected.root,
+        sandboxId: sandbox.id,
+        sessionAuth: ctx.session.auth,
+        sessionId: ctx.session.id,
+        signal: ctx.abortSignal,
+        state,
+      },
       root: selected.root,
       sandbox,
       signal: ctx.abortSignal,

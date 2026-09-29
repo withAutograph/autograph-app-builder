@@ -7,7 +7,7 @@ import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { readActiveVercelInstallationToken } from "../integrations/postgres-vercel-installation";
 import { readVercelIntegrationEnvironment } from "../integrations/vercel-installation";
 import { openHostedPostgresDatabase } from "../mcp/hosted-route";
-import { hostedRuntimeIdentity } from "./hosted-runtime-journal";
+import { hostedRuntimeIdentity, updateHostedRuntimeJournal } from "./hosted-runtime-journal";
 import type { HostedRuntimeTarget } from "./hosted-runtime-journal";
 import {
   createHostedRuntimeVercelProvider,
@@ -15,7 +15,9 @@ import {
 } from "./hosted-runtime-provider";
 import {
   decryptHostedRuntimeFiles,
+  encryptHostedRuntimeFiles,
   hostedRuntimeExecutionEnvironment,
+  hostedRuntimeBindings,
 } from "./hosted-runtime-service";
 import { createPostgresHostedRuntimeJournalStore } from "./postgres-hosted-runtime-journal";
 
@@ -87,19 +89,37 @@ export const resolveHostedRuntimeDeployment = async (input: {
 
 /** Restore/launch helper for server code only. Credentials never become tool or public event fields. */
 export const readHostedRuntimeExecutionBinding = async (
-  input: Parameters<typeof resolveHostedRuntimeDeployment>[0],
+  input: Parameters<typeof resolveHostedRuntimeDeployment>[0] & { optionalProject?: boolean },
 ) => {
-  const runtime = await resolveHostedRuntimeDeployment(input);
+  let runtime;
+  try {
+    runtime = await resolveHostedRuntimeDeployment(input);
+  } catch (error) {
+    if (
+      input.optionalProject === true &&
+      error instanceof HostedRuntimeProviderError &&
+      error.code === "connection_required"
+    ) {
+      return null;
+    }
+    throw error;
+  }
   const credential = await runtime.readCredential();
   if (!credential) {
     throw new HostedRuntimeProviderError("authorization_required");
   }
   const row = await runtime.store.read(runtime);
-  if (!row || row.record.status !== "prepared" || row.record.step !== "bound") {
+  if (!row) {
     return null;
   }
+  if (row.record.status !== "prepared" || row.record.step !== "bound") {
+    throw new HostedRuntimeProviderError("connection_required");
+  }
   const files = decryptHostedRuntimeFiles({ ...runtime, record: row.record });
-  if (files) {
+  if (!files) {
+    throw new HostedRuntimeProviderError("connection_required");
+  }
+  {
     const provider = createHostedRuntimeVercelProvider({ credential, target: runtime.target });
     await provider.assertProject();
     const cluster = await provider.readClusterCredential();
@@ -109,12 +129,35 @@ export const readHostedRuntimeExecutionBinding = async (
     if (original.clusterUrl !== cluster.clusterUrl) {
       throw new HostedRuntimeProviderError("resource_mismatch");
     }
+    const published = hostedRuntimeBindings(files, input.appId);
+    delete published.BETTER_AUTH_URL;
+    await provider.assertEnvironmentBindings(published);
   }
-  return files
-    ? {
-        environment: hostedRuntimeExecutionEnvironment(files, input.appId),
-        files,
-        stateDirectory: runtime.stateDirectory,
+  return {
+    branch: runtime.target.branch,
+    environment: hostedRuntimeExecutionEnvironment(files, input.appId),
+    files,
+    async persistFiles(nextFiles: typeof files) {
+      if (!(await runtime.readCredential())) {
+        throw new HostedRuntimeProviderError("authorization_required");
       }
-    : undefined;
+      await updateHostedRuntimeJournal({
+        ...runtime,
+        now: Date.now,
+        update(record) {
+          if (
+            record.status !== "prepared" ||
+            record.step !== "bound" ||
+            (record.leaseExpiresAt !== undefined && Date.parse(record.leaseExpiresAt) > Date.now())
+          ) {
+            throw new HostedRuntimeProviderError("connection_required");
+          }
+          record.privateState = encryptHostedRuntimeFiles({ ...runtime, files: nextFiles });
+          return record;
+        },
+      });
+    },
+    projectId: runtime.target.projectId,
+    stateDirectory: runtime.stateDirectory,
+  };
 };

@@ -25,7 +25,10 @@ export type HostedRuntimeTarget = z.infer<typeof hostedRuntimeTargetSchema>;
 
 export const hostedRuntimeProofSchema = z.strictObject({
   actors: z.number().int().nonnegative(),
-  artifactHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  artifactHash: z
+    .string()
+    .regex(/^(?:sha256:)?[a-f0-9]{64}$/u)
+    .transform((value) => value.replace(/^sha256:/u, "")),
   authenticatedBehavior: z.literal("unassessed"),
   releaseId: z.string().min(1),
   tenants: z.number().int().positive(),

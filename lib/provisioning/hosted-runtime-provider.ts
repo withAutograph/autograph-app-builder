@@ -171,7 +171,27 @@ export const createHostedRuntimeVercelProvider = (input: {
     }
     return result.data;
   };
+  const assertEnvironmentBindings = async (values: Readonly<Record<string, string>>) => {
+    const observed = await environments();
+    await Promise.all(
+      Object.keys(values).map(async (key) => {
+        const matches = observed.filter(
+          (environment) =>
+            environment.key === key && exactPreviewVariable(environment, input.target.branch),
+        );
+        const [match] = matches;
+        if (matches.length !== 1 || match === undefined) {
+          throw new HostedRuntimeProviderError("resource_mismatch");
+        }
+        const secret = await decrypted(match.id);
+        if (secret.key !== key || secret.value !== values[key]) {
+          throw new HostedRuntimeProviderError("resource_mismatch");
+        }
+      }),
+    );
+  };
   return {
+    assertEnvironmentBindings,
     async assertProject() {
       const project = z
         .object({
@@ -204,23 +224,7 @@ export const createHostedRuntimeVercelProvider = (input: {
           value: values[key],
         })),
       );
-      const observed = await environments();
-      await Promise.all(
-        keys.map(async (key) => {
-          const matches = observed.filter(
-            (environment) =>
-              environment.key === key && exactPreviewVariable(environment, input.target.branch),
-          );
-          const [match] = matches;
-          if (matches.length !== 1 || match === undefined) {
-            throw new HostedRuntimeProviderError("resource_mismatch");
-          }
-          const secret = await decrypted(match.id);
-          if (secret.key !== key || secret.value !== values[key]) {
-            throw new HostedRuntimeProviderError("resource_mismatch");
-          }
-        }),
-      );
+      await assertEnvironmentBindings(values);
       return keys;
     },
     async readClusterCredential() {
