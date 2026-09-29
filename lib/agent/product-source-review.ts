@@ -130,7 +130,16 @@ export const validateSourceJudgment = (
       "Source review returned invalid structured evidence.",
     );
   }
-  const requirements = [input.originalRequest ?? "", ...input.clarifications, input.appSpec];
+  const contextRequirements = input.reviewContext?.text.replaceAll(
+    /^(?:Original request|Accepted AppSpec|Clarification \d+):\n/gmu,
+    "",
+  );
+  const requirements = [
+    input.originalRequest ?? "",
+    ...input.clarifications,
+    input.appSpec,
+    contextRequirements ?? "",
+  ];
   const valid = parsed.data.findings.every(
     (finding) =>
       requirements.some((text) => text.includes(finding.requirementQuote)) &&
@@ -308,24 +317,46 @@ const reviewContextOverlap = 256;
 const safeTextEnd = (text: string, desired: number): number =>
   desired < text.length && /[\uD800-\uDBFF]/u.test(text[desired - 1] ?? "") ? desired - 1 : desired;
 
-const reviewContexts = function* reviewContexts(
+// oxlint-disable-next-line eslint/func-style -- Async iteration reads a durable AppSpec without joining it.
+async function* reviewContexts(
   input: ProductSourceReviewInput,
-): Generator<ReviewContext> {
-  const history = [
+  appSpecParts?: () => AsyncIterable<string>,
+): AsyncGenerator<ReviewContext> {
+  const prefix = `${[
     `Original request:\n${input.originalRequest ?? ""}`,
     ...input.clarifications.map((text, index) => `Clarification ${index + 1}:\n${text}`),
-    `Accepted AppSpec:\n${input.appSpec}`,
-  ].join("\n\n");
-  for (let startOffset = 0; startOffset < history.length;) {
-    const end = safeTextEnd(
-      history,
-      Math.min(history.length, startOffset + reviewContextCharacters),
-    );
-    const text = history.slice(startOffset, end);
-    yield { digest: hashText(text), index: 0, kind: "request-history", startOffset, text };
-    startOffset = end === history.length ? end : end - reviewContextOverlap;
+  ].join("\n\n")}\n\nAccepted AppSpec:\n`;
+  let buffer = "";
+  let startOffset = 0;
+  const segments = async function* segments() {
+    yield prefix;
+    if (appSpecParts === undefined) {
+      yield input.appSpec;
+    } else {
+      yield* appSpecParts();
+    }
+  };
+  for await (const segment of segments()) {
+    buffer += segment;
+    while (buffer.length > reviewContextCharacters) {
+      const end = safeTextEnd(buffer, reviewContextCharacters);
+      const text = buffer.slice(0, end);
+      yield { digest: hashText(text), index: 0, kind: "request-history", startOffset, text };
+      const advance = end - reviewContextOverlap;
+      buffer = buffer.slice(advance);
+      startOffset += advance;
+    }
   }
-};
+  if (buffer.length > 0) {
+    yield {
+      digest: hashText(buffer),
+      index: 0,
+      kind: "request-history",
+      startOffset,
+      text: buffer,
+    };
+  }
+}
 
 const splitReviewPage = (
   page: ProductReviewSourcePage,
@@ -464,6 +495,7 @@ export const assessProductSourcePages = async (
       page: ProductReviewSourcePage,
       context: ReviewContext,
     ) => SourceJudgment | Promise<SourceJudgment>;
+    reviewAppSpecParts?: () => AsyncIterable<string>;
   } = {},
   // oxlint-disable-next-line sonarjs/cognitive-complexity -- Every page and requirement excerpt must be checked before completion.
 ): Promise<ProductSourceAssessment> => {
@@ -486,7 +518,7 @@ export const assessProductSourcePages = async (
     evidence.update(
       JSON.stringify([page.path, page.startLine, page.startColumn, hashText(page.content)]),
     );
-    for (const context of reviewContexts(base)) {
+    for await (const context of reviewContexts(base, options.reviewAppSpecParts)) {
       const contextProgress = {
         contextIndex: context.index,
         contextKind: context.kind,

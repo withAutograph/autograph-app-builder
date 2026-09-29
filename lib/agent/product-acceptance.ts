@@ -3,11 +3,11 @@ import type { AcceptedAppSpec } from "./workflow-state";
 
 /** Retain product outcomes independently of successful compiler/test commands. */
 export const productAcceptanceObligations = (
-  appSpec: Pick<AcceptedAppSpec, "content" | "digest">,
+  appSpec: Pick<AcceptedAppSpec, "content" | "digest" | "walkthrough">,
   evidence: readonly unknown[] = [],
   sourceAssessment?: ProductSourceAssessment,
 ) => {
-  const lines = appSpec.content.split(/\r?\n/u);
+  const lines = appSpec.content?.split(/\r?\n/u) ?? [];
   const selected: string[] = [];
   let inWalkthrough = false;
   let fence: string | undefined;
@@ -31,7 +31,7 @@ export const productAcceptanceObligations = (
       selected.push(line);
     }
   }
-  const walkthrough = selected.join("\n").trim();
+  const walkthrough = appSpec.walkthrough ?? selected.join("\n").trim();
   return {
     appSpecDigest: appSpec.digest,
     evidence,

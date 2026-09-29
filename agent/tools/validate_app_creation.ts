@@ -59,8 +59,11 @@ export default defineTool({
         abortSignal: ctx.abortSignal,
         appSpec: current.appSpec,
         applyReceipt: current.applyReceipt,
+        artifacts: current.artifacts,
         callId: ctx.callId,
         getSandbox: async () => await ctx.getSandbox(),
+        sessionAuth: ctx.session.auth,
+        sessionId: ctx.session.id,
       });
       ctx.abortSignal?.throwIfAborted();
       return {
@@ -177,8 +180,11 @@ export default defineTool({
       abortSignal: ctx.abortSignal,
       appSpec: current.appSpec,
       applyReceipt: current.applyReceipt,
+      artifacts: current.artifacts,
       callId: ctx.callId,
       getSandbox: async () => await ctx.getSandbox(),
+      sessionAuth: ctx.session.auth,
+      sessionId: ctx.session.id,
     });
     validationPhase(ctx.callId, "applied_source_review_finished", sourceAssessment.status);
     return {

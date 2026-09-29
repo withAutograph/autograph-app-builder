@@ -232,6 +232,58 @@ it("sends a large request history through bounded model contexts", async () => {
   expect(assessment.findings[0]?.citations[0]?.startLine).toBe(3);
 });
 
+it("reads a large accepted AppSpec from scoped pages for every source page", async () => {
+  const requirement = "The export must survive a restart.";
+  const content = `${"A product requirement. ".repeat(6 * 10 ** 3)}${requirement}`;
+  const seen: string[] = [];
+  let reads = 0;
+  const assessment = await assessProductSourcePages(
+    {
+      appSpec: "",
+      appSpecDigest: "verified-spec-digest",
+      clarifications: [],
+      omissions: [],
+      originalRequest: "Build an export.",
+      sourceDigest: "source-tree",
+    },
+    (async function* pages() {
+      yield { content: "fake export", path, startColumn: 1, startLine: 1 };
+      yield { content: "fake export", path, startColumn: 1, startLine: 2 };
+    })(),
+    {
+      generate(_page, context) {
+        seen.push(context.text);
+        return {
+          findings: context.text.includes(requirement)
+            ? [
+                {
+                  citations: [{ endLine: 1, excerpt: "fake export", path, startLine: 1 }],
+                  explanation: "The export is only simulated.",
+                  repair: "Persist the export.",
+                  requirement: "Durable export",
+                  requirementQuote: requirement,
+                },
+              ]
+            : [],
+          remainingRuntimeChecks: [],
+        };
+      },
+      reviewAppSpecParts: () =>
+        (async function* parts() {
+          reads += 1;
+          for (let offset = 0; offset < content.length; offset += 8 * 1024) {
+            yield content.slice(offset, offset + 8 * 1024);
+          }
+        })(),
+    },
+  );
+  expect(assessment.reviewCompleted).toBe(true);
+  expect(assessment.status).toBe("failed");
+  expect(reads).toBe(2);
+  expect(seen.some((context) => context.includes(requirement))).toBe(true);
+  expect(Math.max(...seen.map((context) => context.length))).toBeLessThanOrEqual(16 * 1024);
+});
+
 it("reviews ordinary chronological clarifications together for each source page", async () => {
   const contexts: string[] = [];
   const clarifications = Array.from({ length: 12 }, (_, index) => `Requirement ${index + 1}`);

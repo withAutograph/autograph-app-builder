@@ -46,6 +46,18 @@ describe("prototype artifact receipts", () => {
     expect(shouldRecordHostedPrototypeDurably({ ...common, hosted: false })).toBe(false);
   });
 
+  it("routes new hosted AppSpecs to v2 while preserving identical v1 AppSpec retries", () => {
+    const content = '## Build handoff\n\n```json\n{\n  "status": "build-ready"\n}\n```';
+    const path = "prototype/expense-review/app-spec.md";
+    const common = { content, hosted: true, mediaType: "text/markdown" as const, path };
+    expect(shouldRecordHostedPrototypeDurably(common)).toBe(true);
+    const prior = record({ content, path }).artifact;
+    expect(shouldRecordHostedPrototypeDurably({ ...common, existing: prior })).toBe(false);
+    expect(
+      shouldRecordHostedPrototypeDurably({ ...common, content: `${content}\n`, existing: prior }),
+    ).toBe(true);
+  });
+
   it("allows only the three exact files below one kebab-case app id", () => {
     expect(parsePrototypeArtifactPath("prototype/expense-review/app-spec.md")).toEqual({
       appId: "expense-review",

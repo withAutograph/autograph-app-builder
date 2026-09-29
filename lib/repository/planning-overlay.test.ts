@@ -10,6 +10,37 @@ import {
 } from "./target-planning";
 
 describe("planning from the current checkout", () => {
+  it("writes a large accepted AppSpec from a bounded stream without a full-content argument", async () => {
+    const content = "Product outcome. ".repeat(100_000);
+    const pieces = content.match(/[\s\S]{1,65536}/gu) ?? [];
+    const written: string[] = [];
+    const sandbox = {
+      // oxlint-disable-next-line eslint/require-await -- Sandbox fixture models an asynchronous remove.
+      removePath: vi.fn(async () => {}),
+      // oxlint-disable-next-line eslint/require-await -- Sandbox fixture models an asynchronous copy.
+      run: vi.fn(async () => ({ exitCode: 0, stderr: "", stdout: "" })),
+      async writeFile({ content: stream }: { content: ReadableStream<Uint8Array> }) {
+        for await (const bytes of stream) written.push(Buffer.from(bytes).toString("utf-8"));
+      },
+      // oxlint-disable-next-line eslint/require-await -- Sandbox fixture models an asynchronous profile write.
+      writeTextFile: vi.fn(async () => {}),
+    } as unknown as SandboxSession;
+    await materializePlanningOverlay({
+      appId: "inventory",
+      appSpecDigest: "a".repeat(64),
+      appSpecStream: new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const piece of pieces) controller.enqueue(Buffer.from(piece, "utf-8"));
+          controller.close();
+        },
+      }),
+      artifactRevision: "b".repeat(64),
+      sandbox,
+    });
+    expect(written.join("")).toBe(content);
+    expect(written.length).toBeGreaterThan(20);
+    expect(sandbox.writeTextFile).toHaveBeenCalledTimes(1);
+  });
   it.each(["inventory-queue", "travel-approvals"])(
     "uses the planning mise profile for target identity commands for %s",
     async (appId) => {

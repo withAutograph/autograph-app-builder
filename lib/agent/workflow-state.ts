@@ -44,7 +44,11 @@ export const UI_PREVIEW_TRANSFER_STATE_KEY =
 export interface AcceptedAppSpec {
   appId: string;
   artifactPath: string;
-  content: string;
+  /** Legacy accepted snapshots retain their inline content. */
+  content?: string;
+  /** Durable acceptance retains only the exact artifact reference and walkthrough. */
+  version?: 2;
+  walkthrough?: string;
   digest: string;
   acceptedByCallId: string;
   artifactRevision: string;
