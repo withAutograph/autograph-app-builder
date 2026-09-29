@@ -1412,7 +1412,13 @@ export function createHostedEveSessionService(input: {
       const legacyCheckpoint = canPageCheckpoint
         ? undefined
         : checkpointForSnapshot(sessionId, snapshot, observedAt);
-      const observed = await observeSnapshot(sessionId, snapshot, "live", observedAt);
+      let resumability: "live" | "terminal" | "checkpoint" = "live";
+      if (["completed", "failed", "cancelled"].includes(snapshot.status)) {
+        resumability = "terminal";
+      } else if (session.resumability === "checkpoint" && snapshot.status === "working") {
+        resumability = "checkpoint";
+      }
+      const observed = await observeSnapshot(sessionId, snapshot, resumability, observedAt);
       const current = toDurableHostedSessionRecord(await requireSession(sessionId));
       const progressUnchanged = canPageCheckpoint
         ? current.checkpointProgressDigest !== undefined &&
