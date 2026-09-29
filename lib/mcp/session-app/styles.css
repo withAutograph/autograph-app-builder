@@ -121,9 +121,10 @@
 }
 
 .mcpApp .approval-request h2 {
-  max-width: 540px;
+  max-width: 600px;
   margin: 0;
-  font-size: clamp(24px, 4vw, 32px);
+  overflow-wrap: anywhere;
+  font-size: clamp(22px, 3vw, 28px);
   font-weight: 650;
   letter-spacing: -0.04em;
 }
@@ -133,6 +134,7 @@
   margin: 10px 0 0;
   color: var(--muted);
   font-size: 16px;
+  line-height: 1.6;
 }
 
 .mcpApp .approval-request__eyebrow {
@@ -180,15 +182,16 @@
 }
 
 .mcpApp.approval-shell {
-  width: min(650px, calc(100% - 48px));
-  overflow: visible;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
+  width: min(720px, calc(100% - 32px));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 7%);
 }
 
 .mcpApp.approval-shell .request-list {
-  padding: 28px 0 34px;
+  padding: 28px;
 }
 
 .mcpApp .choices label > span {
@@ -401,14 +404,14 @@
   font-size: 12px;
 }
 
-.mcpApp.success {
+.mcpApp.outcome {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 24px;
 }
 
-.mcpApp.success > span {
+.mcpApp.outcome > span {
   display: grid;
   width: 32px;
   height: 32px;
@@ -418,7 +421,28 @@
   color: #23734d;
 }
 
-.mcpApp.success p {
+.mcpApp.outcome--failure {
+  align-items: flex-start;
+  border-color: color-mix(in srgb, var(--danger) 36%, var(--border));
+  background: color-mix(in srgb, var(--danger) 7%, var(--surface));
+}
+
+.mcpApp.outcome--failure > span {
+  background: color-mix(in srgb, var(--danger) 14%, var(--surface));
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.mcpApp.outcome--failure strong {
+  color: var(--danger);
+}
+
+.mcpApp.outcome--neutral {
+  min-height: 82px;
+  color: var(--muted);
+}
+
+.mcpApp.outcome p {
   margin: 2px 0 0;
   color: var(--muted);
 }

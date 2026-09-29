@@ -47,6 +47,19 @@ export const approvalRequest: PublicInputRequest = {
   title: "Approve this plan",
 };
 
+export const draftPullRequestApprovalRequest: PublicInputRequest = {
+  allowFreeform: false,
+  description:
+    "Update draft PR #1500 in withAutograph/arrusted-development with eight reviewed Spend Review files. The PR will remain a draft and will not be merged or deployed.",
+  kind: "question",
+  options: [
+    { id: "update-draft", label: "Update draft PR" },
+    { id: "cancel-update", label: "Do not update" },
+  ],
+  requestId: "publish-reviewed-changes",
+  title: "Update draft PR #1500?",
+};
+
 export const authorizationRequest: PublicInputRequest = {
   allowFreeform: false,
   authorization: {

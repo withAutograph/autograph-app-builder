@@ -36,6 +36,15 @@ writes, pushes, draft PRs, deployments, provisioning, and releases require a
 later approval naming their visible effect. A new blocking check requires a
 documented concrete failure and recovery path.
 
+Make outward-effect approval requests concise and specific. Use a short title
+that names the action, then explain the target and visible result in plain
+language. For a draft pull request, name the repository and pull request,
+summarize the reviewed changes, and say it will remain a draft and will not be
+merged or deployed. Do not include commit IDs, content digests, receipt JSON,
+or other internal verification values in user-facing copy. Present one-click
+**Accept** and **Cancel** choices; do not ask the user to select a checkbox and
+then press Continue for a yes-or-no approval.
+
 Use Vercel Sandbox with project-scoped OIDC and structured commands. Never use
 static provider keys, shell wrappers, or a fallback runtime. Design, planning,
 dependency setup, and prototypes need no approval. Use the integrated Browser

@@ -143,27 +143,43 @@ export function assertApprovalReceipt(input: {
   return actual;
 }
 
-// oxlint-disable-next-line eslint/func-style, eslint/complexity -- preserve hoisting across supported approval phases.
+const isDraftPullRequestTool = (toolName?: string) =>
+  toolName === "publish_github_draft_pr" || toolName === "publish-github-draft-pr";
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+function publicReceiptDescription(receipt: unknown, toolName?: string): string | undefined {
+  const parsed = approvalReceiptSchema.safeParse(receipt);
+  let expectedPhase: ApprovalReceipt["phase"] | undefined;
+  if (toolName === "accept_app_spec") {
+    expectedPhase = "appspec";
+  } else if (toolName === "accept_change_set") {
+    expectedPhase = "change_set";
+  } else if (isDraftPullRequestTool(toolName)) {
+    expectedPhase = "publication";
+  } else if (toolName === "update_github_draft_pr" || toolName === "reconcile_github_draft_pr") {
+    expectedPhase = "draft_update";
+  }
+  if (!parsed.success || (expectedPhase !== undefined && parsed.data.phase !== expectedPhase)) {
+    return undefined;
+  }
+  if (isDraftPullRequestTool(toolName)) {
+    const baseBranch = parsed.data.baseRef.replace(/^refs\/heads\//u, "");
+    return `This will publish the reviewed changes to a draft pull request in ${parsed.data.repository} on ${baseBranch}. The pull request will remain a draft; this will not merge or deploy it.`;
+  }
+  if (toolName === "reconcile_github_draft_pr") {
+    return `This will update the existing draft branch ${parsed.data.baseRef} in ${parsed.data.repository} from commit ${parsed.data.baseSha} using reviewed reconciliation ${parsed.data.subjectDigest}. The pull request will remain a draft; this will not merge or deploy it.`;
+  }
+  return JSON.stringify(parsed.data);
+}
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function publicApprovalDescription(input: unknown, toolName?: string): string | undefined {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     return undefined;
   }
   const record = input as Record<string, unknown>;
   if (Object.hasOwn(record, "approvalReceipt")) {
-    const parsed = approvalReceiptSchema.safeParse(record.approvalReceipt);
-    let expectedPhase: ApprovalReceipt["phase"] | undefined;
-    if (toolName === "accept_app_spec") {
-      expectedPhase = "appspec";
-    } else if (toolName === "accept_change_set") {
-      expectedPhase = "change_set";
-    } else if (toolName === "publish_github_draft_pr") {
-      expectedPhase = "publication";
-    } else if (toolName === "update_github_draft_pr" || toolName === "reconcile_github_draft_pr") {
-      expectedPhase = "draft_update";
-    }
-    return parsed.success && (expectedPhase === undefined || parsed.data.phase === expectedPhase)
-      ? JSON.stringify(parsed.data)
-      : undefined;
+    return publicReceiptDescription(record.approvalReceipt, toolName);
   }
   if (toolName === "accept_app_spec") {
     const parsed = z
