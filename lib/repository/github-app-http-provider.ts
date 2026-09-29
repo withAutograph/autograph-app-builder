@@ -18,6 +18,14 @@ import type { DraftPullRequestProposal, GitHubDraftPullRequestContent } from "./
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
 import type { ExistingDraftUpdateProposal } from "./github-draft-update";
+import { assertReconciliationContent } from "./github-draft-reconciliation";
+import type {
+  ExistingDraftReconciliationProposal,
+  ReconciliationContent,
+} from "./github-draft-reconciliation";
+
+const reconciliationCommitMessage = (proposal: ExistingDraftReconciliationProposal): string =>
+  `Reconcile draft pull request #${proposal.pullRequestNumber} with ${proposal.baseBranch}\n\nApp-Builder-Idempotency: ${proposal.idempotencyKey}\nApp-Builder-Origin: ${proposal.originMarker}`;
 
 class GitHubBlobWriteFailureError extends Error {
   readonly path: string;
@@ -873,6 +881,39 @@ export const createGitHubAppHttpProvider = (input: {
       });
       return { requestId: reference.requestId, status: "accepted" };
     },
+    async inspectAppliedDraftReconciliation(proposal, observed) {
+      if (
+        observed.headSha === proposal.expectedHeadSha ||
+        observed.headTree !== proposal.resolvedTree ||
+        observed.headRepositoryId !== proposal.repositoryId
+      ) {
+        return false;
+      }
+      const current = await inspectExistingDraft({
+        name: proposal.name,
+        number: proposal.pullRequestNumber,
+        owner: proposal.owner,
+        repositoryId: proposal.repositoryId,
+      });
+      if (current.headSha !== observed.headSha || current.headTree !== observed.headTree) {
+        return false;
+      }
+      const accessToken = await token(draftPermissions, [proposal.repositoryId]);
+      const response = await github({
+        authorization: accessToken,
+        expected: [200],
+        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/commits/${observed.headSha}`,
+      });
+      const parents = property(response.body, "parents");
+      return (
+        Array.isArray(parents) &&
+        parents.length === 2 &&
+        stringProperty(parents[0], "sha") === proposal.expectedHeadSha &&
+        stringProperty(parents[1], "sha") === proposal.expectedBaseSha &&
+        stringProperty(property(response.body, "tree"), "sha") === proposal.resolvedTree &&
+        stringProperty(response.body, "message") === reconciliationCommitMessage(proposal)
+      );
+    },
     async inspectAppliedDraftUpdate(proposal, content, observed) {
       try {
         assertExactGitHubDraftPullRequestContent({ content, proposal });
@@ -1326,6 +1367,157 @@ export const createGitHubAppHttpProvider = (input: {
         path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/pulls`,
       });
       return { requestId: reference.requestId, status: "accepted" };
+    },
+    // oxlint-disable-next-line eslint/complexity -- verifies identity, both refs, reviewed preimages, exact tree, and atomic ref update
+    async reconcileExistingDraft(
+      proposal: ExistingDraftReconciliationProposal,
+      content: ReconciliationContent,
+    ) {
+      try {
+        assertReconciliationContent(proposal, content);
+      } catch {
+        return { code: "invalid-publication-material", status: "rejected" };
+      }
+      const current = await inspectExistingDraft({
+        name: proposal.name,
+        number: proposal.pullRequestNumber,
+        owner: proposal.owner,
+        repositoryId: proposal.repositoryId,
+      });
+      if (
+        current.pullRequestId !== proposal.pullRequestId ||
+        !current.draft ||
+        current.state !== "open" ||
+        current.repositoryId !== proposal.repositoryId ||
+        current.headRepositoryId !== proposal.repositoryId ||
+        current.baseRepositoryId !== proposal.repositoryId ||
+        current.headBranch !== proposal.branchName ||
+        current.baseBranch !== proposal.baseBranch
+      ) {
+        return { code: "pull-request-changed", status: "rejected" };
+      }
+      if (
+        current.headSha !== proposal.expectedHeadSha ||
+        current.headTree !== proposal.expectedHeadTree
+      ) {
+        return { code: "branch-moved", status: "rejected" };
+      }
+      const base = await repositoryById(
+        proposal.repositoryId,
+        `refs/heads/${proposal.baseBranch}`,
+        draftPermissions,
+      );
+      if (
+        base.repositoryId !== proposal.repositoryId ||
+        base.owner !== proposal.owner ||
+        base.name !== proposal.name ||
+        base.headSha !== proposal.expectedBaseSha ||
+        base.headTree !== proposal.expectedBaseTree
+      ) {
+        return { code: "branch-moved", status: "rejected" };
+      }
+      const accessToken = await token(draftPermissions, [proposal.repositoryId]);
+      for (const change of content.changes) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- verify every base preimage before publishing a merge commit
+        const matches = await reviewedPreimageMatches({
+          accessToken,
+          change: {
+            path: change.path,
+            ...(change.before === undefined ? {} : { before: change.before }),
+          },
+          headSha: base.headSha,
+          headTree: base.headTree,
+          owner: proposal.owner,
+          repositoryName: proposal.name,
+        });
+        if (!matches)
+          return { code: "reviewed-path-changed", path: change.path, status: "rejected" };
+      }
+      const tree = await createTree({
+        accessToken,
+        baseTree: base.headTree,
+        deletions: content.changes.flatMap((change) =>
+          change.kind === "deleted" ? [change.path] : [],
+        ),
+        files: content.changes.flatMap((change) => {
+          if (change.kind === "deleted") return [];
+          if (change.bytes === undefined) throw new Error("reviewed-reconciliation-bytes-missing");
+          return [
+            {
+              content: change.bytes,
+              mode: change.after?.mode === "755" ? ("100755" as const) : ("100644" as const),
+              path: change.path,
+            },
+          ];
+        }),
+        owner: proposal.owner,
+        repositoryName: proposal.name,
+      });
+      if (tree !== proposal.resolvedTree) {
+        return { code: "invalid-publication-material", status: "rejected" };
+      }
+      const commit = await github({
+        authorization: accessToken,
+        body: {
+          message: reconciliationCommitMessage(proposal),
+          parents: [proposal.expectedHeadSha, proposal.expectedBaseSha],
+          tree,
+        },
+        expected: [201],
+        method: "POST",
+        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/commits`,
+      });
+      const reference = await github({
+        authorization: accessToken,
+        expected: [200],
+        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/git/ref/heads/${encodePath(proposal.branchName)}`,
+      });
+      if (
+        objectId.parse(stringProperty(property(reference.body, "object"), "sha")) !==
+        current.headSha
+      ) {
+        return { code: "branch-moved", status: "rejected" };
+      }
+      const baseNow = await repositoryById(
+        proposal.repositoryId,
+        `refs/heads/${proposal.baseBranch}`,
+        draftPermissions,
+      );
+      if (baseNow.headSha !== proposal.expectedBaseSha)
+        return { code: "branch-moved", status: "rejected" };
+      const repositoryIdentity = await github({
+        authorization: accessToken,
+        expected: [200],
+        path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}`,
+      });
+      if (decimalProperty(repositoryIdentity.body, "id") !== proposal.repositoryId) {
+        return { code: "repository-identity-changed", status: "rejected" };
+      }
+      const result = await github({
+        authorization: accessToken,
+        body: {
+          query:
+            "mutation($repositoryId: ID!, $name: GitRefname!, $afterOid: GitObjectID!, $beforeOid: GitObjectID!) { updateRefs(input: {repositoryId: $repositoryId, refUpdates: [{name: $name, afterOid: $afterOid, beforeOid: $beforeOid, force: false}]}) { clientMutationId } }",
+          variables: {
+            afterOid: objectId.parse(stringProperty(commit.body, "sha")),
+            beforeOid: current.headSha,
+            name: `refs/heads/${proposal.branchName}`,
+            repositoryId: stringProperty(repositoryIdentity.body, "node_id"),
+          },
+        },
+        expected: [200],
+        method: "POST",
+        path: "/graphql",
+      });
+      if (
+        record(result.body) &&
+        Array.isArray(result.body.errors) &&
+        result.body.errors.length > 0
+      ) {
+        return { code: "branch-moved", status: "rejected" };
+      }
+      property(property(result.body, "data"), "updateRefs");
+      return { requestId: result.requestId, status: "accepted" };
     },
     async updateExistingDraft(proposal: ExistingDraftUpdateProposal, content) {
       try {

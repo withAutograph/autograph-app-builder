@@ -13,6 +13,10 @@ import type { GitHubTargetAccessProof } from "./github-target-access-proof";
 import type { z } from "zod";
 import type { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import type { ExistingDraftObservation, ExistingDraftUpdateProposal } from "./github-draft-update";
+import type {
+  ExistingDraftReconciliationProposal,
+  ReconciliationContent,
+} from "./github-draft-reconciliation";
 
 export const GITHUB_PUBLICATION_VERSION = 2 as const;
 export const REPOSITORY_RELEASE_GATE = "REPOSITORY_RELEASE_ENABLED" as const;
@@ -363,6 +367,14 @@ export interface GitHubPublicationAdapter extends GitHubSourceResolutionAdapter 
   inspectAppliedDraftUpdate?: (
     proposal: ExistingDraftUpdateProposal,
     content: GitHubDraftPullRequestContent,
+    observed: ExistingDraftObservation,
+  ) => Promise<boolean>;
+  reconcileExistingDraft?: (
+    proposal: ExistingDraftReconciliationProposal,
+    content: ReconciliationContent,
+  ) => Promise<GitHubMutationAcknowledgement>;
+  inspectAppliedDraftReconciliation?: (
+    proposal: ExistingDraftReconciliationProposal,
     observed: ExistingDraftObservation,
   ) => Promise<boolean>;
   inspectDestination: (input: {

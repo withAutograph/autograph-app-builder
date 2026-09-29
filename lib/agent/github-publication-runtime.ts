@@ -13,6 +13,7 @@ import type {
   GitHubFreshRepositoryContentSource,
   GitHubPublicationAdapter,
   GitHubPublicationReceiptStore,
+  GitHubRepositoryObservation,
   ImmutableGitHubSourceReceipt,
 } from "../repository/github-publication";
 import type { ReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
@@ -26,6 +27,15 @@ import type {
   ExistingDraftUpdateAdapter,
   ExistingDraftUpdateProposal,
 } from "../repository/github-draft-update";
+import {
+  reconcileExistingDraft,
+  sealExistingDraftReconciliation,
+} from "../repository/github-draft-reconciliation";
+import type {
+  ExistingDraftReconciliationAdapter,
+  ExistingDraftReconciliationProposal,
+  ReconciliationReviewReceipt,
+} from "../repository/github-draft-reconciliation";
 import { approvalTargetFromDraftProposal, assertApprovalReceipt } from "./approval-receipt";
 import type { ApprovalReceipt } from "./approval-receipt";
 import type { HostedGitHubTenantAuthority } from "../repository/postgres-github-installation-store";
@@ -36,6 +46,7 @@ const supportedOperations = [
   "create-approved-private-fresh-history-repository",
   "publish-approved-branch-and-draft-pull-request",
   "update-approved-existing-draft-pull-request",
+  "reconcile-approved-existing-draft-pull-request",
   "recover-lost-response-by-idempotency-key",
 ] as const;
 const draftPublicationOperation = "publish-draft-pull-request" as const;
@@ -111,6 +122,28 @@ export interface GitHubPublicationRuntime {
     name: string;
     pullRequestNumber: number;
   }) => Promise<ExistingDraftObservation>;
+  inspectExistingDraftReconciliationSource: (input: {
+    repositoryId: string;
+    owner: string;
+    name: string;
+    pullRequestNumber: number;
+  }) => Promise<{
+    draft: ExistingDraftObservation;
+    base: GitHubRepositoryObservation;
+  }>;
+  sealExistingDraftReconciliation: (input: {
+    githubSource: ImmutableGitHubSourceReceipt;
+    review: ReconciliationReviewReceipt;
+    pullRequestNumber: number;
+    priorPublishedProposalDigest?: string;
+    selectedCheckoutHeadSha: string;
+    selectedCheckoutHeadTree: string;
+  }) => Promise<ExistingDraftReconciliationProposal>;
+  reconcileExistingDraft: (input: {
+    proposal: ExistingDraftReconciliationProposal;
+    review: ReconciliationReviewReceipt;
+    contentSource: GitHubDraftPullRequestContentSource;
+  }) => Promise<ExistingDraftObservation>;
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
@@ -149,6 +182,7 @@ const unavailable = (): never => {
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function disabledRuntime(): GitHubPublicationRuntime {
+  // oxlint-disable-next-line eslint/sort-keys -- Keep runtime methods grouped by their original publication flow.
   return {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async createFreshRepository() {
@@ -156,6 +190,10 @@ function disabledRuntime(): GitHubPublicationRuntime {
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async inspectExistingDraftSource() {
+      return unavailable();
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async inspectExistingDraftReconciliationSource() {
       return unavailable();
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
@@ -167,11 +205,19 @@ function disabledRuntime(): GitHubPublicationRuntime {
       return unavailable();
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async reconcileExistingDraft() {
+      return unavailable();
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async sealDraftPullRequestProposal() {
       return unavailable();
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async sealExistingDraftUpdate() {
+      return unavailable();
+    },
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+    async sealExistingDraftReconciliation() {
       return unavailable();
     },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
@@ -235,6 +281,34 @@ export function composeGitHubPublicationRuntime(input: {
       return await adapter.updateExistingDraft(proposal, content);
     },
   };
+  const draftReconciliationAdapter: ExistingDraftReconciliationAdapter = {
+    async inspectAppliedDraftReconciliation(proposal, observed) {
+      if (adapter.inspectAppliedDraftReconciliation === undefined) {
+        throw new Error(
+          "GitHub draft reconciliation verification is unavailable. Upgrade the GitHub provider before updating this PR.",
+        );
+      }
+      return await adapter.inspectAppliedDraftReconciliation(proposal, observed);
+    },
+    async inspectExistingDraft(request) {
+      return await adapter.inspectExistingDraft(request);
+    },
+    async inspectInstallation() {
+      return await adapter.inspectInstallation(draftPublicationOperation);
+    },
+    async inspectRepository(request) {
+      return await adapter.inspectRepository(request);
+    },
+    async reconcileExistingDraft(proposal, content) {
+      if (adapter.reconcileExistingDraft === undefined) {
+        throw new Error(
+          "GitHub draft reconciliation is unavailable. Upgrade the GitHub provider before updating this PR.",
+        );
+      }
+      return await adapter.reconcileExistingDraft(proposal, content);
+    },
+  };
+  // oxlint-disable-next-line eslint/sort-keys -- Keep runtime methods grouped by their original publication flow.
   return {
     async createFreshRepository(request) {
       const proposal = await proposals.read(request.expectedProposalDigest);
@@ -289,6 +363,25 @@ export function composeGitHubPublicationRuntime(input: {
         );
       }
       return observed;
+    },
+    async inspectExistingDraftReconciliationSource(request) {
+      const draft = await this.inspectExistingDraftSource(request);
+      const base = await adapter.inspectRepository({
+        operation: draftPublicationOperation,
+        ref: `refs/heads/${draft.baseBranch}`,
+        repositoryId: request.repositoryId,
+      });
+      if (
+        base.repositoryId !== request.repositoryId ||
+        base.owner !== request.owner ||
+        base.name !== request.name ||
+        base.defaultBranch !== draft.baseBranch
+      ) {
+        throw new Error(
+          "The draft PR base no longer matches the connected repository's default branch. Reopen the current PR and select its intended base before reconciliation.",
+        );
+      }
+      return { base, draft };
     },
     async publishDraftPullRequest(request) {
       const proposal = await proposals.read(request.expectedProposalDigest);
@@ -460,6 +553,100 @@ export function composeGitHubPublicationRuntime(input: {
     async updateExistingDraft(request) {
       return await updateExistingDraft({
         adapter: draftUpdateAdapter,
+        contentSource: request.contentSource,
+        proposal: request.proposal,
+        review: request.review,
+      });
+    },
+    // oxlint-disable-next-line eslint/complexity -- verifies live draft, tenant receipt, and Builder origin before sealing.
+    async sealExistingDraftReconciliation(request) {
+      const observed = await draftReconciliationAdapter.inspectExistingDraft({
+        name: request.githubSource.repository.name,
+        number: request.pullRequestNumber,
+        owner: request.githubSource.repository.owner,
+        repositoryId: request.githubSource.repository.repositoryId,
+      });
+      if (
+        observed.headSha !== request.selectedCheckoutHeadSha ||
+        observed.headTree !== request.selectedCheckoutHeadTree ||
+        observed.headSha !== request.review.headSha ||
+        observed.headTree !== request.review.headTree
+      ) {
+        throw new Error(
+          "The selected checkout or draft PR head moved during conflict resolution. Reopen its current branch, resolve against the current base, and review both diffs again.",
+        );
+      }
+      const prior =
+        request.priorPublishedProposalDigest === undefined
+          ? await receipts.findDraftByPullRequest?.(
+              request.githubSource.repository.repositoryId,
+              request.pullRequestNumber,
+            )
+          : await receipts.read(request.priorPublishedProposalDigest);
+      // oxlint-disable-next-line sonarjs/expression-complexity -- verify all tenant receipt identity fields together.
+      if (
+        // oxlint-disable-next-line sonarjs/expression-complexity -- one tenant receipt predicate.
+        prior !== undefined &&
+        (prior.status !== "succeeded" ||
+          prior.kind !== "draft-pull-request" ||
+          prior.repositoryId !== observed.repositoryId ||
+          prior.pullRequestNumber !== observed.number ||
+          (request.priorPublishedProposalDigest !== undefined &&
+            prior.proposalDigest !== request.priorPublishedProposalDigest))
+      ) {
+        throw new Error(
+          "The selected draft PR does not match Builder's tenant-scoped publication receipt. Reopen the correct PR branch and review its current files.",
+        );
+      }
+      if (prior === undefined && request.priorPublishedProposalDigest !== undefined) {
+        throw new Error(
+          "The original Builder publication receipt is unavailable in this tenant. Reopen the current PR branch and verify its Builder origin before retrying.",
+        );
+      }
+      const adopted =
+        prior === undefined
+          ? await adoptions?.read(observed.repositoryId, observed.pullRequestId)
+          : undefined;
+      // oxlint-disable-next-line sonarjs/expression-complexity -- reject any missing or mismatched Builder origin evidence.
+      if (
+        // oxlint-disable-next-line sonarjs/expression-complexity -- one Builder origin predicate.
+        (prior === undefined && adopted === undefined) ||
+        observed.verifiedBuilderOrigin === undefined ||
+        (adopted !== undefined &&
+          !isDeepStrictEqual(
+            [adopted.appId, adopted.authorId, adopted.builderMarker, adopted.pullRequestNumber],
+            [
+              observed.verifiedBuilderOrigin.appId,
+              observed.verifiedBuilderOrigin.authorId,
+              observed.verifiedBuilderOrigin.marker,
+              observed.number,
+            ],
+          ))
+      ) {
+        throw new Error(
+          "Builder cannot verify the draft PR's origin marker and tenant-scoped publication or adoption record. Refresh its provenance before reconciling.",
+        );
+      }
+      const repository = await adapter.inspectRepository({
+        operation: draftPublicationOperation,
+        ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
+        repositoryId: request.githubSource.repository.repositoryId,
+      });
+      const installation = await adapter.inspectInstallation(draftPublicationOperation);
+      return await sealExistingDraftReconciliation({
+        adapter: draftReconciliationAdapter,
+        installation,
+        originMarker: observed.verifiedBuilderOrigin.marker,
+        priorPublicationDigest: prior?.digest ?? adopted?.adoptionDigest ?? "",
+        pullRequestNumber: request.pullRequestNumber,
+        repository,
+        review: request.review,
+        selectedSourceRef: request.githubSource.resolvedRef,
+      });
+    },
+    async reconcileExistingDraft(request) {
+      return await reconcileExistingDraft({
+        adapter: draftReconciliationAdapter,
         contentSource: request.contentSource,
         proposal: request.proposal,
         review: request.review,

@@ -4,6 +4,7 @@ import type {
   ImmutableGitHubSourceReceipt,
 } from "@/lib/repository/github-publication";
 import type { ExistingDraftUpdateProposal } from "@/lib/repository/github-draft-update";
+import type { ExistingDraftReconciliationProposal } from "@/lib/repository/github-draft-reconciliation";
 
 export const gitObjectIdSchema = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u);
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -83,14 +84,28 @@ export const approvalTargetFromDraftProposal = (
   repositoryId: proposal.repositoryId,
 });
 
-export const approvalTargetFromExistingDraftUpdate = (
-  proposal: ExistingDraftUpdateProposal,
-): ApprovalTarget => ({
+type DraftHeadApprovalSubject = Pick<
+  ExistingDraftUpdateProposal,
+  "branchName" | "expectedHeadSha" | "name" | "owner" | "repositoryId"
+>;
+
+const approvalTargetFromDraftHead = (proposal: DraftHeadApprovalSubject): ApprovalTarget => ({
   baseRef: `refs/heads/${proposal.branchName}`,
   baseSha: proposal.expectedHeadSha,
   repository: `${proposal.owner}/${proposal.name}`,
   repositoryId: proposal.repositoryId,
 });
+
+export const approvalTargetFromExistingDraftUpdate: (
+  proposal: ExistingDraftUpdateProposal,
+) => ApprovalTarget = approvalTargetFromDraftHead;
+
+export const approvalTargetFromExistingDraftReconciliation: (
+  proposal: Pick<
+    ExistingDraftReconciliationProposal,
+    "branchName" | "expectedHeadSha" | "name" | "owner" | "repositoryId"
+  >,
+) => ApprovalTarget = approvalTargetFromDraftHead;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function assertApprovalReceipt(input: {
@@ -141,7 +156,7 @@ function publicReceiptDescription(receipt: unknown, toolName?: string): string |
     expectedPhase = "change_set";
   } else if (isDraftPullRequestTool(toolName)) {
     expectedPhase = "publication";
-  } else if (toolName === "update_github_draft_pr") {
+  } else if (toolName === "update_github_draft_pr" || toolName === "reconcile_github_draft_pr") {
     expectedPhase = "draft_update";
   }
   if (!parsed.success || (expectedPhase !== undefined && parsed.data.phase !== expectedPhase)) {
@@ -150,6 +165,9 @@ function publicReceiptDescription(receipt: unknown, toolName?: string): string |
   if (isDraftPullRequestTool(toolName)) {
     const baseBranch = parsed.data.baseRef.replace(/^refs\/heads\//u, "");
     return `This will publish the reviewed changes to a draft pull request in ${parsed.data.repository} on ${baseBranch}. The pull request will remain a draft; this will not merge or deploy it.`;
+  }
+  if (toolName === "reconcile_github_draft_pr") {
+    return `This will update the existing draft branch ${parsed.data.baseRef} in ${parsed.data.repository} from commit ${parsed.data.baseSha} using reviewed reconciliation ${parsed.data.subjectDigest}. The pull request will remain a draft; this will not merge or deploy it.`;
   }
   return JSON.stringify(parsed.data);
 }

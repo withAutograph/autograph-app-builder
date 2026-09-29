@@ -47,6 +47,17 @@ diff; a separate approval and GitHub atomic expected-OID update are required.
 If GitHub provenance cannot be verified, Builder reports that reason and leaves
 the PR branch untouched.
 
+When the current draft head conflicts with its live base, Builder prepares a
+private merge candidate from the exact observed head and base commits. It may
+resolve only conflicts under the selected app. The candidate runs its own
+locked dependency install, schema compilation, repository app checks and tests,
+and the app browser task when requested. Builder then exposes the complete
+resolved diff against the live base and the complete delta from the old PR head
+for review. A separate sealed approval binds both parent commits, the resolved
+tree, both diffs, the draft PR, and the tenant-scoped repository. GitHub receives
+a merge commit through an expected-head update without force pushing. A moved
+base or head requires a fresh merge, validation, review, and approval.
+
 `hosted_github_installation` binds that same tenant tuple to one exact GitHub
 App installation and expected account identity. Binding is available only
 through the owner-only, confirmation-digest-bound

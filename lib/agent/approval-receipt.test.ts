@@ -6,6 +6,7 @@ import {
   approvalTarget,
   approvalTargetFromDraftProposal,
   approvalTargetFromExistingDraftUpdate,
+  approvalTargetFromExistingDraftReconciliation,
   approvalTargetFromGitHubSource,
   assertApprovalReceipt,
   publicApprovalDescription,
@@ -93,6 +94,10 @@ describe("approval receipt", () => {
     expect(
       publicApprovalDescription({ approvalReceipt: updateReceipt }, "update_github_draft_pr"),
     ).toBe(JSON.stringify(updateReceipt));
+    expect(
+      publicApprovalDescription({ approvalReceipt: updateReceipt }, "reconcile_github_draft_pr"),
+    ).toContain("update the existing draft branch refs/heads/app-builder/review-original");
+    expect(approvalTargetFromExistingDraftReconciliation(proposal)).toEqual(target);
     expect(
       publicApprovalDescription({ approvalReceipt: updateReceipt }, "publish_github_draft_pr"),
     ).toBeUndefined();
