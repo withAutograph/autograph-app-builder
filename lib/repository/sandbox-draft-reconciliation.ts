@@ -98,6 +98,40 @@ export interface PreparedDraftReconciliation {
   conflicts: readonly string[];
 }
 
+/** A saved candidate is sandbox-local; an expired sandbox can retain its receipt but not its files. */
+export const assertDraftReconciliationCandidateAvailable = async (input: {
+  sandbox: SandboxSession;
+  prepared: PreparedDraftReconciliation;
+}): Promise<void> => {
+  const result = await run(
+    input.sandbox,
+    "inspect the private draft candidate",
+    git(input.prepared.root, ["rev-parse", "--show-prefix", "--is-inside-work-tree"]),
+  );
+  if (result.exitCode !== 0 || result.stdout.trim() !== "true") {
+    throw new Error(
+      "Builder's private draft merge candidate is no longer in this sandbox. The sandbox may have expired; its uncommitted conflict resolutions and edits cannot be assumed to survive. Run prepare_github_draft_pr_reconciliation for this PR again to rebuild from the verified branch commits, then resolve any conflicts, rerun validation, review both complete diffs, and request a new update approval. Nothing was published.",
+    );
+  }
+};
+
+const candidateNeedsCreation = async (sandbox: SandboxSession, root: string): Promise<boolean> => {
+  const exists = await run(
+    sandbox,
+    "inspect the saved reconciliation candidate",
+    `test -e ${quote(root)}`,
+  );
+  if (exists.exitCode === 0) {
+    return false;
+  }
+  if (exists.exitCode === 1) {
+    return true;
+  }
+  throw new Error(
+    `Builder could not inspect the private draft candidate (exit ${exists.exitCode}). Check the sandbox command runner before retrying; no candidate was replaced. Cause: ${redact(exists.stderr || exists.stdout) || "The command returned no diagnostic output."}`,
+  );
+};
+
 const appPath = (appId: string, path: string) =>
   safeSourcePath(path) && path.startsWith(`apps/${appId}/`);
 
@@ -210,15 +244,20 @@ const stageUnpublished = async (
     return;
   }
   const changedPreimage = unpublished.changes.find(
-    (change, index) => !matchesFileState(observed[index] ?? null, change.before),
+    (change, index) =>
+      !matchesFileState(observed[index] ?? null, change.after) &&
+      !matchesFileState(observed[index] ?? null, change.before),
   );
   if (changedPreimage !== undefined) {
     throw new Error(
       `Builder cannot replay reviewed change ${changedPreimage.path}: the current draft head matches neither its reviewed starting content nor the complete reviewed result. Reopen the current PR head and review its files again.`,
     );
   }
+  const pendingChanges = unpublished.changes.filter(
+    (change, index) => !matchesFileState(observed[index] ?? null, change.after),
+  );
   // oxlint-disable-next-line react-doctor/async-await-in-loop -- reviewed postimages are staged in deterministic order.
-  for (const change of unpublished.changes) {
+  for (const change of pendingChanges) {
     if (!appPath(input.appId, change.path)) {
       throw new Error(
         `Builder cannot reconcile unpublished change ${change.path}: it is outside apps/${input.appId}/.`,
@@ -230,8 +269,16 @@ const stageUnpublished = async (
       await input.sandbox.removePath({ force: true, path: relative });
       continue;
     }
-    // oxlint-disable-next-line eslint/no-await-in-loop -- each reviewed file is read before staging.
-    const file = await unpublished.contentSource.readFile(change.path);
+    let file: Awaited<ReturnType<typeof unpublished.contentSource.readFile>>;
+    try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- each reviewed postimage is loaded in order.
+      file = await unpublished.contentSource.readFile(change.path);
+    } catch (error) {
+      throw new Error(
+        `Builder could not recover unpublished app file ${change.path} from the previous checkout. Its sandbox may have expired before those bytes reached the draft branch. Reopen the current app, recreate and review the missing edit, then prepare a new reconciliation. Cause: ${redact(error instanceof Error ? error.message : String(error)) || "The source returned no detail."}`,
+        { cause: error },
+      );
+    }
     if (
       file === null ||
       file.digest !== change.after?.digest ||
@@ -271,7 +318,7 @@ const stageUnpublished = async (
 /** Prepare a private merge candidate. This never updates the GitHub PR branch. */
 export const prepareDraftReconciliation = async (
   input: DraftReconciliationInput,
-): Promise<PreparedDraftReconciliation> => {
+): Promise<PreparedDraftReconciliation & { created: boolean }> => {
   verifyInputs(input);
   const { sandbox } = input;
   const workspaceRoot = input.workspaceRoot ?? DEFAULT_WORKSPACE;
@@ -298,13 +345,9 @@ export const prepareDraftReconciliation = async (
     )
     .digest("hex");
   const root = `${workspaceRoot}/.app-builder/draft-reconcile/${key}`;
-  const exists = await run(
-    sandbox,
-    "inspect the saved reconciliation candidate",
-    `test -e ${quote(root)}`,
-  );
+  const created = await candidateNeedsCreation(sandbox, root);
   // oxlint-disable-next-line eslint/no-negated-condition, unicorn/no-negated-condition -- creation has the longer branch and recovery is handled after it.
-  if (exists.exitCode !== 0) {
+  if (created) {
     const head = await checked(
       sandbox,
       "fetch the current draft head",
@@ -375,6 +418,7 @@ export const prepareDraftReconciliation = async (
       git(root, ["rev-parse", "-q", "--verify", "MERGE_HEAD"]),
     );
     if (merged.exitCode !== 0 && inProgress.exitCode !== 0) {
+      await stageUnpublished(input, root, workspaceRoot);
       const retry = await run(
         sandbox,
         "resume the base merge in the saved candidate",
@@ -417,6 +461,7 @@ export const prepareDraftReconciliation = async (
     baseSha: input.baseSha,
     baseTree: await inspectRevision(sandbox, checkout, input.baseSha),
     conflicts,
+    created,
     headSha: input.headSha,
     headTree: await inspectRevision(sandbox, checkout, input.headSha),
     root,
@@ -454,6 +499,7 @@ export const writeDraftReconciliationResolution = async (input: {
       `Builder cannot resolve ${path}: it is not an app-owned conflict in this draft candidate.`,
     );
   }
+  await assertDraftReconciliationCandidateAvailable(input);
   await checked(
     input.sandbox,
     `verify the resolution path ${path}`,
@@ -477,6 +523,7 @@ export const readDraftReconciliationConflict = async (input: {
       `Builder cannot read ${path}: it is not an app-owned conflict in this draft candidate.`,
     );
   }
+  await assertDraftReconciliationCandidateAvailable(input);
   await checked(
     input.sandbox,
     `verify the conflict path ${path}`,
@@ -503,6 +550,7 @@ export const readDraftReconciliationCandidateFile = async (input: {
   if (!appPath(prepared.appId, path)) {
     throw new Error(`Builder cannot read ${path}: it is outside apps/${prepared.appId}/.`);
   }
+  await assertDraftReconciliationCandidateAvailable(input);
   await checked(
     input.sandbox,
     `verify the candidate file path ${path}`,
@@ -600,6 +648,7 @@ export const readDraftReconciliationDiff = async (input: {
   if (!SHA.test(input.resolvedTree)) {
     throw new Error("Builder cannot read the resolution diff: the reviewed tree ID is invalid.");
   }
+  await assertDraftReconciliationCandidateAvailable(input);
   const currentTree = await checked(
     input.sandbox,
     "verify the current resolved tree",
@@ -687,6 +736,7 @@ export const inspectDraftReconciliation = async (input: {
   unresolvedConflicts: readonly string[];
 }> => {
   const { sandbox, prepared } = input;
+  await assertDraftReconciliationCandidateAvailable(input);
   const unstaged = records(
     await checked(
       sandbox,

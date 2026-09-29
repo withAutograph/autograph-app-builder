@@ -440,7 +440,9 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
     }
-    expect(message).toBe("GitHub provider operation failed.");
+    expect(message).toBe(
+      "GitHub could not acquire read access to the selected repository. Check that the GitHub App installation includes this repository and grants contents read access, then reconnect GitHub and retry.",
+    );
     expect(message).not.toContain("ghs_operation_scoped_installation_token");
     expect(message).not.toContain(privateKeyPem);
   });
@@ -508,7 +510,7 @@ describe("GitHub App fixed-origin HTTP provider", () => {
       createProvider(providerFetch({ extraPermission: true }).implementation),
     );
     await expect(escalated.inspectInstallation("resolve-existing-source")).rejects.toThrow(
-      "GitHub provider operation failed.",
+      "GitHub could not inspect the GitHub App installation.",
     );
 
     const failed = createGitHubAppPublicationAdapter(
@@ -520,8 +522,69 @@ describe("GitHub App fixed-origin HTTP provider", () => {
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
     }
-    expect(message).toBe("GitHub provider operation failed.");
+    expect(message).toBe(
+      "GitHub could not inspect the GitHub App installation (HTTP 500). GitHub is unavailable. Retry after the service recovers; inspect the current state before repeating a write.",
+    );
     expect(message).not.toContain("private-key-material");
+  });
+
+  it.each([
+    [401, "Reconnect GitHub access"],
+    [403, "required repository permission"],
+    [404, "repository and PR still exist"],
+    [409, "rebuild and review the proposal"],
+    [429, "Wait for the limit to reset"],
+    [503, "GitHub is unavailable"],
+  ])("reports a safe recovery for target access HTTP %i", async (status, guidance) => {
+    const adapter = createGitHubTargetAccessAdapter(
+      {
+        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+        async inspectTargetAccess() {
+          throw Object.assign(new Error("secret-token https://github.example/private"), {
+            status,
+          });
+        },
+      },
+      {
+        audience: "https://builder.example/mcp",
+        issuer: "https://builder.example/api/auth",
+        ownerUserId: "user-1",
+        workspaceId: "workspace-1",
+      },
+    );
+
+    await expect(adapter.inspectTargetAccess("resolve-existing-source", "100")).rejects.toThrow(
+      `GitHub could not verify the selected repository's GitHub installation access (HTTP ${status}).`,
+    );
+    await expect(adapter.inspectTargetAccess("resolve-existing-source", "100")).rejects.toThrow(
+      guidance,
+    );
+    await expect(adapter.inspectTargetAccess("resolve-existing-source", "100")).rejects.not.toThrow(
+      /secret-token|github\.example/u,
+    );
+  });
+
+  it("names an existing draft update failure without exposing provider details", async () => {
+    const provider = {
+      ...createProvider(providerFetch().implementation),
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      async updateExistingDraft() {
+        throw Object.assign(new Error("secret-token https://github.example/private"), {
+          status: 409,
+        });
+      },
+    };
+    const adapter = createGitHubAppPublicationAdapter(provider);
+    const { content } = unicodeDraftMaterial();
+    let message = "unexpected success";
+    try {
+      await adapter.updateExistingDraft({} as ExistingDraftUpdateProposal, content);
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain("GitHub could not update the existing draft PR (HTTP 409).");
+    expect(message).toContain("rebuild and review the proposal");
+    expect(message).not.toMatch(/secret-token|github\.example/u);
   });
 
   it("rejects stale full-template bytes before any GitHub mutation", async () => {

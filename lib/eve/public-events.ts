@@ -46,17 +46,74 @@ const visibleOperations = new Map([
   ["start_app_preview", "Starting the app preview"],
   ["validate_app_creation", "Validating the app changes"],
   ["validate-app-creation", "Validating the app changes"],
+  ["validate_github_draft_pr_reconciliation", "Validating the draft PR candidate"],
 ]);
 const visibleOperationLabels = new Set(visibleOperations.values());
+
+const draftValidationCommandLabel = (value: unknown): string | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  if (value === "mise exec -- bun install --frozen-lockfile") {
+    return "Installing the candidate's locked dependencies";
+  }
+  if (/^mise run --skip-tools schema:release -- compile --app [a-z][a-z0-9-]*$/u.test(value)) {
+    return `Running ${value}`;
+  }
+  if (
+    /^mise run --skip-tools (?:app:check [a-z][a-z0-9-]*|app:test [a-z][a-z0-9-]* [1-9][0-9]*\/[1-9][0-9]*|\/\/apps\/[a-z][a-z0-9-]*:test-e2e|check:[A-Za-z0-9:_-]+)$/u.test(
+      value,
+    )
+  ) {
+    return `Running ${value}`;
+  }
+  const local = /mise run app:local -- (?<appId>[a-z][a-z0-9-]*) setup/u.exec(value);
+  return local?.groups?.appId === undefined
+    ? undefined
+    : `Preparing ${local.groups.appId} local validation data`;
+};
+
+const recordStringField = (value: unknown, key: string): string | undefined => {
+  if (typeof value !== "object" || value === null || !(key in value)) {
+    return undefined;
+  }
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "string" ? field : undefined;
+};
+
+const draftValidationLabel = (
+  toolName: string,
+  value: unknown,
+  requested: boolean,
+): string | undefined => {
+  if (toolName !== "validate_github_draft_pr_reconciliation") {
+    return visibleOperations.get(toolName);
+  }
+  const command = recordStringField(value, requested ? "expectedCommand" : "command");
+  return draftValidationCommandLabel(command) ?? visibleOperations.get(toolName);
+};
 
 export const pendingBuilderOperation = (events: readonly PublicEveEvent[]): string => {
   const pending = new Set<string>();
   for (const event of events) {
-    if (event.type !== "progress" || !visibleOperationLabels.has(event.label)) {
+    if (event.type === "status" && ["cancelled", "completed", "failed"].includes(event.status)) {
+      pending.clear();
+      continue;
+    }
+    if (
+      event.type !== "progress" ||
+      (!visibleOperationLabels.has(event.label) &&
+        !event.label.startsWith("Running mise ") &&
+        !event.label.startsWith("Installing the candidate's ") &&
+        !event.label.startsWith("Preparing "))
+    ) {
       continue;
     }
     if (event.state === "started") {
       pending.add(event.label);
+    } else if (event.state === "failed") {
+      // A failed tool result may omit its command. The generic failure closes the active command.
+      pending.clear();
     } else {
       pending.delete(event.label);
     }
@@ -1063,7 +1120,7 @@ export const projectInstalledEveEvent = (
         if (action.kind !== "tool-call") {
           return [];
         }
-        const label = visibleOperations.get(action.toolName);
+        const label = draftValidationLabel(action.toolName, action.input, true);
         return label === undefined ? [] : [{ index, label, state: "started", type: "progress" }];
       });
     }
@@ -1071,7 +1128,15 @@ export const projectInstalledEveEvent = (
       if (event.data.result?.kind !== "tool-result") {
         return [];
       }
-      const label = visibleOperations.get(event.data.result.toolName);
+      const label = draftValidationLabel(
+        event.data.result.toolName,
+        event.data.result.output,
+        false,
+      );
+      const returnedStatus = recordStringField(event.data.result.output, "status");
+      const commandFailed =
+        event.data.result.toolName === "validate_github_draft_pr_reconciliation" &&
+        (returnedStatus === "needs_repair" || returnedStatus === "needs_resolution");
       return label === undefined
         ? []
         : [
@@ -1079,7 +1144,9 @@ export const projectInstalledEveEvent = (
               index,
               label,
               state:
-                event.data.status === "completed" && event.data.result.isError !== true
+                event.data.status === "completed" &&
+                event.data.result.isError !== true &&
+                !commandFailed
                   ? "completed"
                   : "failed",
               type: "progress",

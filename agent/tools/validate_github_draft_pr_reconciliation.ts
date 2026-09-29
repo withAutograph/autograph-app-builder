@@ -1,15 +1,22 @@
 import { defineTool } from "eve/tools";
+import type { ToolContext } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
-import { compileAppSchemaRelease } from "./compile-app-schema-release";
-import { prepareValidationLocalData } from "./prepare-app-local-preview";
-import { runAppBrowserTests } from "./run-app-browser-tests";
+import { appSchemaReleaseCommand, compileAppSchemaRelease } from "./compile-app-schema-release";
+import {
+  appDeclaresLocalSetup,
+  localPreviewExecutionCommand,
+  prepareAppLocalPreview,
+  prepareValidationLocalData,
+} from "./prepare-app-local-preview";
+import { appBrowserTestCommand, runAppBrowserTests } from "./run-app-browser-tests";
 import {
   draftReconciliationState,
   updateExactDraftReconciliation,
 } from "@/lib/agent/draft-reconciliation-state";
+import type { DraftReconciliationCandidate } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { supportedValidationCommands } from "@/lib/repository/supported-template";
 import { inspectDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
@@ -53,6 +60,226 @@ const runAdditionalChecks = async (input: {
   return { commands };
 };
 
+type ValidationStep = NonNullable<DraftReconciliationCandidate["validationRun"]>["steps"][number];
+interface ValidationStepResult {
+  command: string;
+  exitCode: number | null;
+  status: "passed" | "failed";
+  problem?: string;
+  output?: ReturnType<typeof validationOutputExcerpt>;
+}
+
+/** Eve publishes progress at tool boundaries, so each incremental call runs one command. */
+/* oxlint-disable eslint/complexity, sonarjs/cognitive-complexity -- Ordered validation branches by command category and recovery outcome. */
+const runIncrementalValidation = async (
+  input: {
+    additionalCheckTasks: string[];
+    expectedCommand?: string;
+    runBrowserTests: boolean;
+  },
+  ctx: ToolContext,
+  candidate: DraftReconciliationCandidate,
+  sandbox: SandboxSession,
+) => {
+  const before = await inspectDraftReconciliation({ prepared: candidate, sandbox });
+  if (before.unresolvedConflicts.length > 0) {
+    return {
+      conflicts: before.unresolvedConflicts,
+      problem: "Resolve every listed app-owned conflict before running candidate checks.",
+      status: "needs_resolution" as const,
+    };
+  }
+  let run = candidate.validationRun ?? null;
+  const checkoutChanged = run !== null && run.resolvedTree !== before.resolvedTree;
+  if (checkoutChanged) {
+    // An expired/replaced sandbox or a normal source edit invalidates only this validation pass.
+    run = null;
+  }
+  if (run === null) {
+    const local = await appDeclaresLocalSetup({
+      appId: candidate.appId,
+      root: candidate.root,
+      sandbox,
+    });
+    const steps: ValidationStep[] = [
+      { command: "mise exec -- bun install --frozen-lockfile", kind: "install" },
+      { command: appSchemaReleaseCommand(candidate.appId), kind: "schema" },
+      ...(local
+        ? [{ command: localPreviewExecutionCommand(candidate.appId), kind: "local" as const }]
+        : []),
+      ...supportedValidationCommands(candidate.appId).map(({ command }) => ({
+        command,
+        kind: "check" as const,
+      })),
+      ...(input.runBrowserTests
+        ? [{ command: appBrowserTestCommand(candidate.appId), kind: "browser" as const }]
+        : []),
+      ...input.additionalCheckTasks.map((task) => ({
+        command: `mise run --skip-tools ${task}`,
+        kind: "additional" as const,
+      })),
+    ];
+    run = { commands: [], nextIndex: 0, resolvedTree: before.resolvedTree, steps };
+    const initialRun = run;
+    updateExactDraftReconciliation({
+      expected: candidate,
+      operation: "starting command-by-command candidate validation",
+      transition: () => {
+        const next = { ...candidate, validationRun: initialRun };
+        delete next.validation;
+        delete next.proposal;
+        delete next.review;
+        delete next.reviewReadProgress;
+        return next;
+      },
+    });
+  }
+  const step = run.steps[run.nextIndex];
+  if (step === undefined) {
+    throw new Error(
+      "Candidate validation has no next command. Inspect this saved session and restart validation.",
+    );
+  }
+  if (input.expectedCommand !== undefined && input.expectedCommand !== step.command) {
+    throw new Error(
+      `Candidate validation is ready for ${step.command}, but this call supplied a different command.${checkoutChanged ? " The checkout changed since the prior validation command, so Builder restarted the check sequence." : ""} Resume with the returned nextCommand; no command was run.`,
+    );
+  }
+  let result: ValidationStepResult;
+  try {
+    if (step.kind === "schema") {
+      const schema = await compileAppSchemaRelease({
+        appId: candidate.appId,
+        root: candidate.root,
+        sandbox,
+        signal: ctx.abortSignal,
+      });
+      result = {
+        command: schema.command,
+        exitCode: schema.exitCode,
+        output: validationOutputExcerpt(schema.stdout, schema.stderr),
+        problem: schema.status === "failed" ? schema.problem : undefined,
+        status: schema.status === "compiled" ? "passed" : "failed",
+      };
+    } else if (step.kind === "local") {
+      const local = await prepareAppLocalPreview({
+        appId: candidate.appId,
+        root: candidate.root,
+        sandbox,
+        signal: ctx.abortSignal,
+      });
+      result = {
+        command: local.command,
+        exitCode: local.exitCode,
+        output: validationOutputExcerpt(local.stdout, local.stderr),
+        problem: local.status === "failed" ? local.problem : undefined,
+        status: local.status === "prepared" ? "passed" : "failed",
+      };
+    } else if (step.kind === "browser") {
+      const browser = await runAppBrowserTests({
+        appId: candidate.appId,
+        root: candidate.root,
+        sandbox,
+        signal: ctx.abortSignal,
+      });
+      result = {
+        command: browser.command,
+        exitCode: browser.exitCode,
+        output: validationOutputExcerpt(browser.stdout, browser.stderr),
+        problem: browser.status === "failed" ? browser.problem : undefined,
+        status: browser.status === "passed" ? "passed" : "failed",
+      };
+    } else {
+      const planned = supportedValidationCommands(candidate.appId).find(
+        ({ command }) => command === step.command,
+      );
+      if (step.kind === "check" && planned === undefined) {
+        throw new Error(`The selected repository check ${step.command} is no longer supported.`);
+      }
+      const execution =
+        step.kind === "check" && planned !== undefined
+          ? await sandboxValidationCommandExecutor()({
+              appId: candidate.appId,
+              command: planned.command,
+              sandbox,
+              validationRoot: candidate.root,
+            })
+          : await sandbox.run({
+              abortSignal: ctx.abortSignal,
+              command: step.command,
+              workingDirectory: candidate.root,
+            });
+      result = {
+        command: step.command,
+        exitCode: execution.exitCode,
+        output: validationOutputExcerpt(execution.stdout, execution.stderr),
+        status: execution.exitCode === 0 ? "passed" : "failed",
+      };
+    }
+  } catch (error) {
+    throw new Error(
+      `Builder could not run ${step.command} during draft PR candidate validation. Check the private sandbox and repository task, then retry this saved session. Cause: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
+  if (result.status === "failed") {
+    return {
+      command: result.command,
+      exitCode: result.exitCode,
+      output: result.output,
+      problem:
+        result.problem ??
+        `The reconciled checkout failed ${step.command}. Read the command output, repair the named repository task or source, then restart candidate validation.`,
+      status: "needs_repair" as const,
+    };
+  }
+  const after = await inspectDraftReconciliation({ prepared: candidate, sandbox });
+  if (after.unresolvedConflicts.length > 0) {
+    return {
+      conflicts: after.unresolvedConflicts,
+      problem: `After ${step.command}, the checkout has unresolved conflicts. Resolve the listed app-owned files, then restart validation.`,
+      status: "needs_resolution" as const,
+    };
+  }
+  const commands = [...run.commands, { command: step.command, exitCode: 0 }];
+  const latest = draftReconciliationState.get();
+  const nextIndex = run.nextIndex + 1;
+  if (nextIndex < run.steps.length) {
+    const nextRun = { ...run, commands, nextIndex, resolvedTree: after.resolvedTree };
+    updateExactDraftReconciliation({
+      expected: latest,
+      operation: `recording ${step.command} validation progress`,
+      transition: () => ({ ...candidate, validationRun: nextRun }),
+    });
+    return {
+      command: step.command,
+      exitCode: 0,
+      nextCommand: run.steps[nextIndex]?.command,
+      passedCommands: commands.length,
+      remainingCommands: run.steps.length - nextIndex,
+      status: "in_progress" as const,
+    };
+  }
+  updateExactDraftReconciliation({
+    expected: latest,
+    operation: "recording validated merge content",
+    transition: () => {
+      const next = {
+        ...candidate,
+        validation: { commands, resolvedTree: after.resolvedTree, validatedByCallId: ctx.callId },
+      };
+      delete next.validationRun;
+      return next;
+    },
+  });
+  return {
+    command: step.command,
+    commands,
+    resolvedTree: after.resolvedTree,
+    status: "validated" as const,
+  };
+};
+
 export default defineTool({
   description:
     "Install the candidate's own locked dependencies, compile its selected app schema, run repository app:check and app:test, and optionally run the app's browser task and repository check: tasks. All commands run in the isolated reconciled checkout; failures identify the command and cause. This does not update GitHub.",
@@ -71,6 +298,9 @@ export default defineTool({
       );
     }
     const sandbox = await getSourceBoundSandbox(ctx);
+    if (input.incremental) {
+      return await runIncrementalValidation(input, ctx, candidate, sandbox);
+    }
     const before = await inspectDraftReconciliation({ prepared: candidate, sandbox });
     if (before.unresolvedConflicts.length > 0) {
       return {
@@ -88,6 +318,7 @@ export default defineTool({
         delete next.review;
         delete next.reviewReadProgress;
         delete next.validation;
+        delete next.validationRun;
         return next;
       },
     });
@@ -208,6 +439,8 @@ export default defineTool({
   },
   inputSchema: z.strictObject({
     additionalCheckTasks: z.array(z.string().regex(/^check:[A-Za-z0-9:_-]+$/u)).default([]),
+    expectedCommand: z.string().max(1024).optional(),
+    incremental: z.boolean().default(false),
     runBrowserTests: z.boolean().default(false),
   }),
 });

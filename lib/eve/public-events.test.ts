@@ -242,6 +242,79 @@ describe("installed Eve 0.43 projection", () => {
     ]);
     expect(pendingBuilderOperation(events)).toBe("Running the app's browser tests");
   });
+  it("names each draft reconciliation command while it runs and clears it on completion", () => {
+    const command = "mise run --skip-tools app:test spend-review 1/1";
+    const events = projectInstalledEveEvents([
+      installedEvent({
+        data: {
+          actions: [
+            {
+              callId: "draft_validation_1",
+              input: { expectedCommand: command, incremental: true, token: "private" },
+              kind: "tool-call",
+              toolName: "validate_github_draft_pr_reconciliation",
+            },
+          ],
+        },
+        type: "actions.requested",
+      }),
+      installedEvent({
+        data: {
+          result: {
+            callId: "draft_validation_1",
+            kind: "tool-result",
+            output: {
+              command,
+              nextCommand: "mise run --skip-tools check:vercel-services",
+              status: "in_progress",
+            },
+            toolName: "validate_github_draft_pr_reconciliation",
+          },
+          status: "completed",
+        },
+        type: "action.result",
+      }),
+    ]);
+    expect(pendingBuilderOperation(events.slice(0, 1))).toBe(`Running ${command}`);
+    expect(pendingBuilderOperation(events)).toBe("the current Builder step");
+    expect(JSON.stringify(events)).not.toContain("private");
+  });
+  it("clears an active draft command when its tool fails without command output", () => {
+    const events = projectInstalledEveEvents([
+      installedEvent({
+        data: {
+          actions: [
+            {
+              callId: "draft_validation_2",
+              input: {
+                expectedCommand: "mise run --skip-tools app:check spend-review",
+                incremental: true,
+              },
+              kind: "tool-call",
+              toolName: "validate_github_draft_pr_reconciliation",
+            },
+          ],
+        },
+        type: "actions.requested",
+      }),
+      installedEvent({
+        data: {
+          result: {
+            callId: "draft_validation_2",
+            kind: "tool-result",
+            output: { error: "sandbox expired" },
+            toolName: "validate_github_draft_pr_reconciliation",
+          },
+          status: "failed",
+        },
+        type: "action.result",
+      }),
+    ]);
+    expect(pendingBuilderOperation(events.slice(0, 1))).toBe(
+      "Running mise run --skip-tools app:check spend-review",
+    );
+    expect(pendingBuilderOperation(events)).toBe("the current Builder step");
+  });
   it("recovers only the latest receipt-bound HTML prototype", () => {
     const first = recordedPrototypeEvents();
     const second = recordedPrototypeEvents({

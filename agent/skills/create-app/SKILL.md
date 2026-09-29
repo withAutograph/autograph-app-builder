@@ -171,7 +171,15 @@ app-owned files and reuse the same component-backed preview flow.
    content with `resolve_github_draft_pr_conflict`. Report a platform-owned conflict
    with its path and leave it for its owner. Run the selected app's schema,
    repository checks, browser tests, and applicable guard on the reconciled
-   candidate with `validate_github_draft_pr_reconciliation`. Use
+   candidate with `validate_github_draft_pr_reconciliation`. For long
+   reconciliation checks, set `incremental: true` and pass
+   `expectedCommand: "mise exec -- bun install --frozen-lockfile"` on the first
+   call. Each successful call returns the completed command and `nextCommand`;
+   call the same tool again with `expectedCommand` set to that exact value until
+   `status` is `validated`. A result of `in_progress` means checks remain; do
+   not review or seal yet. If a tool call is interrupted, resume the same
+   saved session and repeat the pending command. A changed checkout restarts
+   validation from the first command. Use
    `review_github_draft_pr_reconciliation`, then page through both complete
    diffs with `inspect_github_draft_pr_reconciliation`: the final diff against
    the current base and the delta from the old PR head.

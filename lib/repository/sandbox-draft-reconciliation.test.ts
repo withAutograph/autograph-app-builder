@@ -221,6 +221,53 @@ describe("isolated draft reconciliation", () => {
     expect(prepared.conflicts).toEqual(["apps/demo/tests/journey.spec.ts"]);
   });
 
+  it("explains when unpublished reviewed bytes were lost with the old sandbox", async () => {
+    const { root, sandbox, headSha, baseSha } = fixture();
+    let available = false;
+    const input = {
+      appId: "demo",
+      baseBranch: "main",
+      baseSha,
+      headBranch: "draft",
+      headSha,
+      repository: { name: "arrusted-development", owner: "withAutograph" },
+      sandbox,
+      unpublished: {
+        changes: [
+          {
+            after: { digest: digest("new edit\n"), mode: "644" },
+            before: { digest: digest("draft\n"), mode: "644" },
+            kind: "modified",
+            path: "apps/demo/tests/journey.spec.ts",
+          },
+        ],
+        contentSource: {
+          // oxlint-disable-next-line eslint/require-await -- sandbox file sources return promises.
+          async readFile() {
+            if (!available) {
+              throw new Error("source overlay unavailable");
+            }
+            return {
+              bytes: Buffer.from("new edit\n"),
+              digest: digest("new edit\n"),
+              mode: "644" as const,
+            };
+          },
+        },
+        reviewDigest: "b".repeat(64),
+      },
+      workspaceRoot: root,
+    } as const;
+    await expect(prepareDraftReconciliation(input)).rejects.toThrow(
+      "recreate and review the missing edit",
+    );
+    available = true;
+    const retried = await prepareDraftReconciliation(input);
+    expect(retried.created).toBe(false);
+    expect(git(retried.root, "rev-parse", "HEAD")).not.toBe(headSha);
+    expect(retried.conflicts).toContain("apps/demo/tests/journey.spec.ts");
+  });
+
   it("combines an app conflict with current main and reviews both deltas", async () => {
     const { root, sandbox, headSha, baseSha } = fixture();
     const prepared = await prepareDraftReconciliation({
@@ -286,6 +333,50 @@ describe("isolated draft reconciliation", () => {
     expect(Buffer.from(headDiff.chunkBase64, "base64").toString("utf-8")).toContain(
       "docs/platform.md",
     );
+  });
+
+  it("reports a lost private candidate and rebuilds it without carrying old resolutions", async () => {
+    const { root, sandbox, headSha, baseSha } = fixture();
+    const input = {
+      appId: "demo",
+      baseBranch: "main",
+      baseSha,
+      headBranch: "draft",
+      headSha,
+      repository: { name: "arrusted-development", owner: "withAutograph" },
+      sandbox,
+      workspaceRoot: root,
+    };
+    const prepared = await prepareDraftReconciliation(input);
+    expect(prepared.created).toBe(true);
+    await writeDraftReconciliationResolution({
+      content: "old uncommitted resolution\n",
+      path: "apps/demo/tests/journey.spec.ts",
+      prepared,
+      sandbox,
+    });
+    rmSync(prepared.root, { force: true, recursive: true });
+    git(path.join(root, "repository"), "worktree", "prune");
+    await expect(inspectDraftReconciliation({ prepared, sandbox })).rejects.toThrow(
+      "private draft merge candidate is no longer in this sandbox",
+    );
+    const rebuilt = await prepareDraftReconciliation(input);
+    expect(rebuilt.created).toBe(true);
+    expect(rebuilt.conflicts).toEqual(["apps/demo/tests/journey.spec.ts"]);
+    expect(
+      await readDraftReconciliationConflict({
+        path: "apps/demo/tests/journey.spec.ts",
+        prepared: rebuilt,
+        sandbox,
+      }),
+    ).toContain("<<<<<<<");
+    expect(
+      await readDraftReconciliationConflict({
+        path: "apps/demo/tests/journey.spec.ts",
+        prepared: rebuilt,
+        sandbox,
+      }),
+    ).not.toContain("old uncommitted resolution");
   });
 
   it("names and stops at a platform-owned conflict", async () => {

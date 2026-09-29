@@ -800,7 +800,9 @@ export const createGitHubAppHttpProvider = (input: {
       try {
         return { token: await repositoryReadToken(repositoryId) };
       } catch {
-        throw new Error("GitHub provider operation failed.");
+        throw new Error(
+          "GitHub could not acquire read access to the selected repository. Check that the GitHub App installation includes this repository and grants contents read access, then reconnect GitHub and retry.",
+        );
       }
     },
     async createPrivateFreshHistoryRepository(proposal, content) {
