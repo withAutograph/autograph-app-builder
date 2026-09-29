@@ -3,4 +3,5 @@
 set -eu
 
 mise run app:reset-emulated
-exec mise run storybook:install-browser
+exec .config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" node_modules/playwright/cli.js install chromium --only-shell
