@@ -1,3 +1,4 @@
+import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { describeSelectedApp } from "@/lib/repository/app-description";
 import { runAppBrowserTests } from "./run-app-browser-tests";
 import { reviewAppliedProductSource } from "@/lib/agent/review-applied-product-source";
@@ -193,7 +194,7 @@ export default defineTool({
           execution: {
             appId: current.appSpec.appId,
             root: current.applyReceipt.applyRoot,
-            sandboxId: sandbox.id,
+            sandboxId: getBuilderSandboxId(sandbox),
             sessionAuth: ctx.session.auth,
             sessionId: ctx.session.id,
             signal: ctx.abortSignal,

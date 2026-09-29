@@ -1,3 +1,4 @@
+import { getBuilderSandboxId } from "./builder-sandbox";
 import type { RuntimeSandboxSession } from "eve/sandbox";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -173,7 +174,7 @@ export async function acquireHostedSandboxExecutionLease(input: {
       nowEpochMs: input.nowEpochMs ?? Date.now(),
       policy: SANDBOX_EXECUTION_POLICY,
       principal,
-      providerSandboxId: input.sandbox.id,
+      providerSandboxId: getBuilderSandboxId(input.sandbox),
     });
     if (result.disposition === "rejected") {
       throw new Error("Hosted sandbox recovery is still in progress.");
@@ -258,7 +259,7 @@ export async function releaseHostedSandboxExecutionLease(input: {
     nowEpochMs: input.nowEpochMs ?? Date.now(),
     policyDigest: sandboxExecutionPolicyDigest(),
     principal,
-    providerSandboxId: input.sandbox.id,
+    providerSandboxId: getBuilderSandboxId(input.sandbox),
     reason: input.reason,
   });
   commandAuthorities.delete(input.sessionId);

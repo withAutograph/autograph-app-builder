@@ -1,3 +1,4 @@
+import { getBuilderSandboxId } from "../sandbox/builder-sandbox";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -1084,7 +1085,10 @@ const verifyDevelopmentSandboxWorkspace = async function verifyDevelopmentSandbo
   sandbox: SandboxSession,
   record: PreparedSandboxWorkspace,
 ): Promise<void> {
-  if (record.workspaceId !== sandbox.id || record.workspacePath !== "/workspace/repository") {
+  if (
+    record.workspaceId !== getBuilderSandboxId(sandbox) ||
+    record.workspacePath !== "/workspace/repository"
+  ) {
     throw new Error("The prepared development workspace does not belong to this session.");
   }
   const node = fixtureSandboxEnabled() ? JSON.stringify(process.execPath) : "node";
@@ -1236,7 +1240,7 @@ export const recordPreparedSandboxWorkspace = async function recordPreparedSandb
     workspacePath: "/workspace/repository",
   };
   const existing = await readPreparedSandboxWorkspaceRecord(input.sandbox);
-  if (existing !== undefined && existing.workspaceId !== input.sandbox.id) {
+  if (existing !== undefined && existing.workspaceId !== getBuilderSandboxId(input.sandbox)) {
     throw new Error("This app build already owns a different workspace.");
   }
   if (existing !== undefined) {
@@ -1260,7 +1264,7 @@ export const recordPreparedSandboxWorkspace = async function recordPreparedSandb
     path: ".app-builder/prepare-intent.json",
   });
   const record: PreparedSandboxWorkspace = {
-    workspaceId: input.sandbox.id,
+    workspaceId: getBuilderSandboxId(input.sandbox),
     ...expected,
   };
   await input.sandbox.writeTextFile({
@@ -1471,7 +1475,7 @@ export const prepareSupportedSandboxWorkspace = async function prepareSupportedS
     sourceSha: expectedSha,
     sourceTree,
     workspaceDigest: sha256(JSON.stringify(sourceFiles)),
-    workspaceId: sandbox.id,
+    workspaceId: getBuilderSandboxId(sandbox),
     workspacePath: "/workspace/repository",
   };
   await sandbox.writeTextFile({
@@ -1683,7 +1687,7 @@ export const prepareDevelopmentSandboxWorkspace = async function prepareDevelopm
     sourceSha,
     sourceTree: generation,
     workspaceDigest,
-    workspaceId: sandbox.id,
+    workspaceId: getBuilderSandboxId(sandbox),
     workspacePath: "/workspace/repository",
   };
   await sandbox.writeTextFile({

@@ -1,3 +1,4 @@
+import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
@@ -44,7 +45,7 @@ export default defineTool({
     const sandbox = await ctx.getSandbox();
     await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
     const preview = workingPreviewState.get();
-    if (!hasLiveWorkingPreview(preview, sandbox.id) || preview === null) {
+    if (!hasLiveWorkingPreview(preview, getBuilderSandboxId(sandbox)) || preview === null) {
       throw new Error("A current working preview in this session's Sandbox is required.");
     }
     if (!hasCurrentProductBehaviorPreview(preview.commandId)) {

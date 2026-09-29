@@ -1,51 +1,19 @@
-import { SandboxTemplateNotProvisionedError } from "eve/sandbox";
-import type { SandboxBackend, SandboxBackendHandle, SandboxBackendPrewarmInput } from "eve/sandbox";
-import { vercel } from "eve/sandbox/vercel";
+import { Sandbox } from "@vercel/sandbox";
+import type {
+  SandboxProviderHandle,
+  SandboxProviderTargetFile,
+  SandboxProviderImplementation,
+} from "eve/sandbox/provider";
+import { defineSandboxProvider } from "eve/sandbox/provider";
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-
+import path from "node:path";
+import type { BuilderSandboxSession } from "./builder-sandbox";
 import { assertHostedSandboxCommandAuthority } from "./deployment-execution-lease";
-import { createAuthorizedSandboxBackend } from "./sandbox-command-adapter";
-import { hasVercelSessionGitSource, resolveVercelSessionGitSource } from "./vercel-session-source";
-import { withVercelPreviewProvider } from "./vercel-preview-provider";
-
-export interface HostedVercelBackendOptions {
-  readonly fetch?: ProviderFetch;
-  readonly env?: Readonly<Record<string, string>>;
-  readonly networkPolicy: "allow-all";
-  readonly sessionCreateOptions: (context?: {
-    readonly session: { readonly id: string };
-  }) => Promise<{
-    readonly networkPolicy: "allow-all";
-    readonly source?: {
-      readonly type: "git";
-      readonly url: string;
-      readonly username: "x-access-token";
-      readonly password: string;
-      readonly revision?: string;
-    };
-  }>;
-}
-
-export type HostedVercelBackendFactory = (
-  options: HostedVercelBackendOptions,
-) => ReturnType<typeof vercel>;
-
-type RuntimeRecoveryPrewarmInput<BO = Record<string, never>> = Readonly<{
-  bootstrap: NonNullable<SandboxBackendPrewarmInput<BO>["bootstrap"]>;
-  seedFiles: SandboxBackendPrewarmInput<BO>["seedFiles"];
-}>;
-
-export interface HostedVercelBackendInput {
-  readonly factory?: HostedVercelBackendFactory;
-  readonly sandboxEnvironment?: Readonly<Record<string, string>>;
-  /** Maps Eve's authored key to a provider cache key when reuse has a narrower identity. */
-  readonly providerTemplateKey?: (authoredTemplateKey: string) => string;
-  /** Reuses already-open provider sessions within one local Eve process. */
-  readonly reuseProcessSessionHandles?: boolean;
-  /** Legacy callers may still supply this while migrating off templates. */
-  readonly runtimeRecoveryPrewarmInput?: () => RuntimeRecoveryPrewarmInput;
-}
+import { createAuthorizedSandboxSession } from "./sandbox-command-adapter";
+import { resolveVercelSessionGitSource } from "./vercel-session-source";
+import { registerVercelPreviewProvider } from "./vercel-preview-provider";
+import { createVercelSdkSession } from "./vercel-sdk-session";
 
 const PROVIDER_RETRY_DELAY_MS = 250;
 
@@ -117,293 +85,140 @@ export function createProviderFetch(fetchImpl: typeof fetch = fetch): ProviderFe
   };
 }
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function createRuntimeRecoveringBackend<BO, SO>(input: {
-  readonly backend: SandboxBackend<BO, SO>;
-  readonly providerTemplateKey?: (authoredTemplateKey: string) => string;
-}): SandboxBackend<BO, SO> {
-  const providerTemplateKey = (authoredTemplateKey: string | null) =>
-    authoredTemplateKey === null
-      ? null
-      : (input.providerTemplateKey?.(authoredTemplateKey) ?? authoredTemplateKey);
-  const providerPrewarmTemplateKey = (authoredTemplateKey: string) =>
-    input.providerTemplateKey?.(authoredTemplateKey) ?? authoredTemplateKey;
-  const selectedCheckoutCommand = `if test -e /workspace/repository || test -L /workspace/repository; then
-  if git -C /workspace/repository rev-parse --is-inside-work-tree >/dev/null 2>&1; then echo found; else echo occupied; fi
-elif git -C /vercel/sandbox rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  echo found
-elif find /workspace -mindepth 2 -maxdepth 2 -name .git -print -quit | grep -q .; then
-  echo found
-else
-  echo missing
-fi`;
-  const selectedCheckoutStatus = async (handle: SandboxBackendHandle<SO>) => {
-    const result = await handle.session.run({
-      command: selectedCheckoutCommand,
-      workingDirectory: "/workspace",
-    });
-    if (result.exitCode !== 0) {
-      throw new Error(
-        `Builder could not inspect the selected GitHub checkout in its Vercel sandbox (exit ${result.exitCode}). Check the sandbox command logs and retry.`,
-      );
-    }
-    return result.stdout.trim();
-  };
-  return {
-    async create(createInput) {
-      // Eve may tag a provider attempt with a different identifier than its
-      // durable session key. Either exact selected-source binding must bypass
-      // the starter template so Vercel can clone the Git repository.
-      const selectedGitSource =
-        (createInput.tags?.sessionId !== undefined &&
-          hasVercelSessionGitSource(createInput.tags.sessionId)) ||
-        hasVercelSessionGitSource(createInput.sessionKey);
-      console.info(
-        JSON.stringify({
-          event: "autograph.sandbox.source-selection",
-          selectedGitSource,
-          sessionKeySource: hasVercelSessionGitSource(createInput.sessionKey),
-          taggedSource: hasVercelSessionGitSource(createInput.tags?.sessionId ?? ""),
-        }),
-      );
-      const providerCreateInput = {
-        ...createInput,
-        // Eve replaces a session source with the template snapshot when a
-        // template key is present. A selected Git source needs a fresh
-        // provider create so Vercel can clone it exactly once.
-        templateKey: selectedGitSource ? null : providerTemplateKey(createInput.templateKey),
-      };
+export interface BuilderVercelEnvironmentOptions {
+  readonly sandboxEnvironment?: Readonly<Record<string, string>>;
+}
+
+// oxlint-disable-next-line typescript/consistent-type-definitions -- Eve JSON artifacts require the implicit index signature of an object type alias.
+type BuilderArtifact = {
+  readonly files: readonly { readonly path: string; readonly content: string }[];
+};
+interface BuilderSessionState {
+  readonly name: string;
+  readonly version: 1;
+}
+
+export const createBuilderVercelProvider = (
+  options?: BuilderVercelEnvironmentOptions,
+): SandboxProviderImplementation<
+  undefined,
+  BuilderArtifact,
+  BuilderSessionState,
+  BuilderSandboxSession
+> => {
+  const transport = { fetch: createProviderFetch() };
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- Keep native handle lifecycle next to its provider environment.
+  const handle = (
+    native: Sandbox,
+    sessionId: string,
+  ): SandboxProviderHandle<BuilderSandboxSession> => {
+    const unregister = registerVercelPreviewProvider(native.name, native);
+    const close = async (operation: "stop" | "delete", signal?: AbortSignal) => {
       try {
-        const handle = await input.backend.create(providerCreateInput);
-        if (!selectedGitSource) {
-          return handle;
-        }
-        const status = await selectedCheckoutStatus(handle);
-        console.info(JSON.stringify({ event: "autograph.sandbox.selected-checkout", status }));
-        if (status === "found") {
-          return handle;
-        }
-        if (status === "occupied") {
-          throw new Error(
-            "Builder cannot restore its selected GitHub source: /workspace/repository is occupied by a non-Git directory. Review that sandbox before replacing it.",
-          );
-        }
-        if (status !== "missing") {
-          throw new Error(
-            `Builder received an invalid selected-checkout inspection result: ${status}.`,
-          );
-        }
-        const replacementKey = `app-builder-git-${createHash("sha256").update(createInput.sessionKey).digest("hex").slice(0, 40)}`;
-        const current = await handle.captureState();
-        if (current.metadata.sandboxName === replacementKey) {
-          throw new Error(
-            "Vercel reopened the selected GitHub sandbox without its checkout. The replacement also has no repository; inspect GitHub source options and provider creation logs before retrying.",
-          );
-        }
-        await handle.stop();
-        const replacement = await input.backend.create({
-          ...providerCreateInput,
-          // oxlint-disable-next-line sonarjs/no-undefined-assignment -- a replacement must not reopen the stale provider sandbox named in Eve's metadata.
-          existingMetadata: undefined,
-          sessionKey: replacementKey,
-          tags: {
-            ...providerCreateInput.tags,
-            sessionId: providerCreateInput.tags?.sessionId ?? createInput.sessionKey,
-          },
-        });
-        const replacementStatus = await selectedCheckoutStatus(replacement);
-        console.info(
-          JSON.stringify({
-            event: "autograph.sandbox.replacement-checkout",
-            status: replacementStatus,
-          }),
-        );
-        if (replacementStatus !== "found") {
-          await replacement.stop();
-          throw new Error(
-            "Vercel created a replacement sandbox without the selected GitHub checkout. Verify the installation's repository access and the provider Git source request, then retry this session.",
-          );
-        }
-        return {
-          captureState: async () => ({
-            ...(await replacement.captureState()),
-            sessionKey: createInput.sessionKey,
-          }),
-          session: replacement.session,
-          shutdown: () => replacement.shutdown(),
-          stop: () => replacement.stop(),
-          useSessionFn: replacement.useSessionFn,
-        } satisfies SandboxBackendHandle<SO>;
-      } catch (error) {
-        if (
-          providerCreateInput.templateKey === null ||
-          !SandboxTemplateNotProvisionedError.is(error) ||
-          error.templateKey !== providerCreateInput.templateKey
-        ) {
-          throw error;
-        }
-
-        // Templates are an optional startup optimization. When the provider
-        // has no matching template, create a fresh Vercel Sandbox directly
-        // instead of blocking the user or requiring an out-of-band prewarm.
-        return await input.backend.create({
-          ...providerCreateInput,
-          templateKey: null,
-        });
+        await native[operation]({ signal });
+      } finally {
+        unregister();
       }
-    },
-    name: input.backend.name,
-    prewarm: (prewarmInput) =>
-      input.backend.prewarm({
-        ...prewarmInput,
-        templateKey: providerPrewarmTemplateKey(prewarmInput.templateKey),
+    };
+    return {
+      onRuntimeShutdown: () => close("stop"),
+      onSessionDelete: (input) => close("delete", input?.abortSignal),
+      onSessionStop: () => close("stop"),
+      sandbox: createAuthorizedSandboxSession({
+        authorize: () => assertHostedSandboxCommandAuthority({ sessionId }),
+        session: createVercelSdkSession(native),
       }),
+    };
   };
-}
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function createProcessSessionReusingBackend<BO, SO>(
-  backend: SandboxBackend<BO, SO>,
-): SandboxBackend<BO, SO> {
-  const processState = globalThis as typeof globalThis & {
-    __autographDevelopmentSandboxHandles?: Map<string, Promise<SandboxBackendHandle<unknown>>>;
-  };
-  const sessions = (processState.__autographDevelopmentSandboxHandles ??= new Map()) as Map<
-    string,
-    Promise<SandboxBackendHandle<SO>>
-  >;
   return {
-    create(input) {
-      const key = JSON.stringify([
-        backend.name,
-        input.runtimeContext.appRoot,
-        input.sessionKey,
-        input.templateKey,
-      ]);
-      const existing = sessions.get(key);
-      if (existing !== undefined) {
-        console.log(
-          JSON.stringify({
-            event: "autograph.local.sandbox-handle",
-            sessionKey: input.sessionKey,
-            state: "hit",
-          }),
-        );
-        return existing;
+    prepare(context) {
+      // Only public resource targets are persisted. Preparation does not contact
+      // Vercel or freeze live repository bytes into a provider snapshot.
+      const files: SandboxProviderTargetFile[] = [];
+      for (const tree of [context.resources.workspace, context.resources.skills]) {
+        if (tree === undefined) continue;
+        for (const file of tree.files) {
+          files.push({
+            content: file.content,
+            path: path.posix.join(tree.targetPath, file.relativePath),
+          });
+        }
       }
-      console.log(
-        JSON.stringify({
-          event: "autograph.local.sandbox-handle",
-          sessionKey: input.sessionKey,
-          state: "miss",
-        }),
-      );
-
-      // Promise composition preserves the shared pending handle and cleanup identity.
-      // oxlint-disable promise/prefer-await-to-callbacks
-      // oxlint-disable promise/prefer-await-to-then
-      // oxlint-disable-next-line promise/prefer-await-to-then
-      const pending: Promise<SandboxBackendHandle<SO>> = backend
-        .create(input)
-        .then((handle) => {
-          let closed = false;
-          const close = async (kind: "stop" | "shutdown") => {
-            if (closed) {
-              return;
-            }
-            closed = true;
-            if (sessions.get(key) === pending) {
-              sessions.delete(key);
-            }
-            await handle[kind]();
-          };
-          return {
-            captureState: () => handle.captureState(),
-            session: handle.session,
-            shutdown: () => close("shutdown"),
-            stop: () => close("stop"),
-            useSessionFn: handle.useSessionFn,
-          } satisfies SandboxBackendHandle<SO>;
-        })
-        // The backend promise cleanup must remain attached to the promise chain.
-        // oxlint-disable-next-line promise/prefer-await-to-callbacks
-        // oxlint-disable-next-line promise/prefer-await-to-then
-        .catch((error: unknown) => {
-          if (sessions.get(key) === pending) {
-            sessions.delete(key);
-          }
-          throw error;
-        });
-      // oxlint-enable promise/prefer-await-to-callbacks
-      // oxlint-enable promise/prefer-await-to-then
-      sessions.set(key, pending);
-      return pending;
+      return Promise.resolve({
+        files: files.map((file) => ({
+          content: Buffer.from(file.content).toString("base64"),
+          path: file.path,
+        })),
+      });
     },
-    name: backend.name,
-    prewarm: (input) => backend.prewarm(input),
-  };
-}
-
-/**
- * Keeps network authority different for the reusable template and every live
- * session. Only template construction may download the pinned toolchain.
- */
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function createHostedVercelBackend(
-  input: HostedVercelBackendInput,
-): ReturnType<typeof vercel> {
-  // Eve merges session-only creation options into the provider request,
-  // although its public return type currently names only mounts. Keep the
-  // compatibility assertion isolated at this boundary.
-  const factory = input.factory ?? (vercel as unknown as HostedVercelBackendFactory);
-  const backend = factory({
-    ...(input.sandboxEnvironment === undefined ? {} : { env: { ...input.sandboxEnvironment } }),
-    // The Vercel SDK otherwise uses an unbounded default transport. Keep a
-    // provider outage visible to Eve and the eval runner instead of leaving a
-    // session creation promise pending indefinitely.
-    fetch: createProviderFetch(),
-    networkPolicy: "allow-all",
-    // Eve resolves this for every fresh live session, including a replacement
-    // created after the provider loses the previously recorded sandbox.
-    sessionCreateOptions: async (context) => {
-      const source =
-        context === undefined ? undefined : await resolveVercelSessionGitSource(context.session.id);
-      console.info(
-        JSON.stringify({
-          event: "autograph.sandbox.provider-create-options",
-          selectedGitSource: source !== undefined,
-        }),
-      );
-      return {
-        networkPolicy: "allow-all" as const,
+    async resume(context, _artifact, state) {
+      // Reconnect only: do not recreate source selection or initialization.
+      const native = await Sandbox.get({ ...transport, name: state.name, resume: true });
+      return handle(native, context.session.id);
+    },
+    async start(context, _liveOptions, artifact) {
+      const source = await resolveVercelSessionGitSource(context.session.id);
+      const name = `app-builder-${createHash("sha256").update(context.session.id).digest("hex").slice(0, 40)}`;
+      const native = await Sandbox.create({
+        ...transport,
+        image: "vcr.vercel.com/vercel/eve/base:0.68.0",
+        name,
+        networkPolicy: "allow-all",
+        persistent: true,
+        ...(options?.sandboxEnvironment === undefined
+          ? {}
+          : { env: { ...options.sandboxEnvironment } }),
         ...(source === undefined
           ? {}
           : {
-              // Eve forwards session-specific source options into the
-              // official Vercel `Sandbox.create` call when no template is
-              // present. The installation token remains provider-only.
               source: {
                 password: source.token,
-                ...(source.revision === undefined ? {} : { revision: source.revision }),
                 type: "git" as const,
                 url: source.url,
-                username: "x-access-token" as const,
+                username: "x-access-token",
+                ...(source.revision === undefined ? {} : { revision: source.revision }),
               },
             }),
-      };
+      });
+      try {
+        await native.fs.mkdir("/workspace", { recursive: true });
+        const home = await native.runCommand({ args: ["HOME"], cmd: "printenv" });
+        if (home.exitCode !== 0)
+          throw new Error("Vercel Sandbox did not expose its managed home directory.");
+        const homeOutput = await home.stdout();
+        const homePath = homeOutput.trim();
+        const sandbox = createVercelSdkSession(native);
+        for (const file of artifact.files) {
+          // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Sequential resource uploads keep provider backpressure for the complete tree.
+          await sandbox.writeBinaryFile({
+            content: Buffer.from(file.content, "base64"),
+            path: file.path.replace(/^\$HOME(?=\/|$)/u, homePath),
+          });
+        }
+        return {
+          handle: handle(native, context.session.id),
+          state: { name: native.name, version: 1 as const },
+        };
+      } catch (error) {
+        try {
+          await native.delete();
+        } catch {
+          // Retain the initiating setup failure; provider cleanup may also fail.
+        }
+        throw error;
+      }
     },
-  });
-  const authorized = createAuthorizedSandboxBackend({
-    authorizeSessionCommand: (sessionId) => assertHostedSandboxCommandAuthority({ sessionId }),
-    backend: withVercelPreviewProvider(backend),
-  });
-  const templateOptional = createRuntimeRecoveringBackend({
-    backend: authorized,
-    providerTemplateKey: input.providerTemplateKey,
-  });
-  return (
-    input.reuseProcessSessionHandles
-      ? createProcessSessionReusingBackend(templateOptional)
-      : templateOptional
-  ) as ReturnType<typeof vercel>;
-}
+  };
+};
+
+/** Session-specific Git sources and preview identity are application provider concerns. */
+export const BuilderVercelSandbox = defineSandboxProvider<
+  BuilderVercelEnvironmentOptions,
+  undefined,
+  BuilderArtifact,
+  BuilderSessionState,
+  BuilderSandboxSession
+>({ environment: createBuilderVercelProvider, name: "autograph-vercel" });
+
+export const createHostedVercelEnvironment = (input: BuilderVercelEnvironmentOptions = {}) =>
+  BuilderVercelSandbox.environment(input);

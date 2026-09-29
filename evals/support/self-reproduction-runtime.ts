@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 
-import type { SandboxBackend, SandboxBackendHandle, SandboxSeedFile } from "eve/sandbox";
-import { vercel } from "eve/sandbox/vercel";
+import type { SandboxSession } from "eve/sandbox";
+import type { SandboxProviderTargetFile } from "eve/sandbox/provider";
+import { Sandbox } from "@vercel/sandbox";
+import { createVercelSdkSession } from "../../lib/sandbox/vercel-sdk-session";
 import {
   DEVELOPMENT_SANDBOX_ENVIRONMENT,
   developmentPinnedToolchainCommand,
@@ -85,12 +87,20 @@ export const candidateRuntimeCaptureFailureObservations = (
   input: Omit<Parameters<typeof runtimeFailureObservations>[0], "kind">,
 ) => runtimeFailureObservations({ ...input, kind: "capture" });
 
-type Backend = SandboxBackend<Record<string, never>, Record<string, never>>;
+export interface CandidateRuntimeSandbox {
+  readonly id: string;
+  readonly session: SandboxSession;
+  readonly shutdown: () => Promise<void>;
+}
+
+interface CandidateRuntimeProvider {
+  readonly open: () => Promise<CandidateRuntimeSandbox>;
+}
 
 const excerpt = (value: string) => value.slice(-8000);
 
 const command = async (
-  handle: SandboxBackendHandle<Record<string, never>>,
+  handle: CandidateRuntimeSandbox,
   value: string,
   abortSignal: AbortSignal,
 ): Promise<RuntimeCommandReceipt> => {
@@ -121,7 +131,7 @@ try {
 console.log(JSON.stringify(probes));
 `;
 
-const candidatePackageName = (files: readonly SandboxSeedFile[], appId: string) => {
+const candidatePackageName = (files: readonly SandboxProviderTargetFile[], appId: string) => {
   const manifest = files.find((file) => file.path === "package.json");
   if (manifest) {
     try {
@@ -177,38 +187,49 @@ console.log(JSON.stringify([result]));
 /** Starts an exported candidate in a fresh evaluator-owned Vercel Sandbox.
  * The generated application never receives the backend handle or probe code. */
 export const evaluateCandidateRuntime = async (input: {
-  files: readonly SandboxSeedFile[];
+  files: readonly SandboxProviderTargetFile[];
   workspaceArchive: Buffer;
   candidateAppId: string;
   publicBasePath: string;
   credentials?: { token: string; teamId: string; projectId: string };
   appRoot?: string;
-  backend?: Backend;
+  backend?: CandidateRuntimeProvider;
   timeoutMs?: number;
   /** Opt-in diagnostic rebuild after failure; never used as acceptance evidence. */
   debugPrerender?: boolean;
   /** Evaluator work runs against loopback before the sandbox is released. */
   onReady?: (input: {
-    session: SandboxBackendHandle<Record<string, never>>["session"];
+    session: CandidateRuntimeSandbox["session"];
     baseURL: string;
     abortSignal: AbortSignal;
   }) => Promise<void>;
 }): Promise<CandidateRuntimeReceipt> => {
   const commands: RuntimeCommandReceipt[] = [];
-  let handle: SandboxBackendHandle<Record<string, never>> | undefined;
+  let handle: CandidateRuntimeSandbox | undefined;
   const controller = new AbortController();
   const timer = setTimeout(
     () => controller.abort(new Error("Candidate runtime deadline exceeded.")),
     input.timeoutMs ?? 600_000,
   );
   try {
-    const backend = input.backend ?? vercel({ networkPolicy: "allow-all", ...input.credentials });
-    handle = await backend.create({
-      runtimeContext: { appRoot: input.appRoot ?? "/workspace" },
-      sessionKey: `self-reproduction-runtime-${randomUUID()}`,
-      tags: { purpose: "self-reproduction-eval" },
-      templateKey: null,
-    });
+    if (input.backend !== undefined) {
+      handle = await input.backend.open();
+    } else {
+      const native = await Sandbox.create({
+        ...input.credentials,
+        name: `self-reproduction-runtime-${randomUUID()}`,
+        image: "vcr.vercel.com/vercel/eve/base:0.68.0",
+        networkPolicy: "allow-all",
+      });
+      await native.fs.mkdir("/workspace", { recursive: true });
+      handle = {
+        id: native.name,
+        session: createVercelSdkSession(native),
+        shutdown: async () => {
+          await native.delete();
+        },
+      };
+    }
     await handle.session.writeBinaryFile({
       content: input.workspaceArchive,
       path: ".self-reproduction-workspace.tar",
@@ -225,7 +246,7 @@ export const evaluateCandidateRuntime = async (input: {
         probes: [],
         producer: "evaluator",
         reason: "Reference workspace reconstruction failed.",
-        sandboxId: handle.session.id,
+        sandboxId: handle.id,
         status: "failed",
       };
     }
@@ -264,7 +285,7 @@ export const evaluateCandidateRuntime = async (input: {
         probes: [],
         producer: "evaluator",
         reason: "Candidate runtime toolchain installation failed.",
-        sandboxId: handle.session.id,
+        sandboxId: handle.id,
         status: "infrastructure-unavailable",
       };
     }
@@ -280,7 +301,7 @@ export const evaluateCandidateRuntime = async (input: {
         probes: [],
         producer: "evaluator",
         reason: "Candidate dependency installation failed.",
-        sandboxId: handle.session.id,
+        sandboxId: handle.id,
         status: "failed",
       };
     }
@@ -296,7 +317,7 @@ export const evaluateCandidateRuntime = async (input: {
         probes: [],
         producer: "evaluator",
         reason: "Candidate microfrontend configuration failed.",
-        sandboxId: handle.session.id,
+        sandboxId: handle.id,
         status: "failed",
       };
     }
@@ -312,7 +333,7 @@ export const evaluateCandidateRuntime = async (input: {
         probes: [],
         producer: "evaluator",
         reason: "Candidate microfrontend registration failed.",
-        sandboxId: handle.session.id,
+        sandboxId: handle.id,
         status: "failed",
       };
     }
@@ -337,7 +358,7 @@ export const evaluateCandidateRuntime = async (input: {
         probes: [],
         producer: "evaluator",
         reason: "Candidate build failed.",
-        sandboxId: handle.session.id,
+        sandboxId: handle.id,
         status: "failed",
       };
     }
@@ -446,7 +467,7 @@ export const evaluateCandidateRuntime = async (input: {
         root?.passed === true
           ? "Candidate runtime became ready."
           : "Candidate runtime was not reachable.",
-      sandboxId: handle.session.id,
+      sandboxId: handle.id,
       status: root?.passed === true ? "available" : "failed",
     };
   } catch (error) {
@@ -455,7 +476,7 @@ export const evaluateCandidateRuntime = async (input: {
       commands: [],
       producer: "evaluator",
       reason: message,
-      ...(handle === undefined ? {} : { sandboxId: handle.session.id }),
+      ...(handle === undefined ? {} : { sandboxId: handle.id }),
       probes: [],
       status:
         handle === undefined && /credential|oidc|sandbox|network|fetch/iu.test(message)

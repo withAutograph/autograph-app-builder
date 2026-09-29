@@ -1,3 +1,4 @@
+import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
@@ -34,7 +35,10 @@ export default defineTool({
         throw new HostedRuntimeProviderError("resource_mismatch");
       }
       await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
-      const provider = await getVercelPreviewProvider(sandbox.id, ctx.abortSignal);
+      const provider = await getVercelPreviewProvider(
+        getBuilderSandboxId(sandbox),
+        ctx.abortSignal,
+      );
       return await withHostedInstallerSandbox({
         root: selected.root,
         run: async (control, signal) =>

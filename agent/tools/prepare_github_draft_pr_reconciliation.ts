@@ -1,3 +1,4 @@
+import { setBuilderSandboxNetworkPolicy } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { z } from "zod";
@@ -100,7 +101,9 @@ export default defineTool({
           sessionId: accessReceipt.sessionId,
         }),
       prepare: async () => await prepareDraftReconciliation(request),
-      sandbox,
+      sandbox: {
+        setNetworkPolicy: async (policy) => await setBuilderSandboxNetworkPolicy(sandbox, policy),
+      },
     });
     const { created, ...preparedCandidate } = prepared;
     const candidate = {

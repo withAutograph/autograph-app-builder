@@ -1,5 +1,6 @@
+import { getBuilderSandboxId, simulatedSandboxIdentity } from "@/lib/sandbox/builder-sandbox";
 import { defineSandbox } from "eve/sandbox";
-import { justbash } from "eve/sandbox/just-bash";
+import { JustBashSandbox } from "eve/sandbox/just-bash";
 
 import {
   DEVELOPMENT_SANDBOX_ENVIRONMENT,
@@ -10,42 +11,38 @@ import {
   createHostedRuntimeInstaller,
   sanitizeHostedRuntimeFailure,
 } from "@/lib/sandbox/hosted-bun-runtime";
-import { createHostedVercelBackend } from "@/lib/sandbox/vercel-backend";
+import { createHostedVercelEnvironment } from "@/lib/sandbox/vercel-backend";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 
 const installHostedRuntime = createHostedRuntimeInstaller();
+const simulatedTarget = hasTestCapability("simulated-target");
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function createVercelDefinition() {
-  // Deterministic evals exercise fixture target behavior and must not acquire
-  // provider credentials. Production and development continue to use Vercel.
-  if (hasTestCapability("simulated-target")) {
-    return defineSandbox({ backend: justbash({ autoInstall: false }) });
-  }
-  return defineSandbox({
-    backend: createHostedVercelBackend({
+export const environment = simulatedTarget
+  ? JustBashSandbox.environment({ autoInstall: false })
+  : createHostedVercelEnvironment({
       sandboxEnvironment:
         process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development"
           ? DEVELOPMENT_SANDBOX_ENVIRONMENT
           : HOSTED_BUN_RUNTIME_ENVIRONMENT,
-    }),
-    async onSession({ use }) {
-      // eslint-disable-next-line react-hooks/rules-of-hooks -- Eve lifecycle callback, not a React hook.
-      const sandbox = await use({ networkPolicy: "allow-all" });
-      if (process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development") {
-        const setup = await sandbox.run({
-          command: developmentPinnedToolchainCommand(),
-        });
-        if (setup.exitCode !== 0) {
-          throw new Error(
-            `The Vercel Sandbox runtime setup failed: ${sanitizeHostedRuntimeFailure(setup.stderr || setup.stdout)}`,
-          );
-        }
-      } else {
-        await installHostedRuntime(sandbox);
-      }
-    },
-  });
-}
+    });
 
-export default createVercelDefinition();
+export default defineSandbox(async ({ session }) => {
+  if (simulatedTarget) {
+    simulatedSandboxIdentity.update(() => session.id);
+  }
+  const sandbox = await environment.open();
+  if (simulatedTarget) {
+    return sandbox;
+  }
+  if (process.env.APP_BUILDER_EXECUTION_BUNDLE === "local-development") {
+    const setup = await sandbox.run({ command: developmentPinnedToolchainCommand() });
+    if (setup.exitCode !== 0) {
+      throw new Error(
+        `The Vercel Sandbox runtime setup failed: ${sanitizeHostedRuntimeFailure(setup.stderr || setup.stdout)}`,
+      );
+    }
+  } else {
+    await installHostedRuntime({ id: getBuilderSandboxId(sandbox), run: sandbox.run });
+  }
+  return sandbox;
+});

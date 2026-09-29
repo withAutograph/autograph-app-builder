@@ -1,3 +1,4 @@
+import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
@@ -53,7 +54,10 @@ export default defineTool({
         },
       }));
       await assertHostedSandboxCommandAuthority({ sessionId: ctx.session.id });
-      const provider = await getVercelPreviewProvider(sandbox.id, ctx.abortSignal);
+      const provider = await getVercelPreviewProvider(
+        getBuilderSandboxId(sandbox),
+        ctx.abortSignal,
+      );
       await provider.fs.rm(`${runtime.stateDirectory}/state.json`, {
         force: true,
         signal: ctx.abortSignal,

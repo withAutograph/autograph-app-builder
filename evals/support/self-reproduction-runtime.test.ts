@@ -27,10 +27,9 @@ const backend = (results: { exitCode: number; stdout?: string; stderr?: string }
   );
   return {
     backend: {
-      create: () =>
+      open: () =>
         Promise.resolve({
-          captureState: () =>
-            Promise.resolve({ backendName: "fixture", metadata: {}, sessionKey: "fixture" }),
+          id: "sandbox-fixture",
           session: {
             id: "sandbox-fixture",
             readTextFile: () => Promise.resolve(JSON.stringify({ basePath: "" })),
@@ -40,13 +39,7 @@ const backend = (results: { exitCode: number; stdout?: string; stderr?: string }
             writeTextFile,
           },
           shutdown,
-          stop: () => Promise.resolve(),
-          useSessionFn: () => {
-            throw new Error("unused");
-          },
         }),
-      name: "fixture",
-      prewarm: () => Promise.resolve({ reused: false }),
     } as never,
     run,
     shutdown,
@@ -197,9 +190,7 @@ describe("self-reproduction candidate runtime", () => {
   it("classifies provider creation failure as unavailable infrastructure", async () => {
     const receipt = await evaluateCandidateRuntime({
       backend: {
-        create: () => Promise.reject(new Error("Vercel OIDC credential unavailable")),
-        name: "fixture",
-        prewarm: () => Promise.resolve({ reused: false }),
+        open: () => Promise.reject(new Error("Vercel OIDC credential unavailable")),
       },
       candidateAppId: "candidate",
       files: [],

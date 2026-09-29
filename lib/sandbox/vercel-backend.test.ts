@@ -1,739 +1,199 @@
-import { describe, expect, it, vi } from "vitest";
-import { SandboxTemplateNotProvisionedError } from "eve/sandbox";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
-  SandboxBackendHandle,
-  SandboxBackendPrewarmInput,
-  SandboxSeedFile,
-  SandboxSession,
-} from "eve/sandbox";
-
-import { createHostedVercelBackend, createProviderFetch } from "./vercel-backend";
-import type { HostedVercelBackendFactory, HostedVercelBackendOptions } from "./vercel-backend";
+  SandboxProviderPrepareContext,
+  SandboxProviderSessionContext,
+} from "eve/sandbox/provider";
+import { createBuilderVercelProvider, createProviderFetch } from "./vercel-backend";
 import {
-  clearVercelSessionGitSource,
-  configureVercelSessionGitSource,
   configureVercelSessionGitSourceResolver,
+  clearVercelSessionGitSource,
 } from "./vercel-session-source";
+import { getVercelPreviewProvider } from "./vercel-preview-provider";
 
-const runtimeContext = { appRoot: "/app" };
-const templateKey = "template-key";
+const sdk = vi.hoisted(() => ({ create: vi.fn(), get: vi.fn() }));
+const authority = vi.hoisted(() => vi.fn());
+vi.mock("@vercel/sandbox", () => ({ Sandbox: sdk }));
+vi.mock("./deployment-execution-lease", () => ({ assertHostedSandboxCommandAuthority: authority }));
+const context = { session: { id: "provider-test" } } as SandboxProviderSessionContext;
+const nativeFixture = () => ({
+  name: "owned-name",
+  status: "running",
+  fs: { mkdir: vi.fn().mockResolvedValue(undefined) },
+  writeFiles: vi.fn().mockResolvedValue(undefined),
+  runCommand: vi.fn().mockResolvedValue({
+    exitCode: 0,
+    stdout: async () => "/home/vercel\n",
+    stderr: async () => "",
+  }),
+  stop: vi.fn().mockResolvedValue(undefined),
+  delete: vi.fn().mockResolvedValue(undefined),
+});
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function recoveryInput(input?: {
-  readonly bootstrap?: NonNullable<SandboxBackendPrewarmInput["bootstrap"]>;
-  readonly seedFiles?: readonly SandboxSeedFile[];
-}) {
-  return () => ({
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    bootstrap: input?.bootstrap ?? (async () => {}),
-    seedFiles:
-      input?.seedFiles ??
-      ([
-        {
-          content: Buffer.from("skill bytes"),
-          path: "$HOME/.agents/skills/create-app/SKILL.md",
-        },
-      ] satisfies readonly SandboxSeedFile[]),
+describe("Builder Vercel provider", () => {
+  beforeEach(() => {
+    sdk.create.mockReset();
+    sdk.get.mockReset();
+    authority.mockReset();
   });
-}
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-function backendFactory(input: {
-  readonly create: ReturnType<typeof vi.fn>;
-  readonly prewarm: ReturnType<typeof vi.fn>;
-}): HostedVercelBackendFactory {
-  return vi.fn(() => ({
-    create: input.create,
-    name: "vercel",
-    prewarm: input.prewarm,
-  })) as HostedVercelBackendFactory;
-}
-
-describe.skip("retired template-backed Vercel backend", () => {
-  it("retries transport failures at the cancellable fetch boundary", async () => {
+  it("prepares public resource targets without contacting Vercel or capturing source bytes", async () => {
+    const provider = createBuilderVercelProvider();
+    const artifact = await provider.prepare({
+      resources: {
+        source: { kind: "none" },
+        workspace: {
+          key: "workspace",
+          mountPath: "/unused",
+          targetPath: "/workspace",
+          files: [{ relativePath: "seed.txt", content: "seed" }],
+        },
+        skills: {
+          key: "skills",
+          mountPath: "/unused",
+          targetPath: "$HOME/.agents/skills",
+          files: [{ relativePath: "design/SKILL.md", content: "guide" }],
+        },
+      },
+    } as unknown as SandboxProviderPrepareContext);
+    expect(artifact.files.map((file) => file.path)).toEqual([
+      "/workspace/seed.txt",
+      "$HOME/.agents/skills/design/SKILL.md",
+    ]);
+    expect(sdk.create).not.toHaveBeenCalled();
+  });
+  it("uses a short-lived selected Git source only for creation, retaining no token in state", async () => {
+    const native = nativeFixture();
+    sdk.create.mockResolvedValue(native);
+    const resolver = vi.fn().mockResolvedValue({
+      url: "https://github.com/acme/private.git",
+      token: "private-token",
+      revision: "selected-head",
+    });
+    configureVercelSessionGitSourceResolver({ sessionId: context.session.id, resolve: resolver });
+    const provider = createBuilderVercelProvider({
+      sandboxEnvironment: { MISE_DATA_DIR: "/runtime" },
+    });
+    try {
+      const result = await provider.start(context, undefined, {
+        files: [
+          {
+            path: "$HOME/.agents/skills/SKILL.md",
+            content: Buffer.from("guide").toString("base64"),
+          },
+        ],
+      });
+      expect(sdk.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          networkPolicy: "allow-all",
+          env: { MISE_DATA_DIR: "/runtime" },
+          source: {
+            type: "git",
+            url: "https://github.com/acme/private.git",
+            password: "private-token",
+            username: "x-access-token",
+            revision: "selected-head",
+          },
+        }),
+      );
+      expect(JSON.stringify(result.state)).not.toContain("private-token");
+      expect(native.writeFiles).toHaveBeenCalledWith(
+        [{ path: "/home/vercel/.agents/skills/SKILL.md", content: Buffer.from("guide") }],
+        expect.anything(),
+      );
+      expect(await getVercelPreviewProvider(result.handle.sandbox.id)).toBe(native);
+      sdk.get.mockResolvedValue(native);
+      await provider.resume(context, { files: [] }, result.state);
+      expect(resolver).toHaveBeenCalledOnce();
+      expect(sdk.create).toHaveBeenCalledOnce();
+      expect(sdk.get).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "owned-name", resume: true }),
+      );
+      await result.handle.onSessionStop();
+    } finally {
+      clearVercelSessionGitSource(context.session.id);
+    }
+  });
+  it("rejects a lost native sandbox on resume without creating replacement compute", async () => {
+    sdk.get.mockRejectedValue(new Error("sandbox not found"));
+    await expect(
+      createBuilderVercelProvider().resume(context, { files: [] }, { name: "lost", version: 1 }),
+    ).rejects.toThrow("sandbox not found");
+    expect(sdk.create).not.toHaveBeenCalled();
+  });
+  it("authorizes run and spawn before sending SDK commands", async () => {
+    const native = nativeFixture();
+    sdk.get.mockResolvedValue(native);
+    const handle = await createBuilderVercelProvider().resume(
+      context,
+      { files: [] },
+      { name: native.name, version: 1 },
+    );
+    authority.mockRejectedValue(new Error("authority denied"));
+    await expect(handle.sandbox.run({ command: "git status" })).rejects.toThrow("authority denied");
+    await expect(handle.sandbox.spawn({ command: "bun dev" })).rejects.toThrow("authority denied");
+    expect(native.runCommand).not.toHaveBeenCalled();
+    await handle.onSessionDelete();
+    expect(native.delete).toHaveBeenCalledOnce();
+  });
+  it("removes preview mapping after failed cleanup", async () => {
+    const native = nativeFixture();
+    sdk.get.mockResolvedValue(native);
+    const handle = await createBuilderVercelProvider().resume(
+      context,
+      { files: [] },
+      { name: native.name, version: 1 },
+    );
+    native.stop.mockRejectedValue(new Error("cleanup failed"));
+    await expect(handle.onSessionStop()).rejects.toThrow("cleanup failed");
+    await expect(getVercelPreviewProvider(native.name)).rejects.toThrow("not connected");
+  });
+  it("retries provider transport failures without dropping the caller signal", async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockRejectedValueOnce(new Error("fetch failed"))
       .mockResolvedValueOnce(new Response("ok"));
-    const request = new Request("https://sandbox.example.test/v1/create?secret=hidden", {
-      body: "hidden",
-      headers: { authorization: "Bearer hidden", "x-private": "hidden" },
-      method: "POST",
-    });
-    await expect(createProviderFetch(fetch)(request)).resolves.toMatchObject({
-      status: 200,
-    });
+    const { signal } = new AbortController();
+    await expect(
+      createProviderFetch(fetch)(new Request("https://sandbox.example.test/create", { signal })),
+    ).resolves.toMatchObject({ status: 200 });
     expect(fetch).toHaveBeenCalledTimes(2);
-    expect(fetch.mock.calls[0]?.[0]).toBeInstanceOf(Request);
-  });
-
-  it("keeps networking available for prewarm and every fresh live session", async () => {
-    let options: HostedVercelBackendOptions | undefined;
-    const factory = vi.fn(((input: HostedVercelBackendOptions) => {
-      options = input;
-      return { name: "injected-vercel-backend" } as never;
-    }) satisfies HostedVercelBackendFactory);
-
-    createHostedVercelBackend({
-      factory,
-      runtimeRecoveryPrewarmInput: recoveryInput(),
-    });
-
-    expect(factory).toHaveBeenCalledOnce();
-    expect(options).toBeDefined();
-    expect(options?.networkPolicy).toBe("allow-all");
-    expect(await options?.sessionCreateOptions()).toEqual({
-      networkPolicy: "allow-all",
-    });
-  });
-
-  it("uses the closed Development environment and dependency bootstrap hosts", () => {
-    let options: HostedVercelBackendOptions | undefined;
-    const factory = vi.fn(((input: HostedVercelBackendOptions) => {
-      options = input;
-      return { name: "injected-vercel-backend" } as never;
-    }) satisfies HostedVercelBackendFactory);
-    createHostedVercelBackend({
-      factory,
-      runtimeRecoveryPrewarmInput: recoveryInput(),
-      sandboxEnvironment: {
-        CARGO_NET_OFFLINE: "true",
-        MISE_AUTO_INSTALL: "false",
-      },
-    });
-    expect(options?.networkPolicy).toBe("allow-all");
-    expect(options?.env).toEqual({
-      CARGO_NET_OFFLINE: "true",
-      MISE_AUTO_INSTALL: "false",
-    });
-  });
-
-  it("maps changing authored keys to one dependency-only provider template", async () => {
-    const providerKey = "development-dependencies";
-    const session = { id: "session-1" } as SandboxSession;
-    const handle = {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      captureState: async () => ({
-        backendName: "vercel",
-        metadata: {},
-        sessionKey: "session-1",
-      }),
-      session,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      shutdown: async () => {},
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      stop: async () => {},
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      useSessionFn: async () => session,
-    } satisfies SandboxBackendHandle;
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const create = vi.fn(async () => handle);
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const prewarm = vi.fn(async () => ({ reused: true }));
-    const backend = createHostedVercelBackend({
-      factory: backendFactory({ create, prewarm }),
-      providerTemplateKey: () => providerKey,
-      runtimeRecoveryPrewarmInput: recoveryInput(),
-    });
-
-    await backend.prewarm({
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      bootstrap: async () => {},
-      runtimeContext,
-      seedFiles: [],
-      templateKey: "authored-key-a",
-    });
-    await backend.create({
-      runtimeContext,
-      sessionKey: "session-1",
-      templateKey: "authored-key-b",
-    });
-
-    expect(prewarm).toHaveBeenCalledWith(expect.objectContaining({ templateKey: providerKey }));
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ templateKey: providerKey }));
-  });
-
-  it("reuses one live Development session until its handle is closed", async () => {
-    const session = { id: "session-1" } as SandboxSession;
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const stop = vi.fn(async () => {});
-    const handle = {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      captureState: async () => ({
-        backendName: "vercel",
-        metadata: { sandboxName: "provider-session" },
-        sessionKey: "session-1",
-      }),
-      session,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      shutdown: vi.fn(async () => {}),
-      stop,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      useSessionFn: async () => session,
-    } satisfies SandboxBackendHandle;
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const create = vi.fn(async () => handle);
-    const options = {
-      factory: backendFactory({
-        create,
-        // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-        prewarm: vi.fn(async () => ({ reused: true })),
-      }),
-      reuseProcessSessionHandles: true,
-      runtimeRecoveryPrewarmInput: recoveryInput(),
-    } as const;
-    const firstBackend = createHostedVercelBackend(options);
-    const secondBackend = createHostedVercelBackend(options);
-    const input = {
-      runtimeContext,
-      sessionKey: "session-1",
-      templateKey,
-    };
-
-    const [first, second] = await Promise.all([
-      firstBackend.create(input),
-      secondBackend.create(input),
-    ]);
-
-    expect(first).toBe(second);
-    expect(create).toHaveBeenCalledOnce();
-
-    await first.stop();
-    await first.stop();
-    expect(stop).toHaveBeenCalledOnce();
-
-    const reopened = await secondBackend.create(input);
-    expect(create).toHaveBeenCalledTimes(2);
-    await reopened.shutdown();
-  });
-
-  it("replays the exact non-empty managed seeds and bootstrap, then retries once", async () => {
-    const session = { id: "session-1" } as SandboxSession;
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const stop = vi.fn(async () => {});
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const shutdown = vi.fn(async () => {});
-    const handle = {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      captureState: async () => ({
-        backendName: "vercel",
-        metadata: {},
-        sessionKey: "session-1",
-      }),
-      session,
-      shutdown,
-      stop,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      useSessionFn: async () => session,
-    } satisfies SandboxBackendHandle;
-    const create = vi
-      .fn()
-      .mockRejectedValueOnce(
-        new SandboxTemplateNotProvisionedError({
-          backendName: "vercel",
-          templateKey,
-        }),
-      )
-      .mockResolvedValueOnce(handle);
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const prewarm = vi.fn(async (input: SandboxBackendPrewarmInput) => {
-      void input;
-      return { reused: false };
-    });
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const bootstrap = vi.fn(async () => {});
-    const seedFiles = [
-      {
-        content: Buffer.from("first skill"),
-        path: "$HOME/.agents/skills/create-app/SKILL.md",
-      },
-      {
-        content: Buffer.from("second skill"),
-        path: "$HOME/.agents/skills/design-app/SKILL.md",
-      },
-    ] satisfies readonly SandboxSeedFile[];
-    const resolveRecovery = vi.fn(recoveryInput({ bootstrap, seedFiles }));
-    const backend = createHostedVercelBackend({
-      factory: backendFactory({ create, prewarm }),
-      runtimeRecoveryPrewarmInput: resolveRecovery,
-    });
-
-    const recovered = await backend.create({
-      runtimeContext,
-      sessionKey: "session-1",
-      templateKey,
-    });
-
-    expect(create).toHaveBeenCalledTimes(2);
-    expect(resolveRecovery).toHaveBeenCalledOnce();
-    expect(prewarm).toHaveBeenCalledOnce();
-    const [[prewarmInput]] = prewarm.mock.calls;
-    expect(prewarmInput).toMatchObject({
-      runtimeContext,
-      seedFiles,
-      templateKey,
-    });
-    expect(prewarmInput.seedFiles).toBe(seedFiles);
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    await prewarmInput.bootstrap?.({ use: async () => session });
-    expect(bootstrap).toHaveBeenCalledOnce();
-
-    await recovered.stop();
-    await recovered.shutdown();
-    expect(stop).toHaveBeenCalledOnce();
-    expect(shutdown).toHaveBeenCalledOnce();
-  });
-
-  it.each([
-    {
-      error: new SandboxTemplateNotProvisionedError({
-        backendName: "vercel",
-        templateKey,
-      }),
-      name: "a null template",
-      requestedTemplateKey: null,
-    },
-    {
-      error: new Error("provider unavailable"),
-      name: "an unrelated provider failure",
-      requestedTemplateKey: templateKey,
-    },
-    {
-      error: new SandboxTemplateNotProvisionedError({
-        backendName: "vercel",
-        templateKey: "different-template",
-      }),
-      name: "a typed failure for a different template",
-      requestedTemplateKey: templateKey,
-    },
-  ])("does not recover $name", async ({ error, requestedTemplateKey }) => {
-    const create = vi.fn().mockRejectedValueOnce(error);
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const prewarm = vi.fn(async (input: SandboxBackendPrewarmInput) => {
-      void input;
-      return { reused: false };
-    });
-    const resolveRecovery = vi.fn(recoveryInput());
-    const backend = createHostedVercelBackend({
-      factory: backendFactory({ create, prewarm }),
-      runtimeRecoveryPrewarmInput: resolveRecovery,
-    });
-
-    await expect(
-      backend.create({
-        runtimeContext,
-        sessionKey: "session-1",
-        templateKey: requestedTemplateKey,
-      }),
-    ).rejects.toBe(error);
-    expect(create).toHaveBeenCalledOnce();
-    expect(prewarm).not.toHaveBeenCalled();
-    expect(resolveRecovery).not.toHaveBeenCalled();
-  });
-
-  it("propagates prewarm failure without retrying create", async () => {
-    const missing = new SandboxTemplateNotProvisionedError({
-      backendName: "vercel",
-      templateKey,
-    });
-    const failure = new Error("prewarm failed");
-    const create = vi.fn().mockRejectedValueOnce(missing);
-    const prewarm = vi.fn().mockRejectedValueOnce(failure);
-    const backend = createHostedVercelBackend({
-      factory: backendFactory({ create, prewarm }),
-      runtimeRecoveryPrewarmInput: recoveryInput(),
-    });
-
-    await expect(
-      backend.create({
-        runtimeContext,
-        sessionKey: "session-1",
-        templateKey,
-      }),
-    ).rejects.toBe(failure);
-    expect(create).toHaveBeenCalledOnce();
-    expect(prewarm).toHaveBeenCalledOnce();
-  });
-
-  it("propagates the second create failure without recursive recovery", async () => {
-    const first = new SandboxTemplateNotProvisionedError({
-      backendName: "vercel",
-      templateKey,
-    });
-    const second = new SandboxTemplateNotProvisionedError({
-      backendName: "vercel",
-      templateKey,
-    });
-    const create = vi.fn().mockRejectedValueOnce(first).mockRejectedValueOnce(second);
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const prewarm = vi.fn(async (input: SandboxBackendPrewarmInput) => {
-      void input;
-      return { reused: false };
-    });
-    const backend = createHostedVercelBackend({
-      factory: backendFactory({ create, prewarm }),
-      runtimeRecoveryPrewarmInput: recoveryInput(),
-    });
-
-    await expect(
-      backend.create({
-        runtimeContext,
-        sessionKey: "session-1",
-        templateKey,
-      }),
-    ).rejects.toBe(second);
-    expect(create).toHaveBeenCalledTimes(2);
-    expect(prewarm).toHaveBeenCalledOnce();
   });
 });
 
-describe("active hosted Vercel transport", () => {
-  it("does not impose an operation deadline on provider requests", async () => {
-    const providerResponse = Promise.withResolvers<Response>();
-    const fetch = vi
-      .fn<typeof globalThis.fetch>()
-      .mockImplementationOnce(() => providerResponse.promise);
-    const request = new Request("https://sandbox.example.test/fs/write", {
-      method: "POST",
-    });
-    const pending = createProviderFetch(fetch)(request);
-    await Promise.resolve();
-
-    expect(fetch).toHaveBeenCalledOnce();
-    const providerSignal = fetch.mock.calls[0]?.[1]?.signal;
-    expect(providerSignal).toBeInstanceOf(AbortSignal);
-    expect(providerSignal?.aborted).toBe(false);
-    providerResponse.resolve(new Response("ok"));
-    await expect(pending).resolves.toMatchObject({ status: 200 });
-  });
-
-  it("supplies the retrying provider transport to the Vercel SDK factory", () => {
-    let options: HostedVercelBackendOptions | undefined;
-    const factory = vi.fn(((input: HostedVercelBackendOptions) => {
-      options = input;
-      return { name: "injected-vercel-backend" } as never;
-    }) satisfies HostedVercelBackendFactory);
-
-    createHostedVercelBackend({ factory });
-
-    expect(factory).toHaveBeenCalledOnce();
-    expect(options?.fetch).toBeTypeOf("function");
-    expect(options?.fetch).not.toBe(globalThis.fetch);
-  });
-});
-
-describe("provider-native Vercel source", () => {
-  it("does not refresh GitHub on a healthy resume, but resolves a new provider checkout", async () => {
-    let options: HostedVercelBackendOptions | undefined;
-    const resolve = vi.fn().mockResolvedValue({
-      revision: "review/branch",
-      token: "fresh-token",
-      url: "https://github.com/acme/private.git",
-    });
-    configureVercelSessionGitSourceResolver({ resolve, sessionId: "resumed-session" });
-    const session = {
-      ...({ id: "resumed-session" } as SandboxSession),
-      run: vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "found" }),
-    };
-    const handle = {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      captureState: async () => ({ backendName: "vercel", metadata: {}, sessionKey: session.id }),
-      session,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      shutdown: async () => {},
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      stop: async () => {},
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      useSessionFn: async () => session,
-    } satisfies SandboxBackendHandle;
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const create = vi.fn(async () => handle);
-    try {
-      const backend = createHostedVercelBackend({
-        factory: ((input) => {
-          options = input;
-          return { create, name: "vercel", prewarm: vi.fn() };
-        }) satisfies HostedVercelBackendFactory,
+describe("Builder provider transport", () => {
+  it.each([429, 503])(
+    "retries HTTP %s once and preserves the request and signal",
+    async (status) => {
+      const transport = vi
+        .fn<typeof globalThis.fetch>()
+        .mockResolvedValueOnce(new Response("busy", { status }))
+        .mockResolvedValueOnce(new Response("ok"));
+      const controller = new AbortController();
+      const request = new Request("https://sandbox.example.test/create", {
+        signal: controller.signal,
+        method: "POST",
+        body: "payload",
+        headers: { authorization: "Bearer private" },
       });
-      await backend.create({
-        existingMetadata: { sandboxName: "still-running" },
-        runtimeContext,
-        sessionKey: "resumed-session",
-        templateKey,
-      });
-      expect(create).toHaveBeenCalledWith(expect.objectContaining({ templateKey: null }));
-      expect(resolve).not.toHaveBeenCalled();
-
-      // Eve asks for these options only when its provider lookup finds no
-      // existing sandbox, including after a worker process restart.
-      expect(await options?.sessionCreateOptions({ session: { id: "resumed-session" } })).toEqual({
-        networkPolicy: "allow-all",
-        source: {
-          // oxlint-disable-next-line sonarjs/no-hardcoded-passwords -- test-only provider credential assertion
-          password: "fresh-token",
-          revision: "review/branch",
-          type: "git",
-          url: "https://github.com/acme/private.git",
-          username: "x-access-token",
-        },
-      });
-      expect(resolve).toHaveBeenCalledOnce();
-    } finally {
-      clearVercelSessionGitSource("resumed-session");
-    }
-  });
-
-  it("bypasses the template snapshot for a selected Git source", async () => {
-    const session = {
-      ...({ id: "source-session" } as SandboxSession),
-      run: vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "found" }),
-    };
-    const handle = {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      captureState: async () => ({ backendName: "vercel", metadata: {}, sessionKey: session.id }),
-      session,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      shutdown: async () => {},
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      stop: async () => {},
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      useSessionFn: async () => session,
-    } satisfies SandboxBackendHandle;
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const create = vi.fn(async () => handle);
-    configureVercelSessionGitSource({
-      sessionId: session.id,
-      source: { token: "provider-only-token", url: "https://github.com/acme/private.git" },
-    });
-    try {
-      const backend = createHostedVercelBackend({
-        factory: backendFactory({ create, prewarm: vi.fn() }),
-      });
-      await backend.create({ runtimeContext, sessionKey: session.id, templateKey });
-      expect(create).toHaveBeenCalledOnce();
-      expect(create).toHaveBeenCalledWith(expect.objectContaining({ templateKey: null }));
-      expect(JSON.stringify(create.mock.calls)).not.toContain("provider-only-token");
-    } finally {
-      clearVercelSessionGitSource(session.id);
-    }
-  });
-
-  it("uses the selected source when a provider tag differs from the durable session key", async () => {
-    const session = {
-      ...({ id: "selected-session" } as SandboxSession),
-      run: vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "found" }),
-    };
-    const handle = {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      captureState: async () => ({ backendName: "vercel", metadata: {}, sessionKey: session.id }),
-      session,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      shutdown: async () => {},
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      stop: async () => {},
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      useSessionFn: async () => session,
-    } satisfies SandboxBackendHandle;
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-    const create = vi.fn(async () => handle);
-    configureVercelSessionGitSource({
-      sessionId: session.id,
-      source: { token: "provider-only-token", url: "https://github.com/acme/private.git" },
-    });
-    try {
-      const backend = createHostedVercelBackend({
-        factory: backendFactory({ create, prewarm: vi.fn() }),
-      });
-      await backend.create({
-        runtimeContext,
-        sessionKey: session.id,
-        tags: { sessionId: "unrelated-provider-tag" },
-        templateKey,
-      });
-      expect(create).toHaveBeenCalledWith(expect.objectContaining({ templateKey: null }));
-    } finally {
-      clearVercelSessionGitSource(session.id);
-    }
-  });
-
-  it("replaces an empty named sandbox with a provider-created selected Git checkout", async () => {
-    const staleStop = vi.fn().mockResolvedValue(null);
-    const staleSession = {
-      ...({ id: "selected-session" } as SandboxSession),
-      run: vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "missing" }),
-    };
-    const replacementSession = {
-      ...({ id: "replacement-session" } as SandboxSession),
-      run: vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "found" }),
-    };
-    const stale = {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      captureState: async () => ({
-        backendName: "vercel",
-        metadata: { sandboxName: "old-sandbox" },
-        sessionKey: "selected-session",
-      }),
-      session: staleSession,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      shutdown: async () => {},
-      stop: staleStop,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      useSessionFn: async () => staleSession,
-    } satisfies SandboxBackendHandle;
-    const replacement = {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      captureState: async () => ({
-        backendName: "vercel",
-        metadata: { sandboxName: "replacement" },
-        sessionKey: "replacement-session",
-      }),
-      session: replacementSession,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      shutdown: async () => {},
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      stop: async () => {},
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      useSessionFn: async () => replacementSession,
-    } satisfies SandboxBackendHandle;
-    let attempts = 0;
-    const create = vi.fn(
-      (_input: Parameters<ReturnType<HostedVercelBackendFactory>["create"]>[0]) => {
-        attempts += 1;
-        return Promise.resolve(attempts === 1 ? stale : replacement);
-      },
-    );
-    configureVercelSessionGitSource({
-      sessionId: "selected-session",
-      source: { token: "provider-only-token", url: "https://github.com/acme/private.git" },
-    });
-    try {
-      const backend = createHostedVercelBackend({
-        factory: backendFactory({ create, prewarm: vi.fn() }),
-      });
-      const handle = await backend.create({
-        existingMetadata: { sandboxName: "old-sandbox" },
-        runtimeContext,
-        sessionKey: "selected-session",
-        templateKey,
-      });
-      expect(create).toHaveBeenCalledTimes(2);
-      expect(create.mock.calls[1]?.[0].sessionKey).toMatch(/^app-builder-git-[0-9a-f]{40}$/u);
-      expect(create.mock.calls[1]?.[0]).toMatchObject({
-        tags: { sessionId: "selected-session" },
-        templateKey: null,
-      });
-      expect(create.mock.calls[1]?.[0].existingMetadata).toBeUndefined();
-      expect(staleStop).toHaveBeenCalledOnce();
-      expect(await handle.captureState()).toMatchObject({
-        metadata: { sandboxName: "replacement" },
-        sessionKey: "selected-session",
-      });
-    } finally {
-      clearVercelSessionGitSource("selected-session");
-    }
-  });
-
-  it("falls back to a fresh sandbox when an optional template is absent", async () => {
-    const session = { id: "fresh-session" } as SandboxSession;
-    const handle = {
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      captureState: async () => ({
-        backendName: "vercel",
-        metadata: {},
-        sessionKey: "fresh-session",
-      }),
-      session,
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      shutdown: async () => {},
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      stop: async () => {},
-      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
-      useSessionFn: async () => session,
-    } satisfies SandboxBackendHandle;
-    const create = vi
-      .fn()
-      .mockRejectedValueOnce(
-        new SandboxTemplateNotProvisionedError({
-          backendName: "vercel",
-          templateKey,
-        }),
-      )
-      .mockResolvedValueOnce(handle);
-    const prewarm = vi.fn();
-    const backend = createHostedVercelBackend({
-      factory: backendFactory({ create, prewarm }),
-    });
-
-    const result = await backend.create({
-      runtimeContext,
-      sessionKey: "fresh-session",
-      templateKey,
-    });
-    expect(result.session.id).toBe("fresh-session");
-    expect(create).toHaveBeenNthCalledWith(1, expect.objectContaining({ templateKey }));
-    expect(create).toHaveBeenNthCalledWith(2, expect.objectContaining({ templateKey: null }));
-    expect(prewarm).not.toHaveBeenCalled();
-  });
-
-  it("forwards a server-owned Git source only to the matching fresh session", async () => {
-    let options: HostedVercelBackendOptions | undefined;
-    const factory = vi.fn(((input: HostedVercelBackendOptions) => {
-      options = input;
-      return { name: "injected-vercel-backend" } as never;
-    }) satisfies HostedVercelBackendFactory);
-    const token = "short_lived_installation_token";
-    configureVercelSessionGitSource({
-      sessionId: "session-source",
-      source: {
-        revision: "app-builder/review-original",
-        token,
-        url: "https://github.com/acme/private.git",
-      },
-    });
-    try {
-      createHostedVercelBackend({ factory });
-      expect(await options?.sessionCreateOptions({ session: { id: "other" } })).toEqual({
-        networkPolicy: "allow-all",
-      });
-      expect(await options?.sessionCreateOptions({ session: { id: "session-source" } })).toEqual({
-        networkPolicy: "allow-all",
-        source: {
-          password: token,
-          revision: "app-builder/review-original",
-          type: "git",
-          url: "https://github.com/acme/private.git",
-          username: "x-access-token",
-        },
-      });
-      expect(JSON.stringify(factory.mock.calls)).not.toContain(token);
-    } finally {
-      clearVercelSessionGitSource("session-source");
-    }
-  });
-
-  it("forwards a source when Eve decorates the provider session key", async () => {
-    let options: HostedVercelBackendOptions | undefined;
-    const factory = vi.fn(((input: HostedVercelBackendOptions) => {
-      options = input;
-      return { name: "injected-vercel-backend" } as never;
-    }) satisfies HostedVercelBackendFactory);
-    configureVercelSessionGitSource({
-      sessionId: "wrun_source",
-      source: { token: "token", url: "https://github.com/acme/private.git" },
-    });
-    try {
-      createHostedVercelBackend({ factory });
-      expect(
-        await options?.sessionCreateOptions({
-          session: {
-            id: "eve-sbx-ses-vercel-scope-version-wrun_source-root",
-          },
-        }),
-      ).toMatchObject({
-        source: { url: "https://github.com/acme/private.git" },
-      });
-    } finally {
-      clearVercelSessionGitSource("wrun_source");
-    }
+      await createProviderFetch(transport)(request);
+      expect(transport).toHaveBeenCalledTimes(2);
+      const forwarded = transport.mock.calls[1]![0] as Request;
+      expect(forwarded.method).toBe("POST");
+      expect(await forwarded.text()).toBe("payload");
+      expect(forwarded.headers.get("authorization")).toBe("Bearer private");
+      controller.abort(new Error("cancelled after retry"));
+      expect(transport.mock.calls[1]![1]?.signal?.aborted).toBe(true);
+      expect(forwarded.signal.aborted).toBe(true);
+    },
+  );
+  it("does not retry a caller-cancelled transport request", async () => {
+    const controller = new AbortController();
+    controller.abort(new Error("cancelled"));
+    const transport = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new Error("fetch failed"));
+    await expect(
+      createProviderFetch(transport)(
+        new Request("https://sandbox.example.test/create", { signal: controller.signal }),
+      ),
+    ).rejects.toThrow("fetch failed");
+    expect(transport).toHaveBeenCalledOnce();
   });
 });

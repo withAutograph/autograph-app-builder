@@ -1,3 +1,4 @@
+import { getBuilderSandboxId } from "../sandbox/builder-sandbox";
 import { createHash } from "node:crypto";
 
 import type { SandboxSession } from "eve/sandbox";
@@ -686,7 +687,7 @@ export const inspectGitHubSourceSandboxWorkspace =
       sourceSha: snapshot.sourceSha,
       sourceTree: snapshot.sourceTree,
       workspaceDigest,
-      workspaceId: input.sandbox.id,
+      workspaceId: getBuilderSandboxId(input.sandbox),
       workspacePath: SANDBOX_WORKSPACE,
     };
   };

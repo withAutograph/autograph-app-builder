@@ -1,3 +1,4 @@
+import { getBuilderSandboxId } from "../sandbox/builder-sandbox";
 import { createHash } from "node:crypto";
 
 import type { SandboxSession } from "eve/sandbox";
@@ -145,7 +146,7 @@ export async function inspectCanonicalArrustedSandboxWorkspace(input: {
     throw new Error("The canonical Arrusted workspace is missing.");
   }
   if (
-    observed.workspaceId !== input.sandbox.id ||
+    observed.workspaceId !== getBuilderSandboxId(input.sandbox) ||
     observed.sourcePath !== SANDBOX_WORKSPACE ||
     observed.sourceSha !== receipt.sourceSha ||
     observed.sourceTree !== receipt.sourceTree ||
@@ -174,7 +175,7 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
       throw new Error("The prepared development workspace is missing.");
     }
     const observed = status.workspace;
-    if (observed.workspaceId !== input.sandbox.id) {
+    if (observed.workspaceId !== getBuilderSandboxId(input.sandbox)) {
       throw new Error("The prepared development workspace does not match the active workflow.");
     }
     return observed;
@@ -203,7 +204,7 @@ export async function inspectSourceBoundSandboxWorkspace(input: {
     observed = status.workspace;
   }
   if (
-    observed.workspaceId !== input.sandbox.id ||
+    observed.workspaceId !== getBuilderSandboxId(input.sandbox) ||
     observed.sourcePath !== receipt.sourcePath ||
     observed.sourceSha !== receipt.sourceSha ||
     observed.sourceTree !== receipt.sourceTree ||

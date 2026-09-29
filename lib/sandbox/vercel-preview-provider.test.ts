@@ -1,60 +1,41 @@
-import { getVercelPreviewProvider, withVercelPreviewProvider } from "./vercel-preview-provider";
+import { getVercelPreviewProvider, registerVercelPreviewProvider } from "./vercel-preview-provider";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { SandboxBackend } from "eve/sandbox";
-
+import type { Sandbox } from "@vercel/sandbox";
 const sdk = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock("@vercel/sandbox", () => ({ Sandbox: sdk }));
 
-const register = async (id: string) => {
-  const captureState = vi
-    .fn()
-    .mockResolvedValue({ metadata: { sandboxName: "backend-owned-name" } });
-  const stop = vi.fn(() => Promise.resolve());
-  const shutdown = vi.fn(() => Promise.resolve());
-  const backend = {
-    create: vi.fn().mockResolvedValue({ captureState, session: { id }, shutdown, stop }),
-  };
-  const wrapped = withVercelPreviewProvider(backend as unknown as SandboxBackend<unknown, unknown>);
-  const handle = await wrapped.create({} as Parameters<typeof wrapped.create>[0]);
-  return { captureState, handle, shutdown, stop };
-};
-
 describe("authenticated preview provider mapping", () => {
   beforeEach(() => sdk.get.mockReset());
-  it("uses backend-captured provider name and explicit resume choice", async () => {
-    const { handle, captureState } = await register("lookup");
-    const { signal } = new AbortController();
-    sdk.get.mockResolvedValue({ status: "running" });
-    await getVercelPreviewProvider("lookup", signal, false);
-    expect(captureState).toHaveBeenCalledOnce();
-    expect(sdk.get).toHaveBeenCalledWith({ name: "backend-owned-name", resume: false, signal });
-    await handle.stop();
+  it("returns the authenticated running provider without reacquiring credentials", async () => {
+    const provider = { name: "owned", status: "running" } as Sandbox;
+    const unregister = registerVercelPreviewProvider("lookup", provider);
+    expect(await getVercelPreviewProvider("lookup", undefined, false)).toBe(provider);
+    expect(sdk.get).not.toHaveBeenCalled();
+    unregister();
   });
   it("rejects an unregistered handle without contacting the provider", async () => {
     await expect(getVercelPreviewProvider("not-registered")).rejects.toThrow("not connected");
     expect(sdk.get).not.toHaveBeenCalled();
   });
-  it.each(["stop", "shutdown"] as const)(
-    "removes mapping on %s even if cleanup fails",
-    async (operation) => {
-      const registered = await register(operation);
-      registered[operation].mockRejectedValue(new Error("cleanup failed"));
-      await expect(registered.handle[operation]()).rejects.toThrow("cleanup failed");
-      await expect(getVercelPreviewProvider(operation)).rejects.toThrow("not connected");
-      expect(sdk.get).not.toHaveBeenCalled();
-    },
-  );
   it("does not unregister a replacement when the old handle stops", async () => {
-    const old = await register("replacement");
-    const current = await register("replacement");
-    await old.handle.stop();
-    await getVercelPreviewProvider("replacement", undefined, true);
-    expect(current.captureState).toHaveBeenCalledOnce();
-    expect(sdk.get).toHaveBeenCalledWith({
-      name: "backend-owned-name",
-      resume: true,
-      signal: undefined,
-    });
-    await current.handle.shutdown();
+    const old = registerVercelPreviewProvider("replacement", {
+      name: "old",
+      status: "running",
+    } as Sandbox);
+    const current = { name: "new", status: "running" } as Sandbox;
+    const cleanup = registerVercelPreviewProvider("replacement", current);
+    old();
+    expect(await getVercelPreviewProvider("replacement")).toBe(current);
+    cleanup();
+  });
+  it("only resumes a stopped provider when requested", async () => {
+    const provider = { name: "owned", status: "stopped" } as Sandbox;
+    const cleanup = registerVercelPreviewProvider("stopped", provider);
+    expect(await getVercelPreviewProvider("stopped", undefined, false)).toBe(provider);
+    const { signal } = new AbortController();
+    sdk.get.mockResolvedValue({ status: "running" });
+    await getVercelPreviewProvider("stopped", signal);
+    expect(sdk.get).toHaveBeenCalledWith({ name: "owned", resume: true, signal });
+    cleanup();
   });
 });
