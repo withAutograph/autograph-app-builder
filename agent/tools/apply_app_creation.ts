@@ -20,7 +20,7 @@ import {
 } from "@/lib/repository/target-apply";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import {
-  assertImplementationArchitecture,
+  implementationArchitectureDiagnostics,
   implementationFilesSchema,
   withImplementationFiles,
 } from "@/lib/agent/apply-implementation-files";
@@ -81,7 +81,7 @@ export default defineTool({
       files: input.implementationFiles,
       proposalDigest: current.proposal.digest,
     });
-    assertImplementationArchitecture(
+    const architectureDiagnostics = implementationArchitectureDiagnostics(
       implementationFiles,
       implementationFiles.some(
         (file) => file.path === `.config/app-specs/${current.appSpec.appId}.cue`,
@@ -185,6 +185,7 @@ export default defineTool({
     });
     return {
       appId: current.proposal.target.contract.appId,
+      architectureDiagnostics,
       changedFileCount: result.receipt.changes.length,
       productAcceptance: productAcceptanceObligations(current.appSpec),
       reused: false,

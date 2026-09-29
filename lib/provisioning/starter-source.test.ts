@@ -1,10 +1,18 @@
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import nodePath from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
 import { ARRUSTED_TARGET_SHA, ARRUSTED_TARGET_TREE } from "../repository/dependency-cache";
 import { deterministicGzip, deterministicTar } from "../../scripts/portable-release";
-import { loadStarterSource, starterSourceManifestSchema } from "./starter-source";
+import {
+  cloneStarterSource,
+  loadStarterSource,
+  starterSourceManifestSchema,
+} from "./starter-source";
 
 const sha256 = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
 
@@ -143,5 +151,71 @@ describe("immutable Arrusted starter source", () => {
       controller.signal,
       controller.signal,
     ]);
+  });
+});
+
+describe("source-only starter clone", () => {
+  it("clones real Git source with rearranged internals and no template check evidence", async () => {
+    const root = await mkdtemp(nodePath.join(tmpdir(), "builder-source-only-test-"));
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("No check evidence available"));
+    try {
+      const repository = nodePath.join(root, "upstream");
+      await mkdir(nodePath.join(repository, "tools"), { recursive: true });
+      await writeFile(nodePath.join(repository, "README.md"), "Rearranged starter\n");
+      await writeFile(
+        nodePath.join(repository, "tools", "create-app.ts"),
+        "// repository owns commands\n",
+      );
+      const git = (args: string[]) =>
+        execFileSync(
+          "/usr/bin/git",
+          ["-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", ...args],
+          { cwd: repository, encoding: "utf-8" },
+        ).trim();
+      git(["init", "-b", "main"]);
+      git(["add", "."]);
+      git([
+        "-c",
+        "user.name=Fixture",
+        "-c",
+        "user.email=fixture@example.test",
+        "commit",
+        "-m",
+        "fixture",
+      ]);
+      const source = await cloneStarterSource({
+        git: async (args) =>
+          await Promise.resolve({
+            stdout: execFileSync(
+              "/usr/bin/git",
+              [
+                "-c",
+                `url.file://${repository}.insteadOf=https://github.com/withAutograph/arrusted-development.git`,
+                "-c",
+                "protocol.file.allow=always",
+                "-c",
+                "core.hooksPath=/dev/null",
+                ...args,
+              ],
+              { encoding: "utf-8" },
+            ),
+          }),
+        reader: { acquire: async () => await Promise.resolve({ token: "fixture-only-token" }) },
+      });
+      expect(source.files.map((file) => file.path)).toEqual(["README.md", "tools/create-app.ts"]);
+      expect(source.provenance).toMatchObject({
+        receiptVersion: 4,
+        sourceSha: git(["rev-parse", "HEAD"]),
+        sourceTree: git(["rev-parse", "HEAD^{tree}"]),
+      });
+      expect(source.provenance).toHaveProperty("readinessDigest");
+      expect(source.provenance).not.toHaveProperty("sourceDigest");
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      fetch.mockRestore();
+      await rm(root, { force: true, recursive: true });
+    }
   });
 });

@@ -1,17 +1,11 @@
 # Repository compatibility
 
-App Builder read-only design and implementation planning use one closed,
-builder-owned minimum contract. A repository is planning-compatible only when
-all of the following are true:
+App Builder integrates with Arrusted through repository-owned mise commands and
+their returned identity and execution receipts. The supported integration is the
+Arrusted Next.js app workflow; source acquisition is not a promise that an
+arbitrary framework has an implementation adapter.
 
-- contract version `4` and runtime `nextjs` are supported;
-- the declared repository paths exist and are safe repository-relative paths;
-- the repository exposes the fixed identity, apply, preflight, and
-  validation command names through mise;
-- `microfrontends.json` is the valid repository-owned topology document; and
-- the root package manifest declares Next.js.
-
-The current normalized commands are:
+The public commands remain:
 
 ```text
 mise run repository:exec -- app-identity.ts --app <app-id>
@@ -21,53 +15,57 @@ mise run --skip-tools app:check <app-id>
 mise run --skip-tools app:test <app-id> <shard>
 ```
 
-Compatibility MUST NOT depend on the source code implementing those commands,
-the generator's physical source path, an `@autograph` package-name heuristic,
-repository history, a source-receipt schema version, dependency-cache identity,
-or the repository's CD workflow. The fixed commands execute later inside the
-builder-owned planning or apply boundary and fail closed if the declared
-capability is not actually available.
+The identity operation owns the app's package, project, workspace, routes, and
+specification paths. Keep its required fields and safe repository-relative
+paths. Preserve repository-owned project names and ignore additional producer
+metadata. Do not infer compatibility from the generator's source code, its
+physical location, package-name strings, root framework dependency declarations,
+or a fixed inventory of implementation files.
 
-Development, draft, and release authority remain independent:
+Source inspection, layout observations, and preflight results are diagnostic
+context, not prerequisites to acquiring a fresh starter. A missing named
+“Template readiness” check does not prevent acquisition. Invoke supported
+operations when needed and report their actual command failures with repair
+instructions. Acquisition receipts record source identity, not successful CI. Existing
+serialized receipt fields and recovery parsing remain unchanged. Current
+acquisitions use `readinessDigest` for source identity; older stored values that
+hashed check evidence remain unchanged. The field alone does not establish
+current CI or product readiness.
 
-- Local development compatibility inspection MAY read the selected live
-  checkout, including tracked and non-ignored working-tree changes. Those bytes
-  are a normal planning input and a new edit simply produces a new provisional
-  plan; they are not a rejection condition.
-- A draft PR uses provider-read current-base information but is provisional. It
-  does not need a frozen base guarantee while design and planning iterate, or
-  while the draft remains open. Git SHA/tree observations are diagnostic
-  metadata, not long-lived mutation authority or a source-drift blocker.
-- Dependency reuse MUST be decided from dependency inputs, toolchain,
-  bootstrap, and platform, not repository identity, source SHA/tree,
-  source-receipt version, planning receipt, or draft-PR identity.
-- A repository may be read and planned when its CD workflow is absent or
-  different. Draft creation records the proposal against the provider's current
-  branch without claiming future mergeability. At merge time, the coordinator
-  MUST re-read the current default branch, regenerate or rebase as needed, show
-  the actual diff, run relevant validation, and obtain effect-based merge
-  approval. Release-candidate bytes are the only build inputs that require
-  immutable identity for publication; ordinary execution workspaces, planning
-  sources, and draft proposals do not.
+Architecture observations are advisory. Repository checks and exercised product
+behavior establish whether persistence, authentication, and tenant isolation work.
+Keep path containment, app ownership, exact reviewed changes, conflict handling,
+and approval boundaries: they protect writes and publication.
 
-`lib/repository/supported-template.ts` owns the normalized contract,
-planning-compatibility result, and the separate full release-policy result.
-`lib/repository/supported-template.test.ts` MUST change atomically with the
-contract. Future contributors should add or remove a required capability in
-that contract and its focused tests rather than inspecting another incidental
-implementation string.
+## Source, validation, and publication
 
-This compatibility contract is not merge authority. A draft PR MUST be treated
-as provisional from provider-read current-base information and MUST NOT claim
-merge readiness. At merge, the coordinator MUST re-read the default branch,
-rebase or regenerate, rerun relevant validation, present the reconciled diff,
-and obtain final effect-based approval before a clean-current-base merge.
-Release-candidate byte immutability applies only to build/publish promotion.
+- Local development reads the selected live checkout, including tracked and
+  non-ignored edits. Normal changes produce a new planning input, not a drift
+  rejection.
+- Dependency reuse depends on dependency inputs, toolchain, bootstrap, and
+  platform. Repository identity, source SHA, receipt version, and draft identity
+  do not establish dependency compatibility. Retain Arrusted's Bun installation
+  commands; Builder's own package-manager tasks are not target commands.
+- Draft PRs are provisional against provider-read current-base information.
+  Repository CD layout and template CI do not authorize or prevent a private
+  build. Before updating a draft, prepare the current merge candidate, resolve
+  only owned conflicts, format if needed, validate, review both complete diffs,
+  and seal the exact reviewed changes before separate publication approval.
+- Private command success, product walkthrough evidence, GitHub checks, hosted
+  Preview proof, and Production readiness are distinct results. Source selection
+  and local validation do not activate providers or grant release authority.
 
-Creation preparation is internal durable Builder state. Apply stages the accepted
-Markdown at `.config/app-specs/<id>.md` and invokes the direct creation command.
-The generator derives identity and default routes from the id and current catalog;
-additional public routes are separately reviewed topology edits. A conventional
-`.config/app-specs/<id>.cue` selects CUE generation and is copied into the app.
-Without CUE, creation stays static. Markdown is an opaque snapshot at
+`lib/repository/supported-template.ts` owns diagnostic compatibility inspection
+and the separate release-policy result. Change its focused tests alongside its
+contract; do not add an incidental implementation-string check as a build gate.
+
+Creation preparation remains private durable Builder state. Apply stages accepted
+Markdown at `.config/app-specs/<id>.md` and invokes `mise run create:app <app-id>`.
+The generator derives identity and default routes from the id and current catalog.
+Additional public routes are separately reviewed topology edits. Conventional
+`.config/app-specs/<id>.cue` selects CUE generation and is copied into the app;
+without CUE, creation stays static. Markdown is an opaque snapshot at
 `apps/<id>/.config/app-spec.md`, never backend or provider authority.
+
+See the [Arrusted build guide](arrusted-app-builder-guide.md) for the complete
+setup, validation, recovery, and publication sequence.

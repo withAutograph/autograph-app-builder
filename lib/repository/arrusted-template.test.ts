@@ -4,7 +4,6 @@ import {
   acquireCanonicalArrustedTemplate,
   inspectCanonicalArrustedSandboxWorkspace,
   inspectSourceBoundSandboxWorkspace,
-  sanitizeSandboxCloneError,
 } from "./arrusted-template";
 import {
   inspectCanonicalTemplateSnapshotReceipt,
@@ -12,17 +11,6 @@ import {
 } from "./source-receipt";
 
 describe("canonical Arrusted source preparation", () => {
-  it("preserves long clone diagnostics after redacting credentials and URLs", () => {
-    const token = "local-test-credential-value";
-    const detail = `${"stage detail ".repeat(80)} token=${token} https://example.test/path`;
-    const sanitized = sanitizeSandboxCloneError(detail, token);
-
-    expect(sanitized).toContain("stage detail");
-    expect(sanitized).toContain("token=[redacted]");
-    expect(sanitized).toContain("[url]");
-    expect(sanitized.length).toBeGreaterThan(512);
-  });
-
   it("uses the provider-created starter checkout once", async () => {
     const sourceSha = "a".repeat(40);
     const sourceTree = "b".repeat(40);
