@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
 import { compileAppSchemaRelease } from "./compile-app-schema-release";
@@ -16,9 +17,45 @@ import {
   validationOutputExcerpt,
 } from "@/lib/repository/target-validation";
 
+const runAdditionalChecks = async (input: {
+  sandbox: SandboxSession;
+  root: string;
+  tasks: readonly string[];
+}) => {
+  const commands: { command: string; exitCode: number }[] = [];
+  for (const task of input.tasks) {
+    const command = `mise run --skip-tools ${task}`;
+    let result: Awaited<ReturnType<SandboxSession["run"]>>;
+    try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- repository checks must run sequentially against the same candidate.
+      result = await input.sandbox.run({ command, workingDirectory: input.root });
+    } catch (error) {
+      throw new Error(
+        `Builder could not run ${command} in the reconciled checkout. Check the sandbox command runner and the repository task, then retry. Cause: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      );
+    }
+    commands.push({ command, exitCode: result.exitCode });
+    if (result.exitCode !== 0) {
+      return {
+        commands,
+        failure: {
+          command,
+          exitCode: result.exitCode,
+          output: validationOutputExcerpt(result.stdout, result.stderr),
+          problem: `The reconciled checkout failed ${command}. Repair the reported repository configuration or check, then rerun candidate validation before review.`,
+          status: "needs_repair" as const,
+        },
+      };
+    }
+  }
+  return { commands };
+};
+
 export default defineTool({
   description:
-    "Install the candidate's own locked dependencies, compile its selected app schema, run repository app:check and app:test, and optionally run the app's browser task. All commands run in the isolated reconciled checkout; failures identify the command and cause. This does not update GitHub.",
+    "Install the candidate's own locked dependencies, compile its selected app schema, run repository app:check and app:test, and optionally run the app's browser task and repository check: tasks. All commands run in the isolated reconciled checkout; failures identify the command and cause. This does not update GitHub.",
+  // oxlint-disable-next-line eslint/complexity -- ordered candidate checks need one exit for each named failure.
   async execute(input, ctx) {
     const candidate = draftReconciliationState.get();
     const state = appBuilderWorkflowState.get();
@@ -131,6 +168,15 @@ export default defineTool({
         return { ...browser, status: "needs_repair" as const };
       }
     }
+    const additional = await runAdditionalChecks({
+      root: candidate.root,
+      sandbox,
+      tasks: input.additionalCheckTasks,
+    });
+    commands.push(...additional.commands);
+    if (additional.failure !== undefined) {
+      return additional.failure;
+    }
     const after = await inspectDraftReconciliation({ prepared: candidate, sandbox });
     if (after.unresolvedConflicts.length > 0) {
       return {
@@ -159,6 +205,9 @@ export default defineTool({
       status: "validated" as const,
     };
   },
-  inputSchema: z.strictObject({ runBrowserTests: z.boolean().default(false) }),
+  inputSchema: z.strictObject({
+    additionalCheckTasks: z.array(z.string().regex(/^check:[A-Za-z0-9:_-]+$/u)).default([]),
+    runBrowserTests: z.boolean().default(false),
+  }),
 });
 // oxlint-disable github/filenames-match-regex -- Eve tool discovery requires the public snake_case tool name.
