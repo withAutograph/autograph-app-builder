@@ -35,3 +35,8 @@ port=${mapping##*:}
   "$(mise which node)" --import tsx \
   .config/mise/scripts/repository/test-postgres-sandbox-leases.mts \
   --host 127.0.0.1 --port "$port"
+
+"$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" --import tsx \
+  scripts/test-postgres-validation-logs.mts \
+  --host 127.0.0.1 --port "$port"

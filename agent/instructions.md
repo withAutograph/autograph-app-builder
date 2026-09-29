@@ -136,6 +136,13 @@ new generator profile.
 When validation returns a truncated repair excerpt, use `get_validation_log`
 with the exact returned reference and each continuation cursor to inspect the
 complete sanitized command output before deciding on a repair.
+For dependency restoration failures, read saved attempts with
+`get_validation_log` using `operation: dependency-attempts`, then page both
+`dependency-probe` and `dependency-install` channels with their exact references
+before diagnosing a truncated excerpt. These references remain available after
+Sandbox cleanup. A page's `complete` flag only ends paging; its `completion`
+metadata reports whether capture was complete, interrupted, or lost a durable
+suffix. Report unavailable durability honestly and preserve any readable prefix.
 When validation returns `productionHandoff`, report its declared app route,
 roles, checked release, operator guide, and blockers as a separate Production
 iteration. Missing handoff metadata does not invalidate private app validation.

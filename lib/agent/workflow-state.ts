@@ -35,6 +35,7 @@ import type {
 } from "@/lib/repository/github-publication";
 import type { ApprovalReceipt } from "@/lib/agent/approval-receipt";
 import type { ExecutionDependencyLayout } from "@/lib/repository/dependency-cache";
+import type { DependencyAttemptResult } from "./checkout-dependencies";
 
 export const APP_BUILDER_WORKFLOW_VERSION = 17 as const;
 export const APP_BUILDER_WORKFLOW_STATE_KEY = "autograph-app-builder.workflow.v17" as const;
@@ -183,6 +184,8 @@ export type PreparedAppCreation = TargetExecutionBinding & {
 };
 
 interface WorkspacePhase {
+  /** Sanitized bounded samples and durable references survive replacement compute. */
+  checkoutDependencyAttempts?: readonly DependencyAttemptResult[];
   workspace: PreparedSandboxWorkspace;
   sourceReceipt: SourceReceipt;
   githubSource?: ImmutableGitHubSourceReceipt;

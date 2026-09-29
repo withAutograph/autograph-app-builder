@@ -32,6 +32,7 @@ export const hostedStorageMigrationTags = [
   "0023_paged_session_checkpoints",
   "0024_prototype_chunks",
   "0025_validation_logs",
+  "0026_validation_log_completion",
 ] as const;
 
 const contractSourcePaths = [
@@ -496,6 +497,7 @@ export const hostedStorageExpectedColumns = [
   ["validation_log_manifest", "channel", "text", true],
   ["validation_log_manifest", "chunk_count", "bigint", true],
   ["validation_log_manifest", "command", "text", true],
+  ["validation_log_manifest", "completion", "text", false],
   ["validation_log_manifest", "created_at", "timestamp with time zone", true],
   ["validation_log_manifest", "digest", "text", true],
   ["validation_log_manifest", "issuer", "text", true],
@@ -786,6 +788,7 @@ export const hostedStorageExpectedConstraints = [
   ["user", "user_pkey"],
   ["validation_log_chunk", "validation_log_chunk_index_check"],
   ["validation_log_chunk", "validation_log_chunk_tenant_pk"],
+  ["validation_log_manifest", "validation_log_manifest_completion_check"],
   ["validation_log_manifest", "validation_log_manifest_size_check"],
   ["validation_log_manifest", "validation_log_manifest_tenant_pk"],
   [

@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
@@ -18,7 +16,7 @@ const authority: HostedPrincipal = {
 const key: ValidationLogKey = {
   attemptDigest: "a".repeat(64),
   channel: "stdout",
-  command: "bun run check",
+  command: "check-build",
   logId: "ed5bc83d-a08f-42be-9635-4677fa7bdb32",
   sessionId: "session_one",
 };
@@ -77,7 +75,7 @@ function databaseFixture(rows: unknown[] = []) {
 }
 
 describe("PostgreSQL validation log store", () => {
-  it("reads legacy manifests as complete and returns persisted completion metadata", async () => {
+  it("preserves legacy references and returns persisted completion metadata", async () => {
     const legacyRow = {
       byteLength: 12,
       chunkCount: 1,
@@ -156,20 +154,5 @@ describe("PostgreSQL validation log store", () => {
     await expect(
       postgresValidationLogStore(database, otherTenant, "session_two").getReference(key),
     ).rejects.toThrow("The validation log key is invalid for this session.");
-  });
-
-  it("adds completion without rewriting published manifests or receipts", async () => {
-    const [migration, journal, priorMigration] = await Promise.all([
-      readFile("drizzle/0026_validation_log_completion.sql", "utf-8"),
-      readFile("drizzle/meta/_journal.json", "utf-8"),
-      readFile("drizzle/0025_validation_logs.sql", "utf-8"),
-    ]);
-    expect(migration).toContain('ALTER COLUMN "byte_length" TYPE bigint');
-    expect(migration).toContain('ADD COLUMN "completion" text');
-    expect(migration).toContain('"completion" IS NULL OR "completion" IN');
-    expect(migration).not.toMatch(/\b(?:DELETE|DROP TABLE|TRUNCATE)\b/iu);
-    expect(journal).toContain('"tag": "0026_validation_log_completion"');
-    expect(priorMigration).toContain('CREATE TABLE "validation_log_manifest"');
-    expect(priorMigration).toContain('"byte_length" bigint NOT NULL');
   });
 });

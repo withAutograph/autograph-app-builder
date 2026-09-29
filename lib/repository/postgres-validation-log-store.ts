@@ -7,21 +7,14 @@ import { validationLogChunks, validationLogManifests } from "../db/schema";
 import type { HostedPrincipal } from "../eve/hosted-auth";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import type {
+  ValidationLogCompletion,
   ValidationLogKey,
   ValidationLogReference,
   ValidationLogStore,
 } from "./validation-log";
 
 type Database = PostgresJsDatabase<typeof schema>;
-type Completion = "complete" | "interrupted" | "unavailable";
-type ValidationLogReferenceWithCompletion = ValidationLogReference & {
-  completion?: Completion;
-};
-
-const readCompletion = (value: string | null): Completion => {
-  if (value === null) {
-    return "complete";
-  }
+const readCompletion = (value: string): ValidationLogCompletion => {
   if (value === "complete" || value === "interrupted" || value === "unavailable") {
     return value;
   }
@@ -104,7 +97,7 @@ export function postgresValidationLogStore(
         return undefined;
       }
       const completion = row.completion === null ? undefined : readCompletion(row.completion);
-      const reference: ValidationLogReferenceWithCompletion = {
+      const reference: ValidationLogReference = {
         bytes: row.byteLength,
         channel: key.channel,
         chunkCount: row.chunkCount,
@@ -125,9 +118,7 @@ export function postgresValidationLogStore(
         channel: key.channel,
         chunkCount: reference.chunkCount,
         command: key.command,
-        // SAFETY: completion is optional for callers predating the completion metadata migration.
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-        completion: (reference as ValidationLogReferenceWithCompletion).completion ?? null,
+        completion: reference.completion ?? null,
         createdAt: new Date(),
         digest: reference.digest,
       });
