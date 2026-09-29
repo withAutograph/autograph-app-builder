@@ -63,6 +63,16 @@ describe("productionReadinessHandoff", () => {
     expect(result.blockers).toHaveLength(3);
   });
 
+  it("keeps repository validation intact when a sandbox has no file reader", async () => {
+    const result = await productionReadinessHandoff({
+      appId: app,
+      repositoryRoot: root,
+      source: {},
+    });
+    expect(result.checkedRelease).toBeNull();
+    expect(result.blockers).toHaveLength(3);
+  });
+
   it("blocks a manifest for another app without failing repository validation", async () => {
     const changed = new Map(files);
     changed.set(

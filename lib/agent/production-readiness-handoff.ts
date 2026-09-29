@@ -18,8 +18,19 @@ const handoffSchema = z.strictObject({
 });
 
 interface SourceReader {
-  readTextFile: (input: { path: string }) => PromiseLike<string | null>;
+  readTextFile?: (input: { path: string }) => PromiseLike<string | null>;
 }
+
+const readOptionalSource = async (source: SourceReader, path: string): Promise<string | null> => {
+  if (source.readTextFile === undefined) {
+    return null;
+  }
+  try {
+    return await source.readTextFile({ path });
+  } catch {
+    return null;
+  }
+};
 
 const checkedReleaseFromSource = async (input: {
   appId: string;
@@ -31,9 +42,10 @@ const checkedReleaseFromSource = async (input: {
   if (match?.groups?.release === undefined) {
     throw new Error("checked release pointer");
   }
-  const source = await input.source.readTextFile({
-    path: `${input.appRoot}/schema/release/${match.groups.release}/release-manifest.json`,
-  });
+  const source = await readOptionalSource(
+    input.source,
+    `${input.appRoot}/schema/release/${match.groups.release}/release-manifest.json`,
+  );
   if (source === null) {
     throw new Error("checked release manifest");
   }
@@ -65,9 +77,9 @@ export const productionReadinessHandoff = async (input: {
   const appId = appIdSchema.parse(input.appId);
   const appRoot = `${input.repositoryRoot}/apps/${appId}`;
   const [pointer, metadata, taskConfig] = await Promise.all([
-    input.source.readTextFile({ path: `${appRoot}/schema/index.ts` }),
-    input.source.readTextFile({ path: `${appRoot}/.config/production-handoff.json` }),
-    input.source.readTextFile({ path: `${input.repositoryRoot}/.config/mise/config.toml` }),
+    readOptionalSource(input.source, `${appRoot}/schema/index.ts`),
+    readOptionalSource(input.source, `${appRoot}/.config/production-handoff.json`),
+    readOptionalSource(input.source, `${input.repositoryRoot}/.config/mise/config.toml`),
   ]);
   const blockers: string[] = [];
   let checkedRelease: { releaseId: string; artifactHash: string } | null = null;
