@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import nodePath from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -84,6 +88,36 @@ describe("private local preview setup", () => {
     expect(localPreviewExecutionCommand("spend-review")).toContain('exit "$status"');
     expect(result).toMatchObject({ exitCode: 0, status: "prepared" });
     expect(() => localPreviewSetupCommand("spend-review; deploy")).toThrow();
+  });
+
+  it("runs local setup with a usable terminal when the sandbox has no TERM", () => {
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- mkdtemp creates an owned fixture directory.
+    const bin = mkdtempSync(nodePath.join(tmpdir(), "builder-local-terminal-"));
+    // oxlint-disable-next-line sonarjs/publicly-writable-directories -- Matches the command's sandbox-only fixture log.
+    const log = "/tmp/app-builder-local-setup-terminal-test.log";
+    try {
+      const mise = nodePath.join(bin, "mise");
+      writeFileSync(
+        mise,
+        '#!/bin/sh\nif [ "$TERM" = dumb ]; then echo "local setup ready"; else echo "TERM environment variable not set." >&2; exit 1; fi\n',
+      );
+      chmodSync(mise, 0o755);
+      const environment: NodeJS.ProcessEnv = {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+      };
+      delete environment.TERM;
+      // oxlint-disable-next-line sonarjs/no-os-command-from-path -- PATH intentionally selects the owned mise fixture.
+      const result = spawnSync("/bin/sh", ["-c", localPreviewExecutionCommand("terminal-test")], {
+        encoding: "utf-8",
+        env: environment,
+      });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("local setup ready");
+    } finally {
+      rmSync(bin, { force: true, recursive: true });
+      rmSync(log, { force: true });
+    }
   });
 
   it("preserves actionable local database failures without leaking connection strings", async () => {

@@ -30,7 +30,7 @@ export const appDeclaresLocalSetup = async (input: {
 export const localPreviewExecutionCommand = (appId: string): string => {
   const task = localPreviewSetupCommand(appId);
   const log = `/tmp/app-builder-local-setup-${appIdSchema.parse(appId)}.log`;
-  return `set +e\n${task} > '${log}' 2>&1\nstatus=$?\ntail -c 8000 '${log}'\nexit "$status"`;
+  return `set +e\nTERM=dumb\nexport TERM\n${task} > '${log}' 2>&1\nstatus=$?\ntail -c 8000 '${log}'\nexit "$status"`;
 };
 
 const safeOutput = (value: string): string =>
