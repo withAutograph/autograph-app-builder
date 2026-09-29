@@ -512,6 +512,41 @@ describe("provider-native Vercel source", () => {
     }
   });
 
+  it("uses the selected source when a provider tag differs from the durable session key", async () => {
+    const session = { id: "selected-session" } as SandboxSession;
+    const handle = {
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      captureState: async () => ({ backendName: "vercel", metadata: {}, sessionKey: session.id }),
+      session,
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      shutdown: async () => {},
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      stop: async () => {},
+      // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+      useSessionFn: async () => session,
+    } satisfies SandboxBackendHandle;
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    const create = vi.fn(async () => handle);
+    configureVercelSessionGitSource({
+      sessionId: session.id,
+      source: { token: "provider-only-token", url: "https://github.com/acme/private.git" },
+    });
+    try {
+      const backend = createHostedVercelBackend({
+        factory: backendFactory({ create, prewarm: vi.fn() }),
+      });
+      await backend.create({
+        runtimeContext,
+        sessionKey: session.id,
+        tags: { sessionId: "unrelated-provider-tag" },
+        templateKey,
+      });
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ templateKey: null }));
+    } finally {
+      clearVercelSessionGitSource(session.id);
+    }
+  });
+
   it("falls back to a fresh sandbox when an optional template is absent", async () => {
     const session = { id: "fresh-session" } as SandboxSession;
     const handle = {

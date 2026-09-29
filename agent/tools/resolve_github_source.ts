@@ -6,6 +6,7 @@ import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-githu
 import { repositoryAccessRuntimeForSession } from "@/lib/agent/deployment-repository-access-runtime";
 import { resolveRepositoryAccessForTool } from "@/lib/agent/repository-access-tool";
 import { repositoryAccessReceiptState } from "@/lib/agent/repository-access-state";
+import { selectedGitHubSourceForSandboxRestore } from "@/lib/agent/restore-selected-github-sandbox-source";
 import { APP_BUILDER_SOURCE_VERSION, sourceWorkflowState } from "@/lib/agent/source-state";
 import {
   APP_BUILDER_WORKFLOW_VERSION,
@@ -81,19 +82,25 @@ export default defineTool({
   async execute(input, ctx) {
     const initialWorkflow = appBuilderWorkflowState.get();
     const initialSource = sourceWorkflowState.get();
+    const selectedGitHubSource = selectedGitHubSourceForSandboxRestore({
+      sourceState: initialSource.phase === "empty" ? undefined : initialSource.githubSource,
+      workflowState: initialWorkflow.phase === "empty" ? undefined : initialWorkflow.githubSource,
+    });
+    const sourceUsesStarter =
+      initialSource.phase !== "empty" &&
+      initialSource.githubSource === undefined &&
+      initialSource.receipt.sourceKind !== "existing-repository";
+    const workflowUsesStarter =
+      initialWorkflow.phase !== "empty" && initialWorkflow.githubSource === undefined;
     assertUpstreamMutationAllowed(initialWorkflow, "GitHub source preparation");
-    if (
-      (initialSource.phase !== "empty" && initialSource.githubSource === undefined) ||
-      (initialWorkflow.phase !== "empty" && initialWorkflow.githubSource === undefined)
-    ) {
+    if (sourceUsesStarter || workflowUsesStarter) {
       throw new Error(
         "This app build already uses the starter source. Start a new app build to select an existing GitHub repository.",
       );
     }
     if (
-      initialSource.phase !== "empty" &&
-      initialSource.githubSource !== undefined &&
-      `${initialSource.githubSource.repository.owner}/${initialSource.githubSource.repository.name}` !==
+      selectedGitHubSource !== undefined &&
+      `${selectedGitHubSource.repository.owner}/${selectedGitHubSource.repository.name}` !==
         input.repository
     ) {
       throw new Error("This app build already uses a different GitHub repository.");
@@ -104,36 +111,31 @@ export default defineTool({
       return access.access;
     }
 
-    if (
-      initialSource.phase !== "empty" &&
-      initialWorkflow.phase !== "empty" &&
-      initialSource.githubSource !== undefined &&
-      initialWorkflow.githubSource !== undefined
-    ) {
+    if (initialWorkflow.phase !== "empty" && selectedGitHubSource !== undefined) {
       await assertRetryDraftBranch({
         draftPullRequestNumber: input.draftPullRequestNumber,
         repository: access.access.repository,
-        resolvedRef: initialSource.githubSource.resolvedRef,
+        resolvedRef: selectedGitHubSource.resolvedRef,
         sessionAuth: ctx.session.auth,
       });
       // A retry keeps the selected repository binding and observes the live
       // checkout. GitHub's default branch may have advanced since selection.
       if (
-        initialWorkflow.githubSource.digest !== initialSource.githubSource.digest ||
-        initialSource.githubSource.repository.repositoryId !== access.access.repository.repositoryId
+        initialWorkflow.githubSource?.digest !== selectedGitHubSource.digest ||
+        selectedGitHubSource.repository.repositoryId !== access.access.repository.repositoryId
       ) {
         throw new Error("This app build already owns a different GitHub repository.");
       }
       const workspace = await inspectGitHubSourceSandboxWorkspace({
-        githubSource: initialSource.githubSource,
+        githubSource: selectedGitHubSource,
         sandbox: await ctx.getSandbox(),
       });
       return {
-        githubSource: initialSource.githubSource,
+        githubSource: selectedGitHubSource,
         repository: access.access.repository,
         repositoryAccessReceiptDigest: access.receipt.digest,
         scope: access.access.scope,
-        sourceReceipt: initialSource.receipt,
+        sourceReceipt: initialWorkflow.sourceReceipt,
         workspace,
       };
     }
