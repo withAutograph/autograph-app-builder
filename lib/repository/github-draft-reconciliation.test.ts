@@ -155,6 +155,66 @@ describe("existing draft reconciliation", () => {
     expect(mock.updates).toBe(1);
   });
 
+  it("reports an uncertain update when both the write and PR readback fail", async () => {
+    const mock = mockAdapter();
+    const proposal = await seal(mock.adapter);
+    let inspections = 0;
+    const adapter: ExistingDraftReconciliationAdapter = {
+      ...mock.adapter,
+      async inspectExistingDraft(input) {
+        inspections += 1;
+        if (inspections === 2) {
+          throw new Error("GitHub could not inspect the existing draft PR (HTTP 503).");
+        }
+        return await mock.adapter.inspectExistingDraft(input);
+      },
+      async reconcileExistingDraft() {
+        throw new Error("GitHub could not update the existing draft PR (HTTP 503).");
+      },
+    };
+    await expect(
+      reconcileExistingDraft({
+        adapter,
+        contentSource: {
+          async readFile() {
+            return { bytes, digest: digest(bytes), mode: "644" };
+          },
+        },
+        proposal,
+        review,
+      }),
+    ).rejects.toThrow("The branch may already have moved. Inspect its live head");
+  });
+
+  it("reports accepted write with failed PR readback without claiming failure", async () => {
+    const mock = mockAdapter();
+    const proposal = await seal(mock.adapter);
+    let inspections = 0;
+    const adapter: ExistingDraftReconciliationAdapter = {
+      ...mock.adapter,
+      async inspectExistingDraft(input) {
+        inspections += 1;
+        if (inspections === 2) {
+          throw new Error("GitHub could not inspect the existing draft PR (HTTP 503).");
+        }
+        return await mock.adapter.inspectExistingDraft(input);
+      },
+    };
+    await expect(
+      reconcileExistingDraft({
+        adapter,
+        contentSource: {
+          async readFile() {
+            return { bytes, digest: digest(bytes), mode: "644" };
+          },
+        },
+        proposal,
+        review,
+      }),
+    ).rejects.toThrow("GitHub accepted the merge commit for draft PR #1500");
+    expect(mock.updates).toBe(1);
+  });
+
   it("rejects a moved base or PR head before writing", async () => {
     const baseMoved = mockAdapter();
     const baseProposal = await seal(baseMoved.adapter);

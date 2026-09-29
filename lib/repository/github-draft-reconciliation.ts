@@ -343,6 +343,36 @@ const readContent = async (
   return { changes, kind: "draft-reconciliation", reviewDigest: review.digest, version: 1 };
 };
 
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- JavaScript catch values are unknown; expose only an Error message.
+const errorDescription = (error: unknown): string =>
+  error instanceof Error ? error.message : "unknown provider error";
+
+const inspectDraftAfterWrite = async (input: {
+  adapter: ExistingDraftReconciliationAdapter;
+  proposal: ExistingDraftReconciliationProposal;
+  writeError?: unknown;
+}): Promise<ExistingDraftObservation> => {
+  try {
+    return await input.adapter.inspectExistingDraft({
+      name: input.proposal.name,
+      number: input.proposal.pullRequestNumber,
+      owner: input.proposal.owner,
+      repositoryId: input.proposal.repositoryId,
+    });
+  } catch (readbackError) {
+    const prefix =
+      input.writeError === undefined
+        ? `GitHub accepted the merge commit for draft PR #${input.proposal.pullRequestNumber}, but Builder could not read the PR branch afterward.`
+        : `GitHub did not confirm the draft PR #${input.proposal.pullRequestNumber} update, and Builder could not read the PR branch afterward. The branch may already have moved.`;
+    const writeDetail =
+      input.writeError === undefined ? "" : ` Update error: ${errorDescription(input.writeError)}`;
+    throw new Error(
+      `${prefix} Inspect its live head before retrying this sealed operation.${writeDetail} Readback error: ${errorDescription(readbackError)}`,
+      { cause: readbackError },
+    );
+  }
+};
+
 // oxlint-disable-next-line eslint/complexity -- sealed review, live refs, uncertain-result recovery, and readback are one publication operation
 export const reconcileExistingDraft = async (input: {
   adapter: ExistingDraftReconciliationAdapter;
@@ -415,11 +445,10 @@ export const reconcileExistingDraft = async (input: {
   try {
     result = await input.adapter.reconcileExistingDraft(proposal, content);
   } catch (error) {
-    const latest = await input.adapter.inspectExistingDraft({
-      name: proposal.name,
-      number: proposal.pullRequestNumber,
-      owner: proposal.owner,
-      repositoryId: proposal.repositoryId,
+    const latest = await inspectDraftAfterWrite({
+      adapter: input.adapter,
+      proposal,
+      writeError: error,
     });
     if (
       sameDraft(proposal, latest) &&
@@ -435,12 +464,7 @@ export const reconcileExistingDraft = async (input: {
       `GitHub rejected the draft reconciliation (${result.code}${location}). Refresh both branch heads and the reviewed merge before retrying.`,
     );
   }
-  const updated = await input.adapter.inspectExistingDraft({
-    name: proposal.name,
-    number: proposal.pullRequestNumber,
-    owner: proposal.owner,
-    repositoryId: proposal.repositoryId,
-  });
+  const updated = await inspectDraftAfterWrite({ adapter: input.adapter, proposal });
   if (
     !sameDraft(proposal, updated) ||
     !(await input.adapter.inspectAppliedDraftReconciliation(proposal, updated))
