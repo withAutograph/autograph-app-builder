@@ -8,6 +8,8 @@ import { readJsonStringChecks } from "../agent/streaming-json-pointer";
 import type {
   EveSessionStatus,
   PublicInputRequest,
+  PublicPrototype,
+  PublicPrototypeReference,
   PublicUiPreview,
   PublicWorkingPreview,
 } from "../mcp/contracts";
@@ -546,6 +548,8 @@ export async function observeSameOriginEveStream(
   publicEventCount: number;
   status: EveSessionStatus;
   pendingRequests: PublicInputRequest[];
+  prototype?: PublicPrototype;
+  prototypeRef?: PublicPrototypeReference;
   activeTurnId?: string;
   uiPreview?: PublicUiPreview;
   workingPreview?: PublicWorkingPreview | null;
@@ -560,8 +564,14 @@ export async function observeSameOriginEveStream(
   let uiPreview: PublicUiPreview | undefined;
   let workingPreview: PublicWorkingPreview | null | undefined;
   const artifactReadback = createArtifactReadbackClassifier(input.sessionId);
+  const prototype = createInstalledPrototypeProjector();
+  const prototypeReference = createInstalledPrototypeReferenceReducer({
+    sessionId: input.sessionId,
+  });
   for await (const event of streamSameOriginEveEvents(input)) {
     artifactReadback.accept(event);
+    prototype.observe(event);
+    prototypeReference.accept(event);
     input.onInstalledEvent?.(event);
     installedEventCount += 1;
     const turnId =
@@ -641,6 +651,10 @@ export async function observeSameOriginEveStream(
     artifactProjectionRequiresLegacyReadback: artifactReadback.requiresLegacy(),
     installedEventCount,
     pendingRequests: [...pending.values()],
+    ...(prototype.current() === undefined ? {} : { prototype: prototype.current() }),
+    ...(prototypeReference.snapshot() === undefined
+      ? {}
+      : { prototypeRef: prototypeReference.snapshot() }),
     publicEventCount,
     status,
     ...(currentTurnId === undefined ? {} : { activeTurnId: currentTurnId }),
@@ -953,6 +967,13 @@ export function createSameOriginEveTransport(input: {
     workloadIdentity: input.workloadIdentity,
   };
   return {
+    observeStarted(request) {
+      return observeSameOriginEveStream({
+        ...common,
+        onEvent: request.onEvent,
+        sessionId: request.adapterSessionId,
+      });
+    },
     ...(input.verifyReadAuthority === undefined
       ? {}
       : {

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { hostedEveOperationScopes, tenantKeyFor } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
 import { createHostedEveSessionService, HostedSessionNotFoundError } from "./hosted-service";
+import { HostedAdapterSessionUnavailableError } from "./hosted-errors";
 import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
 import type { HostedEveTransport } from "./hosted-service";
 import {
@@ -114,6 +115,43 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
       };
     },
   );
+  const replaceSessionAdapterPaged = vi.fn<
+    NonNullable<HostedEveStore["replaceSessionAdapterPaged"]>
+  >(async (input) => {
+    const previous = paged ?? (await base.getSession(principal, started.sessionId));
+    if (
+      previous?.version !== 2 ||
+      previous.adapterGeneration !== input.expectedAdapterGeneration ||
+      previous.checkpointDigest !== input.expectedCheckpointDigest
+    ) {
+      throw new Error("Hosted session recovery raced another continuation.");
+    }
+    let nextCount = 0;
+    for await (const event of input.events) {
+      first ??= event;
+      last = event;
+      nextCount += 1;
+    }
+    eventCount = nextCount;
+    ({ metadata } = input);
+    const { checkpoint: previousInlineCheckpoint, ...withoutInline } = previous;
+    void previousInlineCheckpoint;
+    const digest = `sha256:${"c".repeat(64)}`;
+    paged = durableHostedSessionRecordSchema.parse({
+      ...withoutInline,
+      adapterGeneration: previous.adapterGeneration + 1,
+      adapterSessionId: input.adapterSessionId,
+      checkpointDigest: digest,
+      checkpointProgressDigest: `sha256:${"d".repeat(64)}`,
+      checkpointRef: { digest, eventCount, id: randomUUID() },
+      lastProgressAtEpochMs: input.nowEpochMs,
+      resumability: input.resumability,
+      stage: input.stage,
+      status: input.metadata.status,
+      updatedAtEpochMs: input.nowEpochMs,
+    });
+    return paged;
+  });
   const getSession = vi.fn<HostedEveStore["getSession"]>(async (candidate, sessionId) => {
     if (tenantKeyFor(candidate) !== tenantKeyFor(principal)) {
       return null;
@@ -127,6 +165,7 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
     observeSessionPaged,
     readCheckpointPage,
     replaceSessionAdapter: base.replaceSessionAdapter.bind(base),
+    replaceSessionAdapterPaged,
     reserveOperation: base.reserveOperation.bind(base),
     settleIdleReservations: base.settleIdleReservations.bind(base),
     settleSucceeded: base.settleSucceeded.bind(base),
@@ -144,6 +183,7 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
     getSession,
     observeSessionPaged,
     readCheckpointPage,
+    replaceSessionAdapterPaged,
     service,
     sessionId: started.sessionId,
   };
@@ -327,6 +367,148 @@ describe("paged hosted session observation", () => {
     expect(observeSessionPaged).toHaveBeenCalledOnce();
     expect(adapter.get).not.toHaveBeenCalled();
   }, 60_000);
+
+  it("keeps every legacy request in a checkpoint larger than the inline format", async () => {
+    const requests = Array.from({ length: 40 }, (_, index) => ({
+      allowFreeform: true,
+      description: `request ${index}: ${"x".repeat(16_000)}`,
+      kind: "question" as const,
+      requestId: `request_${index}`,
+      title: `Question ${index}`,
+    }));
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async () => {
+      await Promise.resolve();
+      return {
+        artifactProjectionRequiresLegacyReadback: true,
+        installedEventCount: 1,
+        pendingRequests: requests,
+        prototype: {
+          content: "<html>Legacy preview</html>",
+          digest: "a".repeat(64),
+          mediaType: "text/html",
+          path: "prototype/example/index.html",
+          revision: "b".repeat(64),
+        },
+        publicEventCount: 0,
+        status: "input_required",
+      };
+    });
+    const { adapter, observeSessionPaged, service, sessionId } = await fixture(observe);
+    const result = await service.get({ cursor: 0, limit: 1, sessionId });
+    expect(result.inputRequests).toHaveLength(40);
+    expect(result.prototype?.content).toBe("<html>Legacy preview</html>");
+    expect(
+      new TextEncoder().encode(JSON.stringify(observeSessionPaged.mock.calls[0]?.[0].metadata))
+        .byteLength,
+    ).toBeGreaterThan(512 * 1024);
+    expect(adapter.get).not.toHaveBeenCalled();
+  });
+
+  it("replaces an interrupted adapter with a paged checkpoint and keeps its session ID", async () => {
+    const initial = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async ({ onEvent }) => {
+      await onEvent({ index: 0, text: "old", turnId: "turn_1", type: "assistant.message" });
+      return {
+        artifactProjectionRequiresLegacyReadback: false,
+        installedEventCount: 1,
+        pendingRequests: [],
+        publicEventCount: 1,
+        status: "waiting",
+      };
+    });
+    const { adapter, getSession, replaceSessionAdapterPaged, service, sessionId } =
+      await fixture(initial);
+    await service.get({ cursor: 0, limit: 1, sessionId });
+    const before = await getSession(principal, sessionId);
+    adapter.observe = vi.fn(async () => {
+      await Promise.resolve();
+      throw new HostedAdapterSessionUnavailableError();
+    });
+    adapter.start = vi.fn(async () => {
+      await Promise.resolve();
+      return {
+        adapterSessionId: "replacement_adapter",
+        snapshot: emptySnapshot,
+      };
+    });
+    adapter.observeStarted = vi.fn<NonNullable<HostedEveTransport["observeStarted"]>>(
+      async ({ onEvent }) => {
+        for (let index = 0; index < 100_001; index += 1) {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Verify the replacement stream backpressures each event.
+          await onEvent({
+            index,
+            text: `event ${index}`,
+            turnId: "turn_2",
+            type: "assistant.message",
+          });
+        }
+        return {
+          artifactProjectionRequiresLegacyReadback: false,
+          installedEventCount: 100_001,
+          pendingRequests: [],
+          publicEventCount: 100_001,
+          status: "waiting",
+        };
+      },
+    );
+    const result = await service.start({
+      clientRequestId: randomUUID(),
+      resumeSessionId: sessionId,
+    });
+    const after = await getSession(principal, sessionId);
+    expect(result.sessionId).toBe(sessionId);
+    expect(after).toMatchObject({ adapterGeneration: 2, adapterSessionId: "replacement_adapter" });
+    expect(after?.version === 2 && after.checkpointRef?.eventCount).toBe(100_001);
+    expect(before?.version === 2 && before.checkpointRef?.id).not.toBe(
+      after?.version === 2 && after.checkpointRef?.id,
+    );
+    expect(replaceSessionAdapterPaged).toHaveBeenCalledOnce();
+    expect(adapter.get).not.toHaveBeenCalled();
+  }, 60_000);
+
+  it("keeps the old checkpoint and adapter when paged replacement rejects a stale digest", async () => {
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async ({ onEvent }) => {
+      await onEvent({ index: 0, text: "old", turnId: "turn_1", type: "assistant.message" });
+      return {
+        artifactProjectionRequiresLegacyReadback: false,
+        installedEventCount: 1,
+        pendingRequests: [],
+        publicEventCount: 1,
+        status: "waiting",
+      };
+    });
+    const { adapter, getSession, replaceSessionAdapterPaged, service, sessionId } =
+      await fixture(observe);
+    await service.get({ cursor: 0, limit: 1, sessionId });
+    const before = await getSession(principal, sessionId);
+    adapter.observe = vi.fn(async () => {
+      await Promise.resolve();
+      throw new HostedAdapterSessionUnavailableError();
+    });
+    adapter.start = vi.fn(async () => {
+      await Promise.resolve();
+      return { adapterSessionId: "replacement", snapshot: emptySnapshot };
+    });
+    adapter.observeStarted = vi.fn<NonNullable<HostedEveTransport["observeStarted"]>>(async () => {
+      await Promise.resolve();
+      return {
+        artifactProjectionRequiresLegacyReadback: false,
+        installedEventCount: 0,
+        pendingRequests: [],
+        publicEventCount: 0,
+        status: "waiting",
+      };
+    });
+    replaceSessionAdapterPaged.mockImplementationOnce(async (input) => {
+      for await (const event of input.events) {
+        void event;
+      }
+      throw new Error("stale checkpoint digest");
+    });
+    await expect(
+      service.start({ clientRequestId: randomUUID(), resumeSessionId: sessionId }),
+    ).rejects.toThrow();
+    expect(await getSession(principal, sessionId)).toEqual(before);
+  });
 
   it("retains the previous checkpoint when staging fails and rejects another tenant before observation", async () => {
     const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async ({ onEvent }) => {

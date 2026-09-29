@@ -30,12 +30,19 @@ decisions use tenant-bound immutable chunks once the additive schema is
 present. The Browser validates their complete manifest and digest before
 streaming HTML. Identical retries of existing v1 artifacts retain their v1
 receipts. Valid v1 Markdown AppSpec actions do not require Browser prototype
-readback, so they can coexist with a paged v2 HTML session. Legacy HTML receipts
-and unresolved or malformed HTML actions still use the inline checkpoint path.
-It retains the 100,000-event snapshot validation
-bound, 512 retained events, 32 pending input requests, and 512 KiB checkpoint
-ceiling. Historical events discarded by an older checkpoint cannot be
-reconstructed; its truncation marker remains visible during recovery.
+readback, so they can coexist with a paged v2 HTML session. Incremental Eve
+readback also carries a verified legacy HTML prototype into paged metadata;
+the Postgres store chunks that metadata, preserving all pending requests and
+events without the older 512-event, 32-request, or 512 KiB inline checkpoint
+bounds. Same-session adapter replacement stages its new history and publishes
+the adapter generation and checkpoint pointer in one transaction. The old
+checkpoint remains active if staging, digest verification, or publication
+fails. Unresolved or malformed legacy HTML actions still use the inline
+compatibility checkpoint, which retains those three bounds. The materialized
+snapshot validator no longer imposes a 100,000-event ceiling, though that
+compatibility path still holds the provider result in memory. Historical
+events discarded by an older checkpoint cannot be reconstructed; its
+truncation marker remains visible during recovery.
 
 `app-spec.md` remains a v1 whole-content artifact. Its accepted content is
 normalised, validated, and passed to planning and source review as a string.

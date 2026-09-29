@@ -522,6 +522,88 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       });
     },
 
+    async replaceSessionAdapterPaged(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      const metadataStatus = sessionStatusSchema.parse(
+        z.object({ status: sessionStatusSchema }).parse(input.metadata).status,
+      );
+      const staged = await checkpointHistory.stage({
+        events: input.events,
+        metadata: input.metadata,
+        nowEpochMs: input.nowEpochMs,
+        principal,
+        sessionId: input.sessionId,
+      });
+      try {
+        const result = await database.transaction(async (transaction) => {
+          const row = await sessionById(transaction, principal, input.sessionId, true);
+          if (row === null) {
+            throw new Error(SESSION_NOT_FOUND);
+          }
+          const current = toDurableHostedSessionRecord(row);
+          if (
+            current.adapterGeneration !== input.expectedAdapterGeneration ||
+            current.checkpointDigest !== input.expectedCheckpointDigest
+          ) {
+            throw new Error("Hosted session recovery raced another continuation.");
+          }
+          await checkpointHistory.publishInTransaction(transaction, {
+            checkpointDigest: staged.checkpointDigest,
+            checkpointId: staged.checkpointId,
+            eventCount: staged.eventCount,
+            itemCount: staged.itemCount,
+            nowEpochMs: input.nowEpochMs,
+            principal,
+            sessionId: input.sessionId,
+          });
+          const { checkpoint: priorInlineCheckpoint, ...pagedBase } = current;
+          void priorInlineCheckpoint;
+          const replaced = durableHostedSessionRecordSchema.parse({
+            ...pagedBase,
+            adapterGeneration: current.adapterGeneration + 1,
+            adapterSessionId: input.adapterSessionId,
+            checkpointDigest: staged.checkpointDigest,
+            checkpointProgressDigest: staged.checkpointProgressDigest,
+            checkpointRef: {
+              digest: staged.checkpointDigest,
+              eventCount: staged.eventCount,
+              id: staged.checkpointId,
+            },
+            ...(input.appId === undefined ? {} : { appId: input.appId }),
+            lastProgressAtEpochMs: input.nowEpochMs,
+            resumability: input.resumability,
+            stage: input.stage,
+            status: metadataStatus,
+            updatedAtEpochMs: input.nowEpochMs,
+          });
+          const updated = await transaction
+            .update(agentSessions)
+            .set(sessionValues(replaced))
+            .where(
+              and(
+                sessionTenantPredicate(principal),
+                eq(agentSessions.sessionId, input.sessionId),
+                eq(agentSessions.adapterSessionId, current.adapterSessionId),
+                eq(agentSessions.updatedAt, new Date(current.updatedAtEpochMs)),
+              ),
+            )
+            .returning();
+          if (updated.length !== 1) {
+            throw new Error("Hosted session recovery was not durable.");
+          }
+          return parseHostedSessionRow(updated[0]);
+        });
+        return result;
+      } catch (error) {
+        await checkpointHistory.discardStage({
+          checkpointId: staged.checkpointId,
+          principal,
+          sessionId: input.sessionId,
+        });
+        throw error;
+      }
+    },
+
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async reserveOperation(principalInput, candidateInput) {
       const principal = hostedPrincipalSchema.parse(principalInput);
