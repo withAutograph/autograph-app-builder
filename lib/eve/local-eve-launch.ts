@@ -211,7 +211,16 @@ export function createLocalEveInvocation(input: {
   const roots = exactRoots(input.repositoryRoot, input.environment);
   const binding = exactBinding(input.environment);
   return {
-    args: [input.eveCli, "dev", "--host", "127.0.0.1", "--port", binding.port, "--no-ui"],
+    args: [
+      input.eveCli,
+      "dev",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      binding.port,
+      "--no-ui",
+      "--no-default-extensions",
+    ],
     command: input.pinnedNode,
     cwd: roots.applicationRoot,
     environment: {

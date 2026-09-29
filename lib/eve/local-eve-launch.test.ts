@@ -120,6 +120,8 @@ describe("closed local Eve launch", () => {
     });
 
     expect(invocation.cwd).toBe(realpathSync(input.applicationRoot));
+    expect(invocation.args).toContain("--no-default-extensions");
+    expect(invocation.args).not.toContain("--resume");
     expect(invocation.environment.VERCEL_OIDC_TOKEN).toBe(sentinel);
     expect(invocation.environment.APP_BUILDER_SANDBOX_PROVIDER).toBe("vercel");
     expect(invocation.environment.APP_BUILDER_EXECUTION_BUNDLE).toBe("local-development");
