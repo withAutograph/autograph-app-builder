@@ -63,6 +63,42 @@ a reachable GitHub acceptance environment; it does not depend on a local
 candidate checkout. Keep its output directory outside the reference source
 tree. A new baseline requires a new directory.
 
+For another app or an existing app revision, supply `--brief-file PATH` instead
+of the default self-reproduction brief. Name the repository, app, and desired
+branch or open PR through that ordinary product brief. The driver does not add
+private source-selection fields to the public API.
+
+Alternatively, `--start-file PATH` accepts a JSON object matching the existing
+`autograph_start` contract: `clientRequestId` and exactly one of `prompt`,
+`handoffId`, or `resumeSessionId`. Unknown fields are rejected. The accepted
+original request is saved before dispatch and reused unchanged. These two file
+options are mutually exclusive and cannot replace the saved input on `--resume`.
+
+Hosted calls may use `APP_BUILDER_PUBLIC_MCP_TOKEN` from the driver's server-side
+environment. Obtain that token through the supported public authorization flow;
+do not put it in command arguments, the brief, or the start file. The driver
+neither mints credentials nor configures a provider. It keeps the token out of
+state and both transcripts, including provider echoes and transport errors.
+An HTTP 401 remains an authentication blocker; refresh authorization outside
+the driver and resume the same saved run with the current environment token.
+
+If a prompt-start response is lost or returns no session handle, recovery reads
+`autograph_get` with the original `clientRequestId`. A bound session continues
+without another start. If that operation remains unresolved or has no bound
+session, a later resume can retry the exact original start request; it never
+creates a replacement ID. Prepared handoffs and checkpoint resumes use their
+exact original start retry because prompt request lookup does not describe their
+canonical binding. Empty handles are retained as unresolved responses rather
+than used for session polling. The private transcript preserves those original
+public responses separately from the recovered session.
+
+`startRequestSha256` records the canonical accepted start request and
+`promptSha256` records a supplied product brief. `driverRevision` identifies the
+driver checkout; the legacy `sourceRevision` field retains that same provenance.
+These fields do not establish the deployed Builder revision or the selected
+repository's source revision. Record those actual runtime/source observations
+separately when assessing the result.
+
 When the product returns structured `inputRequests`, create a JSON response file
 containing an array with one entry for each exact request ID. Approval requests
 use `{ "kind": "approve" }` or `{ "kind": "deny" }`; question responses use

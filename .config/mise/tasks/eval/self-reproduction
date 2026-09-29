@@ -15,10 +15,19 @@ App Builder owns cloning, installation, planning, implementation, recovery and v
 
 Drive that same public MCP conversation reproducibly (no internal stages):
   mise run eval:self-reproduction -- --endpoint http://127.0.0.1:64613/mcp --output-dir /tmp/self-reproduction
+Supply another product brief with --brief-file PATH, or the exact existing
+autograph_start request with --start-file PATH (including clientRequestId).
+Select a repository branch or open PR through the ordinary product brief or
+prepared handoff. This driver adds no private source instruction fields.
+Hosted endpoints may use APP_BUILDER_PUBLIC_MCP_TOKEN from the server-side
+environment. Tokens are never recorded in run state or transcripts.
 Delivered previews are observed automatically while public polling continues.
 Use --no-preview-observation only for transport-only runs; browser coverage stays unassessed.
 Resume the same session and answer its outstanding product questions:
   mise run eval:self-reproduction -- --endpoint http://127.0.0.1:64613/mcp --output-dir /tmp/self-reproduction --resume --responses-file /tmp/responses.json
+Resume retains the saved original start request. A lost prompt-start response
+is read through autograph_get with its original clientRequestId before an
+exact same-request retry. Prepared handoffs use the exact original start retry.
 
 Compare the unchanged output afterward:
   mise run eval:self-reproduction -- --report-only --candidate-root PATH [comparison options]
