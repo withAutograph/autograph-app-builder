@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 
 import {
   changedAppTextExport,
+  baselineReviewableChanges,
   changedAppTextPaths,
   isCandidateExportTextPath,
   reviewableChanges,
@@ -12,6 +13,41 @@ import { assertExistingAppReviewScope } from "../repository/reviewed-change-set"
 const digest = (value: string) => createHash("sha256").update(value, "utf-8").digest("hex");
 
 describe("reviewed candidate export", () => {
+  it("keeps baseline review limited to the app and its conventional specs while excluding tool output", () => {
+    const changes = [
+      "apps/replica/app/page.tsx",
+      ".config/app-specs/replica.cue",
+      "config/routing.json",
+      "apps/other/app/page.tsx",
+      "apps/replica/.next/server/page.js",
+      "apps/replica/next-env.d.ts",
+    ].map((path) => ({ kind: "modified" as const, path }));
+    expect(baselineReviewableChanges(changes, "replica").map(({ path }) => path)).toEqual([
+      "apps/replica/app/page.tsx",
+      ".config/app-specs/replica.cue",
+    ]);
+  });
+  it("includes baseline-owned conventional spec changes in the reviewed export", async () => {
+    const specPath = ".config/app-specs/replica.cue";
+    const exported = await changedAppTextExport(
+      [
+        {
+          after: { digest: digest("Builder authored spec"), mode: "644" },
+          kind: "modified",
+          path: specPath,
+        },
+        {
+          after: { digest: digest("unrelated"), mode: "644" },
+          kind: "modified",
+          path: ".config/app-specs/other.cue",
+        },
+      ],
+      "replica",
+      async () => await Promise.resolve("Builder authored spec"),
+      { extraPaths: [specPath] },
+    );
+    expect(exported.exportFiles.map(({ path }) => path)).toEqual([specPath]);
+  });
   it("rejects a legacy existing-repository review that includes planning or build output", () => {
     const review = {
       approvedPaths: [".config/app-specs/replica.md", "apps/replica/app/page.tsx"],

@@ -19,6 +19,68 @@ import {
 import { assertExactImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
 import { inspectGitHubSourceSandboxWorkspace } from "@/lib/repository/sandbox-github-source";
 
+import { appBaselineInputSchema, appBaselineSelectionSchema } from "@/lib/repository/app-baseline";
+import type { AppBaselineInput, AppBaselineReceipt } from "@/lib/repository/app-baseline";
+import { appBaselineState, assertInitialAppBaseline } from "@/lib/agent/app-baseline-state";
+import type { SelectedAppBaseline } from "@/lib/agent/app-baseline-state";
+
+const selectInitialBaseline = async (input: {
+  callId: string;
+  repository: { name: string; owner: string; repositoryId: string };
+  requested: AppBaselineInput | undefined;
+  saved: SelectedAppBaseline | undefined;
+  session: { auth: unknown; id: string };
+}) => {
+  if (input.saved !== undefined || input.requested === undefined) {
+    return input.saved;
+  }
+  const publicationRuntime = await githubPublicationRuntimeForSession(input.session.auth);
+  const historical = await publicationRuntime.inspectHistoricalAppSource({
+    ...input.repository,
+    source: input.requested.source,
+  });
+  const selection = appBaselineSelectionSchema.parse({
+    appId: input.requested.appId,
+    historical,
+    selectedByCallId: input.callId,
+    sessionId: input.session.id,
+    source: input.requested.source,
+  });
+  appBaselineState.update((current) => {
+    if (current !== undefined) {
+      throw new Error(
+        "An app baseline was selected concurrently. Retry its saved source selection.",
+      );
+    }
+    return { selection };
+  });
+  return appBaselineState.get();
+};
+
+const recordPreparedBaseline = (
+  selected: SelectedAppBaseline | undefined,
+  receipt: AppBaselineReceipt | undefined,
+  sessionId: string,
+): void => {
+  if (selected === undefined) {
+    return;
+  }
+  if (receipt === undefined) {
+    throw new Error(
+      "The selected app baseline was not prepared; no app source was accepted. Retry this source selection.",
+    );
+  }
+  appBaselineState.update((current) => {
+    if (
+      current?.selection.sessionId !== sessionId ||
+      JSON.stringify(current.selection) !== JSON.stringify(selected.selection)
+    ) {
+      throw new Error("The app baseline changed concurrently during source preparation.");
+    }
+    return { receipt, selection: current.selection };
+  });
+};
+
 const inspectSelectedRevision = async (input: {
   sessionAuth: unknown;
   repository: { name: string; owner: string; repositoryId: string };
@@ -94,6 +156,7 @@ const assertAvailableSourceSelection = (input: {
 
 export const inputSchema = z
   .strictObject({
+    appBaseline: appBaselineInputSchema.optional(),
     branch: z
       .string()
       .min(1)
@@ -133,11 +196,18 @@ export const inputSchema = z
 export default defineTool({
   approval: never(),
   description:
-    "Resolve and prepare an existing connected GitHub repository. In a new Builder session, select a branch or any open PR using pullRequestNumber; draftPullRequestNumber remains a legacy input. Builder uses its current branch as the private source and never replaces an occupied source. Pass selectedInstallationId=null for the single verified installation. This operation never pushes, branches, opens a PR, or grants publication approval.",
+    "Resolve and prepare an existing connected GitHub repository. In a new Builder session, select a branch or any open PR using pullRequestNumber; draftPullRequestNumber remains a legacy input. Builder uses its current branch as the private source and never replaces an occupied source. Pass selectedInstallationId=null for the single verified installation. For an initial appBaseline, prepare that same-repository historical app version before exposing app source while retaining the selected platform branch. This operation never pushes, branches, opens a PR, or grants publication approval.",
   async execute(input, ctx) {
     const pullRequestNumber = input.pullRequestNumber ?? input.draftPullRequestNumber;
     const initialWorkflow = appBuilderWorkflowState.get();
     const initialSource = sourceWorkflowState.get();
+    const savedBaseline = appBaselineState.get();
+    assertInitialAppBaseline({
+      occupied: initialWorkflow.phase !== "empty" || initialSource.phase !== "empty",
+      repository: input.repository,
+      requested: input.appBaseline,
+      saved: savedBaseline,
+    });
     const selectedGitHubSource = selectedGitHubSourceForSandboxRestore({
       sourceState: initialSource.phase === "empty" ? undefined : initialSource.githubSource,
       workflowState: initialWorkflow.phase === "empty" ? undefined : initialWorkflow.githubSource,
@@ -154,6 +224,14 @@ export default defineTool({
     if (access.kind === "selection") {
       return access.access;
     }
+
+    const selectedBaseline = await selectInitialBaseline({
+      callId: ctx.callId,
+      repository: access.access.repository,
+      requested: input.appBaseline,
+      saved: savedBaseline,
+      session: ctx.session,
+    });
 
     const revision = await inspectSelectedRevision({
       branch: input.branch,
@@ -188,16 +266,19 @@ export default defineTool({
           branch: selectedGitHubSource.resolvedRef.slice("refs/heads/".length),
           pullRequestNumber,
         },
+        ...(selectedBaseline?.receipt === undefined
+          ? {}
+          : { appBaseline: selectedBaseline.receipt }),
         sourceReceipt: initialWorkflow.sourceReceipt,
         workspace,
       };
     }
 
     const prepared = await runtime.prepareExistingSource({
-      ...input,
       access: access.access,
       callId: ctx.callId,
       currentAccessReceipt: access.receipt,
+      ...(selectedBaseline === undefined ? {} : { appBaseline: selectedBaseline.selection }),
       ...(revision === null
         ? {}
         : {
@@ -209,10 +290,13 @@ export default defineTool({
       ...(initialSource.phase === "empty" || initialSource.githubSource === undefined
         ? {}
         : { currentGitHubSource: initialSource.githubSource }),
-      sandbox: () => getSourceBoundSandbox(ctx),
+      repository: input.repository,
+      sandbox: () => ctx.getSandbox(),
+      selectedInstallationId: input.selectedInstallationId,
       sessionId: ctx.session.id,
     });
     assertExactImmutableGitHubSourceReceipt(prepared.githubSource);
+    recordPreparedBaseline(selectedBaseline, prepared.appBaseline, ctx.session.id);
     repositoryAccessReceiptState.update((current) => {
       if (current?.digest !== access.receipt.digest) {
         throw new Error("Repository access changed concurrently during source preparation.");
@@ -268,6 +352,7 @@ export default defineTool({
       repository: access.access.repository,
       repositoryAccessReceiptDigest: prepared.accessReceipt.digest,
       scope: access.access.scope,
+      ...(prepared.appBaseline === undefined ? {} : { appBaseline: prepared.appBaseline }),
       selectedSource: {
         branch: prepared.githubSource.resolvedRef.slice("refs/heads/".length),
         pullRequestNumber,

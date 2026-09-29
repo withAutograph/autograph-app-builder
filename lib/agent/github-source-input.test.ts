@@ -62,6 +62,25 @@ it("accepts an initial branch or open PR and rejects conflicting source selector
   }
 });
 
+it("selects historical app input independently of the current platform branch", () => {
+  const input = {
+    appBaseline: { appId: "spend-review", source: { kind: "merged-pr", pullRequestNumber: 1500 } },
+    branch: "codex/builder-complete-app-runtime",
+    repository: "withAutograph/arrusted-development",
+    selectedInstallationId: null,
+  };
+  expect(githubSourceInputSchema.parse(input)).toMatchObject({
+    appBaseline: input.appBaseline,
+    branch: input.branch,
+  });
+  expect(
+    githubSourceInputSchema.safeParse({
+      ...input,
+      appBaseline: { ...input.appBaseline, source: { commitSha: "main", kind: "commit" } },
+    }).success,
+  ).toBe(false);
+});
+
 it("keeps an occupied source on its branch and directs a different selection to a fresh session", () => {
   expect(() => {
     assertSelectedSourceBranch({

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { OverlayChange, TargetApplyReceipt } from "./target-apply";
 import type { TargetValidationReceipt } from "./target-validation";
+import type { AppBaselineReceipt } from "./app-baseline";
 import type { SourceKind } from "./source-receipt";
 
 export interface NormalizedChangeSet {
@@ -43,14 +44,23 @@ export type ReviewedChangeSetReceipt = NormalizedChangeSet & {
 };
 
 export const assertExistingAppReviewScope = (
-  review: Pick<ReviewedChangeSetReceipt, "approvedPaths">,
+  review: Pick<ReviewedChangeSetReceipt, "approvedPaths"> &
+    Partial<Pick<ReviewedChangeSetReceipt, "sourceSha">>,
   appId: string,
   sourceKind: SourceKind,
+  baseline?: AppBaselineReceipt,
 ): void => {
   if (sourceKind !== "existing-repository") {
     return;
   }
-  const outside = review.approvedPaths.find((path) => !path.startsWith(`apps/${appId}/`));
+  const baselineSpecs = new Set(
+    baseline?.appId === appId && baseline.platform.commitSha === review.sourceSha
+      ? [`.config/app-specs/${appId}.cue`, `.config/app-specs/${appId}.md`]
+      : [],
+  );
+  const outside = review.approvedPaths.find(
+    (path) => !path.startsWith(`apps/${appId}/`) && !baselineSpecs.has(path),
+  );
   if (outside !== undefined) {
     throw new Error(
       `The reviewed existing-app change set includes ${outside}, outside apps/${appId}/. Refresh the change-set review and confirm its approved paths before publishing a draft pull request.`,

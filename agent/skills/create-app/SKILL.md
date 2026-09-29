@@ -65,6 +65,19 @@ app-owned files and reuse the same component-backed preview flow.
    and `docs/schema-compiler.md`. Follow current repository docs and actual
    commands; missing documentation is context to investigate, not a build gate.
    Preserve unrelated changes.
+   When the brief requests an existing app revision from an agreed historical
+   version while retaining current shared platform capabilities, select that
+   baseline in this first `resolve_github_source` call, before reading any app
+   source. Use `appBaseline: { appId, source: { kind: "merged-pr",
+   pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
+   for an explicitly supplied full commit. The platform branch/open PR remains
+   the ordinary source selection. Builder verifies and projects the app itself;
+   never ask the evaluator to restore files or manually construct a baseline.
+   Retry the saved selection after a preparation failure. Report the receipt's
+   historical app source and actual platform base separately from newly authored
+   changes. Retained later release archives are not initial implementation input;
+   do not inspect them to copy a later revision. A baseline is provenance only,
+   and grants no publication, deployment, or readiness authority.
    For a hosted existing repository named as `owner/name`, use only
    `resolve_github_source` with `selectedInstallationId: null`; it owns the
    current access readback, source inspection, and isolated preparation without
