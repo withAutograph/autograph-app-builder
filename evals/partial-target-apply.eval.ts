@@ -1,4 +1,4 @@
-import { defineEval } from "eve/evals";
+import { defineEval, type EveEvalTurn } from "eve/evals";
 import { includes } from "eve/evals/expect";
 
 import { BUILD_READY_APP_SPEC } from "./support/app-spec";
@@ -8,38 +8,40 @@ export default defineEval({
   description:
     "A partial target apply records recovery-required state and never retries automatically.",
   async test(t) {
+    const session = await t.session();
+    let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
-    await t.send(`Prepare supported repository at ${repository}`);
-    await t.send(`Accept build-ready AppSpec for apply-failure:\n${BUILD_READY_APP_SPEC}`);
-    await t.send("Prepare offline target dependencies.");
-    await t.send("Run target identity and planning.");
+    turn = await session.send(`Prepare supported repository at ${repository}`);
+    turn = await session.send(`Accept build-ready AppSpec for apply-failure:\n${BUILD_READY_APP_SPEC}`);
+    turn = await session.send("Prepare offline target dependencies.");
+    turn = await session.send("Run target identity and planning.");
     t.succeeded();
 
-    await t.send("Apply the current creation proposal.");
-    t.requireInputRequest({ toolName: "apply_app_creation" });
-    await t.respondAll("approve");
+    turn = await session.send("Apply the current creation proposal.");
+    session.requireInputRequest({ toolName: "apply_app_creation" });
+    turn = await session.respondAll("approve");
     t.succeeded();
-    t.check(t.reply, includes("couldn't finish preparing the app safely"));
-    t.check(t.reply, includes("current plan remains available"));
+    t.check(turn.message, includes("couldn't finish preparing the app safely"));
+    t.check(turn.message, includes("current plan remains available"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Report artifact workflow status.");
+    turn = await session.send("Report artifact workflow status.");
     t.succeeded();
-    t.check(t.reply, includes('"phase":"apply_failed"'));
-    t.check(t.reply, includes('"recoveryRequired":true'));
+    t.check(turn.message, includes('"phase":"apply_failed"'));
+    t.check(turn.message, includes('"recoveryRequired":true'));
 
-    const retryApply = await t.send("Retry target apply after a lost response.");
+    const retryApply = turn = await session.send("Retry target apply after a lost response.");
     t.succeeded();
     retryApply.notEvent("input.requested");
     retryApply.calledTool("apply_app_creation", { count: 1, status: "failed" });
-    t.check(t.reply, includes("couldn't finish preparing the app safely"));
+    t.check(turn.message, includes("couldn't finish preparing the app safely"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Report artifact workflow status.");
+    turn = await session.send("Report artifact workflow status.");
     t.succeeded();
-    t.check(t.reply, includes('"phase":"apply_failed"'));
-    t.check(t.reply, includes('"recoveryRequired":true'));
+    t.check(turn.message, includes('"phase":"apply_failed"'));
+    t.check(turn.message, includes('"recoveryRequired":true'));
   },
 });

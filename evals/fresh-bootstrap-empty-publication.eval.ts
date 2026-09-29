@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
-import { defineEval } from "eve/evals";
+import { defineEval, type EveEvalTurn } from "eve/evals";
 import { includes } from "eve/evals/expect";
 
 import {
@@ -15,19 +15,20 @@ export default defineEval({
   description: "Eve atomically exchanges only an exact approved empty local destination.",
   tags: ["fresh-bootstrap-publication"],
   async test(t) {
+    let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(t, repository, "fresh-empty-eval", "fresh-template");
+    const session = await prepareReviewedWorkflow(t, repository, "fresh-empty-eval", "fresh-template");
     const fixture = await createFreshBootstrapEvalCapability();
     try {
       const destination = path.join(fixture.allowedRoot, "exact-empty");
       await mkdir(destination, { mode: 0o700 });
-      await withFreshBootstrapTestCapability(fixture.capability, () =>
-        t.send(`Publish fresh repository bootstrap at ${destination} exact-empty.`),
+      turn = await withFreshBootstrapTestCapability(fixture.capability, () =>
+        session.send(`Publish fresh repository bootstrap at ${destination} exact-empty.`),
       );
-      t.requireInputRequest({ toolName: "publish_fresh_repository" });
-      await withFreshBootstrapTestCapability(fixture.capability, () => t.respondAll("approve"));
+      session.requireInputRequest({ toolName: "publish_fresh_repository" });
+      turn = await withFreshBootstrapTestCapability(fixture.capability, () => session.respondAll("approve"));
       t.succeeded();
-      t.check(t.reply, includes("one parentless SHA-1 local repository"));
+      t.check(turn.message, includes("one parentless SHA-1 local repository"));
       t.calledTool("fresh_bootstrap_status", { count: 1 });
       t.calledTool("publish_fresh_repository", { count: 1 });
       t.notCalledTool("bash");

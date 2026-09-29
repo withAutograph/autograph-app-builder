@@ -1,4 +1,4 @@
-import { defineEval } from "eve/evals";
+import { defineEval, type EveEvalTurn } from "eve/evals";
 import { equals, includes, satisfies } from "eve/evals/expect";
 
 import { BUILD_READY_APP_SPEC } from "./support/app-spec";
@@ -8,14 +8,16 @@ export default defineEval({
   description:
     "Offline dependency preparation is automatic internal planning and emits no user-input prompt.",
   async test(t) {
+    const session = await t.session();
+    let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
-    await t.send(`Prepare supported repository at ${repository}`);
-    await t.send(`Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`);
+    turn = await session.send(`Prepare supported repository at ${repository}`);
+    turn = await session.send(`Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`);
     t.succeeded();
 
-    await t.send("Report artifact workflow status.");
+    turn = await session.send("Report artifact workflow status.");
     t.succeeded();
-    const recordedStatus = t.reply;
+    const recordedStatus = turn.message;
     t.check(
       recordedStatus,
       satisfies((reply) => {
@@ -33,7 +35,7 @@ export default defineEval({
       }, "planning recorded a durable dependency receipt"),
     );
 
-    const preparation = await t.send("Prepare offline target dependencies.");
+    const preparation = turn = await session.send("Prepare offline target dependencies.");
     t.succeeded();
     preparation.notEvent("input.requested");
     t.notCalledTool("prepare_target_dependencies");
@@ -41,9 +43,9 @@ export default defineEval({
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
 
-    await t.send("Report artifact workflow status.");
+    turn = await session.send("Report artifact workflow status.");
     t.succeeded();
-    t.check(t.reply, includes('"phase":"planned"'));
-    t.check(t.reply, equals(recordedStatus));
+    t.check(turn.message, includes('"phase":"planned"'));
+    t.check(turn.message, equals(recordedStatus));
   },
 });

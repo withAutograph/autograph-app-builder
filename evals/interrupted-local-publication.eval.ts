@@ -1,4 +1,4 @@
-import { defineEval } from "eve/evals";
+import { defineEval, type EveEvalTurn } from "eve/evals";
 import { includes } from "eve/evals/expect";
 
 import { prepareReviewedWorkflow } from "./support/reviewed-workflow";
@@ -8,29 +8,30 @@ export default defineEval({
   description:
     "A durable pending local publication is never redispatched and blocks every upstream mutation.",
   async test(t) {
+    let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(t, repository, "publication-interruption");
+    const session = await prepareReviewedWorkflow(t, repository, "publication-interruption");
 
-    await t.send("Publish reviewed change set locally.");
-    t.requireInputRequest({ toolName: "publish_reviewed_change_set" });
-    await t.respondAll("approve");
+    turn = await session.send("Publish reviewed change set locally.");
+    session.requireInputRequest({ toolName: "publish_reviewed_change_set" });
+    turn = await session.respondAll("approve");
     t.succeeded();
 
-    await t.send("Report artifact workflow status.");
+    turn = await session.send("Report artifact workflow status.");
     t.succeeded();
-    t.check(t.reply, includes('"phase":"publication_pending"'));
+    t.check(turn.message, includes('"phase":"publication_pending"'));
 
-    await t.send("Retry local publication after a lost response.");
+    turn = await session.send("Retry local publication after a lost response.");
     t.succeeded();
-    t.check(t.reply, includes("not redispatched automatically"));
+    t.check(turn.message, includes("not redispatched automatically"));
 
-    await t.send("Report artifact workflow status.");
+    turn = await session.send("Report artifact workflow status.");
     t.succeeded();
-    t.check(t.reply, includes('"phase":"publication_pending"'));
+    t.check(turn.message, includes('"phase":"publication_pending"'));
 
-    await t.send("Record a replacement prototype artifact.");
+    turn = await session.send("Record a replacement prototype artifact.");
     t.succeeded();
-    t.check(t.reply, includes("durable state was not changed"));
+    t.check(turn.message, includes("durable state was not changed"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
   },

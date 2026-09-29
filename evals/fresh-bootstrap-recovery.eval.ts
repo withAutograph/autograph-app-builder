@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { defineEval } from "eve/evals";
+import { defineEval, type EveEvalTurn } from "eve/evals";
 import { includes } from "eve/evals/expect";
 
 import {
@@ -15,28 +15,29 @@ export default defineEval({
     "Eve requires separate approval for exact fresh-bootstrap recovery and reuses terminal state after a lost response.",
   tags: ["fresh-bootstrap-publication"],
   async test(t) {
+    let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(t, repository, "fresh-recovery-eval", "fresh-template");
+    const session = await prepareReviewedWorkflow(t, repository, "fresh-recovery-eval", "fresh-template");
     const fixture = await createFreshBootstrapEvalCapability();
     try {
       const destination = path.join(fixture.allowedRoot, "recovery");
-      await withFreshBootstrapTestCapability(fixture.capability, () =>
-        t.send(`Publish fresh repository bootstrap at ${destination}.`),
+      turn = await withFreshBootstrapTestCapability(fixture.capability, () =>
+        session.send(`Publish fresh repository bootstrap at ${destination}.`),
       );
-      t.requireInputRequest({ toolName: "publish_fresh_repository" });
-      await withFreshBootstrapTestCapability(fixture.capability, () => t.respondAll("approve"));
+      session.requireInputRequest({ toolName: "publish_fresh_repository" });
+      turn = await withFreshBootstrapTestCapability(fixture.capability, () => session.respondAll("approve"));
       t.succeeded();
 
-      await withFreshBootstrapTestCapability(fixture.capability, () =>
-        t.send("Recover fresh repository bootstrap after partial failure."),
+      turn = await withFreshBootstrapTestCapability(fixture.capability, () =>
+        session.send("Recover fresh repository bootstrap after partial failure."),
       );
-      t.requireInputRequest({ toolName: "recover_fresh_repository" });
-      await withFreshBootstrapTestCapability(fixture.capability, () => t.respondAll("approve"));
+      session.requireInputRequest({ toolName: "recover_fresh_repository" });
+      turn = await withFreshBootstrapTestCapability(fixture.capability, () => session.respondAll("approve"));
       t.succeeded();
-      t.check(t.reply, includes("separately approved exact"));
+      t.check(turn.message, includes("separately approved exact"));
 
-      const retry = await withFreshBootstrapTestCapability(fixture.capability, () =>
-        t.send("Retry fresh repository recovery after a lost response."),
+      const retry = turn = await withFreshBootstrapTestCapability(fixture.capability, () =>
+        session.send("Retry fresh repository recovery after a lost response."),
       );
       t.succeeded();
       // Assert idempotent behavior instead of a particular summary sentence.

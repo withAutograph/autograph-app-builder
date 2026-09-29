@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { defineEval } from "eve/evals";
+import { defineEval, type EveEvalTurn } from "eve/evals";
 import { includes } from "eve/evals/expect";
 
 const requiredCommands = ["bash", "git", "mise", "bun", "node"] as const;
@@ -48,13 +48,15 @@ export default defineEval({
     "The Eve agent reports the current Vercel development Sandbox and prepared toolchain without mutating it.",
   tags: ["sandbox-toolchain", "sandbox-integration"],
   async test(t) {
-    await t.send("Inspect the sandbox toolchain.");
+    const session = await t.session();
+    let turn: EveEvalTurn;
+    turn = await session.send("Inspect the sandbox toolchain.");
     t.succeeded();
     t.calledTool("inspect_sandbox_toolchain", { count: 1 });
-    t.check(t.reply, includes("Sandbox toolchain receipt"));
-    t.check(t.reply, includes('"backend":"vercel-development"'));
-    t.check(t.reply, includes('"backendBlockers":[]'));
-    t.eventsSatisfy("current required tool commands executed successfully", (events) =>
+    t.check(turn.message, includes("Sandbox toolchain receipt"));
+    t.check(turn.message, includes('"backend":"vercel-development"'));
+    t.check(turn.message, includes('"backendBlockers":[]'));
+    session.eventsSatisfy("current required tool commands executed successfully", (events) =>
       events.some((event) => {
         const result = toolchainResultSchema.safeParse(event);
         if (!result.success) {
@@ -63,12 +65,12 @@ export default defineEval({
         return requiredToolsAvailable(result.data);
       }),
     );
-    t.check(t.reply, includes("toolchainReady"));
-    t.check(t.reply, includes("backend"));
+    t.check(turn.message, includes("toolchainReady"));
+    t.check(turn.message, includes("backend"));
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
     process.stdout.write(
-      `${JSON.stringify({ diagnostics: toolchainDiagnostics(t.events), version: 1 })}\n`,
+      `${JSON.stringify({ diagnostics: toolchainDiagnostics(session.events), version: 1 })}\n`,
     );
   },
 });

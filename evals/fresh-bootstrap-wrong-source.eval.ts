@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { defineEval } from "eve/evals";
+import { defineEval, type EveEvalTurn } from "eve/evals";
 import { includes } from "eve/evals/expect";
 
 import {
@@ -15,17 +15,18 @@ export default defineEval({
     "Eve refuses fresh bootstrap for an existing-repository source without fallback mutation.",
   tags: ["fresh-bootstrap-publication"],
   async test(t) {
+    let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
-    await prepareReviewedWorkflow(t, repository, "wrong-source-eval");
+    const session = await prepareReviewedWorkflow(t, repository, "wrong-source-eval");
     const fixture = await createFreshBootstrapEvalCapability();
     try {
-      await withFreshBootstrapTestCapability(fixture.capability, () =>
-        t.send(
+      turn = await withFreshBootstrapTestCapability(fixture.capability, () =>
+        session.send(
           `Inspect fresh repository bootstrap at ${path.join(fixture.allowedRoot, "wrong-source")}.`,
         ),
       );
       t.succeeded();
-      t.check(t.reply, includes("rejected without target mutation"));
+      t.check(turn.message, includes("rejected without target mutation"));
       t.notCalledTool("publish_fresh_repository");
       t.notCalledTool("recover_fresh_repository");
       t.notCalledTool("bash");

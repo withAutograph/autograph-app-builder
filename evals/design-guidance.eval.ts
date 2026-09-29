@@ -1,4 +1,4 @@
-import { defineEval } from "eve/evals";
+import { defineEval, type EveEvalTurn } from "eve/evals";
 import { includes, satisfies } from "eve/evals/expect";
 
 import { renewalReviewDesignPrompt } from "../lib/testing/prompt-driven-design";
@@ -10,11 +10,13 @@ export default defineEval({
     "An ambiguous product brief compiles against the supported source and passes real browser interaction before UI review; compilation runs in Vercel Sandbox.",
   tags: ["product-quality", "design-guidance", "sandbox-integration"],
   async test(t) {
+    const session = await t.session();
+    let turn: EveEvalTurn;
     const repository = process.env.REPOSITORY_LOCAL_ROOTS;
     if (repository === undefined || repository.length === 0) {
       throw new Error("The supported source root is missing.");
     }
-    await t.send(`Supported repository at ${repository}
+    turn = await session.send(`Supported repository at ${repository}
 ${renewalReviewDesignPrompt}`);
 
     t.succeeded();
@@ -68,7 +70,7 @@ ${renewalReviewDesignPrompt}`);
     t.notCalledTool("apply_app_creation");
     t.notCalledTool("validate_app_creation");
     t.notCalledTool("prepare_target_dependencies");
-    const browserObservation = await observeRecordedRenewalReview(t.events);
+    const browserObservation = await observeRecordedRenewalReview(session.events);
     process.stdout.write(
       `${JSON.stringify({
         browserInteraction: browserObservation,
@@ -76,11 +78,11 @@ ${renewalReviewDesignPrompt}`);
         version: 1,
       })}\n`,
     );
-    t.check(t.reply, includes("Renewal Review"));
-    t.check(t.reply, includes("existing table and review components"));
-    t.check(t.reply, includes("remains open"));
+    t.check(turn.message, includes("Renewal Review"));
+    t.check(turn.message, includes("existing table and review components"));
+    t.check(turn.message, includes("remains open"));
     t.check(
-      t.reply,
+      turn.message,
       satisfies(
         (reply) =>
           isProductFacing(reply) &&

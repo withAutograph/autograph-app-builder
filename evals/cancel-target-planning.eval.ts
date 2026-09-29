@@ -1,4 +1,4 @@
-import { defineEval } from "eve/evals";
+import { defineEval, type EveEvalTurn } from "eve/evals";
 import { includes, satisfies } from "eve/evals/expect";
 
 import { BUILD_READY_APP_SPEC } from "./support/app-spec";
@@ -8,18 +8,20 @@ export default defineEval({
   description:
     "Read-only target identity and planning complete automatically without a user-input prompt.",
   async test(t) {
+    const session = await t.session();
+    let turn: EveEvalTurn;
     const repository = createSupportedRepositoryFixture();
-    await t.send(`Prepare supported repository at ${repository}`);
-    await t.send(`Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`);
+    turn = await session.send(`Prepare supported repository at ${repository}`);
+    turn = await session.send(`Accept build-ready AppSpec for expense-review:\n${BUILD_READY_APP_SPEC}`);
     t.succeeded();
-    await t.send("Prepare offline target dependencies.");
+    turn = await session.send("Prepare offline target dependencies.");
     t.succeeded();
-    await t.send("Run target identity and planning.");
+    turn = await session.send("Run target identity and planning.");
     t.succeeded();
     t.notEvent("input.requested");
-    t.check(t.reply, includes("private preview"));
+    t.check(turn.message, includes("private preview"));
     t.check(
-      t.reply,
+      turn.message,
       satisfies(
         (reply) =>
           typeof reply === "string" &&
@@ -29,8 +31,8 @@ export default defineEval({
     );
     t.notCalledTool("bash");
     t.notCalledTool("write_file");
-    await t.send("Report artifact workflow status.");
+    turn = await session.send("Report artifact workflow status.");
     t.succeeded();
-    t.check(t.reply, includes('"phase":"planned"'));
+    t.check(turn.message, includes('"phase":"planned"'));
   },
 });
