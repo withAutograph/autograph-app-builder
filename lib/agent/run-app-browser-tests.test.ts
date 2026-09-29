@@ -15,7 +15,7 @@ describe("private app browser tests", () => {
       sandbox: { run },
     });
     expect(run).toHaveBeenCalledWith({
-      command: "mise run --skip-tools //apps/spend-review:test-e2e",
+      command: "mise run app:runtime run spend-review test-e2e",
       workingDirectory: "/workspace/repository",
     });
     expect(result).toMatchObject({ exitCode: 0, status: "passed", stdout: "5 passed" });
@@ -58,7 +58,7 @@ describe("private app browser tests", () => {
     });
     expect(run).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ command: "mise run --skip-tools //apps/spend-review:test-e2e" }),
+      expect.objectContaining({ command: "mise run app:runtime run spend-review test-e2e" }),
     );
     expect(run).toHaveBeenNthCalledWith(
       2,

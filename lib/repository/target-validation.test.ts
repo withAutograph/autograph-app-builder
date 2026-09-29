@@ -481,7 +481,7 @@ describe("target validation", () => {
     expect(run).toHaveBeenCalledExactlyOnceWith({
       command: `set +e
 log=$(mktemp /tmp/app-builder-validation.XXXXXX) || exit $?
-${command} > "$log" 2>&1
+${`if [ -f '/tmp/autograph-app-runtime/b7a886d0cdd17479/example/environment.json' ]; then mise run app:runtime run example ${command.includes(" app:check ") ? "repository-check" : "repository-test 1/1"}; else ${command}; fi`} > "$log" 2>&1
 status=$?
 cat "$log"
 rm -f "$log"

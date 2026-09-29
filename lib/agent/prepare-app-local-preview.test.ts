@@ -9,60 +9,50 @@ import {
 } from "../../agent/tools/prepare-app-local-preview";
 
 describe("private local preview setup", () => {
-  it("prepares only apps whose contract and repository declare local setup", async () => {
-    const readTextFile = vi.fn(
-      async ({ path }: { path: string }): Promise<string> =>
-        await Promise.resolve(
-          path.endsWith("app-spec.md")
-            ? "Local data: mise run app:local -- spend-review setup"
-            : '[tasks."app:local"]',
-        ),
-    );
-    expect(
-      await appDeclaresLocalSetup({
-        appId: "spend-review",
-        root: "/workspace/repository",
-        sandbox: { readTextFile },
-      }),
-    ).toBe(true);
-    expect(readTextFile).toHaveBeenCalledWith({
-      path: "/workspace/repository/apps/spend-review/.config/app-spec.md",
+  const descriptor = (backend: unknown) =>
+    JSON.stringify({
+      version: 1,
+      app: { id: "spend-review", workspacePath: "apps/spend-review", routes: ["/spend-review"] },
+      backend,
+      validation: { check: { task: "check" }, test: { task: "test", shards: 1 }, browser: null },
     });
-    readTextFile.mockImplementationOnce(async () => await Promise.resolve("No local setup task"));
-    expect(
-      await appDeclaresLocalSetup({
+  const generated = {
+    kind: "generated-postgres",
+    authorization: "declared-policy",
+    roles: ["member"],
+    release: { id: "v1", artifactHash: "hash", directory: "release" },
+    runtime: { databaseEnvironment: "SPEND_REVIEW_DATABASE_URL" },
+    schemaReceipt: null,
+  };
+  it("discovers the source-derived backend rather than a demo setup declaration", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValue({ exitCode: 0, stderr: "", stdout: descriptor(generated) });
+    const input = { appId: "spend-review", root: "/workspace/repository", sandbox: { run } };
+    expect(await appDeclaresLocalSetup(input)).toBe(true);
+    expect(run).toHaveBeenCalledWith({
+      command: "mise run app:describe spend-review",
+      workingDirectory: input.root,
+    });
+    run.mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor({ kind: "static" }) });
+    expect(await appDeclaresLocalSetup(input)).toBe(false);
+  });
+  it("prepares authenticated data before validation and preserves setup failures", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor(generated) })
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "pg_ctl failed", stdout: "" });
+    await expect(
+      prepareValidationLocalData({
         appId: "spend-review",
         root: "/workspace/repository",
-        sandbox: { readTextFile },
+        sandbox: { run },
       }),
-    ).toBe(false);
-  });
-
-  it("starts declared local data before validation and reports setup failures", async () => {
-    const readTextFile = vi.fn(
-      async ({ path }: { path: string }) =>
-        await Promise.resolve(
-          path.endsWith("app-spec.md")
-            ? "mise run app:local -- spend-review setup"
-            : '[tasks."app:local"]',
-        ),
-    );
-    const run = vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "ready" });
-    const input = {
-      appId: "spend-review",
-      root: "/workspace/repository",
-      sandbox: { readTextFile, run },
-    };
-    await prepareValidationLocalData(input);
-    expect(run).toHaveBeenCalledWith({
+    ).rejects.toThrow("Validation could not prepare");
+    expect(run).toHaveBeenLastCalledWith({
       command: localPreviewExecutionCommand("spend-review"),
       workingDirectory: "/workspace/repository",
     });
-    run.mockResolvedValueOnce({ exitCode: 1, stderr: "pg_ctl failed", stdout: "" });
-    await expect(prepareValidationLocalData(input)).rejects.toThrow(
-      "Validation could not prepare the selected app's local data",
-    );
-    await expect(prepareValidationLocalData(input)).resolves.toBeUndefined();
   });
 
   it("runs the selected app's repository task in its checkout", async () => {
@@ -79,9 +69,8 @@ describe("private local preview setup", () => {
       workingDirectory: "/workspace/repository",
     });
     expect(localPreviewExecutionCommand("spend-review")).toContain(
-      "MISE_TASK_RUN_AUTO_INSTALL=true MISE_AUTO_INSTALL=true mise run app:local -- spend-review setup > '/tmp/app-builder-local-setup-spend-review.log' 2>&1",
+      "mise run app:runtime prepare spend-review local",
     );
-    expect(localPreviewExecutionCommand("spend-review")).toContain('exit "$status"');
     expect(result).toMatchObject({ exitCode: 0, status: "prepared" });
     expect(() => localPreviewSetupCommand("spend-review; deploy")).toThrow();
   });

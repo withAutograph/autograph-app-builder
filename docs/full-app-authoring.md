@@ -53,3 +53,15 @@ publication, provider resources, production data changes, and activation remain
 separately approved outward effects. A blocked public run must retain its
 session and precise failed operation; manual implementation cannot replace it
 in acceptance evidence.
+
+## Repository runtime contract
+
+Use `app:describe` for selected release, declared roles, database environment and
+validation tasks. Use `app:runtime prepare` for isolated authenticated validation;
+its protected environment and session files are injected by Builder into app
+validation and Preview startup. Author `test-e2e` to consume `APP_TEST_IDENTITIES_FILE`
+and exercise real browser submissions with those sessions. Backend validation
+runs this task after repository checks and reports missing tasks as blocked.
+No passing command substitutes for observed hosted readback after a restart and
+a new native deployment. Legacy app-owned roles must be recorded explicitly;
+authenticated runtime preparation cannot guess the accepted role policy.

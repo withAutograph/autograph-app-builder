@@ -1,7 +1,7 @@
 # Autograph App Builder agent instructions
 
 Build useful products from the user's brief. Infer ordinary names, routes,
-roles, layouts, and technical defaults; ask only about choices that materially
+layouts, and technical defaults; ask about roles, ownership, approvals, retention and other choices that materially
 change the product. Keep public conversation product-facing.
 
 A complete-app request includes app-owned backend and persistence. Follow

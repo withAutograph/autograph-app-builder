@@ -15,7 +15,11 @@ import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 import { resolvePreviewPackageManager } from "@/lib/agent/preview-package-manager";
 import { ensureCheckoutDependencies } from "@/lib/agent/checkout-dependencies";
-import { appDeclaresLocalSetup, prepareAppLocalPreview } from "./prepare-app-local-preview";
+import {
+  appDeclaresLocalSetup,
+  prepareAppLocalPreview,
+  localRuntimeEnvironmentPath,
+} from "./prepare-app-local-preview";
 import {
   hasLiveWorkingPreview,
   workingPreviewState,
@@ -115,6 +119,7 @@ export default defineTool({
         ? { ...dependencyInput, requiredExecutable: "next" }
         : dependencyInput,
     );
+    let environmentPath: string | undefined;
     if (await appDeclaresLocalSetup({ appId, root: selected.root, sandbox })) {
       const setup = await prepareAppLocalPreview({
         appId,
@@ -127,14 +132,31 @@ export default defineTool({
           `The app's local data setup failed before preview startup. ${setup.problem}\nCommand: ${setup.command}\n${setup.stderr || setup.stdout || "No command output was returned."}`,
         );
       }
+      environmentPath = localRuntimeEnvironmentPath(selected.root, appId);
     }
     workingPreviewState.update(() => null);
     let ownedAttemptId: string | undefined;
+    let prepareAuthenticatedOrigin: ((origin: string) => Promise<void>) | undefined;
+    if (environmentPath !== undefined) {
+      prepareAuthenticatedOrigin = async (authOrigin) => {
+        const setup = await prepareAppLocalPreview({
+          appId,
+          authOrigin,
+          root: selected.root,
+          sandbox,
+          signal: ctx.abortSignal,
+        });
+        if (setup.status === "failed") {
+          throw new Error(setup.problem);
+        }
+      };
+    }
     const preview = await startWorkingPreview({
       ...input,
       appId: selected.appId,
       command: launch.command,
       cwd,
+      environmentPath,
       onAttempt: (attempt) => {
         workingPreviewAttemptState.update((currentAttempt) => {
           if (attempt === null) {
@@ -144,6 +166,7 @@ export default defineTool({
           return attempt;
         });
       },
+      prepareAuthenticatedOrigin,
       previous,
       provider,
       requestDigest,

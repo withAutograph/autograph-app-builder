@@ -8,7 +8,7 @@ import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 
 export const appBrowserTestCommand = (appId: string): string =>
-  `mise run --skip-tools //apps/${appIdSchema.parse(appId)}:test-e2e`;
+  `mise run app:runtime run ${appIdSchema.parse(appId)} test-e2e`;
 
 const safeOutput = (value: string): string =>
   value
