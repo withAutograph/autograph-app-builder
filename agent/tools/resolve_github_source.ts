@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { never } from "eve/tools/approval";
 import { z } from "zod";
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
@@ -128,7 +129,7 @@ export default defineTool({
       }
       const workspace = await inspectGitHubSourceSandboxWorkspace({
         githubSource: selectedGitHubSource,
-        sandbox: await ctx.getSandbox(),
+        sandbox: await getSourceBoundSandbox(ctx),
       });
       return {
         githubSource: selectedGitHubSource,
@@ -166,7 +167,7 @@ export default defineTool({
       ...(initialSource.phase === "empty" || initialSource.githubSource === undefined
         ? {}
         : { currentGitHubSource: initialSource.githubSource }),
-      sandbox: () => ctx.getSandbox(),
+      sandbox: () => getSourceBoundSandbox(ctx),
       sessionId: ctx.session.id,
     });
     assertExactImmutableGitHubSourceReceipt(prepared.githubSource);

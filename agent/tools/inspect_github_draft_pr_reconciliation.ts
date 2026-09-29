@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { z } from "zod";
 
 import {
@@ -25,7 +26,7 @@ export default defineTool({
     ) {
       throw new Error("Prepare the current draft reconciliation before inspecting its files.");
     }
-    const sandbox = await ctx.getSandbox();
+    const sandbox = await getSourceBoundSandbox(ctx);
     if (input.kind === "conflict") {
       return {
         content: await readDraftReconciliationConflict({

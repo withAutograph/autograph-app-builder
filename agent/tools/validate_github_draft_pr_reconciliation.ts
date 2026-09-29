@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
 
@@ -69,7 +70,7 @@ export default defineTool({
         "The prepared merge candidate no longer matches the selected app and source review. Prepare reconciliation again.",
       );
     }
-    const sandbox = await ctx.getSandbox();
+    const sandbox = await getSourceBoundSandbox(ctx);
     const before = await inspectDraftReconciliation({ prepared: candidate, sandbox });
     if (before.unresolvedConflicts.length > 0) {
       return {
