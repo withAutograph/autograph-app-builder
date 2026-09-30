@@ -1,8 +1,10 @@
 # Session semantics
 
 - `sessionId` is the public durable session handle. Never expose a continuation credential.
-- `autograph_get` without `sessionId` lists the caller's recent sessions. Use it
-  before starting duplicate work when the user asks to continue or resume.
+- `autograph_get` with `sessionId` inspects that session. Use the exact handle
+  already established in the conversation; discovery and selection are needed
+  only when the session is unknown or ambiguous. Without `sessionId`, it lists
+  the caller's recent sessions. Do not start duplicate work to continue a session.
 - User-facing handles do not expire because a compute lease elapsed. Active
   execution leases and start-admission windows remain bounded independently.
 - Resume a selected session with `autograph_start` and `resumeSessionId`.
