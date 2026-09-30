@@ -316,7 +316,6 @@ describe("preview command working directory", () => {
           getSandbox: vi
             .fn()
             .mockResolvedValue({ id: "sandbox", readTextFile: vi.fn().mockResolvedValue(null) }),
-          getSkill: vi.fn(),
           getToken: vi.fn(),
           requireAuth: (): never => {
             throw new Error("Unexpected authentication redirect");
