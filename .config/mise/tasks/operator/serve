@@ -1,0 +1,4 @@
+#!/bin/sh
+#MISE description="Run separately configured protected hosted operator (reviewed adapter module and digest required)"
+set -eu
+exec node --import tsx scripts/serve-hosted-operator.mts "$@"

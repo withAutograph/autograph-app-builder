@@ -5,6 +5,7 @@ export interface PreparedRuntimeSelection {
   branch: string;
   projectId: string;
   sessionId: string;
+  operationRef?: string;
 }
 
 /** Approval selection only. Credentials and protected files stay outside Eve state. */

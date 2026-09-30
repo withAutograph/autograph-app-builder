@@ -112,7 +112,7 @@ export const readHostedRuntimeExecutionBinding = async (
   if (!row) {
     return null;
   }
-  if (row.record.status !== "prepared" || row.record.step !== "bound") {
+  if (row.record.operator || row.record.status !== "prepared" || row.record.step !== "bound") {
     throw new HostedRuntimeProviderError("connection_required");
   }
   const files = decryptHostedRuntimeFiles({ ...runtime, record: row.record });

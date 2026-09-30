@@ -6,6 +6,7 @@ import { z } from "zod";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import type { BuilderProvisionAuthority } from "./journal";
 import { builderAppIdSchema } from "./names";
+import { hostedOperatorRecordSchema } from "./hosted-operator-contract";
 
 export const hostedRuntimeTargetSchema = z.strictObject({
   appId: builderAppIdSchema,
@@ -54,6 +55,7 @@ export const hostedRuntimeJournalRecordSchema = z.strictObject({
   kind: z.literal("app-runtime"),
   leaseExpiresAt: z.iso.datetime({ offset: true }).optional(),
   leaseId: z.uuid().optional(),
+  operator: hostedOperatorRecordSchema.optional(),
   privateState: encryptedStateSchema.optional(),
   proof: hostedRuntimeProofSchema.optional(),
   request: hostedRuntimeTargetSchema,
@@ -80,6 +82,7 @@ export interface HostedRuntimeJournalStore {
     authority: BuilderProvisionAuthority;
     target: HostedRuntimeTarget;
     approvedByCallId: string;
+    operator?: z.infer<typeof hostedOperatorRecordSchema>;
     now: Date;
   }) => Promise<HostedRuntimeJournalRow>;
   read: (input: {

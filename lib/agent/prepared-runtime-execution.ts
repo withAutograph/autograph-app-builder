@@ -1,5 +1,6 @@
 import type { Sandbox } from "@vercel/sandbox";
 import { z } from "zod";
+import { hostedOperatorClientForSession } from "../provisioning/hosted-operator-client";
 
 import { readHostedRuntimeExecutionBinding } from "../provisioning/hosted-runtime-deployment";
 import { HostedRuntimeProviderError } from "../provisioning/hosted-runtime-provider";
@@ -291,6 +292,7 @@ export const restorePreparedRuntimeExecution = async (input: {
 };
 
 export interface PreparedRuntimeExecutionDependencies {
+  operatorClient?: typeof hostedOperatorClientForSession;
   readBinding: typeof readHostedRuntimeExecutionBinding;
   assertAuthority: typeof assertHostedSandboxCommandAuthority;
   getProvider: (id: string, signal?: AbortSignal) => Promise<RuntimeTransport>;
@@ -344,6 +346,7 @@ const executionDependencies: PreparedRuntimeExecutionDependencies = {
   readBinding: readHostedRuntimeExecutionBinding,
 };
 
+// oxlint-disable-next-line eslint/complexity -- Operator references and explicitly retained v1 selections are separate closed authority paths.
 export const resolvePreparedRuntimeExecution = async (
   input: PreparedRuntimeExecutionContext,
   selectionInput?: PreparedRuntimeSelection | null,
@@ -367,13 +370,45 @@ export const resolvePreparedRuntimeExecution = async (
   if (selection && (selection.appId !== input.appId || selection.sessionId !== input.sessionId)) {
     throw new HostedRuntimeProviderError("authorization_required");
   }
-  const binding = await dependencies.readBinding({
-    appId: input.appId,
-    branch,
-    optionalProject: !selection,
-    sessionAuth: input.sessionAuth,
-    sessionId: input.sessionId,
-  });
+  // An operator reference is a closed route: never read/decrypt the legacy installer journal.
+  const projection =
+    selection?.operationRef === undefined
+      ? undefined
+      : await (dependencies.operatorClient ?? hostedOperatorClientForSession)(
+          input.sessionAuth,
+        ).bindings(
+          {
+            action: "bindings",
+            operationRef: selection.operationRef,
+            selection: {
+              appId: input.appId,
+              branch,
+              environment: "preview",
+              projectId: selection.projectId,
+              sessionId: input.sessionId,
+            },
+          },
+          input.signal,
+        );
+  const binding = projection
+    ? {
+        branch,
+        environment: projection.environment,
+        files: { "environment.json": JSON.stringify(projection.environment) },
+        // Browser-origin adaptation is local runtime state only; the operator retains resource/secret authority.
+        persistFiles: async (_files: PrivateRuntimeFiles) => {
+          /* Local origin files are restored below; protected credentials stay in the operator. */
+        },
+        projectId: projection.plan.selection.projectId,
+        stateDirectory: `/tmp/app-builder-operator/${projection.operationRef}`,
+      }
+    : await dependencies.readBinding({
+        appId: input.appId,
+        branch,
+        optionalProject: !selection,
+        sessionAuth: input.sessionAuth,
+        sessionId: input.sessionId,
+      });
   if (!binding) {
     if (selection) {
       throw new HostedRuntimeProviderError("connection_required");
@@ -389,14 +424,16 @@ export const resolvePreparedRuntimeExecution = async (
     appId: input.appId,
     binding,
     observeInstallation: async (files) =>
-      await dependencies.observeInstallation({
-        appId: input.appId,
-        files,
-        root: input.root,
-        sandboxId: input.sandboxId,
-        signal: input.signal,
-        stateDirectory: binding.stateDirectory,
-      }),
+      projection
+        ? projection.proof
+        : await dependencies.observeInstallation({
+            appId: input.appId,
+            files,
+            root: input.root,
+            sandboxId: input.sandboxId,
+            signal: input.signal,
+            stateDirectory: binding.stateDirectory,
+          }),
     provider,
     root: input.root,
     signal: input.signal,

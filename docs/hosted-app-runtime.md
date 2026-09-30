@@ -1,4 +1,103 @@
-# Hosted app runtime preparation
+# Protected hosted runtime operator
+
+New runtime effects use a separately operated service. Builder's read-only
+`plan-app-hosted-runtime` obtains a frozen concrete plan before approval;
+`prepare-app-hosted-runtime` and `cleanup-app-hosted-runtime` submit its operation
+reference and digest only after their effect approval. The approval description
+names the Vercel project and Preview branch, synthetic Neon context/project/branch,
+app and shared Auth databases and roles, release, exact effects and access grants,
+cost ownership and retention. `get-app-hosted-runtime` reads operator journal
+status. Static apps require no database operation.
+
+The consumed HTTP client uses `HOSTED_RUNTIME_OPERATOR_URL` (an HTTPS origin)
+and Builder's workload identity. Missing configuration fails closed with
+`protected_operator_required`. A configured operator must verify the workload's
+signature and audience, independently resolve the named session's authenticated
+owner/tenant, and recheck membership and provider authority. Client session
+claims and `approvedByCallId` are not approval evidence. Its mandatory approval
+adapter must read the actual authenticated durable Eve approval outcome and
+exact tool input, matching action, call, plan digest, target and approver's current
+authority. No production approval adapter is supplied or defaulted to allow.
+
+`mise run operator:serve -- <absolute-reviewed-adapter-module> <sha256> [port]`
+is a separate service entrypoint bound to loopback for an authenticated HTTPS
+front end. It refuses startup without every required adapter. It must run in a
+separate credential/process boundary, outside the Builder deployment and app
+Sandbox. The entry-module checksum does not prove its imported closure: the
+operator deployment must pin and review its complete package/toolchain and use
+trusted generated artifacts as verified declarative data. Model-authored
+repository scripts, dependencies, hooks and arbitrary SQL are never an installer
+input. The source ships no provider effects or deployment host configuration.
+
+The existing PostgreSQL `builderProvisioningJournals` row is the sole effect
+journal. The optional `operator.mode = protected-operator-v1` discriminator
+preserves v1 target identity, parser compatibility and encryption associated
+data. It stores frozen plans, opaque references, approvals, encrypted checkpoints,
+leases and effect receipts. Legacy rows are never silently converted. Existing
+explicitly selected v1 runtime consumers remain a controlled recovery path; new
+tools cannot create a legacy installer operation. Legacy consumers reject
+operator records before decryption.
+
+The contract requires ordered observed phases: resources → install/grant
+verification → app access → bindings; cleanup requires revoke → remove bindings
+→ retire. Existing resources still require a no-op readback receipt for each
+phase. Execution checks authorization and durable approval before every effect, renews
+its CAS lease and requires an adapter-held fence across the actual shared
+resources. Long operations must call `assertCurrent` immediately before each
+provider/SQL effect and checkpoint credentials before allocation. The adapter
+must enforce cross-session shared-resource fencing and handle process death;
+a journal lease alone does not establish distributed provider fencing. Every
+unreceipted effect is reconciled against its frozen identities before execution.
+Unknown readback stays blocked; a timeout never permits new names/passwords.
+Cleanup uses a separate frozen scope/approval and clears ciphertext only after
+all cleanup receipts. Shared Auth retirement must account for remaining consumers.
+
+The private `bindings` operation rechecks access, current provider/database proof
+and an unchanged journal revision. It returns only restricted app/Auth runtime
+environment plus nonsecret plan/proof. It verifies endpoint, TLS, database and
+explicit runtime role; shared Auth roles are independent of the app principal.
+The actual SQL grants, schema identity and absence of elevated capabilities are
+the mandatory trusted verification adapter's responsibility. No installer state,
+provider token or cluster URL reaches the app process. An operation reference
+selects this closed launch path: failures never trigger legacy admin decryption.
+Launch compares observed release/artifact with the app description. This slice
+projects no browser identity/session fixtures; authenticated browser acceptance
+and durable fixture projection are still unassessed. Origin adaptation affects
+only local restricted runtime files.
+
+## External setup and evidence gate
+
+Source tests exercise the consumed client/handler over local HTTP with synthetic
+trusted adapters, approval denial, tenant/target mismatch, revocation, fencing,
+unknown-effect recovery, restricted projection and unchanged legacy records.
+They do not establish hosted deployment, provider authority or SQL isolation.
+All hosted acceptance remains **UNASSESSED** until these capabilities are
+configured and observed:
+
+- A separately owned operator host, reviewed pinned installer/compiler and
+  verified artifact store; workload audience verification and authoritative
+  session ownership plus durable Eve effect-decision lookup.
+- Explicit owner-authorized Neon connection outside Builder/app processes,
+  with a separately authorized synthetic-only nonproduction project/root.
+  Existing production-root descendants are not synthetic isolation evidence.
+  Preserve existing production database names, users, sessions and data.
+- Resource inventory, concrete cost/retention/access policy, shared-resource
+  lease/fencing, encrypted checkpoint keys and provider reconcile/install/verify
+  adapters. The service uses the existing PostgreSQL journal store, not a second
+  plan/effect ledger. Production stores/adapters must never use the test fixture.
+- Exact Vercel deployment binding identity and restricted credential delivery
+  proven for actual processes. Native dynamic Neon variables cannot be resolved
+  from project-wide env metadata alone. No per-service env allowlist or
+  project-wide OIDC isolation is assumed; unsupported identity remains blocked.
+  A different integration or connection requires separate explicit authorization.
+- Observed migration/role grants, revocation, cross-tenant denial, concurrent
+  consumers, browser behavior, backup/restore and deployed readiness evidence.
+
+The remainder describes existing v1 recovery code and its unresolved native
+provider limitations. It does not authorize creating new legacy operations or
+claim that the protected service's production adapters are implemented.
+
+# Legacy v1 runtime recovery reference
 
 Builder owns the app's schema, backend and authenticated persistence lifecycle.
 Its private database tests and hosted Preview resource changes have separate
