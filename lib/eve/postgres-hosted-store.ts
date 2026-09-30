@@ -974,7 +974,9 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         const updatedSession = await transaction
           .update(agentSessions)
           .set(sessionValues(session))
-          .where(and(tenantPredicate(principal), eq(agentSessions.sessionId, session.sessionId)))
+          .where(
+            and(sessionTenantPredicate(principal), eq(agentSessions.sessionId, session.sessionId)),
+          )
           .returning();
         if (updatedSession.length !== 1) {
           throw new Error("Hosted session checkpoint pointer was not durable.");
