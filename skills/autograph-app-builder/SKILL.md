@@ -1,6 +1,6 @@
 ---
 name: autograph-app-builder
-description: Use Autograph App Builder to design, plan, create, and validate supported apps through its five durable tools.
+description: Create apps or continue app sessions through Autograph App Builder.
 ---
 
 # Autograph App Builder orchestration
@@ -13,9 +13,11 @@ or direct filesystem implementation.
 
 ## Workflow
 
-1. When the user asks to continue, resume, or pick up prior work, call
-   `autograph_get` without a `sessionId` first and offer the relevant recent
-   product sessions. Resume the chosen session with
+1. When continuing prior work, inspect an exact session already established in
+   the conversation with `autograph_get({ sessionId, cursor })`, using its saved
+   cursor when available. If the session is unknown or ambiguous, call
+   `autograph_get` without a `sessionId` and offer relevant recent sessions for
+   selection. Resume the established or selected session with
    `autograph_start({ resumeSessionId, clientRequestId })`. Start genuinely new
    work with `autograph_start({ prompt, clientRequestId })`. When the web App
    Builder supplies an opaque handoff ID, redeem it with
