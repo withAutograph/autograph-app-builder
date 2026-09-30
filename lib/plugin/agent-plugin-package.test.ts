@@ -54,7 +54,7 @@ describe("Agent Plugins package", () => {
       name: "app-builder",
       packageKind: "generated-artifact",
       specification: "1.0.0",
-      version: "0.2.12",
+      version: "0.2.13",
     });
     await expect(readFile(path.resolve(output, "plugin.json"), "utf-8")).resolves.toBe(
       await readFile(path.resolve(repositoryRoot, "plugin.json"), "utf-8"),
@@ -94,7 +94,7 @@ describe("Agent Plugins package", () => {
     const root = await copyPortablePackage();
     await writePluginVersion(root, version);
     await expect(validateAgentPluginPackage({ pluginRoot: root, repositoryRoot })).rejects.toThrow(
-      "version must be exactly 0.2.12",
+      "version must be exactly 0.2.13",
     );
   });
 

@@ -95,7 +95,7 @@ const promotionReceiptUnsignedSchema = z
         receipt: safePath,
         receiptSha256: hash,
         root: safePath,
-        version: z.literal("0.2.12"),
+        version: z.literal("0.2.13"),
       })
       .strict(),
     platform: z
