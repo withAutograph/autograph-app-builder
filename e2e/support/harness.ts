@@ -266,7 +266,10 @@ export async function reopenProviderConnection(page: Page, provider: EmulatedPro
   });
   if (!(await reconnect.isVisible())) await page.getByLabel(descriptor.selectedControl).click();
   await reconnect.click();
-  await expect(page).toHaveURL(new RegExp(`/${descriptor.slug}/installations`, "u"));
+  // Reconnect awaits the same durable checkpoint and route as first connect.
+  await expect(page).toHaveURL(new RegExp(`/${descriptor.slug}/installations`, "u"), {
+    timeout: 30_000,
+  });
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.

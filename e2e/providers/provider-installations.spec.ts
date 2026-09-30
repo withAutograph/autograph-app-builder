@@ -1,3 +1,5 @@
+import { setTimeout as delay } from "node:timers/promises";
+
 import postgres from "postgres";
 import { expect, test } from "playwright/test";
 import type { Page } from "playwright/test";
@@ -196,9 +198,44 @@ for (const provider of emulatedProviders) {
     await finishOAuth(page, "GitHub");
     await openBuilderPage(page);
     await installProvider(page, provider);
-    await reopenProviderConnection(page, provider);
+    let checkpointHeld = false;
+    await page.route(
+      (url) => url.origin === appOrigin && url.pathname === "/",
+      async (route) => {
+        const request = route.request();
+        if (
+          checkpointHeld ||
+          request.method() !== "POST" ||
+          !request.headers()["next-action"] ||
+          !request.postData()?.includes("clientMutationId")
+        )
+          return route.continue();
+        checkpointHeld = true;
+        // Exercise the real durable save while delaying its acknowledgement
+        // beyond the default five-second assertion budget. Callback query
+        // parameters remain on the Builder URL until that acknowledgement.
+        const response = await route.fetch();
+        await delay(6000);
+        await route.fulfill({ response });
+      },
+    );
+    const appName = `${provider} Reconnected App`;
+    const brief = `Keep this ${provider} brief through reconnection.`;
+    await page.getByLabel("App Name").fill(appName);
+    await page.locator("#app-brief").fill(brief);
+    try {
+      await reopenProviderConnection(page, provider);
+      expect(checkpointHeld).toBe(true);
+      await expectProviderCheckpoint(page, appName, brief);
+    } finally {
+      await page.unrouteAll({ behavior: "wait" });
+    }
     await advanceProviderConnectionToApproval(page, provider);
     await approveProviderConnection(page, provider);
+    await page.reload();
+    await waitForBuilderReady(page);
+    await expect(page.getByLabel("App Name")).toHaveValue(appName);
+    await expect(page.locator("#app-brief")).toHaveValue(brief);
     const counts = await applicationCounts();
     expect(counts[descriptor.bindingCount]).toBe(1);
     await expectProviderSelection(page, provider);
