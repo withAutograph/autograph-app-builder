@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
+import { decryptVersionedVercelToken, encryptVercelToken } from "./vercel-installation";
 import {
   createPostgresVercelAuthorizationStateStore,
+  createPostgresVercelInstallationStore,
   readActiveVercelInstallationToken,
 } from "./postgres-vercel-installation";
 
@@ -24,10 +26,22 @@ function databaseFixture(rows: unknown[]) {
     returning: vi.fn(async () => rows),
     select: vi.fn(),
     set: vi.fn(),
+    insert: vi.fn(),
+    values: vi.fn(),
+    onConflictDoUpdate: vi.fn(),
     update: vi.fn(),
     where: vi.fn(),
   };
-  for (const key of ["select", "update", "from", "set", "where"] as const) {
+  for (const key of [
+    "select",
+    "update",
+    "from",
+    "set",
+    "insert",
+    "values",
+    "onConflictDoUpdate",
+    "where",
+  ] as const) {
     query[key].mockReturnValue(query);
   }
   return {
@@ -100,5 +114,115 @@ describe("durable Vercel connection return", () => {
       "icfg_selected",
       true,
     ]);
+  });
+
+  it("reads an installation token encrypted under a retained version with tenant-bound AAD", async () => {
+    const oldKey = Buffer.alloc(32, 3);
+    const activeKey = Buffer.alloc(32, 4);
+    const installationId = "icfg_rotated";
+    const encrypted = encryptVercelToken({
+      associatedData: JSON.stringify({ ...authority, installationId }),
+      key: oldKey,
+      token: "provider-token-sentinel",
+    });
+    const { database } = databaseFixture([
+      {
+        ...authority,
+        ...encrypted,
+        active: true,
+        displayName: "Owner",
+        installationId,
+        plan: "pro",
+        scopeId: "team_1",
+        scopeType: "team",
+        slug: "owner",
+        tokenKeyVersion: "previous_v1",
+        updatedAt: new Date(),
+      },
+    ]);
+    const config = {
+      clientId: "public",
+      clientSecret: "secret",
+      issuer: authority.issuer,
+      previousTokenKeys: [{ key: oldKey, version: "previous_v1" }],
+      resource: authority.audience,
+      slug: "autograph",
+      tokenKey: activeKey,
+      tokenKeyVersion: "current_v2",
+    };
+    expect(
+      await readActiveVercelInstallationToken({
+        authority,
+        config,
+        database,
+        installationId,
+      }),
+    ).toMatchObject({
+      binding: { active: true, installationId },
+      token: "provider-token-sentinel",
+    });
+    await expect(
+      readActiveVercelInstallationToken({
+        authority: { ...authority, workspaceId: "other_workspace" },
+        config,
+        database,
+        installationId,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("writes new installation tokens with the active key version", async () => {
+    const oldKey = Buffer.alloc(32, 3);
+    const currentKey = Buffer.alloc(32, 4);
+    const { database, query } = databaseFixture([
+      {
+        active: true,
+        displayName: "Owner",
+        installationId: "icfg_current",
+        plan: "pro",
+        scopeId: "team_1",
+        scopeType: "team",
+        slug: "owner",
+        updatedAt: new Date(),
+      },
+    ]);
+    const config = {
+      clientId: "public",
+      clientSecret: "secret",
+      issuer: authority.issuer,
+      previousTokenKeys: [{ key: oldKey, version: "previous_v1" }],
+      resource: authority.audience,
+      slug: "autograph",
+      tokenKey: currentKey,
+      tokenKeyVersion: "current_v2",
+    };
+    await createPostgresVercelInstallationStore({ database, config }).bind({
+      authority,
+      binding: {
+        displayName: "Owner",
+        installationId: "icfg_current",
+        plan: "pro",
+        scopeId: "team_1",
+        scopeType: "team",
+        slug: "owner",
+      },
+      now: new Date(),
+      token: "new-provider-token",
+    });
+    const stored = query.values.mock.calls[0]?.[0];
+    expect(stored).toMatchObject({ tokenKeyVersion: "current_v2" });
+    expect(
+      decryptVersionedVercelToken({
+        ...(stored as {
+          encryptedToken: string;
+          tokenIv: string;
+          tokenTag: string;
+          tokenKeyVersion: string;
+        }),
+        associatedData: JSON.stringify({ ...authority, installationId: "icfg_current" }),
+        config,
+        keyVersion: (stored as { tokenKeyVersion: string }).tokenKeyVersion,
+      }),
+    ).toBe("new-provider-token");
   });
 });

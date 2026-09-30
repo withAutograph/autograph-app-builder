@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 import {
   createVercelInstallationAuthorization,
   decryptVercelToken,
+  decryptVersionedVercelToken,
   encryptVercelToken,
+  readVercelIntegrationEnvironment,
   verifyVercelWebhook,
 } from "./vercel-installation";
 
@@ -28,6 +30,103 @@ describe("Vercel integration security", () => {
     expect(() =>
       decryptVercelToken({ ...encrypted, associatedData: "other-tenant", key }),
     ).toThrow();
+  });
+
+  it("decrypts only exact retained key versions while new writes keep using the active key", () => {
+    const oldKey = randomBytes(32);
+    const activeKey = randomBytes(32);
+    const associatedData = "workspace/install-rotation";
+    const legacy = {
+      ...encryptVercelToken({ associatedData, key: oldKey, token: "legacy-token" }),
+      keyVersion: "previous_v1",
+    };
+    const config = {
+      clientId: "client-id",
+      clientSecret: "client-secret",
+      issuer: "https://builder.example/api/auth",
+      previousTokenKeys: [{ key: oldKey, version: "previous_v1" }],
+      resource: "https://builder.example/mcp",
+      slug: "autograph-app-builder",
+      tokenKey: activeKey,
+      tokenKeyVersion: "current_v2",
+    };
+    expect(
+      decryptVersionedVercelToken({ ...legacy, associatedData, config }),
+    ).toBe("legacy-token");
+
+    const current = encryptVercelToken({
+      associatedData,
+      key: config.tokenKey,
+      token: "new-token",
+    });
+    expect(
+      decryptVersionedVercelToken({
+        ...current,
+        associatedData,
+        config,
+        keyVersion: config.tokenKeyVersion,
+      }),
+    ).toBe("new-token");
+    expect(() =>
+      decryptVersionedVercelToken({ ...legacy, associatedData: "other-workspace", config }),
+    ).toThrow();
+    expect(() =>
+      decryptVersionedVercelToken({ ...legacy, associatedData, config, keyVersion: "removed_v0" }),
+    ).toThrow("Vercel token decryption key is unavailable.");
+  });
+
+  it("validates optional previous key configuration without exposing key material", () => {
+    const base = {
+      BETTER_AUTH_URL: "https://builder.example/api/auth",
+      MCP_RESOURCE_URL: "https://builder.example/mcp",
+      VERCEL_INTEGRATION_CLIENT_ID: "client-id",
+      VERCEL_INTEGRATION_CLIENT_SECRET: "client-secret",
+      VERCEL_INTEGRATION_SLUG: "autograph-app-builder",
+      VERCEL_INTEGRATION_TOKEN_KEY: Buffer.alloc(32, 1).toString("base64"),
+      VERCEL_INTEGRATION_TOKEN_KEY_VERSION: "current_v2",
+    };
+    expect(readVercelIntegrationEnvironment(base).previousTokenKeys).toBeUndefined();
+    expect(
+      readVercelIntegrationEnvironment({
+        ...base,
+        VERCEL_INTEGRATION_TOKEN_PREVIOUS_KEYS: JSON.stringify([
+          { key: Buffer.alloc(32, 2).toString("base64"), version: "previous_v1" },
+        ]),
+      }).previousTokenKeys?.map(({ version }) => version),
+    ).toEqual(["previous_v1"]);
+
+    const duplicate = JSON.stringify([
+      { key: Buffer.alloc(32, 2).toString("base64"), version: "previous_v1" },
+      { key: Buffer.alloc(32, 3).toString("base64"), version: "previous_v1" },
+    ]);
+    expect(() =>
+      readVercelIntegrationEnvironment({
+        ...base,
+        VERCEL_INTEGRATION_TOKEN_PREVIOUS_KEYS: duplicate,
+      }),
+    ).toThrow(/unique/u);
+    expect(() =>
+      readVercelIntegrationEnvironment({
+        ...base,
+        VERCEL_INTEGRATION_TOKEN_PREVIOUS_KEYS: "not-json-secret",
+      }),
+    ).toThrow("Invalid Vercel token key rotation configuration.");
+    expect(() =>
+      readVercelIntegrationEnvironment({
+        ...base,
+        VERCEL_INTEGRATION_TOKEN_PREVIOUS_KEYS: JSON.stringify([
+          { key: "malformed-key-material", version: "previous_v1" },
+        ]),
+      }),
+    ).toThrow("Invalid Vercel token key rotation configuration.");
+    expect(() =>
+      readVercelIntegrationEnvironment({
+        ...base,
+        VERCEL_INTEGRATION_TOKEN_PREVIOUS_KEYS: JSON.stringify([
+          { key: Buffer.alloc(32, 2).toString("base64"), version: "current_v2" },
+        ]),
+      }),
+    ).toThrow(/active token key version/u);
   });
 
   it("verifies the exact raw Vercel webhook body", () => {

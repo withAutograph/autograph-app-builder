@@ -23,12 +23,23 @@ first reviewed repository commit triggers deployment later. Do not enable Sign i
 Vercel Connect for this deployment-authority flow.
 
 After registration, configure the environment names documented in
-`.env.example`. `VERCEL_INTEGRATION_TOKEN_KEY` is a base64-encoded 32-byte key;
-rotate it by adding support for the old version before changing
-`VERCEL_INTEGRATION_TOKEN_KEY_VERSION`.
+`.env.example`. `VERCEL_INTEGRATION_TOKEN_KEY` is the active base64-encoded
+32-byte key. New installation credentials and hosted-runtime checkpoints are
+encrypted with this key and `VERCEL_INTEGRATION_TOKEN_KEY_VERSION`.
+
+During rotation, set `VERCEL_INTEGRATION_TOKEN_PREVIOUS_KEYS` to a JSON array
+of `{ "version": "old-v1", "key": "<base64-32-byte-key>" }` entries before
+changing the active key and version. Previous entries are decrypt-only; unknown
+versions fail closed, and their key material is never returned to callers.
+Keep each previous key available until all installation credentials and
+hosted-runtime journals written with that version have been replaced or safely
+removed. This configuration enables versioned reads but does not re-encrypt
+existing credentials or journals automatically. Remove an old key only after a
+protected inventory confirms no retained record needs it.
 
 When `builder-resource-provisioning` is enabled, Create App decrypts only the
-active token for the exact selected installation. It creates
+token for the exact selected installation, using its stored key version. New
+installation tokens use the active key. It creates
 `apps-<app-id>` with `framework: nextjs` and `rootDirectory: apps/<app-id>`.
 Team scopes include `teamId`; personal scopes omit it. A paired GitHub/Vercel
 request links the canonical repository returned by GitHub. If Vercel cannot

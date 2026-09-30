@@ -16,6 +16,25 @@ import type { ProviderEmulation } from "./local-provider-emulation";
 
 type Authority = HostedAdminPlanRequest["authority"];
 
+const tokenKeyVersionSchema = z.string().regex(/^[A-Za-z0-9._-]{1,32}$/u);
+const previousTokenKeySchema = z.strictObject({
+  key: z.instanceof(Buffer).refine((value) => value.length === 32),
+  version: tokenKeyVersionSchema,
+});
+const previousTokenKeysSchema = z.array(previousTokenKeySchema).superRefine((keys, context) => {
+  const versions = new Set<string>();
+  for (const [index, entry] of keys.entries()) {
+    if (versions.has(entry.version)) {
+      context.addIssue({
+        code: "custom",
+        message: "Previous token key versions must be unique.",
+        path: [index, "version"],
+      });
+    }
+    versions.add(entry.version);
+  }
+});
+
 const configSchema = z
   .object({
     clientId: z.string().min(1).max(512),
@@ -24,9 +43,19 @@ const configSchema = z
     resource: z.string().url(),
     slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$/u),
     tokenKey: z.instanceof(Buffer).refine((value) => value.length === 32),
-    tokenKeyVersion: z.string().regex(/^[A-Za-z0-9._-]{1,32}$/u),
+    tokenKeyVersion: tokenKeyVersionSchema,
+    previousTokenKeys: previousTokenKeysSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((config, context) => {
+    if (config.previousTokenKeys?.some((entry) => entry.version === config.tokenKeyVersion)) {
+      context.addIssue({
+        code: "custom",
+        message: "The active token key version cannot also be a previous key.",
+        path: ["previousTokenKeys"],
+      });
+    }
+  });
 
 export type VercelIntegrationConfig = z.infer<typeof configSchema>;
 
@@ -35,6 +64,30 @@ export function readVercelIntegrationEnvironment(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): VercelIntegrationConfig {
   const tokenKey = Buffer.from(environment.VERCEL_INTEGRATION_TOKEN_KEY ?? "", "base64");
+  let previousTokenKeys: unknown;
+  const previousTokenKeysJson = environment.VERCEL_INTEGRATION_TOKEN_PREVIOUS_KEYS;
+  if (previousTokenKeysJson !== undefined && previousTokenKeysJson !== "") {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(previousTokenKeysJson);
+    } catch {
+      throw new Error("Invalid Vercel token key rotation configuration.");
+    }
+    const encodedKeysSchema = z.array(
+      z.strictObject({
+        key: z.string().regex(/^(?:[A-Za-z0-9+/]{4}){10}[A-Za-z0-9+/]{3}=$/u),
+        version: tokenKeyVersionSchema,
+      }),
+    );
+    const encodedKeys = encodedKeysSchema.safeParse(parsed);
+    if (!encodedKeys.success) {
+      throw new Error("Invalid Vercel token key rotation configuration.");
+    }
+    previousTokenKeys = encodedKeys.data.map(({ key, version }) => ({
+      key: Buffer.from(key, "base64"),
+      version,
+    }));
+  }
   return configSchema.parse({
     clientId: environment.VERCEL_INTEGRATION_CLIENT_ID,
     clientSecret: environment.VERCEL_INTEGRATION_CLIENT_SECRET,
@@ -43,6 +96,7 @@ export function readVercelIntegrationEnvironment(
     slug: environment.VERCEL_INTEGRATION_SLUG,
     tokenKey,
     tokenKeyVersion: environment.VERCEL_INTEGRATION_TOKEN_KEY_VERSION,
+    ...(previousTokenKeys === undefined ? {} : { previousTokenKeys }),
   });
 }
 
@@ -140,6 +194,37 @@ export function decryptVercelToken(input: {
     decipher.update(Buffer.from(input.encryptedToken, "base64")),
     decipher.final(),
   ]).toString("utf-8");
+}
+
+export class VercelTokenDecryptionKeyError extends Error {
+  constructor() {
+    super("Vercel token decryption key is unavailable.");
+    this.name = "VercelTokenDecryptionKeyError";
+  }
+}
+
+/** Decrypt only with the exact versioned key; encryption continues using the active key. */
+export function decryptVersionedVercelToken(input: {
+  encryptedToken: string;
+  tokenIv: string;
+  tokenTag: string;
+  keyVersion: string;
+  config: VercelIntegrationConfig;
+  associatedData: string;
+}) {
+  const config = configSchema.parse(input.config);
+  const keyVersion = tokenKeyVersionSchema.safeParse(input.keyVersion);
+  if (!keyVersion.success) {
+    throw new VercelTokenDecryptionKeyError();
+  }
+  const key =
+    keyVersion.data === config.tokenKeyVersion
+      ? config.tokenKey
+      : config.previousTokenKeys?.find((entry) => entry.version === keyVersion.data)?.key;
+  if (key === undefined) {
+    throw new VercelTokenDecryptionKeyError();
+  }
+  return decryptVercelToken({ ...input, key });
 }
 
 const tokenResponseSchema = z.object({ access_token: z.string().min(1).max(8192) }).passthrough();
