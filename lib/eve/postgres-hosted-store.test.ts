@@ -357,6 +357,13 @@ describe("PostgreSQL hosted Eve row authority", () => {
           version: "7",
           when: 1_790_654_400_000,
         },
+        {
+          breakpoints: true,
+          idx: 25,
+          tag: "0026_validation_log_completion",
+          version: "7",
+          when: 1_790_654_400_001,
+        },
       ],
       version: "7",
     });

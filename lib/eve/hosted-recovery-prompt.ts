@@ -1,5 +1,8 @@
 import type { DurableHostedSessionRecord, HostedPagedCheckpointMetadata } from "./hosted-store";
 
+const dependencyRecovery =
+  "Before diagnosing a truncated dependency restoration failure, use get_validation_log with operation: dependency-attempts to recover saved references, then read both channels through their continuation cursors. Interrupted or unavailable capture is incomplete; preserve any readable prefix and report that limit.";
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function recoveryPromptForSession(record: DurableHostedSessionRecord): string | undefined {
   const { checkpoint } = record;
@@ -21,6 +24,7 @@ export function recoveryPromptForSession(record: DurableHostedSessionRecord): st
   const excerpted = historicalMessageCount > 20 || messages.length >= 12_000;
   return [
     "Continue this interrupted Autograph App Builder session from its durable checkpoint.",
+    dependencyRecovery,
     `Product title: ${record.title}`,
     record.appId === undefined ? undefined : `App id: ${record.appId}`,
     checkpoint.prototype === undefined
@@ -57,6 +61,7 @@ export function recoveryPromptForPagedSession(input: {
   const messages = input.recentMessages.join("\n\n").slice(-12_000);
   return [
     "Continue this interrupted Autograph App Builder session from its durable checkpoint.",
+    dependencyRecovery,
     `Product title: ${record.title}`,
     record.appId === undefined ? undefined : `App id: ${record.appId}`,
     metadata.prototype === undefined

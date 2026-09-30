@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { DependencyAttemptResult } from "./checkout-dependencies";
 import startAppPreview from "../../agent/tools/start_app_preview";
 import {
   previewWorkingDirectorySchema,
@@ -6,6 +7,7 @@ import {
 } from "./preview-working-directory";
 
 interface MockWorkflowState {
+  checkoutDependencyAttempts?: readonly DependencyAttemptResult[];
   appSpec?: { appId: string };
   applyReceipt?: { applyRoot: string };
   githubSource?: { digest: string };
@@ -38,6 +40,9 @@ vi.mock("./product-behavior-state", () => ({
 vi.mock("./workflow-state", () => ({
   appBuilderWorkflowState: {
     get: () => mocks.workflowState,
+    update: (transition: (state: MockWorkflowState) => MockWorkflowState) => {
+      mocks.workflowState = transition(mocks.workflowState);
+    },
   },
 }));
 vi.mock("./working-preview-state", () => ({
@@ -268,6 +273,65 @@ describe("preview command working directory", () => {
     expect(mocks.prepare.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.start.mock.invocationCallOrder[0] ?? 0,
     );
+  });
+  it("saves dependency references in workflow state before preview failure", async () => {
+    const attempt: DependencyAttemptResult = {
+      attemptDigest: "a".repeat(64),
+      command: "dependency-install",
+      completion: "complete",
+      durability: "available",
+      excerpt: "lockfile mismatch",
+      executionCommand: "bun install --frozen-lockfile",
+      exitCode: 1,
+      logs: {
+        stdout: {
+          bytes: 100_000,
+          channel: "stdout",
+          chunkCount: 4,
+          completion: "complete",
+          digest: "b".repeat(64),
+          logId: "123e4567-e89b-42d3-a456-426614174001",
+        },
+      },
+      truncated: true,
+    };
+    mocks.dependencies.mockImplementationOnce(
+      (input: { onAttempt: (value: DependencyAttemptResult) => void }) => {
+        input.onAttempt(attempt);
+        throw new Error("dependency install failed");
+      },
+    );
+    mocks.start.mockClear();
+    await expect(
+      startAppPreview.execute(
+        {
+          command: { args: ["run", "dev"], executable: "bun" },
+          landingPath: "/",
+          port: 3000,
+          workingDirectory: ".",
+        },
+        {
+          abortSignal: new AbortController().signal,
+          callId: "failed-dependency-preview",
+          getSandbox: vi
+            .fn()
+            .mockResolvedValue({ id: "sandbox", readTextFile: vi.fn().mockResolvedValue(null) }),
+          getSkill: vi.fn(),
+          getToken: vi.fn(),
+          requireAuth: (): never => {
+            throw new Error("Unexpected authentication redirect");
+          },
+          session: {
+            auth: { current: null, initiator: null },
+            id: "session",
+            turn: { id: "turn", sequence: 0 },
+          },
+          toolName: "start_app_preview",
+        },
+      ),
+    ).rejects.toThrow("dependency install failed");
+    expect(mocks.workflowState.checkoutDependencyAttempts).toContainEqual(attempt);
+    expect(mocks.start).not.toHaveBeenCalled();
   });
   it("reports local database setup failure and does not claim a ready preview", async () => {
     mocks.prepare.mockResolvedValueOnce({

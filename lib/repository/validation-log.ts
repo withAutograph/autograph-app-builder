@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { sanitizeValidationDiagnosticText } from "./validation-output-sanitize";
 
 export type ValidationLogChannel = "stdout" | "stderr";
+export type ValidationLogCompletion = "complete" | "interrupted" | "unavailable";
 
 export interface ValidationLogReference {
   channel: ValidationLogChannel;
@@ -10,6 +11,8 @@ export interface ValidationLogReference {
   logId: string;
   bytes: number;
   chunkCount: number;
+  /** Absent on legacy immutable validation receipts. */
+  completion?: ValidationLogCompletion;
 }
 
 export interface ValidationLogKey {
@@ -48,7 +51,7 @@ const sensitiveLongLine =
 /** One channel is consumed serially; awaited chunk writes provide backpressure. */
 export class ValidationLogWriter {
   readonly key: ValidationLogKey;
-  private readonly store: ValidationLogStore;
+  private readonly store: ValidationLogStore | undefined;
   private readonly hash = createHash("sha256");
   private pending = "";
   private line = "";
@@ -60,13 +63,26 @@ export class ValidationLogWriter {
   private published = false;
   private excerpt = "";
   private omitted = false;
+  private unavailable = false;
+  private readonly captureOptions: { bestEffort?: boolean; excerptLimit?: number };
 
-  constructor(store: ValidationLogStore, input: Omit<ValidationLogKey, "logId">) {
+  constructor(
+    store: ValidationLogStore | undefined,
+    input: Omit<ValidationLogKey, "logId">,
+    captureOptions: { bestEffort?: boolean; excerptLimit?: number } = {},
+  ) {
     this.store = store;
     this.key = { ...input, logId: randomUUID() };
+    this.captureOptions = captureOptions;
   }
 
   private async emit(value: string): Promise<void> {
+    const limit = this.captureOptions.excerptLimit;
+    if (limit !== undefined) {
+      const remaining = limit - this.excerpt.length;
+      this.excerpt += value.slice(0, remaining);
+      this.omitted ||= value.length > remaining;
+    }
     this.pending += value;
     while (Buffer.byteLength(this.pending, "utf-8") >= CHUNK_BYTES) {
       let offset = 0;
@@ -87,8 +103,23 @@ export class ValidationLogWriter {
   }
 
   private async writeChunk(content: string): Promise<void> {
+    if (this.unavailable) {
+      return;
+    }
     const digest = sha256(content);
-    await this.store.putChunk(this.key, this.chunks, content, digest);
+    try {
+      if (this.store === undefined) {
+        throw new Error("Durable command log storage is unavailable.");
+      }
+      await this.store.putChunk(this.key, this.chunks, content, digest);
+    } catch (error) {
+      if (this.captureOptions.bestEffort !== true) {
+        throw error;
+      }
+      this.unavailable = true;
+      this.omitted = true;
+      return;
+    }
     this.hash.update(content, "utf-8");
     this.byteLength += Buffer.byteLength(content, "utf-8");
     this.chunks += 1;
@@ -101,7 +132,12 @@ export class ValidationLogWriter {
     const rendered = value + (newline ? "\n" : "");
     await this.emit(rendered);
     // Receipt output is a convenience sample. Durable logs carry every line.
-    if (!this.streamedLongLine && /apps\/|error|fail|TS\d+|cue:|cargo:|rustc:|mise/iu.test(value)) {
+    if (this.captureOptions.excerptLimit !== undefined) {
+      // emit samples the same sanitized bytes even when durability is unavailable.
+    } else if (
+      !this.streamedLongLine &&
+      /apps\/|error|fail|TS\d+|cue:|cargo:|rustc:|mise/iu.test(value)
+    ) {
       const next = this.excerpt + rendered;
       if (Buffer.byteLength(next, "utf-8") <= CHUNK_BYTES) {
         this.excerpt = next;
@@ -150,7 +186,7 @@ export class ValidationLogWriter {
     }
   }
 
-  async finish(): Promise<{
+  async finish(completion?: ValidationLogCompletion): Promise<{
     reference: ValidationLogReference;
     excerpt: string;
     omitted: boolean;
@@ -162,20 +198,65 @@ export class ValidationLogWriter {
       await this.writeChunk(this.pending);
       this.pending = "";
     }
-    const reference = {
+    const reference: ValidationLogReference = {
       bytes: this.byteLength,
       channel: this.key.channel,
       chunkCount: this.chunks,
       digest: this.hash.digest("hex"),
       logId: this.key.logId,
-    } as const;
-    await this.store.publish(this.key, reference);
+    };
+    if (completion !== undefined) {
+      reference.completion = this.unavailable ? "unavailable" : completion;
+    }
+    if (this.store === undefined) {
+      throw new Error("Durable command log storage is unavailable.");
+    }
+    try {
+      await this.store.publish(this.key, reference);
+    } catch (error) {
+      if (this.captureOptions.bestEffort !== true) {
+        throw error;
+      }
+      // A lost publish acknowledgement may still have committed the immutable manifest.
+      let saved: ValidationLogReference | undefined;
+      try {
+        saved = await this.store.getReference(this.key);
+      } catch {
+        // Readback may share the publication outage.
+      }
+      if (saved === undefined) {
+        throw error;
+      }
+      const sameSize = saved.bytes === reference.bytes && saved.chunkCount === reference.chunkCount;
+      if (
+        !sameSize ||
+        saved.digest !== reference.digest ||
+        saved.completion !== reference.completion
+      ) {
+        throw error;
+      }
+    }
     this.published = true;
     return { excerpt: this.excerpt.trim(), omitted: this.omitted, reference };
   }
 
+  /** Best-effort capture publishes any acknowledged prefix and keeps draining on storage failure. */
+  async finishCapture(completion: "complete" | "interrupted"): Promise<{
+    reference?: ValidationLogReference;
+    excerpt: string;
+    omitted: boolean;
+    durability: "available" | "unavailable";
+  }> {
+    try {
+      const result = await this.finish(completion);
+      return { ...result, durability: this.unavailable ? "unavailable" : "available" };
+    } catch {
+      return { durability: "unavailable", excerpt: this.excerpt.trim(), omitted: true };
+    }
+  }
+
   async abort(): Promise<void> {
-    await this.store.removeStaged(this.key);
+    await this.store?.removeStaged(this.key);
   }
 }
 
@@ -205,6 +286,7 @@ export async function readValidationLogPage(input: {
     return {
       chunkIndex: reference.chunkCount,
       complete: true,
+      completion: reference.completion ?? "complete",
       content: "",
       digest: reference.digest,
       // oxlint-disable-next-line sonarjs/no-undefined-assignment -- No further page exists.
@@ -221,6 +303,7 @@ export async function readValidationLogPage(input: {
   return {
     chunkIndex: index,
     complete: nextCursor === undefined,
+    completion: reference.completion ?? "complete",
     content: chunk.content,
     digest: reference.digest,
     nextCursor,

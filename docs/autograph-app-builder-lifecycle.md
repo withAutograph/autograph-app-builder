@@ -81,6 +81,23 @@ repair excerpt marks `truncated` whenever it omits nonempty output or matching
 lines that exceed its per-response budget. Sandbox cleanup leaves the durable
 log readable until the durable session itself is removed by retention or
 tenant deletion.
+Dependency recovery uses the same streaming writer and authenticated reader.
+The existing dependency probe precedes `bun install --frozen-lockfile`; a live
+checkout with dependencies is reused. Each execution gets a digest bound to
+its checkout identity, command, session and unique execution attempt. Before
+surfacing failure, Builder saves both channel references, exit status, a bounded
+sanitized excerpt and its truncation indicator in workflow state. Recover these
+with `get_validation_log` using `operation: dependency-attempts` and page each
+`dependency-probe` or `dependency-install` channel after compute cleanup.
+Normal exit, including nonzero exit, publishes complete sanitized logs. The
+optional `completion` metadata distinguishes complete capture, interruption,
+and an unavailable durable suffix; legacy manifests retain their old shape
+and read as complete. Page `complete` means only that paging ended. Storage
+failure leaves the install running, continues bounded sanitized draining, and
+reports unavailable durability while retaining any publishable acknowledged
+prefix. Builder never repeats a successful install to repair logging. Persisted
+byte lengths use SQL bigint; source content and dependency command contracts
+remain unchanged.
 Checkout-backed execution readiness uses the prepared checkout and its hosted
 sandbox binding; absence of
 an obsolete offline dependency cache is not an image-configuration failure.

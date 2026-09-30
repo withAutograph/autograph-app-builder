@@ -7,12 +7,19 @@ import { validationLogChunks, validationLogManifests } from "../db/schema";
 import type { HostedPrincipal } from "../eve/hosted-auth";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import type {
+  ValidationLogCompletion,
   ValidationLogKey,
   ValidationLogReference,
   ValidationLogStore,
 } from "./validation-log";
 
 type Database = PostgresJsDatabase<typeof schema>;
+const readCompletion = (value: string): ValidationLogCompletion => {
+  if (value === "complete" || value === "interrupted" || value === "unavailable") {
+    return value;
+  }
+  throw new Error("The validation log completion state is invalid.");
+};
 
 /** Authority comes only from Eve's verified forwarded session. */
 // oxlint-disable-next-line eslint/func-style -- Exported factory keeps the tenant authorization boundary explicit.
@@ -86,15 +93,21 @@ export function postgresValidationLogStore(
     async getReference(key): Promise<ValidationLogReference | undefined> {
       assertKey(key);
       const [row] = await db.select().from(validationLogManifests).where(manifestWhere(key));
-      return row === undefined
-        ? undefined
-        : {
-            bytes: row.byteLength,
-            channel: key.channel,
-            chunkCount: row.chunkCount,
-            digest: row.digest,
-            logId: key.logId,
-          };
+      if (row === undefined) {
+        return undefined;
+      }
+      const completion = row.completion === null ? undefined : readCompletion(row.completion);
+      const reference: ValidationLogReference = {
+        bytes: row.byteLength,
+        channel: key.channel,
+        chunkCount: row.chunkCount,
+        digest: row.digest,
+        logId: key.logId,
+      };
+      if (completion !== undefined) {
+        reference.completion = completion;
+      }
+      return reference;
     },
     async publish(key, reference) {
       assertKey(key);
@@ -105,6 +118,7 @@ export function postgresValidationLogStore(
         channel: key.channel,
         chunkCount: reference.chunkCount,
         command: key.command,
+        completion: reference.completion ?? null,
         createdAt: new Date(),
         digest: reference.digest,
       });
