@@ -4,8 +4,10 @@ import verifyAppBehavior from "../../agent/tools/verify_app_behavior";
 
 const mocks = vi.hoisted(() => ({
   authority: vi.fn(),
+  current: vi.fn(() => true),
   eligible: vi.fn(() => true),
   evidence: vi.fn(),
+  generation: vi.fn(() => 0),
   hasLive: vi.fn(() => true),
   preview: {
     receipt: {
@@ -20,7 +22,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
 vi.mock("./product-behavior", () => ({ executeProductReadback: mocks.readback }));
 vi.mock("./product-behavior-state", () => ({
-  hasCurrentProductBehaviorPreview: mocks.eligible,
+  captureProductBehaviorProvenance: () =>
+    mocks.eligible()
+      ? { commandId: "command", previewGeneration: 0, sourceGeneration: mocks.generation() }
+      : undefined,
+  currentProductBehaviorGeneration: mocks.generation,
+  hasCurrentProductBehaviorProvenance: mocks.current,
   recordProductBehaviorEvidence: mocks.evidence,
 }));
 vi.mock("./workflow-state", () => ({
@@ -63,6 +70,8 @@ describe("verify_app_behavior", () => {
     vi.clearAllMocks();
     mocks.hasLive.mockReturnValue(true);
     mocks.eligible.mockReturnValue(true);
+    mocks.current.mockReturnValue(true);
+    mocks.generation.mockReturnValue(0);
   });
 
   it("blocks before any application request when no current preview exists", async () => {
@@ -111,7 +120,7 @@ describe("verify_app_behavior", () => {
       { acceptedOutcomeText: "Create a durable draft and read it back.", scenario },
       context,
     );
-    expect(result).toMatchObject({ evidence, productStatus: "unassessed" });
+    expect(result).toMatchObject({ eligibility: "current", evidence, productStatus: "unassessed" });
     expect(mocks.readback).toHaveBeenCalledWith(
       expect.objectContaining({
         authority: expect.objectContaining({ launchUrl: mocks.preview.receipt.url }),
@@ -126,5 +135,40 @@ describe("verify_app_behavior", () => {
         result: evidence,
       }),
     );
+  });
+  it.each(["passed", "failed", "blocked"] as const)(
+    "retains an in-flight %s observation after source or runtime replacement without current credit",
+    async (status) => {
+      const evidence = { coverage: "action-readback-only", reason: "Observed result.", status };
+      mocks.readback.mockImplementationOnce(() => {
+        mocks.current.mockReturnValue(false);
+        return Promise.resolve(evidence);
+      });
+      const result = await verifyAppBehavior.execute(
+        { acceptedOutcomeText: "Create a durable draft and read it back.", scenario },
+        context,
+      );
+      expect(result).toMatchObject({
+        eligibility: "historical-only",
+        evidence,
+        productStatus: "unassessed",
+      });
+      expect(mocks.evidence).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provenance: { commandId: "command", previewGeneration: 0, sourceGeneration: 0 },
+          result: evidence,
+        }),
+      );
+    },
+  );
+  it("does not bind an old specification to a new source generation after asynchronous setup", async () => {
+    mocks.generation.mockReturnValueOnce(0).mockReturnValue(1);
+    await expect(
+      verifyAppBehavior.execute(
+        { acceptedOutcomeText: "Create a durable draft and read it back.", scenario },
+        context,
+      ),
+    ).rejects.toThrow("Reopen the working preview");
+    expect(mocks.readback).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,6 @@
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { defineHook } from "eve/hooks";
+import { invalidateProductBehaviorPreview } from "../../lib/agent/product-behavior-state";
 import type { HookContext } from "eve/hooks";
 import { sourceWorkflowState } from "../../lib/agent/source-state";
 import { appBuilderWorkflowState } from "../../lib/agent/workflow-state";
@@ -62,6 +63,7 @@ async function release(
         return;
       }
     }
+    invalidateProductBehaviorPreview("preview-released");
     workingPreviewState.update(() => null);
     if (!hosted) {
       // Local development uses the same cancellation and failure lifecycle.

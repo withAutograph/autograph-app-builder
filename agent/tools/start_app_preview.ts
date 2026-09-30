@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 
 import {
   bindProductBehaviorPreview,
+  invalidateProductBehaviorPreview,
   currentProductBehaviorGeneration,
 } from "@/lib/agent/product-behavior-state";
 import { defineTool } from "eve/tools";
@@ -186,6 +187,7 @@ export default defineTool({
       }
       environmentPath = localRuntimeEnvironmentPath(selected.root, appId);
     }
+    invalidateProductBehaviorPreview("preview-replaced");
     workingPreviewState.update(() => null);
     let ownedAttemptId: string | undefined;
     let prepareAuthenticatedOrigin = runtime?.prepareAuthenticatedOrigin;
