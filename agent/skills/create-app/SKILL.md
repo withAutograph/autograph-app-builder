@@ -130,7 +130,8 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    the dependency versions and scripts already present in the prepared
    workspace; never guess or pin framework versions from model knowledge.
    For a complete app, Builder owns the backend and persistence implementation
-   as well as the UI. Follow [full app authoring](../../../docs/full-app-authoring.md).
+   as well as the UI. Follow [full app authoring](../../../docs/full-app-authoring.md), including
+   its authenticated route, mounted receipt and fresh-process persistence requirements.
    Use the Arrusted CUE/PostgreSQL data boundary for owned durable data: derive
    the CUE model and policies from the accepted product decisions, compile the
    checked release, and implement the authenticated server reads and actions.
@@ -274,7 +275,10 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    cannot exercise. Prepare required sandbox-local data first. Report the exact
    cases the tests covered and any missing behavior separately.
 
-   When validation returns `productionHandoff`, include its declared app route,
+   When validation returns `productionHandoff`, follow
+   [Production handoff](../../../docs/production-readiness-handoff.md) for
+   reviewed Auth identity, explicit QA access and runtime binding delivery.
+   Include its declared app route,
    roles, checked release, operator guide, and blockers in the result. Keep it
    separate from private validation and GitHub checks: a protected operator
    owns tenant preparation, access grants, and hosted activation. Missing

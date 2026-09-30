@@ -136,6 +136,7 @@ const operatorChecklist = (
       requiredEvidence: [
         "Record the intended organization, its app assignment, active members and approved server-owned role grants.",
         "Verify authorized access, denied access and revocation using authenticated identities.",
+        "For approved fleet QA, reuse the synthetic identity with real authentication and independently verify this app's explicit organization enablement, declared role assignment and kernel membership; fleet scope is not a tenant bypass.",
       ],
       status: "unassessed" as const,
     },
@@ -164,6 +165,9 @@ const operatorChecklist = (
       requiredEvidence: [
         "Verify the intended Production identity, authentication origin, Gateway routes and required runtime configuration without exposing secrets.",
         "Read back the selected provider bindings and verify that application processes receive only authorized runtime credentials.",
+        "Match the live Auth runtime binding and reviewed migration database, role and host; preserve existing users and sessions rather than selecting a similarly named empty database.",
+        "Save the descriptor-named restricted runtime secret to the approved project and environment before native Git delivery; an environment save or CD rerun does not update an existing deployment.",
+        "Observe native deployment, provider-owned activation and authenticated Gateway routing before read-only semantic CD proof; repository CD must not deploy, promote, alias or select deployments.",
       ],
       routes: description?.app.routes ?? [],
       status: "unassessed" as const,
