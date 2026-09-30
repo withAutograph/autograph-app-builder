@@ -92,7 +92,7 @@ describe("public plugin installation documentation", () => {
 
     const auditLog = await runInstall(script, "none");
     expect(auditLog).toContain("tar -xzf app-builder-codex-marketplace-0.2.13.tar.gz");
-    expect(auditLog).toMatch(/codex plugin marketplace add .*app-builder-marketplace-0\.2\.12/u);
+    expect(auditLog).toMatch(/codex plugin marketplace add .*app-builder-marketplace-0\.2\.13/u);
     expect(auditLog).toContain("codex plugin add app-builder@autograph");
   });
 
@@ -110,7 +110,7 @@ describe("public plugin installation documentation", () => {
     const documentation = await readDocumentation("docs/installing.md");
 
     expect(documentation).toContain("Once the pre-release `v0.2.13` GitHub release is published");
-    expect(documentation).toMatch(/These\s+commands fail closed until `v0\.2\.12` exists/u);
+    expect(documentation).toMatch(/These\s+commands fail closed until `v0\.2\.13` exists/u);
     expect(documentation).toContain("app-builder-0.2.13.tar.gz");
     expect(documentation).toContain("app-builder-codex-marketplace-0.2.13.tar.gz");
     expect(documentation).toContain("Exact-main CI waits for Vercel Git");
