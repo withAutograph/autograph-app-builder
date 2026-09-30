@@ -15,9 +15,11 @@ passed at `8801e0c118d2755164ae569e192a2017d3140495`
 
 Arrusted supplies source-derived app descriptions, authenticated context, selected-release Next packaging and provider-neutral runtime lifecycle tasks. The runtime installs releases under isolated database scope, provisions real Better Auth identities and restricted runtime principals, verifies installation identity, and cleans up owned resources. Builder consumes those contracts, authors and deletes application files durably, discovers existing schemas, prepares private authenticated validation and journals approved hosted preparation. Its handoff distinguishes Preview observations from Production approvals.
 
+Runtime review hardening is published at `704183e30dcd1304539a98531e11cbf533221488`; fresh exact-head CI is required. It removes Auth assignment write authority, requires password-authenticated owned local clusters, serializes lifecycle state, preserves mise argv, and checks release identity. Ten authenticated runtime tests, seven release tests, two real mise boundary tests, scoped typed lint and HK gates pass.
+
 ## Passed local validation
 
-- Seven real Auth/PostgreSQL runtime tests cover role/session/assignment/database membership revocation, tenant isolation, forged scope, replay, persistence, concurrent writes/audit and release verification.
+- Ten real Auth/PostgreSQL runtime tests cover role/session/assignment/database membership revocation, tenant isolation, forged scope, replay, persistence, concurrent writes/audit and release verification.
 - Populated two-tenant upgrade tests preserve records and audit history; an injected second activation failure rolls back both scopes and a retry succeeds.
 - Native Next output tracing includes CUE source and the selected release while excluding historical releases.
 - Child-process tests exclude installer authority even when application environment input attempts to reintroduce it.
@@ -67,11 +69,15 @@ The current Eve provider creates a persistent named Sandbox and resumes its
 saved name with the supported SDK API. PR #576 fixes a concrete stale-handle
 defect: Preview resume now updates the owning handle used for commands, files,
 and cleanup. Cleanup coordinates pending resume, protects newer registrations,
-and preserves explicit deletion after stop. Twenty-seven focused tests, types,
+and preserves explicit deletion after stop. Twenty-seven focused provider tests, types,
 and scoped lint passed with the checked Eve 0.68 / Sandbox SDK 3.3 dependency
 graph. The SDK boundary was mocked. Live hosted reattachment and complete-loss
 recovery remain unassessed; the external private workspace-store proposal is a
 separate planned milestone.
+
+The combined Builder head also contains sanitized hosted start diagnostics. Server events hash request/operation/session identifiers and expose fixed failure phases and allowlisted database error categories, without prompts, SQL, credentials or raw errors. They preserve public errors and caller isolation. A later recovery and exact retry with the same original request ID remained `submission_unknown`; the retained transcript includes both.
+
+Combined CI at `1136731` passed the Auth, Eve, provider proof, navigation, product-quality and package lanes, but repository CI exposed a Preview lease timer versus wall-clock cleanup boundary. The repair honors the separate lease-expiry signal and has a deterministic regression; all 22 Preview runtime tests, types and scoped lint pass. The final combined head requires fresh exact-head CI.
 
 ## Hosted path blockers
 
