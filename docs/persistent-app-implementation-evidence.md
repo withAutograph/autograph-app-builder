@@ -15,11 +15,11 @@ passed at `8801e0c118d2755164ae569e192a2017d3140495`
 
 Arrusted supplies source-derived app descriptions, authenticated context, selected-release Next packaging and provider-neutral runtime lifecycle tasks. The runtime installs releases under isolated database scope, provisions real Better Auth identities and restricted runtime principals, verifies installation identity, and cleans up owned resources. Builder consumes those contracts, authors and deletes application files durably, discovers existing schemas, prepares private authenticated validation and journals approved hosted preparation. Its handoff distinguishes Preview observations from Production approvals.
 
-Runtime review hardening is published at `704183e30dcd1304539a98531e11cbf533221488`; fresh exact-head CI is required. It removes Auth assignment write authority, requires password-authenticated owned local clusters, serializes lifecycle state, preserves mise argv, and checks release identity. Ten authenticated runtime tests, seven release tests, two real mise boundary tests, scoped typed lint and HK gates pass.
+Runtime review hardening is published at `cf0aa137f39d6ec6adaa3ece1f464bab4b884507`; fresh exact-head CI is required. It removes Auth assignment write authority, requires password-authenticated owned local clusters, serializes lifecycle state, preserves mise argv, and checks release identity. Eleven authenticated runtime tests, seven release tests, two real mise boundary tests, scoped typed lint and HK gates pass.
 
 ## Passed local validation
 
-- Ten real Auth/PostgreSQL runtime tests cover role/session/assignment/database membership revocation, tenant isolation, forged scope, replay, persistence, concurrent writes/audit and release verification.
+- Eleven real Auth/PostgreSQL runtime tests cover role/session/assignment/database membership revocation, tenant isolation, forged scope, replay, persistence, concurrent writes/audit and release verification.
 - Populated two-tenant upgrade tests preserve records and audit history; an injected second activation failure rolls back both scopes and a retry succeeds.
 - Native Next output tracing includes CUE source and the selected release while excluding historical releases.
 - Child-process tests exclude installer authority even when application environment input attempts to reintroduce it.
@@ -86,3 +86,21 @@ See [Hosted app runtime](hosted-app-runtime.md) for source-backed provider const
 ## Remaining acceptance
 
 Both applications still require independently Builder-authored changes and PR provenance, real authenticated Preview writes/readback after reload/restart/new deployment, full role and tenant enforcement, idempotency/concurrency/paginated audit, populated upgrade and failed-upgrade recovery, correct packaging, app/database/deployment checks and green applicable exact-head CI. Spend Review also requires self-approval denial and concurrent decision evidence. Production preparation, business access grants and activation remain separate approvals.
+
+
+## Private preparation checkpoint compatibility
+
+`app:runtime plan` is read-only. Before hosted database mutation, Builder now
+runs `app:runtime prepare <app> preview -- --checkpoint-only` in the separate
+installer Sandbox. That phase allocates private resource identities and
+credentials without installing databases. Builder encrypts and journals those
+files before rechecking owner access and running full preparation. Replacement
+control Sandboxes restore the same identities and passwords. The existing
+journal step and approvals remain unchanged.
+
+Twelve focused hosted service and Sandbox tests, types and scoped lint passed.
+The Arrusted test exercised the same command through real mise and verified
+private file permissions, secret-free output, no cluster creation and cleanup.
+Builder exact-head CI passed at `f84a48ad63875b6ee98bba7f7273554b371745cb`
+([run](https://github.com/withAutograph/autograph-app-builder/actions/runs/36664922905));
+the compatible consumer revision requires fresh exact-head CI.
