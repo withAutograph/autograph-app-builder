@@ -87,7 +87,6 @@ See [Hosted app runtime](hosted-app-runtime.md) for source-backed provider const
 
 Both applications still require independently Builder-authored changes and PR provenance, real authenticated Preview writes/readback after reload/restart/new deployment, full role and tenant enforcement, idempotency/concurrency/paginated audit, populated upgrade and failed-upgrade recovery, correct packaging, app/database/deployment checks and green applicable exact-head CI. Spend Review also requires self-approval denial and concurrent decision evidence. Production preparation, business access grants and activation remain separate approvals.
 
-
 ## Private preparation checkpoint compatibility
 
 `app:runtime plan` is read-only. Before hosted database mutation, Builder now
