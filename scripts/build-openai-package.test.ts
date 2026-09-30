@@ -24,7 +24,7 @@ const runGenerator = async (cwd: string, endpoint: string) => {
 
 const writeFixture = async (
   root: string,
-  { version = "0.2.12", extraServer = false }: { version?: string; extraServer?: boolean } = {},
+  { version = "0.2.13", extraServer = false }: { version?: string; extraServer?: boolean } = {},
 ) => {
   await writeFile(
     path.join(root, "plugin.json"),
@@ -80,7 +80,7 @@ describe("OpenAI package generator", () => {
       expect(codex.mcpServers["app-builder"].url).toBe(endpoint);
       expect(codex.mcpServers["app-builder"].oauth_resource).toBe(endpoint);
       expect(Object.keys(codex.mcpServers)).toEqual(["app-builder"]);
-      expect(manifest.version).toBe("0.2.12");
+      expect(manifest.version).toBe("0.2.13");
       expect(manifest.interface).toMatchObject({
         composerIcon: "./assets/autograph-icon.png",
         displayName: "Autograph App Builder",

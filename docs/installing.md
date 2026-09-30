@@ -75,24 +75,24 @@ record Codex/Cursor versions and observed behavior on Preview before that claim.
 
 ## Install before shared marketplace publication
 
-Once the pre-release `v0.2.12` GitHub release is published, use its public
+Once the pre-release `v0.2.13` GitHub release is published, use its public
 [release assets](https://github.com/withAutograph/autograph-app-builder/releases)
 until the shared marketplace is available. The release contains:
 
-- `app-builder-0.2.12.tar.gz`
-- `app-builder-codex-marketplace-0.2.12.tar.gz`
+- `app-builder-0.2.13.tar.gz`
+- `app-builder-codex-marketplace-0.2.13.tar.gz`
 - `release-receipt.json`
 - `promotion-receipt.json`
 - `SHA256SUMS`
 
 Download the complete asset set, verify both archive checksums and GitHub's
 immutable release state, install, and open a new Codex task. These
-commands fail closed until `v0.2.12` exists:
+commands fail closed until `v0.2.13` exists:
 
 ```sh
 (
   set -eu
-  release_version=0.2.12
+  release_version=0.2.13
   release_dir="$PWD/app-builder-release-$release_version"
   marketplace_dir="$PWD/app-builder-marketplace-$release_version"
   mkdir "$release_dir" "$marketplace_dir"
@@ -188,8 +188,8 @@ doesn't offer a catalog listing.
 
 Every release contains:
 
-- `app-builder-0.2.12.tar.gz`, the portable Agent Plugins package
-- `app-builder-codex-marketplace-0.2.12.tar.gz`, a self-contained
+- `app-builder-0.2.13.tar.gz`, the portable Agent Plugins package
+- `app-builder-codex-marketplace-0.2.13.tar.gz`, a self-contained
   local Codex marketplace
 - `SHA256SUMS`
 - `release-receipt.json`, which binds the source repository, commit, tree, MCP
@@ -205,7 +205,7 @@ then extract the portable archive:
 ```sh
 (
   set -eu
-  release_version=0.2.12
+  release_version=0.2.13
   release_dir="$PWD/app-builder-release-$release_version"
   mkdir "$release_dir"
   gh release download "v$release_version" \
@@ -244,10 +244,10 @@ marketplace directory:
   set -eu
   codex plugin remove app-builder@autograph
   codex plugin marketplace remove autograph
-  mkdir app-builder-marketplace-0.2.12
-  tar -xzf app-builder-codex-marketplace-0.2.12.tar.gz \
-    -C app-builder-marketplace-0.2.12
-  codex plugin marketplace add "$PWD/app-builder-marketplace-0.2.12"
+  mkdir app-builder-marketplace-0.2.13
+  tar -xzf app-builder-codex-marketplace-0.2.13.tar.gz \
+    -C app-builder-marketplace-0.2.13
+  codex plugin marketplace add "$PWD/app-builder-marketplace-0.2.13"
   codex plugin add app-builder@autograph
 )
 ```

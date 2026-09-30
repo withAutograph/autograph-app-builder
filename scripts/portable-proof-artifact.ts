@@ -46,7 +46,7 @@ export const portableReleaseReceiptSchema = z
       z.literal("autograph_respond"),
       z.literal("autograph_cancel"),
     ]),
-    version: z.literal("0.2.12"),
+    version: z.literal("0.2.13"),
   })
   .strict();
 
@@ -239,11 +239,11 @@ export async function verifyPortableProofArtifact(input: {
   const codexManifest = JSON.parse(Buffer.from(codexManifestBytes).toString("utf-8"));
   if (
     codexManifest.name !== receipt.name ||
-    codexManifest.version !== "0.2.12" ||
+    codexManifest.version !== "0.2.13" ||
     codexManifest.mcpServers !== "./.mcp.json"
   ) {
     throw new Error(
-      "Codex marketplace manifest was not bound to package 0.2.12 and its sole MCP adapter.",
+      "Codex marketplace manifest was not bound to package 0.2.13 and its sole MCP adapter.",
     );
   }
   const codexMarketplaceAssetPaths: string[] = [];

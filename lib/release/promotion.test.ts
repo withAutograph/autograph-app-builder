@@ -53,16 +53,16 @@ function unsigned(): PromotionReceiptUnsigned {
       reference: `${IMAGE_REPOSITORY}@sha256:${digest}`,
     },
     package: {
-      archive: "package/app-builder-0.2.12.tar.gz",
+      archive: "package/app-builder-0.2.13.tar.gz",
       archiveSha256: "4".repeat(64),
       checksums: "package/SHA256SUMS",
       checksumsSha256: "6".repeat(64),
-      marketplaceArchive: "package/app-builder-codex-marketplace-0.2.12.tar.gz",
+      marketplaceArchive: "package/app-builder-codex-marketplace-0.2.13.tar.gz",
       marketplaceArchiveSha256: "5".repeat(64),
       receipt: "package/release-receipt.json",
       receiptSha256: "3".repeat(64),
       root: "package",
-      version: "0.2.12",
+      version: "0.2.13",
     },
     platform: {
       closureSha256: "2".repeat(64),
@@ -109,9 +109,9 @@ async function candidate() {
   const packageArchive = Buffer.from("portable-package");
   const marketplaceArchive = Buffer.from("marketplace-package");
   const checksums = Buffer.from("checksums\n");
-  await writeFile(path.join(root, "package/app-builder-0.2.12.tar.gz"), packageArchive);
+  await writeFile(path.join(root, "package/app-builder-0.2.13.tar.gz"), packageArchive);
   await writeFile(
-    path.join(root, "package/app-builder-codex-marketplace-0.2.12.tar.gz"),
+    path.join(root, "package/app-builder-codex-marketplace-0.2.13.tar.gz"),
     marketplaceArchive,
   );
   await writeFile(path.join(root, "package/SHA256SUMS"), checksums);
@@ -158,12 +158,12 @@ async function candidate() {
   };
   const packageReceipt = {
     archive: {
-      name: "app-builder-0.2.12.tar.gz",
+      name: "app-builder-0.2.13.tar.gz",
       sha256: sha256(packageArchive),
     },
     auxiliaryFiles: {},
     codexMarketplaceArchive: {
-      name: "app-builder-codex-marketplace-0.2.12.tar.gz",
+      name: "app-builder-codex-marketplace-0.2.13.tar.gz",
       sha256: sha256(marketplaceArchive),
     },
     codexMarketplaceAssets: {},
@@ -178,7 +178,7 @@ async function candidate() {
     },
     specification: "1.0.0",
     tools: TOOL_NAMES,
-    version: "0.2.12",
+    version: "0.2.13",
   };
   const packageReceiptBytes = Buffer.from(`${JSON.stringify(packageReceipt, null, 2)}\n`);
   await writeFile(path.join(root, "package/release-receipt.json"), packageReceiptBytes);
@@ -288,7 +288,7 @@ describe("release promotion contract", () => {
     });
 
     const packageMutation = await candidate();
-    await writeFile(path.join(packageMutation, "package/app-builder-0.2.12.tar.gz"), "changed");
+    await writeFile(path.join(packageMutation, "package/app-builder-0.2.13.tar.gz"), "changed");
     await expect(verifyPromotionCandidate({ candidateRoot: packageMutation })).rejects.toThrow(
       "bytes drifted",
     );
