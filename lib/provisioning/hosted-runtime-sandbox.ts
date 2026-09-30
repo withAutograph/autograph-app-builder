@@ -53,8 +53,12 @@ export const createHostedRuntimeSandboxExecutor = (input: {
       MISE_AUTO_INSTALL: "true",
       MISE_TASK_RUN_AUTO_INSTALL: "true",
     };
+    const args =
+      operation === "checkpoint"
+        ? ["run", "app:runtime", "prepare", input.appId, "preview", "--", "--checkpoint-only"]
+        : ["run", "app:runtime", operation, input.appId, "preview"];
     const command = await input.provider.runCommand({
-      args: ["run", "app:runtime", operation, input.appId, "preview"],
+      args,
       cmd: "mise",
       cwd: input.root,
       env,
