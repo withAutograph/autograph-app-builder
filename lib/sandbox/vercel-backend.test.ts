@@ -18,6 +18,7 @@ const nativeFixture = () => ({
   delete: vi.fn().mockResolvedValue(null),
   fs: { mkdir: vi.fn().mockResolvedValue(null) },
   name: "owned-name",
+  readFileToBuffer: vi.fn(),
   runCommand: vi.fn().mockResolvedValue({
     exitCode: 0,
     stderr: () => Promise.resolve(""),
@@ -97,7 +98,9 @@ describe("Builder Vercel provider", () => {
       expect(sdk.create).toHaveBeenCalledWith(
         expect.objectContaining({
           env: { MISE_DATA_DIR: "/runtime" },
+          image: "vcr.vercel.com/vercel/eve/base:0.68.0",
           networkPolicy: "allow-all",
+          persistent: true,
           source: {
             password: ["private", "token"].join("-"),
             revision: "selected-head",
@@ -114,23 +117,144 @@ describe("Builder Vercel provider", () => {
       );
       expect(await getVercelPreviewProvider(result.handle.sandbox.id)).toBe(native);
       sdk.get.mockResolvedValue(native);
-      await provider.resume(context, { files: [] }, result.state);
+      const resumed = await provider.resume(context, { files: [] }, result.state);
       expect(resolver).toHaveBeenCalledOnce();
       expect(sdk.create).toHaveBeenCalledOnce();
       expect(sdk.get).toHaveBeenCalledWith(
         expect.objectContaining({ name: "owned-name", resume: true }),
       );
-      await result.handle.onSessionStop();
+      await resumed.onSessionStop();
     } finally {
       clearVercelSessionGitSource(context.session.id);
     }
   });
+  it.each(["onRuntimeShutdown", "onSessionStop"] as const)(
+    "%s preserves state and reconnects without applying new source or seeds",
+    async (close) => {
+      const original = nativeFixture();
+      sdk.create.mockResolvedValue(original);
+      const provider = createBuilderVercelProvider();
+      const started = await provider.start(context, undefined, { files: [] });
+      // A detached copy accompanies a later Eve process's provider instance.
+      const state = structuredClone(started.state);
+      await started.handle[close]();
+      expect(original.stop).toHaveBeenCalledOnce();
+      expect(original.delete).not.toHaveBeenCalled();
+      await expect(getVercelPreviewProvider(original.name)).rejects.toThrow("not connected");
+
+      const reattached = nativeFixture();
+      const editedBytes = Buffer.from([0, 255, 12, 34]);
+      reattached.readFileToBuffer.mockResolvedValue(editedBytes);
+      sdk.get.mockResolvedValue(reattached);
+      const recovered = await createBuilderVercelProvider().resume(
+        context,
+        {
+          files: [
+            { content: Buffer.from("changed seed").toString("base64"), path: "/workspace/new" },
+          ],
+        },
+        state,
+      );
+      expect(await recovered.sandbox.readBinaryFile({ path: "unpublished.bin" })).toEqual(
+        editedBytes,
+      );
+      expect(sdk.create).toHaveBeenCalledOnce();
+      expect(reattached.runCommand).not.toHaveBeenCalled();
+      expect(reattached.writeFiles).not.toHaveBeenCalled();
+      expect(reattached.fs.mkdir).not.toHaveBeenCalled();
+      await recovered.onSessionDelete();
+      expect(reattached.delete).toHaveBeenCalledOnce();
+      expect(reattached.stop).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["onRuntimeShutdown", "onSessionStop", "onSessionDelete"] as const)(
+    "%s uses the current VM after a preview reattachment",
+    async (close) => {
+      const original = nativeFixture();
+      original.status = "stopped";
+      const reattached = nativeFixture();
+      sdk.get.mockResolvedValueOnce(original).mockResolvedValueOnce(reattached);
+      const handle = await createBuilderVercelProvider().resume(
+        context,
+        { files: [] },
+        { name: original.name, version: 1 },
+      );
+      expect(await getVercelPreviewProvider(original.name)).toBe(reattached);
+      reattached.readFileToBuffer.mockResolvedValue(Buffer.from("private edit"));
+      expect(await handle.sandbox.readTextFile({ path: "edited.ts" })).toBe("private edit");
+      expect(original.readFileToBuffer).not.toHaveBeenCalled();
+      await handle.sandbox.run({ command: "git status" });
+      expect(authority).toHaveBeenCalledWith({ sessionId: context.session.id });
+      expect(reattached.runCommand).toHaveBeenCalledOnce();
+      expect(original.runCommand).not.toHaveBeenCalled();
+      await handle[close]();
+      expect(reattached[close === "onSessionDelete" ? "delete" : "stop"]).toHaveBeenCalledOnce();
+      expect(original.stop).not.toHaveBeenCalled();
+      expect(original.delete).not.toHaveBeenCalled();
+      await expect(getVercelPreviewProvider(original.name)).rejects.toThrow("not connected");
+    },
+  );
   it("rejects a lost native sandbox on resume without creating replacement compute", async () => {
     sdk.get.mockRejectedValue(new Error("sandbox not found"));
     await expect(
       createBuilderVercelProvider().resume(context, { files: [] }, { name: "lost", version: 1 }),
     ).rejects.toThrow("sandbox not found");
     expect(sdk.create).not.toHaveBeenCalled();
+  });
+  it("waits for its pending preview resume before stopping the resulting VM", async () => {
+    const original = nativeFixture();
+    original.status = "stopped";
+    sdk.get.mockResolvedValueOnce(original);
+    const handle = await createBuilderVercelProvider().resume(
+      context,
+      { files: [] },
+      { name: original.name, version: 1 },
+    );
+    const reattached = nativeFixture();
+    const deferred = Promise.withResolvers<typeof reattached>();
+    sdk.get.mockReturnValueOnce(deferred.promise);
+    const preview = getVercelPreviewProvider(original.name);
+    const closing = handle.onRuntimeShutdown();
+    expect(original.stop).not.toHaveBeenCalled();
+    deferred.resolve(reattached);
+    await expect(preview).rejects.toThrow("not connected");
+    await closing;
+    expect(reattached.stop).toHaveBeenCalledOnce();
+    expect(original.stop).not.toHaveBeenCalled();
+    await expect(getVercelPreviewProvider(original.name)).rejects.toThrow("not connected");
+  });
+  it("does not stop compute owned by a newer provider handle", async () => {
+    const original = nativeFixture();
+    const replacement = nativeFixture();
+    sdk.get.mockResolvedValueOnce(original).mockResolvedValueOnce(replacement);
+    const provider = createBuilderVercelProvider();
+    const state = { name: original.name, version: 1 } as const;
+    const old = await provider.resume(context, { files: [] }, state);
+    const current = await provider.resume(context, { files: [] }, state);
+    await old.onRuntimeShutdown();
+    await old.onSessionDelete();
+    expect(original.stop).not.toHaveBeenCalled();
+    expect(original.delete).not.toHaveBeenCalled();
+    expect(replacement.stop).not.toHaveBeenCalled();
+    expect(replacement.delete).not.toHaveBeenCalled();
+    expect(await getVercelPreviewProvider(replacement.name)).toBe(replacement);
+    await current.onSessionStop();
+    expect(replacement.stop).toHaveBeenCalledOnce();
+  });
+  it("allows explicit deletion after the same handle has stopped", async () => {
+    const native = nativeFixture();
+    sdk.get.mockResolvedValue(native);
+    const handle = await createBuilderVercelProvider().resume(
+      context,
+      { files: [] },
+      { name: native.name, version: 1 },
+    );
+    await handle.onSessionStop();
+    const { signal } = new AbortController();
+    await handle.onSessionDelete({ abortSignal: signal });
+    expect(native.stop).toHaveBeenCalledOnce();
+    expect(native.delete).toHaveBeenCalledWith({ signal });
+    expect(sdk.get).toHaveBeenCalledOnce();
   });
   it("authorizes run and spawn before sending SDK commands", async () => {
     const native = nativeFixture();

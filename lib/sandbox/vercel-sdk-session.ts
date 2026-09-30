@@ -18,7 +18,10 @@ const encoding = (value = "utf-8"): BufferEncoding => {
 };
 
 /** The Builder's Vercel provider uses only the SDK's supported I/O APIs. */
-export const createVercelSdkSession = (native: VercelSdkSessionNative): BuilderSandboxSession => {
+export const createVercelSdkSession = (
+  native: VercelSdkSessionNative,
+  current: () => VercelSdkSessionNative = () => native,
+): BuilderSandboxSession => {
   const runCommand = (options: SandboxRunOptions) => ({
     args: ["-lc", options.command],
     cmd: "bash",
@@ -27,16 +30,17 @@ export const createVercelSdkSession = (native: VercelSdkSessionNative): BuilderS
     signal: options.abortSignal,
   });
   const readBinaryFile: BuilderSandboxSession["readBinaryFile"] = async (options) =>
-    await native.readFileToBuffer(
+    await current().readFileToBuffer(
       { path: resolvePath(options.path) },
       { signal: options.abortSignal },
     );
   const writeBinaryFile: BuilderSandboxSession["writeBinaryFile"] = async (options) => {
-    await native.fs.mkdir(path.posix.dirname(resolvePath(options.path)), {
+    const provider = current();
+    await provider.fs.mkdir(path.posix.dirname(resolvePath(options.path)), {
       recursive: true,
       signal: options.abortSignal,
     });
-    await native.writeFiles(
+    await provider.writeFiles(
       [{ content: Buffer.from(options.content), path: resolvePath(options.path) }],
       {
         signal: options.abortSignal,
@@ -44,10 +48,12 @@ export const createVercelSdkSession = (native: VercelSdkSessionNative): BuilderS
     );
   };
   return {
-    id: native.name,
+    get id() {
+      return current().name;
+    },
     readBinaryFile,
     async readFile(options) {
-      const content = await native.readFile(
+      const content = await current().readFile(
         { path: resolvePath(options.path) },
         { signal: options.abortSignal },
       );
@@ -77,7 +83,7 @@ export const createVercelSdkSession = (native: VercelSdkSessionNative): BuilderS
         .join("\n");
     },
     async removePath(options) {
-      await native.fs.rm(resolvePath(options.path), {
+      await current().fs.rm(resolvePath(options.path), {
         force: options.force,
         recursive: options.recursive,
         signal: options.abortSignal,
@@ -85,7 +91,7 @@ export const createVercelSdkSession = (native: VercelSdkSessionNative): BuilderS
     },
     resolvePath,
     async run(options) {
-      const command = await native.runCommand(runCommand(options));
+      const command = await current().runCommand(runCommand(options));
       const [stdout, stderr] = await Promise.all([
         command.stdout({ signal: options.abortSignal }),
         command.stderr({ signal: options.abortSignal }),
@@ -93,7 +99,7 @@ export const createVercelSdkSession = (native: VercelSdkSessionNative): BuilderS
       return { exitCode: command.exitCode, stderr, stdout };
     },
     async setNetworkPolicy(policy) {
-      await native.update({ networkPolicy: policy });
+      await current().update({ networkPolicy: policy });
     },
     async spawn(options): Promise<SandboxProcess> {
       const stdout = new TransformStream<Uint8Array, Uint8Array>();
@@ -101,7 +107,7 @@ export const createVercelSdkSession = (native: VercelSdkSessionNative): BuilderS
       const output = Writable.fromWeb(stdout.writable);
       const errors = Writable.fromWeb(stderr.writable);
       // Detached SDK commands stream directly; no command/output deadline is added.
-      const command = await native.runCommand({
+      const command = await current().runCommand({
         ...runCommand(options),
         detached: true,
         stderr: errors,
@@ -141,15 +147,16 @@ export const createVercelSdkSession = (native: VercelSdkSessionNative): BuilderS
     },
     writeBinaryFile,
     async writeFile(options) {
+      const provider = current();
       const target = resolvePath(options.path);
-      await native.fs.mkdir(path.posix.dirname(target), {
+      await provider.fs.mkdir(path.posix.dirname(target), {
         recursive: true,
         signal: options.abortSignal,
       });
-      await native.fs.writeFile(target, Buffer.alloc(0), { signal: options.abortSignal });
+      await provider.fs.writeFile(target, Buffer.alloc(0), { signal: options.abortSignal });
       for await (const chunk of options.content) {
         options.abortSignal?.throwIfAborted();
-        await native.fs.appendFile(target, chunk, { signal: options.abortSignal });
+        await provider.fs.appendFile(target, chunk, { signal: options.abortSignal });
       }
     },
     writeTextFile: (options) =>

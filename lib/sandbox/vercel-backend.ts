@@ -112,12 +112,13 @@ export const createBuilderVercelProvider = (
     native: Sandbox,
     sessionId: string,
   ): SandboxProviderHandle<BuilderSandboxSession> => {
-    const unregister = registerVercelPreviewProvider(native.name, native);
+    const registration = registerVercelPreviewProvider(native.name, native);
     const close = async (operation: "stop" | "delete", signal?: AbortSignal) => {
       try {
-        await native[operation]({ signal });
+        const current = await registration.currentForCleanup(operation === "delete");
+        await current?.[operation]({ signal });
       } finally {
-        unregister();
+        registration.unregister();
       }
     };
     return {
@@ -126,7 +127,7 @@ export const createBuilderVercelProvider = (
       onSessionStop: () => close("stop"),
       sandbox: createAuthorizedSandboxSession({
         authorize: () => assertHostedSandboxCommandAuthority({ sessionId }),
-        session: createVercelSdkSession(native),
+        session: createVercelSdkSession(native, () => registration.current),
       }),
     };
   };
