@@ -35,6 +35,31 @@ a document navigation, not an App Router transition to optimize.
   remains accessible, including reduced-motion behavior.
 - Do not enable or ship `useOffline` in production.
 
+## Request-time reads in new apps
+
+Before implementing a request-dependent route, read the prepared repository's
+native Next contract and the installed framework guides. Keep the page/layout
+shell synchronous; render an async Server Component inside a narrow
+`<Suspense fallback={...}>` and perform request-time reads inside that child.
+This includes `await connection()`, authentication/session lookup, `cookies()`,
+`headers()`, and uncached tenant/database reads. Pass unresolved `params` and
+`searchParams` promises into the child and await them there. A read performed
+before returning the boundary is still outside it; wrapping the returned JSX
+or adding a descendant `loading.tsx` does not contain that earlier read.
+
+Use a meaningful fallback that exposes no protected data. Keep authorization
+before protected reads and mutations inside the request-scoped server boundary,
+including after Server Actions and redirects. Do not cache session or tenant
+state to suppress an error, disable Cache Components as a default workaround,
+or move authorization into the browser.
+
+Verify the initial request and client navigation render the actual heading and
+form beyond the fallback, then exercise the mutation and its redirect destination
+with independent persisted readback. Inspect runtime diagnostics as well as
+visible results: a passing build, HTTP response or committed row does not prove
+the destination rendered. Preserve failures and mark later unexercised outcomes
+unassessed when the supported observation capability is unavailable.
+
 ## App Builder execution boundary
 
 In the App Builder runtime, these upstream skills are design and verification
