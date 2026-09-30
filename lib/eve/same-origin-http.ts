@@ -33,6 +33,8 @@ import {
   projectInstalledEveEvent,
 } from "./public-events";
 import type { InternalEveEvent } from "./public-events";
+import { reportHostedSubmissionDiagnostic } from "./hosted-submission-diagnostic";
+import type { HostedSubmissionDiagnosticSink } from "./hosted-submission-diagnostic";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const SESSION_READ_TIMEOUT_MS = 30_000;
@@ -184,6 +186,10 @@ async function postMutation(input: {
   principal: HostedPrincipal;
   body: Record<string, unknown>;
   sourceHandoffId?: string;
+  startDiagnostic?: {
+    operationId: string;
+    sink?: HostedSubmissionDiagnosticSink;
+  };
 }) {
   let headers: Record<string, string>;
   try {
@@ -208,7 +214,15 @@ async function postMutation(input: {
       redirect: "manual",
       signal: AbortSignal.timeout(input.config.timeoutMs),
     });
-  } catch {
+  } catch (error) {
+    if (input.startDiagnostic !== undefined) {
+      reportHostedSubmissionDiagnostic({
+        ...input.startDiagnostic,
+        error,
+        operationKind: "start",
+        phase: "transport_dispatch",
+      });
+    }
     throw new SubmissionOutcomeUnknownError();
   }
 
@@ -231,6 +245,14 @@ async function postMutation(input: {
   } catch (error) {
     if (error instanceof SubmissionRejectedBeforeDispatchError) {
       throw error;
+    }
+    if (input.startDiagnostic !== undefined) {
+      reportHostedSubmissionDiagnostic({
+        ...input.startDiagnostic,
+        error,
+        operationKind: "start",
+        phase: "transport_acceptance",
+      });
     }
     throw new SubmissionOutcomeUnknownError();
   }
@@ -971,6 +993,7 @@ export function createSameOriginEveTransport(input: {
   config: unknown;
   workloadIdentity: HostedWorkloadIdentity;
   fetchImplementation?: typeof fetch;
+  onSubmissionDiagnostic?: HostedSubmissionDiagnosticSink;
   verifyReadAuthority?: (input: {
     principal: HostedPrincipal;
     sessionId: string;
@@ -1203,10 +1226,22 @@ export function createSameOriginEveTransport(input: {
         path: "/eve/v1/session",
         principal: request.principal,
         sourceHandoffId: request.sourceHandoffId,
+        startDiagnostic: {
+          operationId: request.operationId,
+          sink: input.onSubmissionDiagnostic,
+        },
       });
       try {
         await confirmStartedSession({ ...common, sessionId: accepted.sessionId });
-      } catch {
+      } catch (error) {
+        reportHostedSubmissionDiagnostic({
+          adapterSessionId: accepted.sessionId,
+          error,
+          operationId: request.operationId,
+          operationKind: "start",
+          phase: "transport_start_confirmation",
+          sink: input.onSubmissionDiagnostic,
+        });
         // The create was dispatched, but a candidate ID alone does not prove
         // it claimed the authenticated operation. Keep the reserved operation
         // uncertain so an exact later retry can resolve its canonical owner.

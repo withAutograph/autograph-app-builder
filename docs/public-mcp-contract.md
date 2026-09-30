@@ -48,6 +48,16 @@ controls. After an accepted `autograph_respond` whose settlement cannot be
 observed within 30 seconds, Builder reports `submission_unknown`; callers must
 read the same session before taking further action and must not replay that
 response.
+Unknown hosted submissions emit server-only `[builder:hosted-submission]`
+diagnostics with the failing lookup, reservation, transport, settlement, or
+recovery phase. SHA-256 hashes of the original request, operation, and observed
+adapter IDs correlate logs without exposing their values. Only allowlisted
+SQLSTATE codes and fixed categories are recorded; prompts, caller identities,
+URLs, SQL, credentials, and arbitrary error text are excluded. A candidate
+adapter hash in a transport confirmation failure does not prove ownership.
+These logs are observations, not receipts or permission to replay. A missing
+storage schema must be verified against the exact deployed database before an
+operator separately approves any migration.
 `autograph_start` accepts exactly one of a new prompt, an opaque `handoffId`,
 or `resumeSessionId`.
 Healthy active sessions retain their public handle. A terminal or interrupted

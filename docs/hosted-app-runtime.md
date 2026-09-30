@@ -94,9 +94,11 @@ continue while native application-process installer isolation remains blocked.
 3. Create a separate installer Sandbox through project OIDC. Transfer the
    current checkout and installed dependency symlink closure through supported
    file APIs in bounded chunks; an old snapshot alone cannot supply current
-   source. The control handle never enters Eve or model tools. Run repository
-   `app:runtime plan <app> preview` through its structured command API. The repository writes its private resource identities
-   and random credentials before any database mutation. Encrypt and checkpoint
+   source. The control handle never enters Eve or model tools. Repository task
+   `app:runtime plan <app> preview` is read-only and does not allocate private
+   state. Run `mise run app:runtime prepare <app> preview -- --checkpoint-only` through the
+   structured command API to allocate private resource identities and random
+   credentials without starting or installing databases. Encrypt and checkpoint
    its JSON state using the existing provider credential key and tenant-bound
    associated data.
 4. Recheck access, run `prepare`, checkpoint, then run `verify` and checkpoint

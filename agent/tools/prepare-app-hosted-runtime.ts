@@ -29,7 +29,7 @@ export const hostedRuntimeApprovalInputSchema = z.strictObject({
 export default defineTool({
   approval: always(),
   description:
-    "After approval for the named app, Vercel project and exact Preview branch, prepare isolated app and authentication databases on that branch's existing native Neon connection and bind restricted runtime environment variables. Run the repository-owned app:runtime plan/prepare/verify tasks through Vercel Sandbox. Provide roles only from the accepted product design when its legacy schema has no declared policy roles. Credentials remain protected; missing native Neon connection is a product blocker. This operation does not deploy, promote, alias, activate, or modify Production.",
+    "After approval for the named app, Vercel project and exact Preview branch, checkpoint private credentials, prepare isolated app and authentication databases on that branch's existing native Neon connection, and verify them through the repository-owned app:runtime tasks in Vercel Sandbox before binding restricted runtime environment variables. Provide roles only from the accepted product design when its legacy schema has no declared policy roles. Credentials remain protected; missing native Neon connection is a product blocker. This operation does not deploy, promote, alias, activate, or modify Production.",
   async execute(input, ctx) {
     try {
       const state = appBuilderWorkflowState.get();

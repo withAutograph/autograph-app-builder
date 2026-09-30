@@ -214,7 +214,7 @@ describe("durable hosted runtime preparation", () => {
       },
       async run({ operation }) {
         operations.push(operation);
-        if (operation === "plan") {
+        if (operation === "checkpoint") {
           files = runtimeFiles();
         }
         if (operation === "prepare") {
@@ -246,7 +246,7 @@ describe("durable hosted runtime preparation", () => {
     expect(result.status).toBe("prepared");
     // Branch bindings select restricted app URLs; native service env filtering remains unverified.
     expect(environments.find((value) => value.id === native.id)?.value).toBe(clusterUrl);
-    expect(operations).toEqual(["plan", "prepare", "verify"]);
+    expect(operations).toEqual(["checkpoint", "prepare", "verify"]);
     expect(result).toMatchObject({ proof: { authenticatedBehavior: "unassessed" } });
     expect(JSON.stringify(result)).not.toMatch(/fixture-(?:admin|auth|app|session)-secret/u);
     expect(environments.find((environment) => environment.key === "DATABASE_URL_UNPOOLED")).toEqual(
@@ -289,6 +289,7 @@ describe("durable hosted runtime preparation", () => {
     const { request } = providerFixture();
     let files = runtimeFiles();
     let fail = true;
+    const operations: string[] = [];
     const restore = vi.fn(async (saved: PrivateRuntimeFiles) => {
       files = saved;
     });
@@ -297,6 +298,10 @@ describe("durable hosted runtime preparation", () => {
       restore,
       // oxlint-disable-next-line eslint/require-await -- Promise-returning repository fixture.
       async run({ operation }) {
+        operations.push(operation);
+        if (operation === "checkpoint") {
+          expect(files).toEqual(runtimeFiles());
+        }
         if (operation === "prepare" && fail) {
           throw new HostedRuntimeCommandError(operation, 1);
         }
@@ -321,6 +326,69 @@ describe("durable hosted runtime preparation", () => {
     expect(recovered.status).toBe("prepared");
     expect(restore).toHaveBeenCalledWith(runtimeFiles());
     expect(files["state.json"]).toContain("fixture-app");
+    expect(operations).toEqual(["checkpoint", "prepare", "checkpoint", "prepare", "verify"]);
+  });
+
+  it("stops before database preparation or environment binding if the private checkpoint is absent", async () => {
+    const { store } = memoryStore();
+    const { request } = providerFixture();
+    const run = vi.fn<HostedRuntimeExecutor["run"]>(async () => null);
+    const result = await prepareHostedRuntime({
+      approvedByCallId: "approval_1",
+      authority,
+      config,
+      executor: { capture: async () => ({}), restore: async () => {}, run },
+      fetch: request,
+      readCredential: async () => credential,
+      store,
+      target,
+    });
+
+    expect(result).toEqual({
+      appId: target.appId,
+      code: "runtime_preparation_failed",
+      status: "failed",
+    });
+    expect(run.mock.calls.map(([input]) => input.operation)).toEqual(["checkpoint"]);
+    expect(request.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+    const row = await store.read({ authority, target });
+    expect(row?.record.privateState).toBeUndefined();
+    expect(row?.record.leaseId).toBeUndefined();
+  });
+
+  it("rechecks revocation after checkpointing private state and before database writes", async () => {
+    const { store } = memoryStore();
+    const { request } = providerFixture();
+    const run = vi.fn<HostedRuntimeExecutor["run"]>(async () => null);
+    const result = await prepareHostedRuntime({
+      approvedByCallId: "approval_1",
+      authority,
+      config,
+      executor: { capture: async () => runtimeFiles(), restore: async () => {}, run },
+      fetch: request,
+      readCredential: vi.fn().mockResolvedValueOnce(credential).mockResolvedValueOnce(null),
+      store,
+      target,
+    });
+
+    expect(result).toEqual({
+      appId: target.appId,
+      code: "authorization_required",
+      status: "blocked",
+    });
+    expect(run.mock.calls.map(([input]) => input.operation)).toEqual(["checkpoint"]);
+    expect(request.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+    const row = await store.read({ authority, target });
+    expect(row?.record.step).toBe("planned");
+    expect(row?.record.privateState).toBeDefined();
+    expect(row?.record.leaseId).toBeUndefined();
+    expect(JSON.stringify(row)).not.toContain("fixture-admin-secret");
+    if (row === undefined) {
+      throw new Error("Expected a durable private checkpoint.");
+    }
+    expect(decryptHostedRuntimeFiles({ authority, config, record: row.record, target })).toEqual(
+      runtimeFiles(),
+    );
   });
 
   it("makes missing native connection a safe blocker without running repository mutations", async () => {

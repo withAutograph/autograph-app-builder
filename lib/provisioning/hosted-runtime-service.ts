@@ -26,7 +26,7 @@ import {
 } from "./hosted-runtime-provider";
 
 export type PrivateRuntimeFiles = Record<string, string>;
-export type HostedRuntimeOperation = "plan" | "prepare" | "verify" | "cleanup";
+export type HostedRuntimeOperation = "checkpoint" | "prepare" | "verify" | "cleanup";
 export type HostedRuntimeProof = z.infer<typeof hostedRuntimeProofSchema>;
 const privateFilesSchema = z.record(z.string().regex(/^[A-Za-z0-9_.-]+\.json$/u), z.string());
 export interface HostedRuntimeExecutor {
@@ -327,7 +327,7 @@ export const prepareHostedRuntime = async (input: {
     }
     await input.executor.run({
       clusterUrl: cluster.clusterUrl,
-      operation: "plan",
+      operation: "checkpoint",
       productionDatabaseIdentity: cluster.productionDatabaseIdentity,
       runtimeId: identity.runtimeId,
       signal: executionSignal,

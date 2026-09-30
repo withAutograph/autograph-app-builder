@@ -7,6 +7,51 @@ import { createHostedRuntimeSandboxExecutor } from "./hosted-runtime-sandbox";
 import { HostedRuntimeCommandError } from "./hosted-runtime-service";
 
 describe("protected hosted runtime Sandbox transport", () => {
+  it("allocates a private checkpoint with prepare's checkpoint-only flag before installation", async () => {
+    const stdout = vi.fn();
+    const runCommand = vi.fn().mockResolvedValue({ exitCode: 0, stdout });
+    const executor = createHostedRuntimeSandboxExecutor({
+      appId: "spend-review",
+      provider: {
+        fs: { mkdir: vi.fn(), readFile: vi.fn(), readdir: vi.fn() },
+        runCommand,
+        writeFiles: vi.fn(),
+      },
+      root: "/workspace/repository",
+      stateDirectory: "/private-runtime",
+    });
+
+    expect(
+      await executor.run({
+        clusterUrl: "synthetic-secret-endpoint",
+        operation: "checkpoint",
+        productionDatabaseIdentity: "ep-production.aws.neon.tech/neondb",
+        runtimeId: "owned_runtime",
+      }),
+    ).toBeNull();
+    const call = z
+      .object({
+        args: z.array(z.string()),
+        cmd: z.string(),
+        env: z.record(z.string(), z.string()),
+      })
+      .parse(runCommand.mock.calls[0]?.[0]);
+    expect(call.cmd).toBe("mise");
+    expect(call.args).toEqual([
+      "run",
+      "app:runtime",
+      "prepare",
+      "spend-review",
+      "preview",
+      "--",
+      "--checkpoint-only",
+    ]);
+    expect(call.env.APP_RUNTIME_STATE_DIR).toBe("/private-runtime");
+    expect(call.env.APP_RUNTIME_CLUSTER_DATABASE_URL).toBe("synthetic-secret-endpoint");
+    expect(JSON.stringify(call.args)).not.toContain("synthetic-secret");
+    expect(stdout).not.toHaveBeenCalled();
+  });
+
   it("passes secrets through SDK env, keeps command arguments ordinary, and projects only parsed proof", async () => {
     const proof = {
       actors: 8,

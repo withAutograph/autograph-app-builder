@@ -116,6 +116,10 @@ const sandboxPreviewExpiry = (provider: Sandbox): number => {
   return expiresAt;
 };
 
+// The relative lease timer can fire before the wall clock reaches expiry.
+const isPreviewLeaseActive = (expiresAt: number, signal: AbortSignal): boolean =>
+  !signal.aborted && Date.now() < expiresAt;
+
 // This jar follows same-origin HTTP readiness redirects. Browser authentication
 // and cookie behavior still require the separate product acceptance walkthrough.
 const absorbCookies = (cookies: Map<string, string>, response: Response) => {
@@ -366,6 +370,7 @@ const cleanupPreviewAttempt = async (input: {
   command?: Command;
   diagnosticsPath?: string;
   expiresAt: number;
+  providerLeaseSignal: AbortSignal;
   launchDispatched: boolean;
   error: unknown;
   onAttempt?: (attempt: PreviewAttempt | null) => void;
@@ -376,6 +381,7 @@ const cleanupPreviewAttempt = async (input: {
     command,
     diagnosticsPath,
     expiresAt,
+    providerLeaseSignal,
     launchDispatched,
     error,
     onAttempt,
@@ -410,7 +416,8 @@ const cleanupPreviewAttempt = async (input: {
     current.status === "starting";
   const cleanup = await Promise.allSettled([
     command === undefined ? undefined : stopWorkingPreviewCommand(command),
-    owned && Date.now() < expiresAt
+    // Caller cancellation still closes owned ingress while the lease is live.
+    owned && isPreviewLeaseActive(expiresAt, providerLeaseSignal)
       ? provider.update({ ports: [] }, { signal: AbortSignal.timeout(10_000) })
       : undefined,
   ]);
@@ -476,8 +483,9 @@ export const startWorkingPreview = async (input: {
   input.signal?.throwIfAborted();
   const { provider } = input;
   const expiresAt = sandboxPreviewExpiry(provider);
+  const providerLeaseSignal = AbortSignal.timeout(expiresAt - Date.now());
   const signal = AbortSignal.any([
-    AbortSignal.timeout(expiresAt - Date.now()),
+    providerLeaseSignal,
     ...(input.signal === undefined ? [] : [input.signal]),
   ]);
   const providerSessionId = provider.currentSession().sessionId;
@@ -632,6 +640,7 @@ export const startWorkingPreview = async (input: {
       launchDispatched,
       onAttempt: input.onAttempt,
       provider,
+      providerLeaseSignal,
     });
   }
 };

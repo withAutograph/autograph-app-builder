@@ -70,6 +70,11 @@ import {
 } from "./hosted-errors";
 import { recoveryPromptForPagedSession, recoveryPromptForSession } from "./hosted-recovery-prompt";
 import { resultFromHostedCheckpoint } from "./hosted-checkpoint-result";
+import { reportHostedSubmissionDiagnostic } from "./hosted-submission-diagnostic";
+import type {
+  HostedSubmissionDiagnosticSink,
+  HostedSubmissionPhase,
+} from "./hosted-submission-diagnostic";
 
 const projectSnapshot = projectHostedSnapshot;
 const HOSTED_START_REQUEST_TIMEOUT_MS = 300_000;
@@ -730,6 +735,7 @@ export function createHostedEveSessionService(input: {
     sourceHandoffId?: string;
   }) => Promise<void>;
   now?: () => number;
+  onSubmissionDiagnostic?: HostedSubmissionDiagnosticSink;
   sessionTimeoutPolicy?: HostedSessionTimeoutPolicy;
 }): EveSessionService {
   const principal = hostedPrincipalSchema.parse(input.principal);
@@ -737,6 +743,24 @@ export function createHostedEveSessionService(input: {
   const sessionTimeoutPolicy = hostedSessionTimeoutPolicySchema.parse(
     input.sessionTimeoutPolicy ?? DEFAULT_HOSTED_SESSION_TIMEOUT_POLICY,
   );
+
+  const readStartOperation = async (
+    clientRequestId: string,
+    phase: "start_lookup" | "start_alias_lookup",
+  ): Promise<HostedOperationRecord | null | undefined> => {
+    try {
+      return await input.store.getStartOperation?.(principal, clientRequestId);
+    } catch (error) {
+      reportHostedSubmissionDiagnostic({
+        clientRequestId,
+        error,
+        operationKind: "start",
+        phase,
+        sink: input.onSubmissionDiagnostic,
+      });
+      throw error;
+    }
+  };
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
   function requireOwnedOperation(
@@ -864,79 +888,106 @@ export function createHostedEveSessionService(input: {
     });
     let reservation: z.infer<typeof reserveOperationResultSchema>;
     let recoveringStart = false;
+    const diagnose = (
+      phase: HostedSubmissionPhase,
+      error: unknown,
+      adapterSessionId?: string,
+    ): void => {
+      reportHostedSubmissionDiagnostic({
+        adapterSessionId,
+        clientRequestId: options.request.clientRequestId,
+        error,
+        operationId,
+        operationKind: options.kind,
+        phase,
+        sink: input.onSubmissionDiagnostic,
+      });
+    };
     try {
       reservation = reserveOperationResultSchema.parse(
         await input.store.reserveOperation(principal, candidate),
       );
-    } catch {
+    } catch (error) {
+      diagnose("reservation", error);
       throw new HostedSubmissionUnknownError();
     }
-    switch (reservation.disposition) {
-      case "conflict": {
-        throw new HostedIdempotencyConflictError();
-      }
-      case "rejected": {
-        throw new HostedSessionBusyError();
-      }
-      case "reserved": {
-        const operation = requireOwnedOperation(reservation.operation, {
-          clientRequestId: options.request.clientRequestId,
-          kind: options.kind,
-          operationId,
-          requestDigest,
-          resumeSessionId: options.resumeSessionId,
-          sessionId: options.sessionId,
-        });
-        if (operation.state !== "reserved") {
-          throw new HostedSubmissionUnknownError();
+    try {
+      switch (reservation.disposition) {
+        case "conflict": {
+          throw new HostedIdempotencyConflictError();
         }
-        break;
-      }
-      case "existing": {
-        const operation = requireOwnedOperation(reservation.operation, {
-          clientRequestId: options.request.clientRequestId,
-          kind: options.kind,
-          operationId,
-          requestDigest,
-          resumeSessionId: options.resumeSessionId,
-          sessionId: options.sessionId,
-        });
-        switch (operation.state) {
-          case "succeeded": {
-            const result = eveSessionResultSchema.parse(operation.result);
-            if (operation.kind === "start") {
-              await requireBoundSucceededStartSession(operation);
-            }
-            return result;
-          }
-          case "submission_unknown":
-          case "reserved": {
-            // Canonical Eve session creation is idempotent for this principal
-            // and operationId while its first run remains resumable. Once Eve
-            // expires that ownership, an exact retry may begin a new run.
-            // Only starts may retry; send/respond remain non-replayable.
-            if (
-              options.kind !== "start" ||
-              (operation.state === "reserved" &&
-                now() - operation.updatedAtEpochMs < HOSTED_START_REQUEST_TIMEOUT_MS)
-            ) {
-              throw new HostedSubmissionUnknownError();
-            }
-            recoveringStart = true;
-            break;
-          }
-          case "rejected": {
-            throw new HostedRejectedOperationError(operation.safeErrorCode);
-          }
-          default: {
-            return assertNever(operation);
-          }
+        case "rejected": {
+          throw new HostedSessionBusyError();
         }
-        break;
+        case "reserved": {
+          const operation = requireOwnedOperation(reservation.operation, {
+            clientRequestId: options.request.clientRequestId,
+            kind: options.kind,
+            operationId,
+            requestDigest,
+            resumeSessionId: options.resumeSessionId,
+            sessionId: options.sessionId,
+          });
+          if (operation.state !== "reserved") {
+            throw new HostedSubmissionUnknownError();
+          }
+          break;
+        }
+        case "existing": {
+          const operation = requireOwnedOperation(reservation.operation, {
+            clientRequestId: options.request.clientRequestId,
+            kind: options.kind,
+            operationId,
+            requestDigest,
+            resumeSessionId: options.resumeSessionId,
+            sessionId: options.sessionId,
+          });
+          switch (operation.state) {
+            case "succeeded": {
+              const result = eveSessionResultSchema.parse(operation.result);
+              if (operation.kind === "start") {
+                await requireBoundSucceededStartSession(operation);
+              }
+              return result;
+            }
+            case "submission_unknown":
+            case "reserved": {
+              // Canonical Eve session creation is idempotent for this principal
+              // and operationId while its first run remains resumable. Once Eve
+              // expires that ownership, an exact retry may begin a new run.
+              // Only starts may retry; send/respond remain non-replayable.
+              if (
+                options.kind !== "start" ||
+                (operation.state === "reserved" &&
+                  now() - operation.updatedAtEpochMs < HOSTED_START_REQUEST_TIMEOUT_MS)
+              ) {
+                throw new HostedSubmissionUnknownError();
+              }
+              recoveringStart = true;
+              break;
+            }
+            case "rejected": {
+              throw new HostedRejectedOperationError(operation.safeErrorCode);
+            }
+            default: {
+              return assertNever(operation);
+            }
+          }
+          break;
+        }
+        default: {
+          return assertNever(reservation);
+        }
       }
-      default: {
-        return assertNever(reservation);
+    } catch (error) {
+      if (
+        !(error instanceof HostedIdempotencyConflictError) &&
+        !(error instanceof HostedRejectedOperationError) &&
+        !(error instanceof HostedSessionBusyError)
+      ) {
+        diagnose("reservation_verification", error);
       }
+      throw error;
     }
 
     let dispatched: {
@@ -952,6 +1003,7 @@ export function createHostedEveSessionService(input: {
     try {
       dispatched = await options.dispatch(operationId);
     } catch (error) {
+      diagnose("dispatch", error);
       if (recoveringStart) {
         // An earlier request may have accepted the create. Retain its
         // uncertain record so another exact retry can adopt the same run.
@@ -980,7 +1032,8 @@ export function createHostedEveSessionService(input: {
         const expectedCode = rejected ? error.code : "submission_unknown";
         settlementVerified =
           verified.state === expectedState && verified.safeErrorCode === expectedCode;
-      } catch {
+      } catch (settlementError) {
+        diagnose("unsuccessful_settlement", settlementError);
         // The caller cannot know whether the durable transition committed.
         // `reserved` remains non-replayable; a committed terminal record is
         // interpreted from the store on a later exact retry.
@@ -994,6 +1047,7 @@ export function createHostedEveSessionService(input: {
       throw new HostedSubmissionUnknownError();
     }
 
+    let settlementPhase: HostedSubmissionPhase = "settlement_verification";
     try {
       const dispatchedResult = eveSessionResultSchema.parse(dispatched.result);
       const dispatchedSession =
@@ -1015,6 +1069,7 @@ export function createHostedEveSessionService(input: {
         throw new HostedSubmissionUnknownError();
       }
       let settled: HostedOperationRecord;
+      settlementPhase = "settlement";
       if (dispatchedPagedSession === undefined) {
         settled = await input.store.settleSucceeded({
           nowEpochMs: now(),
@@ -1039,6 +1094,7 @@ export function createHostedEveSessionService(input: {
           session: dispatchedPagedSession.session,
         });
       }
+      settlementPhase = "settlement_verification";
       const verified = requireOwnedOperation(settled, {
         clientRequestId: options.request.clientRequestId,
         kind: options.kind,
@@ -1101,7 +1157,13 @@ export function createHostedEveSessionService(input: {
         }
       }
       return verifiedResult;
-    } catch {
+    } catch (error) {
+      diagnose(
+        settlementPhase,
+        error,
+        dispatched.newSession?.adapterSessionId ??
+          dispatched.newSessionPaged?.session.adapterSessionId,
+      );
       if (recoveringStart) {
         try {
           const replayed = reserveOperationResultSchema.parse(
@@ -1121,7 +1183,8 @@ export function createHostedEveSessionService(input: {
               return eveSessionResultSchema.parse(winner.result);
             }
           }
-        } catch {
+        } catch (recoveryError) {
+          diagnose("recovery", recoveryError);
           // The durable outcome is still unknown.
         }
       }
@@ -1131,7 +1194,13 @@ export function createHostedEveSessionService(input: {
       throw new HostedSubmissionUnknownError();
     } finally {
       if (dispatched.newSessionPaged !== undefined) {
-        await dispatched.newSessionPaged.cleanup();
+        try {
+          await dispatched.newSessionPaged.cleanup();
+        } catch (error) {
+          diagnose("checkpoint_cleanup", error);
+          // oxlint-disable-next-line eslint/no-unsafe-finally -- Preserve the existing cleanup rejection behavior; diagnostics do not change outcomes.
+          throw error;
+        }
       }
     }
   }
@@ -1647,7 +1716,7 @@ export function createHostedEveSessionService(input: {
       if (input.store.getStartOperation === undefined) {
         throw new HostedSubmissionUnknownError();
       }
-      const stored = await input.store.getStartOperation(principal, clientRequestId);
+      const stored = (await readStartOperation(clientRequestId, "start_lookup")) ?? null;
       if (stored === null) {
         return {
           cursor: 0,
@@ -1671,11 +1740,11 @@ export function createHostedEveSessionService(input: {
       }
       const { startAlias } = operation;
       if (startAlias !== undefined && operation.state !== "succeeded") {
-        const canonicalStart = await input.store.getStartOperation(
-          principal,
+        const canonicalStart = await readStartOperation(
           startAlias.canonicalClientRequestId,
+          "start_alias_lookup",
         );
-        if (canonicalStart === null) {
+        if (canonicalStart === null || canonicalStart === undefined) {
           throw new HostedSubmissionUnknownError();
         }
         operation = hostedOperationRecordSchema.parse(canonicalStart);
@@ -1692,6 +1761,14 @@ export function createHostedEveSessionService(input: {
         throw new HostedRejectedOperationError(operation.safeErrorCode);
       }
       if (operation.state !== "succeeded") {
+        reportHostedSubmissionDiagnostic({
+          clientRequestId,
+          operationId: operation.operationId,
+          operationKind: operation.kind,
+          phase: "recovery",
+          savedState: operation.state,
+          sink: input.onSubmissionDiagnostic,
+        });
         throw new HostedSubmissionUnknownError();
       }
       const session =
@@ -1852,7 +1929,7 @@ export function createHostedEveSessionService(input: {
 
     async start(request) {
       requireHostedOperationScope(principal, "start");
-      const prior = await input.store.getStartOperation?.(principal, request.clientRequestId);
+      const prior = await readStartOperation(request.clientRequestId, "start_lookup");
       if (prior !== undefined && prior !== null) {
         const operation = hostedOperationRecordSchema.parse(prior);
         const expectedDigest = digest(

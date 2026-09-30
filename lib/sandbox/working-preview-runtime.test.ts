@@ -209,16 +209,31 @@ describe("shared working preview startup", () => {
 
   it("ends startup and cleans up when the actual provider lease expires", async () => {
     const { options, provider, command } = setup();
-    provider.expiresAt = new Date(Date.now() + 100);
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 503 }));
-    await expect(startWorkingPreview({ ...options, fetch: fetcher })).rejects.toThrow(
-      "stopped during application HTTP readiness",
-    );
-    expect(command.kill).toHaveBeenCalledOnce();
-    expect(command.wait).toHaveBeenCalledOnce();
-    // Setup closes ingress, then opens it; expiry adds no ingress mutation.
-    expect(provider.update).toHaveBeenCalledTimes(2);
-    expect(provider.update).toHaveBeenLastCalledWith({ ports: [3001] }, expect.anything());
+    const now = Date.now();
+    const expiresAt = now + 100;
+    provider.expiresAt = new Date(expiresAt);
+    const lease = new AbortController();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    const timer = vi.spyOn(AbortSignal, "timeout").mockReturnValueOnce(lease.signal);
+    const fetcher = vi.fn<typeof fetch>(() => {
+      // A relative timer can fire just before the wall clock reaches expiry.
+      clock.mockReturnValue(expiresAt - 1);
+      lease.abort(new DOMException("Provider lease expired", "TimeoutError"));
+      return Promise.resolve(new Response(null, { status: 503 }));
+    });
+    try {
+      await expect(startWorkingPreview({ ...options, fetch: fetcher })).rejects.toThrow(
+        "stopped during application HTTP readiness",
+      );
+      expect(command.kill).toHaveBeenCalledOnce();
+      expect(command.wait).toHaveBeenCalledOnce();
+      // Setup closes ingress, then opens it; expiry adds no ingress mutation.
+      expect(provider.update).toHaveBeenCalledTimes(2);
+      expect(provider.update).toHaveBeenLastCalledWith({ ports: [3001] }, expect.anything());
+    } finally {
+      timer.mockRestore();
+      clock.mockRestore();
+    }
   });
 
   it("does not start a preview when the Sandbox has already expired", async () => {

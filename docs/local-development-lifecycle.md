@@ -30,6 +30,30 @@ do not silently create a replacement public request. A fresh Node process also
 loses the local in-memory original-request index. Hosted checkpoint recovery is
 a separate durable path described in the [public MCP contract](public-mcp-contract.md).
 
+## Persistent Sandbox reattachment
+
+The Eve 0.68 provider records the persistent Sandbox name as immutable session
+state. Reopening that state uses `Sandbox.get({ name, resume: true })`; it does
+not resolve a new Git source, upload new seeds, or repeat initialization.
+Session stop and runtime shutdown stop compute while retaining provider state.
+Explicit Sandbox deletion removes that state. A missing named Sandbox fails
+reattachment rather than creating replacement compute.
+
+Preview startup can resume a stopped VM through a new SDK handle. The owning
+provider registration retains that current handle for file I/O, commands, and
+cleanup, so stopping the session targets the resumed VM. An old registration
+cannot replace, unregister, or stop a newer provider handle. Cleanup waits for
+its owned in-flight resume before stopping that VM; the closing registration
+rejects preview startup and further I/O.
+An explicitly deleted handle can still remove its persistent Sandbox after
+stop, provided a newer handle does not currently own the registration.
+
+Focused adapter tests cover these transitions against the installed Eve 0.68
+types, with the external Sandbox SDK boundary mocked. They establish the
+Builder's request and cleanup behavior; they do not establish hosted filesystem
+persistence or restoration after complete loss. External workspace recovery
+remains the separate [draft preservation plan](plans/2026-09-29-sandbox-expiry-draft-preservation.md).
+
 ## Synthetic web authentication and provider connections
 
 The default development command remains the fast HTTP MCP loop. For the normal
