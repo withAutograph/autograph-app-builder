@@ -103,3 +103,25 @@ private file permissions, secret-free output, no cluster creation and cleanup.
 Builder exact-head CI passed at `f84a48ad63875b6ee98bba7f7273554b371745cb`
 ([run](https://github.com/withAutograph/autograph-app-builder/actions/runs/36664922905));
 the compatible consumer revision requires fresh exact-head CI.
+
+### 2026-09-30: paged start settlement predicate repair
+
+The Spend Review start request `b5ca80f7-7cb2-4bd6-9c05-ae0381594daa`
+remained reserved after Eve dispatch. Production diagnostics reported settlement
+SQLSTATE `42P01`. A read-only schema readback from the connected Neon Production
+branch matched all 26 checked-in migrations and the full hosted storage contract
+after applying the previously pending `0026` migration. The pre-migration restore
+point is Neon snapshot `snap-young-hat-auewqzxe`.
+
+The remaining failure is a query defect, not evidence of a missing table:
+`settleSucceededPaged` updates `agent_session` but previously used the
+`agent_operation` tenant predicate. A read-only `EXPLAIN` of that table reference
+reproduced PostgreSQL's missing FROM-clause error. Use the existing session tenant
+predicate so the checkpoint pointer remains scoped to the session's issuer,
+audience, workspace, owner, and session ID. Keep operation settlement scoped to
+its separate operation predicate and in the same transaction.
+
+A focused regression exercises the generated settlement query. Source validation
+alone does not prove hosted recovery or Spend Review acceptance; those still
+require an exact retry of the original public request and the complete
+Builder-authored app acceptance run.
