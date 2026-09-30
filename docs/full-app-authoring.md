@@ -71,3 +71,32 @@ For approved hosted Preview persistence, follow
 owner-selected Vercel installation and existing native Neon branch, keeps
 installer credentials protected, and journals restricted branch bindings and
 private recovery state. A missing native connection is a precise path blocker.
+
+## Authenticated routes and readiness
+
+For native Next App Router apps, read the installed framework guides and the
+repository's cache-component guidance before implementing request-dependent
+reads. Put uncached session, tenant and database reads beneath the appropriate
+Suspense boundary. Exercise the initial form route and the destination after a
+successful Server Action: a committed row does not prove navigation rendered.
+
+Use the repository-described mounted schema receipt path. In Arrusted, a mount
+`/<app-id>` places the protected handler at
+`app/<app-id>/api/schema/route.ts`, serving `/<app-id>/api/schema`.
+A root `app/api/schema/route.ts` does not serve that mounted path. Preserve
+server-derived authentication, no-store responses, checked release tracing and
+the harmless scoped read required by the repository contract. Verify the app
+page and receipt through the Gateway, checking readiness, app, tenant and
+selected release values rather than HTTP status alone. Do not change scaffolded
+configuration through implementationFiles; report an infrastructure repair to
+its repository owner when tracing or route discovery needs an update.
+
+A fresh-process persistence check stops and starts the app against the same
+database. Recreating the fixture database or reusing the original app process
+cannot establish this result. Preserve failures and mark cases skipped after a
+failure as unassessed; a schema receipt does not replace the product journey.
+
+For hosted delivery, follow [Production handoff](production-readiness-handoff.md)
+for reviewed Auth identity, runtime binding and QA access requirements. Missing
+operator/provider capabilities remain explicit handoff work, not a reason to
+bypass authentication or block ordinary private app authoring.

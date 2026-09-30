@@ -19,7 +19,7 @@ const description: AppDescription = {
     },
     roles: ["requester", "reviewer"],
     runtime: { databaseEnvironment: "SPEND_REVIEW_DATABASE_URL" },
-    schemaReceipt: { contract: "authenticated-release-read", path: "/api/schema" },
+    schemaReceipt: { contract: "authenticated-release-read", path: "/spend-review/api/schema" },
   },
   validation: {
     browser: { task: `mise //apps/${app}:test-e2e` },
@@ -52,7 +52,7 @@ describe("productionReadinessHandoff", () => {
       checkedRelease: { artifactHash: `sha256:${"a".repeat(64)}`, releaseId: release },
       roles: ["requester", "reviewer"],
       route: `/${app}`,
-      schemaReceiptPath: "/api/schema",
+      schemaReceiptPath: "/spend-review/api/schema",
       status: "operator-review-required",
     });
   });
