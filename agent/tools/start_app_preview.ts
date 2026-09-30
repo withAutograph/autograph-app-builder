@@ -6,6 +6,7 @@ import {
   currentProductBehaviorGeneration,
 } from "@/lib/agent/product-behavior-state";
 import { defineTool } from "eve/tools";
+import type { ToolContext } from "eve/tools";
 import { z } from "zod";
 
 import {
@@ -17,6 +18,11 @@ import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 import { resolvePreviewPackageManager } from "@/lib/agent/preview-package-manager";
 import { ensureCheckoutDependencies } from "@/lib/agent/checkout-dependencies";
 import { resolvePreparedRuntimeExecution } from "@/lib/agent/prepared-runtime-execution";
+import type { DependencyAttemptResult } from "@/lib/agent/checkout-dependencies";
+import type { ValidationLogStore } from "@/lib/repository/validation-log";
+import { exactForwardedSessionAuthority } from "@/lib/hosted/session-authority";
+import { openHostedPostgresDatabase } from "@/lib/mcp/hosted-route";
+import { createPostgresValidationLogStore } from "@/lib/repository/postgres-validation-log-store";
 import { appDeclaresLocalSetup, prepareAppLocalPreview } from "./prepare-app-local-preview";
 import { localRuntimeEnvironmentPath } from "@/lib/repository/runtime-environment";
 import {
@@ -64,6 +70,25 @@ const usesNext = (source: string | null): boolean => {
       "The selected app's package.json is not valid JSON. Repair its manifest before starting the private preview.",
     );
   }
+};
+
+const dependencyLogStore = (ctx: ToolContext): ValidationLogStore | undefined => {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (databaseUrl === undefined || databaseUrl.length === 0) {
+    return undefined;
+  }
+  // Authentication failures remain fatal; unavailable storage cannot block installation.
+  exactForwardedSessionAuthority(ctx.session.auth);
+  try {
+    return createPostgresValidationLogStore({
+      db: openHostedPostgresDatabase(databaseUrl),
+      sessionAuth: ctx.session.auth,
+      sessionId: ctx.session.id,
+    });
+  } catch {
+    // The command result explicitly reports unavailable durability.
+  }
+  return undefined;
 };
 
 export default defineTool({
@@ -122,12 +147,26 @@ export default defineTool({
     }
     const { appId } = selected;
     const packageManifest = await sandbox.readTextFile({ path: `${cwd}/package.json` });
+    const logStore = dependencyLogStore(ctx);
     const dependencyInput = {
+      checkoutIdentity: selected.revision,
+      logStore,
+      onAttempt: (attempt: DependencyAttemptResult) => {
+        appBuilderWorkflowState.update((state) =>
+          state.phase === "empty"
+            ? state
+            : {
+                ...state,
+                checkoutDependencyAttempts: [...(state.checkoutDependencyAttempts ?? []), attempt],
+              },
+        );
+      },
       root: selected.root,
       sandbox,
+      sessionId: ctx.session.id,
       signal: ctx.abortSignal,
     };
-    await ensureCheckoutDependencies(
+    const dependencies = await ensureCheckoutDependencies(
       usesNext(packageManifest)
         ? { ...dependencyInput, requiredExecutable: "next" }
         : dependencyInput,
@@ -190,6 +229,7 @@ export default defineTool({
     bindProductBehaviorPreview(preview.commandId, evidenceGeneration);
     return {
       commandAdjustment: launch.adjustment,
+      dependencies,
       installationProof: runtime?.installationProof,
       workingPreview: preview.receipt,
     };

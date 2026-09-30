@@ -1535,10 +1535,11 @@ export const validationLogManifests = pgTable(
   {
     attemptDigest: text("attempt_digest").notNull(),
     audience: text("audience").notNull(),
-    byteLength: integer("byte_length").notNull(),
+    byteLength: bigint("byte_length", { mode: "number" }).notNull(),
     channel: text("channel").notNull(),
     chunkCount: bigint("chunk_count", { mode: "number" }).notNull(),
     command: text("command").notNull(),
+    completion: text("completion"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     digest: text("digest").notNull(),
     issuer: text("issuer").notNull(),
@@ -1562,6 +1563,10 @@ export const validationLogManifests = pgTable(
     check(
       "validation_log_manifest_size_check",
       sql`${table.byteLength} >= 0 AND ${table.chunkCount} >= 0`,
+    ),
+    check(
+      "validation_log_manifest_completion_check",
+      sql`${table.completion} IS NULL OR ${table.completion} IN ('complete', 'interrupted', 'unavailable')`,
     ),
   ],
 );
