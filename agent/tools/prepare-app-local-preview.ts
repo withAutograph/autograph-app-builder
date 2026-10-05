@@ -77,15 +77,26 @@ export const prepareAppLocalPreview = async (input: {
           .string()
           .regex(/^https:\/\/[a-z0-9-]+\.vercel\.run$/u)
           .parse(input.authOrigin);
-  const prefix = origin === undefined ? "" : `APP_RUNTIME_AUTH_ORIGIN='${origin}' `;
-  const command = prefix + localPreviewExecutionCommand(input.appId);
+  const command = localPreviewExecutionCommand(input.appId);
   try {
+    const description = await describeSelectedApp({
+      appId: input.appId,
+      root: input.root,
+      sandbox: input.sandbox,
+      signal: input.signal,
+    });
+    const roles = description.backend.kind === "generated-postgres" ? description.backend.roles : [];
+    const env = {
+      ...(roles.length === 0 ? {} : { APP_RUNTIME_ROLES: roles.join(",") }),
+      ...(origin === undefined ? {} : { APP_RUNTIME_AUTH_ORIGIN: origin }),
+    };
     const result =
       input.signal === undefined
-        ? await input.sandbox.run({ command, workingDirectory: input.root })
+        ? await input.sandbox.run({ command, env, workingDirectory: input.root })
         : await input.sandbox.run({
             abortSignal: input.signal,
             command,
+            env,
             workingDirectory: input.root,
           });
     const stdout = safeOutput(result.stdout);

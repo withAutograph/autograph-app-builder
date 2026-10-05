@@ -25,6 +25,10 @@ const generated: z.infer<typeof appDescriptionSchema>["backend"] = {
   runtime: { databaseEnvironment: "SPEND_REVIEW_DATABASE_URL" },
   schemaReceipt: null,
 };
+const generatedWithReviewer: z.infer<typeof appDescriptionSchema>["backend"] = {
+  ...generated,
+  roles: ["member", "reviewer"],
+};
 describe("private local preview setup", () => {
   it("discovers the source-derived backend rather than a demo setup declaration", async () => {
     const run = vi
@@ -53,6 +57,7 @@ describe("private local preview setup", () => {
     ).rejects.toThrow("Validation could not prepare");
     expect(run).toHaveBeenLastCalledWith({
       command: localPreviewExecutionCommand("spend-review"),
+      env: { APP_RUNTIME_ROLES: "member" },
       workingDirectory: "/workspace/repository",
     });
   });
@@ -60,7 +65,8 @@ describe("private local preview setup", () => {
   it("runs the selected app's repository task in its checkout", async () => {
     const run = vi
       .fn()
-      .mockResolvedValue({ exitCode: 0, stderr: "", stdout: "Local setup complete" });
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor(generated) })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "Local setup complete" });
     const result = await prepareAppLocalPreview({
       appId: "spend-review",
       root: "/workspace/repository",
@@ -68,6 +74,7 @@ describe("private local preview setup", () => {
     });
     expect(run).toHaveBeenCalledWith({
       command: localPreviewExecutionCommand("spend-review"),
+      env: { APP_RUNTIME_ROLES: "member" },
       workingDirectory: "/workspace/repository",
     });
     expect(localPreviewExecutionCommand("spend-review")).toContain(
@@ -77,13 +84,37 @@ describe("private local preview setup", () => {
     expect(() => localPreviewSetupCommand("spend-review; deploy")).toThrow();
   });
 
-  it("preserves actionable local database failures without leaking connection strings", async () => {
-    const run = vi.fn().mockResolvedValue({
-      exitCode: 1,
-      stderr:
-        "pg_ctl: could not start server at postgres://postgres:secret@127.0.0.1:52016/spend_review",
-      stdout: "",
+  it("passes accepted roles and the private auth origin through the runtime environment", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor(generatedWithReviewer) })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "Local setup complete" });
+    await prepareAppLocalPreview({
+      appId: "spend-review",
+      authOrigin: "https://spend-review.vercel.run",
+      root: "/workspace/repository",
+      sandbox: { run },
     });
+    expect(run).toHaveBeenLastCalledWith({
+      command: localPreviewExecutionCommand("spend-review"),
+      env: {
+        APP_RUNTIME_AUTH_ORIGIN: "https://spend-review.vercel.run",
+        APP_RUNTIME_ROLES: "member,reviewer",
+      },
+      workingDirectory: "/workspace/repository",
+    });
+  });
+
+  it("preserves actionable local database failures without leaking connection strings", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor(generated) })
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stderr:
+          "pg_ctl: could not start server at postgres://postgres:secret@127.0.0.1:52016/spend_review",
+        stdout: "",
+      });
     const result = await prepareAppLocalPreview({
       appId: "spend-review",
       root: "/workspace/repository",
@@ -96,10 +127,14 @@ describe("private local preview setup", () => {
   });
 
   it("reports command-provider errors with a recovery action", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor(generated) })
+      .mockRejectedValueOnce(new Error("Sandbox unavailable: token=secret"));
     const result = await prepareAppLocalPreview({
       appId: "spend-review",
       root: "/workspace/repository",
-      sandbox: { run: vi.fn().mockRejectedValue(new Error("Sandbox unavailable: token=secret")) },
+      sandbox: { run },
     });
     expect(result).toMatchObject({ exitCode: null, status: "failed" });
     expect(result.problem).toContain("sandbox command runner");
