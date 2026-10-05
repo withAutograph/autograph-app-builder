@@ -20,16 +20,16 @@ const resumeKey = "1c7ed773-0aa9-4e32-9e65-6eb36e7b5cc0";
 function databaseFixture(rows: unknown[]) {
   const query = {
     from: vi.fn(),
+    insert: vi.fn(),
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     limit: vi.fn(async () => rows),
+    onConflictDoUpdate: vi.fn(),
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     returning: vi.fn(async () => rows),
     select: vi.fn(),
     set: vi.fn(),
-    insert: vi.fn(),
-    values: vi.fn(),
-    onConflictDoUpdate: vi.fn(),
     update: vi.fn(),
+    values: vi.fn(),
     where: vi.fn(),
   };
   for (const key of [
@@ -196,7 +196,7 @@ describe("durable Vercel connection return", () => {
       tokenKey: currentKey,
       tokenKeyVersion: "current_v2",
     };
-    await createPostgresVercelInstallationStore({ database, config }).bind({
+    await createPostgresVercelInstallationStore({ config, database }).bind({
       authority,
       binding: {
         displayName: "Owner",
@@ -209,7 +209,7 @@ describe("durable Vercel connection return", () => {
       now: new Date(),
       token: "new-provider-token",
     });
-    const stored = query.values.mock.calls[0]?.[0];
+    const stored: unknown = query.values.mock.calls[0]?.[0];
     expect(stored).toMatchObject({ tokenKeyVersion: "current_v2" });
     expect(
       decryptVersionedVercelToken({

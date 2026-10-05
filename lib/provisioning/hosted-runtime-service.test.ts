@@ -528,9 +528,9 @@ describe("durable hosted runtime preparation", () => {
   it("resumes a version-1 journal with its retained key and encrypts new checkpoints with the active key", () => {
     const rotatedConfig: VercelIntegrationConfig = {
       ...config,
+      previousTokenKeys: [{ key: config.tokenKey, version: config.tokenKeyVersion }],
       tokenKey: Buffer.alloc(32, 10),
       tokenKeyVersion: "fixture_v2",
-      previousTokenKeys: [{ key: config.tokenKey, version: config.tokenKeyVersion }],
     };
     const associatedData = JSON.stringify({
       ...hostedRuntimeIdentity(authority, target),

@@ -50,9 +50,7 @@ describe("Vercel integration security", () => {
       tokenKey: activeKey,
       tokenKeyVersion: "current_v2",
     };
-    expect(
-      decryptVersionedVercelToken({ ...legacy, associatedData, config }),
-    ).toBe("legacy-token");
+    expect(decryptVersionedVercelToken({ ...legacy, associatedData, config })).toBe("legacy-token");
 
     const current = encryptVercelToken({
       associatedData,

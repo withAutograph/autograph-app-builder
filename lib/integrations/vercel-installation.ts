@@ -13,6 +13,9 @@ import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import type { HostedAdminPlanRequest } from "../db/hosted-admin";
 import type { ProviderConnectionReturn } from "./provider-connection-return";
 import type { ProviderEmulation } from "./local-provider-emulation";
+import { VercelTokenDecryptionKeyError } from "./vercel-token-decryption-key-error";
+
+export { VercelTokenDecryptionKeyError } from "./vercel-token-decryption-key-error";
 
 type Authority = HostedAdminPlanRequest["authority"];
 
@@ -40,11 +43,11 @@ const configSchema = z
     clientId: z.string().min(1).max(512),
     clientSecret: z.string().min(1).max(512),
     issuer: z.string().url(),
+    previousTokenKeys: previousTokenKeysSchema.optional(),
     resource: z.string().url(),
     slug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$/u),
     tokenKey: z.instanceof(Buffer).refine((value) => value.length === 32),
     tokenKeyVersion: tokenKeyVersionSchema,
-    previousTokenKeys: previousTokenKeysSchema.optional(),
   })
   .strict()
   .superRefine((config, context) => {
@@ -88,7 +91,7 @@ export function readVercelIntegrationEnvironment(
       version,
     }));
   }
-  return configSchema.parse({
+  const candidate = {
     clientId: environment.VERCEL_INTEGRATION_CLIENT_ID,
     clientSecret: environment.VERCEL_INTEGRATION_CLIENT_SECRET,
     issuer: environment.BETTER_AUTH_URL,
@@ -96,8 +99,10 @@ export function readVercelIntegrationEnvironment(
     slug: environment.VERCEL_INTEGRATION_SLUG,
     tokenKey,
     tokenKeyVersion: environment.VERCEL_INTEGRATION_TOKEN_KEY_VERSION,
-    ...(previousTokenKeys === undefined ? {} : { previousTokenKeys }),
-  });
+  };
+  return configSchema.parse(
+    previousTokenKeys === undefined ? candidate : { ...candidate, previousTokenKeys },
+  );
 }
 
 export interface VercelAuthorizationStateStore {
@@ -196,14 +201,8 @@ export function decryptVercelToken(input: {
   ]).toString("utf-8");
 }
 
-export class VercelTokenDecryptionKeyError extends Error {
-  constructor() {
-    super("Vercel token decryption key is unavailable.");
-    this.name = "VercelTokenDecryptionKeyError";
-  }
-}
-
 /** Decrypt only with the exact versioned key; encryption continues using the active key. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting for integration callers.
 export function decryptVersionedVercelToken(input: {
   encryptedToken: string;
   tokenIv: string;
