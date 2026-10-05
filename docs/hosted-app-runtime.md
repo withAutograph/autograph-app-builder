@@ -38,6 +38,12 @@ explicitly selected v1 runtime consumers remain a controlled recovery path; new
 tools cannot create a legacy installer operation. Legacy consumers reject
 operator records before decryption.
 
+Planning the same resource with a changed release replaces the pending plan
+and clears its old proof while retaining encrypted resource credentials. A plan
+that changes actual resource identities is rejected while those resources are
+present. Approval is bound to the replacement plan digest and must be read again
+before any effect; an earlier plan's approval or proof cannot authorize it.
+
 The contract requires ordered observed phases: resources → install/grant
 verification → app access → bindings; cleanup requires revoke → remove bindings
 → retire. Existing resources still require a no-op readback receipt for each

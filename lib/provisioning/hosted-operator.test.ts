@@ -1,4 +1,4 @@
-/* oxlint-disable eslint/require-await, sonarjs/no-hardcoded-passwords, unicorn/no-await-expression-member -- Synthetic service adapters and credentials only. */
+/* oxlint-disable eslint/require-await, eslint/no-await-in-loop, sonarjs/no-hardcoded-passwords, unicorn/no-await-expression-member -- Synthetic service adapters and credentials only; plan replacements run sequentially against one journal. */
 import { once } from "node:events";
 import { text } from "node:stream/consumers";
 import { z } from "zod";
@@ -367,6 +367,52 @@ describe("protected hosted operator boundary", () => {
     expect((await first).status).toBe("prepared");
     expect(real).toHaveBeenCalledTimes(4);
   });
+  it("requires cleanup before replacing allocated resource identities", async () => {
+    const f = fixture();
+    const request = await prepared(f);
+    f.approve();
+    await f.client.request(request);
+    const previous = structuredClone(f.row);
+    for (const replacement of [
+      { ...plan, contextId: "other-context" },
+      { ...plan, neon: { ...plan.neon, branchId: "br_other" } },
+      { ...plan, appDatabase: { ...plan.appDatabase, runtimeRole: "other_runtime" } },
+      { ...plan, authDatabase: { ...plan.authDatabase, resourceId: "other-auth" } },
+    ]) {
+      f.deps.plan = async () => replacement;
+      const next = await f.client.request({ action: "plan", operation: "prepare", selection });
+      expect(next.code).toBe("resource_mismatch");
+      expect(f.row).toEqual(previous);
+    }
+    expect(f.deps.executeEffect).toHaveBeenCalledTimes(4);
+  });
+  it("retains credentials for a same-resource release edit and invalidates previous proof", async () => {
+    const f = fixture();
+    const request = await prepared(f);
+    f.approve();
+    await f.client.request(request);
+    const credentials = structuredClone(f.row?.record.privateState);
+    f.deps.plan = async () => ({
+      ...plan,
+      release: { ...plan.release, id: "release_next", sha256: "c".repeat(64) },
+    });
+    const next = await f.client.request({ action: "plan", operation: "prepare", selection });
+    expect(next.status).toBe("planned");
+    expect(next.operationRef).not.toBe(request.operationRef);
+    expect(f.row?.record.privateState).toEqual(credentials);
+    expect(f.row?.record.proof).toBeUndefined();
+    expect(f.row?.record.environmentBound).toBe(false);
+    expect(f.row?.record.operator?.receipts).toEqual([]);
+    expect(f.row?.record.operator?.approvalId).toBeUndefined();
+    expect(f.row?.record.approvedByCallId).toBe("operator:unapproved-plan");
+    await expect(
+      f.client.bindings({
+        action: "bindings",
+        operationRef: z.uuid().parse(next.operationRef),
+        selection,
+      }),
+    ).rejects.toThrow("operation_in_progress");
+  });
   it("requires a new concrete cleanup approval and leaves only the journal tombstone", async () => {
     const f = fixture();
     const request = await prepared(f);
@@ -407,6 +453,12 @@ describe("protected hosted operator boundary", () => {
         selection,
       }),
     ).rejects.toThrow("operation_in_progress");
+    f.deps.plan = async () => ({ ...plan, contextId: "replacement-after-cleanup" });
+    const replacement = await f.client.request({ action: "plan", operation: "prepare", selection });
+    expect(replacement.status).toBe("planned");
+    expect(f.row?.record.privateState).toBeUndefined();
+    expect(f.row?.record.proof).toBeUndefined();
+    expect(f.row?.record.environmentBound).toBe(false);
   });
   it("reconciles an effect applied before a timeout without allocating a second identity", async () => {
     const f = fixture();

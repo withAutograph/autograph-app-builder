@@ -109,6 +109,13 @@ type OperatorHttpResponse =
     };
 const response = (value: OperatorHttpResponse, status = 200) =>
   Response.json(value, { headers: { "cache-control": "no-store" }, status });
+const resourceIdentity = (plan: HostedOperatorPlan) =>
+  JSON.stringify({
+    appDatabase: plan.appDatabase,
+    authDatabase: plan.authDatabase,
+    contextId: plan.contextId,
+    neon: plan.neon,
+  });
 
 /** Separate service entrypoint. There is deliberately no production dependency fallback. */
 export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperatorDependencies) => {
@@ -193,7 +200,25 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           ) {
             throw new HostedOperatorError("operation_in_progress");
           }
-          return { ...record, operator, status: "pending", step: "reserved" };
+          const hasResources =
+            record.status !== "cleaned" &&
+            (record.privateState !== undefined ||
+              record.operator.receipts.length > 0 ||
+              record.status === "prepared");
+          if (hasResources && resourceIdentity(record.operator.plan) !== resourceIdentity(plan)) {
+            throw new HostedOperatorError("resource_mismatch");
+          }
+          // Same-resource release changes keep credentials; old proof never attests the new plan.
+          const next = {
+            ...record,
+            approvedByCallId: "operator:unapproved-plan",
+            environmentBound: false,
+            operator,
+            status: "pending" as const,
+            step: "reserved" as const,
+          };
+          delete next.proof;
+          return next;
         });
         return response(
           operatorPublicResultSchema.parse({
