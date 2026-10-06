@@ -4,6 +4,30 @@ import { z } from "zod";
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const sqlName = z.string().regex(/^[a-z][a-z0-9_]{0,62}$/u);
+const isPublicHttpsOrigin = (url: URL): boolean => {
+  if (url.protocol !== "https:") {
+    return false;
+  }
+  if (url.username !== "" || url.password !== "") {
+    return false;
+  }
+  if (url.pathname !== "/" || url.search !== "" || url.hash !== "") {
+    return false;
+  }
+  if (url.hostname.endsWith(".vercel.run")) {
+    return false;
+  }
+  return true;
+};
+const httpsPublicOrigin = z
+  .url()
+  .superRefine((value, ctx) => {
+    const url = new URL(value);
+    if (!isPublicHttpsOrigin(url)) {
+      ctx.addIssue({ code: "custom", message: "Public Gateway origin must be exact HTTPS origin" });
+    }
+  })
+  .transform((value) => new URL(value).origin);
 export const operatorSelectionSchema = z.strictObject({
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
   branch: id.refine((value) => !/[\p{Cc}]/u.test(value)),
@@ -59,6 +83,15 @@ export const hostedOperatorPlanSchema = z
       projectId: id,
       source: z.literal("synthetic-only"),
     }),
+    // Optional only when parsing persisted protected-operator-v1 records created before
+    // native Gateway origins were part of the verified plan.
+    publicGateway: z
+      .strictObject({
+        branch: id,
+        origin: httpsPublicOrigin,
+        projectId: id,
+      })
+      .optional(),
     release: z.strictObject({ artifactRef: id, id, sha256: digest }),
     retention: z.strictObject({ expiresAt: z.iso.datetime({ offset: true }), policy: id }),
     selection: operatorSelectionSchema,
@@ -73,6 +106,17 @@ export const hostedOperatorPlanSchema = z
       ctx.addIssue({
         code: "custom",
         message: "Resources and effects must have distinct identities.",
+      });
+    }
+    if (
+      plan.publicGateway &&
+      (plan.publicGateway.branch !== plan.selection.branch ||
+        plan.publicGateway.projectId !== plan.selection.projectId)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Public Gateway origin must be bound to the selected Preview project and branch.",
+        path: ["publicGateway"],
       });
     }
     // Each phase has an observed receipt, including a no-op verification for already-existing resources.
@@ -178,11 +222,22 @@ export const restrictedOperatorEnvironment = (
     "BETTER_AUTH_APP_NAME",
     "BETTER_AUTH_SECRET",
     "BETTER_AUTH_URL",
+    ...(plan.publicGateway ? ["PLATFORM_PUBLIC_ORIGIN"] : []),
   ];
+  const allowedKeys = new Set(keys);
+  if (Object.keys(env).some((key) => !allowedKeys.has(key))) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  if (keys.some((key) => !env[key])) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  if (env.BETTER_AUTH_APP_NAME !== "apps") {
+    throw new HostedOperatorError("resource_mismatch");
+  }
   if (
-    Object.keys(env).some((key) => !keys.includes(key)) ||
-    keys.some((key) => !env[key]) ||
-    env.BETTER_AUTH_APP_NAME !== "apps"
+    plan.publicGateway &&
+    (env.BETTER_AUTH_URL !== plan.publicGateway.origin ||
+      env.PLATFORM_PUBLIC_ORIGIN !== plan.publicGateway.origin)
   ) {
     throw new HostedOperatorError("resource_mismatch");
   }
@@ -221,6 +276,9 @@ export const restrictedOperatorEnvironment = (
     env.BETTER_AUTH_SECRET.length >= 32,
   ];
   if (validOrigin.includes(false)) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  if (plan.publicGateway && origin.origin !== plan.publicGateway.origin) {
     throw new HostedOperatorError("resource_mismatch");
   }
   return env;

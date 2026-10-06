@@ -84,6 +84,11 @@ const plan = hostedOperatorPlanSchema.parse({
     projectId: "synthetic-project",
     source: "synthetic-only",
   },
+  publicGateway: {
+    branch: selection.branch,
+    origin: "https://apps-preview.example.test",
+    projectId: selection.projectId,
+  },
   release: { artifactRef: "verified-artifact", id: "release_fixture", sha256: "b".repeat(64) },
   retention: {
     expiresAt: "2027-01-01T00:00:00.000Z",
@@ -102,8 +107,9 @@ const proof = {
 const environment = {
   BETTER_AUTH_APP_NAME: "apps",
   BETTER_AUTH_SECRET: "fixture-".repeat(8),
-  BETTER_AUTH_URL: "https://fixture.vercel.run",
+  BETTER_AUTH_URL: "https://apps-preview.example.test",
   PLATFORM_AUTH_DATABASE_URL: `postgres://shared_auth_runtime:synthetic-auth@${plan.neon.endpoint}/shared_auth?sslmode=verify-full`,
+  PLATFORM_PUBLIC_ORIGIN: "https://apps-preview.example.test",
   SPEND_REVIEW_DATABASE_URL: `postgres://spend_runtime:synthetic-app@${plan.neon.endpoint}/spend?sslmode=verify-full`,
 };
 const fixture = () => {
@@ -325,6 +331,18 @@ describe("protected hosted operator boundary", () => {
       expect(description).toContain(value);
     }
   });
+  it("requires a verified Gateway origin on newly planned operations", async () => {
+    const f = fixture();
+    f.deps.plan = async () => {
+      const legacyPlan = { ...plan };
+      delete legacyPlan.publicGateway;
+      return legacyPlan;
+    };
+    const result = await f.client.request({ action: "plan", operation: "prepare", selection });
+    expect(result.status).toBe("blocked");
+    expect(result.code).toBe("resource_mismatch");
+    expect(f.row).toBeUndefined();
+  });
   it("executes only after durable approval and projects shared-context runtime roles without installer state", async () => {
     const f = fixture();
     const request = await prepared(f);
@@ -338,6 +356,7 @@ describe("protected hosted operator boundary", () => {
       selection,
     });
     expect(binding.environment).toEqual(environment);
+    expect(binding.environment.BETTER_AUTH_URL).toBe(binding.environment.PLATFORM_PUBLIC_ORIGIN);
     expect(Object.keys(binding).toSorted()).toEqual([
       "environment",
       "operationRef",
@@ -418,7 +437,7 @@ describe("protected hosted operator boundary", () => {
     const request = await prepared(f);
     f.approve();
     await f.client.request(request);
-    const cleanupPlan = hostedOperatorPlanSchema.parse({
+    const cleanupPlanInput = {
       ...plan,
       action: "cleanup",
       effects: [
@@ -430,7 +449,9 @@ describe("protected hosted operator boundary", () => {
         },
         { description: "Retain shared Auth while consumers exist", id: "retire", kind: "retire" },
       ],
-    });
+    };
+    delete cleanupPlanInput.publicGateway;
+    const cleanupPlan = hostedOperatorPlanSchema.parse(cleanupPlanInput);
     f.deps.plan = async () => cleanupPlan;
     const next = await f.client.request({ action: "plan", operation: "cleanup", selection });
     const cleanup = {
@@ -592,8 +613,50 @@ describe("protected hosted operator boundary", () => {
         "other?",
       ),
     },
+    { ...environment, PLATFORM_PUBLIC_ORIGIN: "https://other-preview.example.test" },
+    { ...environment, BETTER_AUTH_URL: "https://sandbox.vercel.run" },
+    { ...environment, PLATFORM_PUBLIC_ORIGIN: "https://sandbox.vercel.run" },
   ])("rejects overprivileged or unrelated runtime projection", (env) => {
     expect(() => restrictedOperatorEnvironment(plan, env)).toThrow("resource_mismatch");
+  });
+  it("normalizes the trusted Gateway origin and keeps legacy v1 projections unproven", () => {
+    const normalized = hostedOperatorPlanSchema.parse({
+      ...plan,
+      publicGateway: {
+        ...plan.publicGateway,
+        origin: "https://APPS-PREVIEW.example.test:443/",
+      },
+    });
+    expect(normalized.publicGateway?.origin).toBe("https://apps-preview.example.test");
+    const legacyPlan = { ...plan };
+    delete legacyPlan.publicGateway;
+    const legacyEnvironment = Object.fromEntries(
+      Object.entries(environment).filter(([key]) => key !== "PLATFORM_PUBLIC_ORIGIN"),
+    );
+    legacyEnvironment.BETTER_AUTH_URL = "https://fixture.vercel.run";
+    const legacyProjection = restrictedOperatorEnvironment(legacyPlan, legacyEnvironment);
+    expect(legacyProjection).not.toHaveProperty("PLATFORM_PUBLIC_ORIGIN");
+    expect(legacyProjection.BETTER_AUTH_URL).toBe("https://fixture.vercel.run");
+  });
+  it("rejects sandbox origins and origins swapped across selected Preview targets", () => {
+    expect(
+      hostedOperatorPlanSchema.safeParse({
+        ...plan,
+        publicGateway: { ...plan.publicGateway, origin: "https://sandbox.vercel.run" },
+      }).success,
+    ).toBe(false);
+    expect(
+      hostedOperatorPlanSchema.safeParse({
+        ...plan,
+        publicGateway: { ...plan.publicGateway, branch: "another-preview" },
+      }).success,
+    ).toBe(false);
+    expect(
+      hostedOperatorPlanSchema.safeParse({
+        ...plan,
+        publicGateway: { ...plan.publicGateway, projectId: "another-project" },
+      }).success,
+    ).toBe(false);
   });
   it("uses the same client and handler across a real local HTTP transport boundary", async () => {
     const f = fixture();
