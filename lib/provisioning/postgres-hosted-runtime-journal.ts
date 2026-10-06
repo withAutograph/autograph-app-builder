@@ -43,6 +43,31 @@ export const createPostgresHostedRuntimeJournalStore = (
     return row === undefined ? undefined : parseRow(row);
   };
   return {
+    async reserveFenceGeneration(input) {
+      const [row] = await database
+        .update(builderProvisioningJournals)
+        .set({
+          record: sql`jsonb_set(
+            ${builderProvisioningJournals.record},
+            '{operator,fenceGeneration}',
+            to_jsonb(nextval('public.builder_protected_access_fence_generation_seq'::regclass)),
+            true
+          )`,
+          revision: input.expectedRevision + 1,
+          updatedAt: input.now,
+        })
+        .where(
+          and(
+            predicate(input.authority, input.target),
+            eq(builderProvisioningJournals.revision, input.expectedRevision),
+            sql`${builderProvisioningJournals.record} ->> 'leaseId' = ${input.leaseId}`,
+            sql`${builderProvisioningJournals.record} #>> '{operator,operationRef}' = ${input.operationRef}`,
+            sql`${builderProvisioningJournals.record} #> '{operator,fenceGeneration}' IS NULL`,
+          ),
+        )
+        .returning();
+      return row === undefined ? undefined : parseRow(row);
+    },
     async compareAndSet(input) {
       const record = hostedRuntimeJournalRecordSchema.parse(input.record);
       const [row] = await database

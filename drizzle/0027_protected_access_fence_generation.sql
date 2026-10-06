@@ -1,0 +1,7 @@
+CREATE SEQUENCE "builder_protected_access_fence_generation_seq"
+	AS bigint
+	START WITH 1
+	INCREMENT BY 1
+	MINVALUE 1
+	MAXVALUE 9007199254740991
+	NO CYCLE;

@@ -118,11 +118,34 @@ const fixture = () => {
   let approved = false;
   let uncertain = false;
   let fence = true;
+  let nextFenceGeneration = 0;
   const applied = new Map<
     string,
-    { effectId: string; observedAt: string; resourceVersion: string }
+    { effectId: string; fenceGeneration: number; observedAt: string; resourceVersion: string }
   >();
   const store: HostedRuntimeJournalStore = {
+    async reserveFenceGeneration(input) {
+      if (row === undefined) {
+        return undefined;
+      }
+      if (
+        row.revision !== input.expectedRevision ||
+        row.record.leaseId !== input.leaseId ||
+        row.record.operator?.operationRef !== input.operationRef ||
+        row.record.operator.fenceGeneration !== undefined
+      ) {
+        return undefined;
+      }
+      const generation = ++nextFenceGeneration;
+      row = {
+        record: hostedRuntimeJournalRecordSchema.parse({
+          ...row.record,
+          operator: { ...row.record.operator, fenceGeneration: generation },
+        }),
+        revision: row.revision + 1,
+      };
+      return structuredClone(row);
+    },
     async compareAndSet(input) {
       if (row?.revision !== input.expectedRevision) {
         // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS failure is the explicit optional-row return contract.
@@ -181,6 +204,7 @@ const fixture = () => {
       });
       const receipt = {
         effectId: input.effect.id,
+        fenceGeneration: input.fenceGeneration,
         observedAt: new Date().toISOString(),
         resourceVersion: "provider-observed-v1",
       };
@@ -437,6 +461,8 @@ describe("protected hosted operator boundary", () => {
     const request = await prepared(f);
     f.approve();
     await f.client.request(request);
+    const prepareGeneration = f.row?.record.operator?.fenceGeneration;
+    expect(prepareGeneration).toBeGreaterThan(0);
     const cleanupPlanInput = {
       ...plan,
       action: "cleanup",
@@ -467,6 +493,7 @@ describe("protected hosted operator boundary", () => {
     expect((await f.client.request(cleanup)).status).toBe("cleaned");
     expect(f.row?.record.privateState).toBeUndefined();
     expect(f.row?.record.proof).toBeUndefined();
+    expect(f.row?.record.operator?.fenceGeneration).toBeGreaterThan(prepareGeneration ?? 0);
     await expect(
       f.client.bindings({
         action: "bindings",
@@ -485,7 +512,7 @@ describe("protected hosted operator boundary", () => {
     const f = fixture();
     const request = await prepared(f);
     f.approve();
-    const real = f.deps.executeEffect;
+    const real = vi.mocked(f.deps.executeEffect);
     let crashed = false;
     f.deps.executeEffect = async (input) => {
       const receipt = await real(input);
@@ -499,8 +526,16 @@ describe("protected hosted operator boundary", () => {
     expect(first.status).toBe("blocked");
     expect(JSON.stringify(first)).not.toContain("synthetic-admin-secret");
     expect(f.row?.record.operator?.pendingEffectId).toBe("resources");
+    const firstGeneration = f.row?.record.operator?.fenceGeneration;
     expect((await f.client.request(request)).status).toBe("prepared");
     expect(real).toHaveBeenCalledTimes(4);
+    expect(f.row?.record.operator?.fenceGeneration).toBe(firstGeneration);
+    expect(real.mock.calls.map(([input]) => input.fenceGeneration)).toEqual([
+      firstGeneration,
+      firstGeneration,
+      firstGeneration,
+      firstGeneration,
+    ]);
   });
   it("does not retry when effect readback is unknown", async () => {
     const f = fixture();
@@ -509,6 +544,24 @@ describe("protected hosted operator boundary", () => {
     f.unknown();
     expect((await f.client.request(request)).code).toBe("reconciliation_required");
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
+  });
+  it("blocks access checkpoints that do not match the journaled fence generation", async () => {
+    const f = fixture();
+    const request = await prepared(f);
+    f.approve();
+    const real = f.deps.executeEffect;
+    f.deps.executeEffect = async (input) => {
+      const receipt = await real(input);
+      return { ...receipt, fenceGeneration: input.fenceGeneration + 1 };
+    };
+
+    expect((await f.client.request(request)).code).toBe("reconciliation_required");
+    expect(f.row?.record.operator?.receipts.map((receipt) => receipt.effectId)).toEqual([
+      "resources",
+      "install",
+    ]);
+    expect(f.row?.record.operator?.pendingEffectId).toBe("access");
+    expect(f.row?.record.operator?.fenceGeneration).toBeGreaterThan(0);
   });
   it("rechecks revocation before the next effect", async () => {
     const f = fixture();

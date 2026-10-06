@@ -108,6 +108,7 @@ const runtimeFiles = (): PrivateRuntimeFiles => ({
 const memoryStore = () => {
   const rows = new Map<string, HostedRuntimeJournalRow>();
   const store: HostedRuntimeJournalStore = {
+    reserveFenceGeneration: async () => undefined,
     // oxlint-disable-next-line eslint/require-await -- Promise-returning journal fixture.
     async compareAndSet(input): Promise<HostedRuntimeJournalRow | undefined> {
       const key = hostedRuntimeIdentity(input.authority, input.target).digest;

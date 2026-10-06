@@ -39,6 +39,7 @@ type PrivateState = NonNullable<HostedRuntimeJournalRecord["privateState"]>;
 type Effect = HostedOperatorPlan["effects"][number];
 type EffectContext = Context & {
   effect: Effect;
+  fenceGeneration: number;
   operationRef: string;
   plan: HostedOperatorPlan;
   privateState?: PrivateState;
@@ -329,7 +330,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       };
       const approval = await assertApproval();
       const leaseId = randomUUID();
-      const claimed = await update((record) => {
+      let claimed = await update((record) => {
         if (
           record.operator?.operationRef !== operationRef ||
           record.operator.planDigest !== planDigest
@@ -351,6 +352,34 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           operator: { ...record.operator, approvalId: approval.approvalId },
         };
       });
+      let fenceGeneration = requireOperator(claimed.record).fenceGeneration;
+      if (fenceGeneration === undefined) {
+        const allocated = await deps.store.reserveFenceGeneration({
+          ...context,
+          expectedRevision: claimed.revision,
+          leaseId,
+          now: new Date(now()),
+          operationRef,
+        });
+        if (allocated) {
+          claimed = allocated;
+          fenceGeneration = requireOperator(claimed.record).fenceGeneration;
+        } else {
+          const latest = await read();
+          if (
+            latest?.record.leaseId !== leaseId ||
+            requireOperator(latest.record).operationRef !== operationRef ||
+            requireOperator(latest.record).fenceGeneration === undefined
+          ) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+          claimed = latest;
+          fenceGeneration = requireOperator(latest.record).fenceGeneration;
+        }
+      }
+      if (fenceGeneration === undefined) {
+        throw new HostedOperatorError("reconciliation_required");
+      }
       const ownedUpdate = async (
         change: (record: HostedRuntimeJournalRecord) => HostedRuntimeJournalRecord,
       ) =>
@@ -377,8 +406,13 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
             let { record } = claimed;
             for (const effect of plan.effects) {
               await assertCurrent();
+              const priorReceipt = requireOperator(record).receipts.find(
+                (receipt) => receipt.effectId === effect.id,
+              );
               if (
-                requireOperator(record).receipts.some((receipt) => receipt.effectId === effect.id)
+                priorReceipt !== undefined &&
+                ((effect.kind !== "access" && effect.kind !== "revoke") ||
+                  priorReceipt.fenceGeneration === fenceGeneration)
               ) {
                 continue;
               }
@@ -390,6 +424,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                   record = (await ownedUpdate((value) => ({ ...value, privateState }))).record;
                 },
                 effect,
+                fenceGeneration,
                 operationRef,
                 plan,
                 privateState: record.privateState,
@@ -417,6 +452,12 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 });
               }
               receipt = operatorReceiptSchema.parse(receipt);
+              if (
+                (effect.kind === "access" || effect.kind === "revoke") &&
+                receipt.fenceGeneration !== fenceGeneration
+              ) {
+                throw new HostedOperatorError("reconciliation_required");
+              }
               if (receipt.effectId !== effect.id) {
                 throw new HostedOperatorError("resource_mismatch");
               }

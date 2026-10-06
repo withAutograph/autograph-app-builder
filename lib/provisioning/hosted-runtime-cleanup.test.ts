@@ -77,6 +77,7 @@ const fixture = () => {
     revision: 1,
   };
   const store: HostedRuntimeJournalStore = {
+    reserveFenceGeneration: async () => undefined,
     compareAndSet: async (input) => {
       if (input.expectedRevision !== row.revision) {
         // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS conflict must remain explicit.
