@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 
 import { z } from "zod";
 
-import { decryptVercelToken, encryptVercelToken } from "../integrations/vercel-installation";
+import {
+  decryptVersionedVercelToken,
+  encryptVercelToken,
+  VercelTokenDecryptionKeyError,
+} from "../integrations/vercel-installation";
 import type {
   VercelIntegrationConfig,
   VercelInstallationBinding,
@@ -82,18 +86,22 @@ export const decryptHostedRuntimeFiles = (input: {
   if (!state) {
     return undefined;
   }
-  if (state.keyVersion !== input.config.tokenKeyVersion) {
-    throw new HostedRuntimeProviderError("authorization_required");
+  try {
+    return privateFilesSchema.parse(
+      JSON.parse(
+        decryptVersionedVercelToken({
+          ...state,
+          associatedData: associatedData(input.authority, input.target),
+          config: input.config,
+        }),
+      ),
+    );
+  } catch (error) {
+    if (error instanceof VercelTokenDecryptionKeyError) {
+      throw new HostedRuntimeProviderError("authorization_required");
+    }
+    throw error;
   }
-  return privateFilesSchema.parse(
-    JSON.parse(
-      decryptVercelToken({
-        ...state,
-        associatedData: associatedData(input.authority, input.target),
-        key: input.config.tokenKey,
-      }),
-    ),
-  );
 };
 
 /** Native installer credentials remain in private state. Only restricted runtime bindings are eligible for publication. */

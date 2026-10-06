@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  hostedOperatorPlanSchema,
+  operatorPlanDigest,
+} from "../provisioning/hosted-operator-contract";
 import type {
   DraftPullRequestProposal,
   ImmutableGitHubSourceReceipt,
@@ -188,6 +192,34 @@ function publicReceiptDescription(receipt: unknown, toolName?: string): string |
   return JSON.stringify(parsed.data);
 }
 
+const operatorApprovalDescription = (record: Record<string, unknown>, toolName: string) => {
+  const parsed = hostedOperatorPlanSchema.safeParse(record.plan);
+  if (
+    !parsed.success ||
+    record.planDigest !== operatorPlanDigest(parsed.data) ||
+    parsed.data.action !== (toolName === "cleanup-app-hosted-runtime" ? "cleanup" : "prepare") ||
+    record.environment !== "preview" ||
+    parsed.data.selection.appId !== record.appId ||
+    parsed.data.selection.projectId !== record.projectId ||
+    parsed.data.selection.branch !== record.branch
+  ) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional descriptions explicitly return no public approval.
+    return undefined;
+  }
+  const plan = parsed.data;
+  const grants = plan.access
+    .map((entry) => `${entry.actorId} in ${entry.organizationId}: ${entry.roles.join(", ")}`)
+    .join("; ");
+  return (
+    `${plan.action === "cleanup" ? "Clean up" : "Prepare"} ${plan.selection.appId} on Preview branch ${plan.selection.branch} in Vercel project ${plan.selection.projectId}. ` +
+    `Context ${plan.contextId}; Neon project ${plan.neon.projectId}, branch ${plan.neon.branchId} (${plan.neon.source}). ` +
+    `Auth database ${plan.authDatabase.database} with runtime role ${plan.authDatabase.runtimeRole} and migrator role ${plan.authDatabase.migratorRole}; app database ${plan.appDatabase.database} with runtime role ${plan.appDatabase.runtimeRole} and migrator role ${plan.appDatabase.migratorRole}. ` +
+    `Release ${plan.release.id} (${plan.release.sha256}); trusted installer ${plan.installer.reference} (${plan.installer.sha256}). Effects: ${plan.effects.map((effect) => effect.description).join("; ")}. ` +
+    `Access: ${grants || "no new actor grants"}. Cost owner: ${plan.cost.owner}; ${plan.cost.class}: ${plan.cost.description}. ` +
+    `Retention: ${plan.retention.policy}; expires ${plan.retention.expiresAt}. This does not deploy or activate Production.`
+  );
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function publicApprovalDescription(input: unknown, toolName?: string): string | undefined {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
@@ -195,19 +227,9 @@ export function publicApprovalDescription(input: unknown, toolName?: string): st
   }
   const record = input as Record<string, unknown>;
   if (toolName === "prepare-app-hosted-runtime" || toolName === "cleanup-app-hosted-runtime") {
-    const parsed = z
-      .object({
-        appId,
-        branch: z.string().min(1),
-        environment: z.literal("preview"),
-        projectId: z.string().min(1),
-      })
-      .safeParse(input);
-    if (!parsed.success) return undefined;
-    return toolName === "cleanup-app-hosted-runtime"
-      ? `Remove this session's owned runtime variables, app and authentication databases, and database roles for ${parsed.data.appId} on Preview branch ${parsed.data.branch} in Vercel project ${parsed.data.projectId}. Existing Preview deployments using these resources will lose access.`
-      : `Prepare isolated app and authentication databases for ${parsed.data.appId}, and bind restricted runtime credentials to Preview branch ${parsed.data.branch} in Vercel project ${parsed.data.projectId}.`;
+    return operatorApprovalDescription(record, toolName);
   }
+
   if (Object.hasOwn(record, "approvalReceipt")) {
     return publicReceiptDescription(record.approvalReceipt, toolName);
   }

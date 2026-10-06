@@ -105,19 +105,22 @@ not write the checkout. Submit the complete `implementationFiles` and product
 summary together so its approval card covers the actual build; do not send an
 empty apply merely to obtain approval and then request another apply for the
 implementation. The tool writes the private checkout only after approval.
-For hosted Preview persistence, use `prepare-app-hosted-runtime` after the
+For hosted Preview persistence, first use `plan-app-hosted-runtime` after the
 private implementation is ready and the user requests connected Preview
-resources. Its separate approval must name the app, selected Vercel project
-and exact Preview branch. Use the existing native Neon connection; never ask
-the user or model to paste credentials. Follow `docs/hosted-app-runtime.md` for
-protected recovery and binding. Translate a missing native branch/connection
-into that specific product blocker, and retain the public session. Do not claim
-hosted behavior or activation from database preparation alone.
-Use `cleanup-app-hosted-runtime` only for a separately approved removal of the
-named Preview resources. Disconnecting a provider prevents new Builder access;
-it does not revoke database credentials already issued to a deployment. Never
-use turn cleanup to remove persistent databases or overwrite another app's
-shared branch authentication bindings.
+resources. Present the returned concrete targets, app/Auth roles, access grants,
+effects, cost owner and retention. Pass that unchanged plan, digest and operation
+reference to `prepare-app-hosted-runtime` for separate effect approval. Read
+pending status with `get-app-hosted-runtime`; never report completion before
+operator readback. Use `cleanup-app-hosted-runtime` only with a separately
+planned and approved cleanup scope. Static apps require no database preparation.
+The protected operator must be separately configured with explicit owner Neon
+authority and a synthetic-only nonproduction context. Missing operator,
+connection, exact resource identity or durable approval is a specific blocker;
+never fall back to an installer in the agent Sandbox or request pasted secrets.
+Follow `docs/hosted-app-runtime.md`. Preparation is not hosted behavior or
+activation proof. Disconnecting a provider blocks new access but does not revoke
+credentials already issued. Never remove persistent resources during turn
+cleanup or overwrite another app's shared authentication bindings.
 After a successful apply, call `validate_app_creation` in the approved private
 checkout. Applied files are not validated files. Successful repository commands
 establish technical validation, not proof that the accepted product behaviors

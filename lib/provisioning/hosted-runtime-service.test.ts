@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { describe, expect, it, vi } from "vitest";
 
+import { encryptVercelToken } from "../integrations/vercel-installation";
 import type { VercelIntegrationConfig } from "../integrations/vercel-installation";
 import type {
   HostedRuntimeJournalRecord,
@@ -16,6 +17,7 @@ import {
   HostedRuntimeCommandError,
   hostedRuntimeBindings,
   hostedRuntimeExecutionEnvironment,
+  encryptHostedRuntimeFiles,
   prepareHostedRuntime,
 } from "./hosted-runtime-service";
 import type { HostedRuntimeExecutor, PrivateRuntimeFiles } from "./hosted-runtime-service";
@@ -521,6 +523,83 @@ describe("durable hosted runtime preparation", () => {
         target,
       }),
     ).toThrow();
+  });
+
+  it("resumes a version-1 journal with its retained key and encrypts new checkpoints with the active key", () => {
+    const rotatedConfig: VercelIntegrationConfig = {
+      ...config,
+      previousTokenKeys: [{ key: config.tokenKey, version: config.tokenKeyVersion }],
+      tokenKey: Buffer.alloc(32, 10),
+      tokenKeyVersion: "fixture_v2",
+    };
+    const associatedData = JSON.stringify({
+      ...hostedRuntimeIdentity(authority, target),
+      purpose: "app-runtime-private-state-v1",
+    });
+    const oldState = {
+      ...encryptVercelToken({
+        associatedData,
+        key: config.tokenKey,
+        token: JSON.stringify(runtimeFiles()),
+      }),
+      keyVersion: config.tokenKeyVersion,
+    };
+    const legacyRecord: HostedRuntimeJournalRecord = {
+      approvedByCallId: "approval_legacy",
+      kind: "app-runtime",
+      privateState: oldState,
+      request: target,
+      status: "prepared",
+      step: "bound",
+      version: 1,
+    };
+    expect(
+      decryptHostedRuntimeFiles({ authority, config: rotatedConfig, record: legacyRecord, target }),
+    ).toEqual(runtimeFiles());
+
+    const next = encryptHostedRuntimeFiles({
+      authority,
+      config: rotatedConfig,
+      files: runtimeFiles(),
+      target,
+    });
+    expect(next.keyVersion).toBe("fixture_v2");
+    const nextRecord = { ...legacyRecord, privateState: next };
+    expect(
+      decryptHostedRuntimeFiles({ authority, config: rotatedConfig, record: nextRecord, target }),
+    ).toEqual(runtimeFiles());
+    expect(() =>
+      decryptHostedRuntimeFiles({
+        authority: { ...authority, ownerUserId: "other_owner" },
+        config: rotatedConfig,
+        record: legacyRecord,
+        target,
+      }),
+    ).toThrow();
+  });
+
+  it("fails closed with authorization_required when a journal key version is unknown", () => {
+    const record: HostedRuntimeJournalRecord = {
+      approvedByCallId: "approval_legacy",
+      kind: "app-runtime",
+      privateState: {
+        encryptedToken: "opaque-ciphertext",
+        keyVersion: "removed_v0",
+        tokenIv: "opaque-iv",
+        tokenTag: "opaque-tag",
+      },
+      request: target,
+      status: "prepared",
+      step: "bound",
+      version: 1,
+    };
+    let caught: unknown;
+    try {
+      decryptHostedRuntimeFiles({ authority, config, record, target });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({ code: "authorization_required" });
   });
 
   it("rejects installer credentials in an alleged runtime environment", () => {

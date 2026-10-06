@@ -74,6 +74,7 @@ export const createPostgresHostedRuntimeJournalStore = (
           record: hostedRuntimeJournalRecordSchema.parse({
             approvedByCallId: input.approvedByCallId,
             kind: "app-runtime",
+            operator: input.operator,
             request: input.target,
             status: "pending",
             step: "reserved",

@@ -5,7 +5,11 @@ import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { parseProviderConnectionReturn } from "./provider-connection-return";
 import type * as databaseSchema from "../db/schema";
 import { hostedVercelInstallations, vercelInstallationAuthorizationStates } from "../db/schema";
-import { encryptVercelToken, decryptVercelToken } from "./vercel-installation";
+import {
+  decryptVersionedVercelToken,
+  encryptVercelToken,
+  VercelTokenDecryptionKeyError,
+} from "./vercel-installation";
 import type {
   VercelAuthorizationStateStore,
   VercelInstallationBinding,
@@ -46,8 +50,27 @@ export async function readActiveVercelInstallationToken(input: {
     )
     .limit(1);
   const [row] = rows;
-  if (!row || row.tokenKeyVersion !== input.config.tokenKeyVersion) {
+  if (!row) {
     return;
+  }
+  let token: string;
+  try {
+    token = decryptVersionedVercelToken({
+      associatedData: JSON.stringify({
+        ...authority,
+        installationId: row.installationId,
+      }),
+      config: input.config,
+      encryptedToken: row.encryptedToken,
+      keyVersion: row.tokenKeyVersion,
+      tokenIv: row.tokenIv,
+      tokenTag: row.tokenTag,
+    });
+  } catch (error) {
+    if (error instanceof VercelTokenDecryptionKeyError) {
+      return;
+    }
+    throw error;
   }
   return {
     binding: {
@@ -60,16 +83,7 @@ export async function readActiveVercelInstallationToken(input: {
       slug: row.slug,
       updatedAt: row.updatedAt,
     },
-    token: decryptVercelToken({
-      associatedData: JSON.stringify({
-        ...authority,
-        installationId: row.installationId,
-      }),
-      encryptedToken: row.encryptedToken,
-      key: input.config.tokenKey,
-      tokenIv: row.tokenIv,
-      tokenTag: row.tokenTag,
-    }),
+    token,
   };
 }
 

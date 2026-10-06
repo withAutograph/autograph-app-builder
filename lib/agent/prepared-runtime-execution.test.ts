@@ -147,6 +147,22 @@ beforeEach(() => {
 });
 
 describe("approved hosted runtime consumers", () => {
+  it("never falls back to legacy credential decryption when the operator is unavailable", async () => {
+    const operatorClient = vi.fn(() => {
+      throw new Error("protected_operator_required");
+    });
+    await expect(
+      resolvePreparedRuntimeExecution(
+        context,
+        { ...selection, operationRef: "11111111-1111-4111-8111-111111111111" },
+        { ...mocks, operatorClient },
+      ),
+    ).rejects.toThrow("protected_operator_required");
+    expect(mocks.readBinding).not.toHaveBeenCalled();
+    expect(mocks.observeInstallation).not.toHaveBeenCalled();
+    expect(mocks.getProvider).not.toHaveBeenCalled();
+  });
+
   it("redacts a session token split across provider log chunks before durable output", async () => {
     const fixture = transport(descriptor, [
       "Authenticated ",
