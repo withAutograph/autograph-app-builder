@@ -124,28 +124,6 @@ const fixture = () => {
     { effectId: string; fenceGeneration: number; observedAt: string; resourceVersion: string }
   >();
   const store: HostedRuntimeJournalStore = {
-    async reserveFenceGeneration(input) {
-      if (row === undefined) {
-        return undefined;
-      }
-      if (
-        row.revision !== input.expectedRevision ||
-        row.record.leaseId !== input.leaseId ||
-        row.record.operator?.operationRef !== input.operationRef ||
-        row.record.operator.fenceGeneration !== undefined
-      ) {
-        return undefined;
-      }
-      const generation = ++nextFenceGeneration;
-      row = {
-        record: hostedRuntimeJournalRecordSchema.parse({
-          ...row.record,
-          operator: { ...row.record.operator, fenceGeneration: generation },
-        }),
-        revision: row.revision + 1,
-      };
-      return structuredClone(row);
-    },
     async compareAndSet(input) {
       if (row?.revision !== input.expectedRevision) {
         // oxlint-disable-next-line unicorn/no-useless-undefined -- CAS failure is the explicit optional-row return contract.
@@ -172,6 +150,31 @@ const fixture = () => {
           version: 1,
         }),
         revision: 1,
+      };
+      return structuredClone(row);
+    },
+    async reserveFenceGeneration(input) {
+      if (row === undefined) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- The journal CAS reports no allocated row.
+        return undefined;
+      }
+      if (
+        row.revision !== input.expectedRevision ||
+        row.record.leaseId !== input.leaseId ||
+        row.record.operator?.operationRef !== input.operationRef ||
+        row.record.operator.fenceGeneration !== undefined
+      ) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- A stale CAS must not allocate a generation.
+        return undefined;
+      }
+      nextFenceGeneration += 1;
+      const generation = nextFenceGeneration;
+      row = {
+        record: hostedRuntimeJournalRecordSchema.parse({
+          ...row.record,
+          operator: { ...row.record.operator, fenceGeneration: generation },
+        }),
+        revision: row.revision + 1,
       };
       return structuredClone(row);
     },

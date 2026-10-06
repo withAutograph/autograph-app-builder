@@ -6,14 +6,16 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 
-import * as schema from "../../../../lib/db/schema";
+import { builderProvisioningJournals } from "../../../../lib/db/schema";
 import { createPostgresHostedRuntimeJournalStore } from "../../../../lib/provisioning/postgres-hosted-runtime-journal";
 import type { HostedRuntimeTarget } from "../../../../lib/provisioning/hosted-runtime-journal";
 
 const argument = (name: string) => {
   const index = process.argv.indexOf(name);
   const value = index === -1 ? undefined : process.argv[index + 1];
-  if (value === undefined || value.length === 0) throw new Error(`Missing ${name}.`);
+  if (value === undefined || value.length === 0) {
+    throw new Error(`Missing ${name}.`);
+  }
   return value;
 };
 const port = Number(argument("--port"));
@@ -34,6 +36,7 @@ const clientB = postgres({
   port,
   username: "postgres",
 });
+const schema = { builderProvisioningJournals };
 const databaseA = drizzle(clientA, { schema });
 const databaseB = drizzle(clientB, { schema });
 const storeA = createPostgresHostedRuntimeJournalStore(databaseA);
@@ -108,9 +111,8 @@ const reserve = async (sessionId: string) => {
   const selected = target(sessionId);
   const operationRef = randomUUID();
   const record = await storeA.reserve({
-    authority,
-    target: selected,
     approvedByCallId: `approval-${sessionId}`,
+    authority,
     now,
     operator: {
       mode: "protected-operator-v1",
@@ -119,18 +121,19 @@ const reserve = async (sessionId: string) => {
       planDigest: "c".repeat(64),
       receipts: [],
     },
+    target: selected,
   });
   const leaseId = randomUUID();
   const claimed = await storeA.compareAndSet({
     authority,
-    target: selected,
     expectedRevision: record.revision,
     now,
     record: {
       ...record.record,
-      leaseId,
       leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+      leaseId,
     },
+    target: selected,
   });
   assert.ok(claimed);
   return { leaseId, operationRef, row: claimed, target: selected };
@@ -141,11 +144,11 @@ try {
   const first = await reserve("session-a");
   const reserveInput = {
     authority,
-    target: first.target,
     expectedRevision: first.row.revision,
     leaseId: first.leaseId,
-    operationRef: first.operationRef,
     now,
+    operationRef: first.operationRef,
+    target: first.target,
   };
   const concurrent = await Promise.all([
     storeA.reserveFenceGeneration(reserveInput),
@@ -161,23 +164,23 @@ try {
     expectedRevision: afterRestart?.revision ?? -1,
   });
   assert.equal(repeated, undefined, "an existing operation generation cannot be replaced");
-  assert.equal(
-    (await storeA.read({ authority, target: first.target }))?.record.operator?.fenceGeneration,
-    generation,
-  );
+  const finalRead = await storeA.read({ authority, target: first.target });
+  assert.equal(finalRead?.record.operator?.fenceGeneration, generation);
 
   const second = await reserve("session-b");
   const secondGeneration = await storeA.reserveFenceGeneration({
     authority,
-    target: second.target,
     expectedRevision: second.row.revision,
     leaseId: second.leaseId,
-    operationRef: second.operationRef,
     now,
+    operationRef: second.operationRef,
+    target: second.target,
   });
   assert.ok(secondGeneration);
+  assert.ok(secondGeneration.record.operator);
+  const secondFenceGeneration = secondGeneration.record.operator.fenceGeneration;
   assert.ok(
-    secondGeneration.record.operator?.fenceGeneration! > generation,
+    secondFenceGeneration !== undefined && secondFenceGeneration > generation,
     "shared targets get globally increasing operation generations across sessions",
   );
   console.log(
