@@ -1,4 +1,5 @@
-import { lstatSync, readFileSync, readlinkSync, realpathSync, statSync } from "node:fs";
+import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { createRequire } from "node:module";
 import nodePath from "node:path";
 
 interface LinkedVercelProject {
@@ -21,6 +22,8 @@ interface VercelOidcClaims {
   environment: string;
 }
 
+const OWNER_BOUND_INPUT_ERROR = "Installed Eve input was not owner-bound.";
+
 const closedObject = (value: unknown, name: string): Record<string, unknown> => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${name} was not an object.`);
@@ -33,7 +36,7 @@ const assertOwnerNonWritable = (path: string): void => {
   const ownerId = process.getuid?.();
   // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
   if (ownerId === undefined || stat.uid !== ownerId || (stat.mode & 0o022) !== 0) {
-    throw new Error("Installed Eve input was not owner-bound.");
+    throw new Error(OWNER_BOUND_INPUT_ERROR);
   }
 };
 
@@ -55,78 +58,118 @@ const isContainedPath = (parent: string, candidate: string): boolean => {
   );
 };
 
+const assertOwnerBoundResolvedDirectory = (path: string, packageRoot = path): void => {
+  const ownerId = process.getuid?.();
+  if (ownerId === undefined) {
+    throw new Error(OWNER_BOUND_INPUT_ERROR);
+  }
+  let current = realpathSync(path);
+  const boundary = realpathSync(packageRoot);
+  if (current !== boundary && !isContainedPath(boundary, current)) {
+    throw new Error(OWNER_BOUND_INPUT_ERROR);
+  }
+  let insidePackage = true;
+  for (;;) {
+    const stat = lstatSync(current);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new Error("Installed Eve input was not an owner-bound directory.");
+    }
+    if (insidePackage && stat.uid !== ownerId) {
+      throw new Error(OWNER_BOUND_INPUT_ERROR);
+    }
+    // Reject directories another local account can replace files from. A
+    // sticky shared temporary directory remains safe for its owner to use.
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission and sticky-bit checks.
+    const writableByOthers = (stat.mode & 0o022) !== 0;
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional permission and sticky-bit checks.
+    const sticky = (stat.mode & 0o1000) !== 0;
+    if (writableByOthers && (stat.uid === ownerId || !sticky)) {
+      throw new Error(OWNER_BOUND_INPUT_ERROR);
+    }
+    if (current === boundary) insidePackage = false;
+    const parent = nodePath.dirname(current);
+    if (parent === current) return;
+    current = parent;
+  }
+};
+
 export const resolveInstalledEveCli = (repositoryRootInput: string): string => {
   const repositoryRoot = realpathSync(repositoryRootInput);
   if (repositoryRoot !== nodePath.resolve(repositoryRootInput)) {
     throw new Error("Repository root was not canonical.");
   }
   const nodeModules = nodePath.join(repositoryRoot, "node_modules");
-  const pnpmRoot = nodePath.join(nodeModules, ".pnpm");
   const packageLink = nodePath.join(nodeModules, "eve");
   assertOwnerBoundDirectory(nodeModules);
-  assertOwnerBoundDirectory(pnpmRoot);
   const packageLinkStat = lstatSync(packageLink);
-  if (
-    !packageLinkStat.isSymbolicLink() ||
-    packageLinkStat.uid !== process.getuid?.() ||
-    realpathSync(nodePath.dirname(packageLink)) !== nodePath.dirname(packageLink)
-  ) {
-    throw new Error("Installed Eve did not use the expected pnpm layout.");
+  if (packageLinkStat.uid !== process.getuid?.()) {
+    throw new Error(OWNER_BOUND_INPUT_ERROR);
   }
-  const rawTarget = readlinkSync(packageLink, "utf-8");
-  if (
-    nodePath.isAbsolute(rawTarget) ||
-    rawTarget.split("/").includes("..") ||
-    !/^\.pnpm\/eve@0\.68\.0(?:_[^/]+)?\/node_modules\/eve$/u.test(rawTarget)
-  ) {
+  if (!packageLinkStat.isSymbolicLink() && !packageLinkStat.isDirectory()) {
     throw new Error("Installed Eve package link was invalid.");
   }
-  const packageRoot = realpathSync(packageLink);
-  const relativePackageRoot = nodePath.relative(pnpmRoot, packageRoot);
-  if (
-    !isContainedPath(pnpmRoot, packageRoot) ||
-    !/^eve@0\.68\.0(?:_[^/]+)?\/node_modules\/eve$/u.test(relativePackageRoot)
-  ) {
-    throw new Error("Installed Eve resolved outside the pinned pnpm package.");
+  if (realpathSync(nodePath.dirname(packageLink)) !== nodePath.dirname(packageLink)) {
+    throw new Error("Installed Eve package link was invalid.");
   }
-  const cli = nodePath.join(packageRoot, "bin/eve.js");
-  const metadataPath = nodePath.join(packageRoot, "package.json");
-  const packageNodeModules = nodePath.dirname(packageRoot);
-  const packageStoreRoot = nodePath.dirname(packageNodeModules);
-  for (const directoryPath of [
-    packageStoreRoot,
-    packageNodeModules,
-    packageRoot,
-    nodePath.join(packageRoot, "bin"),
-  ]) {
-    assertOwnerBoundDirectory(directoryPath);
+
+  const repositoryPackagePath = nodePath.join(repositoryRoot, "package.json");
+  assertOwnerNonWritable(repositoryPackagePath);
+  const rootMetadata = closedObject(
+    JSON.parse(readFileSync(repositoryPackagePath, "utf-8")) as unknown,
+    "Repository package",
+  );
+  const declared = [
+    rootMetadata.dependencies,
+    rootMetadata.devDependencies,
+    rootMetadata.optionalDependencies,
+    rootMetadata.peerDependencies,
+  ].some((section) => {
+    if (section === undefined) return false;
+    return Object.hasOwn(closedObject(section, "Repository dependencies"), "eve");
+  });
+  if (!declared) {
+    throw new Error("Eve was not a declared repository dependency.");
   }
-  for (const filePath of [cli, metadataPath]) {
-    assertOwnerNonWritable(filePath);
+
+  let metadataPath: string;
+  try {
+    metadataPath = realpathSync(createRequire(repositoryPackagePath).resolve("eve/package.json"));
+  } catch {
+    throw new Error("Installed Eve package metadata was unavailable.");
   }
-  if (
-    lstatSync(cli).isSymbolicLink() ||
-    !lstatSync(cli).isFile() ||
-    // oxlint-disable-next-line eslint/no-bitwise -- Intentional bitmask or binary-flag operation.
-    (statSync(cli).mode & 0o111) === 0
-  ) {
-    throw new Error("Installed Eve CLI was not an exact executable file.");
+  const packageRoot = nodePath.dirname(metadataPath);
+  if (realpathSync(packageLink) !== packageRoot) {
+    throw new Error("Installed Eve package resolution did not match its direct dependency.");
   }
+  assertOwnerBoundResolvedDirectory(packageRoot);
+  assertOwnerNonWritable(metadataPath);
   const metadata = closedObject(
     JSON.parse(readFileSync(metadataPath, "utf-8")) as unknown,
     "Installed Eve package",
   );
-  const bin = closedObject(metadata.bin, "Installed Eve bin");
-  if (metadata.name !== "eve" || metadata.version !== "0.68.0" || bin.eve !== "./bin/eve.js") {
+  const bin =
+    typeof metadata.bin === "string"
+      ? metadata.bin
+      : closedObject(metadata.bin, "Installed Eve bin").eve;
+  if (metadata.name !== "eve" || typeof bin !== "string" || bin.length === 0) {
     throw new Error("Installed Eve package identity was invalid.");
   }
-  const rootMetadata = closedObject(
-    JSON.parse(readFileSync(nodePath.join(repositoryRoot, "package.json"), "utf-8")) as unknown,
-    "Repository package",
-  );
-  const dependencies = closedObject(rootMetadata.dependencies, "Repository dependencies");
-  if (dependencies.eve !== "0.68.0") {
-    throw new Error("Repository Eve dependency was not pinned to 0.68.0.");
+  const cliCandidate = nodePath.resolve(packageRoot, bin);
+  if (nodePath.isAbsolute(bin) || !isContainedPath(packageRoot, cliCandidate)) {
+    throw new Error("Installed Eve CLI target was invalid.");
+  }
+  const cli = realpathSync(cliCandidate);
+  if (!isContainedPath(packageRoot, cli)) {
+    throw new Error("Installed Eve CLI target resolved outside its package.");
+  }
+  assertOwnerBoundResolvedDirectory(nodePath.dirname(cli), packageRoot);
+  assertOwnerNonWritable(cli);
+  if (
+    !statSync(cli).isFile() ||
+    // oxlint-disable-next-line eslint/no-bitwise -- Intentional executable-mode check.
+    (statSync(cli).mode & 0o111) === 0
+  ) {
+    throw new Error("Installed Eve CLI was not an executable file.");
   }
   return cli;
 };
