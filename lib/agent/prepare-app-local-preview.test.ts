@@ -47,6 +47,7 @@ describe("private local preview setup", () => {
     const run = vi
       .fn()
       .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor(generated) })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: descriptor(generated) })
       .mockResolvedValueOnce({ exitCode: 1, stderr: "pg_ctl failed", stdout: "" });
     await expect(
       prepareValidationLocalData({
@@ -54,7 +55,8 @@ describe("private local preview setup", () => {
         root: "/workspace/repository",
         sandbox: { run },
       }),
-    ).rejects.toThrow("Validation could not prepare");
+    ).rejects.toThrow(/Validation could not prepare.*pg_ctl failed/su);
+    expect(run).toHaveBeenCalledTimes(3);
     expect(run).toHaveBeenLastCalledWith({
       command: localPreviewExecutionCommand("spend-review"),
       env: { APP_RUNTIME_ROLES: "member" },

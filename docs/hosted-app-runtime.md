@@ -66,10 +66,15 @@ The actual SQL grants, schema identity and absence of elevated capabilities are
 the mandatory trusted verification adapter's responsibility. No installer state,
 provider token or cluster URL reaches the app process. An operation reference
 selects this closed launch path: failures never trigger legacy admin decryption.
-Launch compares observed release/artifact with the app description. This slice
-projects no browser identity/session fixtures; authenticated browser acceptance
-and durable fixture projection are still unassessed. Origin adaptation affects
-only local restricted runtime files.
+Launch compares observed release/artifact with the app description. New preparation
+plans include `publicGateway`, whose HTTPS origin the protected planner independently
+verifies for the selected Preview project and branch. Both `PLATFORM_PUBLIC_ORIGIN`
+and `BETTER_AUTH_URL` must equal that approved origin in restricted native bindings;
+private Sandbox origins are never a Gateway origin. Persisted legacy plans remain
+readable without origin proof, and cleanup can retire their resources without
+reconstructing an origin. The concrete trusted planner still owns provider origin
+resolution. This slice projects no browser identity/session fixtures; authenticated
+browser acceptance and durable fixture projection remain unassessed.
 
 ## External setup and evidence gate
 

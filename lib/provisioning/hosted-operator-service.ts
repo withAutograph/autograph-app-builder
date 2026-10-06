@@ -49,7 +49,12 @@ export interface ProtectedHostedOperatorDependencies {
   store: HostedRuntimeJournalStore;
   /** Verify caller signature/audience and independently resolve this session's owner and selected project. Never trust body owner IDs. */
   authorize: (request: Request, selection: OperatorSelection) => Promise<Context>;
-  /** Read-only owner-selected resource inventory and trusted generated artifact resolution. No caller checkout or shell execution. */
+  /**
+   * Read-only owner-selected resource inventory and trusted generated artifact resolution. No
+   * caller checkout or shell execution. The plan must include the independently verified public
+   * Gateway origin for its exact Preview project and branch, never a request/model value or
+   * private Sandbox origin.
+   */
   plan: (context: Context & { action: "prepare" | "cleanup" }) => Promise<HostedOperatorPlan>;
   /** Re-read membership, owner connection and provider grants. No ambient Neon authority. */
   assertAuthorized: (context: Context & { plan: HostedOperatorPlan }) => Promise<void>;
@@ -91,6 +96,8 @@ const selectionFor = (target: HostedRuntimeTarget): OperatorSelection => ({
   projectId: target.projectId,
   sessionId: target.sessionId,
 });
+const hasRequiredGatewayPlan = (operation: "prepare" | "cleanup", plan: HostedOperatorPlan) =>
+  operation !== "prepare" || plan.publicGateway !== undefined;
 const assertUnexpired = (plan: HostedOperatorPlan, now: number) => {
   if (plan.action === "prepare" && Date.parse(plan.retention.expiresAt) <= now) {
     throw new HostedOperatorError("authorization_required");
@@ -165,7 +172,8 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         );
         if (
           plan.action !== input.operation ||
-          !sameOperatorSelection(plan.selection, input.selection)
+          !sameOperatorSelection(plan.selection, input.selection) ||
+          !hasRequiredGatewayPlan(input.operation, plan)
         ) {
           throw new HostedOperatorError("resource_mismatch");
         }
