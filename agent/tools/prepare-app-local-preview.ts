@@ -85,7 +85,8 @@ export const prepareAppLocalPreview = async (input: {
       sandbox: input.sandbox,
       signal: input.signal,
     });
-    const roles = description.backend.kind === "generated-postgres" ? description.backend.roles : [];
+    const roles =
+      description.backend.kind === "generated-postgres" ? description.backend.roles : [];
     const env = {
       ...(roles.length === 0 ? {} : { APP_RUNTIME_ROLES: roles.join(",") }),
       ...(origin === undefined ? {} : { APP_RUNTIME_AUTH_ORIGIN: origin }),
