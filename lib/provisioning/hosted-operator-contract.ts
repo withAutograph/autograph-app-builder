@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
+import { hostedPrincipalSchema } from "../eve/hosted-auth";
 
 const id = z.string().min(1);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -159,27 +161,51 @@ export const operatorPlanDigest = (input: HostedOperatorPlan) =>
   createHash("sha256")
     .update(JSON.stringify(hostedOperatorPlanSchema.parse(input)))
     .digest("hex");
+/** Private server-derived claims; the operator re-reads their durable authority. */
+export const operatorOwnerContextSchema = z
+  .strictObject({
+    adapterGeneration: z.number().int().positive(),
+    adapterSessionId: z.string().min(1).max(200),
+    authority: hostedTenantAuthoritySchema,
+    principal: hostedPrincipalSchema,
+    sessionId: z.string().min(1).max(200),
+    sourceHandoffId: z.uuid(),
+  })
+  .superRefine((value, context) => {
+    if (
+      (["audience", "issuer", "ownerUserId", "workspaceId"] as const).some(
+        (key) => value.principal[key] !== value.authority[key],
+      )
+    ) {
+      context.addIssue({ code: "custom", message: "Operator owner claims disagree" });
+    }
+  });
+export type OperatorOwnerContext = z.infer<typeof operatorOwnerContextSchema>;
 export const operatorRequestSchema = z.discriminatedUnion("action", [
   z.strictObject({
     action: z.literal("plan"),
     operation: z.enum(["prepare", "cleanup"]),
+    ownerContext: operatorOwnerContextSchema.optional(),
     selection: operatorSelectionSchema,
   }),
   z.strictObject({
     action: z.literal("execute"),
     callId: id,
     operationRef: z.uuid(),
+    ownerContext: operatorOwnerContextSchema.optional(),
     planDigest: digest,
     selection: operatorSelectionSchema,
   }),
   z.strictObject({
     action: z.literal("status"),
     operationRef: z.uuid(),
+    ownerContext: operatorOwnerContextSchema.optional(),
     selection: operatorSelectionSchema,
   }),
   z.strictObject({
     action: z.literal("bindings"),
     operationRef: z.uuid(),
+    ownerContext: operatorOwnerContextSchema.optional(),
     selection: operatorSelectionSchema,
   }),
 ]);

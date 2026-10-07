@@ -23,6 +23,7 @@ import {
   restrictedOperatorEnvironment,
   sameOperatorSelection,
   hostedOperatorRecordSchema,
+  operatorOwnerContextSchema,
 } from "./hosted-operator-contract";
 import type {
   HostedOperatorPlan,
@@ -30,12 +31,15 @@ import type {
   OperatorRequest,
   OperatorReceipt,
   OperatorSelection,
+  OperatorOwnerContext,
 } from "./hosted-operator-contract";
 
-interface Context {
+export interface HostedOperatorContext {
   authority: BuilderProvisionAuthority;
   target: HostedRuntimeTarget;
+  ownerContext?: OperatorOwnerContext;
 }
+type Context = HostedOperatorContext;
 type PrivateState = NonNullable<HostedRuntimeJournalRecord["privateState"]>;
 type Effect = HostedOperatorPlan["effects"][number];
 type EffectContext = Context & {
@@ -50,7 +54,11 @@ type EffectContext = Context & {
 export interface ProtectedHostedOperatorDependencies {
   store: HostedRuntimeJournalStore;
   /** Verify caller signature/audience and independently resolve this session's owner and selected project. Never trust body owner IDs. */
-  authorize: (request: Request, selection: OperatorSelection) => Promise<Context>;
+  authorize: (
+    request: Request,
+    selection: OperatorSelection,
+    ownerContext?: OperatorOwnerContext,
+  ) => Promise<Context>;
   /**
    * Read-only owner-selected resource inventory and trusted generated artifact resolution. No
    * caller checkout or shell execution. The plan must include the independently verified public
@@ -263,6 +271,26 @@ const handleBindingsOperation = async (input: {
   return response({ environment, operationRef, plan, proof });
 };
 
+const normalizeOperatorContext = (authorized: Context): Context => {
+  const context: Context = {
+    authority: hostedTenantAuthoritySchema.parse(authorized.authority),
+    target: hostedRuntimeTargetSchema.parse(authorized.target),
+  };
+  if (authorized.ownerContext) {
+    const owner = operatorOwnerContextSchema.parse(authorized.ownerContext);
+    if (
+      owner.sessionId !== context.target.sessionId ||
+      (["audience", "issuer", "ownerUserId", "workspaceId"] as const).some(
+        (key) => owner.authority[key] !== context.authority[key],
+      )
+    ) {
+      throw new HostedOperatorError("authorization_required");
+    }
+    context.ownerContext = owner;
+  }
+  return context;
+};
+
 /** Separate service entrypoint. There is deliberately no production dependency fallback. */
 export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperatorDependencies) => {
   for (const name of [
@@ -293,11 +321,8 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       }
       const input = operatorRequestSchema.parse(await request.json());
       appId = input.selection.appId;
-      const authorized = await deps.authorize(request, input.selection);
-      const context = {
-        authority: hostedTenantAuthoritySchema.parse(authorized.authority),
-        target: hostedRuntimeTargetSchema.parse(authorized.target),
-      };
+      const authorized = await deps.authorize(request, input.selection, input.ownerContext);
+      const context = normalizeOperatorContext(authorized);
       if (!sameOperatorSelection(selectionFor(context.target), input.selection)) {
         throw new HostedOperatorError("authorization_required");
       }
