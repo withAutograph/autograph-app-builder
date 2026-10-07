@@ -18,6 +18,13 @@ support a fixed worker protocol; source tests and disposable PostgreSQL tests do
 not prove a deployed operator, real owner grants, Preview deployment behavior,
 or the product session.
 
+The terminal read-only Production receipt for Builder CI SHA `e1c47894` passed
+current-QA route and access checks for `/hc`, `/hc/api/storage/validate`,
+`/spend-review`, `/vendor` and `/vendor/api/schema/active`, including private
+service denials. This is current-QA readiness evidence only. It does not show
+that the generated Spend Review release was installed through the operator or
+recover the original public session below.
+
 Arrusted's current Spend Review release pointer is
 `apps/spend-review/schema/release/2026-10-06.fenced-membership-v17/data-server`.
 The app requires a verified Better Auth session, active organization, exact app
@@ -43,10 +50,11 @@ readiness proof applies only to the tenant it actually read back.
 | Read-only public origin        | `hosted-operator-gateway.ts`: `readHostedOperatorPublicGateway`                                                                                                                                                                                                                 | Verifies selected project/branch deployment metadata and alias before including the origin in the frozen plan.                                                                                                                                          | This is provider metadata, not browser reachability or application health. The deployed Preview still needs independent HTTP/authenticated behavior checks.              |
 | Sole journal                   | `postgres-hosted-runtime-journal.ts`: `createPostgresHostedRuntimeJournalStore`; `hosted-operator-deployment.ts`: `createHostedOperatorControlPlane`                                                                                                                            | CAS, approvals, frozen plan, positive fence generation, checkpoint and receipts in existing `builderProvisioningJournals`; the factory uses the same control-plane database as owner/session reads.                                                     | Deploy with access to existing checkpoint-encryption keys under least required access. Do not add another journal.                                                       |
 | Shared resource fence          | `postgres-hosted-operator-resource-lease.ts`: `createPostgresHostedOperatorResourceLease`; `hosted-operator-deployment.ts`: `createHostedOperatorControlPlane`                                                                                                                  | Dedicated per-operation control-plane SQL lock client; serializes physical Neon project, branch and database identities; rechecks journal lease, operation and generation. The factory opens a separate lock connection.                                | Prove both deployed connections reach the same journal authority and remain available through recovery.                                                                  |
-| Fixed installer execution      | `hosted-operator-sandbox-launcher.ts`: `createHostedOperatorSandboxLauncher`                                                                                                                                                                                                    | Source-free Vercel Sandbox, project/team OIDC, allow-all networking, pinned worker digest, frozen context, explicit tenants, per-effect authority and checkpoint relay, cleanup.                                                                        | Pin the full operator dependency closure and HC worker artifact, configure image/catalog and prove the exact deployed worker digest.                                     |
+| Fixed installer execution      | `hosted-operator-sandbox-launcher.ts`: `createHostedOperatorSandboxLauncher`                                                                                                                                                                                                    | Source-free Vercel Sandbox, project/team OIDC, allow-all networking, pinned worker digest, frozen context, explicit tenants, per-effect authority and checkpoint relay, cleanup.                                                                        | Pin each worker artifact and the full operator dependency closure; configure image/catalog and prove the exact deployed worker digest.                                     |
+| Generated app and Auth workers | Generated-app installer worker and protected Auth lifecycle implementation                                                                                                                                                                                                     | Separate implementation paths select a generated app artifact/release and manage shared Auth identities/assignments under their own protected contracts.                                                                                               | Compose and pin the actual artifacts, prove exact operation plans and readbacks, and keep generated app schema work separate from Auth lifecycle effects.                 |
 | Separate service process       | `scripts/serve-hosted-operator.mts`; `.config/mise/tasks/operator/serve`                                                                                                                                                                                                        | Loopback server that checks the adapter entry-module SHA and requires all dependencies at startup.                                                                                                                                                      | It is a local entrypoint, not a deployed host, TLS ingress, identity policy, artifact store or complete dependency-closure pin.                                          |
 | Builder caller                 | `hosted-operator-client.ts`: `hostedOperatorClientForSession`; `lib/eve/vercel-workload-identity.ts`: `createVercelWorkloadIdentity`                                                                                                                                            | Resolves trusted owner context and sends the request with invocation-scoped Vercel OIDC; missing `HOSTED_RUNTIME_OPERATOR_URL` fails closed.                                                                                                            | Configure an HTTPS operator origin in Builder and verify actual caller claims. No legacy installer fallback is allowed.                                                  |
-| HC worker                      | Arrusted `apps/hc/src/server.rs` `protected-install`; `packages/protected-installer`                                                                                                                                                                                            | Fixed `protected-install --file-spool ...` worker with protected Rust session, explicit tenant targets, pinned installer/release identity, per-write authority and checkpoint protocol.                                                                 | Build and pin the actual binary and its dependency closure; map the frozen Spend Review release/resource plan to the HC adapter's exact operations and verify readbacks. |
+| HC worker                      | Arrusted `apps/hc/src/server.rs` `protected-install`; `packages/protected-installer`                                                                                                                                                                                            | Fixed worker for the HC app only (`context.app_id == "hc"`) and its embedded HC release. It has a protected Rust session, explicit tenant targets, pinned installer/release identity, per-write authority and checkpoint protocol. HC is not a Better Auth worker.                                                                 | Build and pin this artifact only for HC operations. Do not route Spend Review or Auth work through it. |
 
 The operator service is not currently a production composition. A checksum on
 the adapter entry file does not pin imported modules or dependencies. The
@@ -69,7 +77,7 @@ another:
 | Owner-authorized Neon access                 | Creates or verifies the synthetic-only Preview resource set and produces a direct URL for a single protected worker operation.                                  | **Missing.** There is no owner Neon OAuth/credential issuer or `NEON_*` source integration. Do not use an ambient Neon API key, Builder's Production root, a guessed provider token, or a Vercel project-wide database variable as a substitute.                                    |
 | Restricted runtime credentials               | App receives only its app database URL, shared Auth URL, Better Auth secret/name/URL and verified public origin.                                                | Contract projection exists; actual service-specific secret isolation and binding readback are still unproven.                                                                                                                                                                       |
 
-The HC worker's direct database URL is transient protected startup input for the
+Any protected worker direct database URL is transient startup input for that
 fixed installer process. It must not be written to the app service environment,
 public receipt, model context, logs or operator response. Approval and
 checkpoint receipts contain identities and sanitized readback facts, never
@@ -91,11 +99,13 @@ registration:
    operator project/team/image, immutable worker catalog and secret references.
    Validate required values at startup and fail closed; do not invent a Neon
    environment variable or provider credential source.
-3. Build the Arrusted HC worker from the reviewed source/toolchain and pin its
-   artifact digest in the operator catalog. Verify the release artifact and
-   exact HC operation list against the frozen plan; retain the installed bundle,
-   schema install/repair/replay semantics, access generation and explicit
-   tenant targets.
+3. Build and pin each fixed worker for its own contract. Use the HC worker only
+   for `app_id == "hc"` and the embedded HC release. Use the generated-app
+   worker for Spend Review's selected release, and use the separate protected
+   Auth lifecycle for shared Auth resources and assignments. Verify each
+   artifact, operation list, install/repair/replay behavior and explicit tenant
+   targets against its frozen plan; never map Spend Review work to the HC
+   adapter.
 4. Specify least-privilege control-plane database access, encryption-key
    delivery/rotation, operator workload audience, owner-scoped Eve read
    permission, authenticated HTTPS ingress and operational logging that
@@ -163,12 +173,14 @@ secret values.
    tool call. No private stage manipulation or implementation instructions are
    evaluation input.
 5. Approve resource preparation only after reviewing the named nonproduction
-   target. Confirm the worker independently verifies its pinned binary and
-   release, performs the expected schema install/repair/replay, writes only the
-   frozen Auth/app resources and tenant targets, and records one acknowledged
-   checkpoint per protected write. Verify installed identity, schema/release,
-   tenant scope, Auth assignments and restricted runtime grants from independent
-   reads. Unknown readback blocks; do not retry with new names or credentials.
+   target. Confirm the generated-app worker independently verifies its pinned
+   binary and selected release and performs only the frozen app schema
+   install/repair/replay. Run shared Auth resource and assignment changes
+   through the separate protected Auth lifecycle. Use the HC worker only for
+   HC-specific operations. Each protected write needs an acknowledged
+   checkpoint. Verify installed identities, schema/release, tenant scope, Auth
+   assignments and restricted runtime grants from independent reads. Unknown
+   readback blocks; do not retry with new names or credentials.
 6. Approve exact access grants for two real hosted QA identities: requester
    (`member`) and reviewer (`reviewer`) in the same organization. Confirm
    membership before assignment, generation on both authority rows, no
