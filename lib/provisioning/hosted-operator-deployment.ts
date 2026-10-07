@@ -350,7 +350,11 @@ export const createHostedOperatorControlPlane = async (input: {
         if (JSON.stringify(acknowledged.privateState) !== JSON.stringify(prepared.privateState)) {
           throw new HostedOperatorError("operation_in_progress");
         }
-        return prepared;
+        return {
+          bytes: Buffer.from(prepared.credentialsBytes, "utf-8"),
+          privateState: prepared.privateState,
+          sha256: prepared.credentialsSha256,
+        };
       },
       store,
       withResourceLease,
