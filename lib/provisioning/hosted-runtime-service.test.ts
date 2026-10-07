@@ -71,6 +71,13 @@ const native = {
   target: ["preview"],
   value: clusterUrl,
 };
+const neonStore = {
+  id: "store_neon",
+  product: { integrationConfigurationId: "icfg_neon", slug: "neon" },
+  projectsMetadata: [{ projectId: target.projectId }],
+  status: "available",
+  type: "integration",
+};
 const proof = {
   actors: 8,
   artifactHash: "a".repeat(64),
@@ -159,6 +166,18 @@ const providerFixture = () => {
   // oxlint-disable-next-line eslint/require-await -- Promise-returning provider fixture.
   const request = vi.fn<typeof fetch>(async (resource, init) => {
     const url = new URL(resource instanceof Request ? resource.url : resource.toString());
+    if (url.pathname === "/v1/storage/stores") {
+      return Response.json({ stores: [neonStore] });
+    }
+    if (url.pathname === "/v1/storage/stores/store_neon") {
+      return Response.json({
+        store: {
+          ...neonStore,
+          externalResourceId: "neon_project_services",
+          ownerId: target.scopeId,
+        },
+      });
+    }
     if (init?.method === "POST") {
       const values = z
         .array(

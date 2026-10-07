@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import type { VercelInstallationBinding } from "../integrations/vercel-installation";
 import type { HostedRuntimeTarget } from "./hosted-runtime-journal";
+import { readVercelManagedNeonResource } from "./hosted-runtime-marketplace-resource";
 
 export type HostedRuntimeBlockerCode =
   | "authorization_required"
@@ -339,6 +340,7 @@ export const createHostedRuntimeVercelProvider = (input: {
       if (reference === undefined) {
         throw new HostedRuntimeProviderError("connection_required");
       }
+      const configurationId = z.string().min(1).parse(reference.configurationId);
       const secret = await decrypted(reference.id);
       if (secret.configurationId !== reference.configurationId || secret.key !== reference.key) {
         throw new HostedRuntimeProviderError("resource_mismatch");
@@ -379,11 +381,20 @@ export const createHostedRuntimeVercelProvider = (input: {
       if (normalizeEndpoint(new URL(clusterUrl).hostname) === normalizeEndpoint(productionHost)) {
         throw new HostedRuntimeProviderError("resource_mismatch");
       }
+      const marketplaceResource = await readVercelManagedNeonResource({
+        configurationId,
+        fail: (code) => new HostedRuntimeProviderError(code),
+        projectId: input.target.projectId,
+        // oxlint-disable-next-line eslint/require-await -- forward the existing authenticated API client.
+        request: async (path) => await request(path),
+        scopeId: input.target.scopeId,
+      });
       return {
         clusterUrl,
+        marketplaceResource,
         productionDatabaseIdentity: productionGuard.value ?? "",
         reference: {
-          configurationId: z.string().min(1).parse(reference.configurationId),
+          configurationId,
           environmentId: reference.id,
         },
       };
