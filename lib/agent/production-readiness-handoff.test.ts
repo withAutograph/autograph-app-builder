@@ -239,7 +239,7 @@ describe("productionReadinessHandoff", () => {
     expect(result.description).toBeNull();
     expect(result.checkedRelease).toBeNull();
     expect(result.blockers).toEqual([
-      "The repository's app:describe command could not describe the selected app: The selected repository could not describe this app. Repair its app:describe command and retry.",
+      "The repository's app:describe command could not describe the selected app: The selected repository could not describe this app (app:describe exited 1). Repair its app:describe command and retry. Cause: {}",
     ]);
   });
 
