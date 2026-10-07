@@ -31,15 +31,22 @@ const bundleSchema = z.strictObject({
   identity: identitySchema,
   version: z.literal(1),
 });
+const createCredentials = () => ({
+  migratorPassword: randomBytes(32).toString("base64url"),
+  runtimePassword: randomBytes(32).toString("base64url"),
+});
+
 export type ProtectedResourceDatabase = "appDatabase" | "authDatabase";
 
 /** Private control-plane helper; this is never a public tool or model input. */
-export const prepareHostedOperatorResourceCredentials = (input: HostedOperatorContext & {
-  config: VercelTokenKeyringConfig;
-  database: ProtectedResourceDatabase;
-  plan: HostedOperatorPlan;
-  record: HostedRuntimeJournalRecord;
-}) => {
+export const prepareHostedOperatorResourceCredentials = (
+  input: HostedOperatorContext & {
+    config: VercelTokenKeyringConfig;
+    database: ProtectedResourceDatabase;
+    plan: HostedOperatorPlan;
+    record: HostedRuntimeJournalRecord;
+  },
+) => {
   const identity = identitySchema.parse({
     appDatabase: input.plan.appDatabase,
     appId: input.plan.selection.appId,
@@ -63,12 +70,8 @@ export const prepareHostedOperatorResourceCredentials = (input: HostedOperatorCo
   }
   const files = decryptHostedRuntimeFiles(input);
   let bundle: z.infer<typeof bundleSchema>;
-  let privateState = input.record.privateState;
+  let { privateState } = input.record;
   if (files === undefined) {
-    const createCredentials = () => ({
-      migratorPassword: randomBytes(32).toString("base64url"),
-      runtimePassword: randomBytes(32).toString("base64url"),
-    });
     bundle = bundleSchema.parse({
       appDatabase: createCredentials(),
       authDatabase: createCredentials(),

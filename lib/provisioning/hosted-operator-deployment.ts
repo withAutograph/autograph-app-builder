@@ -70,10 +70,17 @@ import {
   createHostedOperatorReadApproval,
 } from "./hosted-operator-owner";
 import { createHostedOperatorOwnerContextResolver } from "./hosted-operator-owner-context";
-import type { HostedOperatorContext, HostedOperatorWorkerEffectContext } from "./hosted-operator-service";
+import type {
+  HostedOperatorContext,
+  HostedOperatorWorkerEffectContext,
+} from "./hosted-operator-service";
 import { HostedOperatorError, operatorPlanDigest } from "./hosted-operator-contract";
 import { prepareHostedOperatorResourceCredentials } from "./hosted-operator-resource-credentials";
 import type { ProtectedResourceDatabase } from "./hosted-operator-resource-credentials";
+import type {
+  HostedRuntimeJournalRecord,
+  HostedRuntimeJournalStore,
+} from "./hosted-runtime-journal";
 import { createPostgresHostedRuntimeJournalStore } from "./postgres-hosted-runtime-journal";
 import { createPostgresHostedOperatorResourceLease } from "./postgres-hosted-operator-resource-lease";
 
@@ -161,6 +168,59 @@ const samePrincipal = (left: HostedPrincipal, right: HostedPrincipal) =>
     right.ownerUserId,
     ...right.scopes.toSorted(),
   ]);
+
+type ResourceCredentialEffect = HostedOperatorWorkerEffectContext & {
+  database: ProtectedResourceDatabase;
+};
+
+const requireCurrentResourceCredentialRecord = (
+  record: HostedRuntimeJournalRecord | undefined,
+  input: ResourceCredentialEffect,
+): HostedRuntimeJournalRecord => {
+  if (record === undefined || record.leaseId === undefined || record.leaseExpiresAt === undefined) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  const { operator } = record;
+  if (Date.parse(record.leaseExpiresAt) <= Date.now() || operator === undefined) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  if (
+    operator.operationRef !== input.operationRef ||
+    operator.fenceGeneration !== input.fenceGeneration ||
+    operator.pendingEffectId !== input.effect.id ||
+    operator.pendingEffectAttempt?.id !== input.workerAttemptId
+  ) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  if (
+    operator.planDigest !== operatorPlanDigest(input.plan) ||
+    operator.planDigest !== operatorPlanDigest(operator.plan)
+  ) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  const plannedEffect = operator.plan.effects.find((effect) => effect.id === input.effect.id);
+  if (
+    input.effect.kind !== "resources" ||
+    input.effect.resourceId !== operator.plan[input.database].resourceId ||
+    JSON.stringify(plannedEffect) !== JSON.stringify(input.effect)
+  ) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  return record;
+};
+
+const readCurrentResourceCredentialRecord = async (input: {
+  assertAuthorized: (
+    context: HostedOperatorContext & { plan: ResourceCredentialEffect["plan"] },
+  ) => Promise<void>;
+  effect: ResourceCredentialEffect;
+  store: HostedRuntimeJournalStore;
+}) => {
+  await input.assertAuthorized(input.effect);
+  await input.effect.assertCurrent();
+  const current = await input.store.read(input.effect);
+  return requireCurrentResourceCredentialRecord(current?.record, input.effect);
+};
 
 /**
  * Composes the production control-plane readers and fences already owned by
@@ -308,45 +368,25 @@ export const createHostedOperatorControlPlane = async (input: {
       async close() {
         await controlPlaneClient.end({ timeout: 5 });
       },
-      readApproval,
-      readCredential,
       async prepareResourceCredentials(
         effectInput: HostedOperatorWorkerEffectContext & { database: ProtectedResourceDatabase },
       ) {
-        const readCurrent = async () => {
-          await owner.assertAuthorized(effectInput);
-          await effectInput.assertCurrent();
-          const current = await store.read(effectInput);
-          const operator = current?.record.operator;
-          if (
-            current === undefined ||
-            current.record.leaseId === undefined ||
-            current.record.leaseExpiresAt === undefined ||
-            Date.parse(current.record.leaseExpiresAt) <= Date.now() ||
-            operator === undefined ||
-            operator.operationRef !== effectInput.operationRef ||
-            operator.fenceGeneration !== effectInput.fenceGeneration ||
-            operator.pendingEffectId !== effectInput.effect.id ||
-            operator.pendingEffectAttempt?.id !== effectInput.workerAttemptId ||
-            operator.planDigest !== operatorPlanDigest(effectInput.plan) ||
-            operator.planDigest !== operatorPlanDigest(operator.plan) ||
-            effectInput.effect.kind !== "resources" ||
-            effectInput.effect.resourceId !== operator.plan[effectInput.database].resourceId ||
-            JSON.stringify(operator.plan.effects.find((effect) => effect.id === effectInput.effect.id)) !==
-              JSON.stringify(effectInput.effect)
-          ) {
-            throw new HostedOperatorError("operation_in_progress");
-          }
-          return current.record;
-        };
         const prepared = prepareHostedOperatorResourceCredentials({
           ...effectInput,
           config: tokenKeyring,
-          record: await readCurrent(),
+          record: await readCurrentResourceCredentialRecord({
+            assertAuthorized: owner.assertAuthorized,
+            effect: effectInput,
+            store,
+          }),
         });
         // The journal callback commits under the active lease before plaintext can escape.
         await effectInput.checkpoint(prepared.privateState);
-        const acknowledged = await readCurrent();
+        const acknowledged = await readCurrentResourceCredentialRecord({
+          assertAuthorized: owner.assertAuthorized,
+          effect: effectInput,
+          store,
+        });
         if (JSON.stringify(acknowledged.privateState) !== JSON.stringify(prepared.privateState)) {
           throw new HostedOperatorError("operation_in_progress");
         }
@@ -356,6 +396,8 @@ export const createHostedOperatorControlPlane = async (input: {
           sha256: prepared.credentialsSha256,
         };
       },
+      readApproval,
+      readCredential,
       store,
       withResourceLease,
     };
