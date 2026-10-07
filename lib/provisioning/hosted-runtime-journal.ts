@@ -31,6 +31,11 @@ export const hostedRuntimeProofSchema = z.strictObject({
     .regex(/^(?:sha256:)?[a-f0-9]{64}$/u)
     .transform((value) => value.replace(/^sha256:/u, "")),
   authenticatedBehavior: z.literal("unassessed"),
+  // Legacy journal proofs remain inspectable; protected operator readiness requires this manifest identity.
+  manifestSha256: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/u)
+    .optional(),
   releaseId: z.string().min(1),
   tenants: z.number().int().positive(),
 });

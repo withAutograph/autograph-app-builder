@@ -270,7 +270,7 @@ const handleBindingsOperation = async (input: {
   const proof = hostedRuntimeProofSchema.parse(
     await deps.verify({ ...context, plan, privateState: current.record.privateState }),
   );
-  if (proof.artifactHash !== plan.release.sha256 || proof.releaseId !== plan.release.id) {
+  if (proof.manifestSha256 !== plan.release.sha256 || proof.releaseId !== plan.release.id) {
     throw new HostedOperatorError("resource_mismatch");
   }
   const environment = restrictedOperatorEnvironment(
@@ -688,7 +688,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 : undefined;
             if (
               proof &&
-              (proof.releaseId !== plan.release.id || proof.artifactHash !== plan.release.sha256)
+              (proof.releaseId !== plan.release.id || proof.manifestSha256 !== plan.release.sha256)
             ) {
               throw new HostedOperatorError("resource_mismatch");
             }

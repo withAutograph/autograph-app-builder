@@ -48,11 +48,13 @@ export const createHostedOperatorClient = (input: {
         ? request
         : { ...request, ownerContext: input.ownerContext };
     const body = operatorRequestSchema.parse(bodyInput);
+    const token = await input.token();
     const response = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), {
       body: JSON.stringify(body),
       headers: {
-        authorization: `Bearer ${await input.token()}`,
+        authorization: `Bearer ${token}`,
         "content-type": "application/json",
+        "x-vercel-trusted-oidc-idp-token": token,
       },
       method: "POST",
       redirect: "error",
@@ -83,7 +85,7 @@ export const createHostedOperatorClient = (input: {
         value.operationRef !== request.operationRef ||
         !sameOperatorSelection(request.selection, value.plan.selection) ||
         value.proof.releaseId !== value.plan.release.id ||
-        value.proof.artifactHash !== value.plan.release.sha256
+        value.proof.manifestSha256 !== value.plan.release.sha256
       ) {
         throw new HostedOperatorError("resource_mismatch");
       }

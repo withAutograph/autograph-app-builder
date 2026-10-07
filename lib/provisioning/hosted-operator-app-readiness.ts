@@ -350,6 +350,7 @@ export const createHostedOperatorAppReadiness =
         actors: 0,
         artifactHash,
         authenticatedBehavior: "unassessed" as const,
+        manifestSha256: digest(bytes),
         observations,
         observedAt: new Date().toISOString(),
         releaseId: plan.release.id,
