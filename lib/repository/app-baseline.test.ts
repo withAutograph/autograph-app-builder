@@ -83,6 +83,11 @@ const fixture = (releaseCollision = false) => {
   write("apps/spend-review/schema/index.ts", "selected later release");
   write("apps/spend-review/schema/release/later/runtime.ts", "immutable later release");
   write(".config/app-specs/spend-review.md", "later manual spec");
+  write(
+    "apps/spend-review/.config/mise/tasks/test-local-acceptance",
+    "current app acceptance task",
+  );
+  write("apps/spend-review/.config/mise/tasks/test", "current app test task");
   write("packages/runtime/index.ts", "new shared runtime");
   write("config/routing.json", "new shared routing");
   if (releaseCollision) {
@@ -140,6 +145,15 @@ describe("initial app baseline projection", () => {
     );
     expect(readFileSync(join(f.root, ".config/app-specs/spend-review.md"), "utf-8")).toBe(
       "agreed demo spec",
+    );
+    expect(
+      readFileSync(
+        join(f.root, "apps/spend-review/.config/mise/tasks/test-local-acceptance"),
+        "utf-8",
+      ),
+    ).toBe("current app acceptance task");
+    expect(readFileSync(join(f.root, "apps/spend-review/.config/mise/tasks/test"), "utf-8")).toBe(
+      "current app test task",
     );
     expect(readFileSync(join(f.root, "packages/runtime/index.ts"), "utf-8")).toBe(
       "new shared runtime",
