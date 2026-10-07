@@ -139,7 +139,24 @@ const proof = {
   releaseId: plan.release.id,
   tenants: 2,
 };
+const appBoundary = {
+  appId: selection.appId,
+  mode: "protected-gateway-v1",
+  runtime: {
+    database: plan.appDatabase.database,
+    environment: "hosted",
+    hostname: plan.neon.endpoint,
+    port: 5432,
+    runtimeRole: plan.appDatabase.runtimeRole,
+  },
+  verification: {
+    jwksUrl: plan.deploymentBoundary?.verification.jwksUrl,
+    publicOrigin: plan.deploymentBoundary?.verification.publicOrigin,
+  },
+  version: 1,
+};
 const environment = {
+  PLATFORM_APP_BOUNDARY: JSON.stringify(appBoundary),
   PLATFORM_JWKS_URL: "https://gateway-preview.example.test/_platform/jwks.json",
   PLATFORM_ORIGIN: "https://gateway-preview.example.test",
   PLATFORM_PUBLIC_ORIGIN: "https://apps-preview.example.test",
@@ -878,10 +895,86 @@ describe("protected hosted operator boundary", () => {
       ...environment,
       SPEND_REVIEW_DATABASE_URL: `${environment.SPEND_REVIEW_DATABASE_URL}&host=other`,
     },
+    {
+      ...environment,
+      SPEND_REVIEW_DATABASE_URL: environment.SPEND_REVIEW_DATABASE_URL.replace(
+        plan.neon.endpoint,
+        plan.neon.endpoint.replace(".", "-pooler."),
+      ),
+    },
     { ...environment, PLATFORM_PUBLIC_ORIGIN: "https://other-preview.example.test" },
     { ...environment, PLATFORM_JWKS_URL: "https://other-preview.example.test/_platform/jwks.json" },
   ])("rejects overprivileged or unrelated runtime projection", (env) => {
     expect(() => restrictedOperatorEnvironment(plan, env, authority)).toThrow("resource_mismatch");
+  });
+  it("adds public expected identities from the approved plan when the private binding reader returns URLs and public origins", () => {
+    const withoutBoundary = Object.fromEntries(
+      Object.entries(environment).filter(([key]) => key !== "PLATFORM_APP_BOUNDARY"),
+    );
+    const projected = restrictedOperatorEnvironment(plan, withoutBoundary, authority);
+    expect(JSON.parse(projected.PLATFORM_APP_BOUNDARY)).toEqual(appBoundary);
+    expect(projected).toEqual(environment);
+    expect(projected.PLATFORM_APP_BOUNDARY).not.toContain("synthetic-app");
+    expect(projected.PLATFORM_APP_BOUNDARY).not.toContain("migrator");
+  });
+  it.each([
+    { ...appBoundary, appId: "other-app" },
+    { ...appBoundary, runtime: { ...appBoundary.runtime, database: "other_database" } },
+    { ...appBoundary, runtime: { ...appBoundary.runtime, runtimeRole: "spend_owner" } },
+    { ...appBoundary, runtime: { ...appBoundary.runtime, hostname: "other.neon.tech" } },
+    { ...appBoundary, runtime: { ...appBoundary.runtime, environment: "local" } },
+    {
+      ...appBoundary,
+      verification: {
+        ...appBoundary.verification,
+        jwksUrl: "https://other.example/_platform/jwks.json",
+      },
+    },
+    { ...appBoundary, privateKey: "forbidden" },
+    { ...appBoundary, version: 2 },
+  ])("rejects supplied public boundary facts that do not match the owned plan", (boundary) => {
+    expect(() =>
+      restrictedOperatorEnvironment(
+        plan,
+        { ...environment, PLATFORM_APP_BOUNDARY: JSON.stringify(boundary) },
+        authority,
+      ),
+    ).toThrow("resource_mismatch");
+  });
+  it("does not derive expected runtime identity from a changed credential URL", () => {
+    expect(() =>
+      restrictedOperatorEnvironment(
+        plan,
+        {
+          ...environment,
+          SPEND_REVIEW_DATABASE_URL: environment.SPEND_REVIEW_DATABASE_URL.replace(
+            plan.neon.endpoint,
+            "other.neon.tech",
+          ),
+        },
+        authority,
+      ),
+    ).toThrow("resource_mismatch");
+    expect(() =>
+      restrictedOperatorEnvironment(
+        plan,
+        {
+          ...environment,
+          SPEND_REVIEW_DATABASE_URL: environment.SPEND_REVIEW_DATABASE_URL.replace(
+            "spend_runtime",
+            "other_runtime",
+          ),
+        },
+        authority,
+      ),
+    ).toThrow("resource_mismatch");
+    expect(() =>
+      restrictedOperatorEnvironment(
+        plan,
+        { ...environment, PLATFORM_APP_BOUNDARY: "not-json" },
+        authority,
+      ),
+    ).toThrow("resource_mismatch");
   });
   it("projects only app runtime SQL and public verification configuration", () => {
     expect(restrictedOperatorEnvironment(plan, environment, authority)).toEqual(environment);
