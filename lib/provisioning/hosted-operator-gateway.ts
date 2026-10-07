@@ -1,7 +1,10 @@
 import { isIP } from "node:net";
 import { z } from "zod";
 import type { BuilderHandoffIntent } from "../handoff/contracts";
-import { readPreparedVercelAccess } from "../agent/prepared-provider-context";
+import {
+  readOwnerVercelProjectAccess,
+  readPreparedVercelAccess,
+} from "../agent/prepared-provider-context";
 import type { OperatorOwnerContext, OperatorSelection } from "./hosted-operator-contract";
 
 // oxlint-disable eslint/no-await-in-loop -- Each next-page cursor is returned by the previous provider read.
@@ -16,6 +19,8 @@ export interface HostedOperatorGatewayDependencies {
   authority: Authority;
   intent: BuilderHandoffIntent;
   selection: OperatorSelection;
+  /** Reviewed deployment configuration, never a request-selected origin or project. */
+  gatewayProjectId?: string;
   readVercelCredential: CredentialReader;
   fetch?: typeof fetch;
   apiOrigin?: string;
@@ -414,10 +419,30 @@ const getProviderContext = async (input: HostedOperatorGatewayDependencies) => {
   ) {
     return null;
   }
+  let projectId = access.project.id;
+  if (input.gatewayProjectId !== undefined && input.gatewayProjectId !== projectId) {
+    const gatewayAccess = await readOwnerVercelProjectAccess({
+      apiOrigin,
+      authority: input.authority,
+      fetch: input.fetch ?? fetch,
+      installationId: credential.binding.installationId,
+      projectId: input.gatewayProjectId,
+      readCredential: input.readVercelCredential,
+    });
+    if (
+      gatewayAccess.status !== "ready" ||
+      gatewayAccess.project?.id !== input.gatewayProjectId ||
+      gatewayAccess.scope.id !== access.scope.id ||
+      gatewayAccess.scope.type !== access.scope.type
+    ) {
+      return null;
+    }
+    projectId = gatewayAccess.project.id;
+  }
   return {
     apiOrigin,
     fetcher: input.fetch ?? fetch,
-    projectId: access.project.id,
+    projectId,
     scopeId: access.scope.id,
     team: access.scope.type === "team",
     token: credential.token,
@@ -447,6 +472,6 @@ export const readHostedOperatorPublicGateway = async (
   return await resolveFromProvider({
     ...provider,
     branch: input.selection.branch,
-    selection: input.selection,
+    selection: { ...input.selection, projectId: provider.projectId },
   });
 };
