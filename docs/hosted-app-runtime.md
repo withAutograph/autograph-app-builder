@@ -260,8 +260,10 @@ continue while native application-process installer isolation remains blocked.
 The protected journal contains ciphertext and provider references. Plaintext
 installer credentials, runtime passwords, cookies and private file contents
 are never tool inputs, public events, model results, repository files or command
-arguments. Installer execution receives secrets through SDK `env`, and private
-state is restored only in the separate control Sandbox. Application Sandboxes
+arguments or process environment variables. The separate control Sandbox gets
+the direct installer database URL through a mode-restricted private startup
+file; only typed, payload-free spool notices reach the command log stream.
+Private state is restored only in the separate control Sandbox. Application Sandboxes
 receive only restricted environment, identity and browser session files. They
 never receive installer `state.json`, including during fresh verification of an
 already running app. Control compute is deleted after each operation; a
