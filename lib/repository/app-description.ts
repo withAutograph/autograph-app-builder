@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SandboxSession } from "eve/sandbox";
+import { sanitizeValidationDiagnosticText } from "./validation-output-sanitize";
 
 const appId = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 export const appDescriptionSchema = z.object({
@@ -14,7 +15,8 @@ export const appDescriptionSchema = z.object({
       runtime: z.object({ databaseEnvironment: z.string() }),
       schemaReceipt: z
         .object({ contract: z.literal("authenticated-release-read"), path: z.string() })
-        .nullable(),
+        .nullable()
+        .default(null),
     }),
   ]),
   validation: z.object({
@@ -42,8 +44,11 @@ export const describeSelectedApp = async (input: {
   }
   const result = await input.sandbox.run(command);
   if (result.exitCode !== 0) {
+    const diagnostic = sanitizeValidationDiagnosticText(result.stderr || result.stdout)
+      .replaceAll(/\b[a-z][a-z0-9+.-]*:\/\/[^\s]+/giu, "[URL REDACTED]")
+      .trim();
     throw new Error(
-      "The selected repository could not describe this app. Repair its app:describe command and retry.",
+      `The selected repository could not describe this app (app:describe exited ${result.exitCode}). Repair its app:describe command and retry. Cause: ${diagnostic || "The command returned no diagnostic output."}`,
     );
   }
   const description = appDescriptionSchema.parse(JSON.parse(result.stdout));
