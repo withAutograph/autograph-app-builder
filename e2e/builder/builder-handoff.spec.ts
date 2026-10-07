@@ -289,6 +289,10 @@ test("visible polling observes an explicit DB binding fixture (UI observation on
     if (request.method() === "GET" && pathname === handoff.statusPath) polled += 1;
     if (pathname === "/mcp") mcpRequests += 1;
   });
+  // Observe a fresh browser poll before changing the fixture. A request already
+  // in flight when the listener is attached can otherwise report continuation
+  // without contributing to the request counter.
+  await expect.poll(() => polled, { timeout: 15_000 }).toBeGreaterThan(0);
   const fixtureSessionId = `ui-observation-fixture:${randomUUID()}`;
   const sql = postgres(databaseUrl, { max: 1 });
   try {
