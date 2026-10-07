@@ -20,6 +20,7 @@ const marketplaceStoreSchema = z.object({
   status: z.literal("available"),
   type: z.literal("integration"),
 });
+const marketplaceStoreDetailSchema = z.object({ store: marketplaceStoreSchema });
 
 const listedStoreSchema = z.object({
   id: z.string().min(1),
@@ -71,11 +72,11 @@ export const readVercelManagedNeonResource = async (input: {
     throw input.fail("connection_required");
   }
   const detailPayload = await input.request(`/v1/storage/stores/${encodeURIComponent(listed.id)}`);
-  const detail = marketplaceStoreSchema.safeParse(detailPayload);
+  const detail = marketplaceStoreDetailSchema.safeParse(detailPayload);
   if (!detail.success) {
     throw input.fail("resource_mismatch");
   }
-  const verified = detail.data;
+  const verified = detail.data.store;
   if (verified.id !== listed.id || verified.ownerId !== input.scopeId) {
     throw input.fail("resource_mismatch");
   }

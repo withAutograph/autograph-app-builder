@@ -115,14 +115,16 @@ describe("owner-bound native Neon runtime adapter", () => {
       }
       if (url.pathname === "/v1/storage/stores/store_neon") {
         return Response.json({
-          externalResourceId: "neon_project",
-          id: "store_neon",
-          ownerId: target.scopeId,
-          product: { integrationConfigurationId: "icfg_neon", slug: "neon" },
-          projectsMetadata: [{ projectId: target.projectId }],
-          secrets: [{ name: "POSTGRES_PASSWORD", value: "must-not-escape" }],
-          status: "available",
-          type: "integration",
+          store: {
+            externalResourceId: "neon_project",
+            id: "store_neon",
+            ownerId: target.scopeId,
+            product: { integrationConfigurationId: "icfg_neon", slug: "neon" },
+            projectsMetadata: [{ projectId: target.projectId }],
+            secrets: [{ name: "POSTGRES_PASSWORD", value: "must-not-escape" }],
+            status: "available",
+            type: "integration",
+          },
         });
       }
       if (url.pathname.endsWith("/env")) {

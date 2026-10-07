@@ -24,6 +24,7 @@ const storeDetail = {
     id: "iap_neon",
     integration: { capabilities: { mcp: true }, id: "oac_neon" },
   },
+  secrets: [{ name: "POSTGRES_PASSWORD", value: "must-not-escape" }],
 };
 
 const fail = (code: MarketplaceResourceErrorCode) => Object.assign(new Error(code), { code });
@@ -36,7 +37,7 @@ describe("Vercel-managed Neon resource readback", () => {
         return { stores: [listedStore] };
       }
       expect(path).toBe("/v1/storage/stores/store_neon");
-      return storeDetail;
+      return { secrets: [{ value: "top-level-secret" }], store: storeDetail };
     });
 
     const resource = await readVercelManagedNeonResource({
@@ -52,6 +53,8 @@ describe("Vercel-managed Neon resource readback", () => {
       resourceId: "store_neon",
     });
     expect(JSON.stringify(resource)).not.toContain("never-return-this");
+    expect(JSON.stringify(resource)).not.toContain("must-not-escape");
+    expect(JSON.stringify(resource)).not.toContain("top-level-secret");
     expect(request.mock.calls).toEqual([["/v1/storage/stores"], ["/v1/storage/stores/store_neon"]]);
   });
 
@@ -90,7 +93,7 @@ describe("Vercel-managed Neon resource readback", () => {
     const request = vi.fn(async (path: string) =>
       path === "/v1/storage/stores"
         ? { stores: [listedStore] }
-        : { ...storeDetail, ownerId: "team_other" },
+        : { store: { ...storeDetail, ownerId: "team_other" } },
     );
 
     await expect(
