@@ -103,17 +103,31 @@ const assertHeldLocks = async (
   }
 };
 
-const lockKey = (plan: HostedOperatorPlan) =>
-  [...new Set([plan.authDatabase.database, plan.appDatabase.database])]
-    .map((database) =>
-      JSON.stringify([
-        "hosted_protected_operator_database_v1",
-        plan.neon.projectId,
-        plan.neon.branchId,
-        database,
-      ]),
-    )
-    .toSorted();
+const lockKey = (plan: HostedOperatorPlan) => {
+  const databases = [plan.authDatabase, plan.appDatabase];
+  const keys = [...new Set(databases.map((resource) => resource.database))].map((database) =>
+    JSON.stringify([
+      "hosted_protected_operator_database_v1",
+      plan.neon.projectId,
+      plan.neon.branchId,
+      database,
+    ]),
+  );
+  if (plan.bootstrap) {
+    const roles = databases.flatMap((resource) => [resource.migratorRole, resource.runtimeRole]);
+    for (const role of new Set(roles)) {
+      keys.push(
+        JSON.stringify([
+          "hosted_protected_operator_role_v1",
+          plan.neon.projectId,
+          plan.neon.branchId,
+          role,
+        ]),
+      );
+    }
+  }
+  return keys.toSorted();
+};
 
 const readLeaseSnapshot = async (
   store: HostedRuntimeJournalStore,

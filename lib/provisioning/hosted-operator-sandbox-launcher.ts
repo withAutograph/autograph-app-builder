@@ -29,6 +29,8 @@ const HC_LOOKUP_SHADOW_PREPARE = "lookup-shadow-prepare";
 const HC_INSTALL_RELEASE_BUNDLE = "install-release-bundle";
 const VENDOR_LOOKUP_SHADOW_BATCH = "lookup-shadow-batch";
 const GENERATED_APP_SCOPE = "generated-app-release-install-v1";
+const RESOURCES_SCOPE = "neon-resource-bootstrap-v1";
+const RESOURCES_COMMAND = "neon-resource-bootstrap";
 const AUTH_SCOPE = "auth-protected-migrate-v1";
 const HC_SCOPE = "hc-protected-install-v1";
 const HC_COMMAND = "protected-install";
@@ -96,12 +98,14 @@ const workerScopeSchema = z.enum([
   "vendor-protected-materialize-v1",
   GENERATED_APP_SCOPE,
   AUTH_SCOPE,
+  RESOURCES_SCOPE,
 ]);
 const workerSubcommandSchema = z.enum([
   HC_COMMAND,
   VENDOR_COMMAND,
   GENERATED_COMMAND,
   AUTH_COMMAND,
+  RESOURCES_COMMAND,
 ]);
 
 export interface ProtectedInstallerWorkerDescriptor {
@@ -121,6 +125,7 @@ export interface HostedOperatorSandboxConfiguration {
   workers: Readonly<Record<string, ProtectedInstallerWorkerDescriptor>>;
   /** Shared Auth uses its own fixed catalog entry, separate from selected app workers. */
   authWorker?: ProtectedInstallerWorkerDescriptor;
+  resourcesWorker?: ProtectedInstallerWorkerDescriptor;
 }
 
 export interface ProtectedInstallContextWire {
@@ -148,9 +153,30 @@ export interface ProtectedInstallContextWire {
   tenant_targets: string[];
 }
 
+export interface ResourceBootstrapContextWire extends Omit<
+  ProtectedInstallContextWire,
+  "resource"
+> {
+  kind: "neon_resource_bootstrap";
+  resource: Omit<ProtectedInstallContextWire["resource"], "schema"> & {
+    scope: "app_database" | "auth_database";
+    maintenance_database: string;
+    bootstrap_role: string;
+    provider_endpoint_id: string;
+    credentials_sha256: string;
+  };
+}
+type WorkerContext = ProtectedInstallContextWire | ResourceBootstrapContextWire;
+
 export interface HostedOperatorSandboxWorkerInput extends HostedOperatorWorkerEffectContext {
   database: "appDatabase" | "authDatabase";
   directDatabaseUrl: string;
+  /** Prepared by the trusted credential closure; checkpoint must acknowledge before allocation. */
+  resourceCredentials?: {
+    bytes: Buffer;
+    sha256: string;
+    privateState: Parameters<HostedOperatorWorkerEffectContext["checkpoint"]>[0];
+  };
   /** Private compiler-checked release resolved by the operator from plan.release.artifactRef. */
   generatedRelease?: { artifactRef: string; files: GeneratedAppReleaseFiles };
   /** Private reviewed Auth plan resolved from plan.authSchema.artifactRef. */
@@ -279,7 +305,7 @@ interface CheckpointRecordedReply {
 
 type PrivateProtocolDocument =
   | string
-  | ProtectedInstallContextWire
+  | WorkerContext
   | SpoolReadyMarker
   | EffectAuthorizedReply
   | CheckpointRecordedReply
@@ -355,9 +381,6 @@ export const buildProtectedInstallContext = (input: {
   };
 };
 
-const canonicalContextBytes = (context: ProtectedInstallContextWire) =>
-  Buffer.from(JSON.stringify(context), "utf-8");
-
 const parseJsonBytes = (buffer: Buffer) => {
   if (buffer.length > MAX_PROTOCOL_FRAME_BYTES) {
     throw resourceMismatch();
@@ -369,6 +392,108 @@ const parseJsonBytes = (buffer: Buffer) => {
     throw resourceMismatch();
   }
 };
+
+export const buildResourceBootstrapContext = (
+  input: HostedOperatorSandboxWorkerInput,
+): ResourceBootstrapContextWire => {
+  const { plan } = input;
+  const { bootstrap } = plan;
+  const installer = plan.resourcesInstaller;
+  const credentials = input.resourceCredentials;
+  const resource = resourceSchema.parse(plan[input.database]);
+  if (
+    !bootstrap ||
+    !installer ||
+    !credentials ||
+    input.effect.kind !== "resources" ||
+    input.effect.resourceId !== resource.resourceId ||
+    !plan.effects.some(
+      (effect) =>
+        effect.id === input.effect.id &&
+        effect.kind === "resources" &&
+        effect.resourceId === resource.resourceId,
+    )
+  ) {
+    throw resourceMismatch();
+  }
+  const parsed = z
+    .strictObject({
+      migratorPassword: z
+        .string()
+        .min(32)
+        .max(512)
+        .refine((value) => !/[\0\r\n]/u.test(value)),
+      runtimePassword: z
+        .string()
+        .min(32)
+        .max(512)
+        .refine((value) => !/[\0\r\n]/u.test(value)),
+    })
+    .safeParse(parseJsonBytes(credentials.bytes));
+  if (
+    !parsed.success ||
+    !Buffer.from(JSON.stringify(parsed.data)).equals(credentials.bytes) ||
+    sha256(credentials.bytes) !== credentials.sha256
+  ) {
+    throw resourceMismatch();
+  }
+  let url: URL;
+  try {
+    url = new URL(input.directDatabaseUrl);
+  } catch {
+    throw resourceMismatch();
+  }
+  if (
+    url.protocol !== "postgresql:" ||
+    url.hostname !== plan.neon.endpoint ||
+    (url.port !== "" && url.port !== "5432") ||
+    decodeURIComponent(url.username) !== bootstrap.role ||
+    decodeURIComponent(url.pathname.slice(1)) !== bootstrap.maintenanceDatabase ||
+    !url.password ||
+    url.hash ||
+    [...url.searchParams.keys()].some((key) => !["sslmode", "channel_binding"].includes(key)) ||
+    !["require", "verify-full"].includes(url.searchParams.get("sslmode") ?? "") ||
+    url.hostname.includes("-pooler")
+  ) {
+    throw resourceMismatch();
+  }
+  workerRunIdSchema.parse(input.operationRef);
+  if (!Number.isSafeInteger(input.fenceGeneration) || input.fenceGeneration <= 0) {
+    throw resourceMismatch();
+  }
+  return {
+    kind: "neon_resource_bootstrap",
+    version: 1,
+    operation: {
+      operation_id: input.operationRef,
+      approval_digest: operatorPlanDigest(plan),
+      fence_generation: input.fenceGeneration,
+    },
+    app_id: input.database === "authDatabase" ? "auth" : plan.selection.appId,
+    resource: {
+      scope: input.database === "authDatabase" ? "auth_database" : "app_database",
+      resource_id: resource.resourceId,
+      environment: "preview",
+      hostname: plan.neon.endpoint,
+      port: 5432,
+      database: resource.database,
+      migrator_role: resource.migratorRole,
+      runtime_role: resource.runtimeRole,
+      maintenance_database: bootstrap.maintenanceDatabase,
+      bootstrap_role: bootstrap.role,
+      provider_project_id: plan.neon.projectId,
+      provider_branch_id: plan.neon.branchId,
+      provider_endpoint_id: bootstrap.endpointId,
+      credentials_sha256: credentials.sha256,
+    },
+    release: { id: plan.release.id, sha256: plan.release.sha256 },
+    installer: { id: installer.reference, sha256: installer.sha256 },
+    tenant_targets: [],
+  };
+};
+
+const canonicalContextBytes = (context: WorkerContext) =>
+  Buffer.from(JSON.stringify(context), "utf-8");
 
 const readSpoolJson = async (sandbox: OperatorSandbox, filePath: string, signal: AbortSignal) => {
   const stat = await sandbox.fs.lstat(filePath, { signal });
@@ -431,7 +556,7 @@ const verifyWorkerPin = async (
 
 const requestMatchesContext = (
   request: AuthorizationRequest,
-  context: ProtectedInstallContextWire,
+  context: WorkerContext,
   contextDigest: string,
 ) => {
   const identityMatches = [
@@ -453,7 +578,7 @@ const requestMatchesContext = (
 
 const checkpointMatchesContext = (
   request: CheckpointRequest,
-  context: ProtectedInstallContextWire,
+  context: WorkerContext,
   contextDigest: string,
   active: ActiveEffect,
 ) => {
@@ -475,9 +600,18 @@ const checkpointMatchesContext = (
 const requestMatchesWorkerScope = (
   effectId: string,
   tenantId: string | null,
-  context: ProtectedInstallContextWire,
+  context: WorkerContext,
   worker: ProtectedInstallerWorkerDescriptor,
 ) => {
+  if (worker.operationScope === RESOURCES_SCOPE) {
+    return (
+      worker.subcommand === RESOURCES_COMMAND &&
+      "kind" in context &&
+      context.kind === "neon_resource_bootstrap" &&
+      tenantId === null &&
+      ["resources:roles", "resources:database", "resources:acl"].includes(effectId)
+    );
+  }
   if (worker.operationScope === AUTH_SCOPE) {
     return (
       worker.subcommand === AUTH_COMMAND &&
@@ -647,13 +781,25 @@ const runSandboxWorker = async (
   input: HostedOperatorSandboxWorkerInput,
 ) => {
   const runId = workerRunIdSchema.parse(input.workerAttemptId);
-  const auth = input.database === "authDatabase";
-  const worker = auth
-    ? configuration.authWorker
-    : configuration.workers[input.plan.selection.appId];
-  const installer = auth ? input.plan.authSchema?.installer : input.plan.installer;
+  const resources = input.effect.kind === "resources";
+  const auth = !resources && input.database === "authDatabase";
+  let worker: ProtectedInstallerWorkerDescriptor | undefined =
+    configuration.workers[input.plan.selection.appId];
+  let installer: HostedOperatorPlan["resourcesInstaller"] = input.plan.installer;
+  if (resources) {
+    worker = configuration.resourcesWorker;
+    installer = input.plan.resourcesInstaller;
+  } else if (auth) {
+    worker = configuration.authWorker;
+    installer = input.plan.authSchema?.installer;
+  }
   if (
     worker === undefined ||
+    (resources &&
+      (worker.operationScope !== RESOURCES_SCOPE ||
+        worker.id !== RESOURCES_SCOPE ||
+        worker.subcommand !== RESOURCES_COMMAND)) ||
+    (!resources && worker.operationScope === RESOURCES_SCOPE) ||
     installer === undefined ||
     !workerScopeSchema.safeParse(worker.operationScope).success ||
     !workerSubcommandSchema.safeParse(worker.subcommand).success ||
@@ -682,7 +828,9 @@ const runSandboxWorker = async (
   if (auth) {
     contextInput.subject = "auth";
   }
-  const context = buildProtectedInstallContext(contextInput);
+  const context = resources
+    ? buildResourceBootstrapContext(input)
+    : buildProtectedInstallContext(contextInput);
   let generatedMetadata: GeneratedAppReleaseMetadata | undefined;
   let generatedFiles: { member: string; content: Buffer }[] = [];
   let authPlanBytes: Buffer | undefined;
@@ -753,6 +901,16 @@ const runSandboxWorker = async (
     throw resourceMismatch();
   }
   const contextDigest = sha256(contextBytes);
+  const resourceCredentialBytes =
+    resources && input.resourceCredentials
+      ? Buffer.from(input.resourceCredentials.bytes)
+      : undefined;
+  if (resources) {
+    if (!input.resourceCredentials) {
+      throw resourceMismatch();
+    }
+    await input.checkpoint(input.resourceCredentials.privateState);
+  }
   const recordCheckpoint = await input.bindWorkerContext({ contextDigest });
   const allowedResources = new Set([
     input.plan.appDatabase.resourceId,
@@ -1045,6 +1203,18 @@ const runSandboxWorker = async (
       input.directDatabaseUrl,
       signal,
     );
+    if (resourceCredentialBytes !== undefined) {
+      await sandbox.writeFiles(
+        [
+          {
+            content: resourceCredentialBytes,
+            mode: 0o600,
+            path: path.posix.join(startup, "resource-credentials.json"),
+          },
+        ],
+        { signal },
+      );
+    }
     if (authPlanBytes !== undefined) {
       await sandbox.writeFiles(
         [
