@@ -832,6 +832,8 @@ const runSandboxWorker = async (
     throw resourceMismatch();
   }
   const contextDigest = sha256(contextBytes);
+  const resourceCredentialBytes = resources && input.resourceCredentials
+    ? Buffer.from(input.resourceCredentials.bytes) : undefined;
   if (resources) {
     if (!input.resourceCredentials) throw resourceMismatch();
     await input.checkpoint(input.resourceCredentials.privateState);
@@ -1128,8 +1130,8 @@ const runSandboxWorker = async (
       input.directDatabaseUrl,
       signal,
     );
-    if (resources && input.resourceCredentials) {
-      await sandbox.writeFiles([{ content: input.resourceCredentials.bytes, mode: 0o600,
+    if (resourceCredentialBytes !== undefined) {
+      await sandbox.writeFiles([{ content: resourceCredentialBytes, mode: 0o600,
         path: path.posix.join(startup, "resource-credentials.json") }], { signal });
     }
     if (authPlanBytes !== undefined) {
