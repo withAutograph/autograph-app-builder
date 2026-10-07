@@ -225,4 +225,48 @@ describe("readHostedOperatorPublicGateway", () => {
       status: "unresolved",
     });
   });
+  it("resolves a separately configured owner-bound Gateway project while preserving the app selection", async () => {
+    const f = fixture();
+    const ownerFetch = f.fetch;
+    const crossProjectFetch = vi.fn<typeof fetch>(async (request) => {
+      const url = request instanceof Request ? new URL(request.url) : new URL(request);
+      if (url.pathname === "/v9/projects/prj_gateway") {
+        return Response.json({ accountId: "team_1", id: "prj_gateway", name: "gateway" });
+      }
+      if (url.pathname === "/v9/projects/prj_gateway/domains") {
+        return Response.json({ domains: [{ ...branchDomain, projectId: "prj_gateway" }] });
+      }
+      if (url.pathname === "/v7/deployments") {
+        return Response.json({
+          deployments: [{ ...readyDeployment, projectId: "prj_gateway" }],
+          pagination: { next: null },
+        });
+      }
+      if (url.pathname === "/v13/deployments/dpl_1") {
+        return Response.json({
+          gitSource: { ref: selection.branch },
+          id: "dpl_1",
+          projectId: "prj_gateway",
+          readyState: "READY",
+          target: null,
+        });
+      }
+      return await ownerFetch(request);
+    });
+    const result = await readHostedOperatorPublicGateway({
+      apiOrigin: "https://api.vercel.test",
+      authority: owner,
+      fetch: crossProjectFetch,
+      gatewayProjectId: "prj_gateway",
+      intent,
+      readVercelCredential: f.readVercelCredential,
+      selection,
+    });
+    expect(result).toMatchObject({
+      deploymentId: "dpl_1",
+      origin: "https://vendor-preview.example.com",
+      status: "ready",
+    });
+    expect(selection.projectId).toBe("prj_1");
+  });
 });
