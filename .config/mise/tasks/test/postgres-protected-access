@@ -1,0 +1,35 @@
+#!/bin/sh
+#MISE description="Verify protected access generations against ephemeral PostgreSQL"
+set -eu
+
+docker=$(mise which docker)
+image='postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40'
+container="app-builder-protected-access-test-$$"
+
+cleanup() {
+  "$docker" rm -f "$container" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT HUP INT TERM
+
+"$docker" run --rm --detach --name "$container" \
+  --env POSTGRES_HOST_AUTH_METHOD=trust \
+  --publish 127.0.0.1::5432 \
+  "$image" >/dev/null
+
+attempt=0
+until "$docker" exec "$container" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; do
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge 60 ]; then
+    echo "ephemeral PostgreSQL did not become ready" >&2
+    "$docker" logs "$container" >&2 || true
+    exit 1
+  fi
+  sleep 1
+done
+
+mapping=$("$docker" port "$container" 5432/tcp)
+port=${mapping##*:}
+"$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" --import tsx \
+  .config/mise/scripts/repository/test-postgres-protected-access.mts \
+  --host 127.0.0.1 --port "$port"

@@ -87,6 +87,7 @@ const fixture = () => {
     },
     read: async () => structuredClone(row),
     reserve: async () => structuredClone(row),
+    reserveFenceGeneration: async () => {},
   };
   const { runtimeId } = hostedRuntimeIdentity(authority, target);
   const environment = z

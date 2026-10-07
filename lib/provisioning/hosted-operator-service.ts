@@ -27,6 +27,7 @@ import {
 import type {
   HostedOperatorPlan,
   OperatorPublicResult,
+  OperatorRequest,
   OperatorReceipt,
   OperatorSelection,
 } from "./hosted-operator-contract";
@@ -39,6 +40,7 @@ type PrivateState = NonNullable<HostedRuntimeJournalRecord["privateState"]>;
 type Effect = HostedOperatorPlan["effects"][number];
 type EffectContext = Context & {
   effect: Effect;
+  fenceGeneration: number;
   operationRef: string;
   plan: HostedOperatorPlan;
   privateState?: PrivateState;
@@ -124,6 +126,143 @@ const resourceIdentity = (plan: HostedOperatorPlan) =>
     neon: plan.neon,
   });
 
+const handlePlanOperation = async (
+  deps: ProtectedHostedOperatorDependencies,
+  context: Context,
+  input: Extract<OperatorRequest, { action: "plan" }>,
+  appId: string,
+  now: () => number,
+) => {
+  const plan = hostedOperatorPlanSchema.parse(
+    await deps.plan({ ...context, action: input.operation }),
+  );
+  if (
+    plan.action !== input.operation ||
+    !sameOperatorSelection(plan.selection, input.selection) ||
+    !hasRequiredGatewayPlan(input.operation, plan)
+  ) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  await deps.assertAuthorized({ ...context, plan });
+  assertUnexpired(plan, now());
+  const planDigest = operatorPlanDigest(plan);
+  const operator = {
+    mode: "protected-operator-v1" as const,
+    operationRef: randomUUID(),
+    plan,
+    planDigest,
+    receipts: [],
+  };
+  await deps.store.reserve({
+    ...context,
+    approvedByCallId: "operator:unapproved-plan",
+    now: new Date(now()),
+    operator,
+  });
+  const row = await updateHostedRuntimeJournal({
+    ...context,
+    now,
+    store: deps.store,
+    update: (record) => {
+      if (!record.operator) {
+        throw new HostedOperatorError("legacy_runtime_requires_migration");
+      }
+      if (record.operator.planDigest === planDigest) {
+        return record;
+      }
+      if (
+        record.leaseId !== undefined ||
+        record.operator.pendingEffectId !== undefined ||
+        (record.operator.receipts.length > 0 && !["prepared", "cleaned"].includes(record.status))
+      ) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      const hasResources =
+        record.status !== "cleaned" &&
+        (record.privateState !== undefined ||
+          record.operator.receipts.length > 0 ||
+          record.status === "prepared");
+      if (hasResources && resourceIdentity(record.operator.plan) !== resourceIdentity(plan)) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      // Same-resource release changes keep credentials; old proof never attests the new plan.
+      const next = {
+        ...record,
+        approvedByCallId: "operator:unapproved-plan",
+        environmentBound: false,
+        operator,
+        status: "pending" as const,
+        step: "reserved" as const,
+      };
+      delete next.proof;
+      return next;
+    },
+  });
+  return response(
+    operatorPublicResultSchema.parse({
+      appId,
+      authenticatedBehavior: "unassessed",
+      operationRef: requireOperator(row.record).operationRef,
+      plan,
+      planDigest,
+      status: "planned",
+    }),
+  );
+};
+
+const handleBindingsOperation = async (input: {
+  context: Context;
+  current: NonNullable<Awaited<ReturnType<HostedRuntimeJournalStore["read"]>>>;
+  deps: ProtectedHostedOperatorDependencies;
+  operationRef: string;
+  operator: z.infer<typeof hostedOperatorRecordSchema>;
+  plan: HostedOperatorPlan;
+  planDigest: string;
+  read: () => Promise<Awaited<ReturnType<HostedRuntimeJournalStore["read"]>>>;
+}) => {
+  const { context, current, deps, operationRef, operator, plan, planDigest, read } = input;
+  if (
+    current.record.leaseId !== undefined ||
+    current.record.status !== "prepared" ||
+    current.record.step !== "bound" ||
+    operator.approvalId === undefined ||
+    operator.pendingEffectId !== undefined
+  ) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  const approval = await deps.readApproval({
+    ...context,
+    action: plan.action,
+    callId: current.record.approvedByCallId,
+    planDigest,
+  });
+  if (
+    approval?.approved !== true ||
+    approval.approvalId !== operator.approvalId ||
+    approval.callId !== current.record.approvedByCallId ||
+    approval.planDigest !== planDigest ||
+    approval.action !== plan.action
+  ) {
+    throw new HostedOperatorError("authorization_required");
+  }
+  const proof = hostedRuntimeProofSchema.parse(
+    await deps.verify({ ...context, plan, privateState: current.record.privateState }),
+  );
+  if (proof.artifactHash !== plan.release.sha256 || proof.releaseId !== plan.release.id) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  const environment = restrictedOperatorEnvironment(
+    plan,
+    await deps.bindings({ ...context, plan, privateState: current.record.privateState }),
+  );
+  await deps.assertAuthorized({ ...context, plan });
+  const latest = await read();
+  if (latest?.revision !== current.revision) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  return response({ environment, operationRef, plan, proof });
+};
+
 /** Separate service entrypoint. There is deliberately no production dependency fallback. */
 export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperatorDependencies) => {
   for (const name of [
@@ -167,77 +306,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         change: (record: HostedRuntimeJournalRecord) => HostedRuntimeJournalRecord,
       ) => await updateHostedRuntimeJournal({ ...context, now, store: deps.store, update: change });
       if (input.action === "plan") {
-        const plan = hostedOperatorPlanSchema.parse(
-          await deps.plan({ ...context, action: input.operation }),
-        );
-        if (
-          plan.action !== input.operation ||
-          !sameOperatorSelection(plan.selection, input.selection) ||
-          !hasRequiredGatewayPlan(input.operation, plan)
-        ) {
-          throw new HostedOperatorError("resource_mismatch");
-        }
-        await deps.assertAuthorized({ ...context, plan });
-        assertUnexpired(plan, now());
-        const planDigest = operatorPlanDigest(plan);
-        const operator = {
-          mode: "protected-operator-v1" as const,
-          operationRef: randomUUID(),
-          plan,
-          planDigest,
-          receipts: [],
-        };
-        await deps.store.reserve({
-          ...context,
-          approvedByCallId: "operator:unapproved-plan",
-          now: new Date(now()),
-          operator,
-        });
-        const row = await update((record) => {
-          if (!record.operator) {
-            throw new HostedOperatorError("legacy_runtime_requires_migration");
-          }
-          if (record.operator.planDigest === planDigest) {
-            return record;
-          }
-          if (
-            record.leaseId !== undefined ||
-            record.operator.pendingEffectId !== undefined ||
-            (record.operator.receipts.length > 0 &&
-              !["prepared", "cleaned"].includes(record.status))
-          ) {
-            throw new HostedOperatorError("operation_in_progress");
-          }
-          const hasResources =
-            record.status !== "cleaned" &&
-            (record.privateState !== undefined ||
-              record.operator.receipts.length > 0 ||
-              record.status === "prepared");
-          if (hasResources && resourceIdentity(record.operator.plan) !== resourceIdentity(plan)) {
-            throw new HostedOperatorError("resource_mismatch");
-          }
-          // Same-resource release changes keep credentials; old proof never attests the new plan.
-          const next = {
-            ...record,
-            approvedByCallId: "operator:unapproved-plan",
-            environmentBound: false,
-            operator,
-            status: "pending" as const,
-            step: "reserved" as const,
-          };
-          delete next.proof;
-          return next;
-        });
-        return response(
-          operatorPublicResultSchema.parse({
-            appId,
-            authenticatedBehavior: "unassessed",
-            operationRef: requireOperator(row.record).operationRef,
-            plan,
-            planDigest,
-            status: "planned",
-          }),
-        );
+        return await handlePlanOperation(deps, context, input, appId, now);
       }
       const current = await read();
       const operator = current?.record.operator;
@@ -263,46 +332,16 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       }
       assertUnexpired(plan, now());
       if (input.action === "bindings") {
-        if (
-          current.record.leaseId !== undefined ||
-          current.record.status !== "prepared" ||
-          current.record.step !== "bound" ||
-          operator.approvalId === undefined ||
-          operator.pendingEffectId !== undefined
-        ) {
-          throw new HostedOperatorError("operation_in_progress");
-        }
-        const approval = await deps.readApproval({
-          ...context,
-          action: plan.action,
-          callId: current.record.approvedByCallId,
-          planDigest,
-        });
-        if (
-          approval?.approved !== true ||
-          approval.approvalId !== operator.approvalId ||
-          approval.callId !== current.record.approvedByCallId ||
-          approval.planDigest !== planDigest ||
-          approval.action !== plan.action
-        ) {
-          throw new HostedOperatorError("authorization_required");
-        }
-        const proof = hostedRuntimeProofSchema.parse(
-          await deps.verify({ ...context, plan, privateState: current.record.privateState }),
-        );
-        if (proof.artifactHash !== plan.release.sha256 || proof.releaseId !== plan.release.id) {
-          throw new HostedOperatorError("resource_mismatch");
-        }
-        const environment = restrictedOperatorEnvironment(
+        return await handleBindingsOperation({
+          context,
+          current,
+          deps,
+          operationRef,
+          operator,
           plan,
-          await deps.bindings({ ...context, plan, privateState: current.record.privateState }),
-        );
-        await deps.assertAuthorized({ ...context, plan });
-        const latest = await read();
-        if (latest?.revision !== current.revision) {
-          throw new HostedOperatorError("operation_in_progress");
-        }
-        return response({ environment, operationRef, plan, proof });
+          planDigest,
+          read,
+        });
       }
       if (input.planDigest !== planDigest) {
         throw new HostedOperatorError("resource_mismatch");
@@ -329,7 +368,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       };
       const approval = await assertApproval();
       const leaseId = randomUUID();
-      const claimed = await update((record) => {
+      let claimed = await update((record) => {
         if (
           record.operator?.operationRef !== operationRef ||
           record.operator.planDigest !== planDigest
@@ -351,6 +390,34 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           operator: { ...record.operator, approvalId: approval.approvalId },
         };
       });
+      let fenceGeneration = requireOperator(claimed.record).fenceGeneration;
+      if (fenceGeneration === undefined) {
+        const allocated = await deps.store.reserveFenceGeneration({
+          ...context,
+          expectedRevision: claimed.revision,
+          leaseId,
+          now: new Date(now()),
+          operationRef,
+        });
+        if (allocated) {
+          claimed = allocated;
+          fenceGeneration = requireOperator(claimed.record).fenceGeneration;
+        } else {
+          const latest = await read();
+          if (
+            latest?.record.leaseId !== leaseId ||
+            requireOperator(latest.record).operationRef !== operationRef ||
+            requireOperator(latest.record).fenceGeneration === undefined
+          ) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+          claimed = latest;
+          fenceGeneration = requireOperator(latest.record).fenceGeneration;
+        }
+      }
+      if (fenceGeneration === undefined) {
+        throw new HostedOperatorError("reconciliation_required");
+      }
       const ownedUpdate = async (
         change: (record: HostedRuntimeJournalRecord) => HostedRuntimeJournalRecord,
       ) =>
@@ -377,8 +444,13 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
             let { record } = claimed;
             for (const effect of plan.effects) {
               await assertCurrent();
+              const priorReceipt = requireOperator(record).receipts.find(
+                (receipt) => receipt.effectId === effect.id,
+              );
               if (
-                requireOperator(record).receipts.some((receipt) => receipt.effectId === effect.id)
+                priorReceipt !== undefined &&
+                ((effect.kind !== "access" && effect.kind !== "revoke") ||
+                  priorReceipt.fenceGeneration === fenceGeneration)
               ) {
                 continue;
               }
@@ -390,6 +462,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                   record = (await ownedUpdate((value) => ({ ...value, privateState }))).record;
                 },
                 effect,
+                fenceGeneration,
                 operationRef,
                 plan,
                 privateState: record.privateState,
@@ -417,6 +490,12 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 });
               }
               receipt = operatorReceiptSchema.parse(receipt);
+              if (
+                (effect.kind === "access" || effect.kind === "revoke") &&
+                receipt.fenceGeneration !== fenceGeneration
+              ) {
+                throw new HostedOperatorError("reconciliation_required");
+              }
               if (receipt.effectId !== effect.id) {
                 throw new HostedOperatorError("resource_mismatch");
               }

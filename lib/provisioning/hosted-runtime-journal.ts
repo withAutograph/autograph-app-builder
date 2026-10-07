@@ -96,6 +96,15 @@ export interface HostedRuntimeJournalStore {
     expectedRevision: number;
     now: Date;
   }) => Promise<HostedRuntimeJournalRow | undefined>;
+  /** Atomically allocate once for this leased approved operation in the same journal row. */
+  reserveFenceGeneration: (input: {
+    authority: BuilderProvisionAuthority;
+    target: HostedRuntimeTarget;
+    expectedRevision: number;
+    leaseId: string;
+    operationRef: string;
+    now: Date;
+  }) => Promise<HostedRuntimeJournalRow | undefined>;
 }
 
 /** Stable across source revisions and replacement sandboxes; never uses ambient provider authority. */

@@ -33,6 +33,7 @@ export const hostedStorageMigrationTags = [
   "0024_prototype_chunks",
   "0025_validation_logs",
   "0026_validation_log_completion",
+  "0027_protected_access_fence_generation",
 ] as const;
 
 const contractSourcePaths = [

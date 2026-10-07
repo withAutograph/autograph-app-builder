@@ -38,6 +38,15 @@ explicitly selected v1 runtime consumers remain a controlled recovery path; new
 tools cannot create a legacy installer operation. Legacy consumers reject
 operator records before decryption.
 
+Each new protected operation reserves one positive `fenceGeneration` in that same
+journal row with a compare-and-set before any provider effect. A PostgreSQL
+sequence orders generations across sessions that share authority rows. Retries
+reuse the stored generation; the trusted effect adapter must pass that exact
+generation to both Auth and app-kernel authority rows and include it in access
+and revoke receipts. This lets those rows reject a delayed older grant after a
+newer revoke. Existing v1 receipts remain readable without generation proof and
+must be reconciled before a new protected access checkpoint is accepted.
+
 Planning the same resource with a changed release replaces the pending plan
 and clears its old proof while retaining encrypted resource credentials. A plan
 that changes actual resource identities is rejected while those resources are

@@ -138,12 +138,16 @@ export type HostedOperatorPlan = z.infer<typeof hostedOperatorPlanSchema>;
 export type OperatorSelection = z.infer<typeof operatorSelectionSchema>;
 export const operatorReceiptSchema = z.strictObject({
   effectId: id,
+  /** Present on new protected grant/revoke checkpoints; absent in existing v1 receipts. */
+  fenceGeneration: z.number().int().positive().optional(),
   observedAt: z.iso.datetime({ offset: true }),
   resourceVersion: id,
 });
 export type OperatorReceipt = z.infer<typeof operatorReceiptSchema>;
 export const hostedOperatorRecordSchema = z.strictObject({
   approvalId: id.optional(),
+  /** Shared across Auth and kernel rows; allocated once by the existing journal CAS. */
+  fenceGeneration: z.number().int().positive().optional(),
   mode: z.literal("protected-operator-v1"),
   operationRef: z.uuid(),
   pendingEffectId: id.optional(),

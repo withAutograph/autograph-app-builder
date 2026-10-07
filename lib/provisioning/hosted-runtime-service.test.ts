@@ -141,6 +141,7 @@ const memoryStore = () => {
       rows.set(key, row);
       return structuredClone(row);
     },
+    reserveFenceGeneration: async () => {},
   };
   return { rows, store };
 };
