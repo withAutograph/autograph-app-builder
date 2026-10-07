@@ -1,3 +1,7 @@
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { VercelSdkSessionNative } from "./vercel-sdk-session";
 import { Readable } from "node:stream";
@@ -114,7 +118,7 @@ describe("Builder SDK session I/O", () => {
     expect(kill).toHaveBeenCalledWith("SIGTERM");
     expect(native.runCommand).toHaveBeenCalledWith(
       expect.objectContaining({
-        args: ["-lc", "bun dev"],
+        args: ["-c", "bun dev"],
         cmd: "bash",
         cwd: "/workspace/repository",
         detached: true,
@@ -159,4 +163,40 @@ describe("Builder SDK session I/O", () => {
       expect.objectContaining({ cwd: "/workspace", signal }),
     );
   });
+});
+
+it("keeps the requested SDK working directory despite a login profile that changes directories", async () => {
+  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), "sdk-working-directory-")));
+  const homeDirectory = path.join(root, "home");
+  const child = path.join(root, "child");
+  mkdirSync(homeDirectory);
+  mkdirSync(child);
+  writeFileSync(path.join(homeDirectory, ".bash_profile"), `cd "${child}"\n`);
+  const native = fixture();
+  native.runCommand.mockImplementation(
+    async (params: Parameters<VercelSdkSessionNative["runCommand"]>[0]) => {
+      await Promise.resolve();
+      const result = spawnSync(params.cmd, params.args ?? [], {
+        cwd: params.cwd,
+        encoding: "utf-8",
+        env: { ...process.env, ...params.env },
+      });
+      return {
+        exitCode: result.status,
+        stderr: async () => await Promise.resolve(result.stderr),
+        stdout: async () => await Promise.resolve(result.stdout),
+      };
+    },
+  );
+  try {
+    const result = await createVercelSdkSession(native).run({
+      command: "pwd",
+      env: { HOME: homeDirectory },
+      workingDirectory: root,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim()).toBe(root);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
 });

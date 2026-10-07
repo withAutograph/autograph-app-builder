@@ -76,6 +76,7 @@ describe("app description source diagnostics", () => {
       configuration: [{ path: ".config/mise/config.toml", state: "absent" }],
       descriptionScriptExists: false,
       sourceHead: "a".repeat(40),
+      workingDirectoryMatchesRoot: false,
     };
     const run = vi
       .fn()
@@ -89,7 +90,7 @@ describe("app description source diagnostics", () => {
       }),
     ).rejects.toThrow(`Source inspection: ${JSON.stringify(facts)}`);
     expect(run).toHaveBeenLastCalledWith({
-      command: `node -e '${appDescriptionSourceInspectionProgram}' spend-review`,
+      command: `node -e '${appDescriptionSourceInspectionProgram}' spend-review '/workspace/repository'`,
       workingDirectory: "/workspace/repository",
     });
     expect(appDescriptionSourceInspectionProgram).not.toContain("process.env.MISE_CONFIG_FILE,");
@@ -104,17 +105,20 @@ it("executes source inspection without printing config contents or override valu
       path.join(root, ".config/mise/config.toml"),
       '[tasks."app:describe"]\nrun = "secret-synthetic-command"\n',
     );
+    const child = path.join(root, "child");
+    mkdirSync(child);
     const output = execFileSync(
       process.execPath,
-      ["-e", appDescriptionSourceInspectionProgram, "spend-review"],
+      ["-e", appDescriptionSourceInspectionProgram, "spend-review", root],
       {
-        cwd: root,
+        cwd: child,
         encoding: "utf-8",
         env: { ...process.env, MISE_CONFIG_FILE: "synthetic-private-config" },
       },
     );
     expect(output).toContain('"state":"declared"');
     expect(output).toContain('"configOverridePresent":true');
+    expect(output).toContain('"workingDirectoryMatchesRoot":false');
     expect(output).not.toContain("secret-synthetic-command");
     expect(output).not.toContain("synthetic-private-config");
   } finally {
