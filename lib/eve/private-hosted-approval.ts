@@ -187,7 +187,7 @@ export const createPrivateHostedApprovalRecorder = (input: {
   const capture = createPrivateHostedApprovalCapture(input.sessionId);
   const persisted = new Set<string>();
   return {
-    async observe(event: MessageStreamEvent) {
+    observe: async (event: MessageStreamEvent) => {
       capture.observe(event);
       const receipts = capture.values().filter((receipt) => !persisted.has(receipt.requestId));
       if (receipts.length === 0) {
@@ -205,7 +205,7 @@ export const createPrivateHostedApprovalRecorder = (input: {
         persisted.add(receipt.requestId);
       }
     },
-    values: capture.values,
+    values: () => capture.values(),
   };
 };
 

@@ -244,15 +244,16 @@ export const createHostedOperatorReadApproval =
     ) {
       throw unavailable();
     }
-    const readReceipt = () => readPrivateHostedApproval({
-      action: context.action,
-      callId: context.callId,
-      planDigest: context.planDigest,
-      principal: owner.data.principal,
-      selection: current.plan.selection,
-      sessionId: owner.data.sessionId,
-      store: input.eve,
-    });
+    const readReceipt = async () =>
+      await readPrivateHostedApproval({
+        action: context.action,
+        callId: context.callId,
+        planDigest: context.planDigest,
+        principal: owner.data.principal,
+        selection: current.plan.selection,
+        sessionId: owner.data.sessionId,
+        store: input.eve,
+      });
     let receipt = await readReceipt();
     if (receipt === null) {
       // The tool can resume before the background observer stores this receipt.
@@ -263,14 +264,20 @@ export const createHostedOperatorReadApproval =
         sessionId: owner.data.sessionId,
         store: input.eve,
       });
-      await input.observe({
+      let observedPublicEventCount = 0;
+      const observation = await input.observe({
         adapterSessionId: owner.data.adapterSessionId,
-        onEvent() {},
+        onEvent: () => {
+          observedPublicEventCount += 1;
+        },
         onPrivateEvent: recorder.observe,
         principal: owner.data.principal,
         readDeadline: true,
         sessionId: owner.data.sessionId,
       });
+      if (observation.publicEventCount !== observedPublicEventCount) {
+        throw unavailable();
+      }
       receipt = await readReceipt();
     }
     if (receipt === null) {

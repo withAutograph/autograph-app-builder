@@ -12,6 +12,7 @@ import type { BuilderHandoffStore } from "../handoff/service";
 import type { HostedWorkspaceMembership } from "../mcp/request-handler";
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
 import type { OperatorOwnerContext, OperatorSelection } from "./hosted-operator-contract";
+import type { PrivateHostedApprovalReceipt } from "../eve/private-hosted-approval";
 import {
   createHostedOperatorOwnerAuthority,
   createHostedOperatorReadApproval,
@@ -52,6 +53,56 @@ const selection: OperatorSelection = {
   projectId: "prj_1",
   sessionId: ownerContext.sessionId,
 };
+const approvalRequestEvent = (receipt: PrivateHostedApprovalReceipt) =>
+  ({
+    data: {
+      requests: [
+        {
+          action: {
+            callId: receipt.callId,
+            input: receipt.toolInput,
+            kind: "tool-call",
+            toolName: receipt.toolName,
+          },
+          kind: "tool-approval",
+          prompt: "Approve this hosted operation.",
+          requestId: receipt.requestId,
+        },
+      ],
+      sequence: receipt.sequence,
+      stepIndex: 0,
+      turnId: receipt.turnId,
+    },
+    meta: { at: "2026-10-06T00:00:00.000Z", id: `request-${receipt.requestId}` },
+    type: "input.requested",
+  } satisfies Extract<MessageStreamEvent, { type: "input.requested" }>);
+const approvalSettledEvent = (receipt: PrivateHostedApprovalReceipt) =>
+  ({
+    data: {
+      outcome: "approved",
+      requestId: receipt.requestId,
+      responderPrincipalId: receipt.responderPrincipalId,
+      sequence: receipt.sequence,
+      stepIndex: 1,
+      turnId: receipt.turnId,
+    },
+    meta: { at: "2026-10-06T00:00:01.000Z", id: `settled-${receipt.requestId}` },
+    type: "approval.settled",
+  } satisfies Extract<MessageStreamEvent, { type: "approval.settled" }>);
+const approvalCandidateEvent = (receipt: PrivateHostedApprovalReceipt) =>
+  ({
+    data: {
+      candidateId: "candidate_1",
+      outcome: "pending",
+      requestId: receipt.requestId,
+      responderPrincipalId: receipt.responderPrincipalId,
+      sequence: receipt.sequence,
+      stepIndex: 0,
+      turnId: receipt.turnId,
+    },
+    meta: { at: "2026-10-06T00:00:01.000Z", id: `candidate-${receipt.requestId}` },
+    type: "approval.candidate",
+  } satisfies Extract<MessageStreamEvent, { type: "approval.candidate" }>);
 const workloadPolicy: OperatorWorkloadPolicy = {
   audience: "https://vercel.com/owner/project",
   environment: "preview",
@@ -142,8 +193,12 @@ const makeFixture = (sessionOverride?: HostedSessionRecord, missingHandoff = fal
   });
   const eve: Pick<HostedEveStore, "getSession" | "recordPrivateApprovalReceipts"> = {
     // oxlint-disable-next-line eslint/require-await -- this in-memory store seam has no asynchronous work.
-    getSession: vi.fn(async () => sessionOverride ?? currentSession),
+    getSession: vi.fn(async () => {
+      await Promise.resolve();
+      return sessionOverride ?? currentSession;
+    }),
     async recordPrivateApprovalReceipts(input) {
+      await Promise.resolve();
       currentSession.privateApprovalReceipts = [
         ...(currentSession.privateApprovalReceipts ?? []),
         ...input.receipts,
@@ -380,7 +435,6 @@ describe("hosted operator owner authority", () => {
       read: vi.fn(async () => ({ record, revision: 1 })),
     };
     const context = await fixture.authority.authorize(request(), selection, ownerContext);
-    let readApproval: ReturnType<typeof createHostedOperatorReadApproval>;
     let concurrentRead:
       | {
           action: "prepare" | "cleanup";
@@ -390,41 +444,22 @@ describe("hosted operator owner authority", () => {
           planDigest: string;
         }
       | undefined;
-    const events = [
-      {
-        data: {
-          requests: [{
-            action: {
-              callId: receipt.callId,
-              input: receipt.toolInput,
-              toolName: receipt.toolName,
-            },
-            kind: "tool-approval",
-            requestId: receipt.requestId,
-          }],
-        },
-        type: "input.requested",
+    const concurrentReader = createHostedOperatorReadApproval({
+      eve: fixture.eve,
+      journal,
+      observe: async () => {
+        await Promise.resolve();
+        throw new Error("The terminal receipt was already persisted.");
       },
-      {
-        data: {
-          outcome: "approved",
-          requestId: receipt.requestId,
-          responderPrincipalId: principal.ownerUserId,
-          sequence: receipt.sequence,
-          turnId: receipt.turnId,
-        },
-        type: "approval.settled",
-      },
-    ] as MessageStreamEvent[];
+    });
     let observationFinished = false;
     const observe = vi.fn(async (streamRequest: Parameters<NonNullable<HostedEveTransport["observe"]>>[0]) => {
       expect(streamRequest.sessionId).toBe(ownerContext.sessionId);
       expect(streamRequest.adapterSessionId).toBe(ownerContext.adapterSessionId);
       expect(streamRequest.readDeadline).toBe(true);
-      for (const event of events) {
-        await streamRequest.onPrivateEvent?.(event);
-      }
-      concurrentRead = await readApproval({
+      await streamRequest.onPrivateEvent?.(approvalRequestEvent(receipt));
+      await streamRequest.onPrivateEvent?.(approvalSettledEvent(receipt));
+      concurrentRead = await concurrentReader({
         ...context,
         action: "prepare",
         callId: receipt.callId,
@@ -440,7 +475,7 @@ describe("hosted operator owner authority", () => {
         status: "waiting" as const,
       };
     });
-    readApproval = createHostedOperatorReadApproval({ eve: fixture.eve, journal, observe });
+    const readApproval = createHostedOperatorReadApproval({ eve: fixture.eve, journal, observe });
     await expect(
       readApproval({
         ...context,
@@ -456,29 +491,27 @@ describe("hosted operator owner authority", () => {
       planDigest,
     });
     expect(observationFinished).toBe(true);
-    expect(concurrentRead).toMatchObject({ approved: true, approvalId: receipt.requestId });
+    expect(concurrentRead).toMatchObject({ approvalId: receipt.requestId, approved: true });
     expect(fixture.currentSession.privateApprovalReceipts).toEqual([receipt]);
     const restartedReader = createHostedOperatorReadApproval({
       eve: fixture.eve,
       journal,
       observe: vi.fn(async () => {
+        await Promise.resolve();
         throw new Error("A persisted terminal receipt must not require another stream read.");
       }),
     });
     await expect(
       restartedReader({ ...context, action: "prepare", callId: receipt.callId, planDigest }),
-    ).resolves.toMatchObject({ approved: true, approvalId: receipt.requestId });
+    ).resolves.toMatchObject({ approvalId: receipt.requestId, approved: true });
     expect(observe).toHaveBeenCalledTimes(1);
-    fixture.currentSession.privateApprovalReceipts = undefined;
+    fixture.currentSession.privateApprovalReceipts = [];
     const submittedOnlyReader = createHostedOperatorReadApproval({
       eve: fixture.eve,
       journal,
       observe: async (streamRequest) => {
-        await streamRequest.onPrivateEvent?.(events[0]!);
-        await streamRequest.onPrivateEvent?.({
-          data: { requestId: receipt.requestId, response: { decision: "approve" } },
-          type: "client.input.responded",
-        } as unknown as MessageStreamEvent);
+        await streamRequest.onPrivateEvent?.(approvalRequestEvent(receipt));
+        await streamRequest.onPrivateEvent?.(approvalCandidateEvent(receipt));
         return {
           artifactProjectionRequiresLegacyReadback: false,
           installedEventCount: 2,
@@ -491,7 +524,7 @@ describe("hosted operator owner authority", () => {
     await expect(
       submittedOnlyReader({ ...context, action: "prepare", callId: receipt.callId, planDigest }),
     ).rejects.toThrow();
-    expect(fixture.currentSession.privateApprovalReceipts).toBeUndefined();
+    expect(fixture.currentSession.privateApprovalReceipts).toEqual([]);
     fixture.currentSession.privateApprovalReceipts = [{ ...receipt, outcome: "cancelled" }];
     await expect(
       readApproval({ ...context, action: "prepare", callId: receipt.callId, planDigest }),
