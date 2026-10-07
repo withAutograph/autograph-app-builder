@@ -100,6 +100,31 @@ describe("owner-bound native Neon runtime adapter", () => {
       if (url.pathname.endsWith("/env/env_native")) {
         return Response.json({ ...native, value: clusterUrl });
       }
+      if (url.pathname === "/v1/storage/stores") {
+        return Response.json({
+          stores: [
+            {
+              id: "store_neon",
+              product: { integrationConfigurationId: "icfg_neon", slug: "neon" },
+              projectsMetadata: [{ projectId: target.projectId }],
+              status: "available",
+              type: "integration",
+            },
+          ],
+        });
+      }
+      if (url.pathname === "/v1/storage/stores/store_neon") {
+        return Response.json({
+          externalResourceId: "neon_project",
+          id: "store_neon",
+          ownerId: target.scopeId,
+          product: { integrationConfigurationId: "icfg_neon", slug: "neon" },
+          projectsMetadata: [{ projectId: target.projectId }],
+          secrets: [{ name: "POSTGRES_PASSWORD", value: "must-not-escape" }],
+          status: "available",
+          type: "integration",
+        });
+      }
       if (url.pathname.endsWith("/env")) {
         expect(url.searchParams.get("gitBranch")).toBe(target.branch);
         return Response.json({ envs: [native, guard] });
@@ -117,6 +142,10 @@ describe("owner-bound native Neon runtime adapter", () => {
     expect(cluster.reference).toEqual({
       configurationId: "icfg_neon",
       environmentId: "env_native",
+    });
+    expect(cluster.marketplaceResource).toEqual({
+      neonProjectId: "neon_project",
+      resourceId: "store_neon",
     });
     expect(new URL(cluster.clusterUrl).searchParams.get("sslmode")).toBe("verify-full");
     expect(cluster.productionDatabaseIdentity).toBe(guard.value);
