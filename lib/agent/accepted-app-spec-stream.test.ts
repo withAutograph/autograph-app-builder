@@ -32,7 +32,10 @@ const fixture = async (content: string) => {
     const continuation =
       current === undefined
         ? {}
-        : { baseRevision: current.artifact.revision, current: current.artifact };
+        : {
+            baseRevision: current.artifact.revision,
+            current: current.artifact,
+          };
     // oxlint-disable-next-line eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Each revision binds the next append.
     current = await recordDurablePrototypeChunk({
       appId: "inventory",
@@ -119,7 +122,51 @@ describe("streamed AppSpec acceptance", () => {
   it("rejects noncanonical handoff bytes rather than accepting a mismatched normalized digest", async () => {
     const { artifact, readChunk } = await fixture(`${BUILD_READY_APP_SPEC}\n`);
     await expect(inspectCanonicalAppSpec({ artifact, readChunk })).rejects.toThrow(
-      "canonical Build handoff",
+      '"canonicalBuildHandoff":"## Build handoff\\n\\n```json',
+    );
+  });
+
+  it("reports the handoff field and exact canonical block without normalizing streamed bytes", async () => {
+    const content = BUILD_READY_APP_SPEC.replace('"status": "build-ready"', '"status": "ready"');
+    const { artifact, readChunk } = await fixture(content);
+    let message = "";
+    try {
+      await inspectCanonicalAppSpec({ artifact, readChunk });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain(
+      '"canonicalBuildHandoff":"## Build handoff\\n\\n```json\\n{\\n  \\"status\\": \\"build-ready\\"\\n}\\n```"',
+    );
+    expect(message).toContain('"path":"Build handoff.status"');
+    expect(message).not.toContain('"status": "ready"');
+  });
+
+  it("distinguishes malformed spacing, trailing content, and CRLF in streamed handoffs", async () => {
+    const cases = [
+      {
+        content: BUILD_READY_APP_SPEC.replace(
+          "## Build handoff\n\n```json",
+          "## Build handoff\n```json",
+        ),
+        message: "one blank line",
+      },
+      {
+        content: `${BUILD_READY_APP_SPEC}\nNotes after handoff.`,
+        message: "Remove all content after",
+      },
+      {
+        content: BUILD_READY_APP_SPEC.replaceAll("\n", "\r\n"),
+        message: "carriage returns",
+      },
+    ];
+    await Promise.all(
+      cases.map(async (testCase) => {
+        const { artifact, readChunk } = await fixture(testCase.content);
+        await expect(inspectCanonicalAppSpec({ artifact, readChunk })).rejects.toThrow(
+          testCase.message,
+        );
+      }),
     );
   });
 });
