@@ -1,3 +1,4 @@
+import { refreshPlanningSource } from "./refresh-planning-source";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import type { ExistingAppChange } from "./existing-app-changes";
 import {
@@ -38,10 +39,20 @@ export const prepareAppCreation = async (
       "Finalize the UI and accept a build-ready AppSpec before running target planning.",
     );
   }
+  const sandboxForPlanning = await refreshPlanningSource(ctx);
+  const stateForPlanning = appBuilderWorkflowState.get();
+  if (
+    stateForPlanning.phase === "empty" ||
+    stateForPlanning.phase === "prepared" ||
+    stateForPlanning.phase === "ui_previewed" ||
+    stateForPlanning.phase === "ui_accepted"
+  ) {
+    throw new Error("The accepted app plan is unavailable after source reconciliation.");
+  }
   const prepared = await prepareOrReuseDependencies({
     callId: ctx.callId,
-    current: state,
-    getSandbox: () => ctx.getSandbox(),
+    current: stateForPlanning,
+    getSandbox: async () => await Promise.resolve(sandboxForPlanning),
   });
   const current: DependencyReadyState = prepared.state;
   const { sandbox } = prepared;

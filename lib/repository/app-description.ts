@@ -60,7 +60,7 @@ const validHead = value => typeof value === "string" && /^[a-f0-9]{40,64}$/.test
 const git = spawnSync("git", ["-c", "core.fsmonitor=false", "rev-parse", "HEAD"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
 let baselinePlatformHead = null;
 try {
-  const marker = JSON.parse(readFileSync(resolve(root, ".app-builder/app-baselines/" + process.argv[1] + ".json"), "utf8"));
+  const marker = JSON.parse(readFileSync(process.argv[3] ?? resolve(root, "..", ".app-builder/app-baselines/" + process.argv[1] + ".json"), "utf8"));
   baselinePlatformHead = validHead(marker.receipt?.platform?.commitSha);
 } catch {}
 const configuration = ["mise.toml", ".mise.toml", ".config/mise/config.toml"].map(path => {
@@ -84,8 +84,9 @@ const describeFailureSourceDiagnostic = async (input: {
   signal?: AbortSignal;
 }): Promise<string> => {
   try {
+    const baselineMarker = `/workspace/.app-builder/app-baselines/${appId.parse(input.appId)}.json`;
     const request: Parameters<SandboxSession["run"]>[0] = {
-      command: `node -e '${appDescriptionSourceInspectionProgram}' ${appId.parse(input.appId)} ${quoteCommandArgument(input.root)}`,
+      command: `node -e '${appDescriptionSourceInspectionProgram}' ${appId.parse(input.appId)} ${quoteCommandArgument(input.root)} ${quoteCommandArgument(baselineMarker)}`,
       workingDirectory: input.root,
     };
     if (input.signal !== undefined) {

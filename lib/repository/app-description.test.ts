@@ -90,7 +90,7 @@ describe("app description source diagnostics", () => {
       }),
     ).rejects.toThrow(`Source inspection: ${JSON.stringify(facts)}`);
     expect(run).toHaveBeenLastCalledWith({
-      command: `node -e '${appDescriptionSourceInspectionProgram}' spend-review '/workspace/repository'`,
+      command: `node -e '${appDescriptionSourceInspectionProgram}' spend-review '/workspace/repository' '/workspace/.app-builder/app-baselines/spend-review.json'`,
       workingDirectory: "/workspace/repository",
     });
     expect(appDescriptionSourceInspectionProgram).not.toContain("process.env.MISE_CONFIG_FILE,");
