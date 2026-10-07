@@ -95,6 +95,15 @@ reconstructing an origin. The concrete trusted planner still owns provider origi
 resolution. This slice projects no browser identity/session fixtures; authenticated
 browser acceptance and durable fixture projection remain unassessed.
 
+The read-only Builder resolver uses the owner-bound Vercel installation credential. It
+requires exactly one verified project domain assigned to the selected Git branch, then
+reads the newest ready Preview deployment for that project and branch, confirms the
+deployment's Git ref, and verifies the domain in that deployment's alias readback. If
+any identity or alias is absent or ambiguous, it returns the unresolved
+`verified_preview_branch_alias` predicate. It does not derive a hostname, use a request
+origin, create an alias, or deploy. These provider metadata reads do not prove browser
+reachability, TLS behavior, or hosted operator configuration.
+
 ## External setup and evidence gate
 
 Source tests exercise the consumed client/handler over local HTTP with synthetic
