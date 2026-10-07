@@ -55,9 +55,9 @@ describe("Vercel integration security", () => {
       resource: "https://builder.example/mcp",
       slug: "autograph-app-builder",
     };
-    expect(
-      decryptVersionedVercelToken({ ...legacy, associatedData, config: fullConfig }),
-    ).toBe("legacy-token");
+    expect(decryptVersionedVercelToken({ ...legacy, associatedData, config: fullConfig })).toBe(
+      "legacy-token",
+    );
 
     const current = encryptVercelToken({
       associatedData,

@@ -56,10 +56,7 @@ import {
   verification,
   vercelInstallationAuthorizationStates,
 } from "../db/schema";
-import {
-  hostedSessionRecordSchema,
-  toDurableHostedSessionRecord,
-} from "../eve/hosted-store";
+import { hostedSessionRecordSchema, toDurableHostedSessionRecord } from "../eve/hosted-store";
 import { createPostgresBuilderHandoffStore } from "../handoff/postgres-store";
 import {
   readVercelInstallationBindings,
@@ -124,10 +121,7 @@ const databaseSchema = {
   verification,
 };
 
-const forwardedSessionAuth = (
-  principal: HostedPrincipal,
-  sourceHandoffId?: string,
-) => {
+const forwardedSessionAuth = (principal: HostedPrincipal, sourceHandoffId?: string) => {
   const attributes = {
     "mcp:audience": principal.audience,
     "mcp:scopes": principal.scopes,
@@ -188,16 +182,11 @@ export const createHostedOperatorControlPlane = async (input: {
       resource: environment.MCP_RESOURCE_URL,
     });
   if (new URL(config.resource).pathname !== "/mcp") {
-    throw new Error(
-      "Protected operator control-plane authority is unavailable.",
-    );
+    throw new Error("Protected operator control-plane authority is unavailable.");
   }
   const tokenKeyring = readVercelTokenKeyringEnvironment(environment);
 
-  const controlPlaneClient = postgres(
-    config.databaseUrl,
-    hostedRuntimePostgresOptions,
-  );
+  const controlPlaneClient = postgres(config.databaseUrl, hostedRuntimePostgresOptions);
   const database = drizzle(controlPlaneClient, { schema: databaseSchema });
   const compose = () => {
     const eve = createPostgresHostedEveStore(database);
@@ -207,11 +196,7 @@ export const createHostedOperatorControlPlane = async (input: {
       issuer: config.issuer,
     });
     const installations = {
-      async list(
-        authority: Parameters<
-          typeof readVercelInstallationBindings
-        >[0]["authority"],
-      ) {
+      async list(authority: Parameters<typeof readVercelInstallationBindings>[0]["authority"]) {
         return await readVercelInstallationBindings({ authority, database });
       },
     };
@@ -243,8 +228,7 @@ export const createHostedOperatorControlPlane = async (input: {
     const owner = createHostedOperatorOwnerAuthority({
       eve,
       handoffs,
-      listVercelInstallations: async (authority) =>
-        await installations.list(authority),
+      listVercelInstallations: async (authority) => await installations.list(authority),
       membership: {
         isMember: async ({ principal, workspaceId }) =>
           await membership.isActiveMember({
@@ -262,16 +246,9 @@ export const createHostedOperatorControlPlane = async (input: {
     const operatorIdentity = createVercelWorkloadIdentity();
     const eveObserver = createSameOriginEveTransport({
       config: { baseUrl: new URL(config.resource).origin },
-      verifyReadAuthority: async ({
-        adapterSessionId,
-        principal,
-        sessionId,
-      }) => {
+      verifyReadAuthority: async ({ adapterSessionId, principal, sessionId }) => {
         try {
-          const rawSession = await eve.getSessionByAdapterSessionId?.(
-            principal,
-            adapterSessionId,
-          );
+          const rawSession = await eve.getSessionByAdapterSessionId?.(principal, adapterSessionId);
           const parsed = hostedSessionRecordSchema.safeParse(rawSession);
           if (!parsed.success) {
             return false;
@@ -297,10 +274,7 @@ export const createHostedOperatorControlPlane = async (input: {
             principal,
             sessionAuth: forwardedSessionAuth(principal, sourceHandoffId),
           });
-          return (
-            resolved.sessionId === sessionId &&
-            resolved.adapterSessionId === adapterSessionId
-          );
+          return resolved.sessionId === sessionId && resolved.adapterSessionId === adapterSessionId;
         } catch {
           return false;
         }
@@ -308,9 +282,7 @@ export const createHostedOperatorControlPlane = async (input: {
       workloadIdentity: operatorIdentity,
     });
     if (eveObserver.observe === undefined) {
-      throw new Error(
-        "Protected operator approval observation is unavailable.",
-      );
+      throw new Error("Protected operator approval observation is unavailable.");
     }
     const readApproval = createHostedOperatorReadApproval({
       eve,

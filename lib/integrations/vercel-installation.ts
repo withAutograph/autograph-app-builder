@@ -112,16 +112,13 @@ const readTokenKeyringCandidate = (
     tokenKey,
     tokenKeyVersion: environment.VERCEL_INTEGRATION_TOKEN_KEY_VERSION,
   };
-  return previousTokenKeys === undefined
-    ? candidate
-    : { ...candidate, previousTokenKeys };
+  return previousTokenKeys === undefined ? candidate : { ...candidate, previousTokenKeys };
 };
 
 /** Reads only token-encryption keys; suitable for services that decrypt owner grants but do not run OAuth. */
 export const readVercelTokenKeyringEnvironment = (
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
-): VercelTokenKeyringConfig =>
-  tokenKeyringSchema.parse(readTokenKeyringCandidate(environment));
+): VercelTokenKeyringConfig => tokenKeyringSchema.parse(readTokenKeyringCandidate(environment));
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function readVercelIntegrationEnvironment(
