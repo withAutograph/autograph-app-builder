@@ -589,6 +589,11 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                       const tenantIds = new Set(plan.access.map((target) => target.organizationId));
                       if (
                         !resourceIds.has(checkpoint.resourceId) ||
+                        (effect.kind === "resources" &&
+                          effect.resourceId !== undefined &&
+                          (checkpoint.resourceId !== effect.resourceId ||
+                            checkpoint.tenantId !== undefined ||
+                            !["resources:roles", "resources:database", "resources:acl"].includes(checkpoint.effectId))) ||
                         (checkpoint.tenantId !== undefined && !tenantIds.has(checkpoint.tenantId))
                       ) {
                         throw new HostedOperatorError("resource_mismatch");

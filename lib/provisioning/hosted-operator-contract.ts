@@ -62,6 +62,9 @@ export const hostedOperatorPlanSchema = z
         targetDigest: digest,
       })
       .optional(),
+    bootstrap: z
+      .strictObject({ endpointId: id, maintenanceDatabase: sqlName, role: sqlName })
+      .optional(),
     contextId: id,
     cost: z.strictObject({
       class: z.enum(["shared-recovery-group", "independent-service"]),
@@ -82,6 +85,7 @@ export const hostedOperatorPlanSchema = z
             "remove-bindings",
             "retire",
           ]),
+          resourceId: id.optional(),
         }),
       )
       .min(1),
@@ -103,11 +107,41 @@ export const hostedOperatorPlanSchema = z
       })
       .optional(),
     release: z.strictObject({ artifactRef: id, id, sha256: digest }),
+    resourcesInstaller: z.strictObject({ reference: id, sha256: digest }).optional(),
     retention: z.strictObject({ expiresAt: z.iso.datetime({ offset: true }), policy: id }),
     selection: operatorSelectionSchema,
     version: z.literal(1),
   })
   .superRefine((plan, ctx) => {
+    if ((plan.bootstrap === undefined) !== (plan.resourcesInstaller === undefined)) {
+      ctx.addIssue({ code: "custom", message: "Resource bootstrap requires its pinned installer." });
+    }
+    if (plan.bootstrap) {
+      const { bootstrap } = plan;
+      const databases = [plan.authDatabase, plan.appDatabase];
+      const roles = databases.flatMap((database) => [database.migratorRole, database.runtimeRole]);
+      const resources = plan.effects.filter((effect) => effect.kind === "resources");
+      const orderedResources = [
+        resources.length === 2,
+        resources[0]?.resourceId === plan.authDatabase.resourceId,
+        resources[1]?.resourceId === plan.appDatabase.resourceId,
+      ].every(Boolean);
+      const invalid = [
+        new Set(roles).size !== roles.length,
+        plan.appDatabase.resourceId === plan.authDatabase.resourceId,
+        roles.includes(bootstrap.role),
+        databases.some((database) =>
+          ["postgres", "neondb", bootstrap.maintenanceDatabase].includes(database.database),
+        ),
+        plan.action === "prepare" && !orderedResources,
+        plan.effects.some((effect) => effect.kind !== "resources" && effect.resourceId !== undefined),
+      ].some(Boolean);
+      if (invalid) {
+        ctx.addIssue({ code: "custom", message: "Bootstrap effects must bind distinct Auth and app resources and roles." });
+      }
+    } else if (plan.effects.some((effect) => effect.resourceId !== undefined)) {
+      ctx.addIssue({ code: "custom", message: "Resource effect bindings require the bootstrap plan." });
+    }
     if (
       new Set(plan.effects.map((effect) => effect.id)).size !== plan.effects.length ||
       plan.appDatabase.database === plan.authDatabase.database ||
