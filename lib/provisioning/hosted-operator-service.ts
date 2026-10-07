@@ -276,6 +276,7 @@ const handleBindingsOperation = async (input: {
   const environment = restrictedOperatorEnvironment(
     plan,
     await deps.bindings({ ...context, plan, privateState: current.record.privateState }),
+    context.authority,
   );
   await deps.assertAuthorized({ ...context, plan });
   const latest = await read();

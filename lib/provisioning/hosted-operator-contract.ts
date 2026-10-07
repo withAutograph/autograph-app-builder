@@ -45,6 +45,29 @@ const databaseResource = z
     runtimeRole: sqlName,
   })
   .refine((value) => value.runtimeRole !== value.migratorRole);
+const previewDeploymentSchema = z.strictObject({
+  branch: id,
+  deploymentId: id,
+  environment: z.literal("preview"),
+  projectId: id,
+});
+const deploymentBoundarySchema = z.strictObject({
+  app: previewDeploymentSchema,
+  authority: hostedTenantAuthoritySchema,
+  gateway: previewDeploymentSchema,
+  operator: z.strictObject({
+    deploymentId: id,
+    environment: z.enum(["preview", "production"]),
+    projectId: id,
+  }),
+  teamId: id,
+  verification: z.strictObject({
+    gatewayOrigin: httpsPublicOrigin,
+    jwksUrl: z.url(),
+    publicOrigin: httpsPublicOrigin,
+  }),
+});
+
 /** Resolved by the protected planner from independently verified owner/provider/artifact state. */
 export const hostedOperatorPlanSchema = z
   .strictObject({
@@ -71,6 +94,7 @@ export const hostedOperatorPlanSchema = z
       description: id,
       owner: id,
     }),
+    deploymentBoundary: deploymentBoundarySchema.optional(),
     effects: z
       .array(
         z.strictObject({
@@ -163,16 +187,40 @@ export const hostedOperatorPlanSchema = z
         message: "Resources and effects must have distinct identities.",
       });
     }
-    if (
-      plan.publicGateway &&
-      (plan.publicGateway.branch !== plan.selection.branch ||
-        plan.publicGateway.projectId !== plan.selection.projectId)
-    ) {
+    if (plan.publicGateway && plan.publicGateway.branch !== plan.selection.branch) {
       ctx.addIssue({
         code: "custom",
-        message: "Public Gateway origin must be bound to the selected Preview project and branch.",
+        message: "Public Gateway origin must be bound to the selected Preview branch.",
         path: ["publicGateway"],
       });
+    }
+    if (plan.deploymentBoundary !== undefined) {
+      const boundary = plan.deploymentBoundary;
+      const jwks = new URL(boundary.verification.jwksUrl);
+      const invalidBoundary = [
+        new Set([boundary.app.projectId, boundary.gateway.projectId, boundary.operator.projectId])
+          .size !== 3,
+        boundary.app.projectId !== plan.selection.projectId,
+        boundary.app.branch !== plan.selection.branch,
+        boundary.gateway.branch !== plan.selection.branch,
+        plan.publicGateway === undefined,
+        boundary.gateway.projectId !== plan.publicGateway?.projectId,
+        boundary.verification.publicOrigin !== plan.publicGateway?.origin,
+        jwks.origin !== boundary.verification.gatewayOrigin,
+        jwks.pathname !== "/_platform/jwks.json",
+        jwks.username !== "",
+        jwks.password !== "",
+        jwks.search !== "",
+        jwks.hash !== "",
+      ].some(Boolean);
+      if (invalidBoundary) {
+        ctx.addIssue({
+          code: "custom",
+          message:
+            "App, Gateway and operator require distinct bound deployment identities and exact public verification configuration.",
+          path: ["deploymentBoundary"],
+        });
+      }
     }
     // Each phase has an observed receipt, including a no-op verification for already-existing resources.
     // Authority is opened only after install/grant verification, and closed before retirement.
@@ -371,76 +419,58 @@ export class HostedOperatorError extends Error {
   }
 }
 
-/** Shared strict projection validation; no raw private state or alternate credential key is accepted. */
+/** Public plan data is not provider proof. The trusted binding adapter must read current
+ * project ownership/deployment environments before projecting this narrow app boundary. */
 export const restrictedOperatorEnvironment = (
   plan: HostedOperatorPlan,
   input: Record<string, string>,
+  authenticatedAuthority?: z.infer<typeof hostedTenantAuthoritySchema>,
 ): Record<string, string> => {
+  const parsedPlan = hostedOperatorPlanSchema.parse(plan);
+  const boundary = parsedPlan.deploymentBoundary;
+  if (boundary === undefined || authenticatedAuthority === undefined) {
+    throw new HostedOperatorError("legacy_runtime_requires_migration");
+  }
+  const authority = hostedTenantAuthoritySchema.parse(authenticatedAuthority);
+  if (JSON.stringify(boundary.authority) !== JSON.stringify(authority)) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
   const env = z.record(z.string(), z.string()).parse(input);
   const appKey = `${plan.selection.appId.toUpperCase().replaceAll("-", "_")}_DATABASE_URL`;
-  const keys = [
-    appKey,
-    "PLATFORM_AUTH_DATABASE_URL",
-    "BETTER_AUTH_APP_NAME",
-    "BETTER_AUTH_SECRET",
-    "BETTER_AUTH_URL",
-    ...(plan.publicGateway ? ["PLATFORM_PUBLIC_ORIGIN"] : []),
-  ];
-  const allowedKeys = new Set(keys);
-  if (Object.keys(env).some((key) => !allowedKeys.has(key))) {
-    throw new HostedOperatorError("resource_mismatch");
-  }
-  if (keys.some((key) => !env[key])) {
-    throw new HostedOperatorError("resource_mismatch");
-  }
-  if (env.BETTER_AUTH_APP_NAME !== "apps") {
+  const keys = [appKey, "PLATFORM_JWKS_URL", "PLATFORM_ORIGIN", "PLATFORM_PUBLIC_ORIGIN"];
+  if (Object.keys(env).some((key) => !keys.includes(key)) || keys.some((key) => !env[key])) {
     throw new HostedOperatorError("resource_mismatch");
   }
   if (
-    plan.publicGateway &&
-    (env.BETTER_AUTH_URL !== plan.publicGateway.origin ||
-      env.PLATFORM_PUBLIC_ORIGIN !== plan.publicGateway.origin)
+    env.PLATFORM_PUBLIC_ORIGIN !== boundary.verification.publicOrigin ||
+    env.PLATFORM_ORIGIN !== boundary.verification.gatewayOrigin ||
+    env.PLATFORM_JWKS_URL !== boundary.verification.jwksUrl
   ) {
     throw new HostedOperatorError("resource_mismatch");
   }
-  for (const [key, resource] of [
-    [appKey, plan.appDatabase],
-    ["PLATFORM_AUTH_DATABASE_URL", plan.authDatabase],
-  ] as const) {
-    const url = new URL(env[key]);
-    const valid = [
-      ["postgres:", "postgresql:"].includes(url.protocol),
-      url.hostname.replace(/-pooler(?=\.)/u, "") === plan.neon.endpoint,
-      url.pathname === `/${resource.database}`,
-      decodeURIComponent(url.username) === resource.runtimeRole,
-      url.password !== "",
-      ["", "5432"].includes(url.port),
-      url.hash === "",
-      url.searchParams.getAll("sslmode").length === 1,
-      url.searchParams.get("sslmode") === "verify-full",
-      [...url.searchParams.keys()].every((name) => ["sslmode", "channel_binding"].includes(name)),
-      url.searchParams.getAll("channel_binding").length <= 1,
-      !url.searchParams.has("channel_binding") ||
-        url.searchParams.get("channel_binding") === "require",
-    ];
-    if (valid.includes(false)) {
-      throw new HostedOperatorError("resource_mismatch");
-    }
-  }
-  const origin = new URL(env.BETTER_AUTH_URL);
-  const validOrigin = [
-    origin.protocol === "https:",
-    origin.username === "",
-    origin.password === "",
-    origin.pathname === "/",
-    origin.search === "",
-    origin.hash === "",
-    env.BETTER_AUTH_SECRET.length >= 32,
-  ];
-  if (validOrigin.includes(false)) {
+  let url: URL;
+  try {
+    url = new URL(env[appKey]);
+  } catch {
     throw new HostedOperatorError("resource_mismatch");
   }
-  if (plan.publicGateway && origin.origin !== plan.publicGateway.origin) {
+  const resource = plan.appDatabase;
+  const valid = [
+    ["postgres:", "postgresql:"].includes(url.protocol),
+    url.hostname.replace(/-pooler(?=\.)/u, "") === plan.neon.endpoint,
+    url.pathname === `/${resource.database}`,
+    decodeURIComponent(url.username) === resource.runtimeRole,
+    url.password !== "",
+    ["", "5432"].includes(url.port),
+    url.hash === "",
+    url.searchParams.getAll("sslmode").length === 1,
+    url.searchParams.get("sslmode") === "verify-full",
+    [...url.searchParams.keys()].every((name) => ["sslmode", "channel_binding"].includes(name)),
+    url.searchParams.getAll("channel_binding").length <= 1,
+    !url.searchParams.has("channel_binding") ||
+      url.searchParams.get("channel_binding") === "require",
+  ];
+  if (valid.includes(false)) {
     throw new HostedOperatorError("resource_mismatch");
   }
   return env;

@@ -35,6 +35,14 @@ const selection: OperatorSelection = {
   projectId: "prj_fixture",
   sessionId: "session_fixture",
 };
+const ownerContext = {
+  adapterGeneration: 1,
+  adapterSessionId: "adapter-session",
+  authority,
+  kind: "direct" as const,
+  principal: { ...authority, scopes: ["autograph:send"] },
+  sessionId: selection.sessionId,
+};
 const target = {
   ...selection,
   installationId: "icfg_fixture",
@@ -62,6 +70,32 @@ const plan = hostedOperatorPlanSchema.parse({
     description: "Approved disposable compute",
     owner: "Fixture owner",
   },
+  deploymentBoundary: {
+    app: {
+      branch: selection.branch,
+      deploymentId: "dpl_app",
+      environment: "preview",
+      projectId: selection.projectId,
+    },
+    authority,
+    gateway: {
+      branch: selection.branch,
+      deploymentId: "dpl_gateway",
+      environment: "preview",
+      projectId: "prj_gateway",
+    },
+    operator: {
+      deploymentId: "dpl_operator",
+      environment: "production",
+      projectId: "prj_operator",
+    },
+    teamId: "team_fixture",
+    verification: {
+      gatewayOrigin: "https://gateway-preview.example.test",
+      jwksUrl: "https://gateway-preview.example.test/_platform/jwks.json",
+      publicOrigin: "https://apps-preview.example.test",
+    },
+  },
   effects: [
     {
       description: "Verify selected resources and their roles",
@@ -88,7 +122,7 @@ const plan = hostedOperatorPlanSchema.parse({
   publicGateway: {
     branch: selection.branch,
     origin: "https://apps-preview.example.test",
-    projectId: selection.projectId,
+    projectId: "prj_gateway",
   },
   release: { artifactRef: "verified-artifact", id: "release_fixture", sha256: "b".repeat(64) },
   retention: {
@@ -106,13 +140,12 @@ const proof = {
   tenants: 2,
 };
 const environment = {
-  BETTER_AUTH_APP_NAME: "apps",
-  BETTER_AUTH_SECRET: "fixture-".repeat(8),
-  BETTER_AUTH_URL: "https://apps-preview.example.test",
-  PLATFORM_AUTH_DATABASE_URL: `postgres://shared_auth_runtime:synthetic-auth@${plan.neon.endpoint}/shared_auth?sslmode=verify-full`,
+  PLATFORM_JWKS_URL: "https://gateway-preview.example.test/_platform/jwks.json",
+  PLATFORM_ORIGIN: "https://gateway-preview.example.test",
   PLATFORM_PUBLIC_ORIGIN: "https://apps-preview.example.test",
   SPEND_REVIEW_DATABASE_URL: `postgres://spend_runtime:synthetic-app@${plan.neon.endpoint}/spend?sslmode=verify-full`,
 };
+
 const fixture = () => {
   let row: HostedRuntimeJournalRow | undefined;
   let member = true;
@@ -251,6 +284,7 @@ const fixture = () => {
     endpoint: "https://operator.example",
     fetch: async (url, init) =>
       await handler(new Request(url instanceof Request ? url.url : url, init)),
+    ownerContext,
     token: async () => "fixture-service-identity",
   });
   return {
@@ -366,6 +400,7 @@ describe("protected hosted operator boundary", () => {
     f.deps.plan = async () => {
       const legacyPlan = { ...plan };
       delete legacyPlan.publicGateway;
+      delete legacyPlan.deploymentBoundary;
       return legacyPlan;
     };
     const result = await f.client.request({ action: "plan", operation: "prepare", selection });
@@ -386,7 +421,7 @@ describe("protected hosted operator boundary", () => {
       selection,
     });
     expect(binding.environment).toEqual(environment);
-    expect(binding.environment.BETTER_AUTH_URL).toBe(binding.environment.PLATFORM_PUBLIC_ORIGIN);
+    expect(binding.environment.PLATFORM_JWKS_URL).toBe(environment.PLATFORM_JWKS_URL);
     expect(Object.keys(binding).toSorted()).toEqual([
       "environment",
       "operationRef",
@@ -637,6 +672,7 @@ describe("protected hosted operator boundary", () => {
       ],
     };
     delete cleanupPlanInput.publicGateway;
+    delete cleanupPlanInput.deploymentBoundary;
     const cleanupPlan = hostedOperatorPlanSchema.parse(cleanupPlanInput);
     f.deps.plan = async () => cleanupPlan;
     const next = await f.client.request({ action: "plan", operation: "cleanup", selection });
@@ -806,50 +842,116 @@ describe("protected hosted operator boundary", () => {
     expect(hostedRuntimeIdentity(authority, target)).toEqual(identity);
     expect(hostedRuntimeJournalRecordSchema.parse(f.row.record)).not.toHaveProperty("operator");
   });
+  it("denies operational client bindings without a resolved owner context", async () => {
+    const f = fixture();
+    const execution = await prepared(f);
+    f.approve();
+    await f.client.request(execution);
+    const legacyClient = createHostedOperatorClient({
+      endpoint: "https://operator.example",
+      fetch: async (url, init) =>
+        await f.handler(new Request(url instanceof Request ? url.url : url, init)),
+      token: async () => "fixture-service-identity",
+    });
+    await expect(
+      legacyClient.bindings({
+        action: "bindings",
+        operationRef: execution.operationRef,
+        selection,
+      }),
+    ).rejects.toThrow("legacy_runtime_requires_migration");
+  });
   it.each([
     { ...environment, NEON_API_KEY: "forbidden" },
+    { ...environment, PLATFORM_AUTH_DATABASE_URL: "forbidden-realm-connection" },
+    { ...environment, BETTER_AUTH_SECRET: "forbidden-signing-secret" },
+    { ...environment, DATABASE_URL: "forbidden-shared-connection" },
+    { ...environment, VENDOR_DATABASE_URL: "forbidden-other-app" },
     {
       ...environment,
-      PLATFORM_AUTH_DATABASE_URL: environment.PLATFORM_AUTH_DATABASE_URL.replace(
-        "shared_auth_runtime",
-        "shared_auth_owner",
+      SPEND_REVIEW_DATABASE_URL: environment.SPEND_REVIEW_DATABASE_URL.replace(
+        "spend_runtime",
+        "spend_owner",
       ),
     },
     {
       ...environment,
       SPEND_REVIEW_DATABASE_URL: `${environment.SPEND_REVIEW_DATABASE_URL}&host=other`,
     },
-    {
-      ...environment,
-      PLATFORM_AUTH_DATABASE_URL: environment.PLATFORM_AUTH_DATABASE_URL.replace(
-        "shared_auth?",
-        "other?",
-      ),
-    },
     { ...environment, PLATFORM_PUBLIC_ORIGIN: "https://other-preview.example.test" },
-    { ...environment, BETTER_AUTH_URL: "https://sandbox.vercel.run" },
-    { ...environment, PLATFORM_PUBLIC_ORIGIN: "https://sandbox.vercel.run" },
+    { ...environment, PLATFORM_JWKS_URL: "https://other-preview.example.test/_platform/jwks.json" },
   ])("rejects overprivileged or unrelated runtime projection", (env) => {
-    expect(() => restrictedOperatorEnvironment(plan, env)).toThrow("resource_mismatch");
+    expect(() => restrictedOperatorEnvironment(plan, env, authority)).toThrow("resource_mismatch");
   });
-  it("normalizes the trusted Gateway origin and keeps legacy v1 projections unproven", () => {
-    const normalized = hostedOperatorPlanSchema.parse({
-      ...plan,
-      publicGateway: {
-        ...plan.publicGateway,
-        origin: "https://APPS-PREVIEW.example.test:443/",
-      },
-    });
-    expect(normalized.publicGateway?.origin).toBe("https://apps-preview.example.test");
-    const legacyPlan = { ...plan };
-    delete legacyPlan.publicGateway;
-    const legacyEnvironment = Object.fromEntries(
-      Object.entries(environment).filter(([key]) => key !== "PLATFORM_PUBLIC_ORIGIN"),
+  it("projects only app runtime SQL and public verification configuration", () => {
+    expect(restrictedOperatorEnvironment(plan, environment, authority)).toEqual(environment);
+    expect(() => restrictedOperatorEnvironment(plan, environment)).toThrow(
+      "legacy_runtime_requires_migration",
     );
-    legacyEnvironment.BETTER_AUTH_URL = "https://fixture.vercel.run";
-    const legacyProjection = restrictedOperatorEnvironment(legacyPlan, legacyEnvironment);
-    expect(legacyProjection).not.toHaveProperty("PLATFORM_PUBLIC_ORIGIN");
-    expect(legacyProjection.BETTER_AUTH_URL).toBe("https://fixture.vercel.run");
+    expect(() =>
+      restrictedOperatorEnvironment(plan, environment, {
+        ...authority,
+        ownerUserId: "other-owner",
+      }),
+    ).toThrow("resource_mismatch");
+    expect(() =>
+      restrictedOperatorEnvironment(plan, environment, {
+        ...authority,
+        workspaceId: "other-workspace",
+      }),
+    ).toThrow("resource_mismatch");
+  });
+  it("parses legacy records for inspection and denies legacy operational projections", () => {
+    const legacyPlan = { ...plan };
+    delete legacyPlan.deploymentBoundary;
+    legacyPlan.publicGateway = {
+      branch: selection.branch,
+      origin: "https://apps-preview.example.test",
+      projectId: selection.projectId,
+    };
+    expect(hostedOperatorPlanSchema.safeParse(legacyPlan).success).toBe(true);
+    expect(() => restrictedOperatorEnvironment(legacyPlan, environment, authority)).toThrow(
+      "legacy_runtime_requires_migration",
+    );
+  });
+  it.each(["app", "gateway"] as const)("rejects swapped %s physical project identities", (key) => {
+    const boundary = plan.deploymentBoundary;
+    if (boundary === undefined) {
+      throw new Error("Fixture deployment boundary is absent.");
+    }
+    expect(
+      hostedOperatorPlanSchema.safeParse({
+        ...plan,
+        deploymentBoundary: {
+          ...boundary,
+          [key]: { ...boundary[key], projectId: "wrong-project" },
+        },
+      }).success,
+    ).toBe(false);
+  });
+  it("rejects shared application, Gateway and operator projects", () => {
+    const boundary = plan.deploymentBoundary;
+    if (boundary === undefined) {
+      throw new Error("Fixture deployment boundary is absent.");
+    }
+    expect(
+      hostedOperatorPlanSchema.safeParse({
+        ...plan,
+        deploymentBoundary: {
+          ...boundary,
+          operator: { ...boundary.operator, projectId: boundary.app.projectId },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      hostedOperatorPlanSchema.safeParse({
+        ...plan,
+        deploymentBoundary: {
+          ...boundary,
+          gateway: { ...boundary.gateway, projectId: boundary.app.projectId },
+        },
+      }).success,
+    ).toBe(false);
   });
   it("rejects sandbox origins and origins swapped across selected Preview targets", () => {
     expect(
@@ -902,6 +1004,7 @@ describe("protected hosted operator boundary", () => {
       const client = createHostedOperatorClient({
         allowLoopback: true,
         endpoint: `http://127.0.0.1:${address.port}`,
+        ownerContext,
         token: async () => "fixture-service-identity",
       });
       const planned = await client.request({ action: "plan", operation: "prepare", selection });
