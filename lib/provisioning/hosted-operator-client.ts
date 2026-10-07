@@ -48,11 +48,13 @@ export const createHostedOperatorClient = (input: {
         ? request
         : { ...request, ownerContext: input.ownerContext };
     const body = operatorRequestSchema.parse(bodyInput);
+    const token = await input.token();
     const response = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), {
       body: JSON.stringify(body),
       headers: {
-        authorization: `Bearer ${await input.token()}`,
+        authorization: `Bearer ${token}`,
         "content-type": "application/json",
+        "x-vercel-trusted-oidc-idp-token": token,
       },
       method: "POST",
       redirect: "error",

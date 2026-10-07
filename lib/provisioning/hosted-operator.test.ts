@@ -240,6 +240,7 @@ const fixture = () => {
     async authorize(request, selected) {
       if (
         request.headers.get("authorization") !== "Bearer fixture-service-identity" ||
+        request.headers.get("x-vercel-trusted-oidc-idp-token") !== "fixture-service-identity" ||
         selected.sessionId !== selection.sessionId
       ) {
         throw new HostedOperatorError("authorization_required");
@@ -1090,7 +1091,12 @@ describe("protected hosted operator boundary", () => {
           const response = await f.handler(
             new Request("http://127.0.0.1/v1/runtime", {
               body: await text(incoming),
-              headers: { authorization: incoming.headers.authorization ?? "" },
+              headers: {
+                authorization: incoming.headers.authorization ?? "",
+                "x-vercel-trusted-oidc-idp-token": String(
+                  incoming.headers["x-vercel-trusted-oidc-idp-token"] ?? "",
+                ),
+              },
               method: "POST",
             }),
           );
