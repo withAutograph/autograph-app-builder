@@ -571,6 +571,7 @@ export async function observeSameOriginEveStream(
   input: Parameters<typeof streamSameOriginEveEvents>[0] & {
     onEvent: (event: InternalEveEvent) => Promise<void> | void;
     onInstalledEvent?: (event: MessageStreamEvent) => void;
+    onPrivateEvent?: (event: MessageStreamEvent) => Promise<void> | void;
   },
 ): Promise<{
   installedEventCount: number;
@@ -602,6 +603,7 @@ export async function observeSameOriginEveStream(
     prototype.observe(event);
     prototypeReference.accept(event);
     input.onInstalledEvent?.(event);
+    await input.onPrivateEvent?.(event);
     installedEventCount += 1;
     const turnId =
       "data" in event && "turnId" in event.data
@@ -1005,6 +1007,7 @@ export function createSameOriginEveTransport(input: {
     sessionId: string;
     adapterSessionId: string;
     onEvent: (event: InternalEveEvent) => Promise<void> | void;
+    onPrivateEvent?: (event: MessageStreamEvent) => Promise<void> | void;
   }) => ReturnType<typeof observeSameOriginEveStream>;
 } {
   const config = sameOriginConfigSchema.parse(input.config);
@@ -1019,6 +1022,7 @@ export function createSameOriginEveTransport(input: {
       return observeSameOriginEveStream({
         ...common,
         onEvent: request.onEvent,
+        onPrivateEvent: request.onPrivateEvent,
         sessionId: request.adapterSessionId,
       });
     },
@@ -1038,6 +1042,7 @@ export function createSameOriginEveTransport(input: {
             return observeSameOriginEveStream({
               ...common,
               onEvent: request.onEvent,
+              onPrivateEvent: request.onPrivateEvent,
               sessionId: request.adapterSessionId,
             });
           },

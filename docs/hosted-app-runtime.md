@@ -19,6 +19,16 @@ adapter must read the actual authenticated durable Eve approval outcome and
 exact tool input, matching action, call, plan digest, target and approver's current
 authority. No production approval adapter is supplied or defaulted to allow.
 
+Hosted Eve records terminal decisions for only the two protected runtime tools
+in a private field on the tenant-owned session record. It pairs Eve's exact
+`input.requested` action with the later `approval.settled` outcome and responder
+identity; replay is idempotent and a conflicting terminal result is rejected.
+The field is outside the public checkpoint and is not returned by session,
+checkpoint or MCP projections. Historical v1/v2 checkpoints remain readable.
+The operator still has to compare the receipt with the independently resolved
+owner, membership, plan digest and selected target; this persistence is not a
+production approval adapter or evidence of hosted provider authority.
+
 `mise run operator:serve -- <absolute-reviewed-adapter-module> <sha256> [port]`
 is a separate service entrypoint bound to loopback for an authenticated HTTPS
 front end. It refuses startup without every required adapter. It must run in a

@@ -16,6 +16,8 @@ import {
 } from "../mcp/contracts";
 import type { PublicSessionSummary } from "../mcp/contracts";
 import type { pagedCheckpointMetadataSchema } from "./postgres-hosted-checkpoint-history";
+import { mergePrivateHostedApprovalReceipts, privateHostedApprovalReceiptSchema } from "./private-hosted-approval";
+import type { PrivateHostedApprovalReceipt } from "./private-hosted-approval";
 
 export const hostedOperationKindSchema = z.enum(["start", "resume", "send", "respond"]);
 export type HostedOperationKind = z.infer<typeof hostedOperationKindSchema>;
@@ -234,6 +236,8 @@ export const durableHostedSessionRecordSchema = z
     originAdapterSessionId: z.string().min(1).max(500),
     parentSessionId: z.string().min(1).max(200).optional(),
     principal: hostedPrincipalSchema,
+    // Private Eve authority facts live beside the session record, outside its public checkpoint.
+    privateApprovalReceipts: z.array(privateHostedApprovalReceiptSchema).optional(),
     resumability: publicSessionResumabilitySchema,
     sessionId: z.string().min(1).max(200),
     sourceHandoffId: z.string().uuid().optional(),
@@ -650,6 +654,12 @@ export type ReserveOperationResult = z.infer<typeof reserveOperationResultSchema
  * optional new session and the terminal operation result.
  */
 export interface HostedEveStore {
+  /** Append raw Eve approval settlements to the owner-scoped session record. */
+  recordPrivateApprovalReceipts?: (input: {
+    principal: z.infer<typeof hostedPrincipalSchema>;
+    sessionId: string;
+    receipts: readonly PrivateHostedApprovalReceipt[];
+  }) => Promise<void>;
   bindExistingStart?: (
     principal: z.infer<typeof hostedPrincipalSchema>,
     candidate: HostedOperationRecord,
@@ -997,6 +1007,29 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   ): Promise<HostedSessionRecord | null> {
     const session = this.sessions.get(InMemoryHostedEveStore.sessionKey(principal, sessionId));
     return session === undefined ? null : structuredClone(session);
+  }
+
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+  async recordPrivateApprovalReceipts(input: {
+    principal: z.infer<typeof hostedPrincipalSchema>;
+    sessionId: string;
+    receipts: readonly PrivateHostedApprovalReceipt[];
+  }): Promise<void> {
+    const key = InMemoryHostedEveStore.sessionKey(input.principal, input.sessionId);
+    const current = this.sessions.get(key);
+    if (current === undefined) {
+      throw new Error(SESSION_NOT_FOUND);
+    }
+    const durable = toDurableHostedSessionRecord(current);
+    const updated = durableHostedSessionRecordSchema.parse({
+      ...durable,
+      privateApprovalReceipts: mergePrivateHostedApprovalReceipts(
+        input.sessionId,
+        durable.privateApprovalReceipts,
+        input.receipts,
+      ),
+    });
+    this.sessions.set(key, structuredClone(updated));
   }
 
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
