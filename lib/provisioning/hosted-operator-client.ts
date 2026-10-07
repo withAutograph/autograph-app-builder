@@ -89,7 +89,11 @@ export const createHostedOperatorClient = (input: {
       }
       return {
         ...value,
-        environment: restrictedOperatorEnvironment(value.plan, value.environment),
+        environment: restrictedOperatorEnvironment(
+          value.plan,
+          value.environment,
+          input.ownerContext?.authority,
+        ),
       };
     },
     async request(request: Exclude<OperatorRequest, { action: "bindings" }>, signal?: AbortSignal) {
