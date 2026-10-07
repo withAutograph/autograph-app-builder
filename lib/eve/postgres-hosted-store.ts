@@ -248,6 +248,22 @@ async function sessionById(
   return rows[0] === undefined ? null : parseHostedSessionRow(rows[0]);
 }
 
+// eslint-disable-next-line eslint/func-style -- Keep lookup adjacent to the tenant-scoped session query.
+async function sessionByAdapterSessionId(
+  database: Database | Transaction,
+  principal: HostedPrincipal,
+  adapterSessionId: string,
+) {
+  const rows = await database
+    .select()
+    .from(agentSessions)
+    .where(
+      and(sessionTenantPredicate(principal), eq(agentSessions.adapterSessionId, adapterSessionId)),
+    )
+    .limit(1);
+  return rows[0] === undefined ? null : parseHostedSessionRow(rows[0]);
+}
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function isExactReservation(existing: HostedOperationRecord, candidate: HostedOperationRecord) {
   return (
@@ -325,6 +341,12 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
     async getSession(principalInput, sessionId) {
       const principal = hostedPrincipalSchema.parse(principalInput);
       return sessionById(database, principal, sessionId);
+    },
+
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning store interface.
+    async getSessionByAdapterSessionId(principalInput, adapterSessionId) {
+      const principal = hostedPrincipalSchema.parse(principalInput);
+      return sessionByAdapterSessionId(database, principal, adapterSessionId);
     },
 
     async getStartOperation(principalInput, clientRequestId) {

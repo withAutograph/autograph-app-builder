@@ -5,7 +5,12 @@ import type { HostedPrincipal } from "../eve/hosted-auth";
 import { builderHandoffRecordSchema } from "../handoff/contracts";
 import type { BuilderHandoffStore } from "../handoff/service";
 import type { HostedWorkspaceMembership } from "../mcp/request-handler";
-import { readPreparedVercelAccess } from "../agent/prepared-provider-context";
+import {
+  readOwnerVercelProjectAccess,
+  readPreparedVercelAccess,
+} from "../agent/prepared-provider-context";
+import type { PreparedVercelAccess } from "../agent/prepared-provider-context";
+import type { VercelInstallationBinding } from "../integrations/vercel-installation";
 import {
   HostedOperatorError,
   operatorOwnerContextSchema,
@@ -37,6 +42,9 @@ export interface HostedOperatorOwnerDependencies {
   eve: Pick<HostedEveStore, "getSession">;
   handoffs: Pick<BuilderHandoffStore, "read">;
   membership: HostedWorkspaceMembership;
+  listVercelInstallations: (
+    authority: Authority,
+  ) => Promise<readonly Pick<VercelInstallationBinding, "active" | "installationId">[]>;
   readVercelCredential: AccessReader;
   fetch?: typeof fetch;
   apiOrigin?: string;
@@ -53,6 +61,8 @@ const samePrincipal = (left: HostedPrincipal, right: HostedPrincipal) =>
   JSON.stringify([...left.scopes].toSorted()) === JSON.stringify([...right.scopes].toSorted());
 
 const unavailable = () => new HostedOperatorError("authorization_required");
+const resourceMismatch = () => new HostedOperatorError("resource_mismatch");
+type HostedSessionVersion = 1 | 2 | undefined;
 
 const ownerContextFromHint = (hint: OperatorOwnerContext | undefined) => {
   const parsed = operatorOwnerContextSchema.safeParse(hint);
@@ -67,37 +77,14 @@ const ownerContextFromHint = (hint: OperatorOwnerContext | undefined) => {
   return { owner, principal };
 };
 
-// oxlint-disable-next-line eslint/complexity -- Each owner, handoff, membership and Vercel fact is a distinct required authority check.
-const readOwnedState = async (
+const readCurrentOwnedSession = async (
   deps: HostedOperatorOwnerDependencies,
-  owner: OperatorOwnerContext,
   principal: HostedPrincipal,
-  selection: OperatorSelection,
+  owner: OperatorOwnerContext,
 ) => {
-  if (selection.sessionId !== owner.sessionId || selection.environment !== "preview") {
-    throw unavailable();
-  }
-  const handoffValue = await deps.handoffs.read({
-    authority: owner.authority,
-    handoffId: owner.sourceHandoffId,
-  });
-  const handoff = builderHandoffRecordSchema.safeParse(handoffValue);
-  if (!handoff.success) {
-    throw unavailable();
-  }
-  // oxlint-disable-next-line sonarjs/expression-complexity -- Handoff ID, owner, session, and app are one persisted linkage.
-  if (
-    handoff.data.handoffId !== owner.sourceHandoffId ||
-    handoff.data.sessionId !== owner.sessionId ||
-    !sameAuthority(handoff.data.authority, owner.authority) ||
-    handoff.data.intent.appId !== selection.appId
-  ) {
-    throw unavailable();
-  }
-
   const sessionValue = await deps.eve.getSession(principal, owner.sessionId);
   let session: ReturnType<typeof toDurableHostedSessionRecord> | null = null;
-  let sessionVersion: 1 | 2 | undefined;
+  let sessionVersion: HostedSessionVersion;
   if (sessionValue !== null) {
     const parsedSession = hostedSessionRecordSchema.safeParse(sessionValue);
     if (parsedSession.success) {
@@ -112,7 +99,104 @@ const readOwnedState = async (
   if (session === null) {
     throw unavailable();
   }
-  if (session.version !== 2) {
+  return { session, sessionVersion };
+};
+
+const readDirectOwnerTarget = async (
+  deps: HostedOperatorOwnerDependencies,
+  owner: OperatorOwnerContext,
+  principal: HostedPrincipal,
+  selection: OperatorSelection,
+  session: ReturnType<typeof toDurableHostedSessionRecord>,
+  sessionVersion: HostedSessionVersion,
+) => {
+  const sessionMatches = [
+    sessionVersion === 2,
+    session.sourceHandoffId === undefined,
+    session.sessionId === owner.sessionId,
+    session.adapterSessionId === owner.adapterSessionId,
+    session.adapterGeneration === owner.adapterGeneration,
+    samePrincipal(session.principal, principal),
+  ].every(Boolean);
+  if (!sessionMatches) {
+    throw unavailable();
+  }
+  if (session.appId === undefined || session.appId !== selection.appId) {
+    throw resourceMismatch();
+  }
+  const { listVercelInstallations } = deps;
+  const installations = await listVercelInstallations(owner.authority);
+  const installationIds = new Set<string>();
+  for (const binding of installations) {
+    if (binding.active) {
+      installationIds.add(binding.installationId);
+    }
+  }
+  const projectChecks = await Promise.all(
+    [...installationIds].map(async (installationId) => {
+      const accessInput: Parameters<typeof readOwnerVercelProjectAccess>[0] = {
+        authority: owner.authority,
+        installationId,
+        projectId: selection.projectId,
+        readCredential: deps.readVercelCredential,
+      };
+      if (deps.fetch !== undefined) {
+        accessInput.fetch = deps.fetch;
+      }
+      if (deps.apiOrigin !== undefined) {
+        accessInput.apiOrigin = deps.apiOrigin;
+      }
+      return await readOwnerVercelProjectAccess(accessInput);
+    }),
+  );
+  let projectAccess: Extract<PreparedVercelAccess, { status: "ready" }> | undefined;
+  for (const access of projectChecks) {
+    if (access.status === "ready" && access.project?.id === selection.projectId) {
+      if (projectAccess !== undefined) {
+        throw resourceMismatch();
+      }
+      projectAccess = access;
+    }
+  }
+  if (projectAccess?.project === undefined) {
+    throw resourceMismatch();
+  }
+  const target = hostedRuntimeTargetSchema.parse({
+    appId: selection.appId,
+    branch: selection.branch,
+    environment: selection.environment,
+    installationId: projectAccess.scope.installationId,
+    projectId: projectAccess.project.id,
+    scopeId: projectAccess.scope.id,
+    scopeType: projectAccess.scope.type,
+    sessionId: selection.sessionId,
+  });
+  return { session, target };
+};
+
+const readHandoffOwnerTarget = async (
+  deps: HostedOperatorOwnerDependencies,
+  owner: OperatorOwnerContext & { kind: "handoff" },
+  principal: HostedPrincipal,
+  selection: OperatorSelection,
+  session: ReturnType<typeof toDurableHostedSessionRecord>,
+  sessionVersion: HostedSessionVersion,
+) => {
+  const handoffValue = await deps.handoffs.read({
+    authority: owner.authority,
+    handoffId: owner.sourceHandoffId,
+  });
+  const handoff = builderHandoffRecordSchema.safeParse(handoffValue);
+  if (!handoff.success) {
+    throw unavailable();
+  }
+  // oxlint-disable-next-line sonarjs/expression-complexity -- Handoff ID, owner, session, and app form one persisted linkage.
+  if (
+    handoff.data.handoffId !== owner.sourceHandoffId ||
+    handoff.data.sessionId !== owner.sessionId ||
+    !sameAuthority(handoff.data.authority, owner.authority) ||
+    handoff.data.intent.appId !== selection.appId
+  ) {
     throw unavailable();
   }
   const sessionMatches = [
@@ -125,13 +209,10 @@ const readOwnedState = async (
   if (!sessionMatches) {
     throw unavailable();
   }
-  if (!(await deps.membership.isMember({ principal, workspaceId: owner.authority.workspaceId }))) {
-    throw unavailable();
-  }
 
   const vercel = handoff.data.intent.provisioning?.vercel;
   if (vercel?.status !== "succeeded" || vercel.projectId !== selection.projectId) {
-    throw new HostedOperatorError("resource_mismatch");
+    throw resourceMismatch();
   }
   const accessInput: Parameters<typeof readPreparedVercelAccess>[0] = {
     authority: owner.authority,
@@ -145,11 +226,8 @@ const readOwnedState = async (
     accessInput.apiOrigin = deps.apiOrigin;
   }
   const access = await readPreparedVercelAccess(accessInput);
-  if (access.status !== "ready") {
-    throw new HostedOperatorError("resource_mismatch");
-  }
-  if (access.project === undefined) {
-    throw new HostedOperatorError("resource_mismatch");
+  if (access.status !== "ready" || access.project === undefined) {
+    throw resourceMismatch();
   }
   const accessMatches = [
     access.project.id === selection.projectId,
@@ -158,7 +236,7 @@ const readOwnedState = async (
     access.scope.type === vercel.scope.type,
   ].every(Boolean);
   if (!accessMatches) {
-    throw new HostedOperatorError("resource_mismatch");
+    throw resourceMismatch();
   }
   const target = hostedRuntimeTargetSchema.parse({
     appId: selection.appId,
@@ -171,6 +249,25 @@ const readOwnedState = async (
     sessionId: selection.sessionId,
   });
   return { handoff: handoff.data, session, target };
+};
+
+const readOwnedState = async (
+  deps: HostedOperatorOwnerDependencies,
+  owner: OperatorOwnerContext,
+  principal: HostedPrincipal,
+  selection: OperatorSelection,
+) => {
+  if (selection.sessionId !== owner.sessionId || selection.environment !== "preview") {
+    throw unavailable();
+  }
+  const { session, sessionVersion } = await readCurrentOwnedSession(deps, principal, owner);
+  if (!(await deps.membership.isMember({ principal, workspaceId: owner.authority.workspaceId }))) {
+    throw unavailable();
+  }
+  if (owner.kind === "direct") {
+    return await readDirectOwnerTarget(deps, owner, principal, selection, session, sessionVersion);
+  }
+  return await readHandoffOwnerTarget(deps, owner, principal, selection, session, sessionVersion);
 };
 
 /**

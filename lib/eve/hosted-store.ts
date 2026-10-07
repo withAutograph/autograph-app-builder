@@ -672,6 +672,11 @@ export interface HostedEveStore {
     principal: z.infer<typeof hostedPrincipalSchema>,
     clientRequestId: string,
   ) => Promise<HostedOperationRecord | null>;
+  /** Exact tenant-scoped lookup through the unique adapter binding. */
+  getSessionByAdapterSessionId?: (
+    principal: z.infer<typeof hostedPrincipalSchema>,
+    adapterSessionId: string,
+  ) => Promise<HostedSessionRecord | null>;
   settleStartAlias?: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     clientRequestId: string;
@@ -1010,6 +1015,23 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   ): Promise<HostedSessionRecord | null> {
     const session = this.sessions.get(InMemoryHostedEveStore.sessionKey(principal, sessionId));
     return session === undefined ? null : structuredClone(session);
+  }
+
+  // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning store contract
+  async getSessionByAdapterSessionId(
+    principal: z.infer<typeof hostedPrincipalSchema>,
+    adapterSessionId: string,
+  ): Promise<HostedSessionRecord | null> {
+    const tenant = tenantKeyFor(principal);
+    const matching = [...this.sessions.values()].filter(
+      (candidate) =>
+        tenantKeyFor(candidate.principal) === tenant &&
+        candidate.adapterSessionId === adapterSessionId,
+    );
+    if (matching.length > 1) {
+      throw new Error("Hosted adapter session binding is ambiguous.");
+    }
+    return matching[0] === undefined ? null : structuredClone(matching[0]);
   }
 
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract

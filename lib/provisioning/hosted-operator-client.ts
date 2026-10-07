@@ -119,7 +119,7 @@ export const hostedOperatorClientForSession = async (
   return createHostedOperatorClient({
     endpoint,
     ownerContext,
-    sessionId: ownerContext?.sessionId ?? adapterSessionId,
+    sessionId: ownerContext.sessionId,
     token: createVercelWorkloadIdentity().token,
   });
 };
