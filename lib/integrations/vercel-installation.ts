@@ -241,10 +241,14 @@ export function decryptVersionedVercelToken(input: {
   tokenIv: string;
   tokenTag: string;
   keyVersion: string;
-  config: VercelTokenKeyringConfig;
+  config: VercelTokenKeyringConfig | VercelIntegrationConfig;
   associatedData: string;
 }) {
-  const config = tokenKeyringSchema.parse(input.config);
+  const config = tokenKeyringSchema.parse({
+    previousTokenKeys: input.config.previousTokenKeys,
+    tokenKey: input.config.tokenKey,
+    tokenKeyVersion: input.config.tokenKeyVersion,
+  });
   const keyVersion = tokenKeyVersionSchema.safeParse(input.keyVersion);
   if (!keyVersion.success) {
     throw new VercelTokenDecryptionKeyError();

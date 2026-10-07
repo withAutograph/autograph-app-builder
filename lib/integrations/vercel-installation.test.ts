@@ -47,6 +47,17 @@ describe("Vercel integration security", () => {
       tokenKeyVersion: "current_v2",
     };
     expect(decryptVersionedVercelToken({ ...legacy, associatedData, config })).toBe("legacy-token");
+    const fullConfig = {
+      ...config,
+      clientId: "client-id",
+      clientSecret: "client-secret",
+      issuer: "https://builder.example/api/auth",
+      resource: "https://builder.example/mcp",
+      slug: "autograph-app-builder",
+    };
+    expect(
+      decryptVersionedVercelToken({ ...legacy, associatedData, config: fullConfig }),
+    ).toBe("legacy-token");
 
     const current = encryptVercelToken({
       associatedData,
