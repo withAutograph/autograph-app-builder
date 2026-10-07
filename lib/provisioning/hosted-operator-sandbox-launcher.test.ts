@@ -1,13 +1,10 @@
 /* oxlint-disable eslint/sort-keys, eslint/consistent-type-definitions, eslint/require-await, eslint/object-shorthand, eslint/func-names, eslint/curly, eslint/no-await-in-loop, unicorn/no-useless-undefined, unicorn/no-useless-spread, typescript/no-non-null-assertion, typescript/strict-boolean-expressions, typescript/no-unsafe-type-assertion, typescript/no-unnecessary-type-assertion, anti-slop/no-unknown-parameters, anti-slop/no-unsafe-dictionary-type, anti-slop/no-conditional-empty-object-spread, anti-slop/require-safety-comment-for-type-assertion -- Synthetic SDK fakes use minimal opaque fixtures to exercise the real protocol boundary without provider calls. */
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  HostedOperatorError,
-  hostedOperatorPlanSchema,
-  operatorPlanDigest,
-} from "./hosted-operator-contract";
+import { HostedOperatorError, hostedOperatorPlanSchema } from "./hosted-operator-contract";
 import type { HostedOperatorWorkerEffectContext } from "./hosted-operator-service";
 import {
   buildProtectedInstallContext,
@@ -15,6 +12,13 @@ import {
 } from "./hosted-operator-sandbox-launcher";
 
 const runId = "a79c7cc3-9236-4a09-9e4a-5f772d08a255";
+const rustWire = JSON.parse(
+  readFileSync(new URL("fixtures/protected-installer-rust-frames.json", import.meta.url), "utf-8"),
+) as { authorization: string; checkpoint: string; context: string; contextDigest: string };
+const rustAuthorization = JSON.parse(rustWire.authorization) as Record<string, unknown>;
+const rustCheckpoint = JSON.parse(rustWire.checkpoint) as {
+  receipt: { readback_sha256: string; state: "applied" | "no_change" };
+} & Record<string, unknown>;
 const workerDigest = "a".repeat(64);
 const readbackDigest = "c".repeat(64);
 const plan = hostedOperatorPlanSchema.parse({
@@ -59,7 +63,7 @@ const plan = hostedOperatorPlanSchema.parse({
   release: { artifactRef: "verified-artifact", id: "release-fixture", sha256: "b".repeat(64) },
   retention: { expiresAt: "2027-01-01T00:00:00.000Z", policy: "Fixture retention" },
   selection: {
-    appId: "spend-review",
+    appId: "hc",
     branch: "preview",
     environment: "preview",
     projectId: "prj_fixture",
@@ -77,38 +81,6 @@ const context = buildProtectedInstallContext({
 const contextDigest = createHash("sha256").update(JSON.stringify(context)).digest("hex");
 const frame = (value: unknown) => Buffer.from(JSON.stringify(value));
 
-const requestAuthorization = (overrides: Record<string, unknown> = {}) => ({
-  kind: "authorize_effect",
-  version: 1,
-  operation_id: runId,
-  approval_digest: operatorPlanDigest(plan),
-  context_digest: contextDigest,
-  fence_generation: 3,
-  sequence: 1,
-  effect_id: "install",
-  app_id: "spend-review",
-  resource_id: "app-resource",
-  release_id: "release-fixture",
-  installer_id: "trusted-worker",
-  installer_sha256: workerDigest,
-  tenant_id: "tenant-a",
-  ...overrides,
-});
-const requestCheckpoint = (state: "applied" | "unknown") => ({
-  kind: "checkpoint_effect",
-  version: 1,
-  operation_id: runId,
-  context_digest: contextDigest,
-  fence_generation: 3,
-  sequence: 1,
-  effect_id: "install",
-  resource_id: "app-resource",
-  tenant_id: "tenant-a",
-  receipt: {
-    state,
-    ...(state === "applied" ? { readback_sha256: readbackDigest } : {}),
-  },
-});
 const ready = (frameId: number) => frame({ version: 1, run_id: runId, frame_id: frameId });
 const authorityNotice = (frameId: number) => ({
   kind: "protected_installer_frame_ready",
@@ -117,21 +89,27 @@ const authorityNotice = (frameId: number) => ({
   frame_id: frameId,
 });
 type Notice = { stream: "stdout" | "stderr"; data: string };
-
 const makeFixture = (
   options: {
     unknown?: boolean;
     staleAtAuthority?: boolean;
     wrongResource?: boolean;
+    effectId?: string;
+    tenantId?: string | null;
     pinMatches?: boolean;
     abortBeforeAuthority?: AbortController;
+    delayCreate?: Promise<void>;
   } = {},
 ) => {
   const files = new Map<string, Buffer>();
   const written: string[] = [];
   const records: unknown[] = [];
   let workerCommand:
-    | { kill: ReturnType<typeof vi.fn>; logs: () => AsyncGenerator<Notice>; wait: ReturnType<typeof vi.fn> }
+    | {
+        kill: ReturnType<typeof vi.fn>;
+        logs: () => AsyncGenerator<Notice>;
+        wait: ReturnType<typeof vi.fn>;
+      }
     | undefined;
   const sandbox = {
     delete: vi.fn(async () => undefined),
@@ -163,9 +141,12 @@ const makeFixture = (
         };
       }
 
-      const request = requestAuthorization({
+      const request = {
+        ...rustAuthorization,
         ...(options.wrongResource ? { resource_id: "other-resource" } : {}),
-      });
+        ...(options.effectId ? { effect_id: options.effectId } : {}),
+        ...(options.tenantId === undefined ? {} : { tenant_id: options.tenantId }),
+      };
       files.set(
         `/vercel/sandbox/protected-installer/${runId}/lifecycle/1.json`,
         frame({ version: 1, run_id: runId, kind: "worker_started" }),
@@ -173,10 +154,15 @@ const makeFixture = (
       files.set(`/vercel/sandbox/protected-installer/${runId}/lifecycle/1.ready`, ready(1));
       files.set(`/vercel/sandbox/protected-installer/${runId}/requests/1.json`, frame(request));
       files.set(`/vercel/sandbox/protected-installer/${runId}/requests/1.ready`, ready(1));
-      if (!options.wrongResource && !options.staleAtAuthority) {
+      const requestCanContinue =
+        options.wrongResource !== true && options.staleAtAuthority !== true;
+      if (requestCanContinue) {
         files.set(
           `/vercel/sandbox/protected-installer/${runId}/requests/2.json`,
-          frame(requestCheckpoint(options.unknown ? "unknown" : "applied")),
+          frame({
+            ...rustCheckpoint,
+            receipt: options.unknown ? { state: "unknown" } : rustCheckpoint.receipt,
+          }),
         );
         files.set(`/vercel/sandbox/protected-installer/${runId}/requests/2.ready`, ready(2));
         files.set(
@@ -227,7 +213,10 @@ const makeFixture = (
     }),
   };
 
-  const createSandbox = vi.fn(async () => sandbox as never);
+  const createSandbox = vi.fn(async () => {
+    await options.delayCreate;
+    return sandbox as never;
+  });
   const assertCurrent = vi.fn(async () => {
     if (options.staleAtAuthority && assertCurrent.mock.calls.length > 2) {
       throw new HostedOperatorError("authorization_required");
@@ -266,9 +255,10 @@ const makeFixture = (
       teamId: "control-team",
       image: "protected-installer-control-image",
       workers: {
-        "spend-review": {
+        hc: {
           executablePath: "/opt/trusted-worker",
           id: "trusted-worker",
+          operationScope: "hc-protected-install-v1",
           sha256: workerDigest,
           subcommand: "protected-install",
         },
@@ -292,6 +282,8 @@ const makeFixture = (
 
 describe("hosted protected installer Sandbox launcher", () => {
   it("relays pinned worker requests through current authority and durable checkpoint callbacks", async () => {
+    expect(contextDigest).toBe(rustWire.contextDigest);
+    expect(JSON.stringify(context)).toBe(rustWire.context);
     const fixture = makeFixture();
     await fixture.launcher.execute(fixture.input);
 
@@ -308,7 +300,7 @@ describe("hosted protected installer Sandbox launcher", () => {
     expect(fixture.records).toEqual([
       expect.objectContaining({
         contextDigest,
-        effectId: "install",
+        effectId: "hc:prepare-schema:tenant-a",
         fenceGeneration: 3,
         operationId: runId,
         resourceId: "app-resource",
@@ -327,7 +319,7 @@ describe("hosted protected installer Sandbox launcher", () => {
         context_digest: contextDigest,
         fence_generation: 3,
         sequence: 1,
-        effect_id: "install",
+        effect_id: "hc:prepare-schema:tenant-a",
         recorded: true,
       }),
     );
@@ -374,7 +366,12 @@ describe("hosted protected installer Sandbox launcher", () => {
   });
 
   it("rejects stale authority or mismatched protected identity without replying", async () => {
-    for (const options of [{ staleAtAuthority: true }, { wrongResource: true }]) {
+    for (const options of [
+      { staleAtAuthority: true },
+      { wrongResource: true },
+      { effectId: "hc:drop-table:tenant-a" },
+      { effectId: "hc:prepare-schema:tenant-b" },
+    ]) {
       const fixture = makeFixture(options);
       await expect(fixture.launcher.execute(fixture.input)).rejects.toBeInstanceOf(
         HostedOperatorError,
@@ -408,5 +405,24 @@ describe("hosted protected installer Sandbox launcher", () => {
     });
     expect(fixture.workerCommand()?.kill).toHaveBeenCalledOnce();
     expect(fixture.sandbox.delete).toHaveBeenCalledOnce();
+  });
+
+  it("renews the durable operator lease while Sandbox creation is still pending", async () => {
+    vi.useFakeTimers();
+    const { promise: delayCreate, resolve: releaseSandbox } = Promise.withResolvers<undefined>();
+    const fixture = makeFixture({ delayCreate });
+    try {
+      const execution = fixture.launcher.execute(fixture.input);
+      await vi.waitFor(() => {
+        expect(fixture.createSandbox).toHaveBeenCalledOnce();
+      });
+      await vi.advanceTimersByTimeAsync(41_000);
+      expect(fixture.assertCurrent.mock.calls.length).toBeGreaterThanOrEqual(3);
+      releaseSandbox(undefined);
+      await execution;
+    } finally {
+      releaseSandbox(undefined);
+      vi.useRealTimers();
+    }
   });
 });

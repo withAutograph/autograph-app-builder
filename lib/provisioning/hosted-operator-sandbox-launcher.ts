@@ -19,7 +19,15 @@ const SPOOL_ROOT = "/vercel/sandbox/protected-installer";
 const INITIAL_SANDBOX_TIMEOUT_MS = 15 * 60_000;
 const EXTEND_SANDBOX_TIMEOUT_MS = 5 * 60_000;
 const SANDBOX_RENEWAL_INTERVAL_MS = 4 * 60_000;
+// The service lease is shorter than the Sandbox lifetime. Keep renewing it
+// while the fixed worker runs; the authority reply timeout is not a lease.
+const JOURNAL_LEASE_RENEWAL_INTERVAL_MS = 20_000;
 const AUTHORITY_REPLY_TIMEOUT_MS = 120_000;
+const HC_APP_ID = "hc";
+const VENDOR_APP_ID = "vendor";
+const HC_LOOKUP_SHADOW_PREPARE = "lookup-shadow-prepare";
+const HC_INSTALL_RELEASE_BUNDLE = "install-release-bundle";
+const VENDOR_LOOKUP_SHADOW_BATCH = "lookup-shadow-batch";
 
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 const workerRunIdSchema = z.uuid();
@@ -35,6 +43,7 @@ const resourceSchema = z
 export interface ProtectedInstallerWorkerDescriptor {
   executablePath: string;
   id: string;
+  operationScope: "hc-protected-install-v1" | "vendor-protected-materialize-v1";
   sha256: string;
   subcommand: "protected-install" | "protected-materialize";
 }
@@ -378,6 +387,93 @@ const checkpointMatchesContext = (
   );
 };
 
+const requestMatchesWorkerScope = (
+  effectId: string,
+  tenantId: string | null,
+  context: ProtectedInstallContextWire,
+  worker: ProtectedInstallerWorkerDescriptor,
+) => {
+  if (worker.operationScope === "hc-protected-install-v1") {
+    if (context.app_id !== HC_APP_ID || worker.subcommand !== "protected-install") {
+      return false;
+    }
+    const match = /^hc:(?<operation>[a-z-]+):(?<tenant>[^:]+)(?::(?<suffix>[^:]+))?$/u.exec(
+      effectId,
+    );
+    const operation = match?.groups?.operation;
+    const tenant = match?.groups?.tenant;
+    const suffix = match?.groups?.suffix;
+    const allowedOperations = new Set([
+      "prepare-schema",
+      "validate-readiness",
+      "activate-schema",
+      "repair-schema",
+      "ensure-mutation-replay",
+      "verify-installed-release",
+      "claim-legacy-schema-hash",
+      HC_LOOKUP_SHADOW_PREPARE,
+      "lookup-shadow-validate",
+      "lookup-shadow-activate",
+      HC_INSTALL_RELEASE_BUNDLE,
+    ]);
+    if (
+      operation === undefined ||
+      tenant === undefined ||
+      !allowedOperations.has(operation) ||
+      !context.tenant_targets.includes(tenant)
+    ) {
+      return false;
+    }
+    const validSuffix =
+      (operation === HC_LOOKUP_SHADOW_PREPARE && suffix !== undefined && /^\d+$/u.test(suffix)) ||
+      (operation === HC_INSTALL_RELEASE_BUNDLE && (suffix === "initial" || suffix === "final"));
+    if (
+      (operation === HC_LOOKUP_SHADOW_PREPARE || operation === HC_INSTALL_RELEASE_BUNDLE) !==
+      (suffix !== undefined)
+    ) {
+      return false;
+    }
+    if (suffix !== undefined && !validSuffix) {
+      return false;
+    }
+    const targetMayBeNull =
+      operation === "ensure-mutation-replay" || operation === HC_INSTALL_RELEASE_BUNDLE;
+    return tenantId === tenant || (targetMayBeNull && tenantId === null);
+  }
+
+  if (context.app_id !== VENDOR_APP_ID || worker.subcommand !== "protected-materialize") {
+    return false;
+  }
+  const match = /^vendor:(?<tenant>[^/]+)\/(?<operation>[a-z-]+)(?::(?<suffix>[^:]+))?$/u.exec(
+    effectId,
+  );
+  const tenant = match?.groups?.tenant;
+  const operation = match?.groups?.operation;
+  const suffix = match?.groups?.suffix;
+  const allowedOperations = new Set([
+    "legacy-seed-cleanup",
+    "release-bundle-install",
+    "prepare-release",
+    "readiness",
+    "activate-release",
+    "trusted-replay-table",
+    "lookup-shadow-schema-hash",
+    VENDOR_LOOKUP_SHADOW_BATCH,
+    "lookup-shadow-activate",
+  ]);
+  const validSuffix =
+    operation === VENDOR_LOOKUP_SHADOW_BATCH && suffix !== undefined && /^\d+$/u.test(suffix);
+  return (
+    tenant !== undefined &&
+    operation !== undefined &&
+    allowedOperations.has(operation) &&
+    (operation === VENDOR_LOOKUP_SHADOW_BATCH) === (suffix !== undefined) &&
+    (suffix === undefined || validSuffix) &&
+    context.tenant_targets.includes(tenant) &&
+    tenantId === tenant
+  );
+};
+
 const checkpointReceipt = (request: CheckpointRequest): WorkerEffectCheckpointFrame["receipt"] => {
   const receipt: WorkerEffectCheckpointFrame["receipt"] = { state: request.receipt.state };
   if (request.receipt.readback_sha256 !== undefined) {
@@ -443,7 +539,11 @@ const runSandboxWorker = async (
   if (
     worker === undefined ||
     worker.id !== input.plan.installer.reference ||
-    worker.sha256 !== input.plan.installer.sha256
+    worker.sha256 !== input.plan.installer.sha256 ||
+    (worker.operationScope === "hc-protected-install-v1" &&
+      worker.subcommand !== "protected-install") ||
+    (worker.operationScope === "vendor-protected-materialize-v1" &&
+      worker.subcommand !== "protected-materialize")
   ) {
     throw resourceMismatch();
   }
@@ -485,7 +585,9 @@ const runSandboxWorker = async (
   let sandbox: OperatorSandbox | undefined;
   let command: Command | undefined;
   let timer: ReturnType<typeof setInterval> | undefined;
+  let journalTimer: ReturnType<typeof setInterval> | undefined;
   let renewal: Promise<void> | null = null;
+  let journalRenewal: Promise<void> | null = null;
   let started = false;
   let succeeded = false;
   let terminal = false;
@@ -592,8 +694,8 @@ const runSandboxWorker = async (
         unknownSeen ||
         activeEffect !== null ||
         request.sequence !== expectedEffectSequence ||
-        request.effect_id !== input.effect.id ||
         !requestMatchesContext(request, context, contextDigest) ||
+        !requestMatchesWorkerScope(request.effect_id, request.tenant_id, context, worker) ||
         !allowedResources.has(request.resource_id) ||
         (request.tenant_id !== null && !allowedTenants.has(request.tenant_id))
       ) {
@@ -700,6 +802,20 @@ const runSandboxWorker = async (
 
   try {
     failOnAbort();
+    journalTimer = setInterval(() => {
+      if (journalRenewal !== null || signal.aborted) {
+        return;
+      }
+      journalRenewal = (async () => {
+        try {
+          await input.assertCurrent();
+        } catch {
+          leaseAbort.abort();
+        } finally {
+          journalRenewal = null;
+        }
+      })();
+    }, JOURNAL_LEASE_RENEWAL_INTERVAL_MS);
     await input.assertCurrent();
     const create = createSandbox;
     sandbox = await create({
@@ -781,8 +897,14 @@ const runSandboxWorker = async (
     if (timer !== undefined) {
       clearInterval(timer);
     }
+    if (journalTimer !== undefined) {
+      clearInterval(journalTimer);
+    }
     if (renewal !== null) {
       await Promise.resolve(renewal);
+    }
+    if (journalRenewal !== null) {
+      await Promise.resolve(journalRenewal);
     }
     if (command !== undefined && (!terminal || !succeeded || operationError !== null)) {
       try {
