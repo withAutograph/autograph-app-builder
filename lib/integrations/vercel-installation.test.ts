@@ -8,6 +8,7 @@ import {
   decryptVersionedVercelToken,
   encryptVercelToken,
   readVercelIntegrationEnvironment,
+  readVercelTokenKeyringEnvironment,
   verifyVercelWebhook,
 } from "./vercel-installation";
 
@@ -41,12 +42,7 @@ describe("Vercel integration security", () => {
       keyVersion: "previous_v1",
     };
     const config = {
-      clientId: "client-id",
-      clientSecret: "client-secret",
-      issuer: "https://builder.example/api/auth",
       previousTokenKeys: [{ key: oldKey, version: "previous_v1" }],
-      resource: "https://builder.example/mcp",
-      slug: "autograph-app-builder",
       tokenKey: activeKey,
       tokenKeyVersion: "current_v2",
     };
@@ -125,6 +121,16 @@ describe("Vercel integration security", () => {
         ]),
       }),
     ).toThrow(/active token key version/u);
+  });
+
+  it("loads a decrypt-only keyring without OAuth client credentials", () => {
+    const key = Buffer.alloc(32, 7);
+    expect(
+      readVercelTokenKeyringEnvironment({
+        VERCEL_INTEGRATION_TOKEN_KEY: key.toString("base64"),
+        VERCEL_INTEGRATION_TOKEN_KEY_VERSION: "current_v1",
+      }),
+    ).toEqual({ tokenKey: key, tokenKeyVersion: "current_v1" });
   });
 
   it("verifies the exact raw Vercel webhook body", () => {

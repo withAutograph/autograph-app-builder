@@ -5,6 +5,7 @@ import {
   createPostgresVercelAuthorizationStateStore,
   createPostgresVercelInstallationStore,
   readActiveVercelInstallationToken,
+  readVercelInstallationBindings,
 } from "./postgres-vercel-installation";
 
 const authority = {
@@ -24,6 +25,8 @@ function databaseFixture(rows: unknown[]) {
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     limit: vi.fn(async () => rows),
     onConflictDoUpdate: vi.fn(),
+    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
+    orderBy: vi.fn(async () => rows),
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning test double
     returning: vi.fn(async () => rows),
     select: vi.fn(),
@@ -94,11 +97,6 @@ describe("durable Vercel connection return", () => {
       await readActiveVercelInstallationToken({
         authority,
         config: {
-          clientId: "public",
-          clientSecret: "secret",
-          issuer: authority.issuer,
-          resource: authority.audience,
-          slug: "autograph",
           tokenKey: Buffer.alloc(32),
           tokenKeyVersion: "v1",
         },
@@ -113,6 +111,28 @@ describe("durable Vercel connection return", () => {
       authority.ownerUserId,
       "icfg_selected",
       true,
+    ]);
+  });
+
+  it("lists owner-scoped Vercel bindings without OAuth client or key config", async () => {
+    const row = {
+      active: true,
+      displayName: "Owner team",
+      installationId: "icfg_selected",
+      plan: "pro",
+      scopeId: "team_1",
+      scopeType: "team",
+      slug: "owner-team",
+      updatedAt: new Date(),
+    };
+    const { database, query } = databaseFixture([row]);
+    expect(await readVercelInstallationBindings({ authority, database })).toEqual([row]);
+    const observed = new PgDialect().sqlToQuery(query.where.mock.calls[0]?.[0]);
+    expect(observed.params).toEqual([
+      authority.audience,
+      authority.issuer,
+      authority.workspaceId,
+      authority.ownerUserId,
     ]);
   });
 
@@ -141,12 +161,7 @@ describe("durable Vercel connection return", () => {
       },
     ]);
     const config = {
-      clientId: "public",
-      clientSecret: "secret",
-      issuer: authority.issuer,
       previousTokenKeys: [{ key: oldKey, version: "previous_v1" }],
-      resource: authority.audience,
-      slug: "autograph",
       tokenKey: activeKey,
       tokenKeyVersion: "current_v2",
     };
@@ -220,7 +235,11 @@ describe("durable Vercel connection return", () => {
           tokenKeyVersion: string;
         }),
         associatedData: JSON.stringify({ ...authority, installationId: "icfg_current" }),
-        config,
+        config: {
+          previousTokenKeys: config.previousTokenKeys,
+          tokenKey: config.tokenKey,
+          tokenKeyVersion: config.tokenKeyVersion,
+        },
         keyVersion: (stored as { tokenKeyVersion: string }).tokenKeyVersion,
       }),
     ).toBe("new-provider-token");
