@@ -28,6 +28,38 @@ const VENDOR_APP_ID = "vendor";
 const HC_LOOKUP_SHADOW_PREPARE = "lookup-shadow-prepare";
 const HC_INSTALL_RELEASE_BUNDLE = "install-release-bundle";
 const VENDOR_LOOKUP_SHADOW_BATCH = "lookup-shadow-batch";
+const GENERATED_APP_SCOPE = "generated-app-release-install-v1";
+const AUTH_SCOPE = "auth-protected-migrate-v1";
+const HC_SCOPE = "hc-protected-install-v1";
+const HC_COMMAND = "protected-install";
+const VENDOR_COMMAND = "protected-materialize";
+const GENERATED_COMMAND = "protected-generated-app-install";
+const AUTH_COMMAND = "auth-protected-migrate";
+const GENERATED_RELEASE_MEMBERS = [
+  "app-artifact.json",
+  "cue-to-sql-source-map.json",
+  "data-operations.md",
+  "data-operations.ts",
+  "data-server.ts",
+  "operation-manifest.json",
+  "release-manifest.json",
+  "runtime-coverage.json",
+  "sql-bundle.sql",
+  "sql-manifest.json",
+  "transition-contract.json",
+  "transition-plan.json",
+] as const;
+export type GeneratedAppReleaseFiles = {
+  [Member in (typeof GENERATED_RELEASE_MEMBERS)[number]]: Buffer;
+};
+interface GeneratedAppReleaseMetadata {
+  version: 1;
+  app_id: string;
+  release_id: string;
+  release_manifest_sha256: string;
+  app_artifact_sha256: string;
+  sql_bundle_sha256: string;
+}
 
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 const workerRunIdSchema = z.uuid();
@@ -39,13 +71,45 @@ const resourceSchema = z
     runtimeRole: z.string().min(1),
   })
   .refine((resource) => resource.migratorRole !== resource.runtimeRole);
+const authResourceSchema = z.strictObject({
+  version: z.literal(1),
+  environment: z.literal("preview"),
+  hostname: z.string(),
+  port: z.literal(5432),
+  database: z.string(),
+  schema: z.literal("public"),
+  runtimeRole: z.string(),
+  migratorRole: z.string(),
+  neon: z.strictObject({ projectId: z.string(), branchId: z.string() }),
+});
+const authPlanFrameSchema = z.strictObject({
+  version: z.literal(1),
+  resource: authResourceSchema,
+  schemaPlan: z.looseObject({
+    resource: authResourceSchema,
+    planDigest: digestSchema,
+    targetDigest: digestSchema,
+  }),
+});
+const workerScopeSchema = z.enum([
+  HC_SCOPE,
+  "vendor-protected-materialize-v1",
+  GENERATED_APP_SCOPE,
+  AUTH_SCOPE,
+]);
+const workerSubcommandSchema = z.enum([
+  HC_COMMAND,
+  VENDOR_COMMAND,
+  GENERATED_COMMAND,
+  AUTH_COMMAND,
+]);
 
 export interface ProtectedInstallerWorkerDescriptor {
   executablePath: string;
   id: string;
-  operationScope: "hc-protected-install-v1" | "vendor-protected-materialize-v1";
+  operationScope: z.infer<typeof workerScopeSchema>;
   sha256: string;
-  subcommand: "protected-install" | "protected-materialize";
+  subcommand: z.infer<typeof workerSubcommandSchema>;
 }
 
 export interface HostedOperatorSandboxConfiguration {
@@ -55,6 +119,8 @@ export interface HostedOperatorSandboxConfiguration {
   /** Immutable control image and worker catalog are operator deployment configuration. */
   image: string;
   workers: Readonly<Record<string, ProtectedInstallerWorkerDescriptor>>;
+  /** Shared Auth uses its own fixed catalog entry, separate from selected app workers. */
+  authWorker?: ProtectedInstallerWorkerDescriptor;
 }
 
 export interface ProtectedInstallContextWire {
@@ -85,6 +151,10 @@ export interface ProtectedInstallContextWire {
 export interface HostedOperatorSandboxWorkerInput extends HostedOperatorWorkerEffectContext {
   database: "appDatabase" | "authDatabase";
   directDatabaseUrl: string;
+  /** Private compiler-checked release resolved by the operator from plan.release.artifactRef. */
+  generatedRelease?: { artifactRef: string; files: GeneratedAppReleaseFiles };
+  /** Private reviewed Auth plan resolved from plan.authSchema.artifactRef. */
+  authSchemaPlan?: { artifactRef: string; content: Buffer };
   signal?: AbortSignal;
 }
 
@@ -212,7 +282,8 @@ type PrivateProtocolDocument =
   | ProtectedInstallContextWire
   | SpoolReadyMarker
   | EffectAuthorizedReply
-  | CheckpointRecordedReply;
+  | CheckpointRecordedReply
+  | GeneratedAppReleaseMetadata;
 
 const unavailable = () => new HostedOperatorError("operator_unavailable");
 const resourceMismatch = () => new HostedOperatorError("resource_mismatch");
@@ -229,10 +300,18 @@ export const buildProtectedInstallContext = (input: {
   operationRef: string;
   fenceGeneration: number;
   database: "appDatabase" | "authDatabase";
+  subject?: "auth";
 }): ProtectedInstallContextWire => {
   const resource = resourceSchema.parse(input.plan[input.database]);
-  const tenantTargets = [...new Set(input.plan.access.map((target) => target.organizationId))];
-  if (tenantTargets.length === 0) {
+  const auth = input.subject === "auth" ? input.plan.authSchema : undefined;
+  if (input.subject === "auth" && (auth === undefined || input.database !== "authDatabase")) {
+    throw resourceMismatch();
+  }
+  const tenantTargets =
+    auth === undefined
+      ? [...new Set(input.plan.access.map((target) => target.organizationId))]
+      : [];
+  if (auth === undefined && tenantTargets.length === 0) {
     throw resourceMismatch();
   }
   const planDigest = operatorPlanDigest(input.plan);
@@ -251,7 +330,7 @@ export const buildProtectedInstallContext = (input: {
       approval_digest: planDigest,
       fence_generation: input.fenceGeneration,
     },
-    app_id: input.plan.selection.appId,
+    app_id: auth === undefined ? input.plan.selection.appId : "auth",
     resource: {
       resource_id: resource.resourceId,
       environment: "preview",
@@ -264,8 +343,14 @@ export const buildProtectedInstallContext = (input: {
       provider_project_id: input.plan.neon.projectId,
       provider_branch_id: input.plan.neon.branchId,
     },
-    release: { id: input.plan.release.id, sha256: input.plan.release.sha256 },
-    installer: { id: input.plan.installer.reference, sha256: input.plan.installer.sha256 },
+    release:
+      auth === undefined
+        ? { id: input.plan.release.id, sha256: input.plan.release.sha256 }
+        : { id: auth.targetDigest, sha256: auth.planDigest },
+    installer: {
+      id: (auth?.installer ?? input.plan.installer).reference,
+      sha256: (auth?.installer ?? input.plan.installer).sha256,
+    },
     tenant_targets: tenantTargets,
   };
 };
@@ -393,8 +478,35 @@ const requestMatchesWorkerScope = (
   context: ProtectedInstallContextWire,
   worker: ProtectedInstallerWorkerDescriptor,
 ) => {
-  if (worker.operationScope === "hc-protected-install-v1") {
-    if (context.app_id !== HC_APP_ID || worker.subcommand !== "protected-install") {
+  if (worker.operationScope === AUTH_SCOPE) {
+    return (
+      worker.subcommand === AUTH_COMMAND &&
+      context.app_id === "auth" &&
+      context.tenant_targets.length === 0 &&
+      tenantId === null &&
+      ["auth:apply-schema-plan", "auth:provision-access"].includes(effectId)
+    );
+  }
+  if (worker.operationScope === GENERATED_APP_SCOPE) {
+    if (worker.subcommand !== GENERATED_COMMAND) {
+      return false;
+    }
+    const tenantEffects = new Set([
+      "generated_app.prepare_schema_revision",
+      "generated_app.validate_readiness",
+      "generated_app.bind_runtime_scope",
+    ]);
+    const groupedEffects = new Set([
+      "generated_app.install_bundle",
+      "generated_app.activate_app_base",
+      "generated_app.grant_runtime_capability",
+    ]);
+    return tenantEffects.has(effectId)
+      ? tenantId !== null && context.tenant_targets.includes(tenantId)
+      : groupedEffects.has(effectId) && tenantId === null;
+  }
+  if (worker.operationScope === HC_SCOPE) {
+    if (context.app_id !== HC_APP_ID || worker.subcommand !== HC_COMMAND) {
       return false;
     }
     const match = /^hc:(?<operation>[a-z-]+):(?<tenant>[^:]+)(?::(?<suffix>[^:]+))?$/u.exec(
@@ -441,7 +553,7 @@ const requestMatchesWorkerScope = (
     return tenantId === tenant || (targetMayBeNull && tenantId === null);
   }
 
-  if (context.app_id !== VENDOR_APP_ID || worker.subcommand !== "protected-materialize") {
+  if (context.app_id !== VENDOR_APP_ID || worker.subcommand !== VENDOR_COMMAND) {
     return false;
   }
   const match = /^vendor:(?<tenant>[^/]+)\/(?<operation>[a-z-]+)(?::(?<suffix>[^:]+))?$/u.exec(
@@ -535,24 +647,97 @@ const runSandboxWorker = async (
   input: HostedOperatorSandboxWorkerInput,
 ) => {
   const runId = workerRunIdSchema.parse(input.workerAttemptId);
-  const worker = configuration.workers[input.plan.selection.appId];
+  const auth = input.database === "authDatabase";
+  const worker = auth
+    ? configuration.authWorker
+    : configuration.workers[input.plan.selection.appId];
+  const installer = auth ? input.plan.authSchema?.installer : input.plan.installer;
   if (
     worker === undefined ||
-    worker.id !== input.plan.installer.reference ||
-    worker.sha256 !== input.plan.installer.sha256 ||
-    (worker.operationScope === "hc-protected-install-v1" &&
-      worker.subcommand !== "protected-install") ||
+    installer === undefined ||
+    !workerScopeSchema.safeParse(worker.operationScope).success ||
+    !workerSubcommandSchema.safeParse(worker.subcommand).success ||
+    (worker.operationScope === AUTH_SCOPE && !auth) ||
+    ((auth || worker.operationScope === GENERATED_APP_SCOPE) && input.effect.kind !== "install") ||
+    worker.id !== installer?.reference ||
+    worker.sha256 !== installer.sha256 ||
+    (auth &&
+      (worker.operationScope !== AUTH_SCOPE ||
+        worker.id !== "auth-protected-installer-v1" ||
+        worker.subcommand !== AUTH_COMMAND)) ||
+    (worker.operationScope === HC_SCOPE && worker.subcommand !== HC_COMMAND) ||
     (worker.operationScope === "vendor-protected-materialize-v1" &&
-      worker.subcommand !== "protected-materialize")
+      worker.subcommand !== VENDOR_COMMAND) ||
+    (worker.operationScope === GENERATED_APP_SCOPE &&
+      (worker.subcommand !== GENERATED_COMMAND || input.database !== "appDatabase"))
   ) {
     throw resourceMismatch();
   }
-  const context = buildProtectedInstallContext({
+  const contextInput: Parameters<typeof buildProtectedInstallContext>[0] = {
     database: input.database,
     fenceGeneration: input.fenceGeneration,
     operationRef: input.operationRef,
     plan: input.plan,
-  });
+  };
+  if (auth) {
+    contextInput.subject = "auth";
+  }
+  const context = buildProtectedInstallContext(contextInput);
+  let generatedMetadata: GeneratedAppReleaseMetadata | undefined;
+  let generatedFiles: { member: string; content: Buffer }[] = [];
+  let authPlanBytes: Buffer | undefined;
+  if (auth) {
+    const artifact = input.authSchemaPlan;
+    if (artifact === undefined || artifact.artifactRef !== input.plan.authSchema?.artifactRef) {
+      throw resourceMismatch();
+    }
+    const parsed = authPlanFrameSchema.safeParse(parseJsonBytes(artifact.content));
+    if (!parsed.success) {
+      throw resourceMismatch();
+    }
+    const { resource, schemaPlan } = parsed.data;
+    if (
+      schemaPlan.planDigest !== context.release.sha256 ||
+      schemaPlan.targetDigest !== context.release.id ||
+      JSON.stringify(resource) !== JSON.stringify(schemaPlan.resource) ||
+      resource.hostname !== context.resource.hostname ||
+      resource.database !== context.resource.database ||
+      resource.runtimeRole !== context.resource.runtime_role ||
+      resource.migratorRole !== context.resource.migrator_role ||
+      resource.neon.projectId !== context.resource.provider_project_id ||
+      resource.neon.branchId !== context.resource.provider_branch_id
+    ) {
+      throw resourceMismatch();
+    }
+    authPlanBytes = Buffer.from(artifact.content);
+  }
+  if (worker.operationScope === GENERATED_APP_SCOPE) {
+    const release = input.generatedRelease;
+    if (
+      release === undefined ||
+      release.artifactRef !== input.plan.release.artifactRef ||
+      Object.keys(release.files).length !== GENERATED_RELEASE_MEMBERS.length ||
+      GENERATED_RELEASE_MEMBERS.some((member) => !Buffer.isBuffer(release.files[member]))
+    ) {
+      throw resourceMismatch();
+    }
+    const manifestDigest = sha256(release.files["release-manifest.json"]);
+    if (manifestDigest !== context.release.sha256) {
+      throw resourceMismatch();
+    }
+    generatedMetadata = {
+      version: 1,
+      app_id: context.app_id,
+      release_id: context.release.id,
+      release_manifest_sha256: manifestDigest,
+      app_artifact_sha256: sha256(release.files["app-artifact.json"]),
+      sql_bundle_sha256: sha256(release.files["sql-bundle.sql"]),
+    };
+    generatedFiles = GENERATED_RELEASE_MEMBERS.map((member) => ({
+      member,
+      content: Buffer.from(release.files[member]),
+    }));
+  }
   if (
     !input.plan.effects.some(
       (effect) => effect.id === input.effect.id && effect.kind === input.effect.kind,
@@ -860,6 +1045,36 @@ const runSandboxWorker = async (
       input.directDatabaseUrl,
       signal,
     );
+    if (authPlanBytes !== undefined) {
+      await sandbox.writeFiles(
+        [
+          {
+            content: authPlanBytes,
+            mode: 0o600,
+            path: path.posix.join(startup, "auth-schema-plan.json"),
+          },
+        ],
+        { signal },
+      );
+    }
+    const releaseDirectory = path.posix.join(spool, "release");
+    if (generatedMetadata !== undefined) {
+      await sandbox.fs.mkdir(releaseDirectory, { recursive: true, signal });
+      await sandbox.writeFiles(
+        generatedFiles.map(({ member, content }) => ({
+          content,
+          mode: 0o600,
+          path: path.posix.join(releaseDirectory, member),
+        })),
+        { signal },
+      );
+      await writePrivateJson(
+        sandbox,
+        path.posix.join(startup, "generated-app-release.json"),
+        generatedMetadata,
+        signal,
+      );
+    }
     await writePrivateJson(
       sandbox,
       path.posix.join(startup, "ready.json"),
@@ -869,7 +1084,14 @@ const runSandboxWorker = async (
 
     const timeout = String(AUTHORITY_REPLY_TIMEOUT_MS);
     command = await sandbox.runCommand({
-      args: [worker.subcommand, "--file-spool", spool, runId, timeout],
+      args: [
+        worker.subcommand,
+        "--file-spool",
+        spool,
+        runId,
+        timeout,
+        ...(generatedMetadata === undefined ? [] : ["--release-directory", releaseDirectory]),
+      ],
       cmd: worker.executablePath,
       cwd: SPOOL_ROOT,
       detached: true,
