@@ -175,6 +175,7 @@ it("independently reads each exact approved organization without exposing creden
   expect(proof).toMatchObject({
     artifactHash,
     authenticatedBehavior: "unassessed",
+    manifestSha256: plan.release.sha256,
     releaseId: "release_fixture",
     source: "reviewed-plan-app-runtime",
     tenants: 1,

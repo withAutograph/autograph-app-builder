@@ -83,7 +83,7 @@ export const createHostedOperatorClient = (input: {
         value.operationRef !== request.operationRef ||
         !sameOperatorSelection(request.selection, value.plan.selection) ||
         value.proof.releaseId !== value.plan.release.id ||
-        value.proof.artifactHash !== value.plan.release.sha256
+        value.proof.manifestSha256 !== value.plan.release.sha256
       ) {
         throw new HostedOperatorError("resource_mismatch");
       }

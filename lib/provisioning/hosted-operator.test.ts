@@ -134,8 +134,9 @@ const plan = hostedOperatorPlanSchema.parse({
 });
 const proof = {
   actors: 2,
-  artifactHash: plan.release.sha256,
+  artifactHash: "c".repeat(64),
   authenticatedBehavior: "unassessed" as const,
+  manifestSha256: plan.release.sha256,
   releaseId: plan.release.id,
   tenants: 2,
 };
@@ -425,6 +426,21 @@ describe("protected hosted operator boundary", () => {
     expect(result.code).toBe("resource_mismatch");
     expect(f.row).toBeUndefined();
   });
+  it.each([undefined, "d".repeat(64)])(
+    "rejects missing or mismatched manifest proof %s despite a valid schema identity",
+    async (manifestSha256) => {
+      const f = fixture();
+      const request = await prepared(f);
+      f.approve();
+      f.deps.verify = async () => ({ ...proof, manifestSha256 });
+      const result = await f.client.request(request);
+      expect(result.status).toBe("blocked");
+      expect(result.code).toBe("resource_mismatch");
+      await expect(
+        f.client.bindings({ action: "bindings", operationRef: request.operationRef, selection }),
+      ).rejects.toThrow();
+    },
+  );
   it("executes only after durable approval and projects shared-context runtime roles without installer state", async () => {
     const f = fixture();
     const request = await prepared(f);
