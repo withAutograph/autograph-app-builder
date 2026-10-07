@@ -83,6 +83,7 @@ import {
 import type { ProtectedResourceDatabase } from "./hosted-operator-resource-credentials";
 import type {
   HostedRuntimeJournalRecord,
+  HostedRuntimeJournalRow,
   HostedRuntimeJournalStore,
 } from "./hosted-runtime-journal";
 import { createPostgresHostedRuntimeJournalStore } from "./postgres-hosted-runtime-journal";
@@ -218,6 +219,63 @@ const readCurrentResourceCredentialRecord = async (input: {
   await input.effect.assertCurrent();
   const current = await input.store.read(input.effect);
   return requireCurrentResourceCredentialRecord(current?.record, input.effect);
+};
+
+type ResourceBindingContext = HostedOperatorContext & {
+  plan: ResourceCredentialEffect["plan"];
+  privateState?: HostedRuntimeJournalRecord["privateState"];
+};
+
+const requireFinalResourceBindingPhase = (
+  row: HostedRuntimeJournalRow | undefined,
+  input: ResourceBindingContext,
+) => {
+  if (row === undefined || row.record.operator === undefined) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  const { record } = row;
+  const { operator } = row.record;
+  if (
+    operator.plan.action !== "prepare" ||
+    input.plan.action !== "prepare" ||
+    operator.approvalId === undefined
+  ) {
+    throw new HostedOperatorError("authorization_required");
+  }
+  if (
+    operator.fenceGeneration === undefined ||
+    operator.pendingEffectId !== undefined ||
+    operator.pendingEffectAttempt !== undefined
+  ) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  if (
+    operator.planDigest !== operatorPlanDigest(input.plan) ||
+    operator.planDigest !== operatorPlanDigest(operator.plan)
+  ) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  const complete = operator.plan.effects.every((effect) =>
+    operator.receipts.some(
+      (receipt) =>
+        receipt.effectId === effect.id &&
+        (effect.kind !== "access" || receipt.fenceGeneration === operator.fenceGeneration),
+    ),
+  );
+  if (!complete || JSON.stringify(input.privateState) !== JSON.stringify(record.privateState)) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  const leasedFinalVerification =
+    record.status === "pending" &&
+    record.leaseId !== undefined &&
+    record.leaseExpiresAt !== undefined &&
+    Date.parse(record.leaseExpiresAt) > Date.now();
+  const preparedRead =
+    record.status === "prepared" && record.step === "bound" && record.leaseId === undefined;
+  if (!leasedFinalVerification && !preparedRead) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  return row;
 };
 
 /**
@@ -402,23 +460,67 @@ export const createHostedOperatorControlPlane = async (input: {
       },
       readApproval,
       readCredential,
-      async readResourceBindings(effectInput: ResourceCredentialEffect) {
-        const record = await readCurrentResourceCredentialRecord({
-          assertAuthorized: owner.assertAuthorized,
-          effect: effectInput,
-          store,
+      async readResourceBindings(effectInput: ResourceCredentialEffect | ResourceBindingContext) {
+        if (effectInput.plan.action !== "prepare") {
+          throw new HostedOperatorError("authorization_required");
+        }
+        if ("effect" in effectInput) {
+          const record = await readCurrentResourceCredentialRecord({
+            assertAuthorized: owner.assertAuthorized,
+            effect: effectInput,
+            store,
+          });
+          const bindings = readHostedOperatorResourceBindings({
+            ...effectInput,
+            config: tokenKeyring,
+            record,
+          });
+          const current = await readCurrentResourceCredentialRecord({
+            assertAuthorized: owner.assertAuthorized,
+            effect: effectInput,
+            store,
+          });
+          if (JSON.stringify(current.privateState) !== JSON.stringify(record.privateState)) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+          return bindings;
+        }
+        await owner.assertAuthorized(effectInput);
+        const current = requireFinalResourceBindingPhase(
+          await store.read(effectInput),
+          effectInput,
+        );
+        const { operator } = current.record;
+        if (operator === undefined) {
+          throw new HostedOperatorError("operation_in_progress");
+        }
+        const approval = await readApproval({
+          ...effectInput,
+          action: "prepare",
+          callId: current.record.approvedByCallId,
+          planDigest: operator.planDigest,
         });
+        if (!approval?.approved || approval.approvalId !== operator.approvalId) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        if (
+          approval.callId !== current.record.approvedByCallId ||
+          approval.planDigest !== operator.planDigest ||
+          approval.action !== "prepare"
+        ) {
+          throw new HostedOperatorError("authorization_required");
+        }
         const bindings = readHostedOperatorResourceBindings({
           ...effectInput,
           config: tokenKeyring,
-          record,
+          record: current.record,
         });
-        const current = await readCurrentResourceCredentialRecord({
-          assertAuthorized: owner.assertAuthorized,
-          effect: effectInput,
-          store,
-        });
-        if (JSON.stringify(current.privateState) !== JSON.stringify(record.privateState)) {
+        await owner.assertAuthorized(effectInput);
+        const latest = requireFinalResourceBindingPhase(await store.read(effectInput), effectInput);
+        if (
+          latest.revision !== current.revision ||
+          JSON.stringify(latest.record.operator) !== JSON.stringify(operator)
+        ) {
           throw new HostedOperatorError("operation_in_progress");
         }
         return bindings;
