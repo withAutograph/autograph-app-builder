@@ -8,6 +8,7 @@ import { HostedOperatorError, hostedOperatorPlanSchema } from "./hosted-operator
 import type { HostedOperatorWorkerEffectContext } from "./hosted-operator-service";
 import {
   buildProtectedInstallContext,
+  buildResourceBootstrapContext,
   createHostedOperatorSandboxLauncher,
 } from "./hosted-operator-sandbox-launcher";
 import type { GeneratedAppReleaseFiles } from "./hosted-operator-sandbox-launcher";
@@ -680,5 +681,45 @@ describe("hosted protected installer Sandbox launcher", () => {
       releaseSandbox(undefined);
       vi.useRealTimers();
     }
+  });
+});
+
+
+describe("resource bootstrap launcher", () => {
+  const bootstrapPlan = hostedOperatorPlanSchema.parse({ ...plan,
+    bootstrap: { maintenanceDatabase: "neondb", role: "bootstrap_owner", endpointId: "ep-fixture" },
+    resourcesInstaller: { reference: "neon-resource-bootstrap-v1", sha256: workerDigest },
+    effects: [
+      { id: "auth-resources", description: "Auth allocation", kind: "resources", resourceId: "auth-resource" },
+      { id: "app-resources", description: "App allocation", kind: "resources", resourceId: "app-resource" },
+      ...plan.effects.filter((effect) => effect.kind !== "resources"),
+    ],
+  });
+  const credentials = Buffer.from(JSON.stringify({ migratorPassword: "m".repeat(32), runtimePassword: "r".repeat(32) }));
+  const resourceInput = () => ({ ...fixture().input, plan: bootstrapPlan,
+    effect: bootstrapPlan.effects[1]!,
+    directDatabaseUrl: "postgresql://bootstrap_owner:secret@ep-fixture.us-east-1.aws.neon.tech/neondb?sslmode=require",
+    resourceCredentials: { bytes: credentials, sha256: createHash("sha256").update(credentials).digest("hex"),
+      privateState: { encryptedToken: "ciphertext", keyVersion: "v1", tokenIv: "iv", tokenTag: "tag" } },
+  });
+  it("serializes the kind-first Node bootstrap ABI and no tenant authority", () => {
+    const context = buildResourceBootstrapContext(resourceInput());
+    expect(Object.keys(context)).toEqual(["kind", "version", "operation", "app_id", "resource", "release", "installer", "tenant_targets"]);
+    expect(context.resource).toMatchObject({ scope: "app_database", bootstrap_role: "bootstrap_owner", maintenance_database: "neondb", provider_endpoint_id: "ep-fixture" });
+    expect(context.tenant_targets).toEqual([]);
+  });
+  it("rejects credential byte changes and pooled or target database URLs", () => {
+    const input = resourceInput();
+    expect(() => buildResourceBootstrapContext({ ...input, resourceCredentials: { ...input.resourceCredentials, bytes: Buffer.from("{}") } })).toThrow(HostedOperatorError);
+    expect(() => buildResourceBootstrapContext({ ...input, directDatabaseUrl: input.directDatabaseUrl.replace("/neondb", "/app_db") })).toThrow(HostedOperatorError);
+    expect(() => buildResourceBootstrapContext({ ...input, directDatabaseUrl: input.directDatabaseUrl + "&options=unsafe" })).toThrow(HostedOperatorError);
+  });
+  it("does not allocate a Sandbox when the private credential checkpoint fails", async () => {
+    const createSandbox = vi.fn();
+    const launcher = createHostedOperatorSandboxLauncher({ projectId: "project", teamId: "team", image: "image", workers: {},
+      resourcesWorker: { executablePath: "/opt/resource-worker", id: "neon-resource-bootstrap-v1", operationScope: "neon-resource-bootstrap-v1", subcommand: "neon-resource-bootstrap", sha256: workerDigest },
+    }, { createSandbox });
+    await expect(launcher.execute({ ...resourceInput(), checkpoint: async () => { throw new Error("checkpoint unavailable"); } })).rejects.toThrow("checkpoint unavailable");
+    expect(createSandbox).not.toHaveBeenCalled();
   });
 });
