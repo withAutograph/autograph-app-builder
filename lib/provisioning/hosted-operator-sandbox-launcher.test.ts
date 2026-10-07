@@ -10,6 +10,7 @@ import {
   buildProtectedInstallContext,
   createHostedOperatorSandboxLauncher,
 } from "./hosted-operator-sandbox-launcher";
+import type { GeneratedAppReleaseFiles } from "./hosted-operator-sandbox-launcher";
 
 const runId = "a79c7cc3-9236-4a09-9e4a-5f772d08a255";
 const rustWire = JSON.parse(
@@ -99,8 +100,75 @@ const makeFixture = (
     pinMatches?: boolean;
     abortBeforeAuthority?: AbortController;
     delayCreate?: Promise<void>;
+    generated?: boolean;
+    auth?: boolean;
   } = {},
 ) => {
+  const generatedFiles = Object.fromEntries(
+    [
+      "app-artifact.json",
+      "cue-to-sql-source-map.json",
+      "data-operations.md",
+      "data-operations.ts",
+      "data-server.ts",
+      "operation-manifest.json",
+      "release-manifest.json",
+      "runtime-coverage.json",
+      "sql-bundle.sql",
+      "sql-manifest.json",
+      "transition-contract.json",
+      "transition-plan.json",
+    ].map((member) => [member, Buffer.from(`synthetic relay member: ${member}`)]),
+  ) as GeneratedAppReleaseFiles;
+  let selectedPlan = plan;
+  if (options.generated) {
+    selectedPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      installer: { ...plan.installer, reference: "generated-app-protected-installer-v1" },
+      release: {
+        ...plan.release,
+        sha256: createHash("sha256").update(generatedFiles["release-manifest.json"]).digest("hex"),
+      },
+      selection: { ...plan.selection, appId: "spend-review" },
+    });
+  } else if (options.auth) {
+    selectedPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      authSchema: {
+        artifactRef: "auth-plan-artifact",
+        planDigest: "d".repeat(64),
+        targetDigest: "e".repeat(64),
+        installer: { reference: "auth-protected-installer-v1", sha256: "f".repeat(64) },
+      },
+    });
+  }
+  const customWorker = options.generated === true || options.auth === true;
+  const selectedContext = buildProtectedInstallContext({
+    plan: selectedPlan,
+    database: options.auth ? "authDatabase" : "appDatabase",
+    ...(options.auth ? { subject: "auth" as const } : {}),
+    fenceGeneration: 3,
+    operationRef: runId,
+  });
+  const selectedDigest = createHash("sha256").update(JSON.stringify(selectedContext)).digest("hex");
+  const reportedDigest =
+    options.pinMatches === false ? "d".repeat(64) : selectedContext.installer.sha256;
+  const scopedAuthorization = customWorker
+    ? {
+        ...rustAuthorization,
+        approval_digest: selectedContext.operation.approval_digest,
+        context_digest: selectedDigest,
+        app_id: selectedContext.app_id,
+        installer_id: selectedContext.installer.id,
+        installer_sha256: selectedContext.installer.sha256,
+        effect_id: options.auth
+          ? "auth:apply-schema-plan"
+          : "generated_app.prepare_schema_revision",
+        release_id: selectedContext.release.id,
+        resource_id: selectedContext.resource.resource_id,
+        tenant_id: options.auth ? null : rustAuthorization.tenant_id,
+      }
+    : rustAuthorization;
   const files = new Map<string, Buffer>();
   const written: string[] = [];
   const records: unknown[] = [];
@@ -136,13 +204,12 @@ const makeFixture = (
       if (!commandOptions.detached) {
         return {
           exitCode: 0,
-          stdout: async () =>
-            `${options.pinMatches === false ? "d".repeat(64) : workerDigest}  /opt/trusted-worker\n`,
+          stdout: async () => `${reportedDigest}  /opt/trusted-worker\n`,
         };
       }
 
       const request = {
-        ...rustAuthorization,
+        ...scopedAuthorization,
         ...(options.wrongResource ? { resource_id: "other-resource" } : {}),
         ...(options.effectId ? { effect_id: options.effectId } : {}),
         ...(options.tenantId === undefined ? {} : { tenant_id: options.tenantId }),
@@ -161,6 +228,14 @@ const makeFixture = (
           `/vercel/sandbox/protected-installer/${runId}/requests/2.json`,
           frame({
             ...rustCheckpoint,
+            ...(customWorker
+              ? {
+                  context_digest: selectedDigest,
+                  effect_id: request.effect_id,
+                  tenant_id: request.tenant_id,
+                  resource_id: request.resource_id,
+                }
+              : {}),
             receipt: options.unknown ? { state: "unknown" } : rustCheckpoint.receipt,
           }),
         );
@@ -223,7 +298,7 @@ const makeFixture = (
     }
   });
   const bindWorkerContext = vi.fn(async ({ contextDigest: digest }: { contextDigest: string }) => {
-    expect(digest).toBe(contextDigest);
+    expect(digest).toBe(selectedDigest);
     return async (checkpoint: unknown) => {
       records.push(checkpoint);
     };
@@ -234,19 +309,63 @@ const makeFixture = (
     effect: plan.effects[1]!,
     fenceGeneration: 3,
     operationRef: runId,
-    plan,
+    plan: selectedPlan,
+    ...(options.auth
+      ? {
+          authSchemaPlan: {
+            artifactRef: "auth-plan-artifact",
+            content: frame({
+              version: 1,
+              resource: {
+                version: 1,
+                environment: "preview",
+                hostname: plan.neon.endpoint,
+                port: 5432,
+                database: plan.authDatabase.database,
+                schema: "public",
+                migratorRole: plan.authDatabase.migratorRole,
+                runtimeRole: plan.authDatabase.runtimeRole,
+                neon: { projectId: plan.neon.projectId, branchId: plan.neon.branchId },
+              },
+              schemaPlan: {
+                planDigest: selectedPlan.authSchema!.planDigest,
+                targetDigest: selectedPlan.authSchema!.targetDigest,
+                resource: {
+                  version: 1,
+                  environment: "preview",
+                  hostname: plan.neon.endpoint,
+                  port: 5432,
+                  database: plan.authDatabase.database,
+                  schema: "public",
+                  migratorRole: plan.authDatabase.migratorRole,
+                  runtimeRole: plan.authDatabase.runtimeRole,
+                  neon: { projectId: plan.neon.projectId, branchId: plan.neon.branchId },
+                },
+              },
+            }),
+          },
+        }
+      : {}),
+    ...(options.generated
+      ? {
+          generatedRelease: {
+            artifactRef: selectedPlan.release.artifactRef,
+            files: generatedFiles,
+          },
+        }
+      : {}),
     workerCheckpoints: [],
     checkpoint: async () => undefined,
     workerAttemptId: runId,
     assertCurrent,
     bindWorkerContext,
     signal: new AbortController().signal,
-    database: "appDatabase" as const,
+    database: options.auth ? "authDatabase" : "appDatabase",
     directDatabaseUrl:
       "postgresql://migrator:secret@ep-fixture.us-east-1.aws.neon.tech/app_db?sslmode=require",
   } as HostedOperatorWorkerEffectContext & {
     signal: AbortSignal;
-    database: "appDatabase";
+    database: "appDatabase" | "authDatabase";
     directDatabaseUrl: string;
   };
   const launcher = createHostedOperatorSandboxLauncher(
@@ -255,14 +374,27 @@ const makeFixture = (
       teamId: "control-team",
       image: "protected-installer-control-image",
       workers: {
-        hc: {
+        [selectedPlan.selection.appId]: {
           executablePath: "/opt/trusted-worker",
-          id: "trusted-worker",
-          operationScope: "hc-protected-install-v1",
+          id: selectedPlan.installer.reference,
+          operationScope: options.generated
+            ? "generated-app-release-install-v1"
+            : "hc-protected-install-v1",
           sha256: workerDigest,
-          subcommand: "protected-install",
+          subcommand: options.generated ? "protected-generated-app-install" : "protected-install",
         },
       },
+      ...(options.auth
+        ? {
+            authWorker: {
+              executablePath: "/opt/auth-worker",
+              id: selectedPlan.authSchema!.installer.reference,
+              sha256: selectedPlan.authSchema!.installer.sha256,
+              operationScope: "auth-protected-migrate-v1" as const,
+              subcommand: "auth-protected-migrate" as const,
+            },
+          }
+        : {}),
     },
     { createSandbox },
   );
@@ -281,6 +413,130 @@ const makeFixture = (
 };
 
 describe("hosted protected installer Sandbox launcher", () => {
+  it("uses a separate approved Auth worker and a resource-wide Auth context", async () => {
+    const fixture = makeFixture({ auth: true });
+    await fixture.launcher.execute(fixture.input);
+    const startup = `/vercel/sandbox/protected-installer/${runId}/startup`;
+    expect(JSON.parse(fixture.files.get(`${startup}/context.json`)!.toString())).toMatchObject({
+      app_id: "auth",
+      tenant_targets: [],
+      resource: { resource_id: plan.authDatabase.resourceId },
+      release: { id: "e".repeat(64), sha256: "d".repeat(64) },
+      installer: { id: "auth-protected-installer-v1", sha256: "f".repeat(64) },
+    });
+    expect(fixture.files.has(`${startup}/auth-schema-plan.json`)).toBe(true);
+    expect(fixture.written.filter((file) => file.includes("/release/"))).toHaveLength(0);
+    expect(fixture.records).toHaveLength(1);
+    expect(fixture.sandbox.runCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cmd: "/opt/auth-worker",
+        args: [
+          "auth-protected-migrate",
+          "--file-spool",
+          `/vercel/sandbox/protected-installer/${runId}`,
+          runId,
+          "120000",
+        ],
+      }),
+    );
+  });
+
+  it.each([
+    ["auth:apply-schema-plan", "tenant-a"],
+    ["hc:prepare-schema:tenant-a", null],
+    ["auth:execute-sql", null],
+  ])("rejects Auth effect %s with tenant %s", async (effectId, tenantId) => {
+    const fixture = makeFixture({ auth: true, effectId: effectId!, tenantId });
+    await expect(fixture.launcher.execute(fixture.input)).rejects.toMatchObject({
+      code: "resource_mismatch",
+    });
+    expect(fixture.records).toHaveLength(0);
+  });
+
+  it("rejects an Auth artifact reference outside the approved plan", async () => {
+    const fixture = makeFixture({ auth: true });
+    const input = fixture.input as typeof fixture.input & {
+      authSchemaPlan: { artifactRef: string; content: Buffer };
+    };
+    input.authSchemaPlan.artifactRef = "other-auth-plan";
+    await expect(fixture.launcher.execute(input)).rejects.toMatchObject({
+      code: "resource_mismatch",
+    });
+    expect(fixture.createSandbox).not.toHaveBeenCalled();
+  });
+
+  it("requires the separately approved Auth installer digest", async () => {
+    const fixture = makeFixture({ auth: true });
+    fixture.input.plan.authSchema!.installer.sha256 = workerDigest;
+    await expect(fixture.launcher.execute(fixture.input)).rejects.toMatchObject({
+      code: "resource_mismatch",
+    });
+    expect(fixture.createSandbox).not.toHaveBeenCalled();
+  });
+
+  it("transfers the frozen generated release privately and retains its selected app identity", async () => {
+    const fixture = makeFixture({ generated: true });
+    await fixture.launcher.execute(fixture.input);
+    const startup = `/vercel/sandbox/protected-installer/${runId}/startup`;
+    expect(JSON.parse(fixture.files.get(`${startup}/context.json`)!.toString())).toMatchObject({
+      app_id: "spend-review",
+    });
+    expect(
+      JSON.parse(fixture.files.get(`${startup}/generated-app-release.json`)!.toString()),
+    ).toMatchObject({
+      app_id: "spend-review",
+      release_manifest_sha256: fixture.input.plan.release.sha256,
+    });
+    expect(fixture.written.filter((file) => file.includes("/release/"))).toHaveLength(12);
+    expect(fixture.sandbox.runCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        args: [
+          "protected-generated-app-install",
+          "--file-spool",
+          `/vercel/sandbox/protected-installer/${runId}`,
+          runId,
+          "120000",
+          "--release-directory",
+          `/vercel/sandbox/protected-installer/${runId}/release`,
+        ],
+      }),
+    );
+    expect(fixture.records).toHaveLength(1);
+  });
+
+  it("rejects generated workers on the Auth database before Sandbox creation", async () => {
+    const fixture = makeFixture({ generated: true });
+    await expect(
+      fixture.launcher.execute({ ...fixture.input, database: "authDatabase" }),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(fixture.createSandbox).not.toHaveBeenCalled();
+  });
+
+  it("rejects a generated release whose manifest no longer matches the frozen plan", async () => {
+    const fixture = makeFixture({ generated: true });
+    const input = fixture.input as typeof fixture.input & {
+      generatedRelease: { artifactRef: string; files: GeneratedAppReleaseFiles };
+    };
+    input.generatedRelease.files["release-manifest.json"] = Buffer.from("other manifest");
+    await expect(fixture.launcher.execute(input)).rejects.toMatchObject({
+      code: "resource_mismatch",
+    });
+    expect(fixture.createSandbox).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["generated_app.prepare_schema_revision", null],
+    ["generated_app.activate_app_base", "tenant-a"],
+    ["generated_app.prepare_schema_revision", "other-tenant"],
+    ["generated_app.execute_sql", "tenant-a"],
+  ])("rejects generated effect %s with tenant %s", async (effectId, tenantId) => {
+    const fixture = makeFixture({ generated: true, effectId: effectId!, tenantId });
+    await expect(fixture.launcher.execute(fixture.input)).rejects.toMatchObject({
+      code: "resource_mismatch",
+    });
+    expect(fixture.records).toHaveLength(0);
+  });
+
   it("relays pinned worker requests through current authority and durable checkpoint callbacks", async () => {
     expect(contextDigest).toBe(rustWire.contextDigest);
     expect(JSON.stringify(context)).toBe(rustWire.context);

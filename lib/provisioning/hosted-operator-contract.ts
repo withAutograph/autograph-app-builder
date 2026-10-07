@@ -54,6 +54,14 @@ export const hostedOperatorPlanSchema = z
     action: z.enum(["prepare", "cleanup"]),
     appDatabase: databaseResource,
     authDatabase: databaseResource,
+    authSchema: z
+      .strictObject({
+        artifactRef: id,
+        installer: z.strictObject({ reference: id, sha256: digest }),
+        planDigest: digest,
+        targetDigest: digest,
+      })
+      .optional(),
     contextId: id,
     cost: z.strictObject({
       class: z.enum(["shared-recovery-group", "independent-service"]),
