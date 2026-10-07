@@ -1,8 +1,8 @@
 import { generateKeyPair, SignJWT } from "jose";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import { durableHostedSessionRecordSchema } from "../eve/hosted-store";
-import type { HostedEveStore } from "../eve/hosted-store";
+import { durableHostedSessionRecordSchema, hostedSessionRecordSchema } from "../eve/hosted-store";
+import type { HostedEveStore, HostedSessionRecord } from "../eve/hosted-store";
 import { privateHostedApprovalReceiptSchema } from "../eve/private-hosted-approval";
 import type { HostedPrincipal } from "../eve/hosted-auth";
 import { builderHandoffRecordSchema } from "../handoff/contracts";
@@ -79,7 +79,7 @@ beforeAll(async () => {
     .sign(keys.privateKey);
 });
 
-const makeFixture = () => {
+const makeFixture = (sessionOverride?: HostedSessionRecord, missingHandoff = false) => {
   const currentSession = durableHostedSessionRecordSchema.parse({
     adapterGeneration: 1,
     adapterSessionId: ownerContext.adapterSessionId,
@@ -140,11 +140,11 @@ const makeFixture = () => {
   });
   const eve: Pick<HostedEveStore, "getSession"> = {
     // oxlint-disable-next-line eslint/require-await -- this in-memory store seam has no asynchronous work.
-    getSession: vi.fn(async () => currentSession),
+    getSession: vi.fn(async () => sessionOverride ?? currentSession),
   };
   const handoffs: Pick<BuilderHandoffStore, "read"> = {
     // oxlint-disable-next-line eslint/require-await -- this in-memory store seam has no asynchronous work.
-    read: vi.fn(async () => handoff),
+    read: vi.fn(async () => (missingHandoff ? undefined : handoff)),
   };
   const membership: HostedWorkspaceMembership = {
     // oxlint-disable-next-line eslint/require-await -- this in-memory membership seam has no asynchronous work.
@@ -295,6 +295,32 @@ describe("hosted operator owner authority", () => {
       ),
     ).rejects.toThrow();
     expect(fixture.fetch).not.toHaveBeenCalled();
+  });
+
+  it("normalizes an owner-bound v1 session using its exact redeemed handoff and adapter binding", async () => {
+    const legacySession = hostedSessionRecordSchema.parse({
+      adapterSessionId: ownerContext.adapterSessionId,
+      createdAtEpochMs: 100,
+      principal,
+      sessionId: ownerContext.sessionId,
+      status: "waiting",
+      updatedAtEpochMs: 100,
+      version: 1,
+    });
+    const fixture = makeFixture(legacySession);
+    await expect(
+      fixture.authority.authorize(request(), selection, ownerContext),
+    ).resolves.toMatchObject({ target: { sessionId: ownerContext.sessionId } });
+
+    const mismatchedAdapter = hostedSessionRecordSchema.parse({
+      ...legacySession,
+      adapterSessionId: "another-adapter",
+    });
+    const stale = makeFixture(mismatchedAdapter);
+    await expect(stale.authority.authorize(request(), selection, ownerContext)).rejects.toThrow();
+
+    const missing = makeFixture(legacySession, true);
+    await expect(missing.authority.authorize(request(), selection, ownerContext)).rejects.toThrow();
   });
 
   it("reads only the exact terminal owner approval for the frozen journal plan", async () => {

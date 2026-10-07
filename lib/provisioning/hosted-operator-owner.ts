@@ -1,5 +1,5 @@
 import type { HostedEveStore } from "../eve/hosted-store";
-import { hostedSessionRecordSchema } from "../eve/hosted-store";
+import { hostedSessionRecordSchema, toDurableHostedSessionRecord } from "../eve/hosted-store";
 import { hostedPrincipalSchema } from "../eve/hosted-auth";
 import type { HostedPrincipal } from "../eve/hosted-auth";
 import { builderHandoffRecordSchema } from "../handoff/contracts";
@@ -92,11 +92,17 @@ const readOwnedState = async (
   }
 
   const sessionValue = await deps.eve.getSession(principal, owner.sessionId);
-  let session = null;
+  let session: ReturnType<typeof toDurableHostedSessionRecord> | null = null;
+  let sessionVersion: 1 | 2 | undefined;
   if (sessionValue !== null) {
     const parsedSession = hostedSessionRecordSchema.safeParse(sessionValue);
     if (parsedSession.success) {
-      session = parsedSession.data;
+      sessionVersion = parsedSession.data.version;
+      try {
+        session = toDurableHostedSessionRecord(parsedSession.data);
+      } catch {
+        throw unavailable();
+      }
     }
   }
   if (session === null) {
@@ -107,7 +113,7 @@ const readOwnedState = async (
   }
   const sessionMatches = [
     session.sessionId === owner.sessionId,
-    session.sourceHandoffId === owner.sourceHandoffId,
+    sessionVersion === 1 || session.sourceHandoffId === owner.sourceHandoffId,
     session.adapterSessionId === owner.adapterSessionId,
     session.adapterGeneration === owner.adapterGeneration,
     samePrincipal(session.principal, principal),
