@@ -261,9 +261,14 @@ catch {
   execFileSync("git", [...gitArgs, "-c", "protocol.allow=never", "-c", "protocol.https.allow=always", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--no-recurse-submodules", remote, selection.historical.commitSha], { env: fetchEnv, stdio: ["ignore", "ignore", "inherit"] });
 }
 if (git(["rev-parse", selection.historical.commitSha + "^{tree}"]) !== selection.historical.treeSha) throw new Error("The historical app Git tree does not match its verified source");
-const baseline = parseTree(selection.historical.commitSha);
-if (!baseline.some(entry => entry.path.startsWith(prefix))) throw new Error("The selected historical version does not contain this app");
+const historicalBaseline = parseTree(selection.historical.commitSha);
+if (!historicalBaseline.some(entry => entry.path.startsWith(prefix))) throw new Error("The selected historical version does not contain this app");
 const platformTree = parseTree(platform.commitSha);
+// Keep current repository-owned app task tooling while restoring historical product files.
+const currentFoundation = platformTree.filter(entry => entry.path.startsWith(prefix + ".config/mise/"));
+const projectedByPath = new Map(historicalBaseline.filter(entry => !entry.path.startsWith(prefix + ".config/mise/")).map(entry => [entry.path, entry]));
+for (const entry of currentFoundation) projectedByPath.set(entry.path, entry);
+const baseline = [...projectedByPath.values()].sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)));
 const platformFiles = platformTree.map(entry => {
   const temporary = mkdtempSync(join(tmpdir(), "builder-baseline-preimage-"));
   const output = join(temporary, "content");
@@ -320,7 +325,7 @@ for (const entry of baseline) {
   chmodSync(staged, entry.mode === "100755" ? 0o755 : 0o644);
   renameSync(staged, destination);
 }
-const unsigned = { ...selection, platform, platformSourceDigest: sha256(JSON.stringify(platformFiles)), projectedByCallId, removedFiles, restoredFiles, retainedReleaseFiles: originalReleases.length, sourceDigest: sha256(JSON.stringify(baseline)), unexposedReleaseDigest: sha256(JSON.stringify(unexposedReleasePrefixes)), version: 1 };
+const unsigned = { ...selection, platform, platformSourceDigest: sha256(JSON.stringify(platformFiles)), projectedByCallId, removedFiles, restoredFiles, retainedReleaseFiles: originalReleases.length, sourceDigest: sha256(JSON.stringify(historicalBaseline)), unexposedReleaseDigest: sha256(JSON.stringify(unexposedReleasePrefixes)), version: 1 };
 const receipt = { ...unsigned, digest: sha256(JSON.stringify(unsigned)) };
 mkdirSync(dirname(markerPath), { recursive: true });
 const temporaryMarker = markerPath + ".pending";
