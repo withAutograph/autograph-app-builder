@@ -136,6 +136,32 @@ const fixture = () => {
   const failure = { environmentId: "" };
   const request = vi.fn<typeof fetch>(async (resource, init) => {
     const url = new URL(resource instanceof Request ? resource.url : resource.toString());
+    if (url.pathname === "/v1/storage/stores") {
+      return Response.json({
+        stores: [
+          {
+            id: "store_neon",
+            product: { integrationConfigurationId: "icfg_neon", slug: "neon" },
+            projectsMetadata: [{ projectId: target.projectId }],
+            status: "available",
+            type: "integration",
+          },
+        ],
+      });
+    }
+    if (url.pathname === "/v1/storage/stores/store_neon") {
+      return Response.json({
+        store: {
+          externalResourceId: "neon_project_owner",
+          id: "store_neon",
+          ownerId: target.scopeId,
+          product: { integrationConfigurationId: "icfg_neon", slug: "neon" },
+          projectsMetadata: [{ projectId: target.projectId }],
+          status: "available",
+          type: "integration",
+        },
+      });
+    }
     if (init?.method === "DELETE") {
       const id = url.pathname.split("/").at(-1);
       if (id === failure.environmentId) {
