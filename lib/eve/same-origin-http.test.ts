@@ -166,6 +166,63 @@ describe("incremental canonical Eve stream", () => {
     });
   });
 
+  it("delivers raw Eve events to the private observer without changing public projection", async () => {
+    const privateEvents: { type: string; data: unknown }[] = [];
+    const events = [
+      {
+        data: {
+          requests: [
+            {
+              action: {
+                callId: "private_call",
+                input: { planDigest: "private" },
+                kind: "tool-call",
+                toolName: "prepare-app-hosted-runtime",
+              },
+              kind: "tool-approval",
+              prompt: "Approve runtime preparation",
+              requestId: "private_request",
+            },
+          ],
+          sequence: 4,
+          stepIndex: 1,
+          turnId: "turn_1",
+        },
+        meta: { at: "2026-10-06T00:00:00.000Z", id: "private_input" },
+        type: "input.requested",
+      },
+      {
+        data: {
+          outcome: "approved",
+          requestId: "private_request",
+          responderPrincipalId: "owner_1",
+          sequence: 5,
+          stepIndex: 1,
+          turnId: "turn_1",
+        },
+        meta: { at: "2026-10-06T00:00:01.000Z", id: "private_settlement" },
+        type: "approval.settled",
+      },
+    ];
+    const projected: { type: string }[] = [];
+    await observeSameOriginEveStream({
+      config: { ...config, timeoutMs: 10_000 },
+      // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
+      fetchImplementation: vi.fn(async () => stream(events)),
+      onEvent(event) {
+        projected.push({ type: event.type });
+      },
+      onPrivateEvent(event) {
+        privateEvents.push({ data: "data" in event ? event.data : undefined, type: event.type });
+      },
+      sessionId: "wrun_1",
+      workloadIdentity: identity(),
+    });
+    expect(privateEvents.map(({ type }) => type)).toEqual(["input.requested", "approval.settled"]);
+    expect(JSON.stringify(projected)).not.toContain("private_call");
+    expect(JSON.stringify(projected)).not.toContain("private_request");
+  });
+
   it("flags prototype receipts for the verified artifact readback path", async () => {
     const observed = await observeSameOriginEveStream({
       config: { ...config, timeoutMs: 10_000 },

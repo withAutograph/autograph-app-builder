@@ -20,6 +20,7 @@ import {
   assertExistingStartSession,
 } from "./hosted-store";
 import type { HostedEveStore, HostedOperationRecord, HostedSessionRecord } from "./hosted-store";
+import { mergePrivateHostedApprovalReceipts } from "./private-hosted-approval";
 import { createPostgresHostedCheckpointHistory } from "./postgres-hosted-checkpoint-history";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
@@ -521,6 +522,40 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         throw new Error("Hosted checkpoint manifest does not match the active reference.");
       }
       return { ...page, checkpointDigest: input.checkpointRef.digest };
+    },
+
+    async recordPrivateApprovalReceipts(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      await database.transaction(async (transaction) => {
+        const current = await sessionById(transaction, principal, input.sessionId, true);
+        if (current === null) {
+          throw new Error(SESSION_NOT_FOUND);
+        }
+        const durable = toDurableHostedSessionRecord(current);
+        const updated = durableHostedSessionRecordSchema.parse({
+          ...durable,
+          privateApprovalReceipts: mergePrivateHostedApprovalReceipts(
+            input.sessionId,
+            durable.privateApprovalReceipts,
+            input.receipts,
+          ),
+        });
+        const rows = await transaction
+          .update(agentSessions)
+          .set(sessionValues(updated))
+          .where(
+            and(
+              sessionTenantPredicate(principal),
+              eq(agentSessions.sessionId, input.sessionId),
+              eq(agentSessions.updatedAt, new Date(durable.updatedAtEpochMs)),
+            ),
+          )
+          .returning();
+        if (rows.length !== 1) {
+          throw new Error("Private Eve approval receipt was not durable.");
+        }
+        parseHostedSessionRow(rows[0]);
+      });
     },
 
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract

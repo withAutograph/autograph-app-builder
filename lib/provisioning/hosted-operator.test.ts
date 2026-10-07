@@ -327,8 +327,10 @@ describe("protected hosted operator boundary", () => {
     ).toBe("pending");
     expect(f.deps.executeEffect).not.toHaveBeenCalled();
   });
-  it("is unavailable without a configured endpoint or all trusted service adapters", () => {
-    expect(() => hostedOperatorClientForSession({}, {})).toThrow("protected_operator_required");
+  it("is unavailable without a configured endpoint or all trusted service adapters", async () => {
+    await expect(hostedOperatorClientForSession({}, "", {})).rejects.toThrow(
+      "protected_operator_required",
+    );
     expect(() =>
       createProtectedHostedOperatorHandler({
         ...fixture().deps,

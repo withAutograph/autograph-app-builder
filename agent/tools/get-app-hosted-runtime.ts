@@ -9,8 +9,16 @@ export default defineTool({
   async execute(input, ctx) {
     try {
       const { operationRef, ...selection } = input;
-      return await hostedOperatorClientForSession(ctx.session.auth).request(
-        { action: "status", operationRef, selection: { ...selection, sessionId: ctx.session.id } },
+      const operator = await hostedOperatorClientForSession(ctx.session.auth, ctx.session.id);
+      return await operator.request(
+        {
+          action: "status",
+          operationRef,
+          selection: {
+            ...selection,
+            sessionId: operator.sessionId ?? ctx.session.id,
+          },
+        },
         ctx.abortSignal,
       );
     } catch (error) {

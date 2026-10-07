@@ -367,16 +367,31 @@ export const resolvePreparedRuntimeExecution = async (
   if (branch === undefined || branch === "") {
     return null;
   }
-  if (selection && (selection.appId !== input.appId || selection.sessionId !== input.sessionId)) {
+  if (selection && selection.appId !== input.appId) {
     throw new HostedRuntimeProviderError("authorization_required");
   }
-  // An operator reference is a closed route: never read/decrypt the legacy installer journal.
-  const projection =
+  const operatorClient =
     selection?.operationRef === undefined
       ? undefined
       : await (dependencies.operatorClient ?? hostedOperatorClientForSession)(
           input.sessionAuth,
-        ).bindings(
+          input.sessionId,
+        );
+  const operatorSessionId = operatorClient?.sessionId ?? input.sessionId;
+  if (
+    selection &&
+    selection.sessionId !==
+      (selection.operationRef === undefined ? input.sessionId : operatorSessionId)
+  ) {
+    // Legacy runtime selections stay bound to the SDK adapter ID. Protected
+    // selections use the durable public session ID resolved from the handoff.
+    throw new HostedRuntimeProviderError("authorization_required");
+  }
+  // An operator reference is a closed route: never read/decrypt the legacy installer journal.
+  const projection =
+    selection?.operationRef === undefined || operatorClient === undefined
+      ? undefined
+      : await operatorClient.bindings(
           {
             action: "bindings",
             operationRef: selection.operationRef,
@@ -385,7 +400,7 @@ export const resolvePreparedRuntimeExecution = async (
               branch,
               environment: "preview",
               projectId: selection.projectId,
-              sessionId: input.sessionId,
+              sessionId: operatorSessionId,
             },
           },
           input.signal,

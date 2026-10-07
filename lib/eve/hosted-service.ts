@@ -43,6 +43,8 @@ import {
   toPublicEvent,
 } from "./public-events";
 import type { InternalEveEvent } from "./public-events";
+import type { MessageStreamEvent } from "eve/client";
+import { createPrivateHostedApprovalRecorder } from "./private-hosted-approval";
 import { projectHostedSnapshot } from "./hosted-projection";
 import type { HostedEngineSnapshot } from "./hosted-projection";
 import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
@@ -103,6 +105,8 @@ export interface HostedEveTransport {
     sessionId: string;
     adapterSessionId: string;
     onEvent: (event: InternalEveEvent) => Promise<void> | void;
+    onPrivateEvent?: (event: MessageStreamEvent) => Promise<void> | void;
+    readDeadline?: boolean;
   }) => Promise<{
     activeTurnId?: string;
     artifactProjectionRequiresLegacyReadback: boolean;
@@ -631,6 +635,7 @@ function* publicSnapshotEvents(snapshot: HostedEngineSnapshot) {
 // eslint-disable-next-line eslint/func-style -- The spool is consumed only after Eve's durable tail is verified.
 async function spoolObservedSession(input: {
   transport: NonNullable<HostedEveTransport["observe"]>;
+  store: HostedEveStore;
   principal: HostedPrincipal;
   sessionId: string;
   adapterSessionId: string;
@@ -645,6 +650,11 @@ async function spoolObservedSession(input: {
     );
   }
   const path = nodePath.join(directory, "events.ndjson");
+  const privateApprovals = createPrivateHostedApprovalRecorder({
+    principal: input.principal,
+    sessionId: input.sessionId,
+    store: input.store,
+  });
   let file: Awaited<ReturnType<typeof open>> | null = null;
   try {
     file = await open(path, "wx", 0o600);
@@ -674,6 +684,7 @@ async function spoolObservedSession(input: {
         hash.update(line);
         eventCount += 1;
       },
+      onPrivateEvent: privateApprovals.observe,
       principal: input.principal,
       sessionId: input.sessionId,
     });
@@ -1387,6 +1398,7 @@ export function createHostedEveSessionService(input: {
           adapterSessionId: session.adapterSessionId,
           principal,
           sessionId,
+          store: input.store,
           transport: input.transport.observe,
         });
         if (
@@ -2129,6 +2141,7 @@ export function createHostedEveSessionService(input: {
                 adapterSessionId: response.adapterSessionId,
                 principal,
                 sessionId: existing.sessionId,
+                store: input.store,
                 transport: input.transport.observeStarted,
               });
               try {

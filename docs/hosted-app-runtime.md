@@ -19,6 +19,16 @@ adapter must read the actual authenticated durable Eve approval outcome and
 exact tool input, matching action, call, plan digest, target and approver's current
 authority. No production approval adapter is supplied or defaulted to allow.
 
+Hosted Eve records terminal decisions for only the two protected runtime tools
+in a private field on the tenant-owned session record. It pairs Eve's exact
+`input.requested` action with the later `approval.settled` outcome and responder
+identity; replay is idempotent and a conflicting terminal result is rejected.
+The field is outside the public checkpoint and is not returned by session,
+checkpoint or MCP projections. Historical v1/v2 checkpoints remain readable.
+The operator still has to compare the receipt with the independently resolved
+owner, membership, plan digest and selected target; this persistence is not a
+production approval adapter or evidence of hosted provider authority.
+
 `mise run operator:serve -- <absolute-reviewed-adapter-module> <sha256> [port]`
 is a separate service entrypoint bound to loopback for an authenticated HTTPS
 front end. It refuses startup without every required adapter. It must run in a
@@ -84,6 +94,15 @@ readable without origin proof, and cleanup can retire their resources without
 reconstructing an origin. The concrete trusted planner still owns provider origin
 resolution. This slice projects no browser identity/session fixtures; authenticated
 browser acceptance and durable fixture projection remain unassessed.
+
+The read-only Builder resolver uses the owner-bound Vercel installation credential. It
+requires exactly one verified project domain assigned to the selected Git branch, then
+reads the newest ready Preview deployment for that project and branch, confirms the
+deployment's Git ref, and verifies the domain in that deployment's alias readback. If
+any identity or alias is absent or ambiguous, it returns the unresolved
+`verified_preview_branch_alias` predicate. It does not derive a hostname, use a request
+origin, create an alias, or deploy. These provider metadata reads do not prove browser
+reachability, TLS behavior, or hosted operator configuration.
 
 ## External setup and evidence gate
 

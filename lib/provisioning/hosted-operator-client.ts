@@ -2,6 +2,8 @@ import { z } from "zod";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
 import { hostedRuntimeProofSchema } from "./hosted-runtime-journal";
+import { resolveHostedOperatorOwnerContext } from "./hosted-operator-owner-context";
+import type { OperatorOwnerContext, OperatorRequest } from "./hosted-operator-contract";
 import {
   HostedOperatorError,
   hostedOperatorPlanSchema,
@@ -10,7 +12,6 @@ import {
   restrictedOperatorEnvironment,
   sameOperatorSelection,
 } from "./hosted-operator-contract";
-import type { OperatorRequest } from "./hosted-operator-contract";
 
 const bindingSchema = z.strictObject({
   environment: z.record(z.string(), z.string()),
@@ -22,6 +23,8 @@ const bindingSchema = z.strictObject({
 export const createHostedOperatorClient = (input: {
   endpoint: string;
   token: () => Promise<string>;
+  ownerContext?: OperatorOwnerContext | null;
+  sessionId?: string;
   fetch?: typeof fetch;
   allowLoopback?: boolean;
 }) => {
@@ -40,7 +43,11 @@ export const createHostedOperatorClient = (input: {
     throw new HostedOperatorError("protected_operator_required");
   }
   const send = async (request: OperatorRequest, signal?: AbortSignal) => {
-    const body = operatorRequestSchema.parse(request);
+    const bodyInput =
+      input.ownerContext === undefined || input.ownerContext === null
+        ? request
+        : { ...request, ownerContext: input.ownerContext };
+    const body = operatorRequestSchema.parse(bodyInput);
     const response = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), {
       body: JSON.stringify(body),
       headers: {
@@ -88,17 +95,31 @@ export const createHostedOperatorClient = (input: {
     async request(request: Exclude<OperatorRequest, { action: "bindings" }>, signal?: AbortSignal) {
       return operatorPublicResultSchema.parse(await send(request, signal));
     },
+    sessionId: input.sessionId,
   };
 };
-export const hostedOperatorClientForSession = (
+export const hostedOperatorClientForSession = async (
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Eve supplies unknown auth; exactForwardedSessionAuthority parses it at this boundary.
   sessionAuth: unknown,
+  adapterSessionId: string,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ) => {
   const endpoint = environment.HOSTED_RUNTIME_OPERATOR_URL;
   if (endpoint === undefined || endpoint === "") {
     throw new HostedOperatorError("protected_operator_required");
   }
-  exactForwardedSessionAuthority(sessionAuth);
-  return createHostedOperatorClient({ endpoint, token: createVercelWorkloadIdentity().token });
+  const { authority, principal } = exactForwardedSessionAuthority(sessionAuth);
+  const ownerContext = await resolveHostedOperatorOwnerContext({
+    adapterSessionId,
+    authority,
+    environment,
+    principal,
+    sessionAuth,
+  });
+  return createHostedOperatorClient({
+    endpoint,
+    ownerContext,
+    sessionId: ownerContext?.sessionId ?? adapterSessionId,
+    token: createVercelWorkloadIdentity().token,
+  });
 };
