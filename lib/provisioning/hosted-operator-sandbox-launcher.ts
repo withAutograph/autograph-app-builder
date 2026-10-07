@@ -153,7 +153,10 @@ export interface ProtectedInstallContextWire {
   tenant_targets: string[];
 }
 
-export interface ResourceBootstrapContextWire extends Omit<ProtectedInstallContextWire, "resource"> {
+export interface ResourceBootstrapContextWire extends Omit<
+  ProtectedInstallContextWire,
+  "resource"
+> {
   kind: "neon_resource_bootstrap";
   resource: Omit<ProtectedInstallContextWire["resource"], "schema"> & {
     scope: "app_database" | "auth_database";
@@ -378,57 +381,6 @@ export const buildProtectedInstallContext = (input: {
   };
 };
 
-export const buildResourceBootstrapContext = (input: HostedOperatorSandboxWorkerInput): ResourceBootstrapContextWire => {
-  const { plan } = input;
-  const bootstrap = plan.bootstrap;
-  const installer = plan.resourcesInstaller;
-  const credentials = input.resourceCredentials;
-  const resource = resourceSchema.parse(plan[input.database]);
-  if (!bootstrap || !installer || !credentials || input.effect.kind !== "resources" ||
-      input.effect.resourceId !== resource.resourceId || !plan.effects.some((effect) =>
-        effect.id === input.effect.id && effect.kind === "resources" && effect.resourceId === resource.resourceId)) {
-    throw resourceMismatch();
-  }
-  const parsed = z.strictObject({
-    migratorPassword: z.string().min(32).max(512).refine((value) => !/[\0\r\n]/u.test(value)),
-    runtimePassword: z.string().min(32).max(512).refine((value) => !/[\0\r\n]/u.test(value)),
-  }).safeParse(parseJsonBytes(credentials.bytes));
-  if (!parsed.success || !Buffer.from(JSON.stringify(parsed.data)).equals(credentials.bytes) ||
-      sha256(credentials.bytes) !== credentials.sha256) throw resourceMismatch();
-  let url: URL;
-  try { url = new URL(input.directDatabaseUrl); } catch { throw resourceMismatch(); }
-  if (url.protocol !== "postgresql:" || url.hostname !== plan.neon.endpoint ||
-      (url.port !== "" && url.port !== "5432") ||
-      decodeURIComponent(url.username) !== bootstrap.role ||
-      decodeURIComponent(url.pathname.slice(1)) !== bootstrap.maintenanceDatabase ||
-      !url.password || url.hash || [...url.searchParams.keys()].some((key) => !["sslmode", "channel_binding"].includes(key)) ||
-      !["require", "verify-full"].includes(url.searchParams.get("sslmode") ?? "") ||
-      url.hostname.includes("-pooler")) throw resourceMismatch();
-  workerRunIdSchema.parse(input.operationRef);
-  if (!Number.isSafeInteger(input.fenceGeneration) || input.fenceGeneration <= 0) throw resourceMismatch();
-  return {
-    kind: "neon_resource_bootstrap",
-    version: 1,
-    operation: { operation_id: input.operationRef, approval_digest: operatorPlanDigest(plan), fence_generation: input.fenceGeneration },
-    app_id: input.database === "authDatabase" ? "auth" : plan.selection.appId,
-    resource: {
-      scope: input.database === "authDatabase" ? "auth_database" : "app_database",
-      resource_id: resource.resourceId, environment: "preview", hostname: plan.neon.endpoint,
-      port: 5432, database: resource.database, migrator_role: resource.migratorRole,
-      runtime_role: resource.runtimeRole, maintenance_database: bootstrap.maintenanceDatabase,
-      bootstrap_role: bootstrap.role, provider_project_id: plan.neon.projectId,
-      provider_branch_id: plan.neon.branchId, provider_endpoint_id: bootstrap.endpointId,
-      credentials_sha256: credentials.sha256,
-    },
-    release: { id: plan.release.id, sha256: plan.release.sha256 },
-    installer: { id: installer.reference, sha256: installer.sha256 },
-    tenant_targets: [],
-  };
-};
-
-const canonicalContextBytes = (context: WorkerContext) =>
-  Buffer.from(JSON.stringify(context), "utf-8");
-
 const parseJsonBytes = (buffer: Buffer) => {
   if (buffer.length > MAX_PROTOCOL_FRAME_BYTES) {
     throw resourceMismatch();
@@ -440,6 +392,108 @@ const parseJsonBytes = (buffer: Buffer) => {
     throw resourceMismatch();
   }
 };
+
+export const buildResourceBootstrapContext = (
+  input: HostedOperatorSandboxWorkerInput,
+): ResourceBootstrapContextWire => {
+  const { plan } = input;
+  const { bootstrap } = plan;
+  const installer = plan.resourcesInstaller;
+  const credentials = input.resourceCredentials;
+  const resource = resourceSchema.parse(plan[input.database]);
+  if (
+    !bootstrap ||
+    !installer ||
+    !credentials ||
+    input.effect.kind !== "resources" ||
+    input.effect.resourceId !== resource.resourceId ||
+    !plan.effects.some(
+      (effect) =>
+        effect.id === input.effect.id &&
+        effect.kind === "resources" &&
+        effect.resourceId === resource.resourceId,
+    )
+  ) {
+    throw resourceMismatch();
+  }
+  const parsed = z
+    .strictObject({
+      migratorPassword: z
+        .string()
+        .min(32)
+        .max(512)
+        .refine((value) => !/[\0\r\n]/u.test(value)),
+      runtimePassword: z
+        .string()
+        .min(32)
+        .max(512)
+        .refine((value) => !/[\0\r\n]/u.test(value)),
+    })
+    .safeParse(parseJsonBytes(credentials.bytes));
+  if (
+    !parsed.success ||
+    !Buffer.from(JSON.stringify(parsed.data)).equals(credentials.bytes) ||
+    sha256(credentials.bytes) !== credentials.sha256
+  ) {
+    throw resourceMismatch();
+  }
+  let url: URL;
+  try {
+    url = new URL(input.directDatabaseUrl);
+  } catch {
+    throw resourceMismatch();
+  }
+  if (
+    url.protocol !== "postgresql:" ||
+    url.hostname !== plan.neon.endpoint ||
+    (url.port !== "" && url.port !== "5432") ||
+    decodeURIComponent(url.username) !== bootstrap.role ||
+    decodeURIComponent(url.pathname.slice(1)) !== bootstrap.maintenanceDatabase ||
+    !url.password ||
+    url.hash ||
+    [...url.searchParams.keys()].some((key) => !["sslmode", "channel_binding"].includes(key)) ||
+    !["require", "verify-full"].includes(url.searchParams.get("sslmode") ?? "") ||
+    url.hostname.includes("-pooler")
+  ) {
+    throw resourceMismatch();
+  }
+  workerRunIdSchema.parse(input.operationRef);
+  if (!Number.isSafeInteger(input.fenceGeneration) || input.fenceGeneration <= 0) {
+    throw resourceMismatch();
+  }
+  return {
+    kind: "neon_resource_bootstrap",
+    version: 1,
+    operation: {
+      operation_id: input.operationRef,
+      approval_digest: operatorPlanDigest(plan),
+      fence_generation: input.fenceGeneration,
+    },
+    app_id: input.database === "authDatabase" ? "auth" : plan.selection.appId,
+    resource: {
+      scope: input.database === "authDatabase" ? "auth_database" : "app_database",
+      resource_id: resource.resourceId,
+      environment: "preview",
+      hostname: plan.neon.endpoint,
+      port: 5432,
+      database: resource.database,
+      migrator_role: resource.migratorRole,
+      runtime_role: resource.runtimeRole,
+      maintenance_database: bootstrap.maintenanceDatabase,
+      bootstrap_role: bootstrap.role,
+      provider_project_id: plan.neon.projectId,
+      provider_branch_id: plan.neon.branchId,
+      provider_endpoint_id: bootstrap.endpointId,
+      credentials_sha256: credentials.sha256,
+    },
+    release: { id: plan.release.id, sha256: plan.release.sha256 },
+    installer: { id: installer.reference, sha256: installer.sha256 },
+    tenant_targets: [],
+  };
+};
+
+const canonicalContextBytes = (context: WorkerContext) =>
+  Buffer.from(JSON.stringify(context), "utf-8");
 
 const readSpoolJson = async (sandbox: OperatorSandbox, filePath: string, signal: AbortSignal) => {
   const stat = await sandbox.fs.lstat(filePath, { signal });
@@ -550,9 +604,13 @@ const requestMatchesWorkerScope = (
   worker: ProtectedInstallerWorkerDescriptor,
 ) => {
   if (worker.operationScope === RESOURCES_SCOPE) {
-    return worker.subcommand === RESOURCES_COMMAND && "kind" in context &&
-      context.kind === "neon_resource_bootstrap" && tenantId === null &&
-      ["resources:roles", "resources:database", "resources:acl"].includes(effectId);
+    return (
+      worker.subcommand === RESOURCES_COMMAND &&
+      "kind" in context &&
+      context.kind === "neon_resource_bootstrap" &&
+      tenantId === null &&
+      ["resources:roles", "resources:database", "resources:acl"].includes(effectId)
+    );
   }
   if (worker.operationScope === AUTH_SCOPE) {
     return (
@@ -725,13 +783,22 @@ const runSandboxWorker = async (
   const runId = workerRunIdSchema.parse(input.workerAttemptId);
   const resources = input.effect.kind === "resources";
   const auth = !resources && input.database === "authDatabase";
-  const worker = resources ? configuration.resourcesWorker : auth
-    ? configuration.authWorker
-    : configuration.workers[input.plan.selection.appId];
-  const installer = resources ? input.plan.resourcesInstaller : auth ? input.plan.authSchema?.installer : input.plan.installer;
+  let worker: ProtectedInstallerWorkerDescriptor | undefined =
+    configuration.workers[input.plan.selection.appId];
+  let installer: HostedOperatorPlan["resourcesInstaller"] = input.plan.installer;
+  if (resources) {
+    worker = configuration.resourcesWorker;
+    installer = input.plan.resourcesInstaller;
+  } else if (auth) {
+    worker = configuration.authWorker;
+    installer = input.plan.authSchema?.installer;
+  }
   if (
     worker === undefined ||
-    (resources && (worker.operationScope !== RESOURCES_SCOPE || worker.id !== RESOURCES_SCOPE || worker.subcommand !== RESOURCES_COMMAND)) ||
+    (resources &&
+      (worker.operationScope !== RESOURCES_SCOPE ||
+        worker.id !== RESOURCES_SCOPE ||
+        worker.subcommand !== RESOURCES_COMMAND)) ||
     (!resources && worker.operationScope === RESOURCES_SCOPE) ||
     installer === undefined ||
     !workerScopeSchema.safeParse(worker.operationScope).success ||
@@ -761,7 +828,9 @@ const runSandboxWorker = async (
   if (auth) {
     contextInput.subject = "auth";
   }
-  const context = resources ? buildResourceBootstrapContext(input) : buildProtectedInstallContext(contextInput);
+  const context = resources
+    ? buildResourceBootstrapContext(input)
+    : buildProtectedInstallContext(contextInput);
   let generatedMetadata: GeneratedAppReleaseMetadata | undefined;
   let generatedFiles: { member: string; content: Buffer }[] = [];
   let authPlanBytes: Buffer | undefined;
@@ -832,10 +901,14 @@ const runSandboxWorker = async (
     throw resourceMismatch();
   }
   const contextDigest = sha256(contextBytes);
-  const resourceCredentialBytes = resources && input.resourceCredentials
-    ? Buffer.from(input.resourceCredentials.bytes) : undefined;
+  const resourceCredentialBytes =
+    resources && input.resourceCredentials
+      ? Buffer.from(input.resourceCredentials.bytes)
+      : undefined;
   if (resources) {
-    if (!input.resourceCredentials) throw resourceMismatch();
+    if (!input.resourceCredentials) {
+      throw resourceMismatch();
+    }
     await input.checkpoint(input.resourceCredentials.privateState);
   }
   const recordCheckpoint = await input.bindWorkerContext({ contextDigest });
@@ -1131,8 +1204,16 @@ const runSandboxWorker = async (
       signal,
     );
     if (resourceCredentialBytes !== undefined) {
-      await sandbox.writeFiles([{ content: resourceCredentialBytes, mode: 0o600,
-        path: path.posix.join(startup, "resource-credentials.json") }], { signal });
+      await sandbox.writeFiles(
+        [
+          {
+            content: resourceCredentialBytes,
+            mode: 0o600,
+            path: path.posix.join(startup, "resource-credentials.json"),
+          },
+        ],
+        { signal },
+      );
     }
     if (authPlanBytes !== undefined) {
       await sandbox.writeFiles(
