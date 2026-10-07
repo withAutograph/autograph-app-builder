@@ -1,27 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
-import type { SandboxSession } from "eve/sandbox";
 import { describeSelectedApp } from "./app-description";
 
 const descriptor = {
-  version: 1,
   app: { id: "spend-review", routes: ["/spend-review"], workspacePath: "apps/spend-review" },
   backend: {
-    kind: "generated-postgres",
     authorization: "app-owned",
+    kind: "generated-postgres",
+    release: { artifactHash: "sha256:hash", directory: "release/v12", id: "v12" },
     roles: [],
-    release: { id: "v12", directory: "release/v12", artifactHash: "sha256:hash" },
     runtime: { databaseEnvironment: "SPEND_REVIEW_DATABASE_URL" },
   },
-  validation: { browser: null, check: { task: "check" }, test: { task: "test", shards: 1 } },
+  validation: { browser: null, check: { task: "check" }, test: { shards: 1, task: "test" } },
+  version: 1,
 };
-const runDescription = (exitCode: number, stdout: string, stderr = "") =>
-  describeSelectedApp({
+const runDescription = async (exitCode: number, stdout: string, stderr = "") =>
+  await describeSelectedApp({
     appId: "spend-review",
     root: "/workspace/repository",
-    sandbox: { run: vi.fn().mockResolvedValue({ exitCode, stdout, stderr }) } as Pick<
-      SandboxSession,
-      "run"
-    >,
+    sandbox: { run: vi.fn().mockResolvedValue({ exitCode, stderr, stdout }) },
   });
 
 describe("repository app description", () => {
@@ -34,6 +30,8 @@ describe("repository app description", () => {
       runDescription(
         1,
         "",
+        // Synthetic diagnostic deliberately exercises secret redaction.
+        // oxlint-disable-next-line sonarjs/no-hardcoded-passwords
         "Missing release; password=secret-value Bearer abc postgres://owner:secret@host/db",
       ),
     ).rejects.toThrow(
