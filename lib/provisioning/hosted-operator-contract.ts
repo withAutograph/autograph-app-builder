@@ -162,15 +162,24 @@ export const operatorPlanDigest = (input: HostedOperatorPlan) =>
     .update(JSON.stringify(hostedOperatorPlanSchema.parse(input)))
     .digest("hex");
 /** Private server-derived claims; the operator re-reads their durable authority. */
+const ownerContextBaseSchema = z.strictObject({
+  adapterGeneration: z.number().int().positive(),
+  adapterSessionId: z.string().min(1).max(200),
+  authority: hostedTenantAuthoritySchema,
+  principal: hostedPrincipalSchema,
+  sessionId: z.string().min(1).max(200),
+});
+const handoffOwnerContextSchema = ownerContextBaseSchema.extend({
+  kind: z.literal("handoff"),
+  sourceHandoffId: z.uuid(),
+});
+const directOwnerContextSchema = ownerContextBaseSchema.extend({ kind: z.literal("direct") });
+const legacyHandoffOwnerContextSchema = ownerContextBaseSchema.extend({
+  sourceHandoffId: z.uuid(),
+});
 export const operatorOwnerContextSchema = z
-  .strictObject({
-    adapterGeneration: z.number().int().positive(),
-    adapterSessionId: z.string().min(1).max(200),
-    authority: hostedTenantAuthoritySchema,
-    principal: hostedPrincipalSchema,
-    sessionId: z.string().min(1).max(200),
-    sourceHandoffId: z.uuid(),
-  })
+  .union([handoffOwnerContextSchema, directOwnerContextSchema, legacyHandoffOwnerContextSchema])
+  .transform((value) => ("kind" in value ? value : { ...value, kind: "handoff" as const }))
   .superRefine((value, context) => {
     if (
       (["audience", "issuer", "ownerUserId", "workspaceId"] as const).some(

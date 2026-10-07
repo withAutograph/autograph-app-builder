@@ -102,6 +102,113 @@ const reconnect = (): PreparedVercelAccess => ({
   status: "authorization-required",
 });
 
+const readVercelProjectAccess = async (input: {
+  authority: Authority;
+  projectId: string;
+  projectName?: string;
+  installationId: string;
+  expectedScope?: { id: string; type: "team" | "user" };
+  readCredential: (input: {
+    authority: Authority;
+    installationId: string;
+  }) => Promise<VercelCredential | undefined>;
+  fetch?: typeof fetch;
+  apiOrigin?: string;
+}): Promise<PreparedVercelAccess> => {
+  try {
+    const credential = await input.readCredential({
+      authority: input.authority,
+      installationId: input.installationId,
+    });
+    if (!credential || !credential.binding.active) {
+      return reconnect();
+    }
+    const { binding, token } = credential;
+    if (binding.installationId !== input.installationId) {
+      return unavailable();
+    }
+    if (
+      input.expectedScope &&
+      (binding.scopeId !== input.expectedScope.id || binding.scopeType !== input.expectedScope.type)
+    ) {
+      return { action: "review-selection", status: "resource-unavailable" };
+    }
+    const url = new URL(
+      `${input.apiOrigin ?? "https://api.vercel.com"}/v9/projects/${encodeURIComponent(input.projectId)}`,
+    );
+    if (binding.scopeType === "team") {
+      url.searchParams.set("teamId", binding.scopeId);
+    }
+    const response = await (input.fetch ?? fetch)(url, {
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+        "User-Agent": "autograph-app-builder",
+      },
+      method: "GET",
+      redirect: "error",
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (response.status === 403 && response.headers.has("retry-after")) {
+      await response.body?.cancel();
+      return unavailable();
+    }
+    if (response.status === 404) {
+      await response.body?.cancel();
+      return { action: "review-selection", status: "resource-unavailable" };
+    }
+    if ([401, 403].includes(response.status)) {
+      await response.body?.cancel();
+      return reconnect();
+    }
+    if (response.status !== 200) {
+      await response.body?.cancel();
+      return unavailable();
+    }
+    const observed = await readJsonStringChecks(response.body, [
+      { expected: input.projectId, pointer: "/id" },
+      { capture: true, pointer: "/name" },
+      { expected: binding.scopeId, optional: true, pointer: "/accountId" },
+    ]);
+    const [idMatches, hasName, accountMatches] = observed.matches;
+    if (!idMatches || !hasName || !accountMatches) {
+      return unavailable();
+    }
+    return {
+      project: {
+        id: input.projectId,
+        name: observed.values[1] ?? input.projectName ?? input.projectId,
+      },
+      scope: {
+        id: binding.scopeId,
+        installationId: input.installationId,
+        slug: binding.slug,
+        type: binding.scopeType,
+      },
+      status: "ready",
+    };
+  } catch {
+    return unavailable();
+  }
+};
+
+/** Read one exact owner-selected Vercel project under a current installation grant. */
+// eslint-disable-next-line eslint/func-style -- Keep provider access helpers as declarations.
+export async function readOwnerVercelProjectAccess(input: {
+  authority: Authority;
+  projectId: string;
+  installationId: string;
+  readCredential: (input: {
+    authority: Authority;
+    installationId: string;
+  }) => Promise<VercelCredential | undefined>;
+  fetch?: typeof fetch;
+  apiOrigin?: string;
+}): Promise<PreparedVercelAccess> {
+  return await readVercelProjectAccess(input);
+}
+
 /** Server-only credential read followed by a fresh, read-only provider request. */
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readPreparedVercelAccess(input: {
@@ -122,6 +229,21 @@ export async function readPreparedVercelAccess(input: {
   if (!installationId) {
     return { status: "not-selected" };
   }
+  if (project !== undefined) {
+    if (project.installationId !== installationId) {
+      return { action: "review-selection", status: "resource-unavailable" };
+    }
+    return await readVercelProjectAccess({
+      authority: input.authority,
+      expectedScope: project.scope,
+      installationId,
+      projectId: project.projectId,
+      projectName: project.name,
+      ...(input.fetch === undefined ? {} : { fetch: input.fetch }),
+      ...(input.apiOrigin === undefined ? {} : { apiOrigin: input.apiOrigin }),
+      readCredential: input.readCredential,
+    });
+  }
   try {
     const credential = await input.readCredential({
       authority: input.authority,
@@ -134,24 +256,11 @@ export async function readPreparedVercelAccess(input: {
       return unavailable();
     }
     const { binding, token } = credential;
-    if (
-      project &&
-      (project.installationId !== installationId ||
-        project.scope.id !== binding.scopeId ||
-        project.scope.type !== binding.scopeType)
-    ) {
-      return { action: "review-selection", status: "resource-unavailable" };
-    }
-    let path = "/v2/user";
-    if (project) {
-      path = `/v9/projects/${encodeURIComponent(project.projectId)}`;
-    } else if (binding.scopeType === "team") {
-      path = `/v2/teams/${encodeURIComponent(binding.scopeId)}`;
-    }
+    const path =
+      binding.scopeType === "team"
+        ? `/v2/teams/${encodeURIComponent(binding.scopeId)}`
+        : "/v2/user";
     const url = new URL(`${input.apiOrigin ?? "https://api.vercel.com"}${path}`);
-    if (project && binding.scopeType === "team") {
-      url.searchParams.set("teamId", binding.scopeId);
-    }
     const response = await (input.fetch ?? fetch)(url, {
       cache: "no-store",
       headers: {
@@ -187,22 +296,6 @@ export async function readPreparedVercelAccess(input: {
       slug: binding.slug,
       type: binding.scopeType,
     };
-    if (project) {
-      const observed = await readJsonStringChecks(response.body, [
-        { expected: project.projectId, pointer: "/id" },
-        { capture: true, pointer: "/name" },
-        { expected: binding.scopeId, optional: true, pointer: "/accountId" },
-      ]);
-      const [idMatches, hasName, accountMatches] = observed.matches;
-      if (!idMatches || !hasName || !accountMatches) {
-        return unavailable();
-      }
-      return {
-        project: { id: project.projectId, name: observed.values[1] ?? project.name },
-        scope,
-        status: "ready",
-      };
-    }
     const {
       matches: [scopeMatches],
     } = await readJsonStringChecks(response.body, [

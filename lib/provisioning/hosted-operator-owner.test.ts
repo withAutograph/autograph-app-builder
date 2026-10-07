@@ -42,9 +42,18 @@ const ownerContext: OperatorOwnerContext = {
     ownerUserId: principal.ownerUserId,
     workspaceId: principal.workspaceId,
   },
+  kind: "handoff",
   principal,
   sessionId: "public-session-1",
   sourceHandoffId: handoffId,
+};
+const directOwnerContext: OperatorOwnerContext = {
+  adapterGeneration: ownerContext.adapterGeneration,
+  adapterSessionId: ownerContext.adapterSessionId,
+  authority: ownerContext.authority,
+  kind: "direct",
+  principal,
+  sessionId: ownerContext.sessionId,
 };
 const selection: OperatorSelection = {
   appId: "vendor-onboarding",
@@ -53,6 +62,29 @@ const selection: OperatorSelection = {
   projectId: "prj_1",
   sessionId: ownerContext.sessionId,
 };
+const directSessionRecord = (
+  overrides: {
+    adapterGeneration?: number;
+    principal?: HostedPrincipal;
+  } = {},
+) =>
+  durableHostedSessionRecordSchema.parse({
+    adapterGeneration: directOwnerContext.adapterGeneration,
+    adapterSessionId: directOwnerContext.adapterSessionId,
+    appId: selection.appId,
+    createdAtEpochMs: 100,
+    lastProgressAtEpochMs: 100,
+    originAdapterSessionId: directOwnerContext.adapterSessionId,
+    principal,
+    resumability: "live",
+    sessionId: directOwnerContext.sessionId,
+    stage: "ready",
+    status: "waiting",
+    title: "Vendor onboarding",
+    updatedAtEpochMs: 100,
+    version: 2,
+    ...overrides,
+  });
 const approvalRequestEvent = (receipt: PrivateHostedApprovalReceipt) =>
   ({
     data: {
@@ -132,10 +164,15 @@ beforeAll(async () => {
     .sign(keys.privateKey);
 });
 
-const makeFixture = (sessionOverride?: HostedSessionRecord, missingHandoff = false) => {
+const makeFixture = (
+  sessionOverride?: HostedSessionRecord,
+  missingHandoff = false,
+  activeMember = true,
+) => {
   const currentSession = durableHostedSessionRecordSchema.parse({
     adapterGeneration: 1,
     adapterSessionId: ownerContext.adapterSessionId,
+    appId: selection.appId,
     createdAtEpochMs: 100,
     lastProgressAtEpochMs: 100,
     originAdapterSessionId: ownerContext.adapterSessionId,
@@ -211,7 +248,10 @@ const makeFixture = (sessionOverride?: HostedSessionRecord, missingHandoff = fal
   };
   const membership: HostedWorkspaceMembership = {
     // oxlint-disable-next-line eslint/require-await -- this in-memory membership seam has no asynchronous work.
-    isMember: vi.fn(async () => true),
+    isMember: vi.fn(async () => {
+      await Promise.resolve();
+      return activeMember;
+    }),
   };
   // oxlint-disable-next-line eslint/require-await -- credential fixture is a direct in-memory result.
   const readVercelCredential = vi.fn(async () => ({
@@ -235,17 +275,31 @@ const makeFixture = (sessionOverride?: HostedSessionRecord, missingHandoff = fal
       name: "apps-vendor-onboarding",
     }),
   );
+  const listVercelInstallations = vi.fn(async () => {
+    await Promise.resolve();
+    return [{ active: true, installationId: "icfg_1" }];
+  });
   const authority = createHostedOperatorOwnerAuthority({
     apiOrigin: "https://vercel.example",
     eve,
     fetch,
     handoffs,
     keyResolver,
+    listVercelInstallations,
     membership,
     readVercelCredential,
     workloadPolicy,
   });
-  return { authority, currentSession, eve, fetch, handoffs, membership, readVercelCredential };
+  return {
+    authority,
+    currentSession,
+    eve,
+    fetch,
+    handoffs,
+    listVercelInstallations,
+    membership,
+    readVercelCredential,
+  };
 };
 
 const plan = hostedOperatorPlanSchema.parse({
@@ -336,6 +390,25 @@ describe("hosted operator owner authority", () => {
     expect(fixture.eve.getSession).not.toHaveBeenCalled();
   });
 
+  it("keeps legacy private handoff owner contexts bound to the existing handoff path", async () => {
+    const legacyHandoffContext = {
+      adapterGeneration: ownerContext.adapterGeneration,
+      adapterSessionId: ownerContext.adapterSessionId,
+      authority: ownerContext.authority,
+      principal,
+      sessionId: ownerContext.sessionId,
+      sourceHandoffId: handoffId,
+    };
+    const fixture = makeFixture();
+    await expect(
+      fixture.authority.authorize(request(), selection, legacyHandoffContext),
+    ).resolves.toMatchObject({ ownerContext });
+    expect(fixture.handoffs.read).toHaveBeenCalledWith({
+      authority: ownerContext.authority,
+      handoffId,
+    });
+  });
+
   it("rejects stale adapter generations and rechecks them before effects", async () => {
     const stale = makeFixture();
     await expect(
@@ -358,6 +431,96 @@ describe("hosted operator owner authority", () => {
       ),
     ).rejects.toThrow();
     expect(fixture.fetch).not.toHaveBeenCalled();
+  });
+
+  it("plans a direct start only for its durable app and a live owner Vercel grant", async () => {
+    const fixture = makeFixture(directSessionRecord());
+    const context = await fixture.authority.authorize(request(), selection, directOwnerContext);
+    expect(context).toMatchObject({
+      ownerContext: directOwnerContext,
+      target: {
+        appId: selection.appId,
+        branch: selection.branch,
+        installationId: "icfg_1",
+        projectId: selection.projectId,
+        scopeId: "team_1",
+        scopeType: "team",
+        sessionId: selection.sessionId,
+      },
+    });
+    await fixture.authority.assertAuthorized({ ...context, plan });
+    expect(fixture.handoffs.read).not.toHaveBeenCalled();
+    expect(fixture.listVercelInstallations).toHaveBeenCalledWith(ownerContext.authority);
+    expect(fixture.readVercelCredential).toHaveBeenCalledWith({
+      authority: ownerContext.authority,
+      installationId: "icfg_1",
+    });
+    expect(fixture.fetch).toHaveBeenCalledTimes(2);
+    await expect(
+      fixture.authority.assertAuthorized({
+        ...context,
+        plan: { ...plan, selection: { ...selection, branch: "changed-branch" } },
+      }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    fixture.listVercelInstallations.mockResolvedValue([]);
+    await expect(fixture.authority.assertAuthorized({ ...context, plan })).rejects.toMatchObject({
+      code: "resource_mismatch",
+    });
+  });
+
+  it("rejects direct app adoption, a stale owner row, and handoff-to-direct downgrade", async () => {
+    const directSession = directSessionRecord();
+    const direct = makeFixture(directSession);
+    await expect(
+      direct.authority.authorize(
+        request(),
+        { ...selection, appId: "another-app" },
+        directOwnerContext,
+      ),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
+    expect(direct.listVercelInstallations).not.toHaveBeenCalled();
+
+    const stale = makeFixture(directSessionRecord({ adapterGeneration: 2 }));
+    await expect(
+      stale.authority.authorize(request(), selection, directOwnerContext),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+
+    const crossOwner = makeFixture(
+      directSessionRecord({ principal: { ...principal, ownerUserId: "another-owner" } }),
+    );
+    await expect(
+      crossOwner.authority.authorize(request(), selection, directOwnerContext),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+
+    const inactive = makeFixture(directSession, false, false);
+    await expect(
+      inactive.authority.authorize(request(), selection, directOwnerContext),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+
+    const downgraded = makeFixture();
+    await expect(
+      downgraded.authority.authorize(request(), selection, {
+        ...directOwnerContext,
+        sessionId: ownerContext.sessionId,
+      }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    expect(downgraded.handoffs.read).not.toHaveBeenCalled();
+
+    const forgedHandoff = { ...directOwnerContext, sourceHandoffId: handoffId };
+    await expect(
+      downgraded.authority.authorize(request(), selection, forgedHandoff),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+  });
+
+  it("rejects a direct project outside every current owner installation", async () => {
+    const fixture = makeFixture(directSessionRecord());
+    await expect(
+      fixture.authority.authorize(
+        request(),
+        { ...selection, projectId: "prj_unowned" },
+        directOwnerContext,
+      ),
+    ).rejects.toMatchObject({ code: "resource_mismatch" });
   });
 
   it("normalizes an owner-bound v1 session using its exact redeemed handoff and adapter binding", async () => {

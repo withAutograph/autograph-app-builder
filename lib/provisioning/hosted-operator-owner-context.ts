@@ -15,7 +15,8 @@ import type { OperatorOwnerContext } from "./hosted-operator-contract";
 
 interface OwnerContextResolverDependencies {
   handoffs: Pick<BuilderHandoffStore, "read">;
-  sessions: Pick<HostedEveStore, "getSession">;
+  sessions: Pick<HostedEveStore, "getSession"> &
+    Partial<Pick<HostedEveStore, "getSessionByAdapterSessionId">>;
   isActiveMember: (authority: HostedSessionTenantAuthority) => Promise<boolean>;
   issuer: string;
   audience: string;
@@ -29,7 +30,44 @@ const samePrincipal = (left: HostedPrincipal, right: HostedPrincipal) =>
   sameAuthority(left, right) &&
   JSON.stringify([...left.scopes].toSorted()) === JSON.stringify([...right.scopes].toSorted());
 
-/** Resolves only through the exact owner-scoped handoff binding, never a caller-supplied session ID. */
+const resolveDirectOwnerContext = async (input: {
+  adapterSessionId: string;
+  authority: HostedSessionTenantAuthority;
+  principal: HostedPrincipal;
+  sessions: OwnerContextResolverDependencies["sessions"];
+}): Promise<OperatorOwnerContext> => {
+  const { getSessionByAdapterSessionId } = input.sessions;
+  if (getSessionByAdapterSessionId === undefined) {
+    throw new HostedOperatorError("authorization_required");
+  }
+  const storedSession = await getSessionByAdapterSessionId.call(
+    input.sessions,
+    input.principal,
+    input.adapterSessionId,
+  );
+  const storedSessionRecord = hostedSessionRecordSchema.safeParse(storedSession);
+  if (!storedSessionRecord.success || storedSessionRecord.data.version !== 2) {
+    throw new HostedOperatorError("authorization_required");
+  }
+  const session = toDurableHostedSessionRecord(storedSessionRecord.data);
+  if (
+    session.sourceHandoffId !== undefined ||
+    session.adapterSessionId !== input.adapterSessionId ||
+    !samePrincipal(session.principal, input.principal)
+  ) {
+    throw new HostedOperatorError("authorization_required");
+  }
+  return {
+    adapterGeneration: session.adapterGeneration,
+    adapterSessionId: session.adapterSessionId,
+    authority: hostedTenantAuthoritySchema.parse(input.authority),
+    kind: "direct",
+    principal: hostedPrincipalSchema.parse(input.principal),
+    sessionId: session.sessionId,
+  };
+};
+
+/** Resolves only through exact tenant-scoped durable handoff or adapter bindings. */
 export const createHostedOperatorOwnerContextResolver =
   (dependencies: OwnerContextResolverDependencies) =>
   async (input: {
@@ -37,11 +75,8 @@ export const createHostedOperatorOwnerContextResolver =
     authority: HostedSessionTenantAuthority;
     principal: HostedPrincipal;
     sessionAuth: unknown;
-  }): Promise<OperatorOwnerContext | null> => {
+  }): Promise<OperatorOwnerContext> => {
     const handoffId = sourceHandoffIdForSessionAuth(input.sessionAuth);
-    if (handoffId === undefined) {
-      return null;
-    }
     const forwarded = exactForwardedSessionAuthority(input.sessionAuth);
     if (
       input.authority.issuer !== dependencies.issuer ||
@@ -57,6 +92,15 @@ export const createHostedOperatorOwnerContextResolver =
     }
     if (!(await dependencies.isActiveMember(input.authority))) {
       throw new HostedOperatorError("authorization_required");
+    }
+
+    if (handoffId === undefined) {
+      return await resolveDirectOwnerContext({
+        adapterSessionId: input.adapterSessionId,
+        authority: input.authority,
+        principal: input.principal,
+        sessions: dependencies.sessions,
+      });
     }
 
     const storedHandoff = await dependencies.handoffs.read({
@@ -101,6 +145,7 @@ export const createHostedOperatorOwnerContextResolver =
       adapterGeneration: session.adapterGeneration,
       adapterSessionId: session.adapterSessionId,
       authority: hostedTenantAuthoritySchema.parse(input.authority),
+      kind: "handoff",
       principal: hostedPrincipalSchema.parse(input.principal),
       sessionId: session.sessionId,
       sourceHandoffId: handoffId,
@@ -152,10 +197,7 @@ export const resolveHostedOperatorOwnerContext = async (input: {
   principal: HostedPrincipal;
   sessionAuth: unknown;
   environment: Readonly<Record<string, string | undefined>>;
-}): Promise<OperatorOwnerContext | null> => {
-  if (sourceHandoffIdForSessionAuth(input.sessionAuth) === undefined) {
-    return null;
-  }
+}): Promise<OperatorOwnerContext> => {
   deploymentResolver ??= createDeploymentResolver(input.environment);
   const pendingResolver = deploymentResolver;
   let resolver: Awaited<typeof pendingResolver>;
