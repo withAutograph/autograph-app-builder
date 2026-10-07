@@ -42,35 +42,63 @@ const clientA = postgres({
   username: "postgres",
 });
 const lockClientAApplicationName = `protected_resource_lease_a_${randomUUID()}`;
-let markLockClientAClosed: (() => void) | undefined;
-const lockClientAClosed = new Promise<void>((resolve) => {
-  markLockClientAClosed = resolve;
+const openLockClientA = (onConnectionClosed: () => void) =>
+  postgres({
+    connection: { application_name: lockClientAApplicationName },
+    database: "postgres",
+    host: argument("--host"),
+    max: 1,
+    onclose: onConnectionClosed,
+    port,
+    username: "postgres",
+  });
+const lockClientBApplicationName = `protected_resource_lease_b_${randomUUID()}`;
+const openLockClientB = (onConnectionClosed: () => void) =>
+  postgres({
+    connection: { application_name: lockClientBApplicationName },
+    database: "postgres",
+    host: argument("--host"),
+    max: 1,
+    onclose: onConnectionClosed,
+    port,
+    username: "postgres",
+  });
+const openLockClientC = (onConnectionClosed: () => void) =>
+  postgres({
+    connection: { application_name: `protected_resource_lease_c_${randomUUID()}` },
+    database: "postgres",
+    host: argument("--host"),
+    max: 1,
+    onclose: onConnectionClosed,
+    port,
+    username: "postgres",
+  });
+const lockClientDApplicationName = `protected_resource_lease_d_${randomUUID()}`;
+const openLockClientD = (onConnectionClosed: () => void) =>
+  postgres({
+    connection: { application_name: lockClientDApplicationName },
+    database: "postgres",
+    host: argument("--host"),
+    max: 1,
+    onclose: onConnectionClosed,
+    port,
+    username: "postgres",
+  });
+const lockClientEApplicationName = `protected_resource_lease_e_${randomUUID()}`;
+let markLockClientEClosed: (() => void) | undefined;
+const lockClientEClosed = new Promise<void>((resolve) => {
+  markLockClientEClosed = resolve;
 });
-const lockClientA = postgres({
-  connection: { application_name: lockClientAApplicationName },
-  database: "postgres",
-  host: argument("--host"),
-  max: 1,
-  onclose: () => markLockClientAClosed?.(),
-  port,
-  username: "postgres",
-});
-const lockClientB = postgres({
-  connection: { application_name: `protected_resource_lease_b_${randomUUID()}` },
-  database: "postgres",
-  host: argument("--host"),
-  max: 1,
-  port,
-  username: "postgres",
-});
-const lockClientC = postgres({
-  connection: { application_name: `protected_resource_lease_c_${randomUUID()}` },
-  database: "postgres",
-  host: argument("--host"),
-  max: 1,
-  port,
-  username: "postgres",
-});
+const openLockClientE = () =>
+  postgres({
+    connection: { application_name: lockClientEApplicationName },
+    database: "postgres",
+    host: argument("--host"),
+    max: 1,
+    onclose: () => markLockClientEClosed?.(),
+    port,
+    username: "postgres",
+  });
 const clientB = postgres({
   database: "postgres",
   host: argument("--host"),
@@ -280,15 +308,23 @@ try {
   assert.ok(independentGeneration);
 
   const resourceLeaseA = createPostgresHostedOperatorResourceLease({
-    database: lockClientA,
+    openLockClient: openLockClientA,
     store: storeA,
   });
   const resourceLeaseB = createPostgresHostedOperatorResourceLease({
-    database: lockClientB,
+    openLockClient: openLockClientB,
     store: storeA,
   });
   const resourceLeaseC = createPostgresHostedOperatorResourceLease({
-    database: lockClientC,
+    openLockClient: openLockClientC,
+    store: storeA,
+  });
+  const resourceLeaseD = createPostgresHostedOperatorResourceLease({
+    openLockClient: openLockClientD,
+    store: storeA,
+  });
+  const resourceLeaseE = createPostgresHostedOperatorResourceLease({
+    openLockClient: openLockClientE,
     store: storeA,
   });
   const firstJournal = await storeA.read({ authority, target: first.target });
@@ -390,6 +426,73 @@ try {
   const releasedProbe = booleanReadbackSchema.parse(rawReleasedProbe);
   assert.equal(releasedProbe.acquired, true, "resource locks release after the operation callback");
   await clientB`select pg_advisory_unlock(hashtextextended(${authLockKey}, 0))`;
+
+  let markCallbackErrorEntered: (() => void) | undefined;
+  let resumeCallbackError: (() => void) | undefined;
+  const callbackErrorEntered = new Promise<void>((resolve) => {
+    markCallbackErrorEntered = resolve;
+  });
+  const callbackErrorContinue = new Promise<void>((resolve) => {
+    resumeCallbackError = resolve;
+  });
+  const callbackErrorOperation = resourceLeaseE(
+    { authority, operationRef: first.operationRef, plan: firstPlan, target: first.target },
+    async () => {
+      markCallbackErrorEntered?.();
+      await callbackErrorContinue;
+      throw new Error("fixture callback failed after connection loss");
+    },
+  );
+  const callbackErrorRejected = assert.rejects(
+    callbackErrorOperation,
+    /fixture callback failed after connection loss/u,
+  );
+  await callbackErrorEntered;
+  const [rawCallbackErrorSession] = await clientB`
+    select activity.pid
+    from pg_stat_activity as activity
+    join pg_locks as locks using (pid)
+    where activity.application_name = ${lockClientEApplicationName}
+      and locks.locktype = 'advisory'
+      and locks.granted
+    limit 1
+  `;
+  const callbackErrorSession = z
+    .strictObject({ pid: z.number().int().positive() })
+    .parse(rawCallbackErrorSession);
+  const [rawCallbackErrorTermination] = await clientB`
+    select pg_terminate_backend(${callbackErrorSession.pid}) as terminated
+  `;
+  assert.equal(terminationReadbackSchema.parse(rawCallbackErrorTermination).terminated, true);
+  await lockClientEClosed;
+  let markCallbackErrorReplacement: (() => void) | undefined;
+  const callbackErrorReplacementEntered = new Promise<void>((resolve) => {
+    markCallbackErrorReplacement = resolve;
+  });
+  let releaseCallbackErrorReplacement: (() => void) | undefined;
+  const callbackErrorReplacementRelease = new Promise<void>((resolve) => {
+    releaseCallbackErrorReplacement = resolve;
+  });
+  const callbackErrorReplacement = resourceLeaseD(
+    { authority, operationRef: second.operationRef, plan: secondPlan, target: second.target },
+    async () => {
+      markCallbackErrorReplacement?.();
+      await callbackErrorReplacementRelease;
+    },
+  );
+  await callbackErrorReplacementEntered;
+  resumeCallbackError?.();
+  await callbackErrorRejected;
+  const [rawCallbackErrorLockProbe] = await clientB`
+    select pg_try_advisory_lock(hashtextextended(${authLockKey}, 0)) as acquired
+  `;
+  assert.equal(
+    booleanReadbackSchema.parse(rawCallbackErrorLockProbe).acquired,
+    false,
+    "a callback error after connection loss cannot unlock the replacement lease",
+  );
+  releaseCallbackErrorReplacement?.();
+  await callbackErrorReplacement;
 
   const stale = await reserve("session-stale");
   const staleGeneration = await storeA.reserveFenceGeneration({
@@ -514,16 +617,160 @@ try {
   releaseLostSession?.();
   await assert.rejects(lostSessionOperation);
   assert.equal(effectContinued, false, "a lost lock session cannot continue an effect");
-  await lockClientAClosed;
+
+  let markLostDCallback: (() => void) | undefined;
+  let resumeLostDCallback: (() => void) | undefined;
+  const lostDCallbackEntered = new Promise<void>((resolve) => {
+    markLostDCallback = resolve;
+  });
+  const lostDCallbackContinue = new Promise<void>((resolve) => {
+    resumeLostDCallback = resolve;
+  });
+  const lostDOperation = resourceLeaseD(
+    { authority, operationRef: first.operationRef, plan: firstPlan, target: first.target },
+    async (assertFence) => {
+      markLostDCallback?.();
+      await lostDCallbackContinue;
+      await assertFence();
+    },
+  );
+  await lostDCallbackEntered;
+  const [rawLostDSession] = await clientB`
+    select activity.pid, activity.backend_start
+    from pg_stat_activity as activity
+    join pg_locks as locks using (pid)
+    where activity.application_name = ${lockClientDApplicationName}
+      and locks.locktype = 'advisory'
+      and locks.granted
+    limit 1
+  `;
+  const lostDSession = lockSessionSchema.parse(rawLostDSession);
+  const [rawLostDTermination] = await clientB`
+    select pg_terminate_backend(${lostDSession.pid}) as terminated
+  `;
+  assert.equal(terminationReadbackSchema.parse(rawLostDTermination).terminated, true);
+
+  let markReplacementEntered: (() => void) | undefined;
+  const replacementEntered = new Promise<void>((resolve) => {
+    markReplacementEntered = resolve;
+  });
+  let releaseReplacement: (() => void) | undefined;
+  const replacementRelease = new Promise<void>((resolve) => {
+    releaseReplacement = resolve;
+  });
+  let replacementEffectCompleted = false;
+  const replacementLease = resourceLeaseD(
+    { authority, operationRef: second.operationRef, plan: secondPlan, target: second.target },
+    async (assertFence) => {
+      await assertFence();
+      markReplacementEntered?.();
+      await replacementRelease;
+      replacementEffectCompleted = true;
+    },
+  );
+  await replacementEntered;
+  resumeLostDCallback?.();
+  await assert.rejects(lostDOperation);
+  const [rawReplacementLockProbe] = await clientB`
+    select pg_try_advisory_lock(hashtextextended(${authLockKey}, 0)) as acquired
+  `;
+  assert.equal(
+    booleanReadbackSchema.parse(rawReplacementLockProbe).acquired,
+    false,
+    "a lost held-lock check cannot release the replacement operation's session",
+  );
+  releaseReplacement?.();
+  await replacementLease;
+  assert.equal(replacementEffectCompleted, true);
+  const [rawReplacementReleasedProbe] = await clientB`
+    select pg_try_advisory_lock(hashtextextended(${authLockKey}, 0)) as acquired
+  `;
+  assert.equal(
+    booleanReadbackSchema.parse(rawReplacementReleasedProbe).acquired,
+    true,
+    "replacement lease releases its lock after stale cleanup finishes",
+  );
+  await clientB`select pg_advisory_unlock(hashtextextended(${authLockKey}, 0))`;
+
+  let markAcquireBlocker: (() => void) | undefined;
+  let releaseAcquireBlocker: (() => void) | undefined;
+  const acquireBlockerEntered = new Promise<void>((resolve) => {
+    markAcquireBlocker = resolve;
+  });
+  const acquireBlockerRelease = new Promise<void>((resolve) => {
+    releaseAcquireBlocker = resolve;
+  });
+  const acquisitionBlocker = resourceLeaseC(
+    { authority, operationRef: first.operationRef, plan: firstPlan, target: first.target },
+    async () => {
+      markAcquireBlocker?.();
+      await acquireBlockerRelease;
+    },
+  );
+  await acquireBlockerEntered;
+  const acquisitionWaiter = resourceLeaseB(
+    { authority, operationRef: second.operationRef, plan: secondPlan, target: second.target },
+    // oxlint-disable-next-line eslint/require-await -- A killed acquisition must not reach the effect callback.
+    async () => {
+      throw new Error("Terminated acquisition unexpectedly entered the callback.");
+    },
+  );
+  const acquisitionWaiterRejected = assert.rejects(acquisitionWaiter);
+  await waitForAdvisoryLockWaiter();
+  const [rawAcquisitionSession] = await clientB`
+    select activity.pid, activity.backend_start
+    from pg_stat_activity as activity
+    join pg_locks as locks using (pid)
+    where activity.application_name = ${lockClientBApplicationName}
+      and locks.locktype = 'advisory'
+      and not locks.granted
+    limit 1
+  `;
+  const acquisitionSession = lockSessionSchema.parse(rawAcquisitionSession);
+  const [rawAcquisitionTermination] = await clientB`
+    select pg_terminate_backend(${acquisitionSession.pid}) as terminated
+  `;
+  assert.equal(terminationReadbackSchema.parse(rawAcquisitionTermination).terminated, true);
+
+  let markAcquisitionReplacement: (() => void) | undefined;
+  const acquisitionReplacementEntered = new Promise<void>((resolve) => {
+    markAcquisitionReplacement = resolve;
+  });
+  let releaseAcquisitionReplacement: (() => void) | undefined;
+  const acquisitionReplacementRelease = new Promise<void>((resolve) => {
+    releaseAcquisitionReplacement = resolve;
+  });
+  const acquisitionReplacement = resourceLeaseB(
+    { authority, operationRef: first.operationRef, plan: firstPlan, target: first.target },
+    async (assertFence) => {
+      await assertFence();
+      markAcquisitionReplacement?.();
+      await acquisitionReplacementRelease;
+    },
+  );
+  await waitForAdvisoryLockWaiter();
+  releaseAcquireBlocker?.();
+  await acquisitionBlocker;
+  await acquisitionWaiterRejected;
+  await acquisitionReplacementEntered;
+  const [rawAcquisitionReplacementProbe] = await clientB`
+    select pg_try_advisory_lock(hashtextextended(${authLockKey}, 0)) as acquired
+  `;
+  assert.equal(
+    booleanReadbackSchema.parse(rawAcquisitionReplacementProbe).acquired,
+    false,
+    "failed acquisition cleanup cannot unlock a later lease on the reused pool",
+  );
+  releaseAcquisitionReplacement?.();
+  await acquisitionReplacement;
+  const [rawAcquisitionReleasedProbe] = await clientB`
+    select pg_try_advisory_lock(hashtextextended(${authLockKey}, 0)) as acquired
+  `;
+  assert.equal(booleanReadbackSchema.parse(rawAcquisitionReleasedProbe).acquired, true);
+  await clientB`select pg_advisory_unlock(hashtextextended(${authLockKey}, 0))`;
   console.log(
     "Protected access resource locking, ordering, independent overlap, stale authority, and lost-session fencing passed.",
   );
 } finally {
-  await Promise.all([
-    clientA.end(),
-    clientB.end(),
-    lockClientA.end({ timeout: 0 }),
-    lockClientB.end(),
-    lockClientC.end(),
-  ]);
+  await Promise.all([clientA.end(), clientB.end()]);
 }

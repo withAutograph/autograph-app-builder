@@ -17,11 +17,12 @@ interface AdvisoryLockParts {
   objectId: string;
 }
 const leaseAuthorityUnavailable = "Protected resource lease authority is unavailable.";
+const leaseSessionLost = "Protected resource lease session was lost.";
 
 const pgTimestamp = z
-  .union([z.date(), z.string().min(1)])
-  .transform((value) => (value instanceof Date ? value.getTime() : Date.parse(value)))
-  .refine(Number.isFinite);
+  .string()
+  .min(1)
+  .refine((value) => Number.isFinite(Date.parse(value)));
 const pgBackendIdentitySchema = z.strictObject({
   backend_pid: z.number().int().positive(),
   backend_start: pgTimestamp,
@@ -33,7 +34,74 @@ const advisoryLockPartsSchema = z
   })
   .transform(({ class_id, object_id }) => ({ classId: class_id, objectId: object_id }));
 const heldLockSchema = z.strictObject({ held: z.boolean() });
-const unlockResultSchema = z.strictObject({ unlocked: z.boolean() });
+const backendIdentitySql = `select pid as backend_pid, backend_start::text as backend_start
+  from pg_stat_activity
+  where pid = pg_backend_pid()`;
+const readBackendIdentity = (connection: postgres.ReservedSql) =>
+  connection.unsafe(backendIdentitySql);
+type BackendIdentity = z.infer<typeof pgBackendIdentitySchema>;
+class LeaseSessionUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LeaseSessionUnavailableError";
+  }
+}
+
+const assertSameBackend = async (
+  connection: postgres.ReservedSql,
+  backend: BackendIdentity,
+  connectionClosed: () => boolean,
+) => {
+  if (connectionClosed()) {
+    throw new LeaseSessionUnavailableError(leaseSessionLost);
+  }
+  try {
+    const [rawCurrent] = await readBackendIdentity(connection);
+    const current = pgBackendIdentitySchema.parse(rawCurrent);
+    if (
+      current.backend_pid === backend.backend_pid &&
+      current.backend_start === backend.backend_start
+    ) {
+      return;
+    }
+  } catch {
+    throw new LeaseSessionUnavailableError(leaseSessionLost);
+  }
+  throw new Error("Protected resource lease session was lost or replaced.");
+};
+
+const assertHeldLocks = async (
+  connection: postgres.ReservedSql,
+  backend: BackendIdentity,
+  lockParts: AdvisoryLockParts[],
+  connectionClosed: () => boolean,
+) => {
+  for (const lock of lockParts) {
+    if (connectionClosed()) {
+      throw new LeaseSessionUnavailableError(leaseSessionLost);
+    }
+    let rawHeld: unknown;
+    try {
+      [rawHeld] = await connection`
+        select exists(
+          select 1
+          from pg_locks
+          where pid = ${backend.backend_pid}
+            and locktype = 'advisory'
+            and granted
+            and classid::text = ${lock.classId}
+            and objid::text = ${lock.objectId}
+            and objsubid = 1
+        ) as held
+      `;
+    } catch {
+      throw new LeaseSessionUnavailableError(leaseSessionLost);
+    }
+    if (!heldLockSchema.parse(rawHeld).held) {
+      throw new Error("Protected resource lease lock was lost.");
+    }
+  }
+};
 
 const lockKey = (plan: HostedOperatorPlan) =>
   [...new Set([plan.authDatabase.database, plan.appDatabase.database])]
@@ -83,7 +151,12 @@ const readLeaseSnapshot = async (
  * never split a physical resource's lock.
  */
 export const createPostgresHostedOperatorResourceLease = (input: {
-  database: postgres.Sql;
+  /**
+   * Opens a new dedicated lock pool for each operation, separate from the journal store's pool.
+   * The lease closes this client after the operation so a stale reserved handler cannot be
+   * reused by a later operation after postgres.js observes a connection loss.
+   */
+  openLockClient: (onConnectionClosed: () => void) => postgres.Sql;
   store: HostedRuntimeJournalStore;
   now?: () => number;
 }) => {
@@ -92,25 +165,24 @@ export const createPostgresHostedOperatorResourceLease = (input: {
     leaseInput: ResourceLeaseInput,
     run: (assertFence: () => Promise<void>) => Promise<T>,
   ) => {
-    // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Reject stale journal authority before reserving a control-plane session.
-    const connection = await input.database.reserve();
-    let snapshot: Awaited<ReturnType<typeof readLeaseSnapshot>>;
+    let connectionClosed = false;
+    const database = input.openLockClient(() => {
+      connectionClosed = true;
+    });
     try {
-      snapshot = await readLeaseSnapshot(input.store, leaseInput, now);
-    } catch (error) {
-      connection.release();
-      throw error;
-    }
-    const keys = lockKey(leaseInput.plan);
-    const acquired: string[] = [];
-    const lockParts: AdvisoryLockParts[] = [];
-    let sessionLost = false;
-    let outcome: { kind: "success"; value: T } | { kind: "failure"; error: unknown };
-
-    try {
-      for (const key of keys) {
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Reserve the dedicated session before reading the separate journal pool.
+      const connection = await database.reserve();
+      let backend: BackendIdentity;
+      try {
+        const [rawBackend] = await readBackendIdentity(connection);
+        backend = pgBackendIdentitySchema.parse(rawBackend);
+      } catch {
+        throw new Error("Protected resource lease session is unavailable.");
+      }
+      const snapshot = await readLeaseSnapshot(input.store, leaseInput, now);
+      const lockParts: AdvisoryLockParts[] = [];
+      for (const key of lockKey(leaseInput.plan)) {
         await connection`select pg_advisory_lock(hashtextextended(${key}, 0))`;
-        acquired.push(key);
         const [rawParts] = await connection`
           select
             ((hashtextextended(${key}, 0) >> 32) & 4294967295)::text as class_id,
@@ -118,56 +190,9 @@ export const createPostgresHostedOperatorResourceLease = (input: {
         `;
         lockParts.push(advisoryLockPartsSchema.parse(rawParts));
       }
-      const [rawBackend] = await connection`
-        select pid as backend_pid, backend_start
-        from pg_stat_activity
-        where pid = pg_backend_pid()
-      `;
-      let backend: z.infer<typeof pgBackendIdentitySchema>;
-      try {
-        backend = pgBackendIdentitySchema.parse(rawBackend);
-      } catch {
-        throw new TypeError("Protected resource lease session is unavailable.");
-      }
-
       const assertFence = async () => {
-        let rawCurrentBackend: unknown;
-        try {
-          [rawCurrentBackend] = await connection`
-            select pid as backend_pid, backend_start
-            from pg_stat_activity
-            where pid = pg_backend_pid()
-          `;
-        } catch {
-          sessionLost = true;
-          throw new Error("Protected resource lease session was lost.");
-        }
-        const currentBackend = pgBackendIdentitySchema.parse(rawCurrentBackend);
-        if (
-          currentBackend.backend_pid !== backend.backend_pid ||
-          currentBackend.backend_start !== backend.backend_start
-        ) {
-          sessionLost = true;
-          throw new Error("Protected resource lease session was replaced.");
-        }
-        for (const lock of lockParts) {
-          const [rawHeld] = await connection`
-            select exists(
-              select 1
-              from pg_locks
-              where pid = ${backend.backend_pid}
-                and locktype = 'advisory'
-                and granted
-                and classid::text = ${lock.classId}
-                and objid::text = ${lock.objectId}
-                and objsubid = 1
-            ) as held
-          `;
-          if (!heldLockSchema.parse(rawHeld).held) {
-            throw new Error("Protected resource lease lock was lost.");
-          }
-        }
-
+        await assertSameBackend(connection, backend, () => connectionClosed);
+        await assertHeldLocks(connection, backend, lockParts, () => connectionClosed);
         const current = await readLeaseSnapshot(input.store, leaseInput, now);
         if (
           current.leaseId !== snapshot.leaseId ||
@@ -179,38 +204,11 @@ export const createPostgresHostedOperatorResourceLease = (input: {
       };
 
       await assertFence();
-      outcome = { kind: "success", value: await run(assertFence) };
-    } catch (error) {
-      outcome = { error, kind: "failure" };
+      return await run(assertFence);
+    } finally {
+      // Closing this operation-owned pool releases every advisory lock, including after an
+      // uncertain disconnect. No shared pool handler can be returned to a later lease.
+      await database.end({ timeout: 0 });
     }
-
-    let unlockFailed = false;
-    if (!sessionLost) {
-      for (const key of acquired.toReversed()) {
-        try {
-          const [rawResult] = await connection`
-            select pg_advisory_unlock(hashtextextended(${key}, 0)) as unlocked
-          `;
-          if (!unlockResultSchema.parse(rawResult).unlocked) {
-            unlockFailed = true;
-          }
-        } catch {
-          sessionLost = true;
-          unlockFailed = true;
-          break;
-        }
-      }
-    }
-    if (!sessionLost) {
-      connection.release();
-    }
-
-    if (outcome.kind === "failure") {
-      throw outcome.error;
-    }
-    if (unlockFailed) {
-      throw new Error("Protected resource lease could not be released cleanly.");
-    }
-    return outcome.value;
   };
 };
