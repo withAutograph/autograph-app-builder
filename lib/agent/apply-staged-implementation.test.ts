@@ -169,4 +169,23 @@ describe("apply tool staged repair integration", () => {
     expect(mocks.wrap).not.toHaveBeenCalled();
     expect(mocks.execute).not.toHaveBeenCalled();
   });
+  it("invalidates older pending approval when the same call becomes a read-only prerequisite", async () => {
+    const getSandbox = vi.fn().mockResolvedValue({});
+    const context = {
+      callId: "same-call-old-pending",
+      getSandbox,
+      session: { id: "session" },
+    } as never;
+    mocks.current = state("same-call-proposal");
+    expect(await approval(context)).toBe("user-approval");
+    mocks.current = { phase: "ui_accepted" };
+    expect(await approval(context)).toBe("not-applicable");
+    mocks.current = state("same-call-proposal");
+    expect(await applyAppCreation.execute({ implementationFiles: [page] }, context)).toMatchObject({
+      status: "build_approval_required",
+    });
+    expect(getSandbox).not.toHaveBeenCalled();
+    expect(mocks.wrap).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
 });

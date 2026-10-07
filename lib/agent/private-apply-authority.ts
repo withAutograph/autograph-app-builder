@@ -74,3 +74,14 @@ export const hasPendingPrivateApplyApproval = (
   const pending = authority.get().pending.find((entry) => entry.callId === callId);
   return pending !== undefined && sameScope(pending.scope, scope);
 };
+
+/** A read-only prerequisite decision invalidates any older pending decision for that call. */
+export const discardPendingPrivateApplyApproval = (callId: string): void => {
+  const current = authority.get();
+  if (current.pending.some((entry) => entry.callId === callId)) {
+    authority.update(() => ({
+      ...current,
+      pending: current.pending.filter((entry) => entry.callId !== callId),
+    }));
+  }
+};

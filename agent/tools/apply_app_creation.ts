@@ -3,6 +3,7 @@ import { stageImplementationFiles } from "@/lib/agent/staged-implementation";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
 import {
+  discardPendingPrivateApplyApproval,
   hasPendingPrivateApplyApproval,
   recordApprovedPrivateApply,
   requestPrivateApplyApproval,
@@ -36,6 +37,7 @@ export default defineTool({
       current.phase !== "apply_failed" &&
       current.phase !== "applied"
     ) {
+      discardPendingPrivateApplyApproval(ctx.callId);
       // Only the read-only prerequisite report can execute in this phase.
       return "not-applicable";
     }
