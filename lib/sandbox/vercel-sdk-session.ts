@@ -23,7 +23,8 @@ export const createVercelSdkSession = (
   current: () => VercelSdkSessionNative = () => native,
 ): BuilderSandboxSession => {
   const runCommand = (options: SandboxRunOptions) => ({
-    args: ["-lc", options.command],
+    // A login profile may change directories after the SDK applies cwd.
+    args: ["-c", options.command],
     cmd: "bash",
     cwd: resolvePath(options.workingDirectory ?? "."),
     env: options.env,
