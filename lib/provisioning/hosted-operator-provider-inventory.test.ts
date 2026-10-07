@@ -6,8 +6,8 @@ import type { OperatorInventoryConfiguration } from "./hosted-operator-provider-
 
 const publicJwk = {
   ...generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }),
-  kid: "public-key",
   alg: "EdDSA",
+  kid: "public-key",
   use: "sig",
 };
 
