@@ -10,6 +10,7 @@ import {
 import type {
   VercelIntegrationConfig,
   VercelInstallationBinding,
+  VercelTokenKeyringConfig,
 } from "../integrations/vercel-installation";
 import type { BuilderProvisionAuthority } from "./journal";
 import {
@@ -66,7 +67,7 @@ export const encryptHostedRuntimeFiles = (input: {
   authority: BuilderProvisionAuthority;
   target: HostedRuntimeTarget;
   files: PrivateRuntimeFiles;
-  config: VercelIntegrationConfig;
+  config: VercelTokenKeyringConfig;
 }) => ({
   ...encryptVercelToken({
     associatedData: associatedData(input.authority, input.target),
@@ -80,7 +81,7 @@ export const decryptHostedRuntimeFiles = (input: {
   authority: BuilderProvisionAuthority;
   target: HostedRuntimeTarget;
   record: HostedRuntimeJournalRecord;
-  config: VercelIntegrationConfig;
+  config: VercelTokenKeyringConfig;
 }): PrivateRuntimeFiles | undefined => {
   const state = input.record.privateState;
   if (!state) {

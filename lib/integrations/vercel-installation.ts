@@ -38,6 +38,22 @@ const previousTokenKeysSchema = z.array(previousTokenKeySchema).superRefine((key
   }
 });
 
+const tokenKeyringSchema = z
+  .strictObject({
+    previousTokenKeys: previousTokenKeysSchema.optional(),
+    tokenKey: z.instanceof(Buffer).refine((value) => value.length === 32),
+    tokenKeyVersion: tokenKeyVersionSchema,
+  })
+  .superRefine((config, context) => {
+    if (config.previousTokenKeys?.some((entry) => entry.version === config.tokenKeyVersion)) {
+      context.addIssue({
+        code: "custom",
+        message: "The active token key version cannot also be a previous key.",
+        path: ["previousTokenKeys"],
+      });
+    }
+  });
+
 const configSchema = z
   .object({
     clientId: z.string().min(1).max(512),
@@ -61,11 +77,12 @@ const configSchema = z
   });
 
 export type VercelIntegrationConfig = z.infer<typeof configSchema>;
+/** Encryption-only key material for reading previously stored owner tokens. */
+export type VercelTokenKeyringConfig = z.infer<typeof tokenKeyringSchema>;
 
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function readVercelIntegrationEnvironment(
+const readTokenKeyringCandidate = (
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
-): VercelIntegrationConfig {
+) => {
   const tokenKey = Buffer.from(environment.VERCEL_INTEGRATION_TOKEN_KEY ?? "", "base64");
   let previousTokenKeys: unknown;
   const previousTokenKeysJson = environment.VERCEL_INTEGRATION_TOKEN_PREVIOUS_KEYS;
@@ -92,17 +109,30 @@ export function readVercelIntegrationEnvironment(
     }));
   }
   const candidate = {
+    tokenKey,
+    tokenKeyVersion: environment.VERCEL_INTEGRATION_TOKEN_KEY_VERSION,
+  };
+  return previousTokenKeys === undefined ? candidate : { ...candidate, previousTokenKeys };
+};
+
+/** Reads only token-encryption keys; suitable for services that decrypt owner grants but do not run OAuth. */
+export const readVercelTokenKeyringEnvironment = (
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+): VercelTokenKeyringConfig => tokenKeyringSchema.parse(readTokenKeyringCandidate(environment));
+
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+export function readVercelIntegrationEnvironment(
+  environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
+): VercelIntegrationConfig {
+  const candidate = {
     clientId: environment.VERCEL_INTEGRATION_CLIENT_ID,
     clientSecret: environment.VERCEL_INTEGRATION_CLIENT_SECRET,
     issuer: environment.BETTER_AUTH_URL,
     resource: environment.MCP_RESOURCE_URL,
     slug: environment.VERCEL_INTEGRATION_SLUG,
-    tokenKey,
-    tokenKeyVersion: environment.VERCEL_INTEGRATION_TOKEN_KEY_VERSION,
+    ...readTokenKeyringCandidate(environment),
   };
-  return configSchema.parse(
-    previousTokenKeys === undefined ? candidate : { ...candidate, previousTokenKeys },
-  );
+  return configSchema.parse(candidate);
 }
 
 export interface VercelAuthorizationStateStore {
@@ -208,10 +238,14 @@ export function decryptVersionedVercelToken(input: {
   tokenIv: string;
   tokenTag: string;
   keyVersion: string;
-  config: VercelIntegrationConfig;
+  config: VercelTokenKeyringConfig | VercelIntegrationConfig;
   associatedData: string;
 }) {
-  const config = configSchema.parse(input.config);
+  const config = tokenKeyringSchema.parse({
+    previousTokenKeys: input.config.previousTokenKeys,
+    tokenKey: input.config.tokenKey,
+    tokenKeyVersion: input.config.tokenKeyVersion,
+  });
   const keyVersion = tokenKeyVersionSchema.safeParse(input.keyVersion);
   if (!keyVersion.success) {
     throw new VercelTokenDecryptionKeyError();

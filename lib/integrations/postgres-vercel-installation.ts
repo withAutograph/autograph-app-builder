@@ -14,6 +14,7 @@ import type {
   VercelAuthorizationStateStore,
   VercelInstallationBinding,
   VercelIntegrationConfig,
+  VercelTokenKeyringConfig,
   VercelInstallationStore,
 } from "./vercel-installation";
 
@@ -33,7 +34,7 @@ function tenant(table: typeof hostedVercelInstallations, authorityInput: unknown
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function readActiveVercelInstallationToken(input: {
   database: Database;
-  config: VercelIntegrationConfig;
+  config: VercelTokenKeyringConfig;
   authority: unknown;
   installationId: string;
 }) {
@@ -86,6 +87,28 @@ export async function readActiveVercelInstallationToken(input: {
     token,
   };
 }
+
+/** Lists owner-scoped bindings without requiring OAuth client credentials or token keys. */
+export const readVercelInstallationBindings = async (input: {
+  database: Database;
+  authority: unknown;
+}): Promise<VercelInstallationBinding[]> => {
+  const rows = await input.database
+    .select({
+      active: hostedVercelInstallations.active,
+      displayName: hostedVercelInstallations.displayName,
+      installationId: hostedVercelInstallations.installationId,
+      plan: hostedVercelInstallations.plan,
+      scopeId: hostedVercelInstallations.scopeId,
+      scopeType: hostedVercelInstallations.scopeType,
+      slug: hostedVercelInstallations.slug,
+      updatedAt: hostedVercelInstallations.updatedAt,
+    })
+    .from(hostedVercelInstallations)
+    .where(tenant(hostedVercelInstallations, input.authority))
+    .orderBy(asc(hostedVercelInstallations.displayName));
+  return rows as VercelInstallationBinding[];
+};
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPostgresVercelAuthorizationStateStore(
@@ -228,21 +251,10 @@ export function createPostgresVercelInstallationStore(input: {
       return rows.length;
     },
     async list(authority) {
-      const rows = await input.database
-        .select({
-          active: hostedVercelInstallations.active,
-          displayName: hostedVercelInstallations.displayName,
-          installationId: hostedVercelInstallations.installationId,
-          plan: hostedVercelInstallations.plan,
-          scopeId: hostedVercelInstallations.scopeId,
-          scopeType: hostedVercelInstallations.scopeType,
-          slug: hostedVercelInstallations.slug,
-          updatedAt: hostedVercelInstallations.updatedAt,
-        })
-        .from(hostedVercelInstallations)
-        .where(tenant(hostedVercelInstallations, authority))
-        .orderBy(asc(hostedVercelInstallations.displayName));
-      return rows as VercelInstallationBinding[];
+      return await readVercelInstallationBindings({
+        authority,
+        database: input.database,
+      });
     },
   };
 }
