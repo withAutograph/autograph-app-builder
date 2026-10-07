@@ -146,17 +146,87 @@ export const operatorReceiptSchema = z.strictObject({
   resourceVersion: id,
 });
 export type OperatorReceipt = z.infer<typeof operatorReceiptSchema>;
-export const hostedOperatorRecordSchema = z.strictObject({
-  approvalId: id.optional(),
-  /** Shared across Auth and kernel rows; allocated once by the existing journal CAS. */
-  fenceGeneration: z.number().int().positive().optional(),
-  mode: z.literal("protected-operator-v1"),
+const workerReceiptSchema = z
+  .strictObject({
+    readbackSha256: digest.optional(),
+    state: z.enum(["applied", "no_change", "unknown"]),
+  })
+  .superRefine((receipt, context) => {
+    if (receipt.state === "unknown" && receipt.readbackSha256 !== undefined) {
+      context.addIssue({ code: "custom", message: "Unknown worker readback cannot include facts" });
+    }
+    if (receipt.state !== "unknown" && receipt.readbackSha256 === undefined) {
+      context.addIssue({ code: "custom", message: "Known worker readback requires a digest" });
+    }
+  });
+const positiveSequence = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
+export const workerEffectCheckpointSchema = z.strictObject({
+  attemptId: z.uuid(),
+  contextDigest: digest,
+  effectId: id,
+  fenceGeneration: positiveSequence,
   operationRef: z.uuid(),
-  pendingEffectId: id.optional(),
-  plan: hostedOperatorPlanSchema,
-  planDigest: digest,
-  receipts: z.array(operatorReceiptSchema),
+  parentEffectId: id,
+  receipt: workerReceiptSchema,
+  resourceId: id,
+  sequence: positiveSequence,
+  tenantId: id.optional(),
 });
+export type WorkerEffectCheckpoint = z.infer<typeof workerEffectCheckpointSchema>;
+export const workerContextBindingSchema = z.strictObject({ contextDigest: digest });
+export type WorkerContextBinding = z.infer<typeof workerContextBindingSchema>;
+export const workerEffectCheckpointFrameSchema = z.strictObject({
+  contextDigest: digest,
+  effectId: id,
+  fenceGeneration: positiveSequence,
+  operationId: z.uuid(),
+  receipt: workerReceiptSchema,
+  resourceId: id,
+  sequence: positiveSequence,
+  tenantId: id.nullable().optional(),
+});
+export type WorkerEffectCheckpointFrame = z.infer<typeof workerEffectCheckpointFrameSchema>;
+export const hostedOperatorRecordSchema = z
+  .strictObject({
+    approvalId: id.optional(),
+    /** Shared across Auth and kernel rows; allocated once by the existing journal CAS. */
+    fenceGeneration: z.number().int().positive().optional(),
+    mode: z.literal("protected-operator-v1"),
+    operationRef: z.uuid(),
+    pendingEffectAttempt: z
+      .strictObject({ contextDigest: digest.optional(), id: z.uuid() })
+      .optional(),
+    pendingEffectId: id.optional(),
+    plan: hostedOperatorPlanSchema,
+    planDigest: digest,
+    receipts: z.array(operatorReceiptSchema),
+    workerCheckpoints: z.array(workerEffectCheckpointSchema).optional(),
+  })
+  .superRefine((operator, context) => {
+    const resources = new Set([
+      operator.plan.appDatabase.resourceId,
+      operator.plan.authDatabase.resourceId,
+    ]);
+    const tenants = new Set(operator.plan.access.map((target) => target.organizationId));
+    const effects = new Set(operator.plan.effects.map((effect) => effect.id));
+    for (const [index, checkpoint] of (operator.workerCheckpoints ?? []).entries()) {
+      const invalidIdentity =
+        checkpoint.operationRef !== operator.operationRef ||
+        operator.fenceGeneration === undefined ||
+        checkpoint.fenceGeneration !== operator.fenceGeneration;
+      const outsidePlan =
+        !resources.has(checkpoint.resourceId) ||
+        !effects.has(checkpoint.parentEffectId) ||
+        (checkpoint.tenantId !== undefined && !tenants.has(checkpoint.tenantId));
+      if (invalidIdentity || outsidePlan) {
+        context.addIssue({
+          code: "custom",
+          message: "Worker checkpoint is outside the frozen operator plan",
+          path: ["workerCheckpoints", index],
+        });
+      }
+    }
+  });
 export const operatorPlanDigest = (input: HostedOperatorPlan) =>
   createHash("sha256")
     .update(JSON.stringify(hostedOperatorPlanSchema.parse(input)))

@@ -12,6 +12,7 @@ import { createProtectedHostedOperatorHandler } from "./hosted-operator-service"
 import type { ProtectedHostedOperatorDependencies } from "./hosted-operator-service";
 import {
   HostedOperatorError,
+  hostedOperatorRecordSchema,
   hostedOperatorPlanSchema,
   operatorPlanDigest,
   restrictedOperatorEnvironment,
@@ -395,6 +396,160 @@ describe("protected hosted operator boundary", () => {
     expect(JSON.stringify(binding)).not.toContain("state.json");
     await f.client.request(request);
     expect(f.deps.executeEffect).toHaveBeenCalledTimes(4);
+  });
+  it("binds nested worker checkpoints to the active parent effect and acknowledges only after CAS", async () => {
+    const f = fixture();
+    const request = await prepared(f);
+    f.approve();
+    const digest = "c".repeat(64);
+    f.deps.executeEffect = vi.fn<ProtectedHostedOperatorDependencies["executeEffect"]>(
+      async (input) => {
+        await input.assertCurrent();
+        if (input.effect.id === "resources") {
+          const recordCheckpoint = await input.bindWorkerContext({ contextDigest: digest });
+          const frame = {
+            contextDigest: digest,
+            effectId: "schema-install",
+            fenceGeneration: input.fenceGeneration,
+            operationId: input.operationRef,
+            receipt: { readbackSha256: "d".repeat(64), state: "applied" as const },
+            resourceId: plan.appDatabase.resourceId,
+            sequence: 1,
+            tenantId: "synthetic-org",
+          };
+          await recordCheckpoint(frame);
+          const stored = f.row?.record.operator?.workerCheckpoints?.[0];
+          expect(stored).toMatchObject({
+            attemptId: input.workerAttemptId,
+            contextDigest: digest,
+            effectId: "schema-install",
+            fenceGeneration: input.fenceGeneration,
+            operationRef: input.operationRef,
+            parentEffectId: input.effect.id,
+            receipt: frame.receipt,
+            resourceId: plan.appDatabase.resourceId,
+            sequence: 1,
+            tenantId: "synthetic-org",
+          });
+          await recordCheckpoint(frame);
+          expect(f.row?.record.operator?.workerCheckpoints).toHaveLength(1);
+          await expect(
+            recordCheckpoint({ ...frame, resourceId: "unplanned-resource" }),
+          ).rejects.toThrow("resource_mismatch");
+          await expect(
+            recordCheckpoint({ ...frame, tenantId: "unplanned-tenant" }),
+          ).rejects.toThrow("resource_mismatch");
+          await expect(recordCheckpoint({ ...frame, sequence: 3 })).rejects.toThrow(
+            "reconciliation_required",
+          );
+          await expect(
+            recordCheckpoint({
+              ...frame,
+              receipt: { readbackSha256: "e".repeat(64), state: "applied" },
+            }),
+          ).rejects.toThrow("reconciliation_required");
+          await expect(
+            recordCheckpoint({ ...frame, contextDigest: "f".repeat(64) }),
+          ).rejects.toThrow("resource_mismatch");
+          await expect(input.bindWorkerContext({ contextDigest: "f".repeat(64) })).rejects.toThrow(
+            "reconciliation_required",
+          );
+        }
+        return {
+          effectId: input.effect.id,
+          fenceGeneration: input.fenceGeneration,
+          observedAt: new Date().toISOString(),
+          resourceVersion: "worker-checkpoint-fixture",
+        };
+      },
+    );
+
+    const result = await f.client.request(request);
+    expect(result.status).toBe("prepared");
+    expect(result).not.toHaveProperty("workerCheckpoints");
+    expect(f.row?.record.operator?.pendingEffectId).toBeUndefined();
+    expect(f.row?.record.operator?.pendingEffectAttempt).toBeUndefined();
+    expect(f.row?.record.operator?.workerCheckpoints).toHaveLength(1);
+  });
+  it("persists unknown worker readback and requires parent reconciliation before a fresh attempt", async () => {
+    const f = fixture();
+    const request = await prepared(f);
+    f.approve();
+    const digest = "a".repeat(64);
+    let unknownObserved = false;
+    let firstAttemptId = "";
+    f.deps.executeEffect = vi.fn<ProtectedHostedOperatorDependencies["executeEffect"]>(
+      async (input) => {
+        firstAttemptId = input.workerAttemptId;
+        const recordCheckpoint = await input.bindWorkerContext({ contextDigest: digest });
+        await recordCheckpoint({
+          contextDigest: digest,
+          effectId: "schema-install",
+          fenceGeneration: input.fenceGeneration,
+          operationId: input.operationRef,
+          receipt: { state: "unknown" },
+          resourceId: plan.appDatabase.resourceId,
+          sequence: 1,
+        });
+        const persistedUnknown = hostedOperatorRecordSchema.parse(f.row?.record.operator)
+          .workerCheckpoints?.[0];
+        expect(persistedUnknown?.receipt.state).toBe("unknown");
+        throw new HostedOperatorError("reconciliation_required");
+      },
+    );
+    const blockedAfterUnknown = await f.client.request(request);
+    expect(blockedAfterUnknown.code).toBe("reconciliation_required");
+    expect(f.row?.record.operator?.pendingEffectAttempt?.id).toBe(firstAttemptId);
+
+    f.deps.reconcile = vi.fn<ProtectedHostedOperatorDependencies["reconcile"]>(async (input) => {
+      if (input.workerCheckpoints.some((checkpoint) => checkpoint.receipt.state === "unknown")) {
+        unknownObserved = true;
+        return { status: "unknown" as const };
+      }
+      return { status: "absent" as const };
+    });
+    const blockedByReconciliation = await f.client.request(request);
+    expect(blockedByReconciliation.code).toBe("reconciliation_required");
+    expect(unknownObserved).toBe(true);
+    expect(f.deps.executeEffect).toHaveBeenCalledTimes(1);
+
+    let retryAttemptId = "";
+    f.deps.reconcile = vi.fn(async () => ({ status: "absent" as const }));
+    f.deps.executeEffect = vi.fn<ProtectedHostedOperatorDependencies["executeEffect"]>(
+      async (input) => {
+        if (input.effect.id === "resources") {
+          retryAttemptId = input.workerAttemptId;
+          const retryDigest = "b".repeat(64);
+          const recordCheckpoint = await input.bindWorkerContext({ contextDigest: retryDigest });
+          await recordCheckpoint({
+            contextDigest: retryDigest,
+            effectId: "schema-install",
+            fenceGeneration: input.fenceGeneration,
+            operationId: input.operationRef,
+            receipt: { readbackSha256: "d".repeat(64), state: "applied" },
+            resourceId: plan.appDatabase.resourceId,
+            sequence: 1,
+          });
+        }
+        return {
+          effectId: input.effect.id,
+          fenceGeneration: input.fenceGeneration,
+          observedAt: new Date().toISOString(),
+          resourceVersion: "reconciled-worker-fixture",
+        };
+      },
+    );
+    expect((await f.client.request(request)).status).toBe("prepared");
+    expect(retryAttemptId).not.toBe(firstAttemptId);
+    expect(
+      f.row?.record.operator?.workerCheckpoints?.map((checkpoint) => [
+        checkpoint.attemptId,
+        checkpoint.receipt.state,
+      ]),
+    ).toEqual([
+      [firstAttemptId, "unknown"],
+      [retryAttemptId, "applied"],
+    ]);
   });
   it("serializes concurrent continuations of the same approved operation", async () => {
     const f = fixture();

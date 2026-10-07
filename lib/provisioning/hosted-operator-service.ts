@@ -24,6 +24,9 @@ import {
   sameOperatorSelection,
   hostedOperatorRecordSchema,
   operatorOwnerContextSchema,
+  workerContextBindingSchema,
+  workerEffectCheckpointFrameSchema,
+  workerEffectCheckpointSchema,
 } from "./hosted-operator-contract";
 import type {
   HostedOperatorPlan,
@@ -32,6 +35,9 @@ import type {
   OperatorReceipt,
   OperatorSelection,
   OperatorOwnerContext,
+  WorkerContextBinding,
+  WorkerEffectCheckpoint,
+  WorkerEffectCheckpointFrame,
 } from "./hosted-operator-contract";
 
 export interface HostedOperatorContext {
@@ -42,14 +48,20 @@ export interface HostedOperatorContext {
 type Context = HostedOperatorContext;
 type PrivateState = NonNullable<HostedRuntimeJournalRecord["privateState"]>;
 type Effect = HostedOperatorPlan["effects"][number];
-type EffectContext = Context & {
+export type HostedOperatorEffectContext = Context & {
   effect: Effect;
   fenceGeneration: number;
   operationRef: string;
   plan: HostedOperatorPlan;
   privateState?: PrivateState;
+  workerCheckpoints: WorkerEffectCheckpoint[];
   assertCurrent: () => Promise<void>;
   checkpoint: (state: PrivateState) => Promise<void>;
+};
+export type RecordWorkerCheckpoint = (frame: WorkerEffectCheckpointFrame) => Promise<void>;
+export type HostedOperatorWorkerEffectContext = HostedOperatorEffectContext & {
+  workerAttemptId: string;
+  bindWorkerContext: (binding: WorkerContextBinding) => Promise<RecordWorkerCheckpoint>;
 };
 export interface ProtectedHostedOperatorDependencies {
   store: HostedRuntimeJournalStore;
@@ -85,10 +97,10 @@ export interface ProtectedHostedOperatorDependencies {
   ) => Promise<T>;
   /** Inspect uncertain effects on the same frozen identities before retry. Unknown must never become absent. */
   reconcile: (
-    input: EffectContext,
+    input: HostedOperatorEffectContext,
   ) => Promise<{ status: "absent" | "unknown" } | { status: "applied"; receipt: OperatorReceipt }>;
   /** Pinned trusted installer + verified declarative artifact only. Guard immediately before every effect; checkpoint credentials before allocation. */
-  executeEffect: (input: EffectContext) => Promise<OperatorReceipt>;
+  executeEffect: (input: HostedOperatorWorkerEffectContext) => Promise<OperatorReceipt>;
   /** Independently read installed identities/release/provider bindings, with no mutation. */
   verify: (
     input: Context & { plan: HostedOperatorPlan; privateState?: PrivateState },
@@ -181,6 +193,7 @@ const handlePlanOperation = async (
       if (
         record.leaseId !== undefined ||
         record.operator.pendingEffectId !== undefined ||
+        record.operator.pendingEffectAttempt !== undefined ||
         (record.operator.receipts.length > 0 && !["prepared", "cleaned"].includes(record.status))
       ) {
         throw new HostedOperatorError("operation_in_progress");
@@ -234,7 +247,8 @@ const handleBindingsOperation = async (input: {
     current.record.status !== "prepared" ||
     current.record.step !== "bound" ||
     operator.approvalId === undefined ||
-    operator.pendingEffectId !== undefined
+    operator.pendingEffectId !== undefined ||
+    operator.pendingEffectAttempt !== undefined
   ) {
     throw new HostedOperatorError("operation_in_progress");
   }
@@ -479,7 +493,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               ) {
                 continue;
               }
-              const effectInput: EffectContext = {
+              const effectInput: HostedOperatorEffectContext = {
                 ...context,
                 assertCurrent,
                 checkpoint: async (privateState) => {
@@ -491,6 +505,9 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 operationRef,
                 plan,
                 privateState: record.privateState,
+                workerCheckpoints: (requireOperator(record).workerCheckpoints ?? []).filter(
+                  (checkpoint) => checkpoint.parentEffectId === effect.id,
+                ),
               };
               // Always inspect before first execution as well as uncertain retry. Provider timeouts cannot create new identities.
               const observed = await deps.reconcile(effectInput);
@@ -501,18 +518,135 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               if (observed.status === "applied") {
                 receipt = observed.receipt;
               } else {
+                const workerAttemptId = randomUUID();
                 await assertCurrent();
                 record = (
                   await ownedUpdate((value) => ({
                     ...value,
-                    operator: { ...requireOperator(value), pendingEffectId: effect.id },
+                    operator: {
+                      ...requireOperator(value),
+                      pendingEffectAttempt: { id: workerAttemptId },
+                      pendingEffectId: effect.id,
+                    },
                     status: plan.action === "prepare" ? "pending" : "cleaning",
                   }))
                 ).record;
-                receipt = await deps.executeEffect({
+                const executeInput: HostedOperatorWorkerEffectContext = {
                   ...effectInput,
+                  bindWorkerContext: async (bindingInput) => {
+                    const binding = workerContextBindingSchema.parse(bindingInput);
+                    await assertCurrent();
+                    record = (
+                      await ownedUpdate((value) => {
+                        const currentOperator = requireOperator(value);
+                        const pendingAttempt = currentOperator.pendingEffectAttempt;
+                        if (
+                          currentOperator.fenceGeneration !== fenceGeneration ||
+                          currentOperator.pendingEffectId !== effect.id ||
+                          pendingAttempt?.id !== workerAttemptId ||
+                          (pendingAttempt.contextDigest !== undefined &&
+                            pendingAttempt.contextDigest !== binding.contextDigest)
+                        ) {
+                          throw new HostedOperatorError("reconciliation_required");
+                        }
+                        return {
+                          ...value,
+                          operator: {
+                            ...currentOperator,
+                            pendingEffectAttempt: {
+                              contextDigest: binding.contextDigest,
+                              id: workerAttemptId,
+                            },
+                          },
+                        };
+                      })
+                    ).record;
+                    return async (frameInput) => {
+                      const frame = workerEffectCheckpointFrameSchema.parse(frameInput);
+                      if (
+                        frame.operationId !== operationRef ||
+                        frame.fenceGeneration !== fenceGeneration ||
+                        frame.contextDigest !== binding.contextDigest
+                      ) {
+                        throw new HostedOperatorError("resource_mismatch");
+                      }
+                      const checkpoint = workerEffectCheckpointSchema.parse({
+                        attemptId: workerAttemptId,
+                        contextDigest: frame.contextDigest,
+                        effectId: frame.effectId,
+                        fenceGeneration,
+                        operationRef,
+                        parentEffectId: effect.id,
+                        receipt: frame.receipt,
+                        resourceId: frame.resourceId,
+                        sequence: frame.sequence,
+                        tenantId: frame.tenantId ?? undefined,
+                      });
+                      const resourceIds = new Set([
+                        plan.appDatabase.resourceId,
+                        plan.authDatabase.resourceId,
+                      ]);
+                      const tenantIds = new Set(plan.access.map((target) => target.organizationId));
+                      if (
+                        !resourceIds.has(checkpoint.resourceId) ||
+                        (checkpoint.tenantId !== undefined && !tenantIds.has(checkpoint.tenantId))
+                      ) {
+                        throw new HostedOperatorError("resource_mismatch");
+                      }
+                      await assertCurrent();
+                      record = (
+                        await ownedUpdate((value) => {
+                          const currentOperator = requireOperator(value);
+                          const pendingAttempt = currentOperator.pendingEffectAttempt;
+                          if (
+                            currentOperator.fenceGeneration !== fenceGeneration ||
+                            currentOperator.pendingEffectId !== effect.id ||
+                            pendingAttempt?.id !== workerAttemptId ||
+                            pendingAttempt.contextDigest !== binding.contextDigest
+                          ) {
+                            throw new HostedOperatorError("reconciliation_required");
+                          }
+                          const checkpoints = currentOperator.workerCheckpoints ?? [];
+                          const previous = checkpoints.find(
+                            (entry) =>
+                              entry.attemptId === workerAttemptId &&
+                              entry.parentEffectId === effect.id &&
+                              entry.sequence === checkpoint.sequence,
+                          );
+                          if (previous !== undefined) {
+                            if (JSON.stringify(previous) !== JSON.stringify(checkpoint)) {
+                              throw new HostedOperatorError("reconciliation_required");
+                            }
+                            return value;
+                          }
+                          let lastSequence = 0;
+                          for (const entry of checkpoints) {
+                            if (
+                              entry.attemptId === workerAttemptId &&
+                              entry.parentEffectId === effect.id
+                            ) {
+                              lastSequence = Math.max(lastSequence, entry.sequence);
+                            }
+                          }
+                          const expectedSequence = lastSequence + 1;
+                          if (checkpoint.sequence !== expectedSequence) {
+                            throw new HostedOperatorError("reconciliation_required");
+                          }
+                          return {
+                            ...value,
+                            operator: {
+                              ...currentOperator,
+                              workerCheckpoints: [...checkpoints, checkpoint],
+                            },
+                          };
+                        })
+                      ).record;
+                    };
+                  },
                   privateState: record.privateState,
-                });
+                  workerAttemptId,
+                };
+                receipt = await deps.executeEffect(executeInput);
               }
               receipt = operatorReceiptSchema.parse(receipt);
               if (
@@ -532,6 +666,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                     receipts: [...requireOperator(value).receipts, receipt],
                   };
                   delete next.pendingEffectId;
+                  delete next.pendingEffectAttempt;
                   return { ...value, operator: next };
                 })
               ).record;
