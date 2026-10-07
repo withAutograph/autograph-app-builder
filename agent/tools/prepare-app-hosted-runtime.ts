@@ -25,12 +25,16 @@ export default defineTool({
     "After approval of the concrete protected operator plan, prepare exactly its named Preview resources/access. Pass the plan and operation reference returned by plan-app-hosted-runtime. The protected service independently verifies the durable approval and current owner authority, resumes the same journal and reports actual effects. No installer credential or repository script is sent to an app Sandbox. This does not deploy or activate Production.",
   async execute(input, ctx) {
     try {
+      const operator = await hostedOperatorClientForSession(
+        ctx.session.auth,
+        ctx.session.id,
+      );
       const selection = {
         appId: input.appId,
         branch: input.branch,
         environment: input.environment,
         projectId: input.projectId,
-        sessionId: ctx.session.id,
+        sessionId: operator.sessionId ?? ctx.session.id,
       };
       if (
         input.plan.action !== "prepare" ||
@@ -39,7 +43,7 @@ export default defineTool({
       ) {
         throw new HostedOperatorError("resource_mismatch");
       }
-      const result = await hostedOperatorClientForSession(ctx.session.auth).request(
+      const result = await operator.request(
         {
           action: "execute",
           callId: ctx.callId,
@@ -50,7 +54,7 @@ export default defineTool({
             branch: input.branch,
             environment: input.environment,
             projectId: input.projectId,
-            sessionId: ctx.session.id,
+            sessionId: operator.sessionId ?? ctx.session.id,
           },
         },
         ctx.abortSignal,
@@ -66,7 +70,7 @@ export default defineTool({
             branch: input.branch,
             operationRef: result.operationRef,
             projectId: input.projectId,
-            sessionId: ctx.session.id,
+            sessionId: operator.sessionId ?? ctx.session.id,
           },
         }));
       }
@@ -75,7 +79,10 @@ export default defineTool({
       return {
         appId: input.appId,
         authenticatedBehavior: "unassessed" as const,
-        code: error instanceof HostedOperatorError ? error.code : "operator_unavailable",
+        code:
+          error instanceof HostedOperatorError
+            ? error.code
+            : "operator_unavailable",
         status: "blocked" as const,
       };
     }
