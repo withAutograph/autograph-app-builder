@@ -114,7 +114,10 @@ export const hostedOperatorPlanSchema = z
   })
   .superRefine((plan, ctx) => {
     if ((plan.bootstrap === undefined) !== (plan.resourcesInstaller === undefined)) {
-      ctx.addIssue({ code: "custom", message: "Resource bootstrap requires its pinned installer." });
+      ctx.addIssue({
+        code: "custom",
+        message: "Resource bootstrap requires its pinned installer.",
+      });
     }
     if (plan.bootstrap) {
       const { bootstrap } = plan;
@@ -134,13 +137,21 @@ export const hostedOperatorPlanSchema = z
           ["postgres", "neondb", bootstrap.maintenanceDatabase].includes(database.database),
         ),
         plan.action === "prepare" && !orderedResources,
-        plan.effects.some((effect) => effect.kind !== "resources" && effect.resourceId !== undefined),
+        plan.effects.some(
+          (effect) => effect.kind !== "resources" && effect.resourceId !== undefined,
+        ),
       ].some(Boolean);
       if (invalid) {
-        ctx.addIssue({ code: "custom", message: "Bootstrap effects must bind distinct Auth and app resources and roles." });
+        ctx.addIssue({
+          code: "custom",
+          message: "Bootstrap effects must bind distinct Auth and app resources and roles.",
+        });
       }
     } else if (plan.effects.some((effect) => effect.resourceId !== undefined)) {
-      ctx.addIssue({ code: "custom", message: "Resource effect bindings require the bootstrap plan." });
+      ctx.addIssue({
+        code: "custom",
+        message: "Resource effect bindings require the bootstrap plan.",
+      });
     }
     if (
       new Set(plan.effects.map((effect) => effect.id)).size !== plan.effects.length ||

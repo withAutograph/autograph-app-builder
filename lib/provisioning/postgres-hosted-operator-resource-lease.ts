@@ -106,12 +106,12 @@ const assertHeldLocks = async (
 const lockKey = (plan: HostedOperatorPlan) => {
   const databases = [plan.authDatabase, plan.appDatabase];
   const keys = [...new Set(databases.map((resource) => resource.database))].map((database) =>
-      JSON.stringify([
-        "hosted_protected_operator_database_v1",
-        plan.neon.projectId,
-        plan.neon.branchId,
-        database,
-      ]),
+    JSON.stringify([
+      "hosted_protected_operator_database_v1",
+      plan.neon.projectId,
+      plan.neon.branchId,
+      database,
+    ]),
   );
   if (plan.bootstrap) {
     const roles = databases.flatMap((resource) => [resource.migratorRole, resource.runtimeRole]);
