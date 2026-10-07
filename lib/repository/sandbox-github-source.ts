@@ -199,18 +199,22 @@ const files = git(["ls-tree", "-r", "-z", "--full-tree", sourceSha], "records")
     if (!safeSourcePath(match[3])) throw new Error("unsafe cloned source entry");
     const path = match[3];
     const file = resolve(root, path);
-    if (
-      !file.startsWith(root + "/") ||
-      !lstatSync(file).isFile() ||
-      !realpathSync(file).startsWith(actualRoot + "/")
-    )
-      throw new Error("cloned source path escaped its workspace");
-    return [{
-      mode: match[1],
-      objectId: match[2],
-      path,
-      sha256: sha256File(file),
-    }];
+    if (!file.startsWith(root + "/")) throw new Error("cloned source path escaped its workspace");
+    try {
+      const stat = lstatSync(file);
+      if (!stat.isFile() || !realpathSync(file).startsWith(actualRoot + "/"))
+        throw new Error("cloned source path escaped its workspace");
+      return [{
+        mode: match[1],
+        objectId: match[2],
+        path,
+        sha256: sha256File(file),
+      }];
+    } catch (error) {
+      // A tracked path deleted from the writable checkout is a live source deletion.
+      if (error?.code === "ENOENT") return [];
+      throw error;
+    }
   });
 if (files.length === 0) throw new Error("cloned source tree is empty");
 const appBuilder = ${JSON.stringify(manifestDirectory)};

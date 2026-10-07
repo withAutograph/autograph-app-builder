@@ -1,9 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 import {
   readSandboxGitHubSourceSnapshot,
+  sandboxGitHubSourceManifestProgram,
   writeSandboxGitHubSourceManifest,
 } from "./sandbox-github-source";
+/* oxlint-disable sonarjs/no-os-command-from-path -- Exercise Git only in a disposable repository fixture. */
 
 const sha = "a".repeat(40);
 const tree = "b".repeat(40);
@@ -141,6 +148,65 @@ describe("provider-created sandbox GitHub source", () => {
         sourceTree: tree,
       }),
     ).rejects.toThrow(/manifest \(exit 127\).*Check that Git and Node.*node: command not found/u);
+  });
+
+  it("records a deleted tracked path as a working-tree deletion without restoring it", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "builder-source-manifest-deletion-"));
+    const taskPath = "apps/spend-review/.config/mise/tasks/test-local-acceptance";
+    const taskFile = path.join(root, taskPath);
+    const sourceFile = path.join(root, "README.md");
+    const appBuilder = path.join(root, ".app-builder");
+    try {
+      mkdirSync(path.dirname(taskFile), { recursive: true });
+      writeFileSync(taskFile, "current source task\n");
+      writeFileSync(sourceFile, "original source\n");
+      execFileSync("git", ["init", "--quiet"], { cwd: root });
+      execFileSync("git", ["config", "user.name", "Fixture"], { cwd: root });
+      execFileSync("git", ["config", "user.email", "fixture@example.test"], { cwd: root });
+      execFileSync("git", ["add", "."], { cwd: root });
+      execFileSync(
+        "git",
+        ["-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "source fixture"],
+        { cwd: root },
+      );
+      const sourceSha = execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: root,
+        encoding: "utf-8",
+      }).trim();
+      const sourceTree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], {
+        cwd: root,
+        encoding: "utf-8",
+      }).trim();
+
+      rmSync(taskFile);
+      writeFileSync(sourceFile, "live edited source\n");
+      const output = execFileSync(
+        process.execPath,
+        ["-e", sandboxGitHubSourceManifestProgram(root, appBuilder)],
+        { encoding: "utf-8" },
+      );
+      const result = JSON.parse(output) as {
+        sourceSha: string;
+        sourceTree: string;
+        workspaceDigest: string;
+      };
+      const files = JSON.parse(
+        readFileSync(path.join(appBuilder, "source-files.json"), "utf-8"),
+      ) as { path: string; sha256: string }[];
+      const liveReadme = files.find(({ path: filePath }) => filePath === "README.md");
+      expect(result).toMatchObject({ sourceSha, sourceTree });
+      expect(files.map(({ path: filePath }) => filePath)).not.toContain(taskPath);
+      expect(liveReadme?.sha256).toBe(
+        createHash("sha256").update("live edited source\n").digest("hex"),
+      );
+      expect(result.workspaceDigest).toBe(
+        createHash("sha256").update(JSON.stringify(files)).digest("hex"),
+      );
+      expect(readFileSync(sourceFile, "utf-8")).toBe("live edited source\n");
+      expect(() => readFileSync(taskFile, "utf-8")).toThrow();
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
   });
 
   it("rejects a mismatched provider checkout before linking it", async () => {
