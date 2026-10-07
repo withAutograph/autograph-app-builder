@@ -8,6 +8,10 @@ import { Readable } from "node:stream";
 import { createVercelSdkSession } from "./vercel-sdk-session";
 
 const fixture = () => ({
+  expiresAt: new Date(Date.now() + 300_000),
+  extendTimeout: vi.fn(async () => {
+    await Promise.resolve();
+  }),
   fs: {
     appendFile: vi.fn().mockResolvedValue(null),
     mkdir: vi.fn().mockResolvedValue(null),
@@ -149,8 +153,10 @@ describe("Builder SDK session I/O", () => {
     const native = fixture();
     native.runCommand.mockResolvedValue({
       exitCode: 4,
+      kill: vi.fn(),
       stderr: vi.fn().mockResolvedValue("stderr"),
       stdout: vi.fn().mockResolvedValue("stdout"),
+      wait: vi.fn().mockResolvedValue({ exitCode: 4 }),
     });
     const { signal } = new AbortController();
     expect(
@@ -159,9 +165,8 @@ describe("Builder SDK session I/O", () => {
         command: "git diff",
       }),
     ).toEqual({ exitCode: 4, stderr: "stderr", stdout: "stdout" });
-    expect(native.runCommand).toHaveBeenCalledWith(
-      expect.objectContaining({ cwd: "/workspace", signal }),
-    );
+    expect(native.runCommand).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/workspace" }));
+    expect(native.runCommand.mock.calls[0]?.[0]).toHaveProperty("signal");
   });
 });
 
@@ -183,8 +188,12 @@ it("keeps the requested SDK working directory despite a login profile that chang
       });
       return {
         exitCode: result.status,
+        kill: vi.fn(async () => {
+          await Promise.resolve();
+        }),
         stderr: async () => await Promise.resolve(result.stderr),
         stdout: async () => await Promise.resolve(result.stdout),
+        wait: async () => await Promise.resolve({ exitCode: result.status }),
       };
     },
   );
@@ -198,5 +207,46 @@ it("keeps the requested SDK working directory despite a login profile that chang
     expect(result.stdout.trim()).toBe(root);
   } finally {
     rmSync(root, { force: true, recursive: true });
+  }
+});
+
+it("kills a running command when renewal fails and leaves no idle renewal", async () => {
+  vi.useFakeTimers();
+  const native = { ...fixture(), expiresAt: new Date(Date.now() + 75_000) };
+  native.extendTimeout.mockRejectedValue(new Error("renewal unavailable"));
+  const kill = vi.fn(async () => {
+    await Promise.resolve();
+  });
+  const wait = vi.fn(async (options: { signal?: AbortSignal }) => {
+    const deferred = Promise.withResolvers<{ exitCode: number }>();
+    options.signal?.addEventListener(
+      "abort",
+      () => {
+        deferred.reject(new Error("renewal unavailable"));
+      },
+      { once: true },
+    );
+    return await deferred.promise;
+  });
+  native.runCommand.mockResolvedValue({
+    kill,
+    stderr: async () => await Promise.resolve(""),
+    stdout: async () => await Promise.resolve(""),
+    wait,
+  });
+  try {
+    const pending = createVercelSdkSession(native).run({
+      command: "mise run app:describe spend-review",
+    });
+    const rejected = expect(pending).rejects.toThrow("renewal unavailable");
+    await vi.advanceTimersByTimeAsync(15_000);
+    await rejected;
+    expect(kill).toHaveBeenCalledOnce();
+    expect(kill).toHaveBeenCalledWith("SIGTERM");
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(native.extendTimeout).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
   }
 });

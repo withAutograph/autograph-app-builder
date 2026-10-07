@@ -21,8 +21,12 @@ const nativeFixture = () => ({
   readFileToBuffer: vi.fn(),
   runCommand: vi.fn().mockResolvedValue({
     exitCode: 0,
+    kill: vi.fn(async () => {
+      await Promise.resolve();
+    }),
     stderr: () => Promise.resolve(""),
     stdout: () => Promise.resolve("/home/vercel\n"),
+    wait: () => Promise.resolve({ exitCode: 0 }),
   }),
   status: "running",
   stop: vi.fn().mockResolvedValue(null),
