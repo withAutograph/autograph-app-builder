@@ -18,7 +18,7 @@ beforeAll(async () => {
   verify = createOperatorWorkloadVerifier(policy, createLocalJWKSet({ keys: [publicKey] }));
 });
 const token = async (
-  claims: Record<string, string> = {},
+  claims: Partial<Record<"owner_id" | "project_id" | "environment", string>> = {},
   options: {
     issuer?: string;
     audience?: string;
