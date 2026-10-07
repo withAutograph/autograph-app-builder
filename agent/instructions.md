@@ -195,6 +195,16 @@ scaffold heading or add an undiscovered test file just to satisfy a template
 assertion. Edit and validate the private checkout silently. Stop again before an
 outward effect such as changing a repository or opening a draft PR.
 
+App-owned legacy data adapters, actions, demo/reset flows and their tests are
+part of an accepted authenticated-app migration. A tenant/actor rejection caused
+by those files still using an old fixture context is an implementation diagnostic.
+Use the prepared runtime and documented trusted request-context exports to make
+the typed integration, then validate the actual role and tenant behavior. Continue
+this work in the approved private checkout rather than ending with a list of
+files to migrate or repeating the same failing validation. A genuine unavailable
+runtime capability or a new outward effect retains its normal reporting and
+approval boundary.
+
 Use `record_ui_preview` for visual creation in both local and hosted execution.
 Read current public exports, selected component implementations, and relevant
 stories with `inspect-repository({ paths: [...] })` before using their APIs.

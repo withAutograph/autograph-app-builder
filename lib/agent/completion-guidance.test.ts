@@ -41,6 +41,15 @@ describe("shared app delivery guidance", () => {
     expect(guidance).toContain("supported next repair action");
     expect(guidance).toContain("Never replace a specific failure with a generic statement");
   });
+  it("keeps app-owned authenticated migration failures executable while preserving external approval boundaries", () => {
+    const guidance = completionGuidance({ phase: "validation_failed" });
+    expect(guidance).toContain("App-owned data adapters, actions, obsolete demo/reset paths");
+    expect(guidance).toContain("not an external blocker");
+    expect(guidance).toContain("complete the typed integration in the same private checkout");
+    expect(guidance).toContain("re-running the same failing tests does not complete this work");
+    expect(guidance).toContain("new outward effect");
+    expect(guidance).toContain("public question or approval");
+  });
 
   it("does not promote fixture previews or publication state into working product proof", () => {
     expect(completionGuidance({ phase: "ui_previewed" })).toContain(
