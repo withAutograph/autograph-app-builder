@@ -2,5 +2,9 @@
 #MISE description="Install Chromium for Storybook browser-mode tests"
 set -eu
 
+# Prepare only the ephemeral hosted runner; local development remains unchanged.
+.config/mise/scripts/trusted-node-launcher \
+  "$(mise which node)" .config/mise/scripts/repository/prepare-ci-browser-apt.mts
+
 exec .config/mise/scripts/trusted-node-launcher \
   "$(mise which node)" node_modules/playwright/cli.js install --with-deps chromium
