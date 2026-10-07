@@ -1,3 +1,4 @@
+import { completionGuidance } from "./completion-guidance";
 import type * as ImplementationModule from "./apply-implementation-files";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import applyAppCreation from "../../agent/tools/apply_app_creation";
@@ -120,5 +121,71 @@ describe("apply tool staged repair integration", () => {
     expect(await approval(context)).toBe("approved");
     await applyAppCreation.execute({ implementationFiles: [action] }, context);
     expect(mocks.wrap.mock.calls[0][1]).toEqual([action]);
+  });
+  it("returns model-readable prerequisites for ui_accepted without creating build approval or touching source", async () => {
+    mocks.current = { phase: "ui_accepted" };
+    const getSandbox = vi.fn().mockResolvedValue({});
+    const context = { callId: "no-proposal", getSandbox, session: { id: "session" } } as never;
+    expect(await approval(context)).toBe("not-applicable");
+    expect(await applyAppCreation.execute({ implementationFiles: [page] }, context)).toMatchObject({
+      guidance: completionGuidance({ phase: "ui_accepted" }),
+      status: "implementation_plan_required",
+      workflowPhase: "ui_accepted",
+    });
+    expect(getSandbox).not.toHaveBeenCalled();
+    expect(mocks.wrap).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
+  it("does not apply a proposal that appears after a read-only policy decision", async () => {
+    mocks.current = { phase: "ui_accepted" };
+    const getSandbox = vi.fn().mockResolvedValue({});
+    const context = { callId: "phase-race", getSandbox, session: { id: "session" } } as never;
+    expect(await approval(context)).toBe("not-applicable");
+    mocks.current = state("new-after-policy");
+    expect(await applyAppCreation.execute({ implementationFiles: [page] }, context)).toMatchObject({
+      status: "build_approval_required",
+    });
+    expect(getSandbox).not.toHaveBeenCalled();
+    expect(mocks.wrap).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(
+      await approval({
+        callId: "new-approved-call",
+        getSandbox,
+        session: { id: "session" },
+      } as never),
+    ).toBe("user-approval");
+  });
+  it("does not apply a scope swapped after an approval policy decision", async () => {
+    mocks.current = state("approved-before-swap");
+    const getSandbox = vi.fn().mockResolvedValue({});
+    const context = { callId: "scope-race", getSandbox, session: { id: "session" } } as never;
+    expect(await approval(context)).toBe("user-approval");
+    mocks.current = state("swapped-after-policy");
+    expect(await applyAppCreation.execute({ implementationFiles: [page] }, context)).toMatchObject({
+      status: "build_approval_required",
+    });
+    expect(getSandbox).not.toHaveBeenCalled();
+    expect(mocks.wrap).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
+  it("invalidates older pending approval when the same call becomes a read-only prerequisite", async () => {
+    const getSandbox = vi.fn().mockResolvedValue({});
+    const context = {
+      callId: "same-call-old-pending",
+      getSandbox,
+      session: { id: "session" },
+    } as never;
+    mocks.current = state("same-call-proposal");
+    expect(await approval(context)).toBe("user-approval");
+    mocks.current = { phase: "ui_accepted" };
+    expect(await approval(context)).toBe("not-applicable");
+    mocks.current = state("same-call-proposal");
+    expect(await applyAppCreation.execute({ implementationFiles: [page] }, context)).toMatchObject({
+      status: "build_approval_required",
+    });
+    expect(getSandbox).not.toHaveBeenCalled();
+    expect(mocks.wrap).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
   });
 });

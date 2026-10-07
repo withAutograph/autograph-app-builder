@@ -1,4 +1,5 @@
-import type { Sandbox } from "@vercel/sandbox";
+import { holdActiveCommandLease } from "./active-command-lease";
+import type { Sandbox, Command } from "@vercel/sandbox";
 import type { SandboxRunOptions, SandboxProcess } from "eve/sandbox";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
@@ -6,7 +7,14 @@ import type { BuilderSandboxSession } from "./builder-sandbox";
 
 export type VercelSdkSessionNative = Pick<
   Sandbox,
-  "name" | "runCommand" | "readFile" | "readFileToBuffer" | "writeFiles" | "update"
+  | "name"
+  | "runCommand"
+  | "readFile"
+  | "readFileToBuffer"
+  | "writeFiles"
+  | "update"
+  | "expiresAt"
+  | "extendTimeout"
 > & { readonly fs: Pick<Sandbox["fs"], "mkdir" | "writeFile" | "appendFile" | "rm"> };
 
 const resolvePath = (value: string) => path.posix.resolve("/workspace", value);
@@ -21,6 +29,7 @@ const encoding = (value = "utf-8"): BufferEncoding => {
 export const createVercelSdkSession = (
   native: VercelSdkSessionNative,
   current: () => VercelSdkSessionNative = () => native,
+  authorize?: () => Promise<void>,
 ): BuilderSandboxSession => {
   const runCommand = (options: SandboxRunOptions) => ({
     // A login profile may change directories after the SDK applies cwd.
@@ -92,12 +101,50 @@ export const createVercelSdkSession = (
     },
     resolvePath,
     async run(options) {
-      const command = await current().runCommand(runCommand(options));
-      const [stdout, stderr] = await Promise.all([
-        command.stdout({ signal: options.abortSignal }),
-        command.stderr({ signal: options.abortSignal }),
-      ]);
-      return { exitCode: command.exitCode, stderr, stdout };
+      const lease = await holdActiveCommandLease({
+        authorize,
+        current,
+        signal: options.abortSignal,
+      });
+      let command: Command | undefined;
+      let killing: Promise<void> | undefined;
+      const kill = () => {
+        if (command !== undefined && killing === undefined) {
+          const ownedCommand = command;
+          killing = (async () => {
+            try {
+              await ownedCommand.kill("SIGTERM");
+            } catch {
+              /* The command may have already exited. */
+            }
+          })();
+        }
+      };
+      lease.signal.addEventListener("abort", kill, { once: true });
+      try {
+        command = await current().runCommand({
+          ...runCommand(options),
+          detached: true,
+          signal: lease.signal,
+        });
+        if (lease.signal.aborted) {
+          kill();
+        }
+        const [stdout, stderr, result] = await Promise.all([
+          command.stdout({ signal: lease.signal }),
+          command.stderr({ signal: lease.signal }),
+          command.wait({ signal: lease.signal }),
+        ]);
+        lease.signal.throwIfAborted();
+        return { exitCode: result.exitCode, stderr, stdout };
+      } catch (error) {
+        kill();
+        throw error;
+      } finally {
+        lease.signal.removeEventListener("abort", kill);
+        await lease.finish();
+        await killing;
+      }
     },
     async setNetworkPolicy(policy) {
       await current().update({ networkPolicy: policy });
@@ -108,14 +155,32 @@ export const createVercelSdkSession = (
       const output = Writable.fromWeb(stdout.writable);
       const errors = Writable.fromWeb(stderr.writable);
       // Detached SDK commands stream directly; no command/output deadline is added.
-      const command = await current().runCommand({
-        ...runCommand(options),
-        detached: true,
-        stderr: errors,
-        stdout: output,
+      const lease = await holdActiveCommandLease({
+        authorize,
+        current,
+        signal: options.abortSignal,
       });
+      let command;
+      try {
+        command = await current().runCommand({
+          ...runCommand(options),
+          detached: true,
+          signal: lease.signal,
+          stderr: errors,
+          stdout: output,
+        });
+      } catch (error) {
+        await lease.finish();
+        output.end();
+        errors.end();
+        throw error;
+      }
+      let killing: Promise<void> | undefined;
       const kill = async () => {
-        await command.kill("SIGTERM");
+        killing ??= (async () => {
+          await command.kill("SIGTERM");
+        })();
+        await killing;
       };
       const abort = () => {
         void (async () => {
@@ -126,24 +191,42 @@ export const createVercelSdkSession = (
           }
         })();
       };
-      options.abortSignal?.addEventListener("abort", abort, { once: true });
-      if (options.abortSignal?.aborted === true) {
+      lease.signal.addEventListener("abort", abort, { once: true });
+      if (lease.signal.aborted) {
         abort();
       }
+      const completion = (async () => {
+        try {
+          const result = await command.wait({ signal: lease.signal });
+          lease.signal.throwIfAborted();
+          return { exitCode: result.exitCode };
+        } finally {
+          lease.signal.removeEventListener("abort", abort);
+          await lease.finish();
+          if (killing !== undefined) {
+            try {
+              await killing;
+            } catch {
+              /* Cancellation retains its own error. */
+            }
+          }
+          output.end();
+          errors.end();
+        }
+      })();
+      // Preserve rejection for wait() while avoiding an unhandled rejection if the owner closes first.
+      void (async () => {
+        try {
+          await completion;
+        } catch {
+          /* wait() retains the original failure. */
+        }
+      })();
       return {
         kill,
         stderr: stderr.readable,
         stdout: stdout.readable,
-        async wait() {
-          try {
-            const result = await command.wait({ signal: options.abortSignal });
-            return { exitCode: result.exitCode };
-          } finally {
-            options.abortSignal?.removeEventListener("abort", abort);
-            output.end();
-            errors.end();
-          }
-        },
+        wait: async () => await completion,
       };
     },
     writeBinaryFile,

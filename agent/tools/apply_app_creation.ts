@@ -1,7 +1,10 @@
+import { completionGuidance } from "@/lib/agent/completion-guidance";
 import { stageImplementationFiles } from "@/lib/agent/staged-implementation";
 import { productAcceptanceObligations } from "@/lib/agent/product-acceptance";
 import { defineTool } from "eve/tools";
 import {
+  discardPendingPrivateApplyApproval,
+  hasPendingPrivateApplyApproval,
   recordApprovedPrivateApply,
   requestPrivateApplyApproval,
 } from "@/lib/agent/private-apply-authority";
@@ -29,10 +32,14 @@ import { invalidateProductBehaviorEvidence } from "@/lib/agent/product-behavior-
 export default defineTool({
   approval(ctx) {
     const current = appBuilderWorkflowState.get();
-    if (!("proposal" in current) || !("appSpec" in current)) {
-      throw new Error(
-        `Build approval cannot start in workflow phase ${current.phase}: no canonical implementation proposal is recorded. If the UI preview was revised, accept the current preview, record or reuse its build-ready AppSpec, then call accept_app_spec with existingAppChanges for an existing app. Supply the complete replacement content of each app-owned file to change. Wait for accept_app_spec to return a planned proposal before calling apply_app_creation.`,
-      );
+    if (
+      current.phase !== "planned" &&
+      current.phase !== "apply_failed" &&
+      current.phase !== "applied"
+    ) {
+      discardPendingPrivateApplyApproval(ctx.callId);
+      // Only the read-only prerequisite report can execute in this phase.
+      return "not-applicable";
     }
     return requestPrivateApplyApproval(
       {
@@ -54,18 +61,28 @@ export default defineTool({
       current.phase !== "apply_failed" &&
       current.phase !== "applied"
     ) {
-      throw new Error("Derive an exact canonical proposal before requesting target apply.");
+      return {
+        guidance: completionGuidance(current),
+        status: "implementation_plan_required" as const,
+        workflowPhase: current.phase,
+      };
     }
-    recordApprovedPrivateApply(
-      {
-        appId: current.proposal.target.contract.appId,
-        appSpecDigest: current.appSpec.digest,
-        proposalDigest: current.proposal.digest,
-        sessionId: ctx.session.id,
-        workspaceId: current.workspace.workspaceId,
-      },
-      ctx.callId,
-    );
+    const scope = {
+      appId: current.proposal.target.contract.appId,
+      appSpecDigest: current.appSpec.digest,
+      proposalDigest: current.proposal.digest,
+      sessionId: ctx.session.id,
+      workspaceId: current.workspace.workspaceId,
+    };
+    if (!hasPendingPrivateApplyApproval(scope, ctx.callId)) {
+      return {
+        guidance:
+          "This tool call has no matching approval policy decision for the current proposal and private target. Retry apply_app_creation to request or reuse its exact Build approval before implementation.",
+        status: "build_approval_required" as const,
+        workflowPhase: current.phase,
+      };
+    }
+    recordApprovedPrivateApply(scope, ctx.callId);
     if (current.phase === "applied") {
       return {
         appId: current.proposal.target.contract.appId,

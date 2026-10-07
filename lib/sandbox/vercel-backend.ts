@@ -127,7 +127,13 @@ export const createBuilderVercelProvider = (
       onSessionStop: () => close("stop"),
       sandbox: createAuthorizedSandboxSession({
         authorize: () => assertHostedSandboxCommandAuthority({ sessionId }),
-        session: createVercelSdkSession(native, () => registration.current),
+        session: createVercelSdkSession(
+          native,
+          () => registration.current,
+          async () => {
+            await assertHostedSandboxCommandAuthority({ sessionId });
+          },
+        ),
       }),
     };
   };
