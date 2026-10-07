@@ -65,3 +65,12 @@ export const recordApprovedPrivateApply = (scope: PrivateApplyScope, callId: str
     pending: current.pending.filter((entry) => entry.callId !== callId),
   }));
 };
+
+/** A policy decision for another call or scope cannot authorize this execution. */
+export const hasPendingPrivateApplyApproval = (
+  scope: PrivateApplyScope,
+  callId: string,
+): boolean => {
+  const pending = authority.get().pending.find((entry) => entry.callId === callId);
+  return pending !== undefined && sameScope(pending.scope, scope);
+};
