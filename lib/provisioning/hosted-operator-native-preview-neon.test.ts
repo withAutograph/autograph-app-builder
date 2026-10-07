@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { HostedOperatorContext } from "./hosted-operator-service";
 import { createNativePreviewNeonReader } from "./hosted-operator-native-preview-neon";
-import type { NativePreviewNeonIo } from "./hosted-operator-native-preview-neon";
+import type {
+  NativePreviewNeonDependencies,
+  NativePreviewNeonIo,
+} from "./hosted-operator-native-preview-neon";
 
 const mocks = {
   oidc: vi.fn<NativePreviewNeonIo["getOidc"]>(),
@@ -37,7 +40,12 @@ const scope = {
 };
 const config = {
   connector: "neon/owned",
-  connectorInstallationId: "neon-installation",
+  connectorInstallationId: "neon-connect-installation",
+  nativeStore: {
+    configurationId: "icfg-native-neon",
+    resourceId: "store-native",
+    sourceProjectId: "prj-source",
+  },
   operator: {
     audience: "https://vercel.com/autographing",
     environment: "production" as const,
@@ -48,19 +56,23 @@ const config = {
 };
 const uri = `postgresql://bootstrap_owner:private-password@${scope.hostname}/neondb?sslmode=require`;
 const nativeStore = {
-  configurationId: "icfg-owner",
+  configurationId: "icfg-native-neon",
   neonProjectId: "native-project",
   ownerId: "team-owner",
-  vercelProjectId: "prj-app",
+  resourceId: "store-native",
+  vercelProjectId: "prj-source",
 };
 const fixture = (
   changes: {
+    sourceProjectId?: string;
     uri?: string;
     branch?: { init_source?: string; default?: boolean };
     endpoint?: { branch_id?: string; project_id?: string; host?: string; type?: string };
   } = {},
 ) => {
-  const owner = vi.fn().mockResolvedValue(nativeStore);
+  const owner = vi
+    .fn<NativePreviewNeonDependencies["readCurrentOwnerNativeStore"]>()
+    .mockResolvedValue(nativeStore);
   const approved = vi.fn(async () => {
     await Promise.resolve();
   });
@@ -114,7 +126,13 @@ const fixture = (
     owner,
     reader: createNativePreviewNeonReader({
       assertApprovedScope: approved,
-      configuration: config,
+      configuration: {
+        ...config,
+        nativeStore: {
+          ...config.nativeStore,
+          sourceProjectId: changes.sourceProjectId ?? config.nativeStore.sourceProjectId,
+        },
+      },
       fetch: fetcher,
       io: {
         getOidc: mocks.oidc,
@@ -157,7 +175,7 @@ describe("private native Preview reader", () => {
     expect(mocks.token).toHaveBeenCalledWith(
       "neon/owned",
       {
-        installationId: "neon-installation",
+        installationId: "neon-connect-installation",
         subject: { id: "owner", issuer: context.authority.issuer, type: "user" },
       },
       { forceRefresh: true, vercelToken: "private-project-oidc" },
@@ -255,13 +273,55 @@ describe("private native Preview reader", () => {
     ).rejects.toThrow();
     expect(f.fetcher).not.toHaveBeenCalled();
   });
+  it.each([
+    { vercelProjectId: "prj-other-source" },
+    { resourceId: "store-other" },
+    { configurationId: "icfg-other-native" },
+    { neonProjectId: "wrong-native-project" },
+  ])("denies mismatched deployment-owned native source binding %j", async (change) => {
+    const f = fixture();
+    f.owner.mockResolvedValue({ ...nativeStore, ...change });
+    await expect(
+      f.reader.withMaintenanceCredential(context, scope, async () => {}),
+    ).rejects.toThrow();
+    expect(mocks.token).not.toHaveBeenCalled();
+    expect(f.fetcher).not.toHaveBeenCalled();
+  });
+  it("denies administrative native store attachment to the app project", async () => {
+    const f = fixture({ sourceProjectId: "prj-app" });
+    f.owner.mockResolvedValue({ ...nativeStore, vercelProjectId: "prj-app" });
+    await expect(
+      f.reader.withMaintenanceCredential(context, scope, async () => {}),
+    ).rejects.toThrow();
+    expect(mocks.token).not.toHaveBeenCalled();
+  });
+  it("requires an explicit deployment-owned source project", async () => {
+    const f = fixture({ sourceProjectId: "" });
+    await expect(
+      f.reader.withMaintenanceCredential(context, scope, async () => {}),
+    ).rejects.toThrow();
+    expect(f.owner).not.toHaveBeenCalled();
+    expect(mocks.oidc).not.toHaveBeenCalled();
+  });
+  it("keeps owner Vercel, Neon Connect and native integration identities separate", async () => {
+    const f = fixture();
+    await f.reader.withMaintenanceCredential(context, scope, async () => {});
+    expect(context.target.installationId).not.toBe(config.nativeStore.configurationId);
+    expect(config.connectorInstallationId).not.toBe(config.nativeStore.configurationId);
+    expect(f.owner.mock.calls[0]?.[0].target.installationId).toBe("icfg-owner");
+    expect(f.owner.mock.calls[0]?.[0].target.projectId).toBe("prj-app");
+    expect(f.owner.mock.calls[0]?.[1]).toEqual(config.nativeStore);
+    expect(config.nativeStore.sourceProjectId).not.toBe(context.target.projectId);
+    expect(config.operator.projectId).not.toBe(config.nativeStore.sourceProjectId);
+  });
   it("denies wrong owner before token acquisition", async () => {
     const f = fixture();
     f.owner.mockResolvedValue({
-      configurationId: "icfg-owner",
+      configurationId: "icfg-native-neon",
       neonProjectId: "native-project",
       ownerId: "other",
-      vercelProjectId: "prj-app",
+      resourceId: "store-native",
+      vercelProjectId: "prj-source",
     });
     await expect(
       f.reader.withMaintenanceCredential(context, scope, async () => {}),
@@ -275,10 +335,11 @@ describe("private native Preview reader", () => {
         throw new Error("revoked");
       }
       return await Promise.resolve({
-        configurationId: "icfg-owner",
+        configurationId: "icfg-native-neon",
         neonProjectId: "native-project",
         ownerId: "team-owner",
-        vercelProjectId: "prj-app",
+        resourceId: "store-native",
+        vercelProjectId: "prj-source",
       });
     });
     await expect(

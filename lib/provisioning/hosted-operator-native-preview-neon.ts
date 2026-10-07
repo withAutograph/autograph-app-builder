@@ -15,10 +15,17 @@ const scopeSchema = z.strictObject({
   projectId: id,
 });
 export type NativePreviewNeonScope = z.infer<typeof scopeSchema>;
+export interface NativePreviewNeonStoreBinding {
+  configurationId: string;
+  resourceId: string;
+  sourceProjectId: string;
+}
 export interface NativePreviewNeonConfiguration {
   /** Deployment-owned Connect registration; never supplied by request/model input. */
   connector: string;
   connectorInstallationId: string;
+  /** Existing owner-authorized source/operator connection; never the generated app project. */
+  nativeStore: NativePreviewNeonStoreBinding;
   operator: {
     projectId: string;
     environment: "preview" | "production";
@@ -27,11 +34,31 @@ export interface NativePreviewNeonConfiguration {
     audience: string;
   };
 }
+const configurationSchema = z.strictObject({
+  connector: z.string().min(1),
+  connectorInstallationId: z.string().min(1),
+  nativeStore: z.strictObject({
+    configurationId: z.string().min(1),
+    resourceId: z.string().min(1),
+    sourceProjectId: z.string().min(1),
+  }),
+  operator: z.strictObject({
+    audience: z.url(),
+    environment: z.enum(["preview", "production"]),
+    issuer: z.url(),
+    ownerId: z.string().min(1),
+    projectId: z.string().min(1),
+  }),
+});
 export interface NativePreviewNeonDependencies {
   configuration: NativePreviewNeonConfiguration;
   /** Re-resolve current owner membership/installation and read the exact native Vercel store. */
-  readCurrentOwnerNativeStore: (context: HostedOperatorContext) => Promise<{
+  readCurrentOwnerNativeStore: (
+    context: HostedOperatorContext,
+    binding: Readonly<NativePreviewNeonStoreBinding>,
+  ) => Promise<{
     ownerId: string;
+    resourceId: string;
     vercelProjectId: string;
     configurationId: string;
     neonProjectId: string;
@@ -146,21 +173,28 @@ export const createNativePreviewNeonReader = (deps: NativePreviewNeonDependencie
         authority: Object.freeze({ ...context.authority }),
         target: Object.freeze({ ...context.target }),
       });
+      const parsedConfiguration = configurationSchema.parse(deps.configuration);
       const configuration = Object.freeze({
-        ...deps.configuration,
-        operator: Object.freeze({ ...deps.configuration.operator }),
+        ...parsedConfiguration,
+        nativeStore: Object.freeze({ ...parsedConfiguration.nativeStore }),
+        operator: Object.freeze({ ...parsedConfiguration.operator }),
       });
       const scope = Object.freeze(scopeSchema.parse(frozenScope));
       const assertOwner = async () => {
         await deps.assertApprovedScope(ownedContext, scope);
-        const store = await deps.readCurrentOwnerNativeStore(ownedContext);
+        const store = await deps.readCurrentOwnerNativeStore(
+          ownedContext,
+          configuration.nativeStore,
+        );
         const checks = [
           ownedContext.target.environment === "preview",
           configuration.operator.projectId !== ownedContext.target.projectId,
           store.ownerId === ownedContext.target.scopeId,
           store.ownerId === configuration.operator.ownerId,
-          store.vercelProjectId === ownedContext.target.projectId,
-          store.configurationId === ownedContext.target.installationId,
+          configuration.nativeStore.sourceProjectId !== ownedContext.target.projectId,
+          store.vercelProjectId === configuration.nativeStore.sourceProjectId,
+          store.configurationId === configuration.nativeStore.configurationId,
+          store.resourceId === configuration.nativeStore.resourceId,
           store.neonProjectId === scope.projectId,
         ];
         if (!checks.every(Boolean)) {
