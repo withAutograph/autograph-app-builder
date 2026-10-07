@@ -6,12 +6,14 @@ import { appDescriptionSchema } from "../repository/app-description";
 import type { AppDescription } from "../repository/app-description";
 import { GENERATED_RELEASE_MEMBERS } from "./hosted-operator-sandbox-launcher";
 import type { GeneratedAppReleaseFiles } from "./hosted-operator-sandbox-launcher";
-import type { HostedOperatorContext } from "./hosted-operator-service";
 import {
   operatorArtifactReferenceSchema,
   operatorArtifactUnavailable,
 } from "./hosted-operator-artifact-store";
-import type { OperatorArtifactStore } from "./hosted-operator-artifact-store";
+import type {
+  OperatorArtifactContext,
+  OperatorArtifactStore,
+} from "./hosted-operator-artifact-store";
 
 const generatedKind = "generated-release";
 const requiredMember = <T>(files: Readonly<Record<string, T>>, name: string): T => {
@@ -79,14 +81,14 @@ const sourcePath = (directory: string, member: string) => {
 };
 export interface OperatorArtifactPublicationDependencies {
   store: OperatorArtifactStore;
-  assertCurrentOwner: (context: HostedOperatorContext) => Promise<void>;
+  assertCurrentOwner: (context: OperatorArtifactContext) => Promise<void>;
 }
 /** Storage verifies immutable captured identity. The catalog-pinned worker remains authoritative for compiled release semantics before any SQL effect. */
 export const createOperatorArtifactPublication = (
   deps: OperatorArtifactPublicationDependencies,
 ) => {
   const publish = async (
-    context: HostedOperatorContext,
+    context: OperatorArtifactContext,
     envelope: z.infer<typeof envelopeSchema>,
   ) => {
     const parsed = envelopeSchema.parse(envelope);
@@ -119,7 +121,7 @@ export const createOperatorArtifactPublication = (
     await deps.assertCurrentOwner(context);
     return artifactRef;
   };
-  const read = async (context: HostedOperatorContext, artifactRef: string) => {
+  const read = async (context: OperatorArtifactContext, artifactRef: string) => {
     operatorArtifactReferenceSchema.parse(artifactRef);
     await deps.assertCurrentOwner(context);
     const completion = await deps.store.read(context, artifactRef, 0);
@@ -156,7 +158,7 @@ export const createOperatorArtifactPublication = (
   };
   return {
     async publishAuthPlan(input: {
-      context: HostedOperatorContext;
+      context: OperatorArtifactContext;
       content: Buffer;
       planDigest: string;
       targetDigest: string;
@@ -183,7 +185,7 @@ export const createOperatorArtifactPublication = (
       }
     },
     async publishGeneratedRelease(input: {
-      context: HostedOperatorContext;
+      context: OperatorArtifactContext;
       description: AppDescription;
       source: Pick<SandboxSession, "readBinaryFile">;
     }) {
@@ -234,7 +236,7 @@ export const createOperatorArtifactPublication = (
       }
     },
     async readAuthPlan(
-      context: HostedOperatorContext,
+      context: OperatorArtifactContext,
       expected: { artifactRef: string; planDigest: string; targetDigest: string },
     ) {
       try {
@@ -258,7 +260,7 @@ export const createOperatorArtifactPublication = (
       }
     },
     async readGeneratedRelease(
-      context: HostedOperatorContext,
+      context: OperatorArtifactContext,
       expected: {
         artifactRef: string;
         releaseId: string;

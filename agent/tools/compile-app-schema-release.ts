@@ -1,5 +1,6 @@
 import { defineTool } from "eve/tools";
 import type { SandboxSession } from "eve/sandbox";
+import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled-operator-artifacts";
 import { z } from "zod";
 
 import {
@@ -36,6 +37,7 @@ export const compileAppSchemaRelease = async (input: {
   root: string;
   sandbox: Pick<SandboxSession, "run">;
   signal?: AbortSignal;
+  onCompiled?: () => Promise<void>;
 }) => {
   const command = appSchemaReleaseCommand(input.appId);
   try {
@@ -59,6 +61,21 @@ export const compileAppSchemaRelease = async (input: {
         stdout,
       };
     }
+    if (input.onCompiled !== undefined) {
+      try {
+        await input.onCompiled();
+      } catch {
+        return {
+          command,
+          exitCode: 0,
+          problem:
+            "The schema compiled, but Builder could not capture its selected release under the current owner and session. Retry this operation after restoring private artifact storage and current session authority.",
+          status: "failed" as const,
+          stderr,
+          stdout,
+        };
+      }
+    }
     return { command, exitCode: 0, status: "compiled" as const, stderr, stdout };
   } catch (error) {
     const detail = safeOutput(error instanceof Error ? error.message : String(error));
@@ -75,7 +92,7 @@ export const compileAppSchemaRelease = async (input: {
 
 export default defineTool({
   description:
-    "Regenerate the selected app's checked CUE schema release in its already approved private checkout, including after an initial validation pass. The fixed repository-owned `app:compile` task targets only the selected app. This does not publish or deploy. The result includes the exact command, exit status, and sanitized compiler output; rerun validate_app_creation after compilation.",
+    "Regenerate the selected app's checked CUE schema release in its already approved private checkout, including after an initial validation pass. The fixed repository-owned `app:compile` task targets only the selected app. The workflow privately captures the compiled app release for its protected operator; this does not deploy or publish source externally. The result includes the exact command, exit status, and sanitized compiler output; rerun validate_app_creation after compilation.",
   async execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (
@@ -111,6 +128,18 @@ export default defineTool({
     }
     return await compileAppSchemaRelease({
       appId: state.appSpec.appId,
+      onCompiled: async () => {
+        await publishCompiledOperatorArtifactsForSession({
+          adapterSessionId: ctx.session.id,
+          appId: state.appSpec.appId,
+          appSpecDigest: state.appSpec.digest,
+          callId: ctx.callId,
+          root: state.applyReceipt.applyRoot,
+          sandbox,
+          sessionAuth: ctx.session.auth,
+          signal: ctx.abortSignal,
+        });
+      },
       root: state.applyReceipt.applyRoot,
       sandbox,
       signal: ctx.abortSignal,

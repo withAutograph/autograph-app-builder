@@ -8,6 +8,12 @@ import { prototypeArtifactChunks } from "../db/schema";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import type { HostedOperatorContext } from "./hosted-operator-service";
 
+/** Build artifact authority needs no provider project or deployment grant. */
+export interface OperatorArtifactContext {
+  authority: HostedOperatorContext["authority"];
+  target: Pick<HostedOperatorContext["target"], "appId" | "sessionId">;
+}
+
 export const operatorArtifactUnavailable = () =>
   new Error("Protected operator artifact is unavailable.");
 export const operatorArtifactReferenceSchema = z
@@ -21,15 +27,15 @@ export interface OperatorArtifactChunk {
   content: string;
 }
 export interface OperatorArtifactStore {
-  put: (context: HostedOperatorContext, chunk: OperatorArtifactChunk) => Promise<void>;
+  put: (context: OperatorArtifactContext, chunk: OperatorArtifactChunk) => Promise<void>;
   read: (
-    context: HostedOperatorContext,
+    context: OperatorArtifactContext,
     artifactRef: string,
     chunkIndex: number,
   ) => Promise<string | undefined>;
 }
 const hash = (content: string) => createHash("sha256").update(content).digest("hex");
-const key = (context: HostedOperatorContext, artifactRef: string, chunkIndex: number) => {
+const key = (context: OperatorArtifactContext, artifactRef: string, chunkIndex: number) => {
   const path = operatorArtifactReferenceSchema.parse(artifactRef);
   const authority = hostedTenantAuthoritySchema.parse(context.authority);
   if (
@@ -63,7 +69,7 @@ const predicate = (value: ReturnType<typeof key>) =>
 /** Private namespace in the existing immutable owner/session chunk storage. Public prototype readers reject this namespace before querying. */
 export const createPostgresOperatorArtifactStore = (input: {
   database: PostgresJsDatabase<typeof databaseSchema>;
-  assertCurrentOwner: (context: HostedOperatorContext) => Promise<void>;
+  assertCurrentOwner: (context: OperatorArtifactContext) => Promise<void>;
 }): OperatorArtifactStore => ({
   async put(context, chunk) {
     try {

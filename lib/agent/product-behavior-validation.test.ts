@@ -8,10 +8,14 @@ const mocks = vi.hoisted(() => ({
   describe: vi.fn(),
   execute: vi.fn(),
   prepare: vi.fn(),
+  publish: vi.fn(),
   review: vi.fn(),
   state: { current: {} as Record<string, unknown>, update: vi.fn() },
 }));
 
+vi.mock("./compiled-operator-artifacts", () => ({
+  publishCompiledOperatorArtifactsForSession: mocks.publish,
+}));
 vi.mock("../repository/app-description", () => ({ describeSelectedApp: mocks.describe }));
 vi.mock("../../agent/tools/run-app-browser-tests", () => ({ runAppBrowserTests: mocks.browser }));
 vi.mock("./review-applied-product-source", () => ({ reviewAppliedProductSource: mocks.review }));
@@ -67,6 +71,7 @@ describe("behavior evidence invalidation during validation repair", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.prepare.mockResolvedValue(null);
+    mocks.publish.mockResolvedValue({ status: "published" });
     mocks.describe.mockResolvedValue({ backend: { kind: "static" } });
     mocks.browser.mockResolvedValue({ status: "passed" });
     vi.stubEnv("DATABASE_URL", "postgres://builder-test.invalid/test");
@@ -81,6 +86,54 @@ describe("behavior evidence invalidation during validation repair", () => {
     vi.unstubAllEnvs();
   });
 
+  it("first-pass generated apps capture the selected release without a separate compile tool call", async () => {
+    mocks.state.current = { ...workflow("validated"), phase: "applied" };
+    mocks.describe.mockResolvedValue({
+      backend: { kind: "generated-postgres" },
+      validation: { browser: null },
+    });
+    const sandbox = { id: "validation-sandbox" };
+    const context = {
+      callId: "validate_capture",
+      getSandbox: () => Promise.resolve(sandbox),
+      session: { auth: { owned: "auth" }, id: "adapter" },
+    };
+    await validateAppCreation.execute({ implementationFiles: [] }, context as never);
+    expect(mocks.execute).toHaveBeenCalledBefore(mocks.publish);
+    expect(mocks.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adapterSessionId: "adapter",
+        appId: "app",
+        appSpecDigest: "a",
+        root: "/workspace/repository",
+        sandbox,
+        sessionAuth: context.session.auth,
+      }),
+    );
+  });
+  it("validated generated reuse retries failed capture without a compiler invocation", async () => {
+    mocks.state.current = workflow("validated");
+    mocks.describe.mockResolvedValue({
+      backend: { kind: "generated-postgres" },
+      validation: { browser: null },
+    });
+    mocks.publish.mockRejectedValueOnce(new Error("private storage failure"));
+    const context = {
+      callId: "validate_retry",
+      getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
+      session: { auth: {}, id: "adapter" },
+    };
+    const failed = await validateAppCreation.execute({ implementationFiles: [] }, context as never);
+    expect(failed).toMatchObject({
+      reason: "compiled-artifact-publication",
+      status: "needs_repair",
+      technicalStatus: "passed",
+    });
+    expect(mocks.state.current.phase).toBe("validated");
+    expect(JSON.stringify(failed)).not.toContain("private storage failure");
+    await validateAppCreation.execute({ implementationFiles: [] }, context as never);
+    expect(mocks.publish).toHaveBeenCalledTimes(2);
+  });
   it("automatically returns source findings after technical validation without a review-tool call", async () => {
     mocks.state.current = { ...workflow("validated"), phase: "applied" };
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {

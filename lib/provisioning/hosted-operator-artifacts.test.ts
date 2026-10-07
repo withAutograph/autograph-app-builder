@@ -2,7 +2,10 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createOperatorArtifactPublication } from "./hosted-operator-artifacts";
-import type { OperatorArtifactStore } from "./hosted-operator-artifact-store";
+import type {
+  OperatorArtifactContext,
+  OperatorArtifactStore,
+} from "./hosted-operator-artifact-store";
 import { GENERATED_RELEASE_MEMBERS } from "./hosted-operator-sandbox-launcher";
 import type { HostedOperatorContext } from "./hosted-operator-service";
 import type { AppDescription } from "../repository/app-description";
@@ -54,7 +57,7 @@ const fixture = () => {
   let interruptAt = Infinity;
   const rows = new Map<string, string>();
   // oxlint-disable-next-line unicorn/consistent-function-scoping -- Faithful store fixtures own their row-key construction.
-  const key = (c: HostedOperatorContext, ref: string, index: number) =>
+  const key = (c: OperatorArtifactContext, ref: string, index: number) =>
     JSON.stringify([c.authority, c.target.sessionId, c.target.appId, ref, index]);
   const assertCurrentOwner = async () => {
     if (!currentOwner) {

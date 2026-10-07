@@ -1,3 +1,4 @@
+import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled-operator-artifacts";
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { describeSelectedApp } from "@/lib/repository/app-description";
 import { runAppBrowserTests } from "./run-app-browser-tests";
@@ -52,11 +53,34 @@ const describeValidationApp = async (
   input: Parameters<typeof describeSelectedApp>[0],
 ) => (fixture ? undefined : await describeSelectedApp(input));
 
+const GENERATED_BACKEND = "generated-postgres";
+const captureValidatedRelease = async (
+  description: Awaited<ReturnType<typeof describeSelectedApp>> | undefined,
+  input: Parameters<typeof publishCompiledOperatorArtifactsForSession>[0],
+) => {
+  if (description?.backend.kind !== GENERATED_BACKEND) {
+    return null;
+  }
+  try {
+    await publishCompiledOperatorArtifactsForSession(input);
+    return null;
+  } catch {
+    input.signal?.throwIfAborted();
+    return {
+      problem:
+        "The repository checks passed, but the selected compiled release could not be captured under current owner/session authority. Restore private artifact storage or session authority and retry validation; no extra schema compilation is required.",
+      reason: "compiled-artifact-publication",
+      status: "needs_repair" as const,
+      technicalStatus: "passed" as const,
+    };
+  }
+};
+
 const validatePersistentBackend = async (
   description: Awaited<ReturnType<typeof describeSelectedApp>> | undefined,
   input: Parameters<typeof runAppBrowserTests>[0],
 ) => {
-  if (description?.backend.kind !== "generated-postgres") {
+  if (description?.backend.kind !== GENERATED_BACKEND) {
     return { status: "unassessed" as const };
   }
   if (description.validation.browser === null) {
@@ -70,6 +94,9 @@ const validatePersistentBackend = async (
 
 const backendValidationStatus = (status: string) =>
   status === "failed" || status === "blocked" ? ("needs_repair" as const) : ("validated" as const);
+
+const hasReusableTechnicalValidation = (phase: string, implementationFileCount: number) =>
+  ["validated", "reviewed"].includes(phase) && implementationFileCount === 0;
 
 export default defineTool({
   description:
@@ -87,9 +114,10 @@ export default defineTool({
       throw new Error("Apply the requested changes before running the repository checks.");
     }
     assertExistingAppImplementationFiles(input.implementationFiles, current.proposal.target);
-    const reusableTechnicalValidation =
-      (current.phase === "validated" || current.phase === "reviewed") &&
-      input.implementationFiles.length === 0;
+    const reusableTechnicalValidation = hasReusableTechnicalValidation(
+      current.phase,
+      input.implementationFiles.length,
+    );
     const priorDescription = await reusableDescription(reusableTechnicalValidation, async () => ({
       appId: current.appSpec.appId,
       root: current.applyReceipt.applyRoot,
@@ -101,7 +129,7 @@ export default defineTool({
     if (
       (current.phase === "validated" || current.phase === "reviewed") &&
       input.implementationFiles.length === 0 &&
-      priorDescription?.backend.kind !== "generated-postgres"
+      priorDescription?.backend.kind !== GENERATED_BACKEND
     ) {
       const evidence = currentProductBehaviorEvidence(
         current.appSpec.digest,
@@ -277,6 +305,19 @@ export default defineTool({
       sandbox,
       signal: ctx.abortSignal,
     });
+    const captureFailure = await captureValidatedRelease(description, {
+      adapterSessionId: ctx.session.id,
+      appId: current.appSpec.appId,
+      appSpecDigest: current.appSpec.digest,
+      callId: ctx.callId,
+      root: current.applyReceipt.applyRoot,
+      sandbox,
+      sessionAuth: ctx.session.auth,
+      signal: ctx.abortSignal,
+    });
+    if (captureFailure !== null) {
+      return captureFailure;
+    }
     const backendValidation = await validatePersistentBackend(description, {
       appId: current.appSpec.appId,
       root: current.applyReceipt.applyRoot,

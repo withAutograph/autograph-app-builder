@@ -11,10 +11,14 @@ const mocks = vi.hoisted(() => ({
   candidate: null as Record<string, unknown> | null,
   check: vi.fn(),
   inspect: vi.fn(),
+  publish: vi.fn(),
   run: vi.fn(),
   workflow: null as Record<string, unknown> | null,
 }));
 
+vi.mock("./compiled-operator-artifacts", () => ({
+  publishCompiledOperatorArtifactsForSession: mocks.publish,
+}));
 vi.mock("eve/tools", () => ({ defineTool: <T>(value: T): T => value }));
 vi.mock("./source-bound-sandbox", () => ({
   getSourceBoundSandbox: async () => ({ readTextFile: vi.fn(), run: mocks.run }),
@@ -39,13 +43,10 @@ vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
 }));
 vi.mock("../../agent/tools/compile-app-schema-release", () => ({
   appSchemaReleaseCommand: () => schemaCommand,
-  compileAppSchemaRelease: async () => ({
-    command: schemaCommand,
-    exitCode: 0,
-    status: "compiled",
-    stderr: "",
-    stdout: "",
-  }),
+  compileAppSchemaRelease: async (input: { onCompiled?: () => Promise<void> }) => {
+    await input.onCompiled?.();
+    return { command: schemaCommand, exitCode: 0, status: "compiled", stderr: "", stdout: "" };
+  },
 }));
 vi.mock("../../agent/tools/run-app-browser-tests", () => ({
   appBrowserTestCommand: () => "mise run --skip-tools //apps/spend-review:test-e2e",
@@ -56,7 +57,11 @@ vi.mock("../repository/target-validation", () => ({
   validationOutputExcerpt: (stdout: string, stderr: string) => ({ stderr, stdout }),
 }));
 
-const context = { abortSignal: new AbortController().signal, callId: "validation_1" } as never;
+const context = {
+  abortSignal: new AbortController().signal,
+  callId: "validation_1",
+  session: { auth: { owned: "auth" }, id: "adapter" },
+} as never;
 
 const incremental = async (expectedCommand: string) =>
   await validateReconciliation.execute(
@@ -75,6 +80,7 @@ describe("draft reconciliation command progress", () => {
       version: 1,
     };
     mocks.workflow = {
+      appSpec: { digest },
       githubSource: { digest },
       phase: "reviewed",
       reviewReceipt: { digest },
@@ -99,6 +105,13 @@ describe("draft reconciliation command progress", () => {
     });
     expect(mocks.run).toHaveBeenCalledOnce();
     expect(mocks.candidate?.validationRun).toMatchObject({ nextIndex: 2 });
+    expect(mocks.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adapterSessionId: "adapter",
+        appSpecDigest: digest,
+        root: "/workspace/candidate",
+      }),
+    );
   });
 
   it("keeps the original single-call validation path available", async () => {
@@ -108,6 +121,7 @@ describe("draft reconciliation command progress", () => {
         context,
       ),
     ).resolves.toMatchObject({ status: "validated" });
+    expect(mocks.publish).toHaveBeenCalledOnce();
     expect(mocks.run).toHaveBeenCalledOnce();
     expect(mocks.check).toHaveBeenCalledTimes(2);
     expect(mocks.candidate?.validation).toMatchObject({
@@ -166,6 +180,13 @@ describe("draft reconciliation command progress", () => {
     );
     expect(mocks.candidate?.validation).toBeUndefined();
     expect(mocks.candidate?.validationRun).toMatchObject({ nextIndex: 2 });
+    expect(mocks.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        adapterSessionId: "adapter",
+        appSpecDigest: digest,
+        root: "/workspace/candidate",
+      }),
+    );
     await expect(incremental(check)).resolves.toMatchObject({ status: "in_progress" });
     expect(mocks.candidate?.validation).toBeUndefined();
   });

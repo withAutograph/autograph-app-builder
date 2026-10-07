@@ -1,4 +1,5 @@
 import { defineTool } from "eve/tools";
+import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled-operator-artifacts";
 import type { ToolContext } from "eve/tools";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import type { SandboxSession } from "eve/sandbox";
@@ -24,6 +25,27 @@ import {
   sandboxValidationCommandExecutor,
   validationOutputExcerpt,
 } from "@/lib/repository/target-validation";
+
+const publishCandidateArtifacts = async (
+  ctx: ToolContext,
+  candidate: DraftReconciliationCandidate,
+  sandbox: SandboxSession,
+) => {
+  const state = appBuilderWorkflowState.get();
+  if (state.phase !== "reviewed") {
+    throw new Error("The reviewed app no longer owns this compilation.");
+  }
+  return await publishCompiledOperatorArtifactsForSession({
+    adapterSessionId: ctx.session.id,
+    appId: candidate.appId,
+    appSpecDigest: state.appSpec.digest,
+    callId: ctx.callId,
+    root: candidate.root,
+    sandbox,
+    sessionAuth: ctx.session.auth,
+    signal: ctx.abortSignal,
+  });
+};
 
 const runAdditionalChecks = async (input: {
   sandbox: SandboxSession;
@@ -150,6 +172,9 @@ const runIncrementalValidation = async (
     if (step.kind === "schema") {
       const schema = await compileAppSchemaRelease({
         appId: candidate.appId,
+        onCompiled: async () => {
+          await publishCandidateArtifacts(ctx, candidate, sandbox);
+        },
         root: candidate.root,
         sandbox,
         signal: ctx.abortSignal,
@@ -346,6 +371,9 @@ export default defineTool({
     }
     const schema = await compileAppSchemaRelease({
       appId: candidate.appId,
+      onCompiled: async () => {
+        await publishCandidateArtifacts(ctx, candidate, sandbox);
+      },
       root: candidate.root,
       sandbox,
       signal: ctx.abortSignal,
