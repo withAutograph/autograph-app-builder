@@ -1,0 +1,202 @@
+# Hosted operator deployment and Spend Review qualification
+
+**Status:** source-backed deployment plan; no operator host, owner Neon registration,
+or hosted Spend Review session has been qualified by this document.
+
+This plan records what the merged Builder and Arrusted sources provide, what
+must be composed and registered before hosted effects are possible, and the
+evidence required to qualify the original Spend Review request. It authorizes
+no provider changes, credential creation, database writes, deployment, or
+Production activity.
+
+## Evidence boundary
+
+The Builder source baseline is `68895726` (protected planning for direct public
+MCP sessions). The Arrusted source baseline is `1fbf221b` (strict protected
+installer lint fix). The HC installer command and `packages/protected-installer`
+support a fixed worker protocol; source tests and disposable PostgreSQL tests do
+not prove a deployed operator, real owner grants, Preview deployment behavior,
+or the product session.
+
+Arrusted's current Spend Review release pointer is
+`apps/spend-review/schema/release/2026-10-06.fenced-membership-v17/data-server`.
+The app requires a verified Better Auth session, active organization, exact app
+role and restricted database login. The release contains no demo seed or reset
+control. The app README and production handoff require distinct requester and
+reviewer actors and exact tenant/role grants.
+
+Readiness evidence for the current QA tenant does not establish that the
+installer host can prepare a fresh tenant. Retain the **PR #1537 fresh-tenant
+dependency** until a concrete protected installer-host composition has been
+deployed and observed preparing a new synthetic Preview target. A later
+readiness proof applies only to the tenant it actually read back.
+
+## Existing source building blocks
+
+| Need | Existing source | What it supplies | What remains to compose or prove |
+| --- | --- | --- | --- |
+| HTTP operator contract | `lib/provisioning/hosted-operator-service.ts`: `createProtectedHostedOperatorHandler`, `ProtectedHostedOperatorDependencies` | Mandatory callback interface for planning, authorization, durable approval, journal, lease, reconcile, execution, verify and bindings. | No production `createDependencies()` adapter module wires all callbacks together. |
+| Authenticated owner resolution | `hosted-operator-owner-context.ts`: `createHostedOperatorOwnerContextResolver`; `hosted-operator-owner.ts`: `createHostedOperatorOwnerAuthority` | Exact tenant-scoped owner/session resolution, active membership and current owner provider authority checks for handoff or direct-start sessions. | The separately deployed service must connect these to the Builder's durable Eve, handoff, membership and owner installation stores. |
+| Terminal approval | `hosted-operator-owner.ts`: `createHostedOperatorReadApproval` | Reads the private terminal approval receipt bound to exact action, call, frozen plan digest, operation, target and responder; can recover from the owner-scoped Eve stream. | Configure its `observe` transport with the operator's own workload identity and explicit read-only permission. It must not borrow a Builder bearer or default to allow. |
+| Workload verification | `hosted-operator-workload.ts`: `createOperatorWorkloadVerifier` and `OperatorWorkloadPolicy` | RS256 signature, issuer, audience, subject, owner, project and environment validation. | Supply the exact policy and trusted key resolution in the separate operator deployment; prove the deployed identity claims match it. |
+| Owner Vercel authority | `hosted-operator-owner.ts`; `lib/agent/prepared-provider-context.ts`; `lib/integrations/postgres-vercel-installation.ts`: `readActiveVercelInstallationToken` | Existing tenant-bound Vercel OAuth installation storage and project access checks. | Compose safe access to the Builder control-plane records and Vercel token decryption key. Recheck active installation and project grants at operation time. |
+| Read-only public origin | `hosted-operator-gateway.ts`: `readHostedOperatorPublicGateway` | Verifies selected project/branch deployment metadata and alias before including the origin in the frozen plan. | This is provider metadata, not browser reachability or application health. The deployed Preview still needs independent HTTP/authenticated behavior checks. |
+| Sole journal | `postgres-hosted-runtime-journal.ts`: `createPostgresHostedRuntimeJournalStore` | CAS, approvals, frozen plan, positive fence generation, checkpoint and receipts in existing `builderProvisioningJournals`. | Supply the existing Builder control-plane database connection and encryption keys with least required access. Do not add another journal. |
+| Shared resource fence | `postgres-hosted-operator-resource-lease.ts`: `createPostgresHostedOperatorResourceLease` | Dedicated per-operation control-plane SQL lock client; serializes physical Neon project, branch and database identities; rechecks journal lease, operation and generation. | Compose `openLockClient` separately from the journal store connection. Prove it targets the same control-plane authority and remains available through recovery. |
+| Fixed installer execution | `hosted-operator-sandbox-launcher.ts`: `createHostedOperatorSandboxLauncher` | Source-free Vercel Sandbox, project/team OIDC, allow-all networking, pinned worker digest, frozen context, explicit tenants, per-effect authority and checkpoint relay, cleanup. | Pin the full operator dependency closure and HC worker artifact, configure image/catalog and prove the exact deployed worker digest. |
+| Separate service process | `scripts/serve-hosted-operator.mts`; `.config/mise/tasks/operator/serve` | Loopback server that checks the adapter entry-module SHA and requires all dependencies at startup. | It is a local entrypoint, not a deployed host, TLS ingress, identity policy, artifact store or complete dependency-closure pin. |
+| Builder caller | `hosted-operator-client.ts`: `hostedOperatorClientForSession`; `lib/eve/vercel-workload-identity.ts`: `createVercelWorkloadIdentity` | Resolves trusted owner context and sends the request with invocation-scoped Vercel OIDC; missing `HOSTED_RUNTIME_OPERATOR_URL` fails closed. | Configure an HTTPS operator origin in Builder and verify actual caller claims. No legacy installer fallback is allowed. |
+| HC worker | Arrusted `apps/hc/src/server.rs` `protected-install`; `packages/protected-installer` | Fixed `protected-install --file-spool ...` worker with protected Rust session, explicit tenant targets, pinned installer/release identity, per-write authority and checkpoint protocol. | Build and pin the actual binary and its dependency closure; map the frozen Spend Review release/resource plan to the HC adapter's exact operations and verify readbacks. |
+
+The operator service is not currently a production composition. A checksum on
+the adapter entry file does not pin imported modules or dependencies. The
+separate host must deploy a reviewed immutable package/toolchain and worker
+catalog; neither model-authored repository code nor arbitrary SQL is an
+installer input.
+
+## Process and credential boundaries
+
+These identities have distinct jobs and must not be substituted for one
+another:
+
+| Principal or secret | Consumer and purpose | Current source status |
+| --- | --- | --- |
+| Builder invocation Vercel OIDC | Builder MCP caller authenticates to the operator's exact workload policy. | `createVercelWorkloadIdentity` exists; operator URL and deployed claims still need configuration/readback. |
+| Operator service Vercel OIDC | Operator makes owner-scoped read-only Eve observation for terminal approvals. | Approval reader accepts an `observe` transport; its separate identity and GET permission are not deployed/configured. |
+| Operator Sandbox project/team OIDC | Creates and controls a source-free installer Sandbox. | Launcher obtains this token using its configured project/team; host permissions and deployed behavior remain unproven. |
+| Owner Vercel OAuth installation | Reads selected project and deployment metadata and resolves owner-authorized project access. | Existing tenant-scoped integration exists; owner must have an active installation with the needed grants. |
+| Builder control-plane DB and encryption keys | Reads owner/session/handoff/membership records, reads/writes the sole journal, decrypts the owner Vercel installation and protects private runtime checkpoints. | Builder factories exist; no operator deployment is wired to these data stores or key material. Grant only the specific access required by the reviewed adapter. |
+| Owner-authorized Neon access | Creates or verifies the synthetic-only Preview resource set and produces a direct URL for a single protected worker operation. | **Missing.** There is no owner Neon OAuth/credential issuer or `NEON_*` source integration. Do not use an ambient Neon API key, Builder's Production root, a guessed provider token, or a Vercel project-wide database variable as a substitute. |
+| Restricted runtime credentials | App receives only its app database URL, shared Auth URL, Better Auth secret/name/URL and verified public origin. | Contract projection exists; actual service-specific secret isolation and binding readback are still unproven. |
+
+The HC worker's direct database URL is transient protected startup input for the
+fixed installer process. It must not be written to the app service environment,
+public receipt, model context, logs or operator response. Approval and
+checkpoint receipts contain identities and sanitized readback facts, never
+passwords, URLs, OAuth tokens or signing secrets.
+
+## Remaining implementation before external registration
+
+These source/configuration tasks can proceed without a customer or provider
+registration:
+
+1. Add one reviewed operator adapter module implementing the exact
+   `ProtectedHostedOperatorDependencies` callbacks. Assemble the existing
+   owner resolver/authority, approval reader, journal store, resource lease,
+   protected planner, reconciler, worker launcher, independent verifier and
+   strict bindings projection. Keep one `builderProvisioningJournals` row as
+   the only effect journal.
+2. Define deployment-owned schemas for the service's exact workload policy,
+   operator project/team/image, immutable worker catalog and secret references.
+   Validate required values at startup and fail closed; do not invent a Neon
+   environment variable or provider credential source.
+3. Build the Arrusted HC worker from the reviewed source/toolchain and pin its
+   artifact digest in the operator catalog. Verify the release artifact and
+   exact HC operation list against the frozen plan; retain the installed bundle,
+   schema install/repair/replay semantics, access generation and explicit
+   tenant targets.
+4. Specify least-privilege control-plane database access, encryption-key
+   delivery/rotation, operator workload audience, owner-scoped Eve read
+   permission, authenticated HTTPS ingress and operational logging that
+   excludes credentials. The existing `operator:serve` command alone does not
+   supply these.
+5. Add composition-level synthetic tests against disposable stores and local
+   PostgreSQL, including wrong owner/project/branch/tenant, absent or rejected
+   approval, revoked owner grants, stale generation, unknown readback, retry
+   after worker interruption, and secret-free public receipts. These are source
+   evidence only, not a deployed readiness result.
+
+No Neon mutation or database preparation should be enabled until the following
+owner/provider inputs exist through an explicit reviewed registration:
+
+- A dedicated nonproduction Neon project/branch and the owner-authorized means
+  to create, inspect and connect to its synthetic-only databases. Confirm its
+  scope and cost/retention with the owner. Do not derive this authority from a
+  Production database URL or ambient service key.
+- An active owner Vercel installation for the selected Preview project, with
+  the exact project/branch access needed for metadata and deployment checks.
+- A separate operator host/deployment with its own workload policy and
+  operator-to-Eve read-only identity, plus project-scoped Sandbox OIDC for
+  installer execution.
+- Reviewed storage and rotation for the Builder control-plane connection and
+  the existing journal/checkpoint encryption key. Keep those credentials
+  outside app services and child Sandboxes.
+
+If owner-authorized Neon access cannot be registered, keep planning blocked at
+that predicate. Do not claim a ready adapter because a locally injected URL
+works; that would bypass the missing owner authority.
+
+## Deployment and first original-session qualification
+
+After the source composition and external registrations are reviewed, perform
+these as separately approved operational steps. Capture exact resource names,
+digests, generation, sanitized receipts and independent readback; never record
+secret values.
+
+1. Deploy the operator separately from Builder and the generated app. Pin its
+   complete package/toolchain, adapter, image and HC installer artifact. Configure
+   HTTPS ingress, exact Vercel issuer/audience/subject/owner/project/environment
+   policy, operator-only Eve observation, control-plane stores/keys and
+   project/team Sandbox OIDC. Verify a rejected workload cannot reach the
+   handler and an accepted Builder invocation can reach only the configured
+   origin.
+2. Set Builder's `HOSTED_RUNTIME_OPERATOR_URL` to that HTTPS origin. Read back
+   the deployed Builder configuration and invoke a no-effect protected status
+   request. Confirm owner, session, membership, active Vercel installation and
+   selected project are independently resolved. No request-supplied owner ID
+   or model-selected target can establish authority.
+3. Recover the exact original public Spend Review request, retained at
+   `docs/evals/evidence/2026-09-29-persistent-apps/spend-review-hosted-recovery.public.jsonl`
+   (client request ID `8b48c82f-e9f7-4e31-b3d5-573e0b5a947d`). The receipt is
+   `submission_unknown` with no session ID. Call `autograph_get` with that
+   original ID; if it remains unresolved, retry `autograph_start` with the same
+   ID and byte-for-byte original brief as required by
+   `docs/public-mcp-contract.md`. Preserve every session ID, cursor and reply.
+   Never create a replacement request ID or use private workflow operations.
+4. Let the Builder's public workflow perform planning. The operator must
+   independently bind the selected app, Vercel project and Preview branch,
+   current owner access, exact current Spend Review release/artifact, synthetic
+   Neon project/branch, distinct Auth/app databases, migrator/runtime roles,
+   explicit organization/actor/role targets, cost owner and retention. Review
+   the plan digest and every ordered effect before approving that exact public
+   tool call. No private stage manipulation or implementation instructions are
+   evaluation input.
+5. Approve resource preparation only after reviewing the named nonproduction
+   target. Confirm the worker independently verifies its pinned binary and
+   release, performs the expected schema install/repair/replay, writes only the
+   frozen Auth/app resources and tenant targets, and records one acknowledged
+   checkpoint per protected write. Verify installed identity, schema/release,
+   tenant scope, Auth assignments and restricted runtime grants from independent
+   reads. Unknown readback blocks; do not retry with new names or credentials.
+6. Approve exact access grants for two real hosted QA identities: requester
+   (`member`) and reviewer (`reviewer`) in the same organization. Confirm
+   membership before assignment, generation on both authority rows, no
+   self-approval, and unchanged sibling app, other-tenant and user/session
+   records. Test revoke ordering separately on the synthetic Preview target.
+7. Read back operator bindings and native Vercel branch/project deployment
+   metadata. Verify app services receive only restricted runtime URLs and
+   auth/public-origin settings; prove installer/admin/Neon credentials are
+   absent from actual app process environments. A Gateway alias or provider
+   `READY` state alone does not establish app behavior.
+8. Qualify the original app brief through the public Builder workflow. Observe
+   normal signed-in requester submission, requester-only history, reviewer
+   queue and one noted terminal approve/reject, self-approval denial, unassigned
+   actor denial, cross-tenant denial and concurrent-decision conflict. Read
+   request/decision/audit history independently, reload, restart the app
+   process, and verify the same records remain. Preserve public transcript,
+   session cursors, deployment SHA, branch, release, approval references and
+   sanitized readback. Report each scenario as passed, failed, blocked or
+   unassessed under `docs/generated-app-behavior-acceptance.md`.
+9. Keep Production out of this qualification. Production provisioning,
+   activation, pilot grants and any write against production data require a
+   separate exact plan, review and explicit authorization.
+
+## Completion criteria
+
+This work is complete only when the operator adapter and host are deployed,
+the owner-authorized synthetic Neon and Vercel inputs are independently
+verified, a fresh synthetic Preview tenant is prepared through the fixed
+protected installer, and the original public Spend Review session demonstrates
+the required requester/reviewer behavior with independent readback and restart
+continuity. Until then, distinguish source, local disposable-PostgreSQL,
+current-QA readiness and hosted product evidence; none substitutes for another.
