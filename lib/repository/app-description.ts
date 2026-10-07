@@ -28,6 +28,75 @@ export const appDescriptionSchema = z.object({
 });
 export type AppDescription = z.infer<typeof appDescriptionSchema>;
 
+const sourceDiagnosticSchema = z.strictObject({
+  baselinePlatformHead: z
+    .string()
+    .regex(/^[a-f0-9]{40,64}$/u)
+    .nullable(),
+  configOverridePresent: z.boolean(),
+  configuration: z
+    .array(
+      z.strictObject({
+        path: z.enum(["mise.toml", ".mise.toml", ".config/mise/config.toml"]),
+        state: z.enum(["declared", "absent", "unavailable"]),
+      }),
+    )
+    .max(3),
+  descriptionScriptExists: z.boolean(),
+  sourceHead: z
+    .string()
+    .regex(/^[a-f0-9]{40,64}$/u)
+    .nullable(),
+});
+
+/** Read-only source facts; deliberately excludes config contents, environment values and remotes. */
+export const appDescriptionSourceInspectionProgram = String.raw`
+const { readFileSync, existsSync, statSync } = require("node:fs");
+const { spawnSync } = require("node:child_process");
+const validHead = value => typeof value === "string" && /^[a-f0-9]{40,64}$/.test(value) ? value : null;
+const git = spawnSync("git", ["-c", "core.fsmonitor=false", "rev-parse", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+let baselinePlatformHead = null;
+try {
+  const marker = JSON.parse(readFileSync(".app-builder/app-baselines/" + process.argv[1] + ".json", "utf8"));
+  baselinePlatformHead = validHead(marker.receipt?.platform?.commitSha);
+} catch {}
+const configuration = ["mise.toml", ".mise.toml", ".config/mise/config.toml"].map(path => {
+  try {
+    if (!existsSync(path)) return { path, state: "absent" };
+    if (statSync(path).size > 1024 * 1024) return { path, state: "unavailable" };
+    const content = readFileSync(path, "utf8");
+    return { path, state: /^\s*\[tasks\.(?:"app:describe"|\x27app:describe\x27)\]/m.test(content) ? "declared" : "absent" };
+  } catch { return { path, state: "unavailable" }; }
+});
+console.log(JSON.stringify({ sourceHead: validHead(git.status === 0 ? git.stdout.trim() : null), baselinePlatformHead, configuration,
+  descriptionScriptExists: existsSync(".config/mise/scripts/repository/app-describe.ts"), configOverridePresent: Boolean(process.env.MISE_CONFIG_FILE) }));
+`;
+
+const describeFailureSourceDiagnostic = async (input: {
+  appId: string;
+  root: string;
+  sandbox: Pick<SandboxSession, "run">;
+  signal?: AbortSignal;
+}): Promise<string> => {
+  try {
+    const request: Parameters<SandboxSession["run"]>[0] = {
+      command: `node -e '${appDescriptionSourceInspectionProgram}' ${appId.parse(input.appId)}`,
+      workingDirectory: input.root,
+    };
+    if (input.signal !== undefined) {
+      request.abortSignal = input.signal;
+    }
+    const result = await input.sandbox.run(request);
+    if (result.exitCode !== 0) {
+      return "";
+    }
+    const facts = sourceDiagnosticSchema.safeParse(JSON.parse(result.stdout));
+    return facts.success ? ` Source inspection: ${JSON.stringify(facts.data)}.` : "";
+  } catch {
+    return "";
+  }
+};
+
 /** Repository commands describe capabilities; the Builder does not parse its internal layout. */
 export const describeSelectedApp = async (input: {
   appId: string;
@@ -47,8 +116,9 @@ export const describeSelectedApp = async (input: {
     const diagnostic = sanitizeValidationDiagnosticText(result.stderr || result.stdout)
       .replaceAll(/\b[a-z][a-z0-9+.-]*:\/\/[^\s]+/giu, "[URL REDACTED]")
       .trim();
+    const sourceDiagnostic = await describeFailureSourceDiagnostic(input);
     throw new Error(
-      `The selected repository could not describe this app (app:describe exited ${result.exitCode}). Repair its app:describe command and retry. Cause: ${diagnostic || "The command returned no diagnostic output."}`,
+      `The selected repository could not describe this app (app:describe exited ${result.exitCode}). Repair its app:describe command and retry. Cause: ${diagnostic || "The command returned no diagnostic output."}${sourceDiagnostic}`,
     );
   }
   const description = appDescriptionSchema.parse(JSON.parse(result.stdout));

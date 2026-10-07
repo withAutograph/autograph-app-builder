@@ -1,5 +1,9 @@
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { describeSelectedApp } from "./app-description";
+import { appDescriptionSourceInspectionProgram, describeSelectedApp } from "./app-description";
 
 const descriptor = {
   app: { id: "spend-review", routes: ["/spend-review"], workspacePath: "apps/spend-review" },
@@ -62,4 +66,58 @@ describe("repository app description", () => {
       ),
     ).rejects.toThrow();
   });
+});
+
+describe("app description source diagnostics", () => {
+  it("adds allowlisted source facts to a failed descriptor without exposing source content", async () => {
+    const facts = {
+      baselinePlatformHead: "b".repeat(40),
+      configOverridePresent: true,
+      configuration: [{ path: ".config/mise/config.toml", state: "absent" }],
+      descriptionScriptExists: false,
+      sourceHead: "a".repeat(40),
+    };
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ exitCode: 1, stderr: "no task //:app:describe found", stdout: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: JSON.stringify(facts) });
+    await expect(
+      describeSelectedApp({
+        appId: "spend-review",
+        root: "/workspace/repository",
+        sandbox: { run },
+      }),
+    ).rejects.toThrow(`Source inspection: ${JSON.stringify(facts)}`);
+    expect(run).toHaveBeenLastCalledWith({
+      command: `node -e '${appDescriptionSourceInspectionProgram}' spend-review`,
+      workingDirectory: "/workspace/repository",
+    });
+    expect(appDescriptionSourceInspectionProgram).not.toContain("process.env.MISE_CONFIG_FILE,");
+  });
+});
+
+it("executes source inspection without printing config contents or override values", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "describe-source-facts-"));
+  try {
+    mkdirSync(path.join(root, ".config/mise"), { recursive: true });
+    writeFileSync(
+      path.join(root, ".config/mise/config.toml"),
+      '[tasks."app:describe"]\nrun = "secret-synthetic-command"\n',
+    );
+    const output = execFileSync(
+      process.execPath,
+      ["-e", appDescriptionSourceInspectionProgram, "spend-review"],
+      {
+        cwd: root,
+        encoding: "utf-8",
+        env: { ...process.env, MISE_CONFIG_FILE: "synthetic-private-config" },
+      },
+    );
+    expect(output).toContain('"state":"declared"');
+    expect(output).toContain('"configOverridePresent":true');
+    expect(output).not.toContain("secret-synthetic-command");
+    expect(output).not.toContain("synthetic-private-config");
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
 });
