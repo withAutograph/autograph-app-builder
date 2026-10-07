@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { readVercelManagedNeonResource } from "./hosted-runtime-marketplace-resource";
-import type { MarketplaceResourceErrorCode } from "./hosted-runtime-marketplace-resource";
+
+type MarketplaceJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | MarketplaceJsonValue[]
+  | { [key: string]: MarketplaceJsonValue };
 
 const projectId = "prj_services";
 const configurationId = "icfg_neon";
@@ -27,12 +34,13 @@ const storeDetail = {
   secrets: [{ name: "POSTGRES_PASSWORD", value: "must-not-escape" }],
 };
 
-const fail = (code: MarketplaceResourceErrorCode) => Object.assign(new Error(code), { code });
+const fail = (code: "connection_required" | "provider_unavailable" | "resource_mismatch") =>
+  Object.assign(new Error(code), { code });
 
 describe("Vercel-managed Neon resource readback", () => {
   it("binds the exact installed Neon resource to its Vercel project without returning secrets", async () => {
     // oxlint-disable-next-line eslint/require-await -- Promise-returning Vercel API fixture.
-    const request = vi.fn(async (path: string) => {
+    const request = vi.fn(async (path: string): Promise<MarketplaceJsonValue> => {
       if (path === "/v1/storage/stores") {
         return { stores: [listedStore] };
       }
@@ -68,7 +76,7 @@ describe("Vercel-managed Neon resource readback", () => {
     { ...listedStore, type: "blob" },
   ])("does not select a store without exact project and integration metadata", async (store) => {
     // oxlint-disable-next-line eslint/require-await -- Promise-returning Vercel API fixture.
-    const request = vi.fn(async () => ({ stores: [store] }));
+    const request = vi.fn(async (): Promise<MarketplaceJsonValue> => ({ stores: [store] }));
 
     await expect(
       readVercelManagedNeonResource({ configurationId, fail, projectId, request, scopeId }),
@@ -78,7 +86,7 @@ describe("Vercel-managed Neon resource readback", () => {
 
   it("rejects multiple linked Neon resources instead of guessing", async () => {
     // oxlint-disable-next-line eslint/require-await -- Promise-returning Vercel API fixture.
-    const request = vi.fn(async () => ({
+    const request = vi.fn(async (): Promise<MarketplaceJsonValue> => ({
       stores: [listedStore, { ...listedStore, id: "store_neon_2" }],
     }));
 
@@ -90,7 +98,7 @@ describe("Vercel-managed Neon resource readback", () => {
 
   it("rejects a detail readback owned by another Vercel scope", async () => {
     // oxlint-disable-next-line eslint/require-await -- Promise-returning Vercel API fixture.
-    const request = vi.fn(async (path: string) =>
+    const request = vi.fn(async (path: string): Promise<MarketplaceJsonValue> =>
       path === "/v1/storage/stores"
         ? { stores: [listedStore] }
         : { store: { ...storeDetail, ownerId: "team_other" } },

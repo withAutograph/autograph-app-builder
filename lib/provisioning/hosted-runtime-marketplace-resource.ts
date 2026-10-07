@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const jsonValueSchema = z.json();
-type JsonValue = z.infer<typeof jsonValueSchema>;
+export type MarketplaceJsonValue = z.infer<typeof jsonValueSchema>;
 
 export type MarketplaceResourceErrorCode =
   | "connection_required"
@@ -44,7 +44,7 @@ export const readVercelManagedNeonResource = async (input: {
   configurationId: string;
   fail: (code: MarketplaceResourceErrorCode) => Error;
   projectId: string;
-  request: (path: string) => Promise<JsonValue>;
+  request: (path: string) => Promise<MarketplaceJsonValue>;
   scopeId: string;
 }) => {
   const listedPayload = resourceListSchema.safeParse(await input.request("/v1/storage/stores"));
