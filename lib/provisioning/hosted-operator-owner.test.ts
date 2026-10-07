@@ -1,8 +1,10 @@
 import { generateKeyPair, SignJWT } from "jose";
+import type { MessageStreamEvent } from "eve/client";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { durableHostedSessionRecordSchema, hostedSessionRecordSchema } from "../eve/hosted-store";
 import type { HostedEveStore, HostedSessionRecord } from "../eve/hosted-store";
+import type { HostedEveTransport } from "../eve/hosted-service";
 import { privateHostedApprovalReceiptSchema } from "../eve/private-hosted-approval";
 import type { HostedPrincipal } from "../eve/hosted-auth";
 import { builderHandoffRecordSchema } from "../handoff/contracts";
@@ -138,9 +140,15 @@ const makeFixture = (sessionOverride?: HostedSessionRecord, missingHandoff = fal
     sessionId: ownerContext.sessionId,
     version: 1,
   });
-  const eve: Pick<HostedEveStore, "getSession"> = {
+  const eve: Pick<HostedEveStore, "getSession" | "recordPrivateApprovalReceipts"> = {
     // oxlint-disable-next-line eslint/require-await -- this in-memory store seam has no asynchronous work.
     getSession: vi.fn(async () => sessionOverride ?? currentSession),
+    async recordPrivateApprovalReceipts(input) {
+      currentSession.privateApprovalReceipts = [
+        ...(currentSession.privateApprovalReceipts ?? []),
+        ...input.receipts,
+      ];
+    },
   };
   const handoffs: Pick<BuilderHandoffStore, "read"> = {
     // oxlint-disable-next-line eslint/require-await -- this in-memory store seam has no asynchronous work.
@@ -346,7 +354,6 @@ describe("hosted operator owner authority", () => {
       toolName: "prepare-app-hosted-runtime",
       turnId: "turn-1",
     });
-    fixture.currentSession.privateApprovalReceipts = [receipt];
     const runtimeTarget = hostedRuntimeTargetSchema.parse({
       ...selection,
       installationId: "icfg_1",
@@ -372,8 +379,68 @@ describe("hosted operator owner authority", () => {
       // oxlint-disable-next-line eslint/require-await -- this fixture returns the exact in-memory journal row.
       read: vi.fn(async () => ({ record, revision: 1 })),
     };
-    const readApproval = createHostedOperatorReadApproval({ eve: fixture.eve, journal });
     const context = await fixture.authority.authorize(request(), selection, ownerContext);
+    let readApproval: ReturnType<typeof createHostedOperatorReadApproval>;
+    let concurrentRead:
+      | {
+          action: "prepare" | "cleanup";
+          approvalId: string;
+          approved: boolean;
+          callId: string;
+          planDigest: string;
+        }
+      | undefined;
+    const events = [
+      {
+        data: {
+          requests: [{
+            action: {
+              callId: receipt.callId,
+              input: receipt.toolInput,
+              toolName: receipt.toolName,
+            },
+            kind: "tool-approval",
+            requestId: receipt.requestId,
+          }],
+        },
+        type: "input.requested",
+      },
+      {
+        data: {
+          outcome: "approved",
+          requestId: receipt.requestId,
+          responderPrincipalId: principal.ownerUserId,
+          sequence: receipt.sequence,
+          turnId: receipt.turnId,
+        },
+        type: "approval.settled",
+      },
+    ] as MessageStreamEvent[];
+    let observationFinished = false;
+    const observe = vi.fn(async (streamRequest: Parameters<NonNullable<HostedEveTransport["observe"]>>[0]) => {
+      expect(streamRequest.sessionId).toBe(ownerContext.sessionId);
+      expect(streamRequest.adapterSessionId).toBe(ownerContext.adapterSessionId);
+      expect(streamRequest.readDeadline).toBe(true);
+      for (const event of events) {
+        await streamRequest.onPrivateEvent?.(event);
+      }
+      concurrentRead = await readApproval({
+        ...context,
+        action: "prepare",
+        callId: receipt.callId,
+        planDigest,
+      });
+      expect(observationFinished).toBe(false);
+      observationFinished = true;
+      return {
+        artifactProjectionRequiresLegacyReadback: false,
+        installedEventCount: 2,
+        pendingRequests: [],
+        publicEventCount: 0,
+        status: "waiting" as const,
+      };
+    });
+    readApproval = createHostedOperatorReadApproval({ eve: fixture.eve, journal, observe });
     await expect(
       readApproval({
         ...context,
@@ -388,6 +455,43 @@ describe("hosted operator owner authority", () => {
       callId: receipt.callId,
       planDigest,
     });
+    expect(observationFinished).toBe(true);
+    expect(concurrentRead).toMatchObject({ approved: true, approvalId: receipt.requestId });
+    expect(fixture.currentSession.privateApprovalReceipts).toEqual([receipt]);
+    const restartedReader = createHostedOperatorReadApproval({
+      eve: fixture.eve,
+      journal,
+      observe: vi.fn(async () => {
+        throw new Error("A persisted terminal receipt must not require another stream read.");
+      }),
+    });
+    await expect(
+      restartedReader({ ...context, action: "prepare", callId: receipt.callId, planDigest }),
+    ).resolves.toMatchObject({ approved: true, approvalId: receipt.requestId });
+    expect(observe).toHaveBeenCalledTimes(1);
+    fixture.currentSession.privateApprovalReceipts = undefined;
+    const submittedOnlyReader = createHostedOperatorReadApproval({
+      eve: fixture.eve,
+      journal,
+      observe: async (streamRequest) => {
+        await streamRequest.onPrivateEvent?.(events[0]!);
+        await streamRequest.onPrivateEvent?.({
+          data: { requestId: receipt.requestId, response: { decision: "approve" } },
+          type: "client.input.responded",
+        } as unknown as MessageStreamEvent);
+        return {
+          artifactProjectionRequiresLegacyReadback: false,
+          installedEventCount: 2,
+          pendingRequests: [],
+          publicEventCount: 0,
+          status: "waiting",
+        };
+      },
+    });
+    await expect(
+      submittedOnlyReader({ ...context, action: "prepare", callId: receipt.callId, planDigest }),
+    ).rejects.toThrow();
+    expect(fixture.currentSession.privateApprovalReceipts).toBeUndefined();
     fixture.currentSession.privateApprovalReceipts = [{ ...receipt, outcome: "cancelled" }];
     await expect(
       readApproval({ ...context, action: "prepare", callId: receipt.callId, planDigest }),

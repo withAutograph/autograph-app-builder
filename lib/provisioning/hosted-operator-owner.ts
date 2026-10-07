@@ -21,7 +21,11 @@ import type { OperatorWorkloadPolicy } from "./hosted-operator-workload";
 import { hostedRuntimeTargetSchema } from "./hosted-runtime-journal";
 import type { HostedRuntimeJournalStore } from "./hosted-runtime-journal";
 import type { HostedOperatorContext } from "./hosted-operator-service";
-import { readPrivateHostedApproval } from "../eve/private-hosted-approval";
+import {
+  createPrivateHostedApprovalRecorder,
+  readPrivateHostedApproval,
+} from "../eve/private-hosted-approval";
+import type { HostedEveTransport } from "../eve/hosted-service";
 
 type Authority = OperatorOwnerContext["authority"];
 type AccessReader = Parameters<typeof readPreparedVercelAccess>[0]["readCredential"];
@@ -211,8 +215,14 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
 /** Owner-scoped terminal approval reader; the durable digest binds the closed plan. */
 export const createHostedOperatorReadApproval =
   (input: {
-    eve: Pick<HostedEveStore, "getSession">;
+    eve: Pick<HostedEveStore, "getSession" | "recordPrivateApprovalReceipts">;
     journal: Pick<HostedRuntimeJournalStore, "read">;
+    /**
+     * Operator-owned read-only Eve transport. Configure its own project-scoped
+     * workload identity with explicit GET access to the canonical session stream;
+     * never borrow a Builder bearer or infer access when this capability is absent.
+     */
+    observe: NonNullable<HostedEveTransport["observe"]>;
   }) =>
   async (
     context: HostedOperatorContext & {
@@ -234,7 +244,7 @@ export const createHostedOperatorReadApproval =
     ) {
       throw unavailable();
     }
-    const receipt = await readPrivateHostedApproval({
+    const readReceipt = () => readPrivateHostedApproval({
       action: context.action,
       callId: context.callId,
       planDigest: context.planDigest,
@@ -243,6 +253,26 @@ export const createHostedOperatorReadApproval =
       sessionId: owner.data.sessionId,
       store: input.eve,
     });
+    let receipt = await readReceipt();
+    if (receipt === null) {
+      // The tool can resume before the background observer stores this receipt.
+      // Re-read Eve's authenticated durable tail using the owner-bound adapter
+      // ID, and persist only server-emitted terminal approval settlements.
+      const recorder = createPrivateHostedApprovalRecorder({
+        principal: owner.data.principal,
+        sessionId: owner.data.sessionId,
+        store: input.eve,
+      });
+      await input.observe({
+        adapterSessionId: owner.data.adapterSessionId,
+        onEvent() {},
+        onPrivateEvent: recorder.observe,
+        principal: owner.data.principal,
+        readDeadline: true,
+        sessionId: owner.data.sessionId,
+      });
+      receipt = await readReceipt();
+    }
     if (receipt === null) {
       throw unavailable();
     }

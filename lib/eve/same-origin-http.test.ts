@@ -213,7 +213,7 @@ describe("incremental canonical Eve stream", () => {
         projected.push({ type: event.type });
       },
       onPrivateEvent(event) {
-        privateEvents.push({ data: event.data, type: event.type });
+        privateEvents.push({ data: "data" in event ? event.data : undefined, type: event.type });
       },
       sessionId: "wrun_1",
       workloadIdentity: identity(),

@@ -178,6 +178,37 @@ export const createPrivateHostedApprovalCapture = (sessionId: string) => {
   };
 };
 
+/** Captures terminal approvals and persists each receipt as soon as Eve emits it. */
+export const createPrivateHostedApprovalRecorder = (input: {
+  principal: HostedPrincipal;
+  sessionId: string;
+  store: Pick<HostedEveStore, "recordPrivateApprovalReceipts">;
+}) => {
+  const capture = createPrivateHostedApprovalCapture(input.sessionId);
+  const persisted = new Set<string>();
+  return {
+    async observe(event: MessageStreamEvent) {
+      capture.observe(event);
+      const receipts = capture.values().filter((receipt) => !persisted.has(receipt.requestId));
+      if (receipts.length === 0) {
+        return;
+      }
+      if (input.store.recordPrivateApprovalReceipts === undefined) {
+        throw new Error("Private Eve approval persistence is unavailable.");
+      }
+      await input.store.recordPrivateApprovalReceipts({
+        principal: input.principal,
+        receipts,
+        sessionId: input.sessionId,
+      });
+      for (const receipt of receipts) {
+        persisted.add(receipt.requestId);
+      }
+    },
+    values: capture.values,
+  };
+};
+
 /** Merge replayed event receipts without allowing a request to change its terminal outcome. */
 export const mergePrivateHostedApprovalReceipts = (
   sessionId: string,

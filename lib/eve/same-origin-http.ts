@@ -1008,6 +1008,7 @@ export function createSameOriginEveTransport(input: {
     adapterSessionId: string;
     onEvent: (event: InternalEveEvent) => Promise<void> | void;
     onPrivateEvent?: (event: MessageStreamEvent) => Promise<void> | void;
+    readDeadline?: boolean;
   }) => ReturnType<typeof observeSameOriginEveStream>;
 } {
   const config = sameOriginConfigSchema.parse(input.config);
@@ -1023,6 +1024,7 @@ export function createSameOriginEveTransport(input: {
         ...common,
         onEvent: request.onEvent,
         onPrivateEvent: request.onPrivateEvent,
+        readDeadline: request.readDeadline,
         sessionId: request.adapterSessionId,
       });
     },
@@ -1043,6 +1045,7 @@ export function createSameOriginEveTransport(input: {
               ...common,
               onEvent: request.onEvent,
               onPrivateEvent: request.onPrivateEvent,
+              readDeadline: request.readDeadline,
               sessionId: request.adapterSessionId,
             });
           },

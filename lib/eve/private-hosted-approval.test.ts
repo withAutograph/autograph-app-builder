@@ -306,6 +306,10 @@ describe("private hosted approval receipts", () => {
         };
         await request.onPrivateEvent?.(inputRequested("request_spooled", undefined, requestInput));
         await request.onPrivateEvent?.(approvalSettled("request_spooled"));
+        const savedDuringObservation = await store.getSession(principal, request.sessionId);
+        expect(savedDuringObservation?.version === 2
+          ? savedDuringObservation.privateApprovalReceipts?.[0]?.outcome
+          : undefined).toBe("approved");
         return {
           artifactProjectionRequiresLegacyReadback: false,
           installedEventCount: 2,

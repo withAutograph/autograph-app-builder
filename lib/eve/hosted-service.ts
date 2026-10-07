@@ -44,7 +44,7 @@ import {
 } from "./public-events";
 import type { InternalEveEvent } from "./public-events";
 import type { MessageStreamEvent } from "eve/client";
-import { createPrivateHostedApprovalCapture } from "./private-hosted-approval";
+import { createPrivateHostedApprovalRecorder } from "./private-hosted-approval";
 import { projectHostedSnapshot } from "./hosted-projection";
 import type { HostedEngineSnapshot } from "./hosted-projection";
 import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
@@ -106,6 +106,7 @@ export interface HostedEveTransport {
     adapterSessionId: string;
     onEvent: (event: InternalEveEvent) => Promise<void> | void;
     onPrivateEvent?: (event: MessageStreamEvent) => Promise<void> | void;
+    readDeadline?: boolean;
   }) => Promise<{
     activeTurnId?: string;
     artifactProjectionRequiresLegacyReadback: boolean;
@@ -649,7 +650,11 @@ async function spoolObservedSession(input: {
     );
   }
   const path = nodePath.join(directory, "events.ndjson");
-  const privateApprovals = createPrivateHostedApprovalCapture(input.sessionId);
+  const privateApprovals = createPrivateHostedApprovalRecorder({
+    principal: input.principal,
+    sessionId: input.sessionId,
+    store: input.store,
+  });
   let file: Awaited<ReturnType<typeof open>> | null = null;
   try {
     file = await open(path, "wx", 0o600);
@@ -683,17 +688,6 @@ async function spoolObservedSession(input: {
       principal: input.principal,
       sessionId: input.sessionId,
     });
-    const receipts = privateApprovals.values();
-    if (receipts.length > 0) {
-      if (input.store.recordPrivateApprovalReceipts === undefined) {
-        throw new Error("Private Eve approval persistence is unavailable.");
-      }
-      await input.store.recordPrivateApprovalReceipts({
-        principal: input.principal,
-        receipts,
-        sessionId: input.sessionId,
-      });
-    }
     await handle.sync();
     await handle.close();
     file = null;
