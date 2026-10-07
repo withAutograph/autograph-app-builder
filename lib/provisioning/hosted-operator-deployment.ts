@@ -70,7 +70,10 @@ import {
   createHostedOperatorReadApproval,
 } from "./hosted-operator-owner";
 import { createHostedOperatorOwnerContextResolver } from "./hosted-operator-owner-context";
-import type { HostedOperatorContext } from "./hosted-operator-service";
+import type { HostedOperatorContext, HostedOperatorWorkerEffectContext } from "./hosted-operator-service";
+import { HostedOperatorError, operatorPlanDigest } from "./hosted-operator-contract";
+import { prepareHostedOperatorResourceCredentials } from "./hosted-operator-resource-credentials";
+import type { ProtectedResourceDatabase } from "./hosted-operator-resource-credentials";
 import { createPostgresHostedRuntimeJournalStore } from "./postgres-hosted-runtime-journal";
 import { createPostgresHostedOperatorResourceLease } from "./postgres-hosted-operator-resource-lease";
 
@@ -307,6 +310,48 @@ export const createHostedOperatorControlPlane = async (input: {
       },
       readApproval,
       readCredential,
+      async prepareResourceCredentials(
+        effectInput: HostedOperatorWorkerEffectContext & { database: ProtectedResourceDatabase },
+      ) {
+        const readCurrent = async () => {
+          await owner.assertAuthorized(effectInput);
+          await effectInput.assertCurrent();
+          const current = await store.read(effectInput);
+          const operator = current?.record.operator;
+          if (
+            current === undefined ||
+            current.record.leaseId === undefined ||
+            current.record.leaseExpiresAt === undefined ||
+            Date.parse(current.record.leaseExpiresAt) <= Date.now() ||
+            operator === undefined ||
+            operator.operationRef !== effectInput.operationRef ||
+            operator.fenceGeneration !== effectInput.fenceGeneration ||
+            operator.pendingEffectId !== effectInput.effect.id ||
+            operator.pendingEffectAttempt?.id !== effectInput.workerAttemptId ||
+            operator.planDigest !== operatorPlanDigest(effectInput.plan) ||
+            operator.planDigest !== operatorPlanDigest(operator.plan) ||
+            effectInput.effect.kind !== "resources" ||
+            effectInput.effect.resourceId !== operator.plan[effectInput.database].resourceId ||
+            JSON.stringify(operator.plan.effects.find((effect) => effect.id === effectInput.effect.id)) !==
+              JSON.stringify(effectInput.effect)
+          ) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+          return current.record;
+        };
+        const prepared = prepareHostedOperatorResourceCredentials({
+          ...effectInput,
+          config: tokenKeyring,
+          record: await readCurrent(),
+        });
+        // The journal callback commits under the active lease before plaintext can escape.
+        await effectInput.checkpoint(prepared.privateState);
+        const acknowledged = await readCurrent();
+        if (JSON.stringify(acknowledged.privateState) !== JSON.stringify(prepared.privateState)) {
+          throw new HostedOperatorError("operation_in_progress");
+        }
+        return prepared;
+      },
       store,
       withResourceLease,
     };
