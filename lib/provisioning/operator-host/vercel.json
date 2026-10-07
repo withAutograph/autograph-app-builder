@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "operator": {
+      "root": "../../..",
+      "framework": "node",
+      "entrypoint": "lib/provisioning/hosted-operator-function.ts",
+      "buildCommand": ""
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/v1/runtime",
+      "destination": { "service": "operator" }
+    }
+  ]
+}
