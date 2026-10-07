@@ -214,13 +214,25 @@ describe("private read-only operator provider inventory", () => {
     f.payloads.set("/v10/projects/prj_app/env", {
       envs: [
         { key: "BETTER_AUTH_SECRET", target: ["preview"], value: "secret-do-not-output" },
-        { key: "PLATFORM_GATEWAY_IDENTITY_PRIVATE_KEY", target: ["preview"], value: "secret-do-not-output" },
-        { key: "AUTOGRAPH_HOSTED_OPERATOR_CONTROL_KEY", target: ["preview"], value: "secret-do-not-output" },
+        {
+          key: "PLATFORM_GATEWAY_IDENTITY_PRIVATE_KEY",
+          target: ["preview"],
+          value: "secret-do-not-output",
+        },
+        {
+          key: "AUTOGRAPH_HOSTED_OPERATOR_CONTROL_KEY",
+          target: ["preview"],
+          value: "secret-do-not-output",
+        },
         { key: "PRODUCTION_ONLY_SECRET", target: ["production"], value: "secret-do-not-output" },
       ],
     });
     const observed = await readHostedOperatorProviderInventory(f.input);
-    expect(observed.appEnvironment.forbiddenKeys).toEqual(["AUTOGRAPH_HOSTED_OPERATOR_CONTROL_KEY", "BETTER_AUTH_SECRET", "PLATFORM_GATEWAY_IDENTITY_PRIVATE_KEY"]);
+    expect(observed.appEnvironment.forbiddenKeys).toEqual([
+      "AUTOGRAPH_HOSTED_OPERATOR_CONTROL_KEY",
+      "BETTER_AUTH_SECRET",
+      "PLATFORM_GATEWAY_IDENTITY_PRIVATE_KEY",
+    ]);
     expect(observed.app.projectEnvironmentKeys).not.toContain("PRODUCTION_ONLY_SECRET");
     expect(JSON.stringify(observed)).not.toContain("secret-do-not-output");
   });
