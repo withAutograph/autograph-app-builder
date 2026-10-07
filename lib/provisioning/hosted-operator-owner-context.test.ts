@@ -225,6 +225,7 @@ describe("hosted operator owner context", () => {
     const handoffs = {
       read: vi.fn(async (): Promise<BuilderHandoffRecord | undefined> => {
         await Promise.resolve();
+        return new Map<string, BuilderHandoffRecord>().get("missing-handoff");
       }),
     };
     const resolver = createHostedOperatorOwnerContextResolver({

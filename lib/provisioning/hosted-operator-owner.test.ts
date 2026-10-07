@@ -10,7 +10,11 @@ import type { HostedPrincipal } from "../eve/hosted-auth";
 import { builderHandoffRecordSchema } from "../handoff/contracts";
 import type { BuilderHandoffStore } from "../handoff/service";
 import type { HostedWorkspaceMembership } from "../mcp/request-handler";
-import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
+import {
+  hostedOperatorPlanSchema,
+  operatorOwnerContextSchema,
+  operatorPlanDigest,
+} from "./hosted-operator-contract";
 import type { OperatorOwnerContext, OperatorSelection } from "./hosted-operator-contract";
 import type { PrivateHostedApprovalReceipt } from "../eve/private-hosted-approval";
 import {
@@ -391,7 +395,7 @@ describe("hosted operator owner authority", () => {
   });
 
   it("keeps legacy private handoff owner contexts bound to the existing handoff path", async () => {
-    const legacyHandoffContext = {
+    const legacyHandoffInput = {
       adapterGeneration: ownerContext.adapterGeneration,
       adapterSessionId: ownerContext.adapterSessionId,
       authority: ownerContext.authority,
@@ -399,6 +403,8 @@ describe("hosted operator owner authority", () => {
       sessionId: ownerContext.sessionId,
       sourceHandoffId: handoffId,
     };
+    expect(legacyHandoffInput).not.toHaveProperty("kind");
+    const legacyHandoffContext = operatorOwnerContextSchema.parse(legacyHandoffInput);
     const fixture = makeFixture();
     await expect(
       fixture.authority.authorize(request(), selection, legacyHandoffContext),
