@@ -419,13 +419,52 @@ export class HostedOperatorError extends Error {
   }
 }
 
+/** Public runtime/verifier facts; credentials remain in the app-specific URL alone. */
+export const protectedAppBoundarySchema = z.strictObject({
+  appId: operatorSelectionSchema.shape.appId,
+  mode: z.literal("protected-gateway-v1"),
+  runtime: z.strictObject({
+    database: sqlName,
+    environment: z.enum(["local", "hosted"]),
+    hostname: z.string().min(1),
+    port: z.number().int().min(1).max(65_535),
+    runtimeRole: sqlName,
+  }),
+  verification: z.strictObject({ jwksUrl: z.url(), publicOrigin: httpsPublicOrigin }),
+  version: z.literal(1),
+});
+export type ProtectedAppBoundary = z.infer<typeof protectedAppBoundarySchema>;
+export type ProtectedAppEnvironment = Record<string, string> & { PLATFORM_APP_BOUNDARY: string };
+const publicAppBoundary = (plan: HostedOperatorPlan): ProtectedAppBoundary => {
+  const boundary = plan.deploymentBoundary;
+  if (boundary === undefined) {
+    throw new HostedOperatorError("legacy_runtime_requires_migration");
+  }
+  return protectedAppBoundarySchema.parse({
+    appId: plan.selection.appId,
+    mode: "protected-gateway-v1",
+    runtime: {
+      database: plan.appDatabase.database,
+      environment: "hosted",
+      hostname: plan.neon.endpoint,
+      port: 5432,
+      runtimeRole: plan.appDatabase.runtimeRole,
+    },
+    verification: {
+      jwksUrl: boundary.verification.jwksUrl,
+      publicOrigin: boundary.verification.publicOrigin,
+    },
+    version: 1,
+  });
+};
+
 /** Public plan data is not provider proof. The trusted binding adapter must read current
  * project ownership/deployment environments before projecting this narrow app boundary. */
 export const restrictedOperatorEnvironment = (
   plan: HostedOperatorPlan,
   input: Record<string, string>,
   authenticatedAuthority?: z.infer<typeof hostedTenantAuthoritySchema>,
-): Record<string, string> => {
+): ProtectedAppEnvironment => {
   const parsedPlan = hostedOperatorPlanSchema.parse(plan);
   const boundary = parsedPlan.deploymentBoundary;
   if (boundary === undefined || authenticatedAuthority === undefined) {
@@ -436,9 +475,10 @@ export const restrictedOperatorEnvironment = (
     throw new HostedOperatorError("resource_mismatch");
   }
   const env = z.record(z.string(), z.string()).parse(input);
-  const appKey = `${plan.selection.appId.toUpperCase().replaceAll("-", "_")}_DATABASE_URL`;
+  const appKey = `${parsedPlan.selection.appId.toUpperCase().replaceAll("-", "_")}_DATABASE_URL`;
   const keys = [appKey, "PLATFORM_JWKS_URL", "PLATFORM_ORIGIN", "PLATFORM_PUBLIC_ORIGIN"];
-  if (Object.keys(env).some((key) => !keys.includes(key)) || keys.some((key) => !env[key])) {
+  const allowedKeys = new Set([...keys, "PLATFORM_APP_BOUNDARY"]);
+  if (Object.keys(env).some((key) => !allowedKeys.has(key)) || keys.some((key) => !env[key])) {
     throw new HostedOperatorError("resource_mismatch");
   }
   if (
@@ -454,10 +494,10 @@ export const restrictedOperatorEnvironment = (
   } catch {
     throw new HostedOperatorError("resource_mismatch");
   }
-  const resource = plan.appDatabase;
+  const resource = parsedPlan.appDatabase;
   const valid = [
     ["postgres:", "postgresql:"].includes(url.protocol),
-    url.hostname.replace(/-pooler(?=\.)/u, "") === plan.neon.endpoint,
+    url.hostname === parsedPlan.neon.endpoint,
     url.pathname === `/${resource.database}`,
     decodeURIComponent(url.username) === resource.runtimeRole,
     url.password !== "",
@@ -473,7 +513,18 @@ export const restrictedOperatorEnvironment = (
   if (valid.includes(false)) {
     throw new HostedOperatorError("resource_mismatch");
   }
-  return env;
+  const expectedBoundary = publicAppBoundary(parsedPlan);
+  if (env.PLATFORM_APP_BOUNDARY !== undefined) {
+    try {
+      const provided = protectedAppBoundarySchema.parse(JSON.parse(env.PLATFORM_APP_BOUNDARY));
+      if (JSON.stringify(provided) !== JSON.stringify(expectedBoundary)) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+    } catch {
+      throw new HostedOperatorError("resource_mismatch");
+    }
+  }
+  return { ...env, PLATFORM_APP_BOUNDARY: JSON.stringify(expectedBoundary) };
 };
 
 export const sameOperatorSelection = (left: OperatorSelection, right: OperatorSelection) =>
