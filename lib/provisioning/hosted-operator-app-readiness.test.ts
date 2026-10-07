@@ -7,6 +7,7 @@ import { createHostedOperatorAppReadiness } from "./hosted-operator-app-readines
 import type {
   AppRuntimeSnapshotReader,
   ReadAppRuntimeSnapshot,
+  OperatorAppMetadataScope,
 } from "./hosted-operator-app-readiness";
 
 const authority = {
@@ -138,11 +139,11 @@ const fixture = () => {
     },
     ok: true as const,
   };
-  const scopes: { appId: string; organizationId: string }[] = [];
+  const scopes: OperatorAppMetadataScope[] = [];
   const reader: AppRuntimeSnapshotReader = {
     readIdentity: async () => identity,
-    readOrganization: async (appId, organizationId) => {
-      scopes.push({ appId, organizationId });
+    readOrganization: async (scope) => {
+      scopes.push(scope);
       return observation;
     },
   };
@@ -175,10 +176,17 @@ it("independently reads each exact approved organization without exposing creden
     artifactHash,
     authenticatedBehavior: "unassessed",
     releaseId: "release_fixture",
-    source: "restricted-app-runtime",
+    source: "reviewed-plan-app-runtime",
     tenants: 1,
   });
-  expect(f.scopes).toEqual([{ appId: "spend-review", organizationId: "synthetic-org" }]);
+  expect(f.scopes).toEqual([
+    {
+      actorId: "synthetic-reviewer",
+      appId: "spend-review",
+      organizationId: "synthetic-org",
+      role: "reviewer",
+    },
+  ]);
   expect(JSON.stringify(proof)).not.toContain("private-secret");
   expect(f.input.assertCurrent.mock.calls.length).toBeGreaterThanOrEqual(4);
 });
@@ -241,11 +249,11 @@ it("queries the complete distinct approved tenant list", async () => {
       { actorId: "second", organizationId: "second-org", roles: ["reviewer"] },
     ],
   };
-  f.reader.readOrganization = async (appId, organizationId) => {
-    f.scopes.push({ appId, organizationId });
+  f.reader.readOrganization = async (scope) => {
+    f.scopes.push(scope);
     return {
       ...f.observation,
-      data: { ...f.observation.data, customer_id: organizationId },
+      data: { ...f.observation.data, customer_id: scope.organizationId },
     };
   };
   const proof = await f.verify(f.input);
@@ -268,3 +276,23 @@ it.each(["privileged_membership", "owns_public_objects"] as const)(
     await expect(f.verify(f.input)).rejects.toThrow("readiness_unconfirmed");
   },
 );
+
+it("chooses only an approved actor and role for every observed organization", async () => {
+  const f = fixture();
+  f.input.plan = {
+    ...plan,
+    access: [
+      { actorId: "approved-first", organizationId: "synthetic-org", roles: ["reviewer", "member"] },
+      ...plan.access,
+    ],
+  };
+  await f.verify(f.input);
+  expect(f.scopes).toEqual([
+    {
+      actorId: "approved-first",
+      appId: "spend-review",
+      organizationId: "synthetic-org",
+      role: "member",
+    },
+  ]);
+});

@@ -126,18 +126,30 @@ export interface ObservedAppTenant {
   baseArtifactHash: string;
   effectiveArtifactHash: string;
 }
+export interface OperatorAppMetadataScope {
+  appId: string;
+  actorId: string;
+  organizationId: string;
+  role: string;
+}
+const actorBindingSchema = z.strictObject({
+  active: z.literal(true),
+  actorId: z.string(),
+  appId: z.string(),
+  fenceGeneration: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  organizationId: z.string(),
+  role: z.string(),
+});
+
 export interface AppRuntimeSnapshotReader {
   readIdentity: () => Promise<z.infer<typeof identitySchema>>;
-  readOrganization: (
-    appId: string,
-    organizationId: string,
-  ) => Promise<z.infer<typeof observationSchema>>;
+  readOrganization: (scope: OperatorAppMetadataScope) => Promise<z.infer<typeof observationSchema>>;
 }
 export type ReadAppRuntimeSnapshot = (
   runtimeUrl: string,
   read: (reader: AppRuntimeSnapshotReader) => Promise<ObservedAppTenant[]>,
 ) => Promise<ObservedAppTenant[]>;
-const readAppRuntimeSnapshot: ReadAppRuntimeSnapshot = async (runtimeUrl, read) => {
+export const readAppRuntimeSnapshot: ReadAppRuntimeSnapshot = async (runtimeUrl, read) => {
   const sql = postgres(runtimeUrl, {
     connect_timeout: 10,
     idle_timeout: 5,
@@ -146,7 +158,8 @@ const readAppRuntimeSnapshot: ReadAppRuntimeSnapshot = async (runtimeUrl, read) 
   });
   try {
     return await sql.begin(
-      "isolation level repeatable read read only",
+      // FOR SHARE admission is a locking read and PostgreSQL prohibits it in READ ONLY mode.
+      "isolation level repeatable read",
       async (tx) =>
         await read({
           readIdentity: async () => {
@@ -156,14 +169,52 @@ const readAppRuntimeSnapshot: ReadAppRuntimeSnapshot = async (runtimeUrl, read) 
             }
             return identitySchema.parse(rows[0]);
           },
-          readOrganization: async (appId, organizationId) => {
+          readOrganization: async (scope) => {
+            const bindings = await tx.unsafe(
+              "select public.kernel_read_actor_binding($1::jsonb) as binding",
+              [
+                tx.json({
+                  actor_id: scope.actorId,
+                  app_id: scope.appId,
+                  customer_id: scope.organizationId,
+                  role: scope.role,
+                }),
+              ],
+            );
+            if (bindings.length !== 1) {
+              throw reject();
+            }
+            const envelope = z
+              .object({ data: actorBindingSchema, ok: z.literal(true) })
+              .parse(bindings[0]?.binding);
+            const binding = envelope.data;
+            if (
+              binding.appId !== scope.appId ||
+              binding.actorId !== scope.actorId ||
+              binding.organizationId !== scope.organizationId ||
+              binding.role !== scope.role
+            ) {
+              throw reject();
+            }
+            await tx.unsafe(
+              "select set_config('kernel.actor_id',$1,true),set_config('kernel.actor_role',$2,true),set_config('kernel.actor_fence_generation',$3,true),set_config('kernel.app_id',$4,true),set_config('kernel.customer_id',$5,true)",
+              [
+                scope.actorId,
+                scope.role,
+                String(binding.fenceGeneration),
+                scope.appId,
+                scope.organizationId,
+              ],
+            );
             const rows = await tx.unsafe(
               "select public.kernel_read_runtime_release_observability($1::jsonb) as observation",
-              [JSON.stringify({ app_id: appId, customer_id: organizationId })],
+              [tx.json({ app_id: scope.appId, customer_id: scope.organizationId })],
             );
             if (rows.length !== 1) {
               throw reject();
             }
+            // The guarded kernel call above rechecks this exact active native fence
+            // and locks its binding; this preliminary read cannot authorize stale metadata.
             return observationSchema.parse(rows[0]?.observation);
           },
         }),
@@ -182,7 +233,7 @@ export type AppReadinessInput = HostedOperatorContext & {
   assertCurrent: () => Promise<void>;
 };
 export interface AppReadinessDependencies {
-  /** Trusted connection adapter; production uses fixed read-only PostgreSQL statements. */
+  /** Trusted connection adapter; production uses fixed metadata queries and binding row locks. */
   readRuntimeSnapshot?: ReadAppRuntimeSnapshot;
   assertAuthorized: (input: HostedOperatorContext & { plan: HostedOperatorPlan }) => Promise<void>;
   /** Owner-bound private credential reader; never a caller/model URL. */
@@ -214,6 +265,12 @@ export const createHostedOperatorAppReadiness =
         await deps.assertAuthorized({ ...input, plan });
       };
       await guard();
+      const approvedByOrganization = new Map<string, HostedOperatorPlan["access"][number]>();
+      for (const access of plan.access) {
+        if (!approvedByOrganization.has(access.organizationId)) {
+          approvedByOrganization.set(access.organizationId, access);
+        }
+      }
       const organizations = [
         ...new Set(plan.access.map((access) => access.organizationId)),
       ].toSorted();
@@ -239,10 +296,21 @@ export const createHostedOperatorAppReadiness =
           const results = [];
           // eslint-disable-next-line react-doctor/async-await-in-loop -- Tenant-scoped configuration and authorization must be serialized on this single snapshot connection.
           for (const organizationId of organizations) {
-            // eslint-disable-next-line no-await-in-loop, react-doctor/async-await-in-loop -- Serialize tenant-scoped reads on one read-only transaction and recheck authority between them.
+            // eslint-disable-next-line no-await-in-loop, react-doctor/async-await-in-loop -- Serialize tenant-scoped reads on one locking metadata transaction and recheck authority between them.
             await guard();
             // eslint-disable-next-line no-await-in-loop, react-doctor/async-await-in-loop -- One runtime transaction provides a consistent release observation for the approved tenant batch.
-            const result = await reader.readOrganization(plan.selection.appId, organizationId);
+            const approved = approvedByOrganization.get(organizationId);
+            const [role] = approved?.roles.toSorted() ?? [];
+            if (approved === undefined || role === undefined) {
+              throw reject();
+            }
+            // eslint-disable-next-line no-await-in-loop, react-doctor/async-await-in-loop -- Keep approved tenant contexts sequential on one locking metadata transaction.
+            const result = await reader.readOrganization({
+              actorId: approved.actorId,
+              appId: plan.selection.appId,
+              organizationId,
+              role,
+            });
             const { data: observation } = result;
             const active = observation.releases.filter(
               (release) => release.schema_revision_id === observation.active_schema_revision_id,
@@ -286,7 +354,7 @@ export const createHostedOperatorAppReadiness =
         observedAt: new Date().toISOString(),
         releaseId: plan.release.id,
         resourceId: plan.appDatabase.resourceId,
-        source: "restricted-app-runtime" as const,
+        source: "reviewed-plan-app-runtime" as const,
         tenants: observations.length,
       };
     } catch {
