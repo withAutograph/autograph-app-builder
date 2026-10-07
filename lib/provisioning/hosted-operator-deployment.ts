@@ -72,10 +72,14 @@ import {
 import { createHostedOperatorOwnerContextResolver } from "./hosted-operator-owner-context";
 import type {
   HostedOperatorContext,
+  HostedOperatorEffectContext,
   HostedOperatorWorkerEffectContext,
 } from "./hosted-operator-service";
 import { HostedOperatorError, operatorPlanDigest } from "./hosted-operator-contract";
-import { prepareHostedOperatorResourceCredentials } from "./hosted-operator-resource-credentials";
+import {
+  prepareHostedOperatorResourceCredentials,
+  readHostedOperatorResourceBindings,
+} from "./hosted-operator-resource-credentials";
 import type { ProtectedResourceDatabase } from "./hosted-operator-resource-credentials";
 import type {
   HostedRuntimeJournalRecord,
@@ -169,9 +173,7 @@ const samePrincipal = (left: HostedPrincipal, right: HostedPrincipal) =>
     ...right.scopes.toSorted(),
   ]);
 
-type ResourceCredentialEffect = HostedOperatorWorkerEffectContext & {
-  database: ProtectedResourceDatabase;
-};
+type ResourceCredentialEffect = HostedOperatorEffectContext & { workerAttemptId?: string };
 
 const requireCurrentResourceCredentialRecord = (
   record: HostedRuntimeJournalRecord | undefined,
@@ -199,11 +201,7 @@ const requireCurrentResourceCredentialRecord = (
     throw new HostedOperatorError("operation_in_progress");
   }
   const plannedEffect = operator.plan.effects.find((effect) => effect.id === input.effect.id);
-  if (
-    input.effect.kind !== "resources" ||
-    input.effect.resourceId !== operator.plan[input.database].resourceId ||
-    JSON.stringify(plannedEffect) !== JSON.stringify(input.effect)
-  ) {
+  if (JSON.stringify(plannedEffect) !== JSON.stringify(input.effect)) {
     throw new HostedOperatorError("operation_in_progress");
   }
   return record;
@@ -371,6 +369,12 @@ export const createHostedOperatorControlPlane = async (input: {
       async prepareResourceCredentials(
         effectInput: HostedOperatorWorkerEffectContext & { database: ProtectedResourceDatabase },
       ) {
+        if (
+          effectInput.effect.kind !== "resources" ||
+          effectInput.effect.resourceId !== effectInput.plan[effectInput.database].resourceId
+        ) {
+          throw new HostedOperatorError("operation_in_progress");
+        }
         const prepared = prepareHostedOperatorResourceCredentials({
           ...effectInput,
           config: tokenKeyring,
@@ -398,6 +402,27 @@ export const createHostedOperatorControlPlane = async (input: {
       },
       readApproval,
       readCredential,
+      async readResourceBindings(effectInput: ResourceCredentialEffect) {
+        const record = await readCurrentResourceCredentialRecord({
+          assertAuthorized: owner.assertAuthorized,
+          effect: effectInput,
+          store,
+        });
+        const bindings = readHostedOperatorResourceBindings({
+          ...effectInput,
+          config: tokenKeyring,
+          record,
+        });
+        const current = await readCurrentResourceCredentialRecord({
+          assertAuthorized: owner.assertAuthorized,
+          effect: effectInput,
+          store,
+        });
+        if (JSON.stringify(current.privateState) !== JSON.stringify(record.privateState)) {
+          throw new HostedOperatorError("operation_in_progress");
+        }
+        return bindings;
+      },
       store,
       withResourceLease,
     };

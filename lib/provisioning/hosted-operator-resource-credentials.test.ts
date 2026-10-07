@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
+import { decryptHostedRuntimeFiles, encryptHostedRuntimeFiles } from "./hosted-runtime-service";
 import { hostedOperatorPlanSchema } from "./hosted-operator-contract";
 import type { OperatorSelection } from "./hosted-operator-contract";
 import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
-import { prepareHostedOperatorResourceCredentials } from "./hosted-operator-resource-credentials";
+import {
+  prepareHostedOperatorResourceCredentials,
+  readHostedOperatorResourceBindings,
+} from "./hosted-operator-resource-credentials";
 
 const authority = {
   audience: "https://builder.example/mcp",
@@ -138,5 +143,69 @@ describe("protected resource credential continuation", () => {
         plan: { ...plan, bootstrap: { ...plan.bootstrap, endpointId: "ep-different" } },
       }),
     ).toThrow("different resources");
+  });
+});
+
+describe("owned installed resource bindings", () => {
+  it("reads the same installed credentials without generating replacements", () => {
+    const prepared = prepareHostedOperatorResourceCredentials(input);
+    const resumed = { ...input, record: { ...input.record, privateState: prepared.privateState } };
+    const bindings = readHostedOperatorResourceBindings(resumed);
+    expect(readHostedOperatorResourceBindings(resumed)).toEqual(bindings);
+    const credentials = z
+      .object({ migratorPassword: z.string() })
+      .parse(JSON.parse(prepared.credentialsBytes));
+    const migration = new URL(bindings.appDatabase.migrationUrl);
+    expect(decodeURIComponent(migration.password)).toBe(credentials.migratorPassword);
+    expect(migration.hostname).toBe(plan.neon.endpoint);
+    expect(migration.port).toBe("5432");
+    expect(migration.pathname).toBe(`/${plan.appDatabase.database}`);
+    expect(new URL(bindings.authDatabase.runtimeUrl).username).toBe(plan.authDatabase.runtimeRole);
+  });
+
+  it("refuses missing credentials, another owner, and changed physical resources", () => {
+    expect(() => readHostedOperatorResourceBindings(input)).toThrow("unavailable");
+    const prepared = prepareHostedOperatorResourceCredentials(input);
+    const resumed = { ...input, record: { ...input.record, privateState: prepared.privateState } };
+    expect(() =>
+      readHostedOperatorResourceBindings({
+        ...resumed,
+        authority: { ...authority, workspaceId: "another-workspace" },
+      }),
+    ).toThrow();
+    expect(() =>
+      readHostedOperatorResourceBindings({
+        ...resumed,
+        plan: { ...plan, authDatabase: { ...plan.authDatabase, runtimeRole: "different_role" } },
+      }),
+    ).toThrow("different resources");
+  });
+
+  it("encodes percent and reserved characters in an owned stored password", () => {
+    const prepared = prepareHostedOperatorResourceCredentials(input);
+    const resumed = { ...input, record: { ...input.record, privateState: prepared.privateState } };
+    const files = decryptHostedRuntimeFiles(resumed);
+    if (files === undefined) {
+      throw new Error("Expected an owned credential checkpoint.");
+    }
+    const bundle = z
+      .looseObject({
+        appDatabase: z.looseObject({ runtimePassword: z.string() }),
+      })
+      .parse(JSON.parse(files["protected-resource-credentials.json"]));
+    const password = "safe%/:@?#&=".repeat(4);
+    bundle.appDatabase.runtimePassword = password;
+    const privateState = encryptHostedRuntimeFiles({
+      ...input,
+      files: { "protected-resource-credentials.json": JSON.stringify(bundle) },
+    });
+    const bindings = readHostedOperatorResourceBindings({
+      ...input,
+      record: { ...input.record, privateState },
+    });
+    const url = new URL(bindings.appDatabase.runtimeUrl);
+    expect(decodeURIComponent(url.password)).toBe(password);
+    expect(url.searchParams.get("sslmode")).toBe("verify-full");
+    expect(url.hostname).toBe(plan.neon.endpoint);
   });
 });
