@@ -9,10 +9,7 @@ export default defineTool({
   async execute(input, ctx) {
     try {
       const { operation, ...selection } = input;
-      const operator = await hostedOperatorClientForSession(
-        ctx.session.auth,
-        ctx.session.id,
-      );
+      const operator = await hostedOperatorClientForSession(ctx.session.auth, ctx.session.id);
       return await operator.request(
         {
           action: "plan",
@@ -28,10 +25,7 @@ export default defineTool({
       return {
         appId: input.appId,
         authenticatedBehavior: "unassessed" as const,
-        code:
-          error instanceof HostedOperatorError
-            ? error.code
-            : "operator_unavailable",
+        code: error instanceof HostedOperatorError ? error.code : "operator_unavailable",
         status: "blocked" as const,
       };
     }

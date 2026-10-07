@@ -218,10 +218,7 @@ describe("incremental canonical Eve stream", () => {
       sessionId: "wrun_1",
       workloadIdentity: identity(),
     });
-    expect(privateEvents.map(({ type }) => type)).toEqual([
-      "input.requested",
-      "approval.settled",
-    ]);
+    expect(privateEvents.map(({ type }) => type)).toEqual(["input.requested", "approval.settled"]);
     expect(JSON.stringify(projected)).not.toContain("private_call");
     expect(JSON.stringify(projected)).not.toContain("private_request");
   });

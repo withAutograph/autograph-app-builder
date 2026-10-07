@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { hostedEveOperationScopes } from "../eve/hosted-auth";
-import {
-  durableHostedSessionRecordSchema,
-  hostedSessionRecordSchema,
-} from "../eve/hosted-store";
+import { durableHostedSessionRecordSchema, hostedSessionRecordSchema } from "../eve/hosted-store";
 import type { HostedSessionRecord } from "../eve/hosted-store";
 import { builderHandoffRecordSchema } from "../handoff/contracts";
 import type { BuilderHandoffRecord } from "../handoff/contracts";
@@ -145,10 +142,7 @@ describe("hosted operator owner context", () => {
       sourceHandoffId: handoffId,
     });
     expect(f.handoffs.read).toHaveBeenCalledWith({ authority, handoffId });
-    expect(f.sessions.getSession).toHaveBeenCalledWith(
-      principal,
-      "public-session-1",
-    );
+    expect(f.sessions.getSession).toHaveBeenCalledWith(principal, "public-session-1");
   });
 
   it("rejects stale SDK adapters, unbound handoffs, and inactive membership", async () => {
@@ -266,14 +260,10 @@ describe("hosted operator owner context", () => {
         sessionId: resolved.sessionId,
       },
     });
-    expect(captured?.headers.get("authorization")).toBe(
-      "Bearer operator-workload-token",
-    );
+    expect(captured?.headers.get("authorization")).toBe("Bearer operator-workload-token");
     await expect(captured?.json()).resolves.toMatchObject({
       ownerContext: resolved,
     });
-    expect(JSON.stringify(captured?.headers)).not.toContain(
-      sessionAuth.current.subject,
-    );
+    expect(JSON.stringify(captured?.headers)).not.toContain(sessionAuth.current.subject);
   });
 });

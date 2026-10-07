@@ -75,7 +75,7 @@ const approvalRequestEvent = (receipt: PrivateHostedApprovalReceipt) =>
     },
     meta: { at: "2026-10-06T00:00:00.000Z", id: `request-${receipt.requestId}` },
     type: "input.requested",
-  } satisfies Extract<MessageStreamEvent, { type: "input.requested" }>);
+  }) satisfies Extract<MessageStreamEvent, { type: "input.requested" }>;
 const approvalSettledEvent = (receipt: PrivateHostedApprovalReceipt) =>
   ({
     data: {
@@ -88,7 +88,7 @@ const approvalSettledEvent = (receipt: PrivateHostedApprovalReceipt) =>
     },
     meta: { at: "2026-10-06T00:00:01.000Z", id: `settled-${receipt.requestId}` },
     type: "approval.settled",
-  } satisfies Extract<MessageStreamEvent, { type: "approval.settled" }>);
+  }) satisfies Extract<MessageStreamEvent, { type: "approval.settled" }>;
 const approvalCandidateEvent = (receipt: PrivateHostedApprovalReceipt) =>
   ({
     data: {
@@ -102,7 +102,7 @@ const approvalCandidateEvent = (receipt: PrivateHostedApprovalReceipt) =>
     },
     meta: { at: "2026-10-06T00:00:01.000Z", id: `candidate-${receipt.requestId}` },
     type: "approval.candidate",
-  } satisfies Extract<MessageStreamEvent, { type: "approval.candidate" }>);
+  }) satisfies Extract<MessageStreamEvent, { type: "approval.candidate" }>;
 const workloadPolicy: OperatorWorkloadPolicy = {
   audience: "https://vercel.com/owner/project",
   environment: "preview",
@@ -453,28 +453,30 @@ describe("hosted operator owner authority", () => {
       },
     });
     let observationFinished = false;
-    const observe = vi.fn(async (streamRequest: Parameters<NonNullable<HostedEveTransport["observe"]>>[0]) => {
-      expect(streamRequest.sessionId).toBe(ownerContext.sessionId);
-      expect(streamRequest.adapterSessionId).toBe(ownerContext.adapterSessionId);
-      expect(streamRequest.readDeadline).toBe(true);
-      await streamRequest.onPrivateEvent?.(approvalRequestEvent(receipt));
-      await streamRequest.onPrivateEvent?.(approvalSettledEvent(receipt));
-      concurrentRead = await concurrentReader({
-        ...context,
-        action: "prepare",
-        callId: receipt.callId,
-        planDigest,
-      });
-      expect(observationFinished).toBe(false);
-      observationFinished = true;
-      return {
-        artifactProjectionRequiresLegacyReadback: false,
-        installedEventCount: 2,
-        pendingRequests: [],
-        publicEventCount: 0,
-        status: "waiting" as const,
-      };
-    });
+    const observe = vi.fn(
+      async (streamRequest: Parameters<NonNullable<HostedEveTransport["observe"]>>[0]) => {
+        expect(streamRequest.sessionId).toBe(ownerContext.sessionId);
+        expect(streamRequest.adapterSessionId).toBe(ownerContext.adapterSessionId);
+        expect(streamRequest.readDeadline).toBe(true);
+        await streamRequest.onPrivateEvent?.(approvalRequestEvent(receipt));
+        await streamRequest.onPrivateEvent?.(approvalSettledEvent(receipt));
+        concurrentRead = await concurrentReader({
+          ...context,
+          action: "prepare",
+          callId: receipt.callId,
+          planDigest,
+        });
+        expect(observationFinished).toBe(false);
+        observationFinished = true;
+        return {
+          artifactProjectionRequiresLegacyReadback: false,
+          installedEventCount: 2,
+          pendingRequests: [],
+          publicEventCount: 0,
+          status: "waiting" as const,
+        };
+      },
+    );
     const readApproval = createHostedOperatorReadApproval({ eve: fixture.eve, journal, observe });
     await expect(
       readApproval({

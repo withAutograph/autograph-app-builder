@@ -11,11 +11,9 @@ import {
 } from "../provisioning/hosted-operator-contract";
 import type { OperatorSelection } from "../provisioning/hosted-operator-contract";
 
-const hostedRuntimeToolName = z.enum([
-  "prepare-app-hosted-runtime",
-  "cleanup-app-hosted-runtime",
-]);
-const planMismatchMessage = "Hosted runtime approval must retain its exact, internally consistent plan.";
+const hostedRuntimeToolName = z.enum(["prepare-app-hosted-runtime", "cleanup-app-hosted-runtime"]);
+const planMismatchMessage =
+  "Hosted runtime approval must retain its exact, internally consistent plan.";
 const hostedRuntimeToolInputSchema = z.strictObject({
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
   branch: z.string().min(1),
@@ -78,9 +76,10 @@ const matchesApprovalScope = (
     requestId?: string;
   },
 ) => {
-  const expectedTool = input.action === "prepare"
-    ? hostedRuntimeToolName.enum["prepare-app-hosted-runtime"]
-    : hostedRuntimeToolName.enum["cleanup-app-hosted-runtime"];
+  const expectedTool =
+    input.action === "prepare"
+      ? hostedRuntimeToolName.enum["prepare-app-hosted-runtime"]
+      : hostedRuntimeToolName.enum["cleanup-app-hosted-runtime"];
   const matches = [
     candidate.callId === input.callId,
     candidate.toolName === expectedTool,
@@ -121,11 +120,14 @@ const assertReceiptsMatchSession = (
 
 /** Captures only protected hosted-runtime approvals from the authenticated Eve stream. */
 export const createPrivateHostedApprovalCapture = (sessionId: string) => {
-  const pending = new Map<string, {
-    callId: string;
-    toolInput: z.infer<typeof hostedRuntimeToolInputSchema>;
-    toolName: z.infer<typeof hostedRuntimeToolName>;
-  }>();
+  const pending = new Map<
+    string,
+    {
+      callId: string;
+      toolInput: z.infer<typeof hostedRuntimeToolInputSchema>;
+      toolName: z.infer<typeof hostedRuntimeToolName>;
+    }
+  >();
   const receipts = new Map<string, PrivateHostedApprovalReceipt>();
 
   return {
@@ -216,10 +218,15 @@ export const mergePrivateHostedApprovalReceipts = (
   observedInput: readonly PrivateHostedApprovalReceipt[],
 ): PrivateHostedApprovalReceipt[] => {
   const merged = new Map<string, PrivateHostedApprovalReceipt>();
-  for (const receipt of assertReceiptsMatchSession(sessionId, [...(existingInput ?? []), ...observedInput])) {
+  for (const receipt of assertReceiptsMatchSession(sessionId, [
+    ...(existingInput ?? []),
+    ...observedInput,
+  ])) {
     const previous = merged.get(receipt.requestId);
     if (previous !== undefined && !sameReceipt(previous, receipt)) {
-      throw new Error("Protected hosted approval receipt conflicts with its saved terminal outcome.");
+      throw new Error(
+        "Protected hosted approval receipt conflicts with its saved terminal outcome.",
+      );
     }
     merged.set(receipt.requestId, receipt);
   }

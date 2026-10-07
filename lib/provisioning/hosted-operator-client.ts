@@ -3,10 +3,7 @@ import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
 import { hostedRuntimeProofSchema } from "./hosted-runtime-journal";
 import { resolveHostedOperatorOwnerContext } from "./hosted-operator-owner-context";
-import type {
-  OperatorOwnerContext,
-  OperatorRequest,
-} from "./hosted-operator-contract";
+import type { OperatorOwnerContext, OperatorRequest } from "./hosted-operator-contract";
 import {
   HostedOperatorError,
   hostedOperatorPlanSchema,
@@ -33,9 +30,7 @@ export const createHostedOperatorClient = (input: {
 }) => {
   const url = new URL(input.endpoint);
   const loopback =
-    input.allowLoopback === true &&
-    url.protocol === "http:" &&
-    url.hostname === "127.0.0.1";
+    input.allowLoopback === true && url.protocol === "http:" && url.hostname === "127.0.0.1";
   const validEndpoint = [
     url.protocol === "https:" || loopback,
     url.username === "",
@@ -81,9 +76,7 @@ export const createHostedOperatorClient = (input: {
       const raw = await send(request, signal);
       const blocked = operatorPublicResultSchema.safeParse(raw);
       if (blocked.success) {
-        throw new HostedOperatorError(
-          blocked.data.code ?? "operator_unavailable",
-        );
+        throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
       }
       const value = bindingSchema.parse(raw);
       if (
@@ -96,16 +89,10 @@ export const createHostedOperatorClient = (input: {
       }
       return {
         ...value,
-        environment: restrictedOperatorEnvironment(
-          value.plan,
-          value.environment,
-        ),
+        environment: restrictedOperatorEnvironment(value.plan, value.environment),
       };
     },
-    async request(
-      request: Exclude<OperatorRequest, { action: "bindings" }>,
-      signal?: AbortSignal,
-    ) {
+    async request(request: Exclude<OperatorRequest, { action: "bindings" }>, signal?: AbortSignal) {
       return operatorPublicResultSchema.parse(await send(request, signal));
     },
     sessionId: input.sessionId,

@@ -24,10 +24,7 @@ export default defineTool({
     "After approval of the concrete protected operator plan, cleanup exactly its named Preview resources/access. Pass the plan and operation reference returned by plan-app-hosted-runtime. The protected service independently verifies the durable approval and current owner authority, resumes the same journal and reports actual effects. No installer credential or repository script is sent to an app Sandbox. This does not deploy or activate Production.",
   async execute(input, ctx) {
     try {
-      const operator = await hostedOperatorClientForSession(
-        ctx.session.auth,
-        ctx.session.id,
-      );
+      const operator = await hostedOperatorClientForSession(ctx.session.auth, ctx.session.id);
       const selection = {
         appId: input.appId,
         branch: input.branch,
@@ -63,10 +60,7 @@ export default defineTool({
       return {
         appId: input.appId,
         authenticatedBehavior: "unassessed" as const,
-        code:
-          error instanceof HostedOperatorError
-            ? error.code
-            : "operator_unavailable",
+        code: error instanceof HostedOperatorError ? error.code : "operator_unavailable",
         status: "blocked" as const,
       };
     }

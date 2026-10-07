@@ -3,10 +3,7 @@ import {
   sourceHandoffIdForSessionAuth,
 } from "../hosted/session-authority";
 import type { HostedSessionTenantAuthority } from "../hosted/session-authority";
-import {
-  hostedSessionRecordSchema,
-  toDurableHostedSessionRecord,
-} from "../eve/hosted-store";
+import { hostedSessionRecordSchema, toDurableHostedSessionRecord } from "../eve/hosted-store";
 import type { HostedEveStore } from "../eve/hosted-store";
 import { hostedPrincipalSchema } from "../eve/hosted-auth";
 import type { HostedPrincipal } from "../eve/hosted-auth";
@@ -24,27 +21,13 @@ interface OwnerContextResolverDependencies {
   audience: string;
 }
 
-const sameAuthority = (
-  left: HostedSessionTenantAuthority,
-  right: HostedSessionTenantAuthority,
-) =>
-  JSON.stringify([
-    left.issuer,
-    left.audience,
-    left.workspaceId,
-    left.ownerUserId,
-  ]) ===
-  JSON.stringify([
-    right.issuer,
-    right.audience,
-    right.workspaceId,
-    right.ownerUserId,
-  ]);
+const sameAuthority = (left: HostedSessionTenantAuthority, right: HostedSessionTenantAuthority) =>
+  JSON.stringify([left.issuer, left.audience, left.workspaceId, left.ownerUserId]) ===
+  JSON.stringify([right.issuer, right.audience, right.workspaceId, right.ownerUserId]);
 
 const samePrincipal = (left: HostedPrincipal, right: HostedPrincipal) =>
   sameAuthority(left, right) &&
-  JSON.stringify([...left.scopes].toSorted()) ===
-    JSON.stringify([...right.scopes].toSorted());
+  JSON.stringify([...left.scopes].toSorted()) === JSON.stringify([...right.scopes].toSorted());
 
 /** Resolves only through the exact owner-scoped handoff binding, never a caller-supplied session ID. */
 export const createHostedOperatorOwnerContextResolver =
@@ -84,10 +67,7 @@ export const createHostedOperatorOwnerContextResolver =
     if (!handoff.success) {
       throw new HostedOperatorError("authorization_required");
     }
-    if (
-      handoff.data.handoffId !== handoffId ||
-      handoff.data.sessionId === undefined
-    ) {
+    if (handoff.data.handoffId !== handoffId || handoff.data.sessionId === undefined) {
       throw new HostedOperatorError("authorization_required");
     }
     if (!sameAuthority(handoff.data.authority, input.authority)) {
@@ -98,8 +78,7 @@ export const createHostedOperatorOwnerContextResolver =
       input.principal,
       handoff.data.sessionId,
     );
-    const storedSessionRecord =
-      hostedSessionRecordSchema.safeParse(storedSession);
+    const storedSessionRecord = hostedSessionRecordSchema.safeParse(storedSession);
     if (!storedSessionRecord.success) {
       throw new HostedOperatorError("authorization_required");
     }

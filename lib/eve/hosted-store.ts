@@ -16,7 +16,10 @@ import {
 } from "../mcp/contracts";
 import type { PublicSessionSummary } from "../mcp/contracts";
 import type { pagedCheckpointMetadataSchema } from "./postgres-hosted-checkpoint-history";
-import { mergePrivateHostedApprovalReceipts, privateHostedApprovalReceiptSchema } from "./private-hosted-approval";
+import {
+  mergePrivateHostedApprovalReceipts,
+  privateHostedApprovalReceiptSchema,
+} from "./private-hosted-approval";
 import type { PrivateHostedApprovalReceipt } from "./private-hosted-approval";
 
 export const hostedOperationKindSchema = z.enum(["start", "resume", "send", "respond"]);

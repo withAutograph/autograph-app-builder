@@ -20,7 +20,10 @@ import {
   InMemoryHostedEveStore,
 } from "./hosted-store";
 import type { HostedEveStore } from "./hosted-store";
-import { hostedOperatorPlanSchema, operatorPlanDigest } from "../provisioning/hosted-operator-contract";
+import {
+  hostedOperatorPlanSchema,
+  operatorPlanDigest,
+} from "../provisioning/hosted-operator-contract";
 import { publicSessionSummarySchema } from "../mcp/contracts";
 
 const principal: HostedPrincipal = {
@@ -115,19 +118,18 @@ const inputRequested = (
 const approvalSettled = (
   requestId: string,
   outcome: "approved" | "cancelled" = "approved",
-): MessageStreamEvent =>
-  ({
-    data: {
-      outcome,
-      requestId,
-      responderPrincipalId: "owner_1",
-      sequence: 5,
-      stepIndex: 2,
-      turnId: "turn_fixture",
-    },
-    meta: { at: "2026-10-06T00:00:00.000Z", id: `evt_settled_${requestId}` },
-    type: "approval.settled",
-  });
+): MessageStreamEvent => ({
+  data: {
+    outcome,
+    requestId,
+    responderPrincipalId: "owner_1",
+    sequence: 5,
+    stepIndex: 2,
+    turnId: "turn_fixture",
+  },
+  meta: { at: "2026-10-06T00:00:00.000Z", id: `evt_settled_${requestId}` },
+  type: "approval.settled",
+});
 
 const receipt = (
   savedSessionId: string,
@@ -231,7 +233,9 @@ describe("private hosted approval receipts", () => {
       stage: "designing",
     });
     let current = await store.getSession(principal, savedSessionId);
-    expect(current?.version === 2 ? current.privateApprovalReceipts : undefined).toEqual([savedReceipt]);
+    expect(current?.version === 2 ? current.privateApprovalReceipts : undefined).toEqual([
+      savedReceipt,
+    ]);
     if (current?.version !== 2) {
       throw new Error("Expected durable hosted session.");
     }
@@ -247,7 +251,9 @@ describe("private hosted approval receipts", () => {
       stage: "designing",
     });
     current = await store.getSession(principal, savedSessionId);
-    expect(current?.version === 2 ? current.privateApprovalReceipts : undefined).toEqual([savedReceipt]);
+    expect(current?.version === 2 ? current.privateApprovalReceipts : undefined).toEqual([
+      savedReceipt,
+    ]);
 
     if (current === null) {
       throw new Error("Hosted session disappeared after recovery.");
@@ -283,7 +289,8 @@ describe("private hosted approval receipts", () => {
         });
       },
       // oxlint-disable-next-line typescript/promise-function-async -- Inline fixture checkpoint does not use page reads.
-      readCheckpointPage: () => Promise.reject(new Error("Inline fixture checkpoint does not use page reads.")),
+      readCheckpointPage: () =>
+        Promise.reject(new Error("Inline fixture checkpoint does not use page reads.")),
       recordPrivateApprovalReceipts: base.recordPrivateApprovalReceipts?.bind(base),
       reserveOperation: base.reserveOperation.bind(base),
       settleSucceeded: base.settleSucceeded.bind(base),
@@ -307,9 +314,11 @@ describe("private hosted approval receipts", () => {
         await request.onPrivateEvent?.(inputRequested("request_spooled", undefined, requestInput));
         await request.onPrivateEvent?.(approvalSettled("request_spooled"));
         const savedDuringObservation = await store.getSession(principal, request.sessionId);
-        expect(savedDuringObservation?.version === 2
-          ? savedDuringObservation.privateApprovalReceipts?.[0]?.outcome
-          : undefined).toBe("approved");
+        expect(
+          savedDuringObservation?.version === 2
+            ? savedDuringObservation.privateApprovalReceipts?.[0]?.outcome
+            : undefined,
+        ).toBe("approved");
         return {
           artifactProjectionRequiresLegacyReadback: false,
           installedEventCount: 2,
@@ -323,13 +332,19 @@ describe("private hosted approval receipts", () => {
       // oxlint-disable-next-line typescript/promise-function-async -- test stub
       send: () => Promise.resolve({ events: [], status: "waiting" }),
       // oxlint-disable-next-line typescript/promise-function-async -- test stub
-      start: () => Promise.resolve({ adapterSessionId: "adapter_fixture", snapshot: { events: [], status: "waiting" } }),
+      start: () =>
+        Promise.resolve({
+          adapterSessionId: "adapter_fixture",
+          snapshot: { events: [], status: "waiting" },
+        }),
     };
     const service = createHostedEveSessionService({ now: () => 10, principal, store, transport });
     const started = await service.start({ clientRequestId: randomUUID(), prompt: "Build an app" });
     const result = await service.get({ cursor: 0, limit: 10, sessionId: started.sessionId });
     const saved = await store.getSession(principal, started.sessionId);
-    expect(saved?.version === 2 ? saved.privateApprovalReceipts?.[0]?.outcome : undefined).toBe("approved");
+    expect(saved?.version === 2 ? saved.privateApprovalReceipts?.[0]?.outcome : undefined).toBe(
+      "approved",
+    );
     expect(JSON.stringify(result)).not.toContain("call_fixture");
     expect(JSON.stringify(result)).not.toContain("responderPrincipalId");
   });
