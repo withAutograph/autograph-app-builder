@@ -15,6 +15,7 @@ import type {
 } from "./hosted-runtime-journal";
 import {
   HostedOperatorError,
+  managedOperatorEnvironmentRowsSchema,
   hostedOperatorPlanSchema,
   operatorPlanDigest,
   operatorPublicResultSchema,
@@ -38,6 +39,7 @@ import type {
   WorkerContextBinding,
   WorkerEffectCheckpoint,
   WorkerEffectCheckpointFrame,
+  ManagedOperatorEnvironmentRow,
 } from "./hosted-operator-contract";
 
 export interface HostedOperatorContext {
@@ -48,12 +50,17 @@ export interface HostedOperatorContext {
 type Context = HostedOperatorContext;
 type PrivateState = NonNullable<HostedRuntimeJournalRecord["privateState"]>;
 type Effect = HostedOperatorPlan["effects"][number];
+export type HostedOperatorManagedEnvironmentContext = HostedOperatorEffectContext & {
+  checkpointManagedEnvironment: (rows: readonly ManagedOperatorEnvironmentRow[]) => Promise<void>;
+};
 export type HostedOperatorEffectContext = Context & {
   effect: Effect;
   fenceGeneration: number;
   operationRef: string;
   plan: HostedOperatorPlan;
   privateState?: PrivateState;
+  managedEnvironment?: ManagedOperatorEnvironmentRow[];
+  checkpointManagedEnvironment?: (rows: readonly ManagedOperatorEnvironmentRow[]) => Promise<void>;
   workerCheckpoints: WorkerEffectCheckpoint[];
   assertCurrent: () => Promise<void>;
   checkpoint: (state: PrivateState) => Promise<void>;
@@ -207,11 +214,15 @@ const handlePlanOperation = async (
         throw new HostedOperatorError("resource_mismatch");
       }
       // Same-resource release changes keep credentials; old proof never attests the new plan.
+      const nextOperator: ReturnType<typeof requireOperator> = { ...operator };
+      if (record.operator.managedEnvironment !== undefined) {
+        nextOperator.managedEnvironment = record.operator.managedEnvironment;
+      }
       const next = {
         ...record,
         approvedByCallId: "operator:unapproved-plan",
         environmentBound: false,
-        operator,
+        operator: nextOperator,
         status: "pending" as const,
         step: "reserved" as const,
       };
@@ -501,8 +512,32 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                   await assertCurrent();
                   record = (await ownedUpdate((value) => ({ ...value, privateState }))).record;
                 },
+                checkpointManagedEnvironment: async (rows) => {
+                  await assertCurrent();
+                  const managedEnvironment = managedOperatorEnvironmentRowsSchema.parse(rows);
+                  record = (
+                    await ownedUpdate((value) => {
+                      const currentOperator = requireOperator(value);
+                      const priorRows = currentOperator.managedEnvironment ?? [];
+                      if (
+                        managedEnvironment.some(
+                          (row) =>
+                            row.operationRef !== operationRef &&
+                            !priorRows.some(
+                              (prior) => JSON.stringify(prior) === JSON.stringify(row),
+                            ),
+                        )
+                      ) {
+                        throw new HostedOperatorError("resource_mismatch");
+                      }
+                      return { ...value, operator: { ...currentOperator, managedEnvironment } };
+                    })
+                  ).record;
+                  effectInput.managedEnvironment = requireOperator(record).managedEnvironment;
+                },
                 effect,
                 fenceGeneration,
+                managedEnvironment: requireOperator(record).managedEnvironment,
                 operationRef,
                 plan,
                 privateState: record.privateState,

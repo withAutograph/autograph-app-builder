@@ -347,6 +347,63 @@ const prepared = async (f: ReturnType<typeof fixture>) => {
 };
 
 describe("protected hosted operator boundary", () => {
+  it("CAS-checkpoints managed environment ownership and preserves it for cleanup", async () => {
+    const f = fixture();
+    const original = f.deps.executeEffect;
+    f.deps.executeEffect = async (input) => {
+      if (input.effect.kind === "bindings") {
+        if (input.checkpointManagedEnvironment === undefined) {
+          throw new Error("Missing real CAS checkpoint");
+        }
+        const row = {
+          branch: input.target.branch,
+          comment: `App Builder protected operator ${input.operationRef}`,
+          id: "env_owned",
+          key: "PLATFORM_ORIGIN",
+          operationRef: input.operationRef,
+          projectId: input.target.projectId,
+        };
+        await input.checkpointManagedEnvironment([row]);
+        expect(f.row?.record.operator?.managedEnvironment).toEqual([row]);
+        await expect(
+          input.checkpointManagedEnvironment([
+            {
+              ...row,
+              comment: "App Builder protected operator 00000000-0000-4000-8000-000000000000",
+              operationRef: "00000000-0000-4000-8000-000000000000",
+            },
+          ]),
+        ).rejects.toMatchObject({ code: "resource_mismatch" });
+      }
+      return await original(input);
+    };
+    const preparedInput = await prepared(f);
+    f.approve();
+    const outcome = await f.client.request(preparedInput);
+    expect(outcome).toMatchObject({ status: "prepared" });
+    const rows = f.row?.record.operator?.managedEnvironment;
+    expect(rows).toHaveLength(1);
+    const cleanupPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      action: "cleanup",
+      effects: [
+        { description: "Revoke current authority", id: "revoke", kind: "revoke" },
+        {
+          description: "Remove exact owned bindings",
+          id: "remove-bindings",
+          kind: "remove-bindings",
+        },
+        { description: "Retire owned resources", id: "retire", kind: "retire" },
+      ],
+    });
+    f.deps.plan = async () => cleanupPlan;
+    expect(
+      (await f.client.request({ action: "plan", operation: "cleanup", selection })).status,
+    ).toBe("planned");
+    expect(f.row?.record.operator?.managedEnvironment).toEqual(rows);
+    expect(f.row?.record.operator?.operationRef).not.toBe(preparedInput.operationRef);
+  });
+
   it("rejects missing or reordered authorization phases", () => {
     for (const effects of [plan.effects.slice(1), plan.effects.toReversed(), [plan.effects[3]]]) {
       expect(hostedOperatorPlanSchema.safeParse({ ...plan, effects }).success).toBe(false);

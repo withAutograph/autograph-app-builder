@@ -287,11 +287,22 @@ export const workerEffectCheckpointFrameSchema = z.strictObject({
   tenantId: id.nullable().optional(),
 });
 export type WorkerEffectCheckpointFrame = z.infer<typeof workerEffectCheckpointFrameSchema>;
+export const managedOperatorEnvironmentRowSchema = z.strictObject({
+  branch: id,
+  comment: id,
+  id,
+  key: z.string().regex(/^[A-Z][A-Z0-9_]{0,199}$/u),
+  operationRef: z.uuid(),
+  projectId: id,
+});
+export type ManagedOperatorEnvironmentRow = z.infer<typeof managedOperatorEnvironmentRowSchema>;
+export const managedOperatorEnvironmentRowsSchema = z.array(managedOperatorEnvironmentRowSchema);
 export const hostedOperatorRecordSchema = z
   .strictObject({
     approvalId: id.optional(),
     /** Shared across Auth and kernel rows; allocated once by the existing journal CAS. */
     fenceGeneration: z.number().int().positive().optional(),
+    managedEnvironment: managedOperatorEnvironmentRowsSchema.optional(),
     mode: z.literal("protected-operator-v1"),
     operationRef: z.uuid(),
     pendingEffectAttempt: z
@@ -304,6 +315,32 @@ export const hostedOperatorRecordSchema = z
     workerCheckpoints: z.array(workerEffectCheckpointSchema).optional(),
   })
   .superRefine((operator, context) => {
+    const environmentRows = operator.managedEnvironment ?? [];
+    const appKey = `${operator.plan.selection.appId.toUpperCase().replaceAll("-", "_")}_DATABASE_URL`;
+    const ownedKeys = new Set([
+      appKey,
+      "PLATFORM_ORIGIN",
+      "PLATFORM_PUBLIC_ORIGIN",
+      "PLATFORM_JWKS_URL",
+      "PLATFORM_APP_BOUNDARY",
+    ]);
+    if (
+      new Set(environmentRows.map((row) => row.key)).size !== environmentRows.length ||
+      new Set(environmentRows.map((row) => row.id)).size !== environmentRows.length ||
+      environmentRows.some(
+        (row) =>
+          row.projectId !== operator.plan.selection.projectId ||
+          row.branch !== operator.plan.selection.branch ||
+          !ownedKeys.has(row.key) ||
+          row.comment !== `App Builder protected operator ${row.operationRef}`,
+      )
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Managed environment rows must belong to this approved app operation.",
+        path: ["managedEnvironment"],
+      });
+    }
     const resources = new Set([
       operator.plan.appDatabase.resourceId,
       operator.plan.authDatabase.resourceId,
