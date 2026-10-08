@@ -1,3 +1,4 @@
+import { approvedBuildDecisionSchema } from "../agent/approved-build-continuation";
 import { and, count, desc, eq, inArray, lte, ne, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
@@ -337,6 +338,53 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         return existing;
       });
     },
+    async claimInternalBuildMessage(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      return await database.transaction(async (transaction) => {
+        const operation = await operationById(transaction, principal, input.operationId, true);
+        const marker = operation?.internalBuildContinuation;
+        if (
+          operation === null ||
+          marker === undefined ||
+          operation.state === "rejected" ||
+          operation.sessionId !== input.sessionId ||
+          marker.nonce !== input.nonce ||
+          input.turnSequence <= marker.decision.turnSequence
+        ) {
+          return false;
+        }
+        if (marker.deliveredTurnId !== undefined) {
+          return (
+            marker.deliveredTurnId === input.turnId &&
+            marker.deliveredMessageSequence === input.messageSequence
+          );
+        }
+        const updated = hostedOperationRecordSchema.parse({
+          ...operation,
+          internalBuildContinuation: {
+            ...marker,
+            deliveredMessageSequence: input.messageSequence,
+            deliveredTurnId: input.turnId,
+          },
+        });
+        const rows = await transaction
+          .update(agentOperations)
+          .set(operationValues(updated))
+          .where(
+            and(tenantPredicate(principal), eq(agentOperations.operationId, input.operationId)),
+          )
+          .returning();
+        if (rows.length !== 1) {
+          throw new Error("Internal continuation receipt was not durable.");
+        }
+        parseHostedOperationRow(rows[0]);
+        return true;
+      });
+    },
+
+    async getPrivateOperation(principal, operationId) {
+      return await operationById(database, hostedPrincipalSchema.parse(principal), operationId);
+    },
     // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async getSession(principalInput, sessionId) {
       const principal = hostedPrincipalSchema.parse(principalInput);
@@ -575,6 +623,38 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           .returning();
         if (rows.length !== 1) {
           throw new Error("Private Eve approval receipt was not durable.");
+        }
+        parseHostedSessionRow(rows[0]);
+      });
+    },
+    async recordPrivateBuildDecision(input) {
+      const principal = hostedPrincipalSchema.parse(input.principal);
+      await database.transaction(async (transaction) => {
+        const stored = await sessionById(transaction, principal, input.sessionId, true);
+        if (stored === null) {
+          throw new Error(SESSION_NOT_FOUND);
+        }
+        const current = toDurableHostedSessionRecord(stored);
+        const decision = approvedBuildDecisionSchema.parse(input.decision);
+        if (decision.adapterSessionId !== current.adapterSessionId) {
+          throw new Error(SESSION_NOT_FOUND);
+        }
+        if ((current.privateBuildDecision?.turnSequence ?? -1) > decision.turnSequence) {
+          return;
+        }
+        const updated = durableHostedSessionRecordSchema.parse({
+          ...current,
+          privateBuildDecision: decision,
+        });
+        const rows = await transaction
+          .update(agentSessions)
+          .set(sessionValues(updated))
+          .where(
+            and(sessionTenantPredicate(principal), eq(agentSessions.sessionId, input.sessionId)),
+          )
+          .returning();
+        if (rows.length !== 1) {
+          throw new Error("Private build decision was not durable.");
         }
         parseHostedSessionRow(rows[0]);
       });
@@ -1105,7 +1185,5 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         return parseHostedOperationRow(updated[0]);
       });
     },
-
-    // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
   };
 }
