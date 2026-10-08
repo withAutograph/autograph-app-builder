@@ -165,12 +165,12 @@ const fixture = () => {
     binding: {
       active: true,
       displayName: "Fixture team",
-      plan: "pro",
-      updatedAt: new Date("2026-10-07T00:00:00Z"),
       installationId: target.installationId,
+      plan: "pro",
       scopeId: target.scopeId,
       scopeType: target.scopeType,
       slug: "fixture-team",
+      updatedAt: new Date("2026-10-07T00:00:00Z"),
     },
     token: "synthetic-owner-oauth",
   };
