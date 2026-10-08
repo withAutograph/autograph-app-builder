@@ -153,11 +153,12 @@ const inspectEmptyAuthNamespace = async (
     await sql.end({ timeout: 5 });
   }
 };
-const resolveFullPlan = async (
+export const resolveFullPlan = async (
   base: HostedOperatorPlan,
   context: HostedOperatorContext,
   configuration: HostedOperatorSourceConfiguration,
   controlPlane: ControlPlane,
+  transportIo: Parameters<typeof createHostedOperatorRealmHttpTransport>[2] = {},
 ): Promise<HostedOperatorPlan> => {
   const captured = await controlPlane.readCapturedRealmIdentity(context);
   if (captured === null) {
@@ -168,7 +169,7 @@ const resolveFullPlan = async (
   const transport = createHostedOperatorRealmHttpTransport(
     configuration,
     "operator",
-    {},
+    transportIo,
     captured.endpointOrigin,
   );
   const getKey = createRemoteJWKSet(new URL("/_platform/jwks.json", captured.endpointOrigin), {

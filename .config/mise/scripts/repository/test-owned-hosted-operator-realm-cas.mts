@@ -1,4 +1,6 @@
 /* oxlint-disable eslint/sort-keys, eslint/no-await-in-loop, unicorn/no-await-expression-member, typescript/no-non-null-assertion, promise/avoid-new, promise/prefer-await-to-callbacks -- Ordered native state transitions and assertions operate on resources whose creation is checked; callback adapters exercise the real owner resolver and never replace journal or artifact stores. */
+import type { verifyVercelOidcToken } from "@vercel/oidc";
+import type { JWTVerifyResult } from "jose";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -29,12 +31,14 @@ import {
   encryptVercelToken,
   readVercelTokenKeyringEnvironment,
 } from "../../../../lib/integrations/vercel-installation";
+import { resolveFullPlan } from "../../../../lib/provisioning/hosted-operator-composition";
+import { hostedOperatorSourceConfigurationSchema } from "../../../../lib/provisioning/hosted-operator-source-configuration";
 import { openOwnedRealmSource } from "./owned-hosted-operator-realm-source.mjs";
 
 // This diagnostic owns every database/process/key. Provider metadata, HTTP routing and the browser owner-auth selector are modeled;
 // canonical SQL/CAS, source cookie/proof issuance, source session readback, and callback logic are real.
 // It never reads configured DATABASE_URL/provider credentials and is not hosted Preview qualification.
-const [arrustedRoot] = process.argv.slice(2);
+const [arrustedRoot, postgresBin] = process.argv.slice(2);
 if (!arrustedRoot || !path.isAbsolute(arrustedRoot)) {
   throw new Error("Expected absolute Arrusted source root");
 }
@@ -58,7 +62,7 @@ const port = await new Promise<number>((resolve, reject) => {
   });
 });
 const command = (name: string, args: string[]) => {
-  const result = spawnSync(name, args, {
+  const result = spawnSync(postgresBin === undefined ? name : path.join(postgresBin, name), args, {
     encoding: "utf-8",
     env: { LANG: "C", LC_ALL: "C", PATH: process.env.PATH },
   });
@@ -566,6 +570,158 @@ try {
   assert.equal(captured.proofSha256, digest(realm.proof));
   const stored = await cp.readCapturedRealmIdentityProof(context);
   assert.equal(stored.proof, realm.proof);
+  // Modeled native OIDC acquisition/routing; real CP consumed capture, signature and Realm SQL govern the full-plan sender.
+  const nativeOperator = {
+    audience: "https://vercel.com/owned",
+    issuer: "https://oidc.vercel.com/owned",
+    ownerId: target.scopeId,
+    projectId: "prj_operator",
+    environment: "preview" as const,
+  };
+  const configuration = hostedOperatorSourceConfigurationSchema.parse({
+    applications: {
+      [selection.appId]: {
+        accessRoles: ["owner"],
+        appDatabase: plan.appDatabase,
+        branch: selection.branch,
+        deploymentId: "dpl_app",
+        gitSha: "1".repeat(40),
+        projectId: selection.projectId,
+        repoId: "repo_owned",
+        organizationProposal: {
+          name: "Owned organization",
+          organizationId: "org_owned",
+          slug: "owned-organization",
+        },
+      },
+    },
+    authDatabase: plan.authDatabase,
+    builderCallbackOrigin: builderOrigin,
+    catalogAppIds: [selection.appId],
+    teamId: target.scopeId,
+    gateway: {
+      authBrowserOrigin: pending.link.browserOrigin,
+      branch: selection.branch,
+      deploymentId: "dpl_gateway",
+      environment: "preview",
+      gatewayOrigin: pending.link.endpointOrigin,
+      gitSha: "1".repeat(40),
+      projectId: "prj_gateway",
+      protectedApplicationIds: [selection.appId],
+      publicOrigin: pending.link.issuer,
+      repoId: "repo_owned",
+      workload: { ...nativeOperator, projectId: "prj_gateway", subject: "modeled-source" },
+    },
+    nativeNeon: {
+      configuration: {
+        connector: "modeled-owner-mcp",
+        nativeStore: {
+          configurationId: "owned",
+          resourceId: "owned",
+          sourceProjectId: "prj_operator",
+        },
+        operator: nativeOperator,
+      },
+      scope: {
+        branchId: "owned-branch",
+        endpointId: "owned-endpoint",
+        hostname: plan.neon.endpoint,
+        maintenanceDatabase: "neondb",
+        maintenanceRole: "neondb_owner",
+        projectId: "owned-project",
+      },
+    },
+    operator: {
+      deploymentId: "dpl_operator",
+      environment: "preview",
+      origin: pending.link.audience,
+      projectId: "prj_operator",
+    },
+    workloadPolicy: { ...nativeOperator, subject: "modeled-source" },
+    sandbox: {
+      image: "owned-fixture-image",
+      projectId: "prj_operator",
+      teamId: target.scopeId,
+      authProposal: {
+        executablePath: "/owned/proposal",
+        id: "auth-proposal",
+        sha256: "a".repeat(64),
+      },
+      authWorker: {
+        executablePath: "/owned/auth",
+        id: "auth-protected-schema-v1",
+        operationScope: "auth-protected-schema-v1",
+        sha256: "a".repeat(64),
+        subcommand: "auth-protected-schema",
+      },
+      accessWorker: {
+        executablePath: "/owned/access",
+        id: "access",
+        operationScope: "generated-app-access-v1",
+        sha256: "a".repeat(64),
+        subcommand: "protected-generated-app-access",
+      },
+      resourcesWorker: {
+        executablePath: "/owned/resources",
+        id: "resources",
+        operationScope: "neon-resource-bootstrap-v1",
+        sha256: "a".repeat(64),
+        subcommand: "neon-resource-bootstrap",
+      },
+      workers: {},
+    },
+  });
+  let oidcChecks = 0;
+  let attestationReads = 0;
+  const modeledOidc = "modeled-native-project-oidc";
+  const transportIo = {
+    getOidc: async () => await Promise.resolve(modeledOidc),
+    verifyOidc: async <PayloadType,>(
+      token: string,
+      options: Parameters<typeof verifyVercelOidcToken>[1],
+    ): Promise<JWTVerifyResult<PayloadType>> => {
+      assert.equal(token, modeledOidc);
+      assert.deepEqual(options, nativeOperator);
+      oidcChecks += 1;
+      // SAFETY: Only the transport's unused return value is modeled; expected token/source options were checked above. This is not provider authority evidence.
+      return await Promise.resolve({
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The native OIDC verifier result is unused by this explicitly modeled transport fixture.
+        payload: {} as PayloadType,
+        protectedHeader: { alg: "fixture" },
+      });
+    },
+    fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      assert.equal(request.headers.get("x-vercel-trusted-oidc-idp-token"), modeledOidc);
+      if (request.method === "POST") {
+        const body = new URLSearchParams(await request.clone().text());
+        assert.deepEqual(JSON.parse(body.get("attestation") ?? "null"), {
+          version: 1,
+          purpose: "realm-captured-link-readback-v1",
+          capturedAt: captured.consumedAt,
+          realmSessionId: realm!.identity.sessionId,
+          proofSha256: captured.proofSha256,
+        });
+        attestationReads += 1;
+      }
+      return await realm!.fetch(request);
+    },
+  };
+  const full = await resolveFullPlan(plan, context, configuration, cp, transportIo);
+  assert.equal(full.stage, "app");
+  assert.equal(full.authMembership?.actorId, realm.identity.actorId);
+  assert.equal(full.authMembership?.identityCapture.capturedAt, captured.consumedAt);
+  assert.deepEqual(full.access, [
+    { actorId: realm.identity.actorId, organizationId: "org_owned", roles: ["owner"] },
+  ]);
+  assert.ok(oidcChecks >= 2);
+  assert.equal(attestationReads, 1);
+  checks += 6;
+  await realm.setSessionCurrent(false);
+  await assert.rejects(resolveFullPlan(plan, context, configuration, cp, transportIo));
+  await realm.setSessionCurrent(true);
+  checks += 1;
+
   checks += 5;
   await assert.rejects(
     cp.consumeOwnerRealmIdentityCallback({
