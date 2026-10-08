@@ -69,174 +69,214 @@ const deploymentBoundarySchema = z.strictObject({
 });
 
 /** Resolved by the protected planner from independently verified owner/provider/artifact state. */
-export const hostedOperatorPlanSchema = z
-  .strictObject({
-    access: z.array(
-      z.strictObject({ actorId: id, organizationId: id, roles: z.array(sqlName).min(1) }),
-    ),
-    action: z.enum(["prepare", "cleanup"]),
-    appDatabase: databaseResource,
-    authDatabase: databaseResource,
-    authSchema: z
-      .strictObject({
-        artifactRef: id,
-        installer: z.strictObject({ reference: id, sha256: digest }),
-        planDigest: digest,
-        targetDigest: digest,
-      })
-      .optional(),
-    bootstrap: z
-      .strictObject({ endpointId: id, maintenanceDatabase: sqlName, role: sqlName })
-      .optional(),
-    contextId: id,
-    cost: z.strictObject({
-      class: z.enum(["shared-recovery-group", "independent-service"]),
-      description: id,
-      owner: id,
-    }),
-    deploymentBoundary: deploymentBoundarySchema.optional(),
-    effects: z
-      .array(
-        z.strictObject({
-          description: id,
-          id,
-          kind: z.enum([
-            "resources",
-            "install",
-            "access",
-            "bindings",
-            "revoke",
-            "remove-bindings",
-            "retire",
-          ]),
-          resourceId: id.optional(),
-        }),
-      )
-      .min(1),
-    installer: z.strictObject({ reference: id, sha256: digest }),
-    neon: z.strictObject({
-      branchId: id,
-      connectionRef: id,
-      endpoint: z.string().regex(/^[a-z0-9.-]+\.neon\.tech$/u),
+const AUTH_BOOTSTRAP_STAGE = "auth-bootstrap";
+const hostedOperatorPlanDataSchema = z.strictObject({
+  access: z.array(
+    z.strictObject({ actorId: id, organizationId: id, roles: z.array(sqlName).min(1) }),
+  ),
+  action: z.enum(["prepare", "cleanup"]),
+  appDatabase: databaseResource,
+  authDatabase: databaseResource,
+  authSchema: z
+    .strictObject({
+      artifactRef: id,
+      installer: z.strictObject({ reference: id, sha256: digest }),
+      planDigest: digest,
+      targetDigest: digest,
+    })
+    .optional(),
+  bootstrap: z
+    .strictObject({ endpointId: id, maintenanceDatabase: sqlName, role: sqlName })
+    .optional(),
+  contextId: id,
+  cost: z.strictObject({
+    class: z.enum(["shared-recovery-group", "independent-service"]),
+    description: id,
+    owner: id,
+  }),
+  deploymentBoundary: deploymentBoundarySchema.optional(),
+  effects: z
+    .array(
+      z.strictObject({
+        description: id,
+        id,
+        kind: z.enum([
+          "resources",
+          "install",
+          "access",
+          "bindings",
+          "revoke",
+          "remove-bindings",
+          "retire",
+        ]),
+        resourceId: id.optional(),
+      }),
+    )
+    .min(1),
+  installer: z.strictObject({ reference: id, sha256: digest }),
+  neon: z.strictObject({
+    branchId: id,
+    connectionRef: id,
+    endpoint: z.string().regex(/^[a-z0-9.-]+\.neon\.tech$/u),
+    projectId: id,
+    source: z.literal("synthetic-only"),
+  }),
+  // Optional only when parsing persisted protected-operator-v1 records created before
+  // native Gateway origins were part of the verified plan.
+  publicGateway: z
+    .strictObject({
+      branch: id,
+      origin: httpsPublicOrigin,
       projectId: id,
-      source: z.literal("synthetic-only"),
-    }),
-    // Optional only when parsing persisted protected-operator-v1 records created before
-    // native Gateway origins were part of the verified plan.
-    publicGateway: z
-      .strictObject({
-        branch: id,
-        origin: httpsPublicOrigin,
-        projectId: id,
-      })
-      .optional(),
-    release: z.strictObject({ artifactRef: id, id, sha256: digest }),
-    resourcesInstaller: z.strictObject({ reference: id, sha256: digest }).optional(),
-    retention: z.strictObject({ expiresAt: z.iso.datetime({ offset: true }), policy: id }),
-    selection: operatorSelectionSchema,
-    version: z.literal(1),
-  })
-  .superRefine((plan, ctx) => {
-    if ((plan.bootstrap === undefined) !== (plan.resourcesInstaller === undefined)) {
+    })
+    .optional(),
+  release: z.strictObject({ artifactRef: id, id, sha256: digest }),
+  resourcesInstaller: z.strictObject({ reference: id, sha256: digest }).optional(),
+  retention: z.strictObject({ expiresAt: z.iso.datetime({ offset: true }), policy: id }),
+  selection: operatorSelectionSchema,
+  stage: z.enum([AUTH_BOOTSTRAP_STAGE, "app"]).optional(),
+  version: z.literal(1),
+});
+const validatePlanStage = (
+  plan: z.infer<typeof hostedOperatorPlanDataSchema>,
+  ctx: z.RefinementCtx,
+) => {
+  if (plan.stage === AUTH_BOOTSTRAP_STAGE) {
+    const invalid = [
+      plan.action !== "prepare",
+      plan.access.length !== 0,
+      plan.authSchema === undefined,
+      plan.bootstrap === undefined,
+      plan.effects.filter((effect) => effect.kind === "install").length !== 1,
+    ].some(Boolean);
+    if (invalid) {
       ctx.addIssue({
         code: "custom",
-        message: "Resource bootstrap requires its pinned installer.",
+        message:
+          "Auth bootstrap prepares resources and one Auth schema only, without actor grants.",
       });
     }
-    if (plan.bootstrap) {
-      const { bootstrap } = plan;
-      const databases = [plan.authDatabase, plan.appDatabase];
-      const roles = databases.flatMap((database) => [database.migratorRole, database.runtimeRole]);
-      const resources = plan.effects.filter((effect) => effect.kind === "resources");
-      const orderedResources = [
-        resources.length === 2,
-        resources[0]?.resourceId === plan.authDatabase.resourceId,
-        resources[1]?.resourceId === plan.appDatabase.resourceId,
-      ].every(Boolean);
-      const invalid = [
-        new Set(roles).size !== roles.length,
-        plan.appDatabase.resourceId === plan.authDatabase.resourceId,
-        roles.includes(bootstrap.role),
-        databases.some((database) =>
-          ["postgres", "neondb", bootstrap.maintenanceDatabase].includes(database.database),
-        ),
-        plan.action === "prepare" && !orderedResources,
-        plan.effects.some(
-          (effect) => effect.kind !== "resources" && effect.resourceId !== undefined,
-        ),
-      ].some(Boolean);
-      if (invalid) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Bootstrap effects must bind distinct Auth and app resources and roles.",
-        });
-      }
-    } else if (plan.effects.some((effect) => effect.resourceId !== undefined)) {
+  }
+  if (
+    plan.effects.some(
+      (effect) =>
+        effect.kind === "retire" &&
+        effect.resourceId !== undefined &&
+        effect.resourceId !== plan.appDatabase.resourceId,
+    )
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Only the owned app resource may be retired; shared Auth is retained.",
+    });
+  }
+};
+export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine((plan, ctx) => {
+  if ((plan.bootstrap === undefined) !== (plan.resourcesInstaller === undefined)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Resource bootstrap requires its pinned installer.",
+    });
+  }
+  if (plan.bootstrap) {
+    const { bootstrap } = plan;
+    const databases = [plan.authDatabase, plan.appDatabase];
+    const roles = databases.flatMap((database) => [database.migratorRole, database.runtimeRole]);
+    const resources = plan.effects.filter((effect) => effect.kind === "resources");
+    const orderedResources = [
+      resources.length === 2,
+      resources[0]?.resourceId === plan.authDatabase.resourceId,
+      resources[1]?.resourceId === plan.appDatabase.resourceId,
+    ].every(Boolean);
+    const invalid = [
+      new Set(roles).size !== roles.length,
+      plan.appDatabase.resourceId === plan.authDatabase.resourceId,
+      roles.includes(bootstrap.role),
+      databases.some((database) =>
+        ["postgres", "neondb", bootstrap.maintenanceDatabase].includes(database.database),
+      ),
+      plan.action === "prepare" && !orderedResources,
+      plan.effects.some(
+        (effect) =>
+          !["resources", "retire"].includes(effect.kind) && effect.resourceId !== undefined,
+      ),
+    ].some(Boolean);
+    if (invalid) {
       ctx.addIssue({
         code: "custom",
-        message: "Resource effect bindings require the bootstrap plan.",
+        message: "Bootstrap effects must bind distinct Auth and app resources and roles.",
       });
     }
-    if (
-      new Set(plan.effects.map((effect) => effect.id)).size !== plan.effects.length ||
-      plan.appDatabase.database === plan.authDatabase.database ||
-      plan.appDatabase.runtimeRole === plan.authDatabase.runtimeRole
-    ) {
+  } else if (plan.effects.some((effect) => effect.resourceId !== undefined)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Resource effect bindings require the bootstrap plan.",
+    });
+  }
+  if (
+    new Set(plan.effects.map((effect) => effect.id)).size !== plan.effects.length ||
+    plan.appDatabase.database === plan.authDatabase.database ||
+    plan.appDatabase.runtimeRole === plan.authDatabase.runtimeRole
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Resources and effects must have distinct identities.",
+    });
+  }
+  if (plan.publicGateway && plan.publicGateway.branch !== plan.selection.branch) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Public Gateway origin must be bound to the selected Preview branch.",
+      path: ["publicGateway"],
+    });
+  }
+  if (plan.deploymentBoundary !== undefined) {
+    const boundary = plan.deploymentBoundary;
+    const jwks = new URL(boundary.verification.jwksUrl);
+    const invalidBoundary = [
+      new Set([boundary.app.projectId, boundary.gateway.projectId, boundary.operator.projectId])
+        .size !== 3,
+      boundary.app.projectId !== plan.selection.projectId,
+      boundary.app.branch !== plan.selection.branch,
+      boundary.gateway.branch !== plan.selection.branch,
+      plan.publicGateway === undefined,
+      boundary.gateway.projectId !== plan.publicGateway?.projectId,
+      boundary.verification.publicOrigin !== plan.publicGateway?.origin,
+      jwks.origin !== boundary.verification.gatewayOrigin,
+      jwks.pathname !== "/_platform/jwks.json",
+      jwks.username !== "",
+      jwks.password !== "",
+      jwks.search !== "",
+      jwks.hash !== "",
+    ].some(Boolean);
+    if (invalidBoundary) {
       ctx.addIssue({
         code: "custom",
-        message: "Resources and effects must have distinct identities.",
+        message:
+          "App, Gateway and operator require distinct bound deployment identities and exact public verification configuration.",
+        path: ["deploymentBoundary"],
       });
     }
-    if (plan.publicGateway && plan.publicGateway.branch !== plan.selection.branch) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Public Gateway origin must be bound to the selected Preview branch.",
-        path: ["publicGateway"],
-      });
-    }
-    if (plan.deploymentBoundary !== undefined) {
-      const boundary = plan.deploymentBoundary;
-      const jwks = new URL(boundary.verification.jwksUrl);
-      const invalidBoundary = [
-        new Set([boundary.app.projectId, boundary.gateway.projectId, boundary.operator.projectId])
-          .size !== 3,
-        boundary.app.projectId !== plan.selection.projectId,
-        boundary.app.branch !== plan.selection.branch,
-        boundary.gateway.branch !== plan.selection.branch,
-        plan.publicGateway === undefined,
-        boundary.gateway.projectId !== plan.publicGateway?.projectId,
-        boundary.verification.publicOrigin !== plan.publicGateway?.origin,
-        jwks.origin !== boundary.verification.gatewayOrigin,
-        jwks.pathname !== "/_platform/jwks.json",
-        jwks.username !== "",
-        jwks.password !== "",
-        jwks.search !== "",
-        jwks.hash !== "",
-      ].some(Boolean);
-      if (invalidBoundary) {
-        ctx.addIssue({
-          code: "custom",
-          message:
-            "App, Gateway and operator require distinct bound deployment identities and exact public verification configuration.",
-          path: ["deploymentBoundary"],
-        });
-      }
-    }
-    // Each phase has an observed receipt, including a no-op verification for already-existing resources.
-    // Authority is opened only after install/grant verification, and closed before retirement.
-    const phases =
-      plan.action === "prepare"
-        ? ["resources", "install", "access", "bindings"]
-        : ["revoke", "remove-bindings", "retire"];
-    const kinds = plan.effects.map((effect) => effect.kind);
-    const groups = kinds.filter((kind, index) => index === 0 || kind !== kinds[index - 1]);
-    if (JSON.stringify(groups) !== JSON.stringify(phases)) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Effects must include every ordered authorization phase.",
-      });
-    }
-  });
+  }
+  validatePlanStage(plan, ctx);
+  // Each phase has an observed receipt, including a no-op verification for already-existing resources.
+  // Authority is opened only after install/grant verification, and closed before retirement.
+  let phases = ["revoke", "remove-bindings", "retire"];
+  if (plan.action === "prepare") {
+    phases = ["resources", "install", "access", "bindings"];
+  }
+  if (plan.stage === AUTH_BOOTSTRAP_STAGE) {
+    phases = ["resources", "install"];
+  }
+  const kinds = plan.effects.map((effect) => effect.kind);
+  const groups = kinds.filter((kind, index) => index === 0 || kind !== kinds[index - 1]);
+  if (JSON.stringify(groups) !== JSON.stringify(phases)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Effects must include every ordered authorization phase.",
+    });
+  }
+});
 export type HostedOperatorPlan = z.infer<typeof hostedOperatorPlanSchema>;
 export type OperatorSelection = z.infer<typeof operatorSelectionSchema>;
 export const operatorReceiptSchema = z.strictObject({
@@ -287,6 +327,15 @@ export const workerEffectCheckpointFrameSchema = z.strictObject({
   tenantId: id.nullable().optional(),
 });
 export type WorkerEffectCheckpointFrame = z.infer<typeof workerEffectCheckpointFrameSchema>;
+export const operatorAuthSchemaPreparationSchema = z.strictObject({
+  assetSha256: digest,
+  catalogFingerprint: digest,
+  database: sqlName,
+  observedAt: z.iso.datetime({ offset: true }),
+  runtimeRole: sqlName,
+  targetDigest: digest,
+});
+export type OperatorAuthSchemaPreparation = z.infer<typeof operatorAuthSchemaPreparationSchema>;
 export const managedOperatorEnvironmentRowSchema = z.strictObject({
   branch: id,
   comment: id,
@@ -300,6 +349,7 @@ export const managedOperatorEnvironmentRowsSchema = z.array(managedOperatorEnvir
 export const hostedOperatorRecordSchema = z
   .strictObject({
     approvalId: id.optional(),
+    authPreparation: operatorAuthSchemaPreparationSchema.optional(),
     /** Shared across Auth and kernel rows; allocated once by the existing journal CAS. */
     fenceGeneration: z.number().int().positive().optional(),
     managedEnvironment: managedOperatorEnvironmentRowsSchema.optional(),
@@ -433,6 +483,9 @@ export const operatorPublicResultSchema = z.strictObject({
   code: z
     .enum([
       "protected_operator_required",
+      "auth_identity_required",
+      "auth_membership_required",
+      "auth_schema_not_ready",
       "authorization_required",
       "resource_mismatch",
       "operation_in_progress",
@@ -444,7 +497,7 @@ export const operatorPublicResultSchema = z.strictObject({
   operationRef: z.uuid().optional(),
   plan: hostedOperatorPlanSchema.optional(),
   planDigest: digest.optional(),
-  status: z.enum(["planned", "pending", "prepared", "cleaned", "blocked"]),
+  status: z.enum(["planned", "pending", "prepared", "cleaned", "blocked", "auth-schema-prepared"]),
 });
 export type OperatorPublicResult = z.infer<typeof operatorPublicResultSchema>;
 export class HostedOperatorError extends Error {

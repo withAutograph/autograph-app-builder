@@ -347,6 +347,94 @@ const prepared = async (f: ReturnType<typeof fixture>) => {
 };
 
 describe("protected hosted operator boundary", () => {
+  it("prepares actual Auth metadata without app readiness and resumes a freshly approved full plan", async () => {
+    const f = fixture();
+    const bootstrap = {
+      endpointId: "ep_fixture",
+      maintenanceDatabase: "neondb",
+      role: "neondb_owner",
+    };
+    const resourcesInstaller = { reference: "neon-resource-bootstrap-v1", sha256: "c".repeat(64) };
+    const authSchema = {
+      artifactRef: "auth-plan",
+      installer: { reference: "auth-protected-installer-v1", sha256: "f".repeat(64) },
+      planDigest: "d".repeat(64),
+      targetDigest: "e".repeat(64),
+    };
+    const resources = [
+      {
+        description: "Prepare owned Auth resource",
+        id: "resources:auth",
+        kind: "resources",
+        resourceId: plan.authDatabase.resourceId,
+      },
+      {
+        description: "Prepare owned app resource",
+        id: "resources:app",
+        kind: "resources",
+        resourceId: plan.appDatabase.resourceId,
+      },
+    ];
+    const authEffect = {
+      description: "Prepare exact Auth schema",
+      id: "install:auth",
+      kind: "install",
+    };
+    const bootstrapPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      access: [],
+      authSchema,
+      bootstrap,
+      effects: [...resources, authEffect],
+      resourcesInstaller,
+      stage: "auth-bootstrap",
+    });
+    f.deps.plan = async () => bootstrapPlan;
+    f.deps.verifyAuthReadiness = vi.fn(
+      async () =>
+        await Promise.resolve({
+          assetSha256: "1".repeat(64),
+          catalogFingerprint: "2".repeat(64),
+          database: plan.authDatabase.database,
+          observedAt: new Date().toISOString(),
+          runtimeRole: plan.authDatabase.runtimeRole,
+          targetDigest: authSchema.targetDigest,
+        }),
+    );
+    f.deps.verify = vi.fn(f.deps.verify);
+    f.deps.bindings = vi.fn(f.deps.bindings);
+    const first = await prepared(f);
+    f.approve();
+    expect((await f.client.request(first)).status).toBe("auth-schema-prepared");
+    expect(f.deps.verify).not.toHaveBeenCalled();
+    expect(f.deps.bindings).not.toHaveBeenCalled();
+    const receipts = f.row?.record.operator?.receipts;
+    expect(receipts).toHaveLength(3);
+    expect(f.row?.record.environmentBound).toBe(false);
+    const fullPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      authSchema,
+      bootstrap,
+      effects: [...resources, authEffect, ...plan.effects.slice(1)],
+      resourcesInstaller,
+      stage: "app",
+    });
+    f.deps.plan = async () => fullPlan;
+    const currentApproval = f.deps.readApproval;
+    f.deps.readApproval = async (input) =>
+      input.planDigest === first.planDigest ? await currentApproval(input) : null;
+    const renewed = await prepared(f);
+    expect(await f.client.request(renewed)).toMatchObject({
+      code: "authorization_required",
+      status: "blocked",
+    });
+    f.deps.readApproval = currentApproval;
+    expect(renewed.planDigest).not.toBe(first.planDigest);
+    expect(f.row?.record.operator?.receipts).toEqual(receipts);
+    expect((await f.client.request(renewed)).status).toBe("prepared");
+    expect(f.deps.verify).toHaveBeenCalledTimes(1);
+  });
+
   it("CAS-checkpoints managed environment ownership and preserves it for cleanup", async () => {
     const f = fixture();
     const original = f.deps.executeEffect;

@@ -70,11 +70,7 @@ import {
   createHostedOperatorReadApproval,
 } from "./hosted-operator-owner";
 import { createHostedOperatorOwnerContextResolver } from "./hosted-operator-owner-context";
-import type {
-  HostedOperatorContext,
-  HostedOperatorEffectContext,
-  HostedOperatorWorkerEffectContext,
-} from "./hosted-operator-service";
+import type { HostedOperatorContext, HostedOperatorEffectContext } from "./hosted-operator-service";
 import { HostedOperatorError, operatorPlanDigest } from "./hosted-operator-contract";
 import {
   prepareHostedOperatorResourceCredentials,
@@ -193,9 +189,20 @@ const requireCurrentResourceCredentialRecord = (
   }
   if (
     operator.operationRef !== input.operationRef ||
-    operator.fenceGeneration !== input.fenceGeneration ||
-    operator.pendingEffectId !== input.effect.id ||
-    operator.pendingEffectAttempt?.id !== input.workerAttemptId
+    operator.fenceGeneration !== input.fenceGeneration
+  ) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  if (input.workerAttemptId !== undefined) {
+    if (
+      operator.pendingEffectId !== input.effect.id ||
+      operator.pendingEffectAttempt?.id !== input.workerAttemptId
+    ) {
+      throw new HostedOperatorError("operation_in_progress");
+    }
+  } else if (
+    (operator.pendingEffectId !== undefined || operator.pendingEffectAttempt !== undefined) &&
+    (operator.pendingEffectId !== input.effect.id || operator.pendingEffectAttempt === undefined)
   ) {
     throw new HostedOperatorError("operation_in_progress");
   }
@@ -453,7 +460,7 @@ export const createHostedOperatorControlPlane = async (input: {
         await controlPlaneClient.end({ timeout: 5 });
       },
       async prepareResourceCredentials(
-        effectInput: HostedOperatorWorkerEffectContext & { database: ProtectedResourceDatabase },
+        effectInput: ResourceCredentialEffect & { database: ProtectedResourceDatabase },
       ) {
         if (
           effectInput.effect.kind !== "resources" ||
@@ -487,6 +494,15 @@ export const createHostedOperatorControlPlane = async (input: {
         };
       },
       readApproval,
+      async readAuthPlan(
+        context: HostedOperatorContext,
+        selection: Parameters<
+          ReturnType<typeof createOperatorArtifactPublication>["readAuthPlan"]
+        >[1],
+      ) {
+        const artifacts = ownedArtifacts(context);
+        return await artifacts.publication.readAuthPlan(artifacts.context, selection);
+      },
       readCredential,
       readCurrentPlanningOwner: owner.readCurrentPlanningOwner,
       async readGeneratedRelease(
@@ -503,7 +519,11 @@ export const createHostedOperatorControlPlane = async (input: {
         return await artifacts.selections.read(artifacts.context, appSpecDigest);
       },
       async readResourceBindings(effectInput: ResourceCredentialEffect | ResourceBindingContext) {
-        if (effectInput.plan.action !== "prepare") {
+        if (
+          effectInput.plan.action !== "prepare" &&
+          (!("effect" in effectInput) ||
+            !["revoke", "remove-bindings", "retire"].includes(effectInput.effect.kind))
+        ) {
           throw new HostedOperatorError("authorization_required");
         }
         if ("effect" in effectInput) {

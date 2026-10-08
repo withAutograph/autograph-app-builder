@@ -1,4 +1,4 @@
-/* oxlint-disable eslint/no-await-in-loop, eslint/no-loop-func, sonarjs/no-nested-functions, eslint/complexity, sonarjs/expression-complexity, unicorn/no-await-expression-member, eslint/prefer-destructuring -- Effects, fences and journal checkpoints are deliberately sequential inside one resource lease. */
+/* oxlint-disable eslint/no-await-in-loop, eslint/no-loop-func, sonarjs/no-nested-functions, eslint/complexity, sonarjs/expression-complexity, sonarjs/cognitive-complexity, unicorn/no-await-expression-member, eslint/prefer-destructuring -- Effects, fences and journal checkpoints are deliberately sequential inside one resource lease. */
 import { randomUUID } from "node:crypto";
 import type { z } from "zod";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
@@ -16,6 +16,7 @@ import type {
 import {
   HostedOperatorError,
   managedOperatorEnvironmentRowsSchema,
+  operatorAuthSchemaPreparationSchema,
   hostedOperatorPlanSchema,
   operatorPlanDigest,
   operatorPublicResultSchema,
@@ -40,6 +41,7 @@ import type {
   WorkerEffectCheckpoint,
   WorkerEffectCheckpointFrame,
   ManagedOperatorEnvironmentRow,
+  OperatorAuthSchemaPreparation,
 } from "./hosted-operator-contract";
 
 export interface HostedOperatorContext {
@@ -47,6 +49,7 @@ export interface HostedOperatorContext {
   target: HostedRuntimeTarget;
   ownerContext?: OperatorOwnerContext;
 }
+const AUTH_BOOTSTRAP_STAGE = "auth-bootstrap";
 type Context = HostedOperatorContext;
 type PrivateState = NonNullable<HostedRuntimeJournalRecord["privateState"]>;
 type Effect = HostedOperatorPlan["effects"][number];
@@ -113,6 +116,13 @@ export interface ProtectedHostedOperatorDependencies {
     input: Context & { plan: HostedOperatorPlan; privateState?: PrivateState },
   ) => Promise<z.infer<typeof hostedRuntimeProofSchema>>;
   /** Decrypt only inside this operator; return the strict runtime environment projection. */
+  verifyAuthReadiness?: (
+    input: Context & {
+      plan: HostedOperatorPlan;
+      privateState?: PrivateState;
+      assertCurrent: () => Promise<void>;
+    },
+  ) => Promise<OperatorAuthSchemaPreparation>;
   bindings: (
     input: Context & { plan: HostedOperatorPlan; privateState?: PrivateState },
   ) => Promise<Record<string, string>>;
@@ -197,11 +207,22 @@ const handlePlanOperation = async (
       if (record.operator.planDigest === planDigest) {
         return record;
       }
+      const authStageCompleted =
+        record.operator.plan.stage === AUTH_BOOTSTRAP_STAGE &&
+        record.operator.authPreparation !== undefined &&
+        record.operator.pendingEffectId === undefined &&
+        record.operator.pendingEffectAttempt === undefined &&
+        record.operator.plan.effects.every(
+          (effect) =>
+            record.operator?.receipts.some((receipt) => receipt.effectId === effect.id) === true,
+        );
       if (
         record.leaseId !== undefined ||
         record.operator.pendingEffectId !== undefined ||
         record.operator.pendingEffectAttempt !== undefined ||
-        (record.operator.receipts.length > 0 && !["prepared", "cleaned"].includes(record.status))
+        (record.operator.receipts.length > 0 &&
+          !["prepared", "cleaned"].includes(record.status) &&
+          !authStageCompleted)
       ) {
         throw new HostedOperatorError("operation_in_progress");
       }
@@ -215,6 +236,26 @@ const handlePlanOperation = async (
       }
       // Same-resource release changes keep credentials; old proof never attests the new plan.
       const nextOperator: ReturnType<typeof requireOperator> = { ...operator };
+      if (authStageCompleted) {
+        nextOperator.authPreparation = record.operator.authPreparation;
+      }
+      if (
+        authStageCompleted &&
+        record.operator.plan.authSchema?.targetDigest === plan.authSchema?.targetDigest
+      ) {
+        nextOperator.receipts = record.operator.receipts.filter((receipt) => {
+          const priorEffect = record.operator?.plan.effects.find(
+            (effect) => effect.id === receipt.effectId,
+          );
+          const nextEffect = plan.effects.find((effect) => effect.id === receipt.effectId);
+          return (
+            priorEffect !== undefined &&
+            nextEffect !== undefined &&
+            priorEffect.kind === nextEffect.kind &&
+            priorEffect.resourceId === nextEffect.resourceId
+          );
+        });
+      }
       if (record.operator.managedEnvironment !== undefined) {
         nextOperator.managedEnvironment = record.operator.managedEnvironment;
       }
@@ -370,19 +411,27 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       }
       const { plan, planDigest, operationRef } = operator;
       await deps.assertAuthorized({ ...context, plan });
-      const publicStatus = (record: HostedRuntimeJournalRecord): OperatorPublicResult => ({
-        appId,
-        authenticatedBehavior: "unassessed",
-        operationRef,
-        planDigest,
-        status:
-          record.status === "prepared" || record.status === "cleaned" ? record.status : "pending",
-      });
+      const publicStatus = (record: HostedRuntimeJournalRecord): OperatorPublicResult => {
+        let status: OperatorPublicResult["status"] = "pending";
+        if (record.status === "prepared" || record.status === "cleaned") {
+          status = record.status;
+        }
+        if (
+          operator.plan.stage === AUTH_BOOTSTRAP_STAGE &&
+          requireOperator(record).authPreparation !== undefined
+        ) {
+          status = "auth-schema-prepared";
+        }
+        return { appId, authenticatedBehavior: "unassessed", operationRef, planDigest, status };
+      };
       if (input.action === "status") {
         return response(operatorPublicResultSchema.parse(publicStatus(current.record)));
       }
       assertUnexpired(plan, now());
       if (input.action === "bindings") {
+        if (plan.stage === AUTH_BOOTSTRAP_STAGE) {
+          throw new HostedOperatorError("auth_identity_required");
+        }
         return await handleBindingsOperation({
           context,
           current,
@@ -715,6 +764,36 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               ).record;
             }
             await assertCurrent();
+            if (plan.stage === AUTH_BOOTSTRAP_STAGE) {
+              if (deps.verifyAuthReadiness === undefined) {
+                throw new HostedOperatorError("operator_unavailable");
+              }
+              await assertCurrent();
+              const authPreparation = operatorAuthSchemaPreparationSchema.parse(
+                await deps.verifyAuthReadiness({
+                  ...context,
+                  plan,
+                  privateState: record.privateState,
+                }),
+              );
+              const matches = [
+                authPreparation.targetDigest === plan.authSchema?.targetDigest,
+                authPreparation.database === plan.authDatabase.database,
+                authPreparation.runtimeRole === plan.authDatabase.runtimeRole,
+              ].every(Boolean);
+              if (!matches) {
+                throw new HostedOperatorError("resource_mismatch");
+              }
+              await assertCurrent();
+              const complete = await ownedUpdate((value) => ({
+                ...value,
+                environmentBound: false,
+                operator: { ...requireOperator(value), authPreparation },
+                status: "pending",
+                step: "reserved",
+              }));
+              return response(operatorPublicResultSchema.parse(publicStatus(complete.record)));
+            }
             const proof =
               plan.action === "prepare"
                 ? hostedRuntimeProofSchema.parse(
