@@ -1040,7 +1040,10 @@ async function readRespondSettlementIncremental(input: {
   fetchImplementation: typeof fetch;
   sessionId: string;
   requestIds: readonly string[];
+  nativeObservationState?: NativeObservationState;
 }): Promise<void> {
+  let { nativeObservationState } = input;
+  const seeded = nativeObservationState !== undefined;
   const readSignal = AbortSignal.timeout(SESSION_READ_TIMEOUT_MS);
   while (true) {
     if (readSignal.aborted) {
@@ -1049,14 +1052,21 @@ async function readRespondSettlementIncremental(input: {
     // oxlint-disable-next-line eslint/no-await-in-loop -- Each read verifies the durable tail before polling again.
     const observed = await observeSameOriginEveStream({
       ...input,
+      nativeObservationState,
       onEvent() {
         // Settlement only needs the reducer's pending-request state.
       },
       readSignal,
     });
+    if (!observed.observationComplete) {
+      throw new SubmissionOutcomeUnknownError();
+    }
+    if (seeded) {
+      ({ nativeObservationState } = observed);
+    }
     const outstanding = new Set(observed.pendingRequests.map((request) => request.requestId));
     if (
-      observed.status !== "input_required" ||
+      (!seeded && observed.status !== "input_required") ||
       input.requestIds.every((requestId) => !outstanding.has(requestId))
     ) {
       return;
@@ -1154,6 +1164,11 @@ export function createSameOriginEveTransport(input: {
     adapterSessionId: string;
   }) => Promise<boolean>;
 }): HostedEveTransport & {
+  respondAccepted?: (
+    request: Parameters<HostedEveTransport["respond"]>[0] & {
+      nativeObservationState?: NativeObservationState;
+    },
+  ) => Promise<void>;
   observe?: (request: {
     principal: HostedPrincipal;
     sessionId: string;
@@ -1351,6 +1366,22 @@ export function createSameOriginEveTransport(input: {
       });
     },
     async respondAccepted(request) {
+      const nativeObservationState =
+        "nativeObservationState" in request && request.nativeObservationState !== undefined
+          ? nativeObservationStateSchema.parse(request.nativeObservationState)
+          : undefined;
+      if (nativeObservationState !== undefined) {
+        const pending = nativeObservationState.pendingRequests
+          .filter((item) => item.kind !== "authorization")
+          .map((item) => item.requestId);
+        if (
+          nativeObservationState.adapterSessionId !== request.adapterSessionId ||
+          pending.length !== request.responses.length ||
+          pending.some((id, index) => id !== request.responses[index]?.requestId)
+        ) {
+          throw new SubmissionRejectedBeforeDispatchError("input_batch_changed");
+        }
+      }
       const accepted = await postMutation({
         ...common,
         body: { inputResponses: responsePayload(request.responses) },
@@ -1362,6 +1393,7 @@ export function createSameOriginEveTransport(input: {
         throw new SubmissionOutcomeUnknownError();
       }
       await readRespondSettlementIncremental({
+        nativeObservationState,
         ...common,
         requestIds: request.responses.map(({ requestId }) => requestId),
         sessionId: request.adapterSessionId,

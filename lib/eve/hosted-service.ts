@@ -157,6 +157,7 @@ export interface HostedEveTransport {
   /** Resolves after Eve accepts the message, without exporting its complete history. */
   sendAccepted?: (input: Parameters<HostedEveTransport["send"]>[0]) => Promise<void>;
   respond: (input: {
+    nativeObservationState?: NativeObservationState;
     principal: HostedPrincipal;
     operationId: string;
     adapterSessionId: string;
@@ -1915,6 +1916,12 @@ export function createHostedEveSessionService(input: {
     }
     return {
       activeTurnId: metadata?.activeTurnId,
+      nativeObservationState:
+        metadata?.coldReadProgress === undefined &&
+        metadata?.nativeObservationState?.adapterSessionId === session.adapterSessionId &&
+        metadata.nativeObservationState.publicEventCount === session.checkpointRef?.eventCount
+          ? metadata.nativeObservationState
+          : undefined,
       persisted: session.checkpointDigest !== before.checkpointDigest,
       result,
       session,
@@ -2154,6 +2161,11 @@ export function createHostedEveSessionService(input: {
           }
           const responseInput = {
             adapterSessionId: session.adapterSessionId,
+            ...(preflight?.nativeObservationState === undefined
+              ? {}
+              : {
+                  nativeObservationState: preflight.nativeObservationState,
+                }),
             operationId,
             principal,
             responses: request.responses,

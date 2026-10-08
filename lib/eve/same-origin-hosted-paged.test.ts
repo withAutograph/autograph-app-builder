@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { expect, it, vi } from "vitest";
+import { z } from "zod";
 import { createSameOriginEveTransport } from "./same-origin-http";
 import { createHostedEveSessionService } from "./hosted-service";
 import { hostedEveOperationScopes, tenantKeyFor } from "./hosted-auth";
@@ -47,8 +48,26 @@ it.each([false, true])(
       fetchImplementation: async (input, init) => {
         const url = new URL(input instanceof Request ? input.url : String(input));
         if (init?.method === "POST") {
+          const requestText = z.string().parse(init.body);
+          const body = z
+            .looseObject({
+              inputResponses: z.array(z.object({ requestId: z.string() })).optional(),
+            })
+            .parse(JSON.parse(requestText));
+          if (body.inputResponses !== undefined) {
+            expect(body).not.toHaveProperty("nativeObservationState");
+            for (const answer of body.inputResponses) {
+              native.push(resolved(answer.requestId));
+            }
+            native.push({ data: {}, type: "session.waiting" });
+          }
           return Response.json(
-            { ok: true, sessionId: "wrun_fixture", status: "accepted" },
+            {
+              deliveryId: "delivery_response",
+              ok: true,
+              sessionId: "wrun_fixture",
+              status: "accepted",
+            },
             { status: 202 },
           );
         }
@@ -240,10 +259,10 @@ it.each([false, true])(
     });
     expect(pending.status).toBe("input_required");
     expect(pending.inputRequests?.map((request) => request.requestId)).toEqual(["second"]);
-    native.push(resolved("second"), { data: {}, type: "session.waiting" });
-    const settled = await service.get({
-      cursor: pending.cursor,
-      limit: 100,
+    const settlementStart = starts.length;
+    const settled = await service.respond({
+      clientRequestId: randomUUID(),
+      responses: [{ requestId: "second", response: { kind: "answer", value: "isolated Preview" } }],
       sessionId: started.sessionId,
     });
     expect(settled.error).toBeUndefined();
@@ -251,6 +270,6 @@ it.each([false, true])(
     expect(settled.inputRequests ?? []).toEqual([]);
     expect(events.map((event) => event.index)).toEqual(events.map((_, index) => index));
     expect(events.some((event) => event.type === "input_required")).toBe(true);
-    expect(starts.slice(-2)).toEqual([5, 6]);
+    expect(starts.slice(settlementStart)).toEqual([6, 6, 6]);
   },
 );
