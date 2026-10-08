@@ -181,3 +181,33 @@ export const readVerifiedRealmAccess = async (input: {
   await input.assertCurrent();
   return { claims, identity: result.identity };
 };
+
+/** Only a nonce returned by the existing owner-bound pending journal may form the ordinary Auth UI link. */
+export const createRealmIdentityBrowserUrl = (input: {
+  link: PendingRealmIdentityLink;
+  nonce: string;
+}): string => {
+  const link = pendingRealmIdentityLinkSchema.parse(input.link);
+  const browser = new URL(link.browserOrigin);
+  const current = [
+    browser.protocol === "https:",
+    browser.origin === link.browserOrigin,
+    browser.username === "",
+    browser.password === "",
+    link.consumedAt === undefined,
+    Date.parse(link.expiresAt) > Date.now(),
+    realmIdentityNonceSha256(input.nonce) === link.nonceSha256,
+  ].every(Boolean);
+  if (!current) {
+    throw new HostedOperatorError("auth_identity_required");
+  }
+  const url = new URL("/api/auth/platform/operator-link", browser);
+  url.searchParams.set("nonce", input.nonce);
+  url.searchParams.set("ownerSessionId", link.ownerSessionId);
+  url.searchParams.set("bootstrapPlanDigest", link.bootstrapPlanDigest);
+  url.searchParams.set("authResourceId", link.authResourceId);
+  if (link.organizationId !== null) {
+    url.searchParams.set("organizationId", link.organizationId);
+  }
+  return url.toString();
+};

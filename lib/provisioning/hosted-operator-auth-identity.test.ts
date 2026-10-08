@@ -3,6 +3,7 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 import { SignJWT } from "jose";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createRealmIdentityBrowserUrl,
   readVerifiedRealmAccess,
   realmIdentityNonceSha256,
   verifyRealmIdentityLinkProof,
@@ -187,4 +188,21 @@ describe("private Realm identity bridge", () => {
       }),
     ).rejects.toThrow("owner revoked");
   });
+});
+
+it("uses only the live canonical nonce and approved normal Auth browser origin for the link", async () => {
+  const f = await fixture();
+  const url = new URL(createRealmIdentityBrowserUrl({ link: f.pending, nonce }));
+  expect(url.origin).toBe(f.pending.browserOrigin);
+  expect(url.pathname).toBe("/api/auth/platform/operator-link");
+  expect(url.searchParams.get("ownerSessionId")).toBe(f.pending.ownerSessionId);
+  expect(url.searchParams.get("organizationId")).toBeNull();
+  expect(url.toString()).not.toContain(f.pending.endpointOrigin);
+  expect(() => createRealmIdentityBrowserUrl({ link: f.pending, nonce: "c".repeat(64) })).toThrow();
+  expect(() =>
+    createRealmIdentityBrowserUrl({
+      link: { ...f.pending, consumedAt: new Date().toISOString() },
+      nonce,
+    }),
+  ).toThrow();
 });
