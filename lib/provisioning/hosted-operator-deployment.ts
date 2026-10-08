@@ -314,6 +314,7 @@ const requireFinalResourceBindingPhase = (
 export const createHostedOperatorControlPlane = async (input: {
   environment?: Readonly<Record<string, string | undefined>>;
   workloadPolicy: OperatorWorkloadPolicy;
+  fetch?: typeof fetch;
 }) => {
   const environment = input.environment ?? process.env;
   const config = z
@@ -375,6 +376,7 @@ export const createHostedOperatorControlPlane = async (input: {
       eve,
       handoffs,
       listVercelInstallations: async (authority) => await installations.list(authority),
+      fetch: input.fetch,
       membership: {
         isMember: async ({ principal, workspaceId }) =>
           await membership.isActiveMember({
@@ -565,6 +567,67 @@ export const createHostedOperatorControlPlane = async (input: {
     return {
       assertAuthorized: owner.assertAuthorized,
       assertPlanningAuthorized: owner.assertPlanningAuthorized,
+      async assertMembershipCapture(inputContext: HostedOperatorEffectContext) {
+        if (
+          inputContext.effect.kind !== "auth-membership" ||
+          inputContext.plan.authMembership === undefined
+        ) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        await inputContext.assertCurrent();
+        const record = await readCurrentResourceCredentialRecord({
+          assertAuthorized: owner.assertAuthorized,
+          effect: inputContext,
+          store,
+        });
+        const link = record.operator?.identityLink;
+        const membership = inputContext.plan.authMembership;
+        const matches = [
+          link?.consumedAt === membership.identityCapture.capturedAt,
+          link?.proofRef === membership.identityProof.reference,
+          link?.proofSha256 === membership.identityProof.sha256,
+          link?.nonceSha256 === membership.identityNonceSha256,
+          link?.bootstrapPlanDigest === membership.bootstrapPlanDigest,
+          link?.ownerSessionId === inputContext.target.sessionId,
+          link?.authResourceId === inputContext.plan.authDatabase.resourceId,
+          link?.issuer === membership.identityVerification.issuer,
+          link?.audience === membership.identityVerification.audience,
+          `${link?.endpointOrigin}/_platform/jwks.json` === membership.identityVerification.jwksUrl,
+        ].every(Boolean);
+        if (!matches) {
+          throw new HostedOperatorError("auth_identity_required");
+        }
+        const artifacts = ownedArtifacts(inputContext);
+        const content = await artifacts.store.read(
+          artifacts.context,
+          membership.identityProof.reference,
+          0,
+        );
+        if (
+          content === undefined ||
+          createHash("sha256").update(Buffer.from(content, "base64")).digest("hex") !==
+            membership.identityProof.sha256
+        ) {
+          throw new HostedOperatorError("auth_identity_required");
+        }
+        const claims = z
+          .object({ sessionId: z.string(), sub: z.string() })
+          .parse(
+            JSON.parse(
+              Buffer.from(
+                Buffer.from(content, "base64").toString("utf-8").split(".")[1] ?? "",
+                "base64url",
+              ).toString("utf-8"),
+            ),
+          );
+        if (
+          claims.sessionId !== membership.identityCapture.realmSessionId ||
+          claims.sub !== membership.actorId
+        ) {
+          throw new HostedOperatorError("auth_identity_required");
+        }
+        await owner.assertAuthorized(inputContext);
+      },
       authorize: owner.authorize,
       async close() {
         await controlPlaneClient.end({ timeout: 5 });
