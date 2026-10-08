@@ -41,7 +41,7 @@ const failed = {
     reason: "command-failed",
   },
   workspace: { workspaceId: scope.workspaceId },
-} as unknown as AppBuilderWorkflowState;
+} as unknown as Extract<AppBuilderWorkflowState, { phase: "validation_failed" }>;
 const decide = (state = failed, changes: { blocked?: boolean; pendingInput?: boolean } = {}) =>
   decideApprovedBuildContinuation({
     adapterSessionId: scope.sessionId,
@@ -60,6 +60,60 @@ const decide = (state = failed, changes: { blocked?: boolean; pendingInput?: boo
     turnSequence: 13,
   });
 describe("approved stopped build continuation", () => {
+  it("continues app command repairs without requiring changed-file diagnostic membership", () => {
+    contextStorage.run(new ContextContainer(), () => {
+      requestPrivateApplyApproval(scope, "approve");
+      recordApprovedPrivateApply(scope, "approve");
+      for (const diagnostics of [
+        undefined,
+        [],
+        [
+          {
+            code: "VITEST",
+            column: 1,
+            line: 1,
+            message: "Assertion failed",
+            path: "tests/unchanged.test.ts",
+          },
+        ],
+        [
+          {
+            code: "VITEST",
+            column: 1,
+            line: 1,
+            message: "tenant_scope_not_bound",
+            path: "packages/auth/runtime.ts",
+          },
+        ],
+      ]) {
+        // SAFETY: Exercise only source-owned validator diagnostics; retained approval is real Eve state.
+        const state = {
+          ...failed,
+          validationFailure: { ...failed.validationFailure, diagnostics },
+        } as AppBuilderWorkflowState;
+        expect(decide(state).decision).toBe("runnable");
+      }
+    });
+  });
+  it("keeps provider and materialization failures blocked", () => {
+    contextStorage.run(new ContextContainer(), () => {
+      requestPrivateApplyApproval(scope, "approve");
+      recordApprovedPrivateApply(scope, "approve");
+      for (const reason of [
+        "execution-error",
+        "command-timeout",
+        "materialization-failed",
+        "protected-workspace-drift",
+      ] as const) {
+        // SAFETY: Change only the validator failure reason, preserving the actual approval.
+        const state = {
+          ...failed,
+          validationFailure: { ...failed.validationFailure, reason },
+        } as AppBuilderWorkflowState;
+        expect(decide(state).decision).toBe("blocked");
+      }
+    });
+  });
   it("retains runnable app-owned legacy demo repair after a prose-only turn without declaring checks passed", () => {
     contextStorage.run(new ContextContainer(), () => {
       expect(decide().decision).toBe("blocked");
