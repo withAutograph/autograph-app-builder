@@ -52,7 +52,7 @@ const fixture = async (ownerSessionId = "original-public-session") => {
     sessionId: "normal-realm-session",
     sub: "normal-realm-user",
   })
-    .setProtectedHeader({ alg: "EdDSA", kid: "native", typ: "autograph-realm-operator-link+jwt" })
+    .setProtectedHeader({ alg: "EdDSA", kid: "native", typ: "platform-realm-operator-link+jwt" })
     .sign(keys.privateKey);
   let consumed = false;
   const context: HostedOperatorContext = {

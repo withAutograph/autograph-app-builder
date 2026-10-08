@@ -94,7 +94,7 @@ const verifySignedRealmIdentityProof = async (input: {
     issuer: pending.issuer,
     maxTokenAge: 240,
     requiredClaims: ["iat", "exp", "sub"],
-    typ: "autograph-realm-operator-link+jwt",
+    typ: "platform-realm-operator-link+jwt",
   });
   const claims = realmLinkClaimsSchema.parse(result.payload);
   const matches = [

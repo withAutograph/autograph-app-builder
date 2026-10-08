@@ -56,7 +56,7 @@ const fixture = async () => {
     .setProtectedHeader({
       alg: "EdDSA",
       kid: "actual-native-key",
-      typ: "autograph-realm-operator-link+jwt",
+      typ: "platform-realm-operator-link+jwt",
     })
     .sign(keys.privateKey);
   return {
@@ -214,7 +214,7 @@ it("uses the immutable consumed receipt for an expired transport proof while fre
     .setProtectedHeader({
       alg: "EdDSA",
       kid: "actual-native-key",
-      typ: "autograph-realm-operator-link+jwt",
+      typ: "platform-realm-operator-link+jwt",
     })
     .sign(keys.privateKey);
   const capturedAt = new Date((issued + 1) * 1000).toISOString();
