@@ -165,10 +165,13 @@ const fixture = () => {
   const credential = {
     binding: {
       active: true,
+      displayName: "Fixture team",
       installationId: target.installationId,
+      plan: "pro",
       scopeId: target.scopeId,
       scopeType: target.scopeType,
       slug: "fixture-team",
+      updatedAt: new Date("2026-10-08T00:00:00Z"),
     },
     token: "synthetic-owner-oauth",
   };
@@ -183,20 +186,18 @@ const fixture = () => {
       }
       await Promise.resolve();
     }),
-    readApproval: vi.fn(
-      async () =>
-        await Promise.resolve(
-          approved
-            ? {
-                action: "prepare" as const,
-                approvalId: "fixture-approval",
-                approved: true,
-                callId: record.approvedByCallId,
-                planDigest: operatorPlanDigest(plan),
-              }
-            : null,
-        ),
-    ),
+    readApproval: vi.fn(async () => {
+      if (!approved) {
+        throw new Error("Approval revoked");
+      }
+      return await Promise.resolve({
+        action: "prepare" as const,
+        approvalId: "fixture-approval",
+        approved: true,
+        callId: record.approvedByCallId,
+        planDigest: operatorPlanDigest(plan),
+      });
+    }),
     readCredential: vi.fn(
       async () => await Promise.resolve(credentialActive ? credential : undefined),
     ),

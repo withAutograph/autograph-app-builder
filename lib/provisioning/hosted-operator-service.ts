@@ -814,6 +814,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               const authPreparation = operatorAuthSchemaPreparationSchema.parse(
                 await deps.verifyAuthReadiness({
                   ...context,
+                  assertCurrent,
                   plan,
                   privateState: record.privateState,
                 }),
@@ -851,7 +852,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
             await assertCurrent();
             const complete = await ownedUpdate((value) => {
               if (plan.action === "cleanup") {
-                delete value.privateState;
+                // Shared Auth remains live after app cleanup; retain its owned encrypted credentials.
                 delete value.proof;
               }
               return {

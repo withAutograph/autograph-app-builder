@@ -830,11 +830,12 @@ describe("protected hosted operator boundary", () => {
       }),
     ).rejects.toThrow("operation_in_progress");
   });
-  it("requires a new concrete cleanup approval and leaves only the journal tombstone", async () => {
+  it("requires cleanup approval and retains private shared Auth credentials for the next Preview", async () => {
     const f = fixture();
     const request = await prepared(f);
     f.approve();
     await f.client.request(request);
+    const retainedCredentials = structuredClone(f.row?.record.privateState);
     const prepareGeneration = f.row?.record.operator?.fenceGeneration;
     expect(prepareGeneration).toBeGreaterThan(0);
     const cleanupPlanInput = {
@@ -866,7 +867,7 @@ describe("protected hosted operator boundary", () => {
     expect((await f.client.request(cleanup)).code).toBe("authorization_required");
     f.deps.readApproval = approval;
     expect((await f.client.request(cleanup)).status).toBe("cleaned");
-    expect(f.row?.record.privateState).toBeUndefined();
+    expect(f.row?.record.privateState).toEqual(retainedCredentials);
     expect(f.row?.record.proof).toBeUndefined();
     expect(f.row?.record.operator?.fenceGeneration).toBeGreaterThan(prepareGeneration ?? 0);
     await expect(
@@ -879,7 +880,7 @@ describe("protected hosted operator boundary", () => {
     f.deps.plan = async () => ({ ...plan, contextId: "replacement-after-cleanup" });
     const replacement = await f.client.request({ action: "plan", operation: "prepare", selection });
     expect(replacement.status).toBe("planned");
-    expect(f.row?.record.privateState).toBeUndefined();
+    expect(f.row?.record.privateState).toEqual(retainedCredentials);
     expect(f.row?.record.proof).toBeUndefined();
     expect(f.row?.record.environmentBound).toBe(false);
   });

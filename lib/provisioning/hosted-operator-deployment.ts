@@ -1,8 +1,9 @@
 /* oxlint-disable sonarjs/no-nested-functions -- Owner authorization and journal CAS closures share the actual opened private database. */
 import postgres from "postgres";
+import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { z } from "zod";
 import { drizzle } from "drizzle-orm/postgres-js";
-import { and, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { createPostgresPreviewOrganizationAuthority } from "../auth/postgres-organization-user-authority";
 import {
@@ -10,7 +11,7 @@ import {
   parseHostedDatabaseUrl,
 } from "../db/postgres-connection-policy";
 import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
-import { createPostgresHostedEveStore } from "../eve/postgres-hosted-store";
+import { parseHostedSessionRow, createPostgresHostedEveStore } from "../eve/postgres-hosted-store";
 import { createSameOriginEveTransport } from "../eve/same-origin-http";
 import {
   account,
@@ -793,6 +794,72 @@ export const createHostedOperatorControlPlane = async (input: {
         return operatorRealmIdentityLinkSchema.parse(saved.record.operator?.identityLink);
       },
 
+      async resolveRealmIdentityCallbackContext(callbackInput: {
+        authority: HostedOperatorContext["authority"];
+        ownerSessionId: string;
+        nonceSha256: string;
+      }): Promise<HostedOperatorContext> {
+        const authority = hostedTenantAuthoritySchema.parse(callbackInput.authority);
+        if (authority.issuer !== config.issuer || authority.audience !== config.resource) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const sessionRows = await database
+          .select()
+          .from(agentSessions)
+          .where(
+            and(
+              eq(agentSessions.issuer, authority.issuer),
+              eq(agentSessions.audience, authority.audience),
+              eq(agentSessions.workspaceId, authority.workspaceId),
+              eq(agentSessions.ownerUserId, authority.ownerUserId),
+              eq(agentSessions.sessionId, callbackInput.ownerSessionId),
+            ),
+          )
+          .limit(1);
+        const row = sessionRows.at(0);
+        if (row === undefined) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const parsedSession = parseHostedSessionRow(row);
+        const durable = toDurableHostedSessionRecord(parsedSession);
+        const ownerContext = await ownerContextResolver({
+          adapterSessionId: durable.adapterSessionId,
+          authority,
+          principal: durable.principal,
+          sessionAuth: forwardedSessionAuth(
+            durable.principal,
+            parsedSession.version === 2 ? parsedSession.sourceHandoffId : undefined,
+          ),
+        });
+        // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Resolve the saved owner binding before reading its private pending callback journal.
+        const records = await database
+          .select({ record: builderProvisioningJournals.record })
+          .from(builderProvisioningJournals)
+          .where(
+            and(
+              eq(builderProvisioningJournals.issuer, authority.issuer),
+              eq(builderProvisioningJournals.audience, authority.audience),
+              eq(builderProvisioningJournals.workspaceId, authority.workspaceId),
+              eq(builderProvisioningJournals.ownerUserId, authority.ownerUserId),
+              sql`${builderProvisioningJournals.record}->'operator'->'identityLink'->>'ownerSessionId' = ${callbackInput.ownerSessionId}`,
+              sql`${builderProvisioningJournals.record}->'operator'->'identityLink'->>'nonceSha256' = ${callbackInput.nonceSha256}`,
+            ),
+          )
+          .limit(2);
+        if (records.length !== 1) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const record = hostedRuntimeJournalRecordSchema.parse(records.at(0)?.record);
+        const context = { authority, ownerContext, target: record.request };
+        await readKnownAuthBootstrap(context);
+        if (
+          record.operator?.identityLink?.consumedAt !== undefined ||
+          Date.parse(record.operator?.identityLink?.expiresAt ?? "") <= Date.now()
+        ) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        return context;
+      },
       store,
       withResourceLease,
     };

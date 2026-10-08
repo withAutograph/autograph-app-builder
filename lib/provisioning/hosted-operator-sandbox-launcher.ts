@@ -837,7 +837,7 @@ const atomicReply = async (
   spool: string,
   runId: string,
   frameId: number,
-  reply: EffectAuthorizedReply | CheckpointRecordedReply,
+  reply: EffectAuthorizedReply | CheckpointRecordedReply | FenceCurrentReply,
   signal: AbortSignal,
 ) => {
   const responses = path.posix.join(spool, "responses");
@@ -1438,6 +1438,10 @@ const runSandboxWorker = async (
     );
 
     const timeout = String(AUTHORITY_REPLY_TIMEOUT_MS);
+    const releaseArguments =
+      worker.subcommand === RESOURCES_RETIRE_COMMAND
+        ? [releaseDirectory]
+        : ["--release-directory", releaseDirectory];
     command = await sandbox.runCommand({
       args: [
         worker.subcommand,
@@ -1445,7 +1449,7 @@ const runSandboxWorker = async (
         spool,
         runId,
         timeout,
-        ...(generatedMetadata === undefined ? [] : ["--release-directory", releaseDirectory]),
+        ...(generatedMetadata === undefined ? [] : releaseArguments),
       ],
       cmd: worker.executablePath,
       cwd: SPOOL_ROOT,
