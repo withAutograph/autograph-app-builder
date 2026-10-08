@@ -1858,3 +1858,157 @@ describe("durable native observer checkpoint", () => {
     expect(JSON.stringify(first.nativeObservationState)).toBe(before);
   });
 });
+
+const catchupInput = (fetchImplementation: typeof fetch) => ({
+  config: { ...config, timeoutMs: 10_000 },
+  fetchImplementation,
+  onEvent: () => {},
+  sessionId: "wrun_1",
+  workloadIdentity: identity(),
+});
+
+const pinnedResponse = (body: string, tail: number) => {
+  const response = stream([]);
+  return new Response(body, {
+    headers: { ...Object.fromEntries(response.headers), "x-eve-stream-tail-index": String(tail) },
+  });
+};
+
+describe("explicit cold-read catch-up frontier", () => {
+  it("returns only a fully processed event frontier after an opted-in deadline and resumes its facts", async () => {
+    const controller = new AbortController();
+    const prefix = [
+      {
+        data: {
+          requests: [
+            {
+              allowFreeform: true,
+              display: "text",
+              kind: "question",
+              prompt: "Choose",
+              requestId: "cold-question",
+            },
+          ],
+        },
+        type: "input.requested",
+      },
+    ];
+    const privateEvents: string[] = [];
+    const publicEvents: number[] = [];
+    const partial = await observeSameOriginEveStream({
+      ...catchupInput(
+        async () => await Promise.resolve(pinnedResponse(`${JSON.stringify(prefix[0])}\n`, 2)),
+      ),
+      allowPartialObservation: true,
+      onEvent: (event) => {
+        if (toPublicEvent(event) !== null) publicEvents.push(event.index);
+        controller.abort();
+      },
+      onPrivateEvent: (event) => {
+        privateEvents.push(event.type);
+      },
+      readSignal: controller.signal,
+    });
+    expect(partial.observationComplete).toBe(false);
+    expect(partial.nativeTailIndex).toBe(2);
+    expect(partial.nextNativeIndex).toBe(1);
+    expect(partial.pendingRequests.map((request) => request.requestId)).toEqual(["cold-question"]);
+    expect(partial.nativeObservationState.publicEventCount).toBe(publicEvents.length);
+    expect(privateEvents).toEqual(["input.requested"]);
+    const rest = [
+      { data: { resolutions: [{ requestId: "cold-question" }] }, type: "input.resolved" },
+      { data: {}, type: "session.waiting" },
+    ];
+    const resumed = await observeSameOriginEveStream({
+      ...catchupInput(async (url) => {
+        expect(String(url)).toContain("startIndex=1&includeTailIndex=1");
+        return await Promise.resolve(
+          pinnedResponse(`${rest.map((event) => JSON.stringify(event)).join("\n")}\n`, 2),
+        );
+      }),
+      allowPartialObservation: true,
+      nativeObservationState: partial.nativeObservationState,
+    });
+    expect(resumed.observationComplete).toBe(true);
+    expect(resumed.nextNativeIndex).toBe(3);
+    expect(resumed.pendingRequests).toEqual([]);
+    expect(resumed.status).toBe("waiting");
+  });
+
+  it("keeps default reads throwing and rejects an unfinished callback even when catch-up is enabled", async () => {
+    await Promise.all(
+      [false, true].map(async (allowPartialObservation) => {
+        const controller = new AbortController();
+        const input = {
+          ...catchupInput(
+            async () =>
+              await Promise.resolve(
+                pinnedResponse(`${JSON.stringify({ data: {}, type: "session.waiting" })}\n`, 1),
+              ),
+          ),
+          allowPartialObservation,
+          onPrivateEvent: async () => {
+            controller.abort();
+            await Promise.reject(new HostedSessionReadTimeoutError());
+          },
+          readSignal: controller.signal,
+        };
+        await expect(observeSameOriginEveStream(input)).rejects.toBeInstanceOf(
+          HostedSessionReadTimeoutError,
+        );
+      }),
+    );
+    const controller = new AbortController();
+    await expect(
+      observeSameOriginEveStream({
+        ...catchupInput(
+          async () =>
+            await Promise.resolve(
+              pinnedResponse(`${JSON.stringify({ data: {}, type: "session.waiting" })}\n`, 1),
+            ),
+        ),
+        onEvent: () => {
+          controller.abort();
+        },
+        readSignal: controller.signal,
+      }),
+    ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
+  });
+
+  it("never converts malformed, provider or pre-header failures into catch-up progress", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      observeSameOriginEveStream({
+        ...catchupInput(async () => await Promise.resolve(pinnedResponse("{malformed}\n", 0))),
+        allowPartialObservation: true,
+        readSignal: controller.signal,
+      }),
+    ).rejects.toBeInstanceOf(SyntaxError);
+    await expect(
+      observeSameOriginEveStream({
+        ...catchupInput(
+          async () =>
+            await Promise.resolve(
+              new Response(
+                new ReadableStream({
+                  start(c) {
+                    c.error(new Error("provider failure"));
+                  },
+                }),
+                { headers: pinnedResponse("", 0).headers },
+              ),
+            ),
+        ),
+        allowPartialObservation: true,
+        readSignal: controller.signal,
+      }),
+    ).rejects.toThrow("provider failure");
+    await expect(
+      observeSameOriginEveStream({
+        ...catchupInput(async () => await Promise.reject(new HostedSessionReadTimeoutError())),
+        allowPartialObservation: true,
+      }),
+    ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
+  });
+});
