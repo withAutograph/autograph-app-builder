@@ -1,3 +1,4 @@
+import { continueApprovedLocalBuild } from "../agent/local-build-continuation";
 import { Client, ClientError, parseInputResponses } from "eve/client";
 import type { ClientSession, MessageStreamEvent } from "eve/client";
 import { setTimeout as delay } from "node:timers/promises";
@@ -18,6 +19,9 @@ import {
   localSessionRecoveryError,
   LocalSessionRecoveryUnavailableError,
 } from "./local-session-recovery";
+
+const DEVELOPMENT_BUNDLE = "local-development";
+const DEVELOPMENT_MODE = "development";
 
 export class AdapterNotConfiguredError extends Error {
   constructor() {
@@ -129,6 +133,7 @@ interface LocalEveRuntimeState {
   sessionEvents: Map<string, MessageStreamEvent[]>;
   sessionHandles: Map<string, ClientSession>;
   activeResponses: Map<string, CancellableResponse>;
+  continuationPumps: Map<string, Promise<boolean>>;
   /**
    * A model stream stopped making progress and its turn was cancelled. Keep a
    * product-facing interruption until the durable session confirms the cancel
@@ -190,12 +195,14 @@ const localRuntimeGlobal = globalThis as typeof globalThis & {
 function localRuntimeState(generation: string): LocalEveRuntimeState {
   const existing = localRuntimeGlobal[localEveRuntimeStateKey];
   if (existing !== undefined && existing.generation === generation) {
+    existing.continuationPumps ??= new Map();
     existing.tailControllers ??= new Map();
     existing.unavailableSessions ??= new Set();
     return existing;
   }
   return (localRuntimeGlobal[localEveRuntimeStateKey] = {
     activeResponses: new Map(),
+    continuationPumps: new Map(),
     generation,
     metadata: new Map(),
     modelInterruptions: new Map(),
@@ -220,8 +227,8 @@ function localSessionTitle(prompt: string): string {
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function localCycleGeneration(environment: NodeJS.ProcessEnv | Record<string, string | undefined>) {
   if (
-    environment.APP_BUILDER_EXECUTION_MODE !== "development" ||
-    environment.APP_BUILDER_EXECUTION_BUNDLE !== "local-development"
+    environment.APP_BUILDER_EXECUTION_MODE !== DEVELOPMENT_MODE ||
+    environment.APP_BUILDER_EXECUTION_BUNDLE !== DEVELOPMENT_BUNDLE
   ) {
     return `unbound:${environment.EVE_AGENT_HOST ?? "unknown"}`;
   }
@@ -241,8 +248,8 @@ function localEveRestartGeneration(
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ) {
   if (
-    environment.APP_BUILDER_EXECUTION_MODE !== "development" ||
-    environment.APP_BUILDER_EXECUTION_BUNDLE !== "local-development"
+    environment.APP_BUILDER_EXECUTION_MODE !== DEVELOPMENT_MODE ||
+    environment.APP_BUILDER_EXECUTION_BUNDLE !== DEVELOPMENT_BUNDLE
   ) {
     return;
   }
@@ -768,6 +775,49 @@ export function createLocalEveSessionService(
       sessions,
     };
   };
+  const dispatchLocalBuildMessage = async (sessionId: string, message: string) => {
+    await requireSettledModelTurn(sessionId);
+    const response = await acceptLocalContinuation(
+      sessionId,
+      async () => await sessionAtBufferedTail(sessionId).send(message, { turnPolicy: "queue" }),
+    );
+    consumeSessionResponse(sessionId, response);
+  };
+
+  const continueLocalApprovedWork = async (sessionId: string): Promise<boolean> => {
+    if (
+      process.env.APP_BUILDER_EXECUTION_MODE !== DEVELOPMENT_MODE ||
+      process.env.APP_BUILDER_EXECUTION_BUNDLE !== DEVELOPMENT_BUNDLE ||
+      state.unavailableSessions.has(sessionId) ||
+      localActiveResponses.has(sessionId)
+    ) {
+      return false;
+    }
+    const pending = state.continuationPumps.get(sessionId);
+    if (pending !== undefined) {
+      return await pending;
+    }
+    const work = async () => {
+      const snapshot = await readLocalSnapshot(sessionId);
+      const status = deriveInstalledEveStatus(snapshot.events);
+      return await continueApprovedLocalBuild({
+        active: status === "working",
+        dispatch: async (message) => await dispatchLocalBuildMessage(sessionId, message),
+        pendingInput: outstandingInstalledEveRequests(snapshot.events).length > 0,
+        sessionId,
+      });
+    };
+    const promise = work();
+    state.continuationPumps.set(sessionId, promise);
+    try {
+      return await promise;
+    } finally {
+      if (state.continuationPumps.get(sessionId) === promise) {
+        state.continuationPumps.delete(sessionId);
+      }
+    }
+  };
+
   service.get = async ({ sessionId, cursor, limit }) => {
     try {
       if (state.restartInterrupted.has(sessionId)) {
@@ -789,13 +839,17 @@ export function createLocalEveSessionService(
       }
     }
     touchSession(sessionId);
-    return resultForEvents(
+    const result = resultForEvents(
       sessionId,
       localSessionEvents.get(sessionId) ?? [],
       cursor,
       limit,
       localResultOptions(sessionId),
     );
+    if (result.status === "waiting" && (await continueLocalApprovedWork(sessionId))) {
+      return { ...result, status: "working" };
+    }
+    return result;
   };
   service.getStart = async ({ clientRequestId, cursor, limit }) => {
     const sessionId = localRequests.get(`start:${clientRequestId}`);
@@ -815,6 +869,9 @@ export function createLocalEveSessionService(
     return await service.get({ cursor, limit, sessionId });
   };
   service.send = async ({ sessionId, message, clientRequestId }) => {
+    if (state.continuationPumps.has(sessionId)) {
+      throw new Error("Another continuation is already active for this session.");
+    }
     if (state.unavailableSessions.has(sessionId)) {
       throw new LocalSessionRecoveryUnavailableError();
     }
@@ -833,6 +890,9 @@ export function createLocalEveSessionService(
     return acceptedResult(sessionId, localSessionEvents.get(sessionId));
   };
   service.respond = async ({ sessionId, responses, clientRequestId }) => {
+    if (state.continuationPumps.has(sessionId)) {
+      throw new Error("Another continuation is already active for this session.");
+    }
     if (state.unavailableSessions.has(sessionId)) {
       throw new LocalSessionRecoveryUnavailableError();
     }

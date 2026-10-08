@@ -1,6 +1,12 @@
+import {
+  approvedBuildDecisionSchema,
+  internalBuildContinuationSchema,
+} from "../agent/approved-build-continuation";
+import type { ApprovedBuildDecision } from "../agent/approved-build-continuation";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 
+import type { HostedPrincipal } from "./hosted-auth";
 import { hostedPrincipalSchema, tenantKeyFor } from "./hosted-auth";
 import {
   eveSessionResultSchema,
@@ -241,6 +247,7 @@ export const durableHostedSessionRecordSchema = z
     principal: hostedPrincipalSchema,
     // Private Eve authority facts live beside the session record, outside its public checkpoint.
     privateApprovalReceipts: z.array(privateHostedApprovalReceiptSchema).optional(),
+    privateBuildDecision: approvedBuildDecisionSchema.optional(),
     resumability: publicSessionResumabilitySchema,
     sessionId: z.string().min(1).max(200),
     sourceHandoffId: z.string().uuid().optional(),
@@ -456,6 +463,7 @@ const reportInvalidStartAlias = (
 const hostedOperationCommonShape = {
   clientRequestId: z.string().min(1).max(200),
   createdAtEpochMs: z.number().int().nonnegative(),
+  internalBuildContinuation: internalBuildContinuationSchema.optional(),
   kind: hostedOperationKindSchema,
   operationId: z.string().min(1).max(200),
   principal: hostedPrincipalSchema,
@@ -617,6 +625,17 @@ export const assertExistingStartSession = (
 
 const SESSION_NOT_FOUND = "Hosted session was not found.";
 
+export const isDeliveredInternalContinuation = (operation: HostedOperationRecord): boolean =>
+  operation.kind === "send" &&
+  operation.state === "submission_unknown" &&
+  operation.internalBuildContinuation?.deliveredTurnId !== undefined &&
+  operation.internalBuildContinuation.deliveredMessageSequence !== undefined;
+
+const maySettleHostedOperation = (operation: HostedOperationRecord): boolean =>
+  operation.state === "reserved" ||
+  (operation.kind === "start" && operation.state === "submission_unknown") ||
+  isDeliveredInternalContinuation(operation);
+
 export const withoutHostedOperationError = (operation: HostedOperationRecord) => {
   if (operation.state !== "submission_unknown") {
     return operation;
@@ -657,6 +676,25 @@ export type ReserveOperationResult = z.infer<typeof reserveOperationResultSchema
  * optional new session and the terminal operation result.
  */
 export interface HostedEveStore {
+  getPrivateOperation?: (
+    principal: HostedPrincipal,
+    operationId: string,
+  ) => Promise<HostedOperationRecord | null>;
+  recordPrivateBuildDecision?: (input: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    decision: ApprovedBuildDecision;
+  }) => Promise<void>;
+  claimInternalBuildMessage?: (input: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    operationId: string;
+    nonce: string;
+    turnId: string;
+    turnSequence: number;
+    messageSequence: number;
+  }) => Promise<boolean>;
+
   /** Append raw Eve approval settlements to the owner-scoped session record. */
   recordPrivateApprovalReceipts?: (input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
@@ -912,8 +950,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     if (operation === undefined || operation.requestDigest !== input.requestDigest) {
       throw new Error("Hosted operation cannot settle at this digest.");
     }
-    const replayableStart = operation.kind === "start" && operation.state === "submission_unknown";
-    if (operation.state !== "reserved" && !replayableStart) {
+    if (!maySettleHostedOperation(operation)) {
       throw new Error("Hosted operation cannot settle at this digest.");
     }
     const result = eveSessionResultSchema.parse(input.result);
@@ -1035,6 +1072,80 @@ export class InMemoryHostedEveStore implements HostedEveStore {
   }
 
   // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
+  // oxlint-disable-next-line eslint/require-await -- The in-memory implementation preserves the asynchronous canonical store contract.
+  async getPrivateOperation(
+    principal: HostedPrincipal,
+    operationId: string,
+  ): Promise<HostedOperationRecord | null> {
+    return structuredClone(
+      this.operations.get(InMemoryHostedEveStore.operationKey(principal, operationId)) ?? null,
+    );
+  }
+  // oxlint-disable-next-line eslint/require-await -- The in-memory implementation preserves the asynchronous canonical store contract.
+  async recordPrivateBuildDecision(input: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    decision: ApprovedBuildDecision;
+  }): Promise<void> {
+    const key = InMemoryHostedEveStore.sessionKey(input.principal, input.sessionId);
+    const stored = this.sessions.get(key);
+    if (stored === undefined) {
+      throw new Error(SESSION_NOT_FOUND);
+    }
+    const current = toDurableHostedSessionRecord(stored);
+    const decision = approvedBuildDecisionSchema.parse(input.decision);
+    if (decision.adapterSessionId !== current.adapterSessionId) {
+      throw new Error(SESSION_NOT_FOUND);
+    }
+    if ((current.privateBuildDecision?.turnSequence ?? -1) > decision.turnSequence) {
+      return;
+    }
+    this.sessions.set(
+      key,
+      durableHostedSessionRecordSchema.parse({ ...current, privateBuildDecision: decision }),
+    );
+  }
+  // oxlint-disable-next-line eslint/require-await -- The in-memory implementation preserves the asynchronous canonical store contract.
+  async claimInternalBuildMessage(input: {
+    principal: HostedPrincipal;
+    sessionId: string;
+    operationId: string;
+    nonce: string;
+    turnId: string;
+    turnSequence: number;
+    messageSequence: number;
+  }): Promise<boolean> {
+    const key = InMemoryHostedEveStore.operationKey(input.principal, input.operationId);
+    const operation = this.operations.get(key);
+    const marker = operation?.internalBuildContinuation;
+    if (operation === undefined || marker === undefined || operation.state === "rejected") {
+      return false;
+    }
+    const wrongIdentity = operation.sessionId !== input.sessionId || marker.nonce !== input.nonce;
+    if (wrongIdentity || input.turnSequence <= marker.decision.turnSequence) {
+      return false;
+    }
+    if (marker.deliveredTurnId !== undefined) {
+      return (
+        marker.deliveredTurnId === input.turnId &&
+        marker.deliveredMessageSequence === input.messageSequence
+      );
+    }
+    this.operations.set(
+      key,
+      hostedOperationRecordSchema.parse({
+        ...operation,
+        internalBuildContinuation: {
+          ...marker,
+          deliveredMessageSequence: input.messageSequence,
+          deliveredTurnId: input.turnId,
+        },
+      }),
+    );
+    return true;
+  }
+
+  // oxlint-disable-next-line eslint/require-await -- The in-memory implementation retains the async canonical store contract.
   async recordPrivateApprovalReceipts(input: {
     principal: z.infer<typeof hostedPrincipalSchema>;
     sessionId: string;
