@@ -185,6 +185,8 @@ it("does not infer absence from an empty deployment listing and records normal G
   const first = await f.writer.deliver(f.input);
   expect(initial.status).toBe("retryable");
   expect(first.status).toBe("unknown");
+  const whileBuilding = await f.writer.deliver(f.input);
+  expect(whileBuilding.status).toBe("unknown");
   expect(f.calls.filter((call) => call.method === "POST")).toHaveLength(1);
   expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
     gitSource: { ref: "feature", sha, type: "github" },

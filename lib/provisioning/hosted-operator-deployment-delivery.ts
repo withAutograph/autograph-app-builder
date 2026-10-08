@@ -259,7 +259,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
     async deliver(input: HostedOperatorDeploymentContext) {
       const reader = io(input);
       const prior = await reconcile(input);
-      if (prior.status === "applied") {
+      if (prior.status === "applied" || prior.status === "unknown") {
         return prior;
       }
       // A complete no-match listing is still uncertain; this approved retry is at-least-once and may create another scoped Preview.
