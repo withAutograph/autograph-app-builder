@@ -83,7 +83,6 @@ const context = buildProtectedInstallContext({
 const contextDigest = createHash("sha256").update(JSON.stringify(context)).digest("hex");
 const frame = (value: unknown) => Buffer.from(JSON.stringify(value));
 
-const ready = (frameId: number) => frame({ version: 1, run_id: runId, frame_id: frameId });
 const authorityNotice = (frameId: number) => ({
   kind: "protected_installer_frame_ready",
   version: 1,
@@ -91,9 +90,12 @@ const authorityNotice = (frameId: number) => ({
   frame_id: frameId,
 });
 type Notice = { stream: "stdout" | "stderr"; data: string };
+// oxlint-disable-next-line sonarjs/cognitive-complexity -- One owned SDK fixture covers the closed installer and guard-only protocol variants.
 const makeFixture = (
   options: {
+    access?: boolean;
     fenceOnly?: boolean;
+    readbackStatus?: "applied" | "incomplete";
     unknown?: boolean;
     staleAtAuthority?: boolean;
     wrongResource?: boolean;
@@ -155,6 +157,13 @@ const makeFixture = (
   const selectedDigest = createHash("sha256").update(JSON.stringify(selectedContext)).digest("hex");
   const reportedDigest =
     options.pinMatches === false ? "d".repeat(64) : selectedContext.installer.sha256;
+  let selectedEffectId = "generated_app.prepare_schema_revision";
+  if (options.access) {
+    selectedEffectId = "generated_app.grant_access";
+  }
+  if (options.auth) {
+    selectedEffectId = "auth:apply-schema-plan";
+  }
   const scopedAuthorization = customWorker
     ? {
         ...rustAuthorization,
@@ -163,9 +172,7 @@ const makeFixture = (
         app_id: selectedContext.app_id,
         installer_id: selectedContext.installer.id,
         installer_sha256: selectedContext.installer.sha256,
-        effect_id: options.auth
-          ? "auth:apply-schema-plan"
-          : "generated_app.prepare_schema_revision",
+        effect_id: selectedEffectId,
         release_id: selectedContext.release.id,
         resource_id: selectedContext.resource.resource_id,
         tenant_id: options.auth ? null : rustAuthorization.tenant_id,
@@ -202,98 +209,142 @@ const makeFixture = (
         written.push(entry.path);
       }
     }),
-    runCommand: vi.fn(async (commandOptions: { cmd: string; detached?: boolean }) => {
-      if (!commandOptions.detached) {
-        return {
-          exitCode: 0,
-          stdout: async () => `${reportedDigest}  /opt/trusted-worker\n`,
-        };
-      }
-
-      const request = {
-        ...scopedAuthorization,
-        ...(options.wrongResource ? { resource_id: "other-resource" } : {}),
-        ...(options.effectId ? { effect_id: options.effectId } : {}),
-        ...(options.tenantId === undefined ? {} : { tenant_id: options.tenantId }),
-      };
-      files.set(
-        `/vercel/sandbox/protected-installer/${runId}/lifecycle/1.json`,
-        frame({ version: 1, run_id: runId, kind: "worker_started" }),
-      );
-      files.set(`/vercel/sandbox/protected-installer/${runId}/lifecycle/1.ready`, ready(1));
-      const wireRequest = { ...request };
-      if (options.fenceOnly) {
-        Object.assign(wireRequest, { kind: "check_fence" });
-        Reflect.deleteProperty(wireRequest, "effect_id");
-        Reflect.deleteProperty(wireRequest, "sequence");
-      }
-      files.set(`/vercel/sandbox/protected-installer/${runId}/requests/1.json`, frame(wireRequest));
-      files.set(`/vercel/sandbox/protected-installer/${runId}/requests/1.ready`, ready(1));
-      const requestCanContinue =
-        options.wrongResource !== true && options.staleAtAuthority !== true;
-      if (requestCanContinue) {
-        files.set(
-          `/vercel/sandbox/protected-installer/${runId}/requests/2.json`,
-          frame({
-            ...rustCheckpoint,
-            ...(customWorker
-              ? {
-                  context_digest: selectedDigest,
-                  effect_id: request.effect_id,
-                  tenant_id: request.tenant_id,
-                  resource_id: request.resource_id,
-                }
-              : {}),
-            receipt: options.unknown ? { state: "unknown" } : rustCheckpoint.receipt,
-          }),
-        );
-        files.set(`/vercel/sandbox/protected-installer/${runId}/requests/2.ready`, ready(2));
-        files.set(
-          `/vercel/sandbox/protected-installer/${runId}/lifecycle/2.json`,
-          frame({
-            version: 1,
-            run_id: runId,
-            kind: options.unknown ? "worker_failed" : "worker_succeeded",
-            ...(options.unknown ? { failure_code: "readback_unknown" } : {}),
-          }),
-        );
-        files.set(`/vercel/sandbox/protected-installer/${runId}/lifecycle/2.ready`, ready(2));
-      }
-
-      const notices: Notice[] = [
-        { stream: "stderr", data: "installer private diagnostic that must not be forwarded" },
-        {
-          stream: "stdout",
-          data: `${JSON.stringify({ kind: "protected_installer_lifecycle_ready", version: 1, run_id: runId, frame_id: 1 })}\n`,
-        },
-        { stream: "stdout", data: `${JSON.stringify(authorityNotice(1))}\n` },
-      ];
-      if (!options.staleAtAuthority && !options.wrongResource) {
-        if (!options.fenceOnly) {
-          notices.push({ stream: "stdout", data: `${JSON.stringify(authorityNotice(2))}\n` });
+    runCommand: vi.fn(
+      async (commandOptions: {
+        args?: string[];
+        cmd: string;
+        detached?: boolean;
+        env?: Record<string, string>;
+      }) => {
+        if (!commandOptions.detached) {
+          return {
+            exitCode: 0,
+            stdout: async () => `${reportedDigest}  /opt/trusted-worker\n`,
+          };
         }
-        notices.push({
-          stream: "stdout",
-          data: `${JSON.stringify({ kind: "protected_installer_lifecycle_ready", version: 1, run_id: runId, frame_id: 2 })}\n`,
-        });
-      }
-      workerCommand = {
-        kill: vi.fn(async () => undefined),
-        logs: async function* () {
-          for (const notice of notices) {
-            if (
-              options.abortBeforeAuthority !== undefined &&
-              notice.data.includes('"protected_installer_frame_ready"')
-            ) {
-              options.abortBeforeAuthority.abort();
-            }
-            yield notice;
+
+        const transportRunId = commandOptions.args?.[3] ?? runId;
+        const ready = (frameId: number) =>
+          frame({ version: 1, run_id: transportRunId, frame_id: frameId });
+        const request = {
+          ...scopedAuthorization,
+          ...(options.wrongResource ? { resource_id: "other-resource" } : {}),
+          ...(options.effectId ? { effect_id: options.effectId } : {}),
+          ...(options.tenantId === undefined ? {} : { tenant_id: options.tenantId }),
+        };
+        files.set(
+          `/vercel/sandbox/protected-installer/${transportRunId}/lifecycle/1.json`,
+          frame({ version: 1, run_id: transportRunId, kind: "worker_started" }),
+        );
+        files.set(
+          `/vercel/sandbox/protected-installer/${transportRunId}/lifecycle/1.ready`,
+          ready(1),
+        );
+        const wireRequest = { ...request };
+        if (options.fenceOnly) {
+          Object.assign(wireRequest, { kind: "check_fence" });
+          Reflect.deleteProperty(wireRequest, "effect_id");
+          Reflect.deleteProperty(wireRequest, "sequence");
+        }
+        files.set(
+          `/vercel/sandbox/protected-installer/${transportRunId}/requests/1.json`,
+          frame(wireRequest),
+        );
+        files.set(
+          `/vercel/sandbox/protected-installer/${transportRunId}/requests/1.ready`,
+          ready(1),
+        );
+        const requestCanContinue =
+          options.wrongResource !== true && options.staleAtAuthority !== true;
+        if (requestCanContinue) {
+          files.set(
+            `/vercel/sandbox/protected-installer/${transportRunId}/requests/2.json`,
+            frame({
+              ...rustCheckpoint,
+              ...(customWorker
+                ? {
+                    context_digest: selectedDigest,
+                    effect_id: request.effect_id,
+                    tenant_id: request.tenant_id,
+                    resource_id: request.resource_id,
+                  }
+                : {}),
+              receipt: options.unknown ? { state: "unknown" } : rustCheckpoint.receipt,
+            }),
+          );
+          files.set(
+            `/vercel/sandbox/protected-installer/${transportRunId}/requests/2.ready`,
+            ready(2),
+          );
+          files.set(
+            `/vercel/sandbox/protected-installer/${transportRunId}/lifecycle/2.json`,
+            frame({
+              version: 1,
+              run_id: transportRunId,
+              kind: options.unknown ? "worker_failed" : "worker_succeeded",
+              ...(options.unknown ? { failure_code: "readback_unknown" } : {}),
+            }),
+          );
+          files.set(
+            `/vercel/sandbox/protected-installer/${transportRunId}/lifecycle/2.ready`,
+            ready(2),
+          );
+        }
+
+        if (options.readbackStatus !== undefined) {
+          files.set(
+            `/vercel/sandbox/protected-installer/${transportRunId}/readback.json`,
+            frame({
+              version: 1,
+              operation_id: runId,
+              context_digest: selectedDigest,
+              fence_generation: 3,
+              status: options.readbackStatus,
+              readback_sha256: "9".repeat(64),
+            }),
+          );
+        }
+        const notices: Notice[] = [
+          { stream: "stderr", data: "installer private diagnostic that must not be forwarded" },
+          {
+            stream: "stdout",
+            data: `${JSON.stringify({ kind: "protected_installer_lifecycle_ready", version: 1, run_id: transportRunId, frame_id: 1 })}\n`,
+          },
+          {
+            stream: "stdout",
+            data: `${JSON.stringify({ ...authorityNotice(1), run_id: transportRunId })}\n`,
+          },
+        ];
+        if (!options.staleAtAuthority && !options.wrongResource) {
+          if (!options.fenceOnly) {
+            notices.push({
+              stream: "stdout",
+              data: `${JSON.stringify({ ...authorityNotice(2), run_id: transportRunId })}\n`,
+            });
           }
-        },
-        wait: vi.fn(async () => ({ exitCode: 0 })),
-      };
-      return workerCommand;
-    }),
+          notices.push({
+            stream: "stdout",
+            data: `${JSON.stringify({ kind: "protected_installer_lifecycle_ready", version: 1, run_id: transportRunId, frame_id: 2 })}\n`,
+          });
+        }
+        workerCommand = {
+          kill: vi.fn(async () => undefined),
+          logs: async function* () {
+            for (const notice of notices) {
+              if (
+                options.abortBeforeAuthority !== undefined &&
+                notice.data.includes('"protected_installer_frame_ready"')
+              ) {
+                options.abortBeforeAuthority.abort();
+              }
+              yield notice;
+            }
+          },
+          wait: vi.fn(async () => ({ exitCode: 0 })),
+        };
+        return workerCommand;
+      },
+    ),
   };
 
   const createSandbox = vi.fn(async () => {
@@ -314,7 +365,9 @@ const makeFixture = (
   const input = {
     authority: {} as HostedOperatorWorkerEffectContext["authority"],
     target: {} as HostedOperatorWorkerEffectContext["target"],
-    effect: plan.effects[1]!,
+    effect: options.access
+      ? selectedPlan.effects.find((effect) => effect.kind === "access")!
+      : plan.effects[1]!,
     fenceGeneration: 3,
     operationRef: runId,
     plan: selectedPlan,
@@ -369,6 +422,17 @@ const makeFixture = (
     bindWorkerContext,
     signal: new AbortController().signal,
     database: options.auth ? "authDatabase" : "appDatabase",
+    ...(options.access
+      ? {
+          accessConnections: {
+            appMigrator:
+              "postgresql://migrator:secret@ep-fixture.us-east-1.aws.neon.tech/app_db?sslmode=require",
+            appRuntime: "private-owned-app-runtime",
+            authMigrator: "private-owned-auth-migrator",
+            authRuntime: "private-owned-auth-runtime",
+          },
+        }
+      : {}),
     directDatabaseUrl:
       "postgresql://migrator:secret@ep-fixture.us-east-1.aws.neon.tech/app_db?sslmode=require",
   } as HostedOperatorWorkerEffectContext & {
@@ -381,6 +445,13 @@ const makeFixture = (
       projectId: "control-project",
       teamId: "control-team",
       image: "protected-installer-control-image",
+      accessWorker: {
+        executablePath: "/opt/trusted-worker",
+        id: selectedPlan.installer.reference,
+        operationScope: "generated-app-access-v1",
+        sha256: workerDigest,
+        subcommand: "protected-generated-app-access",
+      },
       workers: {
         [selectedPlan.selection.appId]: {
           executablePath: "/opt/trusted-worker",
@@ -421,6 +492,30 @@ const makeFixture = (
 };
 
 describe("hosted protected installer Sandbox launcher", () => {
+  it("independently inspects access under the real leased context without a new worker attempt or receipt", async () => {
+    const fixture = makeFixture({
+      access: true,
+      fenceOnly: true,
+      generated: true,
+      readbackStatus: "incomplete",
+    });
+    const observed = await fixture.launcher.inspect({ ...fixture.input, readbackOnly: true });
+    expect(observed).toMatchObject({ status: "incomplete", readback_sha256: "9".repeat(64) });
+    expect(fixture.bindWorkerContext).not.toHaveBeenCalled();
+    expect(fixture.records).toHaveLength(0);
+    const command = fixture.sandbox.runCommand.mock.calls.at(-1)?.[0];
+    expect(command?.args?.[0]).toBe("protected-generated-app-access-readback");
+    expect(command?.env).toEqual({});
+  });
+  it("denies a mutating authorization frame in the fixed read-only inspection lane", async () => {
+    const fixture = makeFixture({ access: true, generated: true, readbackStatus: "applied" });
+    await expect(
+      fixture.launcher.inspect({ ...fixture.input, readbackOnly: true }),
+    ).rejects.toThrow();
+    expect(fixture.bindWorkerContext).not.toHaveBeenCalled();
+    expect(fixture.records).toHaveLength(0);
+  });
+
   it("checks the current real fence without authorizing an effect or recording a receipt", async () => {
     const fixture = makeFixture({ fenceOnly: true });
     await fixture.launcher.execute(fixture.input);
