@@ -1,0 +1,17 @@
+#!/bin/sh
+#MISE description="Verify owned PostgreSQL Realm callback/CAS and full-plan sender against explicit Arrusted source"
+set -eu
+if [ "$#" -ne 1 ]; then
+  echo "usage: mise run test:postgres-hosted-operator-realm-cas -- <absolute-arrusted-source-root>" >&2
+  exit 64
+fi
+case "$1" in
+  /*) ;;
+  *) echo "Arrusted source root must be absolute" >&2; exit 64 ;;
+esac
+# The fixture creates and removes its own cluster. Installed PostgreSQL initdb/
+# pg_ctl and dependencies in both source roots are explicit local prerequisites.
+postgres_bin=$(dirname "$(command -v initdb)")
+exec "$PWD/.config/mise/scripts/trusted-node-launcher" \
+  "$(mise which node)" --import tsx \
+  .config/mise/scripts/repository/test-owned-hosted-operator-realm-cas.mts "$1" "$postgres_bin"

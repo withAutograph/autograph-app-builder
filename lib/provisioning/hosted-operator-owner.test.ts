@@ -385,6 +385,23 @@ describe("hosted operator owner authority", () => {
     expect(fixture.fetch).toHaveBeenCalledTimes(2);
   });
 
+  it("reads planning authority without fabricating an approved plan and rejects stale ownership", async () => {
+    const fixture = makeFixture();
+    const context = await fixture.authority.authorize(request(), selection, ownerContext);
+    const owned = await fixture.authority.readCurrentPlanningOwner(context);
+    expect(owned.target).toEqual(context.target);
+    expect(owned.session.adapterSessionId).toBe(ownerContext.adapterSessionId);
+    await fixture.authority.assertPlanningAuthorized(context);
+    await expect(
+      fixture.authority.assertPlanningAuthorized({
+        ...context,
+        target: { ...context.target, projectId: "prj_foreign" },
+      }),
+    ).rejects.toThrow();
+    fixture.currentSession.adapterGeneration = 2;
+    await expect(fixture.authority.readCurrentPlanningOwner(context)).rejects.toThrow();
+  });
+
   it("requires the pinned trusted workload identity before any owner lookup", async () => {
     const fixture = makeFixture();
     await expect(

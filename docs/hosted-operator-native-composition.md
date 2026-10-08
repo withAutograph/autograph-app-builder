@@ -1,0 +1,63 @@
+# Native Preview operator composition
+
+`lib/provisioning/hosted-operator-function.ts` loads the real
+`hosted-operator-composition.ts#createDependencies` factory. Missing or invalid
+`PROTECTED_HOSTED_OPERATOR_CONFIGURATION` returns 503. Source configuration,
+local fixtures, native deployment READY, database metadata, and normal human
+sign-in are separate evidence.
+
+The deployment-owned configuration selects three distinct projects: app-only
+Next, Gateway/Auth-only, and private operator. It supplies exact native project,
+branch, repository and commit references; native Neon store/project/branch/endpoint;
+actual operator/workload OIDC identities; immutable Sandbox image and worker
+IDs/SHA256s; Auth/app database and role names; public browser/issuer origins;
+and restricted application roles. Secrets and SQL URLs are never plan inputs.
+Existing Gateway signing and Better Auth secrets, actual provider-injected
+`VERCEL_DEPLOYMENT_ID`, and independently observed
+`AUTH_PRODUCTION_DATABASE_IDENTITY` are setup prerequisites. No Production
+connection string is supplied to the Preview realm or generated app.
+
+The first approved `auth-bootstrap` plan creates or observes the owned resources,
+installs only the Auth schema through `auth-protected-schema-v1`, writes the
+Gateway's private Auth runtime connection and public configuration, and delivers
+an independently observed native Gateway Preview. It records Auth schema
+readiness, not app preparation. After execution releases its lease, the closed
+private `auth-identity-input` request prepares or reuses the journal's sealed
+nonce and returns an ordinary Auth browser link. The normal user signs in and
+confirms the link; Builder receives only the separately scoped signed proof.
+The canonical owner callback consumes that nonce exactly once.
+
+A renewed full plan reads that captured proof and current Realm session through
+the closed native transport. Creating a new organization is a distinct approved
+`auth-membership` effect for the existing normally authenticated user; it seeds
+no users and initially grants no apps. The existing access saga installs current
+App DB bindings before enabling this app in Auth. App environment delivery
+contains only its own runtime URL and public verification/boundary settings.
+The selected native app candidate is then published into the existing
+`PLATFORM_GATEWAY_PROJECT_BINDINGS` projection, preserving sibling applications,
+and the Gateway is delivered again. The public working surface is the approved
+Gateway browser origin; immutable native candidates remain the authority for
+provider readback.
+
+Normal Git delivery is explicitly at least once. A completed no-match listing is
+not absence; an approved retry can create additional owned matching Preview
+deployments and provider usage charges. Known queued/building candidates are
+observed without another POST. The existing journal retains every observed
+candidate ID, pins one independently READY candidate matching the approved
+project/environment/repository/commit/configuration, and does not rewrite the
+old frozen inventory.
+
+Required native transport grants are directional and exact: Builder Production
+or operator Preview to the configured Gateway Preview for identity/JWKS
+readback, and Gateway Preview to app Preview for protected ingress. Each caller
+uses actual SDK OIDC and the configured team/project/environment; deployment
+protection compatibility requires actual provider readback. No source fixture
+qualifies these hosted grants.
+
+Cleanup closes and observes app access before Auth revocation, deletes only
+journal-owned app environment rows, and retires only the owned app resource.
+Shared Auth users, sessions, data, credentials and Gateway settings remain. The
+existing encrypted resource credential checkpoint survives cleanup and renewed
+Preview preparation. Retired-state inspection uses the fixed read-only worker;
+errors, foreign ownership and unsafe live sessions remain unknown. It never
+forces database drops or equates a receipt with actual cleanup.

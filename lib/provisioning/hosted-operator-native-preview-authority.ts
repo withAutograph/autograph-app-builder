@@ -59,6 +59,101 @@ const assertPending = (
   }
 };
 
+const readVerifiedOwnerNativeStore = async (
+  input: {
+    assertCurrentOwner: (context: HostedOperatorContext) => Promise<void>;
+    readCredential: ControlPlane["readCredential"];
+    nativeStore: Readonly<NativePreviewNeonStoreBinding>;
+    neonProjectId: string;
+    fetch?: typeof fetch;
+  },
+  context: HostedOperatorContext,
+  binding: NativePreviewNeonStoreBinding,
+) => {
+  if (
+    !sameStore(binding, input.nativeStore) ||
+    binding.sourceProjectId === context.target.projectId
+  ) {
+    throw fail();
+  }
+  await input.assertCurrentOwner(context);
+  const readCredential = async () => {
+    await input.assertCurrentOwner(context);
+    const credential = await input.readCredential(context.authority, context.target.installationId);
+    if (
+      credential?.binding.active !== true ||
+      credential.binding.installationId !== context.target.installationId ||
+      credential.binding.scopeId !== context.target.scopeId ||
+      credential.binding.scopeType !== context.target.scopeType
+    ) {
+      throw fail();
+    }
+    await input.assertCurrentOwner(context);
+    return credential;
+  };
+  const access = await readOwnerVercelProjectAccess({
+    authority: context.authority,
+    fetch: input.fetch ?? fetch,
+    installationId: context.target.installationId,
+    projectId: binding.sourceProjectId,
+    readCredential,
+  });
+  if (
+    access.status !== "ready" ||
+    access.project?.id !== binding.sourceProjectId ||
+    access.scope.id !== context.target.scopeId ||
+    access.scope.type !== context.target.scopeType
+  ) {
+    throw fail();
+  }
+  await input.assertCurrentOwner(context);
+  const native = await readVercelManagedNeonResource({
+    configurationId: binding.configurationId,
+    fail,
+    projectId: binding.sourceProjectId,
+    request: async (pathname) => {
+      await input.assertCurrentOwner(context);
+      const credential = await readCredential();
+      const url = new URL(pathname, "https://api.vercel.com");
+      if (context.target.scopeType === "team") {
+        url.searchParams.set("teamId", context.target.scopeId);
+      }
+      const response = await (input.fetch ?? fetch)(url, {
+        cache: "no-store",
+        headers: { Accept: "application/json", Authorization: `Bearer ${credential.token}` },
+        method: "GET",
+        redirect: "error",
+        signal: AbortSignal.timeout(20_000),
+      });
+      try {
+        if (!response.ok) {
+          throw fail();
+        }
+        const raw: unknown = await response.json();
+        const value = z.json().parse(raw);
+        await input.assertCurrentOwner(context);
+        return value;
+      } finally {
+        if (!response.bodyUsed) {
+          await response.body?.cancel();
+        }
+      }
+    },
+    scopeId: context.target.scopeId,
+  });
+  if (native.resourceId !== binding.resourceId || native.neonProjectId !== input.neonProjectId) {
+    throw fail();
+  }
+  await input.assertCurrentOwner(context);
+  return {
+    configurationId: binding.configurationId,
+    neonProjectId: native.neonProjectId,
+    ownerId: access.scope.id,
+    resourceId: native.resourceId,
+    vercelProjectId: access.project.id,
+  };
+};
+
 const createAuthority = (
   input: Input<HostedOperatorEffectContext>,
   executionAttemptId?: string,
@@ -94,6 +189,11 @@ const createAuthority = (
     ) {
       throw fail();
     }
+    const bootstrapPhase = effect.effect.kind === "resources" && plan.action === "prepare";
+    const retirementPhase =
+      effect.effect.kind === "retire" &&
+      plan.action === "cleanup" &&
+      effect.effect.resourceId === plan.appDatabase.resourceId;
     const validPhase = [
       Date.parse(record.leaseExpiresAt) > now(),
       operator.operationRef === effect.operationRef,
@@ -101,8 +201,7 @@ const createAuthority = (
       operator.planDigest === planDigest,
       operatorPlanDigest(operator.plan) === planDigest,
       hostedRuntimeIdentity(effect.authority, record.request).digest === identity,
-      effect.effect.kind === "resources",
-      plan.action === "prepare",
+      bootstrapPhase || retirementPhase,
       plan.bootstrap !== undefined,
       [plan.authDatabase.resourceId, plan.appDatabase.resourceId].includes(
         effect.effect.resourceId ?? "",
@@ -116,7 +215,7 @@ const createAuthority = (
     assertPending(operator, effect.effect.id, executionAttemptId);
     const approval = await input.controlPlane.readApproval({
       ...effect,
-      action: "prepare",
+      action: plan.action,
       callId: record.approvedByCallId,
       planDigest,
     });
@@ -125,7 +224,7 @@ const createAuthority = (
       approval?.approvalId === operator.approvalId,
       approval?.callId === record.approvedByCallId,
       approval?.planDigest === planDigest,
-      approval?.action === "prepare",
+      approval?.action === plan.action,
     ];
     if (!approved.every(Boolean)) {
       throw fail();
@@ -158,94 +257,17 @@ const createAuthority = (
   return {
     assertApprovedScope,
     async readCurrentOwnerNativeStore(context, binding) {
-      if (
-        !sameStore(binding, expectedStore) ||
-        binding.sourceProjectId === effect.target.projectId
-      ) {
-        throw fail();
-      }
-      await assertPhase(context);
-      const readCredential = async () => {
-        await assertPhase(context);
-        const credential = await input.controlPlane.readCredential(
-          effect.authority,
-          effect.target.installationId,
-        );
-        if (
-          credential?.binding.active !== true ||
-          credential.binding.installationId !== effect.target.installationId ||
-          credential.binding.scopeId !== effect.target.scopeId ||
-          credential.binding.scopeType !== effect.target.scopeType
-        ) {
-          throw fail();
-        }
-        await assertPhase(context);
-        return credential;
-      };
-      const access = await readOwnerVercelProjectAccess({
-        authority: effect.authority,
-        fetch: input.fetch ?? fetch,
-        installationId: effect.target.installationId,
-        projectId: binding.sourceProjectId,
-        readCredential,
-      });
-      if (
-        access.status !== "ready" ||
-        access.project?.id !== binding.sourceProjectId ||
-        access.scope.id !== effect.target.scopeId ||
-        access.scope.type !== effect.target.scopeType
-      ) {
-        throw fail();
-      }
-      await assertPhase(context);
-      const native = await readVercelManagedNeonResource({
-        configurationId: binding.configurationId,
-        fail,
-        projectId: binding.sourceProjectId,
-        request: async (pathname) => {
-          await assertPhase(context);
-          const credential = await readCredential();
-          const url = new URL(pathname, "https://api.vercel.com");
-          if (effect.target.scopeType === "team") {
-            url.searchParams.set("teamId", effect.target.scopeId);
-          }
-          const response = await (input.fetch ?? fetch)(url, {
-            cache: "no-store",
-            headers: { Accept: "application/json", Authorization: `Bearer ${credential.token}` },
-            method: "GET",
-            redirect: "error",
-            signal: AbortSignal.timeout(20_000),
-          });
-          try {
-            if (!response.ok) {
-              throw fail();
-            }
-            const raw: unknown = await response.json();
-            const value = z.json().parse(raw);
-            await assertPhase(context);
-            return value;
-          } finally {
-            if (!response.bodyUsed) {
-              await response.body?.cancel();
-            }
-          }
+      return await readVerifiedOwnerNativeStore(
+        {
+          assertCurrentOwner: assertPhase,
+          fetch: input.fetch,
+          nativeStore: expectedStore,
+          neonProjectId: plan.neon.projectId,
+          readCredential: input.controlPlane.readCredential,
         },
-        scopeId: effect.target.scopeId,
-      });
-      if (
-        native.resourceId !== binding.resourceId ||
-        native.neonProjectId !== plan.neon.projectId
-      ) {
-        throw fail();
-      }
-      await assertPhase(context);
-      return {
-        configurationId: binding.configurationId,
-        neonProjectId: native.neonProjectId,
-        ownerId: access.scope.id,
-        resourceId: native.resourceId,
-        vercelProjectId: access.project.id,
-      };
+        context,
+        binding,
+      );
     },
   };
 };
@@ -259,3 +281,69 @@ export const createNativePreviewNeonExecutionAuthority = (
 export const createNativePreviewNeonReconciliationAuthority = (
   input: Input<HostedOperatorEffectContext>,
 ): Callbacks => createAuthority(input);
+
+/** Current-owner read-only planning has no approval/effect/worker attempt and never returns a SQL URI. */
+export const createNativePreviewNeonPlanningAuthority = (input: {
+  controlPlane: Pick<
+    Awaited<ReturnType<typeof createHostedOperatorControlPlane>>,
+    "assertPlanningAuthorized" | "readCredential"
+  >;
+  context: HostedOperatorContext;
+  nativeStore: Readonly<NativePreviewNeonStoreBinding>;
+  scope: Readonly<NativePreviewNeonScope>;
+  fetch?: typeof fetch;
+}) => {
+  const context = structuredClone({
+    authority: input.context.authority,
+    ownerContext: input.context.ownerContext,
+    target: input.context.target,
+  });
+  const scope = structuredClone(input.scope);
+  const nativeStore = structuredClone(input.nativeStore);
+  const assertCurrentOwner = async (requested: HostedOperatorContext) => {
+    if (
+      hostedRuntimeIdentity(requested.authority, requested.target).digest !==
+        hostedRuntimeIdentity(context.authority, context.target).digest ||
+      requested.target.environment !== "preview"
+    ) {
+      throw fail();
+    }
+    await input.controlPlane.assertPlanningAuthorized(requested);
+  };
+  return {
+    async assertPlanningScope(
+      requested: HostedOperatorContext,
+      requestedScope: NativePreviewNeonScope,
+    ) {
+      await assertCurrentOwner(requested);
+      const matches = [
+        requestedScope.projectId === scope.projectId,
+        requestedScope.branchId === scope.branchId,
+        requestedScope.endpointId === scope.endpointId,
+        requestedScope.hostname === scope.hostname,
+        requestedScope.maintenanceDatabase === scope.maintenanceDatabase,
+        requestedScope.maintenanceRole === scope.maintenanceRole,
+      ].every(Boolean);
+      if (!matches) {
+        throw fail();
+      }
+      await assertCurrentOwner(requested);
+    },
+    async readCurrentOwnerNativeStore(
+      requested: HostedOperatorContext,
+      binding: NativePreviewNeonStoreBinding,
+    ) {
+      return await readVerifiedOwnerNativeStore(
+        {
+          assertCurrentOwner,
+          fetch: input.fetch,
+          nativeStore,
+          neonProjectId: scope.projectId,
+          readCredential: input.controlPlane.readCredential,
+        },
+        requested,
+        binding,
+      );
+    },
+  };
+};

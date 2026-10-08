@@ -8,6 +8,7 @@ import {
   HostedOperatorError,
   hostedOperatorPlanSchema,
   operatorPublicResultSchema,
+  operatorAuthIdentityInputSchema,
   operatorRequestSchema,
   restrictedOperatorEnvironment,
   sameOperatorSelection,
@@ -71,6 +72,19 @@ export const createHostedOperatorClient = (input: {
     return value;
   };
   return {
+    async authIdentityInput(
+      request: Extract<OperatorRequest, { action: "auth-identity-input" }>,
+      signal?: AbortSignal,
+    ) {
+      const value = operatorAuthIdentityInputSchema.parse(await send(request, signal));
+      if (
+        value.operationRef !== request.operationRef ||
+        value.sessionId !== request.selection.sessionId
+      ) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      return value;
+    },
     async bindings(
       request: Extract<OperatorRequest, { action: "bindings" }>,
       signal?: AbortSignal,
@@ -98,7 +112,10 @@ export const createHostedOperatorClient = (input: {
         ),
       };
     },
-    async request(request: Exclude<OperatorRequest, { action: "bindings" }>, signal?: AbortSignal) {
+    async request(
+      request: Exclude<OperatorRequest, { action: "bindings" | "auth-identity-input" }>,
+      signal?: AbortSignal,
+    ) {
       return operatorPublicResultSchema.parse(await send(request, signal));
     },
     sessionId: input.sessionId,
