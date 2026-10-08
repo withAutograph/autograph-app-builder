@@ -162,6 +162,24 @@ const hostedOperatorPlanDataSchema = z.strictObject({
       builderCallbackOrigin: httpsPublicOrigin,
       catalogAppIds: z.array(id).min(1),
       operatorOrigin: httpsPublicOrigin,
+      readonlyAttesters: z
+        .strictObject({
+          builderProduction: z.strictObject({
+            audience: z.url(),
+            environment: z.literal("production"),
+            issuer: z.url(),
+            ownerId: id,
+            projectId: id,
+          }),
+          operatorPreview: z.strictObject({
+            audience: z.url(),
+            environment: z.literal("preview"),
+            issuer: z.url(),
+            ownerId: id,
+            projectId: id,
+          }),
+        })
+        .optional(),
       sourceWorkload: z.strictObject({
         audience: z.url(),
         environment: z.literal("preview"),
@@ -474,6 +492,11 @@ export const operatorRealmIdentityLinkSchema = z
     }
   });
 export type OperatorRealmIdentityLink = z.infer<typeof operatorRealmIdentityLinkSchema>;
+export const projectPendingRealmIdentityLink = (input: OperatorRealmIdentityLink) => {
+  const { sealedNonce, ...publicLink } = operatorRealmIdentityLinkSchema.parse(input);
+  void sealedNonce;
+  return publicLink;
+};
 export const operatorDeploymentCandidateSchema = z.strictObject({
   branch: id,
   deploymentId: id,
@@ -481,9 +504,9 @@ export const operatorDeploymentCandidateSchema = z.strictObject({
   origin: httpsPublicOrigin,
   projectId: id,
   projectName: id.optional(),
-  scopeSlug: id.optional(),
   readyState: id,
   repoId: id,
+  scopeSlug: id.optional(),
 });
 export type OperatorDeploymentCandidate = z.infer<typeof operatorDeploymentCandidateSchema>;
 export const operatorDeploymentCandidatesSchema = z.array(operatorDeploymentCandidateSchema);

@@ -4,6 +4,7 @@ import {
   hostedOperatorRecordSchema,
   operatorPlanDigest,
   operatorRealmIdentityLinkSchema,
+  projectPendingRealmIdentityLink,
 } from "./hosted-operator-contract";
 import { operatorArtifactReferenceSchema } from "./hosted-operator-artifact-store";
 
@@ -63,6 +64,14 @@ const plan = hostedOperatorPlanSchema.parse({
     builderCallbackOrigin: "https://builder.example.test",
     catalogAppIds: ["spend-review"],
     operatorOrigin: "https://operator.example",
+    sourceWorkload: {
+      audience: "https://vercel.com/fixture",
+      environment: "preview",
+      issuer: "https://oidc.vercel.com/fixture",
+      ownerId: "team",
+      projectId: "prj_gateway",
+      subject: "observed-fixture",
+    },
   },
   installer: { reference: "installer", sha256: "a".repeat(64) },
   neon: {
@@ -107,6 +116,13 @@ const record = () => ({
 });
 
 describe("owner-bound private Realm identity link contract", () => {
+  it("projects a refined valid pending link without invoking Zod omit or exposing encrypted nonce", () => {
+    const pending = operatorRealmIdentityLinkSchema.parse({
+      ...link,
+      sealedNonce: { encryptedToken: "cipher", keyVersion: "v1", tokenIv: "iv", tokenTag: "tag" },
+    });
+    expect(projectPendingRealmIdentityLink(pending)).toEqual(link);
+  });
   it("keeps source signer issuer distinct from actual endpoint and has no app grants", () => {
     expect(hostedOperatorRecordSchema.parse(record()).identityLink).toEqual(link);
     expect(

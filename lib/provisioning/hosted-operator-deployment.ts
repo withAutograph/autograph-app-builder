@@ -83,6 +83,7 @@ import {
   HostedOperatorError,
   operatorPlanDigest,
   operatorRealmIdentityLinkSchema,
+  projectPendingRealmIdentityLink,
 } from "./hosted-operator-contract";
 import {
   prepareHostedOperatorResourceCredentials,
@@ -903,7 +904,7 @@ export const createHostedOperatorControlPlane = async (input: {
             version: 1 as const,
           },
           jwksUrl: operator.plan.deploymentBoundary.verification.jwksUrl,
-          link: operatorRealmIdentityLinkSchema.omit({ sealedNonce: true }).parse(link),
+          link: projectPendingRealmIdentityLink(link),
         };
       },
       async readRealmIdentityLink(context: HostedOperatorContext) {
