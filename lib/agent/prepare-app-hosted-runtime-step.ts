@@ -115,7 +115,7 @@ export const prepareHostedRuntimeWithOperator = async (
       },
     };
   }
-}
+};
 
 // eslint-disable-next-line eslint/func-style, eslint/no-use-before-define -- Workflow SDK requires a hoisted top-level step declaration.
 export async function prepareHostedRuntimeStep(

@@ -1,9 +1,10 @@
 import type { ToolInputRequest } from "eve/tools";
-import type { OperatorPublicResult, HostedOperatorError } from "../provisioning/hosted-operator-contract";
+import type {
+  OperatorPublicResult,
+  HostedOperatorError,
+} from "../provisioning/hosted-operator-contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  prepareHostedRuntimeWithOperator,
-} from "../../agent/tools/prepare-app-hosted-runtime-step";
+import { prepareHostedRuntimeWithOperator } from "./prepare-app-hosted-runtime-step";
 import {
   hostedRuntimeApprovalInputSchema,
   realmIdentityInputQuestion,

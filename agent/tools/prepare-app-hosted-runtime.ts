@@ -3,8 +3,8 @@ import { defineWorkflowTool } from "eve/tools";
 import { always } from "eve/tools/approval";
 import { z } from "zod";
 
-import { prepareHostedRuntimeStep } from "./prepare-app-hosted-runtime-step";
-import type { HostedRuntimeApprovalEnvelope } from "./prepare-app-hosted-runtime-step";
+import { prepareHostedRuntimeStep } from "../../lib/agent/prepare-app-hosted-runtime-step";
+import type { HostedRuntimeApprovalEnvelope } from "../../lib/agent/prepare-app-hosted-runtime-step";
 
 export const hostedRuntimeApprovalInputSchema = z.strictObject({
   appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),

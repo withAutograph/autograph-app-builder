@@ -592,7 +592,8 @@ export const createHostedOperatorControlPlane = async (input: {
           link?.authResourceId === inputContext.plan.authDatabase.resourceId,
           link?.issuer === capturedMembership.identityVerification.issuer,
           link?.audience === capturedMembership.identityVerification.audience,
-          `${link?.endpointOrigin}/_platform/jwks.json` === capturedMembership.identityVerification.jwksUrl,
+          `${link?.endpointOrigin}/_platform/jwks.json` ===
+            capturedMembership.identityVerification.jwksUrl,
         ].every(Boolean);
         if (!matches) {
           throw new HostedOperatorError("auth_identity_required");
