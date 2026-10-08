@@ -39,6 +39,7 @@ import {
 } from "../lib/sandbox/hosted-toolchain";
 import { loopbackDevelopmentOrigin } from "../lib/mcp/browser-preview";
 import { rotateLocalEveCycleBinding } from "../lib/eve/local-cycle-binding";
+import { ensureLocalDevelopmentOidc } from "../lib/development/local-oidc-startup";
 
 const repositoryRoot = nodePath.resolve(".");
 const developmentTools = {
@@ -171,6 +172,15 @@ async function runEveCycle(input: {
   nextExited: Promise<{ kind: "next-exit" | "web-exit"; code: number }>;
 }) {
   input.signal.throwIfAborted();
+  // `mise run dev` refreshes once before the supervisor starts. Eve may be
+  // restarted much later, so recheck the same owner-bound project token before
+  // each child launch and refresh it only when the existing lifetime guard
+  // requires it.
+  ensureLocalDevelopmentOidc({
+    miseExecutable: requiredEnvironment("APP_BUILDER_DEV_MISE_BIN"),
+    repositoryRoot,
+    vercelExecutable: requiredEnvironment("APP_BUILDER_DEV_VERCEL_BIN"),
+  });
   // Every child gets a new restart generation. Next keeps its public local
   // session index, observes this marker on the next MCP request, and fences
   // any response stream owned by the child we are replacing.
