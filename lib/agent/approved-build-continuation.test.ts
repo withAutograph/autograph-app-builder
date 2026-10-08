@@ -42,7 +42,10 @@ const failed = {
   },
   workspace: { workspaceId: scope.workspaceId },
 } as unknown as Extract<AppBuilderWorkflowState, { phase: "validation_failed" }>;
-const decide = (state: AppBuilderWorkflowState = failed, changes: { blocked?: boolean; pendingInput?: boolean } = {}) =>
+const decide = (
+  state: AppBuilderWorkflowState = failed,
+  changes: { blocked?: boolean; pendingInput?: boolean } = {},
+) =>
   decideApprovedBuildContinuation({
     adapterSessionId: scope.sessionId,
     approvalMatches: (current) => {
