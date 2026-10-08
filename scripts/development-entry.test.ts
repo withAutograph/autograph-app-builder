@@ -33,6 +33,7 @@ describe("trusted local development entrypoint environment", () => {
             HOME: homedir(),
             LANG: "C",
             LC_ALL: "C",
+            NODE_ENV: "test",
             PATH: `${path.dirname(pinnedNode)}:/usr/bin:/bin`,
             TMPDIR: tmpdir(),
             TZ: "UTC",
