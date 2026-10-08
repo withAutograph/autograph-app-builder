@@ -1,12 +1,14 @@
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
 import type { SandboxSession } from "eve/sandbox";
+import path from "node:path";
 import { z } from "zod";
 
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { describeSelectedApp } from "@/lib/repository/app-description";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 import { resolvePreparedRuntimeExecution } from "@/lib/agent/prepared-runtime-execution";
+import { localRuntimeEnvironmentPath } from "@/lib/repository/runtime-environment";
 import type {
   PreparedRuntimeExecution,
   PreparedRuntimeExecutionContext,
@@ -87,7 +89,11 @@ export const prepareAppLocalPreview = async (input: {
     });
     const roles =
       description.backend.kind === "generated-postgres" ? description.backend.roles : [];
-    const env: Record<string, string> = {};
+    const env = {
+      APP_RUNTIME_STATE_DIR: path.posix.dirname(
+        localRuntimeEnvironmentPath(input.root, input.appId),
+      ),
+    };
     if (roles.length > 0) {
       env.APP_RUNTIME_ROLES = roles.join(",");
     }
