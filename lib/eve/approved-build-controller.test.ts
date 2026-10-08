@@ -1,5 +1,6 @@
 /* oxlint-disable anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- The fixture supplies only the controller transport ports; canonical reservations and delivery receipts use the real store. */
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { InMemoryHostedEveStore, toDurableHostedSessionRecord } from "./hosted-store";
 import { continueApprovedHostedBuild } from "./approved-build-controller";
 import { hostedEveOperationScopes } from "./hosted-auth";
@@ -201,6 +202,47 @@ describe("canonical approved private build continuation", () => {
       expect(f.sendAccepted).not.toHaveBeenCalled();
     },
   );
+  it("logs only closed decision metadata after the owner-scoped canonical read", async () => {
+    const f = await fixture();
+    await f.store.recordPrivateBuildDecision({
+      decision: { ...decision, decision: "blocked", workflowPhase: "private unexpected phase" },
+      principal,
+      sessionId: result.sessionId,
+    });
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      await continueApprovedHostedBuild(f);
+      const [[encoded]] = log.mock.calls;
+      const metadata = z.record(z.string(), z.unknown()).parse(JSON.parse(String(encoded)));
+      expect(metadata).toMatchObject({
+        decision: "blocked",
+        projectionPresent: true,
+        reason: "decision_not_runnable",
+        scopePresent: true,
+        workflowPhase: "unknown",
+      });
+      expect(Object.keys(metadata).toSorted()).toEqual([
+        "adapterGeneration",
+        "currentSpecPresent",
+        "decision",
+        "event",
+        "projectionPresent",
+        "reason",
+        "scopePresent",
+        "sessionIdentity",
+        "turnIdentity",
+        "workflowPhase",
+      ]);
+      expect(encoded).not.toContain(result.sessionId);
+      expect(encoded).not.toContain(decision.turnId);
+      expect(encoded).not.toContain(decision.scope.appSpecDigest);
+      expect(encoded).not.toContain(principal.ownerUserId);
+      expect(encoded).not.toContain("private unexpected phase");
+      expect(f.sendAccepted).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
   it("checks current owner and refuses a public/model forged internal marker", async () => {
     const f = await fixture();
     f.assertCurrentOwner.mockRejectedValue(new Error("owner revoked"));
