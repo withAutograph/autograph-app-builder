@@ -4,8 +4,7 @@
     "operator": {
       "root": "../../..",
       "framework": "node",
-      "entrypoint": "lib/provisioning/hosted-operator-function.ts",
-      "buildCommand": ""
+      "entrypoint": "lib/provisioning/hosted-operator-function.ts"
     }
   },
   "rewrites": [
