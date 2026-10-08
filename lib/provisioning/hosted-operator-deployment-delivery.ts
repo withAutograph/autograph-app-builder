@@ -258,6 +258,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
   return {
     async deliver(input: HostedOperatorDeploymentContext) {
       const reader = io(input);
+      await reader.assertCurrent();
       const prior = await reconcile(input);
       if (prior.status === "applied" || prior.status === "unknown") {
         return prior;
