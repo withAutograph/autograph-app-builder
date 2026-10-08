@@ -174,7 +174,11 @@ const fixture = () => {
       target: ["preview"],
       gitBranch: selection.branch,
       type: "plain",
-      value: [gateway.gatewayOrigin, gateway.publicOrigin].join(","),
+      value: [
+        gateway.gatewayOrigin,
+        "https://separately-approved.example.test",
+        gateway.publicOrigin,
+      ].join(","),
     },
     { id: "unrelated", key: "APP_TITLE", target: ["production"], type: "plain", value: "keep" },
   ];
@@ -304,6 +308,9 @@ it("binds only exact encrypted Gateway Preview Auth configuration and retains ex
     }),
   ).toBe(true);
   expect(f.rows.find((row) => row.id === "auth-secret")?.value).toBe("fixture-better-auth-secret");
+  expect(f.rows.find((row) => row.id === "trusted-origins")?.value).toContain(
+    "https://separately-approved.example.test",
+  );
   expect(f.requests.some((request) => request.path.endsWith("/auth-secret"))).toBe(false);
   expect(f.checkpointGatewayEnvironment).toHaveBeenCalledTimes(5);
   expect(f.readCredential).toHaveBeenCalledWith(authority, target.installationId);
@@ -382,6 +389,18 @@ it("does not treat a credential shared with Production as a Gateway Preview cred
     throw new Error("Missing fixture Auth secret");
   }
   secret.target = ["preview", "production"];
+  expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it("requires both approved Gateway and public-app origins while preserving unrelated authorized origins", async () => {
+  const f = fixture();
+  const trustedOrigins = f.rows.find((row) => row.id === "trusted-origins");
+  if (!trustedOrigins) {
+    throw new Error("Missing fixture trusted origins");
+  }
+  trustedOrigins.value = `${gateway.gatewayOrigin},https://separately-approved.example.test`;
   expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
   await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
   expect(f.requests.every((request) => request.method === "GET")).toBe(true);

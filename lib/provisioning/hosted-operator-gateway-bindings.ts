@@ -252,7 +252,6 @@ export const createHostedOperatorGatewayBindings = (deps: {
         ["BETTER_AUTH_URL", `${gateway.gatewayOrigin}/api/auth`],
         ["BETTER_AUTH_APP_NAME", "apps"],
         ["PLATFORM_PUBLIC_ORIGIN", gateway.gatewayOrigin],
-        ["PLATFORM_AUTH_TRUSTED_ORIGINS", [gateway.gatewayOrigin, gateway.publicOrigin].join(",")],
       ] as const) {
         const matches = byKey(key);
         if (matches.length !== 1) {
@@ -270,6 +269,31 @@ export const createHostedOperatorGatewayBindings = (deps: {
         if (actual.value !== expected) {
           throw unavailable();
         }
+      }
+      const trustedOriginRows = byKey("PLATFORM_AUTH_TRUSTED_ORIGINS");
+      if (trustedOriginRows.length !== 1) {
+        throw unavailable();
+      }
+      const trustedOriginRow = trustedOriginRows.at(0);
+      if (trustedOriginRow === undefined) {
+        throw unavailable();
+      }
+      const trustedOriginValues = new Set(
+        providerValue
+          .parse(
+            await request(
+              `/v1/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(trustedOriginRow.id)}`,
+            ),
+          )
+          .value.split(",")
+          .map((origin) => origin.trim())
+          .filter((origin) => origin.length > 0),
+      );
+      if (
+        !trustedOriginValues.has(gateway.gatewayOrigin) ||
+        !trustedOriginValues.has(gateway.publicOrigin)
+      ) {
+        throw unavailable();
       }
     };
     const expectedValues = async (rows: ProviderRow[]): Promise<GatewayValues> => {
