@@ -24,7 +24,7 @@ export const operatorArtifactUnavailable = () =>
 export const operatorArtifactReferenceSchema = z
   .string()
   .regex(
-    /^_protected-operator\/artifacts\/(?:generated-release|auth-plan)\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/[a-f0-9]{64}$/u,
+    /^_protected-operator\/artifacts\/(?:generated-release|auth-plan|realm-identity-proof)\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/[a-f0-9]{64}$/u,
   );
 export interface OperatorArtifactChunk {
   artifactRef: string;

@@ -17,6 +17,7 @@ import {
   HostedOperatorError,
   managedOperatorEnvironmentRowsSchema,
   operatorAuthSchemaPreparationSchema,
+  operatorDeploymentCandidatesSchema,
   hostedOperatorPlanSchema,
   operatorPlanDigest,
   operatorPublicResultSchema,
@@ -42,6 +43,7 @@ import type {
   WorkerEffectCheckpointFrame,
   ManagedOperatorEnvironmentRow,
   OperatorAuthSchemaPreparation,
+  OperatorDeploymentCandidate,
 } from "./hosted-operator-contract";
 
 export interface HostedOperatorContext {
@@ -56,12 +58,23 @@ type Effect = HostedOperatorPlan["effects"][number];
 export type HostedOperatorManagedEnvironmentContext = HostedOperatorEffectContext & {
   checkpointManagedEnvironment: (rows: readonly ManagedOperatorEnvironmentRow[]) => Promise<void>;
 };
+export type HostedOperatorDeploymentContext = HostedOperatorEffectContext & {
+  checkpointDelivery: (
+    candidates: readonly OperatorDeploymentCandidate[],
+    selectedId?: string,
+  ) => Promise<void>;
+};
 export type HostedOperatorEffectContext = Context & {
   effect: Effect;
   fenceGeneration: number;
   operationRef: string;
   plan: HostedOperatorPlan;
   privateState?: PrivateState;
+  deliveryCandidates?: OperatorDeploymentCandidate[];
+  checkpointDelivery?: (
+    candidates: readonly OperatorDeploymentCandidate[],
+    selectedId?: string,
+  ) => Promise<void>;
   managedEnvironment?: ManagedOperatorEnvironmentRow[];
   checkpointManagedEnvironment?: (rows: readonly ManagedOperatorEnvironmentRow[]) => Promise<void>;
   workerCheckpoints: WorkerEffectCheckpoint[];
@@ -238,6 +251,9 @@ const handlePlanOperation = async (
       const nextOperator: ReturnType<typeof requireOperator> = { ...operator };
       if (authStageCompleted) {
         nextOperator.authPreparation = record.operator.authPreparation;
+      }
+      if (record.operator.identityLink?.consumedAt !== undefined) {
+        nextOperator.identityLink = record.operator.identityLink;
       }
       if (
         authStageCompleted &&
@@ -561,6 +577,31 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                   await assertCurrent();
                   record = (await ownedUpdate((value) => ({ ...value, privateState }))).record;
                 },
+                checkpointDelivery: async (rows, selectedId) => {
+                  await assertCurrent();
+                  const candidates = operatorDeploymentCandidatesSchema.parse(rows);
+                  record = (
+                    await ownedUpdate((value) => {
+                      const prior = requireOperator(value);
+                      if (
+                        candidates.some(
+                          (candidate) =>
+                            candidate.operationRef !== operationRef &&
+                            !(prior.deliveryCandidates ?? []).some(
+                              (old) => JSON.stringify(old) === JSON.stringify(candidate),
+                            ),
+                        )
+                      ) {
+                        throw new HostedOperatorError("resource_mismatch");
+                      }
+                      const next = { ...prior, deliveryCandidates: candidates };
+                      if (selectedId !== undefined) {
+                        next.deliveredDeploymentId = selectedId;
+                      }
+                      return { ...value, operator: next };
+                    })
+                  ).record;
+                },
                 checkpointManagedEnvironment: async (rows) => {
                   await assertCurrent();
                   const managedEnvironment = managedOperatorEnvironmentRowsSchema.parse(rows);
@@ -584,6 +625,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                   ).record;
                   effectInput.managedEnvironment = requireOperator(record).managedEnvironment;
                 },
+                deliveryCandidates: requireOperator(record).deliveryCandidates,
                 effect,
                 fenceGeneration,
                 managedEnvironment: requireOperator(record).managedEnvironment,

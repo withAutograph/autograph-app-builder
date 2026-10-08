@@ -77,6 +77,18 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   action: z.enum(["prepare", "cleanup"]),
   appDatabase: databaseResource,
   authDatabase: databaseResource,
+  authMembership: z
+    .strictObject({
+      actorId: id,
+      bootstrapPlanDigest: digest,
+      identityNonceSha256: digest,
+      identityProof: z.strictObject({ reference: id, sha256: digest }),
+      kind: z.literal("create-owned-organization"),
+      name: id,
+      organizationId: id,
+      slug: id,
+    })
+    .optional(),
   authSchema: z
     .strictObject({
       artifactRef: id,
@@ -94,6 +106,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
     description: id,
     owner: id,
   }),
+  delivery: z.strictObject({ branch: id, projectId: id, repoId: id }).optional(),
   deploymentBoundary: deploymentBoundarySchema.optional(),
   effects: z
     .array(
@@ -104,7 +117,9 @@ const hostedOperatorPlanDataSchema = z.strictObject({
           "resources",
           "install",
           "access",
+          "auth-membership",
           "bindings",
+          "delivery",
           "revoke",
           "remove-bindings",
           "retire",
@@ -141,6 +156,16 @@ const validatePlanStage = (
   plan: z.infer<typeof hostedOperatorPlanDataSchema>,
   ctx: z.RefinementCtx,
 ) => {
+  if (
+    plan.delivery !== undefined &&
+    (plan.delivery.projectId !== plan.selection.projectId ||
+      plan.delivery.branch !== plan.selection.branch)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Deployment delivery must remain in the exact selected Preview project and branch.",
+    });
+  }
   if (plan.stage === AUTH_BOOTSTRAP_STAGE) {
     const invalid = [
       plan.action !== "prepare",
@@ -170,6 +195,23 @@ const validatePlanStage = (
       message: "Only the owned app resource may be retired; shared Auth is retained.",
     });
   }
+};
+const authorizationPhases = (plan: z.infer<typeof hostedOperatorPlanDataSchema>) => {
+  let phases = ["revoke", "remove-bindings", "retire"];
+  if (plan.action === "prepare") {
+    phases = ["resources", "install"];
+    if (plan.authMembership !== undefined) {
+      phases.push("auth-membership");
+    }
+    phases.push("access", "bindings");
+    if (plan.delivery !== undefined) {
+      phases.push("delivery");
+    }
+  }
+  if (plan.stage === AUTH_BOOTSTRAP_STAGE) {
+    phases = ["resources", "install"];
+  }
+  return phases;
 };
 export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine((plan, ctx) => {
   if ((plan.bootstrap === undefined) !== (plan.resourcesInstaller === undefined)) {
@@ -261,13 +303,7 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
   validatePlanStage(plan, ctx);
   // Each phase has an observed receipt, including a no-op verification for already-existing resources.
   // Authority is opened only after install/grant verification, and closed before retirement.
-  let phases = ["revoke", "remove-bindings", "retire"];
-  if (plan.action === "prepare") {
-    phases = ["resources", "install", "access", "bindings"];
-  }
-  if (plan.stage === AUTH_BOOTSTRAP_STAGE) {
-    phases = ["resources", "install"];
-  }
+  const phases = authorizationPhases(plan);
   const kinds = plan.effects.map((effect) => effect.kind);
   const groups = kinds.filter((kind, index) => index === 0 || kind !== kinds[index - 1]);
   if (JSON.stringify(groups) !== JSON.stringify(phases)) {
@@ -327,6 +363,44 @@ export const workerEffectCheckpointFrameSchema = z.strictObject({
   tenantId: id.nullable().optional(),
 });
 export type WorkerEffectCheckpointFrame = z.infer<typeof workerEffectCheckpointFrameSchema>;
+export const operatorRealmIdentityLinkSchema = z
+  .strictObject({
+    audience: httpsPublicOrigin,
+    authResourceId: id,
+    bootstrapPlanDigest: digest,
+    consumedAt: z.iso.datetime({ offset: true }).optional(),
+    endpointOrigin: httpsPublicOrigin,
+    expiresAt: z.iso.datetime({ offset: true }),
+    issuer: httpsPublicOrigin,
+    nonceSha256: digest,
+    organizationId: id.nullable(),
+    ownerSessionId: id,
+    proofRef: id.optional(),
+    proofSha256: digest.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (
+      (value.consumedAt === undefined) !== (value.proofRef === undefined) ||
+      (value.proofRef === undefined) !== (value.proofSha256 === undefined)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Captured Realm proof must be atomic with nonce consumption.",
+      });
+    }
+  });
+export type OperatorRealmIdentityLink = z.infer<typeof operatorRealmIdentityLinkSchema>;
+export const operatorDeploymentCandidateSchema = z.strictObject({
+  branch: id,
+  deploymentId: id,
+  operationRef: z.uuid(),
+  origin: httpsPublicOrigin,
+  projectId: id,
+  readyState: id,
+  repoId: id,
+});
+export type OperatorDeploymentCandidate = z.infer<typeof operatorDeploymentCandidateSchema>;
+export const operatorDeploymentCandidatesSchema = z.array(operatorDeploymentCandidateSchema);
 export const operatorAuthSchemaPreparationSchema = z.strictObject({
   assetSha256: digest,
   catalogFingerprint: digest,
@@ -346,25 +420,80 @@ export const managedOperatorEnvironmentRowSchema = z.strictObject({
 });
 export type ManagedOperatorEnvironmentRow = z.infer<typeof managedOperatorEnvironmentRowSchema>;
 export const managedOperatorEnvironmentRowsSchema = z.array(managedOperatorEnvironmentRowSchema);
-export const hostedOperatorRecordSchema = z
-  .strictObject({
-    approvalId: id.optional(),
-    authPreparation: operatorAuthSchemaPreparationSchema.optional(),
-    /** Shared across Auth and kernel rows; allocated once by the existing journal CAS. */
-    fenceGeneration: z.number().int().positive().optional(),
-    managedEnvironment: managedOperatorEnvironmentRowsSchema.optional(),
-    mode: z.literal("protected-operator-v1"),
-    operationRef: z.uuid(),
-    pendingEffectAttempt: z
-      .strictObject({ contextDigest: digest.optional(), id: z.uuid() })
-      .optional(),
-    pendingEffectId: id.optional(),
-    plan: hostedOperatorPlanSchema,
-    planDigest: digest,
-    receipts: z.array(operatorReceiptSchema),
-    workerCheckpoints: z.array(workerEffectCheckpointSchema).optional(),
-  })
-  .superRefine((operator, context) => {
+const hostedOperatorRecordDataSchema = z.strictObject({
+  approvalId: id.optional(),
+  authPreparation: operatorAuthSchemaPreparationSchema.optional(),
+  deliveredDeploymentId: id.optional(),
+  deliveryCandidates: operatorDeploymentCandidatesSchema.optional(),
+  /** Shared across Auth and kernel rows; allocated once by the existing journal CAS. */
+  fenceGeneration: z.number().int().positive().optional(),
+  identityLink: operatorRealmIdentityLinkSchema.optional(),
+  managedEnvironment: managedOperatorEnvironmentRowsSchema.optional(),
+  mode: z.literal("protected-operator-v1"),
+  operationRef: z.uuid(),
+  pendingEffectAttempt: z
+    .strictObject({ contextDigest: digest.optional(), id: z.uuid() })
+    .optional(),
+  pendingEffectId: id.optional(),
+  plan: hostedOperatorPlanSchema,
+  planDigest: digest,
+  receipts: z.array(operatorReceiptSchema),
+  workerCheckpoints: z.array(workerEffectCheckpointSchema).optional(),
+});
+// oxlint-disable-next-line eslint/complexity, sonarjs/expression-complexity -- Frozen identity link and actual delivered candidate identities require every exact binding.
+const validateOperatorMetadata = (
+  operator: z.infer<typeof hostedOperatorRecordDataSchema>,
+  context: z.RefinementCtx,
+) => {
+  const link = operator.identityLink;
+  if (link !== undefined) {
+    const matches = [
+      link.authResourceId === operator.plan.authDatabase.resourceId,
+      link.ownerSessionId === operator.plan.selection.sessionId,
+      link.issuer === operator.plan.deploymentBoundary?.verification.publicOrigin,
+      link.endpointOrigin === operator.plan.deploymentBoundary?.verification.gatewayOrigin,
+    ].every(Boolean);
+    if (!matches) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Realm identity link must match the owned Auth resource, exact issuer and canonical owner session.",
+      });
+    }
+  }
+  const candidates = operator.deliveryCandidates ?? [];
+  if (
+    new Set(candidates.map((value) => value.deploymentId)).size !== candidates.length ||
+    candidates.some(
+      (value) =>
+        value.projectId !== operator.plan.selection.projectId ||
+        value.branch !== operator.plan.selection.branch,
+    )
+  ) {
+    context.addIssue({
+      code: "custom",
+      message:
+        "Deployment candidates must remain within their approved project and Preview branch.",
+    });
+  }
+  if (
+    operator.deliveredDeploymentId !== undefined &&
+    !candidates.some(
+      (value) =>
+        value.deploymentId === operator.deliveredDeploymentId &&
+        value.readyState === "READY" &&
+        value.operationRef === operator.operationRef,
+    )
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "Only an observed READY deployment of this approved delivery may be selected.",
+    });
+  }
+};
+export const hostedOperatorRecordSchema = hostedOperatorRecordDataSchema.superRefine(
+  (operator, context) => {
+    validateOperatorMetadata(operator, context);
     const environmentRows = operator.managedEnvironment ?? [];
     const appKey = `${operator.plan.selection.appId.toUpperCase().replaceAll("-", "_")}_DATABASE_URL`;
     const ownedKeys = new Set([
@@ -414,7 +543,8 @@ export const hostedOperatorRecordSchema = z
         });
       }
     }
-  });
+  },
+);
 export const operatorPlanDigest = (input: HostedOperatorPlan) =>
   createHash("sha256")
     .update(JSON.stringify(hostedOperatorPlanSchema.parse(input)))
