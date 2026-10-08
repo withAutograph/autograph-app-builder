@@ -50,6 +50,9 @@ describe("separate native operator host", () => {
       operator: {
         entrypoint: "entrypoint.ts",
         framework: "hono",
+        functions: {
+          "entrypoint.ts": { includeFiles: "../../../node_modules/eve/**" },
+        },
         root: ".",
       },
     });
