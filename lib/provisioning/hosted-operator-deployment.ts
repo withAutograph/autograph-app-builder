@@ -86,6 +86,10 @@ import type {
   HostedRuntimeJournalRow,
   HostedRuntimeJournalStore,
 } from "./hosted-runtime-journal";
+import { createPostgresOperatorArtifactStore } from "./hosted-operator-artifact-store";
+import type { OperatorArtifactContext } from "./hosted-operator-artifact-store";
+import { createPostgresOperatorArtifactSelections } from "./hosted-operator-artifact-selection";
+import { createOperatorArtifactPublication } from "./hosted-operator-artifacts";
 import { createPostgresHostedRuntimeJournalStore } from "./postgres-hosted-runtime-journal";
 import { createPostgresHostedOperatorResourceLease } from "./postgres-hosted-operator-resource-lease";
 
@@ -362,6 +366,29 @@ export const createHostedOperatorControlPlane = async (input: {
       workloadPolicy: input.workloadPolicy,
     });
 
+    const ownedArtifacts = (inputContext: HostedOperatorContext) => {
+      const context = structuredClone(inputContext);
+      const artifactContext: OperatorArtifactContext = {
+        authority: context.authority,
+        target: { appId: context.target.appId, sessionId: context.target.sessionId },
+      };
+      const assertCurrentOwner = async (requested: OperatorArtifactContext) => {
+        if (JSON.stringify(requested) !== JSON.stringify(artifactContext)) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        await owner.assertPlanningAuthorized(context);
+      };
+      const artifactStore = createPostgresOperatorArtifactStore({ assertCurrentOwner, database });
+      return {
+        context: artifactContext,
+        publication: createOperatorArtifactPublication({
+          assertCurrentOwner,
+          store: artifactStore,
+        }),
+        selections: createPostgresOperatorArtifactSelections({ assertCurrentOwner, database }),
+      };
+    };
+
     const operatorIdentity = createVercelWorkloadIdentity();
     const eveObserver = createSameOriginEveTransport({
       config: { baseUrl: new URL(config.resource).origin },
@@ -462,6 +489,19 @@ export const createHostedOperatorControlPlane = async (input: {
       readApproval,
       readCredential,
       readCurrentPlanningOwner: owner.readCurrentPlanningOwner,
+      async readGeneratedRelease(
+        context: HostedOperatorContext,
+        selection: Parameters<
+          ReturnType<typeof createOperatorArtifactPublication>["readGeneratedRelease"]
+        >[1],
+      ) {
+        const artifacts = ownedArtifacts(context);
+        return await artifacts.publication.readGeneratedRelease(artifacts.context, selection);
+      },
+      async readGeneratedSelection(context: HostedOperatorContext, appSpecDigest: string) {
+        const artifacts = ownedArtifacts(context);
+        return await artifacts.selections.read(artifacts.context, appSpecDigest);
+      },
       async readResourceBindings(effectInput: ResourceCredentialEffect | ResourceBindingContext) {
         if (effectInput.plan.action !== "prepare") {
           throw new HostedOperatorError("authorization_required");
