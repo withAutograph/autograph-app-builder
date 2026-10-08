@@ -85,3 +85,10 @@ export const discardPendingPrivateApplyApproval = (callId: string): void => {
     }));
   }
 };
+
+/** Private build artifacts require the same actual Eve session and approved scope; no provider grant is implied. */
+export const assertApprovedPrivateApplySession = (scope: PrivateApplyScope): void => {
+  if (!sameScope(authority.get().grant, scope)) {
+    throw new Error("Private artifact capture no longer belongs to this approved build session.");
+  }
+};

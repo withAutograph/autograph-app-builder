@@ -26,6 +26,17 @@ export const compiledOperatorReleaseSelectionSchema = z.strictObject({
 export type CompiledOperatorReleaseSelection = z.infer<
   typeof compiledOperatorReleaseSelectionSchema
 >;
+export interface OperatorArtifactSelections {
+  read: (
+    context: OperatorArtifactContext,
+    appSpecDigest: string,
+  ) => Promise<CompiledOperatorReleaseSelection | undefined>;
+  record: (
+    context: OperatorArtifactContext,
+    callId: string,
+    selection: CompiledOperatorReleaseSelection,
+  ) => Promise<CompiledOperatorReleaseSelection>;
+}
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const scoped = (context: OperatorArtifactContext, appSpecDigest: string) => ({
   ...hostedTenantAuthoritySchema.parse(context.authority),
@@ -47,7 +58,7 @@ const predicate = (scope: ReturnType<typeof scoped>) =>
 export const createPostgresOperatorArtifactSelections = (input: {
   database: PostgresJsDatabase<typeof databaseSchema>;
   assertCurrentOwner: (context: OperatorArtifactContext) => Promise<void>;
-}) => ({
+}): OperatorArtifactSelections => ({
   async read(
     context: OperatorArtifactContext,
     appSpecDigest: string,

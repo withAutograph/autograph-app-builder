@@ -1,6 +1,11 @@
 import path from "node:path";
 import type { SandboxSession } from "eve/sandbox";
 import { appBuilderWorkflowState } from "./workflow-state";
+import { assertApprovedPrivateApplySession } from "./private-apply-authority";
+import {
+  createLocalOperatorArtifactStorage,
+  readLocalOperatorArtifactAuthority,
+} from "../provisioning/local-operator-artifact-store";
 import { draftReconciliationState } from "./draft-reconciliation-state";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { resolveHostedOperatorOwnerContext } from "../provisioning/hosted-operator-owner-context";
@@ -81,29 +86,60 @@ export const publishCompiledOperatorArtifactsForSession = async (input: {
 }) => {
   assertApprovedCompilation(input);
   const relativeRoot = compiledArtifactSandboxRelativePath(input.root);
-  const { authority, principal } = exactForwardedSessionAuthority(input.sessionAuth);
-  const resolve = async () =>
-    await resolveHostedOperatorOwnerContext({
-      adapterSessionId: input.adapterSessionId,
-      authority,
-      environment: process.env,
-      principal,
-      sessionAuth: input.sessionAuth,
-    });
-  const owner = await resolve();
-  const context: OperatorArtifactContext = {
-    authority: owner.authority,
-    target: { appId: input.appId, sessionId: owner.sessionId },
-  };
-  const assertCurrentOwner = async (current: OperatorArtifactContext) => {
-    assertApprovedCompilation(input);
-    if (
-      JSON.stringify(current) !== JSON.stringify(context) ||
-      JSON.stringify(await resolve()) !== JSON.stringify(owner)
-    ) {
-      throw operatorArtifactUnavailable();
-    }
-  };
+  const localAuthority = await readLocalOperatorArtifactAuthority();
+  let context: OperatorArtifactContext;
+  let assertCurrentOwner: (current: OperatorArtifactContext) => Promise<void>;
+  if (localAuthority === undefined) {
+    const { authority, principal } = exactForwardedSessionAuthority(input.sessionAuth);
+    const resolve = async () =>
+      await resolveHostedOperatorOwnerContext({
+        adapterSessionId: input.adapterSessionId,
+        authority,
+        environment: process.env,
+        principal,
+        sessionAuth: input.sessionAuth,
+      });
+    const owner = await resolve();
+    context = {
+      authority: owner.authority,
+      target: { appId: input.appId, sessionId: owner.sessionId },
+    };
+    assertCurrentOwner = async (current) => {
+      assertApprovedCompilation(input);
+      if (
+        JSON.stringify(current) !== JSON.stringify(context) ||
+        JSON.stringify(await resolve()) !== JSON.stringify(owner)
+      ) {
+        throw operatorArtifactUnavailable();
+      }
+    };
+  } else {
+    context = {
+      authority: localAuthority,
+      target: { appId: input.appId, sessionId: input.adapterSessionId },
+    };
+    assertCurrentOwner = async (current) => {
+      assertApprovedCompilation(input);
+      const state = appBuilderWorkflowState.get();
+      if (!("applyReceipt" in state)) {
+        throw operatorArtifactUnavailable();
+      }
+      assertApprovedPrivateApplySession({
+        appId: input.appId,
+        appSpecDigest: input.appSpecDigest,
+        proposalDigest: state.proposal.digest,
+        sessionId: input.adapterSessionId,
+        workspaceId: state.workspace.workspaceId,
+      });
+      if (
+        JSON.stringify(current) !== JSON.stringify(context) ||
+        JSON.stringify(await readLocalOperatorArtifactAuthority()) !==
+          JSON.stringify(localAuthority)
+      ) {
+        throw operatorArtifactUnavailable();
+      }
+    };
+  }
   await assertCurrentOwner(context);
   const description = await describeSelectedApp({
     appId: input.appId,
@@ -115,18 +151,33 @@ export const publishCompiledOperatorArtifactsForSession = async (input: {
   if (description.backend.kind === "static") {
     return { status: "not-required" as const };
   }
-  database ??= openArtifactDatabase();
-  const pendingDatabase = database;
-  let opened: Awaited<typeof pendingDatabase>;
-  try {
-    opened = await pendingDatabase;
-  } catch {
-    database = null;
-    throw operatorArtifactUnavailable();
+  let storage: Awaited<ReturnType<typeof createLocalOperatorArtifactStorage>>;
+  if (localAuthority === undefined) {
+    database ??= openArtifactDatabase();
+    const pendingDatabase = database;
+    let opened: Awaited<typeof pendingDatabase>;
+    try {
+      opened = await pendingDatabase;
+    } catch {
+      database = null;
+      throw operatorArtifactUnavailable();
+    }
+    storage = {
+      selections: createPostgresOperatorArtifactSelections({
+        assertCurrentOwner,
+        database: opened,
+      }),
+      store: createPostgresOperatorArtifactStore({ assertCurrentOwner, database: opened }),
+    };
+  } else {
+    storage = await createLocalOperatorArtifactStorage({
+      assertCurrentOwner,
+      authority: localAuthority,
+    });
   }
   const publication = createOperatorArtifactPublication({
     assertCurrentOwner,
-    store: createPostgresOperatorArtifactStore({ assertCurrentOwner, database: opened }),
+    store: storage.store,
   });
   const captured = await publication.publishGeneratedRelease({
     context,
@@ -147,10 +198,7 @@ export const publishCompiledOperatorArtifactsForSession = async (input: {
   });
   // Read every completed immutable member before recording a planner-visible selection.
   await publication.readGeneratedRelease(context, captured);
-  const selection = await createPostgresOperatorArtifactSelections({
-    assertCurrentOwner,
-    database: opened,
-  }).record(context, input.callId, {
+  const selection = await storage.selections.record(context, input.callId, {
     ...captured,
     appId: input.appId,
     appSpecDigest: input.appSpecDigest,

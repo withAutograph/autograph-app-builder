@@ -9,8 +9,13 @@ import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import type { HostedOperatorContext } from "./hosted-operator-service";
 
 /** Build artifact authority needs no provider project or deployment grant. */
+export interface LocalOperatorArtifactAuthority {
+  kind: "local";
+  ownerUid: number;
+  stateRoot: string;
+}
 export interface OperatorArtifactContext {
-  authority: HostedOperatorContext["authority"];
+  authority: HostedOperatorContext["authority"] | LocalOperatorArtifactAuthority;
   target: Pick<HostedOperatorContext["target"], "appId" | "sessionId">;
 }
 

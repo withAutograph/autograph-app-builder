@@ -1,5 +1,5 @@
 /* oxlint-disable anti-slop/no-module-mocking, anti-slop/require-safety-comment-for-type-assertion, anti-slop/no-unknown-returns, anti-slop/no-unsafe-dictionary-type, eslint/require-await, typescript/no-unsafe-type-assertion -- Controlled Eve/owner/DB ports isolate the production capture hook; real PostgreSQL storage has its separate owned fixture. */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import {
   compiledArtifactSandboxRelativePath,
@@ -7,6 +7,15 @@ import {
 } from "./compiled-operator-artifacts";
 import type { OperatorArtifactContext } from "../provisioning/hosted-operator-artifact-store";
 import type { CompiledOperatorReleaseSelection } from "../provisioning/hosted-operator-artifact-selection";
+import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
+import path from "node:path";
+import { tmpdir } from "node:os";
+// oxlint-disable-next-line sonarjs/no-internal-api-use -- Actual local Eve authority is exercised only in this fixture, never through product imports.
+import {
+  ContextContainer,
+  contextStorage,
+} from "../../node_modules/eve/dist/src/context/container.js";
+import { requestPrivateApplyApproval, recordApprovedPrivateApply } from "./private-apply-authority";
 import { GENERATED_RELEASE_MEMBERS } from "../provisioning/hosted-operator-sandbox-launcher";
 
 const mocks = vi.hoisted(() => ({
@@ -48,9 +57,11 @@ vi.mock("../provisioning/hosted-operator-artifact-store", async (importOriginal)
     },
   }),
 }));
-vi.mock("../provisioning/hosted-operator-artifact-selection", () => ({
+vi.mock("../provisioning/hosted-operator-artifact-selection", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   createPostgresOperatorArtifactSelections: () => ({ record: mocks.record }),
 }));
+
 const digest = "a".repeat(64);
 const authority = {
   audience: "https://builder.example/mcp",
@@ -108,6 +119,9 @@ const frame = () => {
   };
 };
 describe("owned compiled artifact workflow hook", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.rows.clear();
@@ -200,6 +214,58 @@ describe("owned compiled artifact workflow hook", () => {
     await expect(publishCompiledOperatorArtifactsForSession(input)).rejects.toThrow();
     expect(mocks.record).not.toHaveBeenCalled();
     expect(mocks.rows.size).toBe(0);
+  });
+  it("normal developer profile captures through actual private files and Eve approval without hosted auth or DB", async () => {
+    const stateRoot = await realpath(
+      await mkdtemp(path.join(tmpdir(), "developer-compiled-artifact-")),
+    );
+    try {
+      const runsRoot = path.join(stateRoot, "runs");
+      await mkdir(runsRoot, { mode: 0o700 });
+      for (const [name, value] of Object.entries({
+        APP_BUILDER_DEV_RUNS_ROOT: runsRoot,
+        APP_BUILDER_EXECUTION_BUNDLE: "local-development",
+        APP_BUILDER_EXECUTION_MODE: "development",
+        APP_BUILDER_LOCAL_ADAPTER: "1",
+        APP_BUILDER_SANDBOX_PROVIDER: "vercel",
+        EVE_HOSTED_ADAPTER: "0",
+      })) {
+        vi.stubEnv(name, value);
+      }
+      mocks.state = {
+        ...mocks.state,
+        proposal: { digest: "approved-proposal" },
+        workspace: { workspaceId: "private-workspace" },
+      };
+      const input = { ...frame(), sessionAuth: null };
+      const scope = {
+        appId: input.appId,
+        appSpecDigest: input.appSpecDigest,
+        proposalDigest: "approved-proposal",
+        sessionId: input.adapterSessionId,
+        workspaceId: "private-workspace",
+      };
+      await contextStorage.run(new ContextContainer(), async () => {
+        requestPrivateApplyApproval(scope, "approve");
+        recordApprovedPrivateApply(scope, "approve");
+        const result = await publishCompiledOperatorArtifactsForSession(input);
+        expect(result.status).toBe("published");
+        expect(input.sandbox.readBinaryFile).toHaveBeenCalledTimes(
+          GENERATED_RELEASE_MEMBERS.length,
+        );
+        await expect(
+          publishCompiledOperatorArtifactsForSession({
+            ...input,
+            adapterSessionId: "other-session",
+          }),
+        ).rejects.toThrow();
+      });
+      expect(mocks.resolve).not.toHaveBeenCalled();
+      expect(mocks.record).not.toHaveBeenCalled();
+      expect(mocks.rows.size).toBe(0);
+    } finally {
+      await rm(stateRoot, { force: true, recursive: true });
+    }
   });
   it("rejects paths escaping the approved sandbox workspace", () => {
     expect(compiledArtifactSandboxRelativePath("/workspace/.app-builder/candidate")).toBe(
