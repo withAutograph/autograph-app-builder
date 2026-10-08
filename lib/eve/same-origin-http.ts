@@ -1020,11 +1020,12 @@ export function createSameOriginEveTransport(input: {
   };
   return {
     observeStarted(request) {
+      // Public observation catches up to the opened durable tail; it never waits for a long-running turn.
       return observeSameOriginEveStream({
         ...common,
         onEvent: request.onEvent,
         onPrivateEvent: request.onPrivateEvent,
-        readDeadline: request.readDeadline,
+        readDeadline: request.readDeadline ?? true,
         sessionId: request.adapterSessionId,
       });
     },
@@ -1045,7 +1046,7 @@ export function createSameOriginEveTransport(input: {
               ...common,
               onEvent: request.onEvent,
               onPrivateEvent: request.onPrivateEvent,
-              readDeadline: request.readDeadline,
+              readDeadline: request.readDeadline ?? true,
               sessionId: request.adapterSessionId,
             });
           },
