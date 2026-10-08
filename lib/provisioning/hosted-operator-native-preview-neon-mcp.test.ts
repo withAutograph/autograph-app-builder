@@ -297,6 +297,9 @@ const fixture = () => {
   const approved = vi.fn(async () => {
     await Promise.resolve();
   });
+  const planning = vi.fn(async () => {
+    await Promise.resolve();
+  });
   const owner = vi.fn(async () => {
     await Promise.resolve();
     return {
@@ -335,8 +338,10 @@ const fixture = () => {
   return {
     approved,
     owner,
+    planning,
     reader: createPreviewNeonMcpReader({
       assertApprovedScope: approved,
+      assertPlanningScope: planning,
       configuration,
       io,
       readCurrentOwnerNativeStore: owner,
@@ -344,6 +349,30 @@ const fixture = () => {
   };
 };
 describe("private Preview Neon OAuth MCP credentials", () => {
+  it("reads planning metadata through the actual broker without an approved SQL effect or URI acquisition", async () => {
+    const f = fixture();
+    expect(await f.reader.inspectPlanningTarget(context, scope)).toEqual({
+      initSource: "schema-only",
+      scope,
+    });
+    expect(f.planning).toHaveBeenCalled();
+    expect(f.approved).not.toHaveBeenCalled();
+    expect(called.map((value) => value.name)).toEqual([
+      "describe_project",
+      "get_branch",
+      "get_postgres_endpoint",
+      "get_postgres_database",
+      "get_postgres_role",
+    ]);
+  });
+  it("denies planning when actual current-owner scope is revoked before tools", async () => {
+    const f = fixture();
+    f.planning.mockRejectedValue(new Error("revoked"));
+    await expect(f.reader.inspectPlanningTarget(context, scope)).rejects.toThrow();
+    expect(called).toHaveLength(0);
+    expect(f.approved).not.toHaveBeenCalled();
+  });
+
   it("uses actual Connect authProvider and MCP HTTPS client with exact private named tool arguments", async () => {
     const f = fixture();
     const consume = vi.fn(async (material: { maintenanceUrl: string }) => {

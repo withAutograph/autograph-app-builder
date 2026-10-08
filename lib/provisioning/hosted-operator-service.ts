@@ -1,4 +1,4 @@
-/* oxlint-disable eslint/no-await-in-loop, eslint/no-loop-func, sonarjs/no-nested-functions, eslint/complexity, sonarjs/expression-complexity, unicorn/no-await-expression-member, eslint/prefer-destructuring -- Effects, fences and journal checkpoints are deliberately sequential inside one resource lease. */
+/* oxlint-disable eslint/no-await-in-loop, eslint/no-loop-func, sonarjs/no-nested-functions, eslint/complexity, sonarjs/expression-complexity, sonarjs/cognitive-complexity, unicorn/no-await-expression-member, eslint/prefer-destructuring -- Effects, fences and journal checkpoints are deliberately sequential inside one resource lease. */
 import { randomUUID } from "node:crypto";
 import type { z } from "zod";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
@@ -15,10 +15,14 @@ import type {
 } from "./hosted-runtime-journal";
 import {
   HostedOperatorError,
+  managedOperatorEnvironmentRowsSchema,
+  operatorAuthSchemaPreparationSchema,
+  operatorDeploymentCandidatesSchema,
   hostedOperatorPlanSchema,
   operatorPlanDigest,
   operatorPublicResultSchema,
   operatorReceiptSchema,
+  operatorAuthIdentityInputSchema,
   operatorRequestSchema,
   restrictedOperatorEnvironment,
   sameOperatorSelection,
@@ -38,6 +42,9 @@ import type {
   WorkerContextBinding,
   WorkerEffectCheckpoint,
   WorkerEffectCheckpointFrame,
+  ManagedOperatorEnvironmentRow,
+  OperatorAuthSchemaPreparation,
+  OperatorDeploymentCandidate,
 } from "./hosted-operator-contract";
 
 export interface HostedOperatorContext {
@@ -45,15 +52,55 @@ export interface HostedOperatorContext {
   target: HostedRuntimeTarget;
   ownerContext?: OperatorOwnerContext;
 }
+const AUTH_BOOTSTRAP_STAGE = "auth-bootstrap";
 type Context = HostedOperatorContext;
 type PrivateState = NonNullable<HostedRuntimeJournalRecord["privateState"]>;
 type Effect = HostedOperatorPlan["effects"][number];
+export type HostedOperatorManagedEnvironmentContext = HostedOperatorEffectContext & {
+  checkpointManagedEnvironment: (rows: readonly ManagedOperatorEnvironmentRow[]) => Promise<void>;
+};
+export type GatewayManagedEnvironmentContext = HostedOperatorEffectContext & {
+  gateway: {
+    authBrowserOrigin: string;
+    branch: string;
+    builderCallbackOrigin: string;
+    catalogAppIds: readonly string[];
+    gatewayOrigin: string;
+    operatorOrigin: string;
+    projectId: string;
+    publicOrigin: string;
+    readonlyAttesters?: NonNullable<HostedOperatorPlan["gatewayBindings"]>["readonlyAttesters"];
+    sourceWorkload: NonNullable<HostedOperatorPlan["gatewayBindings"]>["sourceWorkload"];
+  };
+  gatewayEnvironmentRows?: ManagedOperatorEnvironmentRow[];
+  checkpointGatewayEnvironment: (rows: readonly ManagedOperatorEnvironmentRow[]) => Promise<void>;
+};
+export type HostedOperatorDeploymentContext = HostedOperatorEffectContext & {
+  checkpointDelivery: (
+    candidates: readonly OperatorDeploymentCandidate[],
+    selectedId?: string,
+  ) => Promise<void>;
+};
 export type HostedOperatorEffectContext = Context & {
   effect: Effect;
   fenceGeneration: number;
   operationRef: string;
   plan: HostedOperatorPlan;
   privateState?: PrivateState;
+  deliveryCandidates?: OperatorDeploymentCandidate[];
+  gatewayDeliveryCandidates?: OperatorDeploymentCandidate[];
+  checkpointGatewayDelivery?: (
+    candidates: readonly OperatorDeploymentCandidate[],
+    selectedId?: string,
+  ) => Promise<void>;
+  checkpointDelivery?: (
+    candidates: readonly OperatorDeploymentCandidate[],
+    selectedId?: string,
+  ) => Promise<void>;
+  gatewayEnvironmentRows?: ManagedOperatorEnvironmentRow[];
+  checkpointGatewayEnvironment?: (rows: readonly ManagedOperatorEnvironmentRow[]) => Promise<void>;
+  managedEnvironment?: ManagedOperatorEnvironmentRow[];
+  checkpointManagedEnvironment?: (rows: readonly ManagedOperatorEnvironmentRow[]) => Promise<void>;
   workerCheckpoints: WorkerEffectCheckpoint[];
   assertCurrent: () => Promise<void>;
   checkpoint: (state: PrivateState) => Promise<void>;
@@ -98,7 +145,11 @@ export interface ProtectedHostedOperatorDependencies {
   /** Inspect uncertain effects on the same frozen identities before retry. Unknown must never become absent. */
   reconcile: (
     input: HostedOperatorEffectContext,
-  ) => Promise<{ status: "absent" | "unknown" } | { status: "applied"; receipt: OperatorReceipt }>;
+  ) => Promise<
+    | { status: "absent" | "unknown" }
+    | { status: "retryable"; resourceVersion: string }
+    | { status: "applied"; receipt: OperatorReceipt }
+  >;
   /** Pinned trusted installer + verified declarative artifact only. Guard immediately before every effect; checkpoint credentials before allocation. */
   executeEffect: (input: HostedOperatorWorkerEffectContext) => Promise<OperatorReceipt>;
   /** Independently read installed identities/release/provider bindings, with no mutation. */
@@ -106,6 +157,16 @@ export interface ProtectedHostedOperatorDependencies {
     input: Context & { plan: HostedOperatorPlan; privateState?: PrivateState },
   ) => Promise<z.infer<typeof hostedRuntimeProofSchema>>;
   /** Decrypt only inside this operator; return the strict runtime environment projection. */
+  verifyAuthReadiness?: (
+    input: Context & {
+      plan: HostedOperatorPlan;
+      privateState?: PrivateState;
+      assertCurrent: () => Promise<void>;
+    },
+  ) => Promise<OperatorAuthSchemaPreparation>;
+  authIdentityInput?: (
+    input: Context & { operationRef: string; plan: HostedOperatorPlan },
+  ) => Promise<z.infer<typeof operatorAuthIdentityInputSchema>>;
   bindings: (
     input: Context & { plan: HostedOperatorPlan; privateState?: PrivateState },
   ) => Promise<Record<string, string>>;
@@ -128,6 +189,7 @@ const assertUnexpired = (plan: HostedOperatorPlan, now: number) => {
 const requireOperator = (record: HostedRuntimeJournalRecord) =>
   hostedOperatorRecordSchema.parse(record.operator);
 type OperatorHttpResponse =
+  | z.infer<typeof operatorAuthIdentityInputSchema>
   | OperatorPublicResult
   | { code: "not_found" }
   | {
@@ -190,11 +252,22 @@ const handlePlanOperation = async (
       if (record.operator.planDigest === planDigest) {
         return record;
       }
+      const authStageCompleted =
+        record.operator.plan.stage === AUTH_BOOTSTRAP_STAGE &&
+        record.operator.authPreparation !== undefined &&
+        record.operator.pendingEffectId === undefined &&
+        record.operator.pendingEffectAttempt === undefined &&
+        record.operator.plan.effects.every(
+          (effect) =>
+            record.operator?.receipts.some((receipt) => receipt.effectId === effect.id) === true,
+        );
       if (
         record.leaseId !== undefined ||
         record.operator.pendingEffectId !== undefined ||
         record.operator.pendingEffectAttempt !== undefined ||
-        (record.operator.receipts.length > 0 && !["prepared", "cleaned"].includes(record.status))
+        (record.operator.receipts.length > 0 &&
+          !["prepared", "cleaned"].includes(record.status) &&
+          !authStageCompleted)
       ) {
         throw new HostedOperatorError("operation_in_progress");
       }
@@ -207,11 +280,45 @@ const handlePlanOperation = async (
         throw new HostedOperatorError("resource_mismatch");
       }
       // Same-resource release changes keep credentials; old proof never attests the new plan.
+      const nextOperator: ReturnType<typeof requireOperator> = { ...operator };
+      if (authStageCompleted) {
+        nextOperator.authPreparation = record.operator.authPreparation;
+      }
+      nextOperator.deliveryCandidates = record.operator.deliveryCandidates;
+      nextOperator.gatewayDeliveryCandidates = record.operator.gatewayDeliveryCandidates;
+      nextOperator.deliveredGatewayDeploymentId = record.operator.deliveredGatewayDeploymentId;
+      if (record.operator.gatewayEnvironment !== undefined) {
+        nextOperator.gatewayEnvironment = record.operator.gatewayEnvironment;
+      }
+      if (record.operator.identityLink?.consumedAt !== undefined) {
+        nextOperator.identityLink = record.operator.identityLink;
+      }
+      if (
+        authStageCompleted &&
+        record.operator.plan.authSchema?.targetDigest === plan.authSchema?.targetDigest
+      ) {
+        nextOperator.receipts = record.operator.receipts.filter((receipt) => {
+          const priorEffect = record.operator?.plan.effects.find(
+            (effect) => effect.id === receipt.effectId,
+          );
+          const nextEffect = plan.effects.find((effect) => effect.id === receipt.effectId);
+          return (
+            priorEffect !== undefined &&
+            nextEffect !== undefined &&
+            ["resources", "install"].includes(priorEffect.kind) &&
+            priorEffect.kind === nextEffect.kind &&
+            priorEffect.resourceId === nextEffect.resourceId
+          );
+        });
+      }
+      if (record.operator.managedEnvironment !== undefined) {
+        nextOperator.managedEnvironment = record.operator.managedEnvironment;
+      }
       const next = {
         ...record,
         approvedByCallId: "operator:unapproved-plan",
         environmentBound: false,
-        operator,
+        operator: nextOperator,
         status: "pending" as const,
         step: "reserved" as const,
       };
@@ -359,19 +466,37 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       }
       const { plan, planDigest, operationRef } = operator;
       await deps.assertAuthorized({ ...context, plan });
-      const publicStatus = (record: HostedRuntimeJournalRecord): OperatorPublicResult => ({
-        appId,
-        authenticatedBehavior: "unassessed",
-        operationRef,
-        planDigest,
-        status:
-          record.status === "prepared" || record.status === "cleaned" ? record.status : "pending",
-      });
+      const publicStatus = (record: HostedRuntimeJournalRecord): OperatorPublicResult => {
+        let status: OperatorPublicResult["status"] = "pending";
+        if (record.status === "prepared" || record.status === "cleaned") {
+          status = record.status;
+        }
+        if (
+          operator.plan.stage === AUTH_BOOTSTRAP_STAGE &&
+          requireOperator(record).authPreparation !== undefined
+        ) {
+          status = "auth-schema-prepared";
+        }
+        return { appId, authenticatedBehavior: "unassessed", operationRef, planDigest, status };
+      };
+      if (input.action === "auth-identity-input") {
+        if (deps.authIdentityInput === undefined) {
+          throw new HostedOperatorError("operator_unavailable");
+        }
+        return response(
+          operatorAuthIdentityInputSchema.parse(
+            await deps.authIdentityInput({ ...context, operationRef, plan }),
+          ),
+        );
+      }
       if (input.action === "status") {
         return response(operatorPublicResultSchema.parse(publicStatus(current.record)));
       }
       assertUnexpired(plan, now());
       if (input.action === "bindings") {
+        if (plan.stage === AUTH_BOOTSTRAP_STAGE) {
+          throw new HostedOperatorError("auth_identity_required");
+        }
         return await handleBindingsOperation({
           context,
           current,
@@ -501,8 +626,128 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                   await assertCurrent();
                   record = (await ownedUpdate((value) => ({ ...value, privateState }))).record;
                 },
+                checkpointDelivery: async (rows, selectedId) => {
+                  await assertCurrent();
+                  const candidates = operatorDeploymentCandidatesSchema.parse(rows);
+                  record = (
+                    await ownedUpdate((value) => {
+                      const prior = requireOperator(value);
+                      if (
+                        candidates.some(
+                          (candidate) =>
+                            candidate.operationRef !== operationRef &&
+                            !(prior.deliveryCandidates ?? []).some(
+                              (old) => JSON.stringify(old) === JSON.stringify(candidate),
+                            ),
+                        )
+                      ) {
+                        throw new HostedOperatorError("resource_mismatch");
+                      }
+                      const merged = [
+                        ...(prior.deliveryCandidates ?? []).filter(
+                          (old) =>
+                            !candidates.some(
+                              (observedCandidate) =>
+                                observedCandidate.deploymentId === old.deploymentId,
+                            ),
+                        ),
+                        ...candidates,
+                      ];
+                      const next = { ...prior, deliveryCandidates: merged };
+                      if (selectedId !== undefined) {
+                        next.deliveredDeploymentId = selectedId;
+                      }
+                      return { ...value, operator: next };
+                    })
+                  ).record;
+                },
+                checkpointGatewayDelivery: async (rows, selectedId) => {
+                  await assertCurrent();
+                  const candidates = operatorDeploymentCandidatesSchema.parse(rows);
+                  record = (
+                    await ownedUpdate((value) => {
+                      const prior = requireOperator(value);
+                      if (
+                        candidates.some(
+                          (candidate) =>
+                            candidate.operationRef !== operationRef &&
+                            !(prior.gatewayDeliveryCandidates ?? []).some(
+                              (old) => JSON.stringify(old) === JSON.stringify(candidate),
+                            ),
+                        )
+                      ) {
+                        throw new HostedOperatorError("resource_mismatch");
+                      }
+                      const merged = [
+                        ...(prior.gatewayDeliveryCandidates ?? []).filter(
+                          (old) =>
+                            !candidates.some(
+                              (observedCandidate) =>
+                                observedCandidate.deploymentId === old.deploymentId,
+                            ),
+                        ),
+                        ...candidates,
+                      ];
+                      const next = { ...prior, gatewayDeliveryCandidates: merged };
+                      if (selectedId !== undefined) {
+                        next.deliveredGatewayDeploymentId = selectedId;
+                      }
+                      return { ...value, operator: next };
+                    })
+                  ).record;
+                },
+                checkpointGatewayEnvironment: async (rows) => {
+                  await assertCurrent();
+                  const gatewayEnvironment = managedOperatorEnvironmentRowsSchema.parse(rows);
+                  record = (
+                    await ownedUpdate((value) => {
+                      const currentOperator = requireOperator(value);
+                      const priorRows = currentOperator.gatewayEnvironment ?? [];
+                      if (
+                        gatewayEnvironment.some(
+                          (row) =>
+                            row.operationRef !== operationRef &&
+                            !priorRows.some(
+                              (prior) => JSON.stringify(prior) === JSON.stringify(row),
+                            ),
+                        )
+                      ) {
+                        throw new HostedOperatorError("resource_mismatch");
+                      }
+                      return { ...value, operator: { ...currentOperator, gatewayEnvironment } };
+                    })
+                  ).record;
+                  effectInput.gatewayEnvironmentRows = requireOperator(record).gatewayEnvironment;
+                },
+                checkpointManagedEnvironment: async (rows) => {
+                  await assertCurrent();
+                  const managedEnvironment = managedOperatorEnvironmentRowsSchema.parse(rows);
+                  record = (
+                    await ownedUpdate((value) => {
+                      const currentOperator = requireOperator(value);
+                      const priorRows = currentOperator.managedEnvironment ?? [];
+                      if (
+                        managedEnvironment.some(
+                          (row) =>
+                            row.operationRef !== operationRef &&
+                            !priorRows.some(
+                              (prior) => JSON.stringify(prior) === JSON.stringify(row),
+                            ),
+                        )
+                      ) {
+                        throw new HostedOperatorError("resource_mismatch");
+                      }
+                      return { ...value, operator: { ...currentOperator, managedEnvironment } };
+                    })
+                  ).record;
+                  effectInput.managedEnvironment = requireOperator(record).managedEnvironment;
+                },
+                deliveryCandidates: requireOperator(record).deliveryCandidates,
                 effect,
                 fenceGeneration,
+                gatewayDeliveryCandidates: requireOperator(record).gatewayDeliveryCandidates,
+                gatewayEnvironmentRows: requireOperator(record).gatewayEnvironment,
+                managedEnvironment: requireOperator(record).managedEnvironment,
                 operationRef,
                 plan,
                 privateState: record.privateState,
@@ -680,6 +925,37 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               ).record;
             }
             await assertCurrent();
+            if (plan.stage === AUTH_BOOTSTRAP_STAGE) {
+              if (deps.verifyAuthReadiness === undefined) {
+                throw new HostedOperatorError("operator_unavailable");
+              }
+              await assertCurrent();
+              const authPreparation = operatorAuthSchemaPreparationSchema.parse(
+                await deps.verifyAuthReadiness({
+                  ...context,
+                  assertCurrent,
+                  plan,
+                  privateState: record.privateState,
+                }),
+              );
+              const matches = [
+                authPreparation.targetDigest === plan.authSchema?.targetDigest,
+                authPreparation.database === plan.authDatabase.database,
+                authPreparation.runtimeRole === plan.authDatabase.runtimeRole,
+              ].every(Boolean);
+              if (!matches) {
+                throw new HostedOperatorError("resource_mismatch");
+              }
+              await assertCurrent();
+              const complete = await ownedUpdate((value) => ({
+                ...value,
+                environmentBound: false,
+                operator: { ...requireOperator(value), authPreparation },
+                status: "pending",
+                step: "reserved",
+              }));
+              return response(operatorPublicResultSchema.parse(publicStatus(complete.record)));
+            }
             const proof =
               plan.action === "prepare"
                 ? hostedRuntimeProofSchema.parse(
@@ -695,7 +971,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
             await assertCurrent();
             const complete = await ownedUpdate((value) => {
               if (plan.action === "cleanup") {
-                delete value.privateState;
+                // Shared Auth remains live after app cleanup; retain its owned encrypted credentials.
                 delete value.proof;
               }
               return {

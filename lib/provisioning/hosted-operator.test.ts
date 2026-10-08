@@ -347,6 +347,151 @@ const prepared = async (f: ReturnType<typeof fixture>) => {
 };
 
 describe("protected hosted operator boundary", () => {
+  it("prepares actual Auth metadata without app readiness and resumes a freshly approved full plan", async () => {
+    const f = fixture();
+    const bootstrap = {
+      endpointId: "ep_fixture",
+      maintenanceDatabase: "neondb",
+      role: "neondb_owner",
+    };
+    const resourcesInstaller = { reference: "neon-resource-bootstrap-v1", sha256: "c".repeat(64) };
+    const authSchema = {
+      artifactRef: "auth-plan",
+      installer: { reference: "auth-protected-installer-v1", sha256: "f".repeat(64) },
+      planDigest: "d".repeat(64),
+      targetDigest: "e".repeat(64),
+    };
+    const resources = [
+      {
+        description: "Prepare owned Auth resource",
+        id: "resources:auth",
+        kind: "resources",
+        resourceId: plan.authDatabase.resourceId,
+      },
+      {
+        description: "Prepare owned app resource",
+        id: "resources:app",
+        kind: "resources",
+        resourceId: plan.appDatabase.resourceId,
+      },
+    ];
+    const authEffect = {
+      description: "Prepare exact Auth schema",
+      id: "install:auth",
+      kind: "install",
+    };
+    const bootstrapPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      access: [],
+      authSchema,
+      bootstrap,
+      effects: [...resources, authEffect],
+      resourcesInstaller,
+      stage: "auth-bootstrap",
+    });
+    f.deps.plan = async () => bootstrapPlan;
+    f.deps.verifyAuthReadiness = vi.fn(
+      async () =>
+        await Promise.resolve({
+          assetSha256: "1".repeat(64),
+          catalogFingerprint: "2".repeat(64),
+          database: plan.authDatabase.database,
+          observedAt: new Date().toISOString(),
+          runtimeRole: plan.authDatabase.runtimeRole,
+          targetDigest: authSchema.targetDigest,
+        }),
+    );
+    f.deps.verify = vi.fn(f.deps.verify);
+    f.deps.bindings = vi.fn(f.deps.bindings);
+    const first = await prepared(f);
+    f.approve();
+    expect((await f.client.request(first)).status).toBe("auth-schema-prepared");
+    expect(f.deps.verify).not.toHaveBeenCalled();
+    expect(f.deps.bindings).not.toHaveBeenCalled();
+    const receipts = f.row?.record.operator?.receipts;
+    expect(receipts).toHaveLength(3);
+    expect(f.row?.record.environmentBound).toBe(false);
+    const fullPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      authSchema,
+      bootstrap,
+      effects: [...resources, authEffect, ...plan.effects.slice(1)],
+      resourcesInstaller,
+      stage: "app",
+    });
+    f.deps.plan = async () => fullPlan;
+    const currentApproval = f.deps.readApproval;
+    f.deps.readApproval = async (input) =>
+      input.planDigest === first.planDigest ? await currentApproval(input) : null;
+    const renewed = await prepared(f);
+    expect(await f.client.request(renewed)).toMatchObject({
+      code: "authorization_required",
+      status: "blocked",
+    });
+    f.deps.readApproval = currentApproval;
+    expect(renewed.planDigest).not.toBe(first.planDigest);
+    expect(f.row?.record.operator?.receipts).toEqual(receipts);
+    expect((await f.client.request(renewed)).status).toBe("prepared");
+    expect(f.deps.verify).toHaveBeenCalledTimes(1);
+  });
+
+  it("CAS-checkpoints managed environment ownership and preserves it for cleanup", async () => {
+    const f = fixture();
+    const original = f.deps.executeEffect;
+    f.deps.executeEffect = async (input) => {
+      if (input.effect.kind === "bindings") {
+        if (input.checkpointManagedEnvironment === undefined) {
+          throw new Error("Missing real CAS checkpoint");
+        }
+        const row = {
+          branch: input.target.branch,
+          comment: `App Builder protected operator ${input.operationRef}`,
+          id: "env_owned",
+          key: "PLATFORM_ORIGIN",
+          operationRef: input.operationRef,
+          projectId: input.target.projectId,
+        };
+        await input.checkpointManagedEnvironment([row]);
+        expect(f.row?.record.operator?.managedEnvironment).toEqual([row]);
+        await expect(
+          input.checkpointManagedEnvironment([
+            {
+              ...row,
+              comment: "App Builder protected operator 00000000-0000-4000-8000-000000000000",
+              operationRef: "00000000-0000-4000-8000-000000000000",
+            },
+          ]),
+        ).rejects.toMatchObject({ code: "resource_mismatch" });
+      }
+      return await original(input);
+    };
+    const preparedInput = await prepared(f);
+    f.approve();
+    const outcome = await f.client.request(preparedInput);
+    expect(outcome).toMatchObject({ status: "prepared" });
+    const rows = f.row?.record.operator?.managedEnvironment;
+    expect(rows).toHaveLength(1);
+    const cleanupPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      action: "cleanup",
+      effects: [
+        { description: "Revoke current authority", id: "revoke", kind: "revoke" },
+        {
+          description: "Remove exact owned bindings",
+          id: "remove-bindings",
+          kind: "remove-bindings",
+        },
+        { description: "Retire owned resources", id: "retire", kind: "retire" },
+      ],
+    });
+    f.deps.plan = async () => cleanupPlan;
+    expect(
+      (await f.client.request({ action: "plan", operation: "cleanup", selection })).status,
+    ).toBe("planned");
+    expect(f.row?.record.operator?.managedEnvironment).toEqual(rows);
+    expect(f.row?.record.operator?.operationRef).not.toBe(preparedInput.operationRef);
+  });
+
   it("rejects missing or reordered authorization phases", () => {
     for (const effects of [plan.effects.slice(1), plan.effects.toReversed(), [plan.effects[3]]]) {
       expect(hostedOperatorPlanSchema.safeParse({ ...plan, effects }).success).toBe(false);
@@ -685,11 +830,12 @@ describe("protected hosted operator boundary", () => {
       }),
     ).rejects.toThrow("operation_in_progress");
   });
-  it("requires a new concrete cleanup approval and leaves only the journal tombstone", async () => {
+  it("requires cleanup approval and retains private shared Auth credentials for the next Preview", async () => {
     const f = fixture();
     const request = await prepared(f);
     f.approve();
     await f.client.request(request);
+    const retainedCredentials = structuredClone(f.row?.record.privateState);
     const prepareGeneration = f.row?.record.operator?.fenceGeneration;
     expect(prepareGeneration).toBeGreaterThan(0);
     const cleanupPlanInput = {
@@ -721,7 +867,7 @@ describe("protected hosted operator boundary", () => {
     expect((await f.client.request(cleanup)).code).toBe("authorization_required");
     f.deps.readApproval = approval;
     expect((await f.client.request(cleanup)).status).toBe("cleaned");
-    expect(f.row?.record.privateState).toBeUndefined();
+    expect(f.row?.record.privateState).toEqual(retainedCredentials);
     expect(f.row?.record.proof).toBeUndefined();
     expect(f.row?.record.operator?.fenceGeneration).toBeGreaterThan(prepareGeneration ?? 0);
     await expect(
@@ -734,7 +880,7 @@ describe("protected hosted operator boundary", () => {
     f.deps.plan = async () => ({ ...plan, contextId: "replacement-after-cleanup" });
     const replacement = await f.client.request({ action: "plan", operation: "prepare", selection });
     expect(replacement.status).toBe("planned");
-    expect(f.row?.record.privateState).toBeUndefined();
+    expect(f.row?.record.privateState).toEqual(retainedCredentials);
     expect(f.row?.record.proof).toBeUndefined();
     expect(f.row?.record.environmentBound).toBe(false);
   });

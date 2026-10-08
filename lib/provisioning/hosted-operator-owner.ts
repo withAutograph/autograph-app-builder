@@ -15,6 +15,7 @@ import {
   HostedOperatorError,
   operatorOwnerContextSchema,
   operatorPlanDigest,
+  sameOperatorSelection,
 } from "./hosted-operator-contract";
 import type {
   OperatorOwnerContext,
@@ -289,10 +290,16 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
     return { authority: owner.authority, ownerContext: owner, target };
   };
 
-  const assertAuthorized = async (input: HostedOperatorContext & { plan: HostedOperatorPlan }) => {
+  const readCurrentPlanningOwner = async (input: HostedOperatorContext) => {
     const owner = operatorOwnerContextSchema.parse(input.ownerContext);
     const { principal } = ownerContextFromHint(owner);
-    const current = await readOwnedState(deps, owner, principal, input.plan.selection);
+    const current = await readOwnedState(deps, owner, principal, {
+      appId: input.target.appId,
+      branch: input.target.branch,
+      environment: input.target.environment,
+      projectId: input.target.projectId,
+      sessionId: input.target.sessionId,
+    });
     // oxlint-disable-next-line sonarjs/expression-complexity -- Approval is accepted only when every terminal receipt binding matches.
     if (
       !sameAuthority(input.authority, owner.authority) ||
@@ -302,10 +309,30 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
     ) {
       throw unavailable();
     }
+    return current;
+  };
+  const assertPlanningAuthorized = async (input: HostedOperatorContext): Promise<void> => {
+    await readCurrentPlanningOwner(input);
+  };
+  const assertAuthorized = async (input: HostedOperatorContext & { plan: HostedOperatorPlan }) => {
+    if (
+      !sameOperatorSelection(input.plan.selection, {
+        appId: input.target.appId,
+        branch: input.target.branch,
+        environment: input.target.environment,
+        projectId: input.target.projectId,
+        sessionId: input.target.sessionId,
+      })
+    ) {
+      throw unavailable();
+    }
+    await assertPlanningAuthorized(input);
   };
   return {
     assertAuthorized,
+    assertPlanningAuthorized,
     authorize: resolve,
+    readCurrentPlanningOwner,
   };
 };
 
