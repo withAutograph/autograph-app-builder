@@ -85,6 +85,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         meta: Record<string, string>;
         name: string;
         project: string;
+        target: "preview";
       },
     ) => {
       await assertCurrent();
@@ -298,6 +299,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
             meta: reader.expectedMeta,
             name: project.name,
             project: project.id,
+            target: "preview",
           },
         ),
       );

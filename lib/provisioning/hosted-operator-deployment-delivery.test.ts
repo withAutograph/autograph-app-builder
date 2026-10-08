@@ -126,6 +126,7 @@ const fixture = () => {
       return Response.json({ id: "team", slug: "team-slug" });
     }
     if (path === "/v13/deployments" && method === "POST") {
+      expect(body).toMatchObject({ target: "preview" });
       count += 1;
       return Response.json({ id: "dpl_new" });
     }
