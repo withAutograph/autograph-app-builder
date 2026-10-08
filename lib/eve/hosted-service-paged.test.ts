@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
 
+import { stableId } from "./hosted-operation-identifiers";
 import { hostedEveOperationScopes, tenantKeyFor } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
 import { createHostedEveSessionService, HostedSessionNotFoundError } from "./hosted-service";
@@ -670,4 +671,85 @@ describe("paged hosted session observation", () => {
         .byteLength,
     ).toBeGreaterThan(512 * 1024);
   });
+});
+
+describe("send preflight dispatch classification", () => {
+  it("records a failed read-only preflight as rejected and never dispatches or replays the same request", async () => {
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async () => {
+      await Promise.reject(new HostedSessionReadTimeoutError());
+      throw new Error("unreachable");
+    });
+    const { adapter, base, service, sessionId } = await fixture(observe);
+    adapter.sendAccepted = vi.fn(async () => {
+      await Promise.resolve();
+    });
+    const request = { clientRequestId: randomUUID(), message: "continue", sessionId };
+    await expect(service.send(request)).rejects.toMatchObject({
+      code: "send_preflight_unavailable",
+    });
+    const operationId = stableId("op", {
+      clientRequestId: request.clientRequestId,
+      kind: "send",
+      tenant: [principal.issuer, principal.audience, principal.workspaceId, principal.ownerUserId],
+    });
+    expect(await base.getPrivateOperation(principal, operationId)).toMatchObject({
+      safeErrorCode: "send_preflight_unavailable",
+      state: "rejected",
+    });
+    await expect(service.send(request)).rejects.toMatchObject({
+      code: "send_preflight_unavailable",
+    });
+    expect(observe).toHaveBeenCalledTimes(1);
+    expect(adapter.sendAccepted).not.toHaveBeenCalled();
+    expect(adapter.send).not.toHaveBeenCalled();
+  });
+  it.each(["post", "accepted-readback"] as const)(
+    "preserves uncertainty after %s and blocks exact replay",
+    async (failure) => {
+      let reads = 0;
+      const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async () => {
+        reads += 1;
+        if (reads > 1 && failure === "accepted-readback") {
+          throw new HostedSessionReadTimeoutError();
+        }
+        return await Promise.resolve({
+          artifactProjectionRequiresLegacyReadback: false,
+          installedEventCount: 0,
+          pendingRequests: [],
+          publicEventCount: 0,
+          status: "waiting" as const,
+        });
+      });
+      const { adapter, base, service, sessionId } = await fixture(observe);
+      adapter.sendAccepted = vi.fn(async () => {
+        if (failure === "post") {
+          throw new Error("mutation response unknown");
+        }
+        await Promise.resolve();
+      });
+      const request = { clientRequestId: randomUUID(), message: "continue", sessionId };
+      await expect(service.send(request)).rejects.toMatchObject({
+        name: "HostedSubmissionUnknownError",
+      });
+      const operationId = stableId("op", {
+        clientRequestId: request.clientRequestId,
+        kind: "send",
+        tenant: [
+          principal.issuer,
+          principal.audience,
+          principal.workspaceId,
+          principal.ownerUserId,
+        ],
+      });
+      expect(await base.getPrivateOperation(principal, operationId)).toMatchObject({
+        safeErrorCode: "submission_unknown",
+        state: "submission_unknown",
+      });
+      await expect(service.send(request)).rejects.toMatchObject({
+        name: "HostedSubmissionUnknownError",
+      });
+      expect(adapter.sendAccepted).toHaveBeenCalledTimes(1);
+      expect(adapter.send).not.toHaveBeenCalled();
+    },
+  );
 });

@@ -1925,16 +1925,22 @@ export function createHostedEveSessionService(input: {
             input.transport.sendAccepted !== undefined &&
             input.store.observeSessionPaged !== undefined &&
             input.store.readCheckpointPage !== undefined;
-          const observed = paged
-            ? await input.transport.observe?.({
+          let observed: Awaited<ReturnType<NonNullable<HostedEveTransport["observe"]>>> | undefined;
+          if (paged) {
+            try {
+              observed = await input.transport.observe?.({
                 adapterSessionId: session.adapterSessionId,
                 onEvent() {
                   // Preflight needs only the bounded observation summary.
                 },
                 principal,
                 sessionId: request.sessionId,
-              })
-            : undefined;
+              });
+            } catch {
+              // This read precedes both mutation paths. No message POST has run.
+              throw new SubmissionRejectedBeforeDispatchError("send_preflight_unavailable");
+            }
+          }
           const sendInput = {
             adapterSessionId: session.adapterSessionId,
             message: request.message,
