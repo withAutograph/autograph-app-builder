@@ -113,6 +113,7 @@ export interface HostedEveTransport {
     sessionId: string;
     adapterSessionId: string;
     nativeObservationState?: NativeObservationState;
+    allowPartialObservation?: boolean;
     onEvent: (event: InternalEveEvent) => Promise<void> | void;
     onPrivateEvent?: (event: MessageStreamEvent) => Promise<void> | void;
     readDeadline?: boolean;
@@ -120,6 +121,7 @@ export interface HostedEveTransport {
     activeTurnId?: string;
     artifactProjectionRequiresLegacyReadback: boolean;
     installedEventCount: number;
+    observationComplete?: boolean;
     pendingRequests: PublicInputRequest[];
     prototype?: z.infer<typeof publicPrototypeSchema>;
     prototypeRef?: PublicPrototypeReference;
@@ -655,6 +657,7 @@ async function spoolObservedSession(input: {
   adapterSessionId: string;
   nativeObservationState?: NativeObservationState;
   privateApprovalCaptureState?: PrivateHostedApprovalCaptureState;
+  allowPartialObservation?: boolean;
 }): Promise<PagedObservationSpool> {
   let directory: string;
   try {
@@ -683,6 +686,7 @@ async function spoolObservedSession(input: {
     const eventStartIndex = input.nativeObservationState?.publicEventCount ?? 0;
     const observation = await input.transport({
       adapterSessionId: input.adapterSessionId,
+      allowPartialObservation: input.allowPartialObservation ?? false,
       ...(input.nativeObservationState === undefined
         ? {}
         : { nativeObservationState: input.nativeObservationState }),
@@ -1523,7 +1527,29 @@ export function createHostedEveSessionService(input: {
       let spool: PagedObservationSpool | undefined;
       try {
         const checkpointMetadata = await readCheckpointMetadata(session);
-        const storedNativeState = checkpointMetadata?.nativeObservationState;
+        const candidateColdProgress = checkpointMetadata?.coldReadProgress;
+        if (
+          candidateColdProgress !== undefined &&
+          checkpointMetadata?.nativeObservationState !== undefined
+        ) {
+          throw new HostedSessionRecoveryUnavailableError();
+        }
+        const coldReadProgress =
+          candidateColdProgress?.nativeObservationState.adapterSessionId ===
+          session.adapterSessionId
+            ? candidateColdProgress
+            : undefined;
+        if (
+          coldReadProgress !== undefined &&
+          (coldReadProgress.events.length !==
+            coldReadProgress.nativeObservationState.publicEventCount ||
+            coldReadProgress.events.some((event, index) => event.index !== index) ||
+            coldReadProgress.privateApprovalCaptureState.sessionId !== sessionId)
+        ) {
+          throw new HostedSessionRecoveryUnavailableError();
+        }
+        const storedNativeState =
+          coldReadProgress?.nativeObservationState ?? checkpointMetadata?.nativeObservationState;
         const parsedNativeState =
           storedNativeState === undefined
             ? undefined
@@ -1533,16 +1559,19 @@ export function createHostedEveSessionService(input: {
             ? parsedNativeState
             : undefined;
         if (
+          coldReadProgress === undefined &&
           nativeObservationState !== undefined &&
           nativeObservationState.publicEventCount !== session.checkpointRef?.eventCount
         ) {
           throw new HostedSessionRecoveryUnavailableError();
         }
         const storedPrivateApprovalCaptureState =
-          checkpointMetadata?.privateApprovalCaptureState === undefined
+          (coldReadProgress?.privateApprovalCaptureState ??
+            checkpointMetadata?.privateApprovalCaptureState) === undefined
             ? undefined
             : privateHostedApprovalCaptureStateSchema.parse(
-                checkpointMetadata.privateApprovalCaptureState,
+                coldReadProgress?.privateApprovalCaptureState ??
+                  checkpointMetadata?.privateApprovalCaptureState,
               );
         if (
           storedPrivateApprovalCaptureState !== undefined &&
@@ -1565,6 +1594,9 @@ export function createHostedEveSessionService(input: {
               });
         spool = await spoolObservedSession({
           adapterSessionId: session.adapterSessionId,
+          allowPartialObservation:
+            checkpointMetadata?.nativeObservationState === undefined ||
+            coldReadProgress !== undefined,
           ...(nativeObservationState === undefined ? {} : { nativeObservationState }),
           ...(privateApprovalCaptureState === undefined ? {} : { privateApprovalCaptureState }),
           principal,
@@ -1586,6 +1618,70 @@ export function createHostedEveSessionService(input: {
             observedNativeState.publicEventCount !== spool.eventStartIndex + spool.eventCount)
         ) {
           throw new HostedSessionRecoveryUnavailableError();
+        }
+        if (spool.observation.observationComplete === false) {
+          if (
+            checkpointMetadata === null ||
+            observedNativeState === undefined ||
+            session.checkpointRef === undefined
+          ) {
+            throw new HostedSessionReadTimeoutError();
+          }
+          if (
+            observedNativeState.nextNativeIndex <=
+            (coldReadProgress?.nativeObservationState.nextNativeIndex ?? 0)
+          ) {
+            throw new HostedSessionReadTimeoutError();
+          }
+          const events = [...(coldReadProgress?.events ?? [])];
+          for await (const event of readSpoolEvents(spool)) {
+            events.push(event);
+          }
+          if (
+            events.length !== observedNativeState.publicEventCount ||
+            events.some((event, index) => event.index !== index)
+          ) {
+            throw new HostedSessionRecoveryUnavailableError();
+          }
+          const stored = await input.store.observeSessionPaged({
+            events: readCheckpointEvents(session),
+            expectedCheckpointDigest: session.checkpointDigest,
+            metadata: {
+              ...checkpointMetadata,
+              coldReadProgress: {
+                events,
+                nativeObservationState: observedNativeState,
+                privateApprovalCaptureState: spool.privateApprovalCaptureState,
+                version: 1,
+              },
+            },
+            nowEpochMs: now(),
+            principal,
+            resumability: session.resumability,
+            sessionId,
+            stage: session.stage,
+          });
+          return delayedCheckpointResult(sessionId, stored, cursor, limit);
+        }
+        if (
+          coldReadProgress !== undefined &&
+          observedNativeState !== undefined &&
+          observedNativeState.publicEventCount < (session.checkpointRef?.eventCount ?? 0)
+        ) {
+          throw new HostedSessionRecoveryUnavailableError();
+        }
+        const completedSpool = spool;
+        const readColdPrefixAndDelta = async function* readColdPrefixAndDelta() {
+          yield* coldReadProgress?.events ?? [];
+          yield* readSpoolEvents(completedSpool);
+        };
+        let orderedEvents = readSpoolEvents(spool);
+        if (coldReadProgress === undefined) {
+          if (nativeObservationState !== undefined) {
+            orderedEvents = readCheckpointPrefixAndDelta(session, spool);
+          }
+        } else {
+          orderedEvents = readColdPrefixAndDelta();
         }
         if (
           !spool.observation.artifactProjectionRequiresLegacyReadback ||
@@ -1638,10 +1734,7 @@ export function createHostedEveSessionService(input: {
           });
           const stored = await input.store.observeSessionPaged({
             ...(summary.uiPreview?.appId === undefined ? {} : { appId: summary.uiPreview.appId }),
-            events:
-              nativeObservationState === undefined
-                ? readSpoolEvents(spool)
-                : readCheckpointPrefixAndDelta(session, spool),
+            events: orderedEvents,
             expectedCheckpointDigest: session.checkpointDigest,
             metadata,
             nowEpochMs: capturedAtEpochMs,

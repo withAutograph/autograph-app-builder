@@ -299,6 +299,7 @@ export async function* streamSameOriginEveEvents(input: {
   readSignal?: AbortSignal;
   startIndex?: number;
   readTrace?: HostedReadTrace;
+  onNativeTail?: (tailIndex: number) => void;
 }): AsyncGenerator<MessageStreamEvent, void, undefined> {
   // Matches the supported SDK's absolute startIndex + follow:false contract: pin this opened durable tail.
   const startIndex = z
@@ -357,6 +358,7 @@ export async function* streamSameOriginEveEvents(input: {
     void response.body.cancel().catch(() => null);
     throw new Error("Canonical Eve durable tail precedes the saved native cursor.");
   }
+  input.onNativeTail?.(tail);
   if (startIndex === tail + 1) {
     // Provider cancellation is best effort; a stalled cancel must not hold the response.
     // oxlint-disable-next-line promise/prefer-await-to-then -- Cleanup must not delay the reader.
@@ -373,7 +375,20 @@ export async function* streamSameOriginEveEvents(input: {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
       input.readTrace?.enter("decode");
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve stream backpressure
-      const chunk = await reader.read();
+      let chunk: ReadableStreamReadResult<Uint8Array>;
+      try {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Consume sequential native bytes under one pinned tail.
+        chunk = await reader.read();
+      } catch (error) {
+        if (
+          signal?.aborted === true &&
+          (error === signal.reason ||
+            (error instanceof DOMException && ["AbortError", "TimeoutError"].includes(error.name)))
+        ) {
+          throw new HostedSessionReadTimeoutError();
+        }
+        throw error;
+      }
       input.readTrace?.increment("bodyBytes", chunk.value?.byteLength ?? 0);
       if (chunk.done) {
         buffered += decoder.decode();
@@ -413,11 +428,6 @@ export async function* streamSameOriginEveEvents(input: {
     if (eventCount !== tail + 1) {
       throw new Error("Canonical Eve stream ended before its durable tail.");
     }
-  } catch (error) {
-    if (signal?.aborted === true) {
-      throw new HostedSessionReadTimeoutError();
-    }
-    throw error;
   } finally {
     // The complete durable tail is already installed (or this read failed).
     // Do not let a provider stream's cancellation handshake hold the MCP reply.
@@ -626,6 +636,7 @@ export async function observeSameOriginEveStream(
     onInstalledEvent?: (event: MessageStreamEvent) => void;
     onPrivateEvent?: (event: MessageStreamEvent) => Promise<void> | void;
     nativeObservationState?: NativeObservationState;
+    allowPartialObservation?: boolean;
   },
 ): Promise<{
   installedEventCount: number;
@@ -640,6 +651,8 @@ export async function observeSameOriginEveStream(
   uiPreview?: PublicUiPreview;
   workingPreview?: PublicWorkingPreview | null;
   artifactProjectionRequiresLegacyReadback: boolean;
+  observationComplete: boolean;
+  nativeTailIndex?: number;
 }> {
   const readTrace = input.readTrace ?? createHostedReadTrace({ sessionId: input.sessionId });
   const readSignal =
@@ -675,96 +688,116 @@ export async function observeSameOriginEveStream(
     });
     readTrace.set("nativeStartIndex", installedEventCount);
     readTrace.set("nativeNextIndex", installedEventCount);
-    for await (const event of streamSameOriginEveEvents({
-      ...input,
-      readSignal,
-      readTrace,
-      startIndex: state?.nextNativeIndex ?? 0,
-    })) {
-      readTrace.increment("decodedEvents");
-      artifactReadback.accept(event);
-      prototype.observe(event);
-      prototypeReference.accept(event);
-      input.onInstalledEvent?.(event);
-      readTrace.enter("private_callback");
-      await input.onPrivateEvent?.(event);
-      readTrace.increment("privateCallbacks");
-      readTrace.enter("decode");
-      installedEventCount += 1;
-      readTrace.set("nativeNextIndex", installedEventCount);
-      const turnId =
-        "data" in event && "turnId" in event.data
-          ? (event.data.turnId as string | undefined)
-          : undefined;
-      if (
-        turnId !== undefined &&
-        !["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type)
-      ) {
-        currentTurnId = turnId;
-      }
-      if (
-        ["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type) &&
-        (turnId === undefined || turnId === currentTurnId)
-      ) {
-        currentTurnId = undefined;
-      }
-      if (["session.waiting", "session.completed", "session.failed"].includes(event.type)) {
-        currentTurnId = undefined;
-      }
-      if (event.type === "turn.cancelled") {
-        boundary = "cancelled";
-      }
-      if (event.type === "session.waiting") {
-        boundary = "waiting";
-      }
-      if (event.type === "session.completed") {
-        boundary = "completed";
-      }
-      if (event.type === "session.failed") {
-        boundary = "failed";
-      }
-      if (event.type === "step.started") {
-        boundary = "working";
-      }
-      if (event.type === "approval.settled") {
-        pending.delete(event.data.requestId);
-      }
-      const nextUiPreview = latestInstalledUiPreview([event]);
-      if (nextUiPreview !== undefined) {
-        uiPreview = nextUiPreview;
-      }
-      const nextWorkingPreview = latestInstalledWorkingPreview([event]);
-      if (nextWorkingPreview !== undefined) {
-        workingPreview = nextWorkingPreview;
-      }
-      for (const projected of projectInstalledEveEvent(event, 0)) {
-        const indexed = { ...projected, index: publicEventCount };
-        // Internal resolution events still update reducers/callbacks but have no public checkpoint row.
-        if (toPublicEvent(indexed) !== null) {
-          publicEventCount += 1;
-        }
-        if (indexed.type === "input.requested" && indexed.request !== undefined) {
-          pending.set(indexed.request.requestId, indexed.request);
-        }
-        if (indexed.type === "input.resolved") {
-          for (const requestId of indexed.requestIds ?? []) {
-            pending.delete(requestId);
-          }
+    let eventInFlight = false;
+    let observationComplete = true;
+    let nativeTailIndex: number | undefined;
+    try {
+      for await (const event of streamSameOriginEveEvents({
+        ...input,
+        onNativeTail: (tail) => {
+          nativeTailIndex = tail;
+        },
+        readSignal,
+        readTrace,
+        startIndex: state?.nextNativeIndex ?? 0,
+      })) {
+        eventInFlight = true;
+        readTrace.increment("decodedEvents");
+        artifactReadback.accept(event);
+        prototype.observe(event);
+        prototypeReference.accept(event);
+        input.onInstalledEvent?.(event);
+        readTrace.enter("private_callback");
+        await input.onPrivateEvent?.(event);
+        readTrace.increment("privateCallbacks");
+        readTrace.enter("decode");
+        installedEventCount += 1;
+        readTrace.set("nativeNextIndex", installedEventCount);
+        const turnId =
+          "data" in event && "turnId" in event.data
+            ? (event.data.turnId as string | undefined)
+            : undefined;
+        if (
+          turnId !== undefined &&
+          !["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type)
+        ) {
+          currentTurnId = turnId;
         }
         if (
-          event.type === "input.requested" &&
-          indexed.type === "status" &&
-          indexed.status === "failed"
+          ["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type) &&
+          (turnId === undefined || turnId === currentTurnId)
         ) {
-          invalidInput = true;
+          currentTurnId = undefined;
         }
-        // oxlint-disable-next-line eslint/no-await-in-loop -- the callback controls storage backpressure
-        readTrace.enter("public_spool");
-        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve storage backpressure
-        await input.onEvent(indexed);
-        readTrace.increment("publicSpoolEvents");
-        readTrace.enter("decode");
+        if (["session.waiting", "session.completed", "session.failed"].includes(event.type)) {
+          currentTurnId = undefined;
+        }
+        if (event.type === "turn.cancelled") {
+          boundary = "cancelled";
+        }
+        if (event.type === "session.waiting") {
+          boundary = "waiting";
+        }
+        if (event.type === "session.completed") {
+          boundary = "completed";
+        }
+        if (event.type === "session.failed") {
+          boundary = "failed";
+        }
+        if (event.type === "step.started") {
+          boundary = "working";
+        }
+        if (event.type === "approval.settled") {
+          pending.delete(event.data.requestId);
+        }
+        const nextUiPreview = latestInstalledUiPreview([event]);
+        if (nextUiPreview !== undefined) {
+          uiPreview = nextUiPreview;
+        }
+        const nextWorkingPreview = latestInstalledWorkingPreview([event]);
+        if (nextWorkingPreview !== undefined) {
+          workingPreview = nextWorkingPreview;
+        }
+        for (const projected of projectInstalledEveEvent(event, 0)) {
+          const indexed = { ...projected, index: publicEventCount };
+          // Internal resolution events still update reducers/callbacks but have no public checkpoint row.
+          if (toPublicEvent(indexed) !== null) {
+            publicEventCount += 1;
+          }
+          if (indexed.type === "input.requested" && indexed.request !== undefined) {
+            pending.set(indexed.request.requestId, indexed.request);
+          }
+          if (indexed.type === "input.resolved") {
+            for (const requestId of indexed.requestIds ?? []) {
+              pending.delete(requestId);
+            }
+          }
+          if (
+            event.type === "input.requested" &&
+            indexed.type === "status" &&
+            indexed.status === "failed"
+          ) {
+            invalidInput = true;
+          }
+          // oxlint-disable-next-line eslint/no-await-in-loop -- the callback controls storage backpressure
+          readTrace.enter("public_spool");
+          // oxlint-disable-next-line eslint/no-await-in-loop -- preserve storage backpressure
+          await input.onEvent(indexed);
+          readTrace.increment("publicSpoolEvents");
+          readTrace.enter("decode");
+        }
+        eventInFlight = false;
       }
+    } catch (error) {
+      if (
+        input.allowPartialObservation !== true ||
+        !(error instanceof HostedSessionReadTimeoutError) ||
+        eventInFlight ||
+        nativeTailIndex === undefined
+      ) {
+        throw error;
+      }
+      observationComplete = false;
     }
     let status: EveSessionStatus = boundary;
     if (invalidInput) {
@@ -776,6 +809,8 @@ export async function observeSameOriginEveStream(
     return {
       artifactProjectionRequiresLegacyReadback: artifactReadback.requiresLegacy(),
       installedEventCount,
+      observationComplete,
+      ...(nativeTailIndex === undefined ? {} : { nativeTailIndex }),
       nativeObservationState: nativeObservationStateSchema.parse({
         adapterSessionId: input.sessionId,
         artifactReadback: artifactReadback.checkpoint(),
@@ -1127,6 +1162,7 @@ export function createSameOriginEveTransport(input: {
     onPrivateEvent?: (event: MessageStreamEvent) => Promise<void> | void;
     readDeadline?: boolean;
     nativeObservationState?: NativeObservationState;
+    allowPartialObservation?: boolean;
   }) => ReturnType<typeof observeSameOriginEveStream>;
 } {
   const config = sameOriginConfigSchema.parse(input.config);
@@ -1165,6 +1201,8 @@ export function createSameOriginEveTransport(input: {
               throw new SubmissionRejectedBeforeDispatchError("session_access_denied");
             }
             return observeSameOriginEveStream({
+              allowPartialObservation:
+                "allowPartialObservation" in request && request.allowPartialObservation === true,
               ...common,
               nativeObservationState:
                 "nativeObservationState" in request && request.nativeObservationState !== undefined
