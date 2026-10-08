@@ -68,6 +68,7 @@ export type GatewayManagedEnvironmentContext = HostedOperatorEffectContext & {
     operatorOrigin: string;
     projectId: string;
     publicOrigin: string;
+    sourceWorkload: NonNullable<HostedOperatorPlan["gatewayBindings"]>["sourceWorkload"];
   };
   gatewayEnvironmentRows?: ManagedOperatorEnvironmentRow[];
   checkpointGatewayEnvironment: (rows: readonly ManagedOperatorEnvironmentRow[]) => Promise<void>;
@@ -298,6 +299,7 @@ const handlePlanOperation = async (
           return (
             priorEffect !== undefined &&
             nextEffect !== undefined &&
+            ["resources", "install"].includes(priorEffect.kind) &&
             priorEffect.kind === nextEffect.kind &&
             priorEffect.resourceId === nextEffect.resourceId
           );
@@ -625,7 +627,16 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                       ) {
                         throw new HostedOperatorError("resource_mismatch");
                       }
-                      const next = { ...prior, deliveryCandidates: candidates };
+                      const merged = [
+                        ...(prior.deliveryCandidates ?? []).filter(
+                          (old) =>
+                            !candidates.some(
+                              (current) => current.deploymentId === old.deploymentId,
+                            ),
+                        ),
+                        ...candidates,
+                      ];
+                      const next = { ...prior, deliveryCandidates: merged };
                       if (selectedId !== undefined) {
                         next.deliveredDeploymentId = selectedId;
                       }
@@ -650,7 +661,16 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                       ) {
                         throw new HostedOperatorError("resource_mismatch");
                       }
-                      const next = { ...prior, gatewayDeliveryCandidates: candidates };
+                      const merged = [
+                        ...(prior.gatewayDeliveryCandidates ?? []).filter(
+                          (old) =>
+                            !candidates.some(
+                              (current) => current.deploymentId === old.deploymentId,
+                            ),
+                        ),
+                        ...candidates,
+                      ];
+                      const next = { ...prior, gatewayDeliveryCandidates: merged };
                       if (selectedId !== undefined) {
                         next.deliveredGatewayDeploymentId = selectedId;
                       }

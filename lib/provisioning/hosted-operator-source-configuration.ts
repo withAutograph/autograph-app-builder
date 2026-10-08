@@ -78,6 +78,7 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
     protectedApplicationIds: z.array(id),
     publicOrigin: httpsOrigin,
     repoId: id,
+    workload: workload,
   }),
   nativeNeon: z.strictObject({
     configuration: configurationSchema.omit({ connectorInstallationId: true }),
@@ -121,6 +122,9 @@ export const readHostedOperatorSourceConfiguration = (
     config.operator.projectId === config.nativeNeon.configuration.operator.projectId,
     config.teamId === config.nativeNeon.configuration.operator.ownerId,
     config.operator.environment === config.nativeNeon.configuration.operator.environment,
+    config.gateway.workload.projectId === config.gateway.projectId,
+    config.gateway.workload.ownerId === config.teamId,
+    config.gateway.workload.environment === config.gateway.environment,
     Object.values(config.applications).every(
       (app) =>
         app.projectId !== config.operator.projectId && app.projectId !== config.gateway.projectId,

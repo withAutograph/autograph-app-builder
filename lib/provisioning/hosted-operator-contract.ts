@@ -81,6 +81,10 @@ const hostedOperatorPlanDataSchema = z.strictObject({
     .strictObject({
       actorId: id,
       bootstrapPlanDigest: digest,
+      identityCapture: z.strictObject({
+        capturedAt: z.iso.datetime({ offset: true }),
+        realmSessionId: id,
+      }),
       identityNonceSha256: digest,
       identityProof: z.strictObject({ reference: id, sha256: digest }),
       identityVerification: z.strictObject({
@@ -158,6 +162,14 @@ const hostedOperatorPlanDataSchema = z.strictObject({
       builderCallbackOrigin: httpsPublicOrigin,
       catalogAppIds: z.array(id).min(1),
       operatorOrigin: httpsPublicOrigin,
+      sourceWorkload: z.strictObject({
+        audience: z.url(),
+        environment: z.literal("preview"),
+        issuer: z.url(),
+        ownerId: id,
+        projectId: id,
+        subject: id,
+      }),
     })
     .optional(),
   gatewayDelivery: z
@@ -468,6 +480,8 @@ export const operatorDeploymentCandidateSchema = z.strictObject({
   operationRef: z.uuid(),
   origin: httpsPublicOrigin,
   projectId: id,
+  projectName: id.optional(),
+  scopeSlug: id.optional(),
   readyState: id,
   repoId: id,
 });
@@ -637,6 +651,7 @@ export const hostedOperatorRecordSchema = hostedOperatorRecordDataSchema.superRe
       "PLATFORM_AUTH_DATABASE_URL",
       "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
       "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+      "PLATFORM_GATEWAY_PROJECT_BINDINGS",
     ]);
     if (
       new Set(gatewayRows.map((row) => row.key)).size !== gatewayRows.length ||
