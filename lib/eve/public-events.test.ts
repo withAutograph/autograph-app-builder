@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { MessageStreamEvent } from "eve/client";
 import {
   createInstalledPrototypeProjector,
+  installedPrototypeProjectorStateSchema,
   createInstalledPreviewMetadataReducer,
   deriveInstalledEveStatus,
   latestInstalledPrototype,
@@ -472,6 +473,14 @@ describe("installed Eve 0.68 projection", () => {
         }),
       );
     }
+    let restored = createInstalledPrototypeProjector();
+    for (let index = 0; index < events.length; index += 1) {
+      restored.observe(events[index]);
+      const serialized = JSON.stringify(restored.checkpoint());
+      const checkpoint = installedPrototypeProjectorStateSchema.parse(JSON.parse(serialized));
+      restored = createInstalledPrototypeProjector(checkpoint);
+      expect(restored.current()).toEqual(latestInstalledPrototype(events.slice(0, index + 1)));
+    }
     expect(latestInstalledPrototype(events)).toMatchObject({
       content: fullContent,
       digest: expectedDigest,
@@ -556,6 +565,19 @@ describe("installed Eve 0.68 projection", () => {
       index += 1;
     }
     expect(index).toBeGreaterThan(1);
+    const split = Math.floor(events.length / 2);
+    let restored = createInstalledPrototypeProjector();
+    for (const event of events.slice(0, split)) {
+      restored.observe(event);
+    }
+    const serialized = JSON.stringify(restored.checkpoint());
+    restored = createInstalledPrototypeProjector(
+      installedPrototypeProjectorStateSchema.parse(JSON.parse(serialized)),
+    );
+    for (const event of events.slice(split)) {
+      restored.observe(event);
+    }
+    expect(restored.current()).toEqual(latestInstalledPrototype(events));
     expect(latestInstalledPrototype(events)).toMatchObject({
       content: artifact.content,
       digest: artifact.digest,
@@ -1326,4 +1348,25 @@ describe("installed Eve 0.68 projection", () => {
     expect(message).toContain("correct the named CUE field");
     expect(message).not.toContain("token=private");
   });
+});
+
+it("preserves interleaved pending prototype calls across private serializable checkpoints", () => {
+  const first = recordedPrototypeEvents({
+    callId: "interleaved_first",
+    content: "<html>First</html>",
+  });
+  const second = recordedPrototypeEvents({
+    callId: "interleaved_second",
+    content: "<html>Second</html>",
+  });
+  const events = [first[0], second[0], second[1], first[1]];
+  let projector = createInstalledPrototypeProjector();
+  for (let index = 0; index < events.length; index += 1) {
+    projector.observe(events[index]);
+    const serialized = JSON.stringify(projector.checkpoint());
+    projector = createInstalledPrototypeProjector(
+      installedPrototypeProjectorStateSchema.parse(JSON.parse(serialized)),
+    );
+    expect(projector.current()).toEqual(latestInstalledPrototype(events.slice(0, index + 1)));
+  }
 });

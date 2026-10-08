@@ -245,11 +245,83 @@ const prototypeReferenceResultSchema = z
   })
   .passthrough();
 
+export const installedPrototypeReferenceStateSchema = z.strictObject({
+  latest: publicPrototypeReferenceSchema.optional(),
+  requested: z.array(z.tuple([z.string(), prototypeRequestSchema])),
+  requestedUiPreview: z.array(z.tuple([z.string(), z.string()])),
+});
+export type InstalledPrototypeReferenceState = z.infer<
+  typeof installedPrototypeReferenceStateSchema
+>;
+
+export const installedPrototypeProjectorStateSchema = z.strictObject({
+  artifactReadRequests: z.array(
+    z.tuple([
+      z.string(),
+      z.strictObject({
+        digest: lowercaseSha256Schema,
+        offsetBytes: z.number().int().nonnegative().optional(),
+        path: z.string(),
+        revision: lowercaseSha256Schema.optional(),
+      }),
+    ]),
+  ),
+  expectedChunkedPreview: z
+    .strictObject({
+      digest: lowercaseSha256Schema,
+      path: z.string(),
+      revision: lowercaseSha256Schema,
+    })
+    .optional(),
+  latest: publicPrototypeSchema.optional(),
+  readChunks: z.array(
+    z.tuple([
+      z.string(),
+      z.strictObject({
+        chunks: z.array(z.string()),
+        digest: lowercaseSha256Schema,
+        mediaType: z.literal("text/html"),
+        nextOffsetBytes: z.number().int().nonnegative(),
+        path: z.string(),
+        revision: lowercaseSha256Schema,
+        totalBytes: z.number().int().positive(),
+      }),
+    ]),
+  ),
+  requested: z.array(z.tuple([z.string(), prototypeRequestSchema])),
+  transfers: z.array(
+    z.tuple([
+      z.string(),
+      z.strictObject({
+        chunks: z.array(z.string()),
+        expectedDigest: lowercaseSha256Schema,
+        lastCallId: z.string(),
+        lastChunkDigest: lowercaseSha256Schema,
+        lastChunkIndex: z.number().int().nonnegative(),
+        nextChunkIndex: z.number().int().nonnegative(),
+        receivedBytes: z.number().int().nonnegative(),
+        revision: lowercaseSha256Schema,
+        rollingDigest: lowercaseSha256Schema,
+      }),
+    ]),
+  ),
+});
+export type InstalledPrototypeProjectorState = z.infer<
+  typeof installedPrototypeProjectorStateSchema
+>;
+
 /** Projects v2 manifests only from a matching completed tool receipt. */
-export const createInstalledPrototypeReferenceReducer = (input: { sessionId: string }) => {
-  const requested = new Map<string, z.infer<typeof prototypeRequestSchema>>();
-  const requestedUiPreview = new Map<string, string>();
-  let latest: PublicPrototypeReference | undefined;
+export const createInstalledPrototypeReferenceReducer = (input: {
+  sessionId: string;
+  state?: InstalledPrototypeReferenceState;
+}) => {
+  const state =
+    input.state === undefined
+      ? undefined
+      : installedPrototypeReferenceStateSchema.parse(input.state);
+  const requested = new Map<string, z.infer<typeof prototypeRequestSchema>>(state?.requested);
+  const requestedUiPreview = new Map<string, string>(state?.requestedUiPreview);
+  let latest: PublicPrototypeReference | undefined = state?.latest;
   return {
     accept(candidate: unknown) {
       const event = z
@@ -431,6 +503,12 @@ export const createInstalledPrototypeReferenceReducer = (input: { sessionId: str
         latest = projected.data;
       }
     },
+    checkpoint: (): InstalledPrototypeReferenceState =>
+      installedPrototypeReferenceStateSchema.parse({
+        requested: [...requested],
+        requestedUiPreview: [...requestedUiPreview],
+        ...(latest === undefined ? {} : { latest }),
+      }),
     snapshot: () => latest,
   };
 };
@@ -459,14 +537,18 @@ const uiPreviewResultSchema = z
 export interface InstalledPrototypeProjector {
   observe: (event: MessageStreamEvent) => void;
   current: () => PublicPrototype | undefined;
+  checkpoint: () => InstalledPrototypeProjectorState;
 }
 
-export const createInstalledPrototypeProjector = (): InstalledPrototypeProjector => {
-  const requested = new Map<string, z.infer<typeof prototypeRequestSchema>>();
+export const createInstalledPrototypeProjector = (
+  seed?: InstalledPrototypeProjectorState,
+): InstalledPrototypeProjector => {
+  const state = seed === undefined ? undefined : installedPrototypeProjectorStateSchema.parse(seed);
+  const requested = new Map<string, z.infer<typeof prototypeRequestSchema>>(state?.requested);
   const artifactReadRequests = new Map<
     string,
     { path: string; digest: string; revision?: string; offsetBytes?: number }
-  >();
+  >(state?.artifactReadRequests);
   const readChunks = new Map<
     string,
     {
@@ -478,8 +560,9 @@ export const createInstalledPrototypeProjector = (): InstalledPrototypeProjector
       digest: string;
       revision: string;
     }
-  >();
-  let expectedChunkedPreview: { path: string; digest: string; revision: string } | undefined;
+  >(state?.readChunks);
+  let expectedChunkedPreview: { path: string; digest: string; revision: string } | undefined =
+    state?.expectedChunkedPreview;
   const transfers = new Map<
     string,
     {
@@ -493,8 +576,8 @@ export const createInstalledPrototypeProjector = (): InstalledPrototypeProjector
       receivedBytes: number;
       rollingDigest: string;
     }
-  >();
-  let latest: PublicPrototype | undefined;
+  >(state?.transfers);
+  let latest: PublicPrototype | undefined = state?.latest;
 
   const observe = (event: MessageStreamEvent): void => {
     if (event.type === "actions.requested") {
@@ -881,7 +964,19 @@ export const createInstalledPrototypeProjector = (): InstalledPrototypeProjector
     });
   };
 
-  return { current: () => latest, observe };
+  return {
+    checkpoint: () =>
+      installedPrototypeProjectorStateSchema.parse({
+        artifactReadRequests: [...artifactReadRequests],
+        readChunks: [...readChunks],
+        requested: [...requested],
+        transfers: [...transfers],
+        ...(expectedChunkedPreview === undefined ? {} : { expectedChunkedPreview }),
+        ...(latest === undefined ? {} : { latest }),
+      }),
+    current: () => latest,
+    observe,
+  };
 };
 
 export const latestInstalledPrototype = (

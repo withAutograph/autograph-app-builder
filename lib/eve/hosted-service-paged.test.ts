@@ -20,6 +20,46 @@ import type {
   HostedSessionRecord,
 } from "./hosted-store";
 import type { PublicEveEvent } from "../mcp/contracts";
+import { nativeObservationStateSchema } from "./native-observation-state";
+import {
+  privateHostedApprovalCaptureStateSchema,
+  privateHostedApprovalReceiptSchema,
+} from "./private-hosted-approval";
+import {
+  hostedOperatorPlanSchema,
+  operatorPlanDigest,
+} from "../provisioning/hosted-operator-contract";
+
+const nativeState = (input: {
+  adapterSessionId: string;
+  nextNativeIndex: number;
+  publicEventCount: number;
+  legacy?: boolean;
+}) =>
+  nativeObservationStateSchema.parse({
+    adapterSessionId: input.adapterSessionId,
+    artifactReadback: {
+      incompleteArtifacts: [],
+      incompleteUiPreviews: [],
+      legacy: input.legacy ?? false,
+      markdownCalls: [],
+      pending: [],
+      references: { requested: [], requestedUiPreview: [] },
+    },
+    boundary: "waiting",
+    invalidInput: false,
+    nextNativeIndex: input.nextNativeIndex,
+    pendingRequests: [],
+    prototypeProjector: {
+      artifactReadRequests: [],
+      readChunks: [],
+      requested: [],
+      transfers: [],
+    },
+    prototypeReference: { requested: [], requestedUiPreview: [] },
+    publicEventCount: input.publicEventCount,
+    version: 1,
+  });
 
 const principal: HostedPrincipal = {
   audience: "autograph-app-builder",
@@ -58,24 +98,25 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
   let paged: HostedSessionRecord | null = null;
   let metadata: HostedPagedCheckpointMetadata | null = null;
   let eventCount = 0;
-  let first: PublicEveEvent | undefined;
-  let last: PublicEveEvent | undefined;
+  let checkpointEvents: PublicEveEvent[] = [];
+  let checkpointRevision = 0;
   const observeSessionPaged = vi.fn<NonNullable<HostedEveStore["observeSessionPaged"]>>(
     async (input) => {
       const previous = paged ?? (await base.getSession(principal, started.sessionId));
       if (previous?.version !== 2 || previous.checkpointDigest !== input.expectedCheckpointDigest) {
         throw new Error("Checkpoint observation raced.");
       }
-      eventCount = 0;
+      const stagedEvents: PublicEveEvent[] = [];
       for await (const event of input.events) {
-        first ??= event;
-        last = event;
-        eventCount += 1;
+        stagedEvents.push(event);
       }
+      checkpointEvents = stagedEvents;
+      eventCount = stagedEvents.length;
       ({ metadata } = input);
       const { checkpoint: previousInlineCheckpoint, ...withoutInline } = previous;
       void previousInlineCheckpoint;
-      const digest = `sha256:${"a".repeat(64)}`;
+      const digest = `sha256:${checkpointRevision.toString(16).padStart(64, "0")}`;
+      checkpointRevision += 1;
       paged = durableHostedSessionRecordSchema.parse({
         ...withoutInline,
         checkpointDigest: digest,
@@ -100,13 +141,7 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
       ) {
         throw new Error("Unknown checkpoint reference.");
       }
-      let event: PublicEveEvent | undefined;
-      if (input.cursor === 0) {
-        event = first;
-      } else if (input.cursor === eventCount - 1) {
-        event = last;
-      }
-      const events = event === undefined ? [] : [event];
+      const events = checkpointEvents.slice(input.cursor, input.cursor + input.limit);
       return {
         checkpointDigest: paged.checkpointRef.digest,
         cursor: input.cursor + events.length,
@@ -127,17 +162,17 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
     ) {
       throw new Error("Hosted session recovery raced another continuation.");
     }
-    let nextCount = 0;
+    const stagedEvents: PublicEveEvent[] = [];
     for await (const event of input.events) {
-      first ??= event;
-      last = event;
-      nextCount += 1;
+      stagedEvents.push(event);
     }
-    eventCount = nextCount;
+    checkpointEvents = stagedEvents;
+    eventCount = stagedEvents.length;
     ({ metadata } = input);
     const { checkpoint: previousInlineCheckpoint, ...withoutInline } = previous;
     void previousInlineCheckpoint;
-    const digest = `sha256:${"c".repeat(64)}`;
+    const digest = `sha256:${checkpointRevision.toString(16).padStart(64, "0")}`;
+    checkpointRevision += 1;
     paged = durableHostedSessionRecordSchema.parse({
       ...withoutInline,
       adapterGeneration: previous.adapterGeneration + 1,
@@ -165,6 +200,7 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
     observeSession: base.observeSession.bind(base),
     observeSessionPaged,
     readCheckpointPage,
+    recordPrivateApprovalReceipts: base.recordPrivateApprovalReceipts.bind(base),
     replaceSessionAdapter: base.replaceSessionAdapter.bind(base),
     replaceSessionAdapterPaged,
     reserveOperation: base.reserveOperation.bind(base),
@@ -188,10 +224,308 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
     replaceSessionAdapterPaged,
     service,
     sessionId: started.sessionId,
+    store,
   };
 };
 
 describe("paged hosted session observation", () => {
+  it("hydrates native reducer state and atomically appends absolute public event deltas", async () => {
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
+      const previous = input.nativeObservationState;
+      const eventIndex = previous?.publicEventCount ?? 0;
+      await input.onEvent({
+        index: eventIndex,
+        text: `event ${eventIndex}`,
+        turnId: "turn_1",
+        type: "assistant.message",
+      });
+      const nextNativeIndex = previous === undefined ? 2 : 3;
+      const publicEventCount = eventIndex + 1;
+      const state = nativeState({
+        adapterSessionId: input.adapterSessionId,
+        legacy: true,
+        nextNativeIndex,
+        publicEventCount,
+      });
+      return {
+        artifactProjectionRequiresLegacyReadback: true,
+        installedEventCount: nextNativeIndex,
+        nativeObservationState: state,
+        nextNativeIndex,
+        pendingRequests: [],
+        publicEventCount,
+        status: "waiting",
+      };
+    });
+    const { getPagedEventCount, observeSessionPaged, service, sessionId } = await fixture(observe);
+
+    const first = await service.get({ cursor: 0, limit: 10, sessionId });
+    const second = await service.get({ cursor: 0, limit: 10, sessionId });
+
+    expect(first.events.map((event) => event.index)).toEqual([0]);
+    expect(second.events.map((event) => event.index)).toEqual([0, 1]);
+    expect(getPagedEventCount()).toBe(2);
+    expect(observe.mock.calls[1]?.[0].nativeObservationState).toMatchObject({
+      adapterSessionId: "adapter_1",
+      nextNativeIndex: 2,
+      publicEventCount: 1,
+    });
+    const metadata = observeSessionPaged.mock.calls[1]?.[0].metadata;
+    expect(metadata?.nativeObservationState).toMatchObject({
+      nextNativeIndex: 3,
+      publicEventCount: 2,
+    });
+    expect(metadata?.privateApprovalCaptureState).toMatchObject({
+      sessionId,
+      version: 1,
+    });
+    expect(second).not.toHaveProperty("nativeObservationState");
+    expect(second).not.toHaveProperty("privateApprovalCaptureState");
+  });
+
+  it("does not advance native or approval checkpoints after a checkpoint CAS failure", async () => {
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
+      const previous = input.nativeObservationState;
+      const eventIndex = previous?.publicEventCount ?? 0;
+      await input.onEvent({
+        index: eventIndex,
+        text: `event ${eventIndex}`,
+        turnId: "turn_1",
+        type: "assistant.message",
+      });
+      const nextNativeIndex = previous === undefined ? 2 : 3;
+      const publicEventCount = eventIndex + 1;
+      const state = nativeState({
+        adapterSessionId: input.adapterSessionId,
+        nextNativeIndex,
+        publicEventCount,
+      });
+      return {
+        artifactProjectionRequiresLegacyReadback: false,
+        installedEventCount: nextNativeIndex,
+        nativeObservationState: state,
+        nextNativeIndex,
+        pendingRequests: [],
+        publicEventCount,
+        status: "waiting",
+      };
+    });
+    const { getPagedEventCount, getSession, observeSessionPaged, service, sessionId } =
+      await fixture(observe);
+    await service.get({ cursor: 0, limit: 10, sessionId });
+    const before = await getSession(principal, sessionId);
+    const savedMetadata = observeSessionPaged.mock.calls[0]?.[0].metadata;
+    observeSessionPaged.mockRejectedValueOnce(new Error("checkpoint CAS lost"));
+
+    await expect(service.get({ cursor: 0, limit: 10, sessionId })).rejects.toThrow(
+      "checkpoint CAS lost",
+    );
+
+    const after = await getSession(principal, sessionId);
+    expect(before?.version).toBe(2);
+    expect(after?.version).toBe(2);
+    if (before?.version !== 2 || after?.version !== 2) {
+      throw new Error("Expected a saved paged checkpoint before and after the failed CAS.");
+    }
+    expect(after.checkpointRef?.digest).toBe(before.checkpointRef?.digest);
+    expect(observeSessionPaged.mock.calls[0]?.[0].metadata).toBe(savedMetadata);
+    expect(getPagedEventCount()).toBe(1);
+  });
+
+  it("drops pending approval correlation when the durable adapter generation is replaced", async () => {
+    const requestId = "request_reused_after_replacement";
+    const selection = {
+      appId: "spend-review",
+      branch: "preview",
+      environment: "preview" as const,
+      projectId: "prj_fixture",
+      sessionId: "replace-me",
+    };
+    const plan = hostedOperatorPlanSchema.parse({
+      access: [{ actorId: "reviewer", organizationId: "org", roles: ["reviewer"] }],
+      action: "prepare",
+      appDatabase: {
+        database: "spend",
+        migratorRole: "spend_owner",
+        resourceId: "app-resource",
+        runtimeRole: "spend_runtime",
+      },
+      authDatabase: {
+        database: "shared_auth",
+        migratorRole: "auth_owner",
+        resourceId: "auth-resource",
+        runtimeRole: "auth_runtime",
+      },
+      contextId: "context",
+      cost: { class: "shared-recovery-group", description: "fixture", owner: "owner" },
+      effects: [
+        { description: "verify resources", id: "resources", kind: "resources" },
+        { description: "install release", id: "install", kind: "install" },
+        { description: "grant access", id: "access", kind: "access" },
+        { description: "bind runtime", id: "bindings", kind: "bindings" },
+      ],
+      installer: { reference: "installer", sha256: "a".repeat(64) },
+      neon: {
+        branchId: "br_synthetic",
+        connectionRef: "owner-connection",
+        endpoint: "ep-fixture.us-east-1.aws.neon.tech",
+        projectId: "neon-project",
+        source: "synthetic-only",
+      },
+      publicGateway: {
+        branch: selection.branch,
+        origin: "https://apps-preview.example.test",
+        projectId: selection.projectId,
+      },
+      release: { artifactRef: "artifact", id: "release", sha256: "b".repeat(64) },
+      retention: { expiresAt: "2027-01-01T00:00:00.000Z", policy: "retain" },
+      selection,
+      version: 1,
+    });
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
+      if (input.adapterSessionId === "adapter_1") {
+        const approvalPlan = hostedOperatorPlanSchema.parse({
+          ...plan,
+          selection: { ...selection, sessionId: input.sessionId },
+        });
+        const requested = {
+          data: {
+            requests: [
+              {
+                action: {
+                  callId: "call_fixture",
+                  input: {
+                    appId: selection.appId,
+                    branch: selection.branch,
+                    environment: selection.environment,
+                    operationRef: "a3f06690-718f-41c7-a67f-c6c1c0ecdbf3",
+                    plan: approvalPlan,
+                    planDigest: operatorPlanDigest(approvalPlan),
+                    projectId: selection.projectId,
+                  },
+                  kind: "tool-call",
+                  toolName: "prepare-app-hosted-runtime",
+                },
+                kind: "tool-approval",
+                prompt: "Approve hosted runtime preparation",
+                requestId,
+              },
+            ],
+            sequence: 4,
+            stepIndex: 2,
+            turnId: "turn_fixture",
+          },
+          meta: { at: "2026-10-06T00:00:00.000Z", id: "evt_pending" },
+          type: "input.requested",
+        } as const;
+        await input.onPrivateEvent?.(requested);
+        return {
+          artifactProjectionRequiresLegacyReadback: false,
+          installedEventCount: 1,
+          nativeObservationState: nativeState({
+            adapterSessionId: input.adapterSessionId,
+            nextNativeIndex: 1,
+            publicEventCount: 0,
+          }),
+          nextNativeIndex: 1,
+          pendingRequests: [],
+          publicEventCount: 0,
+          status: "waiting",
+        };
+      }
+      await input.onPrivateEvent?.({
+        data: {
+          outcome: "approved",
+          requestId,
+          responderPrincipalId: "owner_1",
+          sequence: 5,
+          stepIndex: 2,
+          turnId: "turn_fixture",
+        },
+        meta: { at: "2026-10-06T00:00:01.000Z", id: "evt_settled_collision" },
+        type: "approval.settled",
+      });
+      return {
+        artifactProjectionRequiresLegacyReadback: false,
+        installedEventCount: 1,
+        nativeObservationState: nativeState({
+          adapterSessionId: input.adapterSessionId,
+          nextNativeIndex: 1,
+          publicEventCount: 0,
+        }),
+        nextNativeIndex: 1,
+        pendingRequests: [],
+        publicEventCount: 0,
+        status: "waiting",
+      };
+    });
+    const { getSession, observeSessionPaged, service, sessionId, store } = await fixture(observe);
+    await service.get({ cursor: 0, limit: 10, sessionId });
+    const recordReceipts = vi.spyOn(store, "recordPrivateApprovalReceipts");
+    const saved = await getSession(principal, sessionId);
+    if (saved?.version !== 2) {
+      throw new Error("Expected the initial adapter checkpoint.");
+    }
+    const priorApprovedPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      selection: { ...selection, sessionId },
+    });
+    const priorReceipt = privateHostedApprovalReceiptSchema.parse({
+      callId: "call_fixture",
+      format: "autograph-hosted-approval-v1",
+      outcome: "approved",
+      requestId: "request_from_original_adapter",
+      responderPrincipalId: "owner_1",
+      sequence: 3,
+      toolInput: {
+        appId: selection.appId,
+        branch: selection.branch,
+        environment: selection.environment,
+        operationRef: "a3f06690-718f-41c7-a67f-c6c1c0ecdbf3",
+        plan: priorApprovedPlan,
+        planDigest: operatorPlanDigest(priorApprovedPlan),
+        projectId: selection.projectId,
+      },
+      toolName: "prepare-app-hosted-runtime",
+      turnId: "turn_fixture",
+    });
+    const savedMetadata = observeSessionPaged.mock.calls[0]?.[0].metadata;
+    if (savedMetadata?.privateApprovalCaptureState === undefined) {
+      throw new Error("Expected a saved private approval capture checkpoint.");
+    }
+    savedMetadata.privateApprovalCaptureState = privateHostedApprovalCaptureStateSchema.parse({
+      ...savedMetadata.privateApprovalCaptureState,
+      receipts: [priorReceipt],
+    });
+    // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous store contract.
+    getSession.mockImplementationOnce(async () => ({
+      ...saved,
+      adapterGeneration: saved.adapterGeneration + 1,
+      adapterSessionId: "replacement_adapter",
+    }));
+
+    await expect(service.get({ cursor: 0, limit: 10, sessionId })).resolves.toMatchObject({
+      sessionId,
+      status: "waiting",
+    });
+
+    expect(
+      observeSessionPaged.mock.calls[0]?.[0].metadata.privateApprovalCaptureState,
+    ).toMatchObject({ pendingRequests: [{ requestId }] });
+    const replacementApprovalState =
+      observeSessionPaged.mock.calls[1]?.[0].metadata.privateApprovalCaptureState;
+    if (replacementApprovalState === undefined) {
+      throw new Error("Expected a replacement private approval checkpoint.");
+    }
+    expect(replacementApprovalState).toMatchObject({ pendingRequests: [] });
+    expect(replacementApprovalState.receipts).toEqual([priorReceipt]);
+    expect(observe.mock.calls[1]?.[0].nativeObservationState).toBeUndefined();
+    expect(recordReceipts).toHaveBeenCalledOnce();
+    expect(recordReceipts.mock.calls[0]?.[0].receipts.map((receipt) => receipt.requestId)).toEqual([
+      priorReceipt.requestId,
+    ]);
+  });
+
   it("atomically settles a new session with more than 512 paged checkpoint events", async () => {
     const base = new InMemoryHostedEveStore();
     const events = Array.from({ length: 520 }, (_, index) => ({

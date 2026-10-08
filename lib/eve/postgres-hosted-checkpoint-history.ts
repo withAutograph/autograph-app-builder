@@ -24,6 +24,8 @@ import {
 import type { PublicEveEvent } from "../mcp/contracts";
 import { hostedPrincipalSchema } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
+import { nativeObservationStateSchema } from "./native-observation-state";
+import { privateHostedApprovalCaptureStateSchema } from "./private-hosted-approval";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -32,9 +34,14 @@ type Bytes = AsyncIterable<Uint8Array>;
 // New checkpoint metadata lives in byte chunks. Legacy inline checkpoint
 // validation retains its size limit until every read has moved to this store.
 export const pagedCheckpointMetadataSchema = z.strictObject({
+  activeTurnId: z.string().min(1).optional(),
   capturedAtEpochMs: z.number().int().nonnegative(),
   implementationPlan: z.json().optional(),
   inputRequests: z.array(publicInputRequestSchema).optional(),
+  // Private, owner-scoped reducer snapshots live in chunked metadata and are
+  // published atomically with the complete public event prefix.
+  nativeObservationState: nativeObservationStateSchema.optional(),
+  privateApprovalCaptureState: privateHostedApprovalCaptureStateSchema.optional(),
   prototype: publicPrototypeSchema.optional(),
   prototypeRef: publicPrototypeReferenceSchema.optional(),
   status: sessionStatusSchema,
