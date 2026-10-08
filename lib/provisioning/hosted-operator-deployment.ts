@@ -375,9 +375,9 @@ export const createHostedOperatorControlPlane = async (input: {
       });
     const owner = createHostedOperatorOwnerAuthority({
       eve,
+      fetch: input.fetch,
       handoffs,
       listVercelInstallations: async (authority) => await installations.list(authority),
-      fetch: input.fetch,
       membership: {
         isMember: async ({ principal, workspaceId }) =>
           await membership.isActiveMember({
@@ -567,7 +567,6 @@ export const createHostedOperatorControlPlane = async (input: {
 
     return {
       assertAuthorized: owner.assertAuthorized,
-      assertPlanningAuthorized: owner.assertPlanningAuthorized,
       async assertMembershipCapture(inputContext: HostedOperatorEffectContext) {
         if (
           inputContext.effect.kind !== "auth-membership" ||
@@ -582,18 +581,18 @@ export const createHostedOperatorControlPlane = async (input: {
           store,
         });
         const link = record.operator?.identityLink;
-        const membership = inputContext.plan.authMembership;
+        const capturedMembership = inputContext.plan.authMembership;
         const matches = [
-          link?.consumedAt === membership.identityCapture.capturedAt,
-          link?.proofRef === membership.identityProof.reference,
-          link?.proofSha256 === membership.identityProof.sha256,
-          link?.nonceSha256 === membership.identityNonceSha256,
-          link?.bootstrapPlanDigest === membership.bootstrapPlanDigest,
+          link?.consumedAt === capturedMembership.identityCapture.capturedAt,
+          link?.proofRef === capturedMembership.identityProof.reference,
+          link?.proofSha256 === capturedMembership.identityProof.sha256,
+          link?.nonceSha256 === capturedMembership.identityNonceSha256,
+          link?.bootstrapPlanDigest === capturedMembership.bootstrapPlanDigest,
           link?.ownerSessionId === inputContext.target.sessionId,
           link?.authResourceId === inputContext.plan.authDatabase.resourceId,
-          link?.issuer === membership.identityVerification.issuer,
-          link?.audience === membership.identityVerification.audience,
-          `${link?.endpointOrigin}/_platform/jwks.json` === membership.identityVerification.jwksUrl,
+          link?.issuer === capturedMembership.identityVerification.issuer,
+          link?.audience === capturedMembership.identityVerification.audience,
+          `${link?.endpointOrigin}/_platform/jwks.json` === capturedMembership.identityVerification.jwksUrl,
         ].every(Boolean);
         if (!matches) {
           throw new HostedOperatorError("auth_identity_required");
@@ -601,13 +600,13 @@ export const createHostedOperatorControlPlane = async (input: {
         const artifacts = ownedArtifacts(inputContext);
         const content = await artifacts.store.read(
           artifacts.context,
-          membership.identityProof.reference,
+          capturedMembership.identityProof.reference,
           0,
         );
         if (
           content === undefined ||
           createHash("sha256").update(Buffer.from(content, "base64")).digest("hex") !==
-            membership.identityProof.sha256
+            capturedMembership.identityProof.sha256
         ) {
           throw new HostedOperatorError("auth_identity_required");
         }
@@ -622,13 +621,14 @@ export const createHostedOperatorControlPlane = async (input: {
             ),
           );
         if (
-          claims.sessionId !== membership.identityCapture.realmSessionId ||
-          claims.sub !== membership.actorId
+          claims.sessionId !== capturedMembership.identityCapture.realmSessionId ||
+          claims.sub !== capturedMembership.actorId
         ) {
           throw new HostedOperatorError("auth_identity_required");
         }
         await owner.assertAuthorized(inputContext);
       },
+      assertPlanningAuthorized: owner.assertPlanningAuthorized,
       authorize: owner.authorize,
       async close() {
         await controlPlaneClient.end({ timeout: 5 });
