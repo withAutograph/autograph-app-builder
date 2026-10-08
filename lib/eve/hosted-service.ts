@@ -1436,9 +1436,7 @@ export function createHostedEveSessionService(input: {
   };
 
   // eslint-disable-next-line eslint/func-style -- Keep local checkpoint readers adjacent to the observer flow.
-  const readCheckpointEvents = async function* readCheckpointEvents(
-    record: HostedSessionRecord,
-  ) {
+  const readCheckpointEvents = async function* readCheckpointEvents(record: HostedSessionRecord) {
     const durable = toDurableHostedSessionRecord(record);
     const ref = durable.checkpointRef;
     if (ref === undefined || input.store.readCheckpointPage === undefined) {
@@ -1572,8 +1570,7 @@ export function createHostedEveSessionService(input: {
         if (
           observedNativeState !== undefined &&
           (observedNativeState.adapterSessionId !== session.adapterSessionId ||
-            observedNativeState.publicEventCount !==
-              spool.eventStartIndex + spool.eventCount)
+            observedNativeState.publicEventCount !== spool.eventStartIndex + spool.eventCount)
         ) {
           throw new HostedSessionRecoveryUnavailableError();
         }
@@ -1905,10 +1902,7 @@ export function createHostedEveSessionService(input: {
             principal,
             ...(turnId === undefined ? {} : { turnId }),
           });
-          return readAcceptedMutation(
-            sessionId,
-            session.checkpointDigest,
-          );
+          return readAcceptedMutation(sessionId, session.checkpointDigest);
         }
         snapshot = await input.transport.cancel({
           adapterSessionId: session.adapterSessionId,
@@ -2038,7 +2032,7 @@ export function createHostedEveSessionService(input: {
               });
           const expected = (
             preflight?.persisted
-              ? preflight?.result.inputRequests ?? []
+              ? (preflight?.result.inputRequests ?? [])
               : outstandingInternalEveRequests(
                   (before?.events ?? []).filter(
                     (event): event is InternalEveEvent =>
