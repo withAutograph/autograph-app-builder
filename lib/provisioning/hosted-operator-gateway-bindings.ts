@@ -25,6 +25,7 @@ const managedKeys = [
   "PLATFORM_AUTH_DATABASE_URL",
   "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
   "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+  "PLATFORM_GATEWAY_PROJECT_BINDINGS",
 ] as const;
 const managedKeySchema = z.enum(managedKeys);
 const requiredSecretKeys = [
@@ -66,6 +67,41 @@ const authResource = (input: GatewayManagedEnvironmentContext) => {
   };
 };
 
+const projectionScope = {
+  environment: z.literal("preview"),
+  ownerId: z.string().min(1),
+  projectId: z.string().min(1),
+};
+const appBinding = z.strictObject({
+  appId: z.string().min(1),
+  approved: z.strictObject({
+    ...projectionScope,
+    deploymentId: z.string().min(1),
+    deploymentUrl: z.url(),
+    projectName: z.string().min(1),
+    scopeSlug: z.string().min(1),
+  }),
+  observation: z.strictObject({
+    ...projectionScope,
+    deploymentId: z.string().min(1),
+    deploymentUrl: z.url(),
+    projectName: z.string().min(1),
+    readyState: z.literal("READY"),
+    scopeSlug: z.string().min(1),
+  }),
+});
+const projectionSchema = z.strictObject({
+  bindings: z.array(appBinding),
+  provenance: z.literal("trusted-operator-published-provider-projection"),
+  source: z.strictObject({
+    ...projectionScope,
+    audience: z.url(),
+    issuer: z.url(),
+    publicOrigin: z.url(),
+    subject: z.string().min(1),
+  }),
+  version: z.literal(1),
+});
 const validGatewayInput = (input: GatewayManagedEnvironmentContext) => {
   const { gateway, plan, target } = input;
   const {
@@ -98,6 +134,9 @@ const validGatewayInput = (input: GatewayManagedEnvironmentContext) => {
     publicOrigin === boundary.verification.publicOrigin,
     operatorOrigin === config.operatorOrigin,
     authBrowserOrigin === config.authBrowserOrigin,
+    JSON.stringify(gateway.sourceWorkload) === JSON.stringify(config.sourceWorkload),
+    gateway.sourceWorkload.projectId === gateway.projectId,
+    gateway.sourceWorkload.ownerId === target.scopeId,
     builderCallbackOrigin === config.builderCallbackOrigin,
     JSON.stringify(catalogAppIds.toSorted()) === JSON.stringify(config.catalogAppIds.toSorted()),
     catalogAppIds.includes(plan.selection.appId),
@@ -329,15 +368,82 @@ export const createHostedOperatorGatewayBindings = (deps: {
           ...new Set([...existingIds, ...protectedApplicationIds]),
         ].toSorted((a, b) => a.localeCompare(b));
       }
+      const oldProjection = rows.find((row) => row.key === "PLATFORM_GATEWAY_PROJECT_BINDINGS");
+      let priorBindings: z.infer<typeof appBinding>[] = [];
+      if (oldProjection !== undefined) {
+        const stored = providerValue.parse(
+          await request(
+            `/v1/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(oldProjection.id)}`,
+          ),
+        );
+        const prior = projectionSchema.parse(JSON.parse(stored.value));
+        const expectedSource = { ...gateway.sourceWorkload, publicOrigin: gateway.publicOrigin };
+        if (
+          JSON.stringify(prior.source) !==
+          JSON.stringify(projectionSchema.shape.source.parse(expectedSource))
+        ) {
+          throw unavailable();
+        }
+        priorBindings = prior.bindings;
+      }
+      const selectedId =
+        input.plan.stage === "auth-bootstrap"
+          ? undefined
+          : input.deliveryCandidates?.find(
+              (candidate) =>
+                candidate.readyState === "READY" && candidate.operationRef === input.operationRef,
+            )?.deploymentId;
+      const selected = input.deliveryCandidates?.find(
+        (candidate) => candidate.deploymentId === selectedId,
+      );
+      if (input.plan.stage !== "auth-bootstrap" && selected === undefined) {
+        throw unavailable();
+      }
+      if (selected !== undefined) {
+        if (
+          selected.projectName === undefined ||
+          selected.scopeSlug === undefined ||
+          selected.projectId !== input.target.projectId ||
+          selected.branch !== input.target.branch
+        ) {
+          throw unavailable();
+        }
+        const targetScope = {
+          deploymentId: selected.deploymentId,
+          deploymentUrl: selected.origin,
+          environment: "preview" as const,
+          ownerId: input.target.scopeId,
+          projectId: selected.projectId,
+          projectName: selected.projectName,
+          scopeSlug: selected.scopeSlug,
+        };
+        const bound = appBinding.parse({
+          appId: input.target.appId,
+          approved: targetScope,
+          observation: { ...targetScope, readyState: "READY" },
+        });
+        priorBindings = [
+          ...priorBindings.filter((binding) => binding.appId !== input.target.appId),
+          bound,
+        ];
+      }
+      const projection = projectionSchema.parse({
+        bindings: priorBindings,
+        provenance: "trusted-operator-published-provider-projection",
+        source: { ...gateway.sourceWorkload, publicOrigin: gateway.publicOrigin },
+        version: 1,
+      });
       return {
         AUTH_DATABASE_RESOURCE: JSON.stringify(authResource(input)),
         PLATFORM_AUTH_DATABASE_URL: runtimeUrl,
+        PLATFORM_GATEWAY_PROJECT_BINDINGS: JSON.stringify(projection),
         PLATFORM_GATEWAY_PROTECTED_APPLICATIONS: JSON.stringify(protectedApplicationIds),
         PLATFORM_REALM_OPERATOR_LINK_CONFIG: JSON.stringify({
           browserOrigin: exactHttpsOrigin(gateway.authBrowserOrigin),
           builderCallbackOrigin: exactHttpsOrigin(gateway.builderCallbackOrigin),
           builderCallbackPath: "/api/hosted-operator/realm-identity",
           operatorOrigin: exactHttpsOrigin(gateway.operatorOrigin),
+          readonlyAttesters: input.plan.gatewayBindings?.readonlyAttesters,
         }),
       };
     };

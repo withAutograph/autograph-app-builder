@@ -142,7 +142,7 @@ const makeFixture = (
         artifactRef: "auth-plan-artifact",
         planDigest: "d".repeat(64),
         targetDigest: "e".repeat(64),
-        installer: { reference: "auth-protected-installer-v1", sha256: "f".repeat(64) },
+        installer: { reference: "auth-protected-schema-v1", sha256: "f".repeat(64) },
       },
     });
   }
@@ -469,8 +469,8 @@ const makeFixture = (
               executablePath: "/opt/auth-worker",
               id: selectedPlan.authSchema!.installer.reference,
               sha256: selectedPlan.authSchema!.installer.sha256,
-              operationScope: "auth-protected-migrate-v1" as const,
-              subcommand: "auth-protected-migrate" as const,
+              operationScope: "auth-protected-schema-v1" as const,
+              subcommand: "auth-protected-schema" as const,
             },
           }
         : {}),
@@ -552,7 +552,7 @@ describe("hosted protected installer Sandbox launcher", () => {
       tenant_targets: [],
       resource: { resource_id: plan.authDatabase.resourceId },
       release: { id: "e".repeat(64), sha256: "d".repeat(64) },
-      installer: { id: "auth-protected-installer-v1", sha256: "f".repeat(64) },
+      installer: { id: "auth-protected-schema-v1", sha256: "f".repeat(64) },
     });
     expect(fixture.files.has(`${startup}/auth-schema-plan.json`)).toBe(true);
     expect(fixture.written.filter((file) => file.includes("/release/"))).toHaveLength(0);
@@ -561,7 +561,7 @@ describe("hosted protected installer Sandbox launcher", () => {
       expect.objectContaining({
         cmd: "/opt/auth-worker",
         args: [
-          "auth-protected-migrate",
+          "auth-protected-schema",
           "--file-spool",
           `/vercel/sandbox/protected-installer/${runId}`,
           runId,

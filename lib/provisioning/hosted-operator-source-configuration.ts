@@ -78,7 +78,7 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
     protectedApplicationIds: z.array(id),
     publicOrigin: httpsOrigin,
     repoId: id,
-    workload: workload,
+    workload,
   }),
   nativeNeon: z.strictObject({
     configuration: configurationSchema.omit({ connectorInstallationId: true }),

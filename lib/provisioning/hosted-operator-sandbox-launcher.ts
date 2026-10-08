@@ -34,15 +34,20 @@ const RESOURCES_SCOPE = "neon-resource-bootstrap-v1";
 const RESOURCES_COMMAND = "neon-resource-bootstrap";
 const RESOURCES_INSPECT_COMMAND = "neon-resource-inspect";
 const RESOURCES_RETIRE_COMMAND = "neon-resource-retire";
+const RESOURCES_RETIRED_INSPECT_COMMAND = "neon-resource-inspect-retired";
 const ACCESS_SCOPE = "generated-app-access-v1";
 const ACCESS_COMMAND = "protected-generated-app-access";
 const ACCESS_INSPECT_COMMAND = "protected-generated-app-access-readback";
-const AUTH_SCOPE = "auth-protected-migrate-v1";
+const AUTH_SCOPE = "auth-protected-schema-v1";
+const MEMBERSHIP_SCOPE = "auth-protected-membership-v1";
+const MEMBERSHIP_COMMAND = "auth-protected-membership";
+const MEMBERSHIP_INSPECT_COMMAND = "auth-protected-membership-readback";
 const HC_SCOPE = "hc-protected-install-v1";
 const HC_COMMAND = "protected-install";
 const VENDOR_COMMAND = "protected-materialize";
 const GENERATED_COMMAND = "protected-generated-app-install";
-const AUTH_COMMAND = "auth-protected-migrate";
+const GENERATED_INSPECT_COMMAND = "protected-generated-app-install-readback";
+const AUTH_COMMAND = "auth-protected-schema";
 export const GENERATED_RELEASE_MEMBERS = [
   "app-artifact.json",
   "cue-to-sql-source-map.json",
@@ -105,6 +110,7 @@ const workerScopeSchema = z.enum([
   "vendor-protected-materialize-v1",
   GENERATED_APP_SCOPE,
   AUTH_SCOPE,
+  MEMBERSHIP_SCOPE,
   RESOURCES_SCOPE,
   ACCESS_SCOPE,
 ]);
@@ -113,11 +119,15 @@ const workerSubcommandSchema = z.enum([
   VENDOR_COMMAND,
   GENERATED_COMMAND,
   AUTH_COMMAND,
+  MEMBERSHIP_COMMAND,
+  MEMBERSHIP_INSPECT_COMMAND,
   RESOURCES_COMMAND,
   RESOURCES_INSPECT_COMMAND,
+  RESOURCES_RETIRED_INSPECT_COMMAND,
   RESOURCES_RETIRE_COMMAND,
   ACCESS_COMMAND,
   ACCESS_INSPECT_COMMAND,
+  GENERATED_INSPECT_COMMAND,
 ]);
 
 export interface ProtectedInstallerWorkerDescriptor {
@@ -139,6 +149,7 @@ export interface HostedOperatorSandboxConfiguration {
   authWorker?: ProtectedInstallerWorkerDescriptor;
   resourcesWorker?: ProtectedInstallerWorkerDescriptor;
   accessWorker?: ProtectedInstallerWorkerDescriptor;
+  membershipWorker?: ProtectedInstallerWorkerDescriptor;
 }
 
 export interface ProtectedInstallContextWire {
@@ -194,6 +205,7 @@ interface PrivateSandboxWorkerInput {
   generatedRelease?: { artifactRef: string; files: GeneratedAppReleaseFiles };
   /** Private reviewed Auth plan resolved from plan.authSchema.artifactRef. */
   authSchemaPlan?: { artifactRef: string; content: Buffer };
+  membershipProof?: { proof: string; oidcToken: string };
   accessConnections?: {
     appMigrator: string;
     appRuntime: string;
@@ -217,7 +229,7 @@ const accessReadbackSchema = z.strictObject({
   operation_id: z.uuid(),
   context_digest: digestSchema,
   fence_generation: z.number().int().positive(),
-  status: z.enum(["applied", "incomplete"]),
+  status: z.enum(["absent", "applied", "incomplete", "retryable"]),
   readback_sha256: digestSchema,
 });
 
@@ -229,7 +241,7 @@ const resourceReadbackSchema = z
     fence_generation: z.number().int().positive(),
     resource_id: z.string().min(1),
     scope: z.enum(["app_database", "auth_database"]),
-    status: z.enum(["applied", "absent", "unknown"]),
+    status: z.enum(["applied", "absent", "unknown", "retryable"]),
     readback_sha256: digestSchema.optional(),
     databaseAbsent: z.boolean().optional(),
     retainedRoles: z
@@ -693,7 +705,7 @@ const requestMatchesWorkerScope = (
       "kind" in context &&
       context.kind === "neon_resource_bootstrap" &&
       tenantId === null &&
-      (worker.subcommand === RESOURCES_RETIRE_COMMAND
+      ([RESOURCES_RETIRE_COMMAND, RESOURCES_RETIRED_INSPECT_COMMAND].includes(worker.subcommand)
         ? context.resource.scope === "app_database" && effectId === "resources:retire"
         : ["resources:roles", "resources:database", "resources:acl"].includes(effectId))
     );
@@ -705,13 +717,22 @@ const requestMatchesWorkerScope = (
       ["generated_app.grant_access", "generated_app.revoke_access"].includes(effectId)
     );
   }
+  if (worker.operationScope === MEMBERSHIP_SCOPE) {
+    return (
+      worker.subcommand === MEMBERSHIP_COMMAND &&
+      context.app_id === "auth" &&
+      context.tenant_targets.length === 0 &&
+      tenantId === null &&
+      effectId === "auth:create-owned-organization"
+    );
+  }
   if (worker.operationScope === AUTH_SCOPE) {
     return (
       worker.subcommand === AUTH_COMMAND &&
       context.app_id === "auth" &&
       context.tenant_targets.length === 0 &&
       tenantId === null &&
-      ["auth:apply-schema-plan", "auth:provision-access"].includes(effectId)
+      effectId === "auth:apply-schema-plan"
     );
   }
   if (worker.operationScope === GENERATED_APP_SCOPE) {
@@ -877,7 +898,12 @@ const runSandboxWorker = async (
     input.readbackOnly === true ? randomUUID() : workerRunIdSchema.parse(input.workerAttemptId);
   const resources = input.effect.kind === "resources" || input.effect.kind === "retire";
   const access = input.effect.kind === "access" || input.effect.kind === "revoke";
-  if (input.readbackOnly === true && !access && !resources) {
+  const membership = input.effect.kind === "auth-membership";
+  const installReadback =
+    input.readbackOnly === true &&
+    input.effect.kind === "install" &&
+    input.database === "appDatabase";
+  if (input.readbackOnly === true && !access && !resources && !installReadback && !membership) {
     throw resourceMismatch();
   }
   const auth = !resources && !access && input.database === "authDatabase";
@@ -889,6 +915,9 @@ const runSandboxWorker = async (
     installer = input.plan.resourcesInstaller;
   } else if (access) {
     worker = configuration.accessWorker;
+  } else if (membership) {
+    worker = configuration.membershipWorker;
+    installer = worker === undefined ? undefined : { reference: worker.id, sha256: worker.sha256 };
   } else if (auth) {
     worker = configuration.authWorker;
     installer = input.plan.authSchema?.installer;
@@ -898,7 +927,10 @@ const runSandboxWorker = async (
     resourceCommand = RESOURCES_RETIRE_COMMAND;
   }
   if (input.readbackOnly === true) {
-    resourceCommand = RESOURCES_INSPECT_COMMAND;
+    resourceCommand =
+      input.effect.kind === "retire"
+        ? RESOURCES_RETIRED_INSPECT_COMMAND
+        : RESOURCES_INSPECT_COMMAND;
   }
   if (worker !== undefined && resources) {
     worker = { ...worker, subcommand: resourceCommand };
@@ -907,6 +939,12 @@ const runSandboxWorker = async (
       ...worker,
       subcommand: input.readbackOnly === true ? ACCESS_INSPECT_COMMAND : ACCESS_COMMAND,
     };
+  }
+  if (worker !== undefined && membership && input.readbackOnly === true) {
+    worker = { ...worker, subcommand: MEMBERSHIP_INSPECT_COMMAND };
+  }
+  if (worker !== undefined && installReadback) {
+    worker = { ...worker, subcommand: GENERATED_INSPECT_COMMAND };
   }
   if (
     worker === undefined ||
@@ -926,18 +964,22 @@ const runSandboxWorker = async (
     !workerScopeSchema.safeParse(worker.operationScope).success ||
     !workerSubcommandSchema.safeParse(worker.subcommand).success ||
     (worker.operationScope === AUTH_SCOPE && !auth) ||
-    ((auth || worker.operationScope === GENERATED_APP_SCOPE) && input.effect.kind !== "install") ||
+    (((auth && !membership) || worker.operationScope === GENERATED_APP_SCOPE) &&
+      input.effect.kind !== "install") ||
     worker.id !== installer?.reference ||
     worker.sha256 !== installer.sha256 ||
     (auth &&
+      !membership &&
       (worker.operationScope !== AUTH_SCOPE ||
-        worker.id !== "auth-protected-installer-v1" ||
+        worker.id !== "auth-protected-schema-v1" ||
         worker.subcommand !== AUTH_COMMAND)) ||
     (worker.operationScope === HC_SCOPE && worker.subcommand !== HC_COMMAND) ||
     (worker.operationScope === "vendor-protected-materialize-v1" &&
       worker.subcommand !== VENDOR_COMMAND) ||
     (worker.operationScope === GENERATED_APP_SCOPE &&
-      (worker.subcommand !== GENERATED_COMMAND || input.database !== "appDatabase"))
+      ((worker.subcommand !== GENERATED_COMMAND &&
+        !(installReadback && worker.subcommand === GENERATED_INSPECT_COMMAND)) ||
+        input.database !== "appDatabase"))
   ) {
     throw resourceMismatch();
   }
@@ -953,10 +995,29 @@ const runSandboxWorker = async (
   const context = resources
     ? buildResourceBootstrapContext(input)
     : buildProtectedInstallContext(contextInput);
+  if (membership) {
+    if (
+      worker.operationScope !== MEMBERSHIP_SCOPE ||
+      ![MEMBERSHIP_COMMAND, MEMBERSHIP_INSPECT_COMMAND].includes(worker.subcommand) ||
+      worker.id !== "auth-owned-organization-v1" ||
+      input.plan.authMembership === undefined ||
+      input.membershipProof === undefined
+    ) {
+      throw resourceMismatch();
+    }
+    context.release = {
+      id: operatorPlanDigest(input.plan),
+      sha256: input.plan.authMembership.identityProof.sha256,
+    };
+    context.installer = { id: worker.id, sha256: worker.sha256 };
+    if (sha256(Buffer.from(input.membershipProof.proof, "utf-8")) !== context.release.sha256) {
+      throw resourceMismatch();
+    }
+  }
   let generatedMetadata: GeneratedAppReleaseMetadata | undefined;
   let generatedFiles: { member: string; content: Buffer }[] = [];
   let authPlanBytes: Buffer | undefined;
-  if (auth) {
+  if (auth && !membership) {
     const artifact = input.authSchemaPlan;
     if (artifact === undefined || artifact.artifactRef !== input.plan.authSchema?.artifactRef) {
       throw resourceMismatch();
@@ -1035,7 +1096,9 @@ const runSandboxWorker = async (
     if (!input.resourceCredentials) {
       throw resourceMismatch();
     }
-    await input.checkpoint(input.resourceCredentials.privateState);
+    if (input.readbackOnly !== true) {
+      await input.checkpoint(input.resourceCredentials.privateState);
+    }
   }
   const recordCheckpoint =
     input.readbackOnly === true ? undefined : await input.bindWorkerContext({ contextDigest });
@@ -1377,7 +1440,56 @@ const runSandboxWorker = async (
         { signal },
       );
     }
+    if (membership && input.membershipProof !== undefined) {
+      await sandbox.writeFiles(
+        [
+          {
+            content: Buffer.from(JSON.stringify(input.plan)),
+            mode: 0o600,
+            path: path.posix.join(startup, "operator-plan.json"),
+          },
+          {
+            content: Buffer.from(
+              JSON.stringify({
+                version: 1,
+                environment: "preview",
+                hostname: input.plan.neon.endpoint,
+                port: 5432,
+                database: input.plan.authDatabase.database,
+                schema: "public",
+                migratorRole: input.plan.authDatabase.migratorRole,
+                runtimeRole: input.plan.authDatabase.runtimeRole,
+                neon: { projectId: input.plan.neon.projectId, branchId: input.plan.neon.branchId },
+              }),
+            ),
+            mode: 0o600,
+            path: path.posix.join(startup, "auth-database-resource.json"),
+          },
+          {
+            content: Buffer.from(JSON.stringify({ proof: input.membershipProof.proof })),
+            mode: 0o600,
+            path: path.posix.join(startup, "realm-identity-proof.json"),
+          },
+          {
+            content: Buffer.from(JSON.stringify({ token: input.membershipProof.oidcToken })),
+            mode: 0o600,
+            path: path.posix.join(startup, "gateway-readback-oidc.json"),
+          },
+        ],
+        { signal },
+      );
+    }
     if (authPlanBytes !== undefined) {
+      await sandbox.writeFiles(
+        [
+          {
+            content: Buffer.from(JSON.stringify(input.plan)),
+            mode: 0o600,
+            path: path.posix.join(startup, "operator-plan.json"),
+          },
+        ],
+        { signal },
+      );
       await sandbox.writeFiles(
         [
           {
@@ -1389,10 +1501,11 @@ const runSandboxWorker = async (
         { signal },
       );
     }
-    if (access || (resources && input.effect.kind === "retire")) {
+    if (access || installReadback || (resources && input.effect.kind === "retire")) {
       if (
         input.accessConnections === undefined ||
-        (input.accessConnections.appMigrator !== input.directDatabaseUrl && access)
+        (input.accessConnections.appMigrator !== input.directDatabaseUrl &&
+          (access || installReadback))
       ) {
         throw resourceMismatch();
       }
@@ -1438,10 +1551,11 @@ const runSandboxWorker = async (
     );
 
     const timeout = String(AUTHORITY_REPLY_TIMEOUT_MS);
-    const releaseArguments =
-      worker.subcommand === RESOURCES_RETIRE_COMMAND
-        ? [releaseDirectory]
-        : ["--release-directory", releaseDirectory];
+    const releaseArguments = [RESOURCES_RETIRE_COMMAND, RESOURCES_RETIRED_INSPECT_COMMAND].includes(
+      worker.subcommand,
+    )
+      ? [releaseDirectory]
+      : ["--release-directory", releaseDirectory];
     command = await sandbox.runCommand({
       args: [
         worker.subcommand,
@@ -1471,7 +1585,7 @@ const runSandboxWorker = async (
     if (finished.exitCode !== 0 || !started || !succeeded || !terminal || unknownSeen) {
       throw unknownSeen ? reconciliationRequired() : unavailable();
     }
-    if (input.readbackOnly === true && access) {
+    if (input.readbackOnly === true && (access || installReadback || membership)) {
       await input.assertCurrent();
       const observed = accessReadbackSchema.parse(
         await readSpoolJson(sandbox, path.posix.join(spool, "readback.json"), signal),

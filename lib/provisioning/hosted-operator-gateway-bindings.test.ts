@@ -34,6 +34,14 @@ const gateway = {
   operatorOrigin: "https://operator-preview.example.test",
   projectId: "prj_gateway",
   publicOrigin: "https://apps-preview.example.test",
+  sourceWorkload: {
+    audience: "https://vercel.com/fixture",
+    environment: "preview" as const,
+    issuer: "https://oidc.vercel.com/fixture",
+    ownerId: target.scopeId,
+    projectId: "prj_gateway",
+    subject: "provider-observed-fixture",
+  },
 };
 const plan = hostedOperatorPlanSchema.parse({
   access: [{ actorId: "synthetic-reviewer", organizationId: "synthetic-org", roles: ["reviewer"] }],
@@ -90,6 +98,7 @@ const plan = hostedOperatorPlanSchema.parse({
     builderCallbackOrigin: gateway.builderCallbackOrigin,
     catalogAppIds: gateway.catalogAppIds,
     operatorOrigin: gateway.operatorOrigin,
+    sourceWorkload: gateway.sourceWorkload,
   },
   installer: { reference: "trusted-toolchain", sha256: "a".repeat(64) },
   neon: {
@@ -202,6 +211,19 @@ const fixture = () => {
     checkpoint: vi.fn(async () => {}),
     checkpointGatewayEnvironment,
     effect: plan.effects.find((effect) => effect.kind === "gateway-bindings")!,
+    deliveryCandidates: [
+      {
+        branch: target.branch,
+        deploymentId: "dpl_new_app",
+        operationRef: "prepare-operation",
+        origin: "https://fixture-app.vercel.app",
+        projectId: target.projectId,
+        projectName: "fixture-app",
+        readyState: "READY",
+        repoId: "fixture-repo",
+        scopeSlug: "fixture",
+      },
+    ],
     fenceGeneration: 1,
     gateway,
     gatewayEnvironmentRows: journal,
@@ -299,6 +321,7 @@ it("binds only exact encrypted Gateway Preview Auth configuration and retains ex
   ).toEqual([
     "AUTH_DATABASE_RESOURCE",
     "PLATFORM_AUTH_DATABASE_URL",
+    "PLATFORM_GATEWAY_PROJECT_BINDINGS",
     "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
     "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
   ]);
@@ -315,9 +338,9 @@ it("binds only exact encrypted Gateway Preview Auth configuration and retains ex
     "https://separately-approved.example.test",
   );
   expect(f.requests.some((request) => request.path.endsWith("/auth-secret"))).toBe(false);
-  expect(f.checkpointGatewayEnvironment).toHaveBeenCalledTimes(5);
+  expect(f.checkpointGatewayEnvironment).toHaveBeenCalledTimes(6);
   expect(f.readCredential).toHaveBeenCalledWith(authority, target.installationId);
-  expect(result.rows).toHaveLength(4);
+  expect(result.rows).toHaveLength(5);
   expect(JSON.stringify(result)).not.toContain("fixture-private-password");
   expect(JSON.stringify(result)).not.toContain("fixture-private-key");
   expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
@@ -366,7 +389,7 @@ it("recovers a created row after an unknown POST outcome without duplicating it"
   expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
   const afterFirstTry = f.requests.filter((request) => request.method === "POST").length;
   await f.writer.bind(f.input);
-  expect(f.requests.filter((request) => request.method === "POST")).toHaveLength(afterFirstTry + 3);
+  expect(f.requests.filter((request) => request.method === "POST")).toHaveLength(afterFirstTry + 4);
   expect(f.rows.filter((row) => row.key === "AUTH_DATABASE_RESOURCE")).toHaveLength(1);
 });
 

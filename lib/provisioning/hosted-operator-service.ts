@@ -22,6 +22,7 @@ import {
   operatorPlanDigest,
   operatorPublicResultSchema,
   operatorReceiptSchema,
+  operatorAuthIdentityInputSchema,
   operatorRequestSchema,
   restrictedOperatorEnvironment,
   sameOperatorSelection,
@@ -68,6 +69,7 @@ export type GatewayManagedEnvironmentContext = HostedOperatorEffectContext & {
     operatorOrigin: string;
     projectId: string;
     publicOrigin: string;
+    readonlyAttesters?: NonNullable<HostedOperatorPlan["gatewayBindings"]>["readonlyAttesters"];
     sourceWorkload: NonNullable<HostedOperatorPlan["gatewayBindings"]>["sourceWorkload"];
   };
   gatewayEnvironmentRows?: ManagedOperatorEnvironmentRow[];
@@ -162,6 +164,9 @@ export interface ProtectedHostedOperatorDependencies {
       assertCurrent: () => Promise<void>;
     },
   ) => Promise<OperatorAuthSchemaPreparation>;
+  authIdentityInput?: (
+    input: Context & { operationRef: string; plan: HostedOperatorPlan },
+  ) => Promise<z.infer<typeof operatorAuthIdentityInputSchema>>;
   bindings: (
     input: Context & { plan: HostedOperatorPlan; privateState?: PrivateState },
   ) => Promise<Record<string, string>>;
@@ -184,6 +189,7 @@ const assertUnexpired = (plan: HostedOperatorPlan, now: number) => {
 const requireOperator = (record: HostedRuntimeJournalRecord) =>
   hostedOperatorRecordSchema.parse(record.operator);
 type OperatorHttpResponse =
+  | z.infer<typeof operatorAuthIdentityInputSchema>
   | OperatorPublicResult
   | { code: "not_found" }
   | {
@@ -473,6 +479,16 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         }
         return { appId, authenticatedBehavior: "unassessed", operationRef, planDigest, status };
       };
+      if (input.action === "auth-identity-input") {
+        if (deps.authIdentityInput === undefined) {
+          throw new HostedOperatorError("operator_unavailable");
+        }
+        return response(
+          operatorAuthIdentityInputSchema.parse(
+            await deps.authIdentityInput({ ...context, operationRef, plan }),
+          ),
+        );
+      }
       if (input.action === "status") {
         return response(operatorPublicResultSchema.parse(publicStatus(current.record)));
       }
@@ -631,7 +647,8 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                         ...(prior.deliveryCandidates ?? []).filter(
                           (old) =>
                             !candidates.some(
-                              (current) => current.deploymentId === old.deploymentId,
+                              (observedCandidate) =>
+                                observedCandidate.deploymentId === old.deploymentId,
                             ),
                         ),
                         ...candidates,
@@ -665,7 +682,8 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                         ...(prior.gatewayDeliveryCandidates ?? []).filter(
                           (old) =>
                             !candidates.some(
-                              (current) => current.deploymentId === old.deploymentId,
+                              (observedCandidate) =>
+                                observedCandidate.deploymentId === old.deploymentId,
                             ),
                         ),
                         ...candidates,

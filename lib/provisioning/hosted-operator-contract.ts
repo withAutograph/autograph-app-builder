@@ -778,8 +778,20 @@ export const operatorRequestSchema = z.discriminatedUnion("action", [
     ownerContext: operatorOwnerContextSchema.optional(),
     selection: operatorSelectionSchema,
   }),
+  z.strictObject({
+    action: z.literal("auth-identity-input"),
+    operationRef: z.uuid(),
+    ownerContext: operatorOwnerContextSchema.optional(),
+    selection: operatorSelectionSchema,
+  }),
 ]);
 export type OperatorRequest = z.infer<typeof operatorRequestSchema>;
+export const operatorAuthIdentityInputSchema = z.strictObject({
+  browserUrl: z.url().startsWith("https://"),
+  expiresAt: z.iso.datetime({ offset: true }),
+  operationRef: z.uuid(),
+  sessionId: id,
+});
 export const operatorPublicResultSchema = z.strictObject({
   appId: id,
   authenticatedBehavior: z.literal("unassessed"),
