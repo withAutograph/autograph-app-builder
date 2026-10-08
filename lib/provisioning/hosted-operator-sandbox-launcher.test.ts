@@ -454,6 +454,25 @@ describe("hosted protected installer Sandbox launcher", () => {
     expect(fixture.records).toHaveLength(0);
   });
 
+  it("transports the explicit new-empty proposal without converting it into observed readiness", async () => {
+    const fixture = makeFixture({ auth: true });
+    const input = fixture.input as typeof fixture.input & {
+      authSchemaPlan: { artifactRef: string; content: Buffer };
+    };
+    const artifact = input.authSchemaPlan;
+    if (artifact === undefined) {
+      throw new Error("Auth fixture is missing its private artifact.");
+    }
+    artifact.content = frame({ ...JSON.parse(artifact.content.toString()), proposal: "new-empty" });
+    await fixture.launcher.execute(fixture.input);
+    const startup = `/vercel/sandbox/protected-installer/${runId}/startup`;
+    expect(
+      JSON.parse(fixture.files.get(`${startup}/auth-schema-plan.json`)!.toString()),
+    ).toMatchObject({
+      proposal: "new-empty",
+    });
+  });
+
   it("rejects an Auth artifact reference outside the approved plan", async () => {
     const fixture = makeFixture({ auth: true });
     const input = fixture.input as typeof fixture.input & {
