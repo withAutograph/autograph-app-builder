@@ -4,7 +4,12 @@
     "operator": {
       "root": ".",
       "framework": "hono",
-      "entrypoint": "entrypoint.ts"
+      "entrypoint": "entrypoint.ts",
+      "functions": {
+        "entrypoint.ts": {
+          "includeFiles": "../../../node_modules/eve/**"
+        }
+      }
     }
   },
   "rewrites": [
