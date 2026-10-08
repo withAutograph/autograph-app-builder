@@ -260,7 +260,7 @@ describe("paged hosted session observation", () => {
     const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
       const start = input.nativeObservationState?.publicEventCount ?? 0;
       expect(input.allowPartialObservation).toBe(true);
-      const end = start === 0 ? 1 : 3;
+      const end = start + 1;
       for (let index = start; index < end; index += 1) {
         // oxlint-disable-next-line eslint/no-await-in-loop -- Preserve ordered callback backpressure.
         await input.onEvent({
@@ -280,7 +280,7 @@ describe("paged hosted session observation", () => {
         installedEventCount: state.nextNativeIndex,
         nativeObservationState: state,
         nextNativeIndex: state.nextNativeIndex,
-        observationComplete: start !== 0,
+        observationComplete: start === 2,
         pendingRequests: [],
         publicEventCount: end,
         status: "waiting",
@@ -299,13 +299,19 @@ describe("paged hosted session observation", () => {
     const privateProgress = f.observeSessionPaged.mock.calls[1]?.[0].metadata.coldReadProgress;
     expect(privateProgress?.events).toEqual(priorEvents.slice(0, 1));
     expect(privateProgress?.nativeObservationState.nextNativeIndex).toBe(10);
+    const secondPartial = await f.service.get({ cursor: 3, limit: 10, sessionId: f.sessionId });
+    expect(secondPartial.error?.code).toBe("session_read_delayed");
+    expect(f.observeSessionPaged.mock.calls[2]?.[0].metadata.coldReadProgress?.events).toEqual(
+      priorEvents.slice(0, 2),
+    );
+    expect(f.getPagedEventCount()).toBe(3);
     const complete = await f.service.get({ cursor: 3, limit: 10, sessionId: f.sessionId });
     expect(complete.error).toBeUndefined();
     expect(complete.cursor).toBe(3);
     expect(complete.events).toEqual([]);
     expect(f.getPagedEventCount()).toBe(3);
     expect(observe.mock.calls[1]?.[0].nativeObservationState?.nextNativeIndex).toBe(10);
-    expect(f.observeSessionPaged.mock.calls[2]?.[0].metadata.coldReadProgress).toBeUndefined();
+    expect(f.observeSessionPaged.mock.calls[3]?.[0].metadata.coldReadProgress).toBeUndefined();
   });
 
   it.each(["CAS race", "provider failure", "invalid frontier"])(
