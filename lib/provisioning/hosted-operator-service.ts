@@ -58,6 +58,19 @@ type Effect = HostedOperatorPlan["effects"][number];
 export type HostedOperatorManagedEnvironmentContext = HostedOperatorEffectContext & {
   checkpointManagedEnvironment: (rows: readonly ManagedOperatorEnvironmentRow[]) => Promise<void>;
 };
+export type GatewayManagedEnvironmentContext = HostedOperatorEffectContext & {
+  gateway: {
+    branch: string;
+    builderCallbackOrigin: string;
+    catalogAppIds: readonly string[];
+    gatewayOrigin: string;
+    operatorOrigin: string;
+    projectId: string;
+    publicOrigin: string;
+  };
+  gatewayEnvironmentRows?: ManagedOperatorEnvironmentRow[];
+  checkpointGatewayEnvironment: (rows: readonly ManagedOperatorEnvironmentRow[]) => Promise<void>;
+};
 export type HostedOperatorDeploymentContext = HostedOperatorEffectContext & {
   checkpointDelivery: (
     candidates: readonly OperatorDeploymentCandidate[],
@@ -75,6 +88,8 @@ export type HostedOperatorEffectContext = Context & {
     candidates: readonly OperatorDeploymentCandidate[],
     selectedId?: string,
   ) => Promise<void>;
+  gatewayEnvironmentRows?: ManagedOperatorEnvironmentRow[];
+  checkpointGatewayEnvironment?: (rows: readonly ManagedOperatorEnvironmentRow[]) => Promise<void>;
   managedEnvironment?: ManagedOperatorEnvironmentRow[];
   checkpointManagedEnvironment?: (rows: readonly ManagedOperatorEnvironmentRow[]) => Promise<void>;
   workerCheckpoints: WorkerEffectCheckpoint[];
@@ -251,6 +266,9 @@ const handlePlanOperation = async (
       const nextOperator: ReturnType<typeof requireOperator> = { ...operator };
       if (authStageCompleted) {
         nextOperator.authPreparation = record.operator.authPreparation;
+      }
+      if (record.operator.gatewayEnvironment !== undefined) {
+        nextOperator.gatewayEnvironment = record.operator.gatewayEnvironment;
       }
       if (record.operator.identityLink?.consumedAt !== undefined) {
         nextOperator.identityLink = record.operator.identityLink;
@@ -602,6 +620,29 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                     })
                   ).record;
                 },
+                checkpointGatewayEnvironment: async (rows) => {
+                  await assertCurrent();
+                  const gatewayEnvironment = managedOperatorEnvironmentRowsSchema.parse(rows);
+                  record = (
+                    await ownedUpdate((value) => {
+                      const currentOperator = requireOperator(value);
+                      const priorRows = currentOperator.gatewayEnvironment ?? [];
+                      if (
+                        gatewayEnvironment.some(
+                          (row) =>
+                            row.operationRef !== operationRef &&
+                            !priorRows.some(
+                              (prior) => JSON.stringify(prior) === JSON.stringify(row),
+                            ),
+                        )
+                      ) {
+                        throw new HostedOperatorError("resource_mismatch");
+                      }
+                      return { ...value, operator: { ...currentOperator, gatewayEnvironment } };
+                    })
+                  ).record;
+                  effectInput.gatewayEnvironmentRows = requireOperator(record).gatewayEnvironment;
+                },
                 checkpointManagedEnvironment: async (rows) => {
                   await assertCurrent();
                   const managedEnvironment = managedOperatorEnvironmentRowsSchema.parse(rows);
@@ -628,6 +669,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 deliveryCandidates: requireOperator(record).deliveryCandidates,
                 effect,
                 fenceGeneration,
+                gatewayEnvironmentRows: requireOperator(record).gatewayEnvironment,
                 managedEnvironment: requireOperator(record).managedEnvironment,
                 operationRef,
                 plan,

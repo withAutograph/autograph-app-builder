@@ -116,6 +116,8 @@ const hostedOperatorPlanDataSchema = z.strictObject({
         kind: z.enum([
           "resources",
           "install",
+          "gateway-bindings",
+          "gateway-delivery",
           "access",
           "auth-membership",
           "bindings",
@@ -128,6 +130,14 @@ const hostedOperatorPlanDataSchema = z.strictObject({
       }),
     )
     .min(1),
+  gatewayBindings: z
+    .strictObject({
+      builderCallbackOrigin: httpsPublicOrigin,
+      catalogAppIds: z.array(id).min(1),
+      operatorOrigin: httpsPublicOrigin,
+    })
+    .optional(),
+  gatewayDelivery: z.strictObject({ branch: id, projectId: id, repoId: id }).optional(),
   installer: z.strictObject({ reference: id, sha256: digest }),
   neon: z.strictObject({
     branchId: id,
@@ -164,6 +174,25 @@ const validatePlanStage = (
     ctx.addIssue({
       code: "custom",
       message: "Deployment delivery must remain in the exact selected Preview project and branch.",
+    });
+  }
+  if (
+    (plan.gatewayBindings !== undefined || plan.gatewayDelivery !== undefined) &&
+    (plan.publicGateway === undefined || plan.deploymentBoundary === undefined)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Trusted Gateway effects require the frozen native project and boundary.",
+    });
+  }
+  if (
+    plan.gatewayDelivery !== undefined &&
+    (plan.gatewayDelivery.projectId !== plan.publicGateway?.projectId ||
+      plan.gatewayDelivery.branch !== plan.publicGateway?.branch)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Gateway delivery must match the exact approved native project and branch.",
     });
   }
   if (plan.stage === AUTH_BOOTSTRAP_STAGE) {
@@ -210,6 +239,12 @@ const authorizationPhases = (plan: z.infer<typeof hostedOperatorPlanDataSchema>)
   }
   if (plan.stage === AUTH_BOOTSTRAP_STAGE) {
     phases = ["resources", "install"];
+  }
+  if (plan.gatewayBindings !== undefined) {
+    phases.push("gateway-bindings");
+  }
+  if (plan.gatewayDelivery !== undefined) {
+    phases.push("gateway-delivery");
   }
   return phases;
 };
@@ -427,6 +462,7 @@ const hostedOperatorRecordDataSchema = z.strictObject({
   deliveryCandidates: operatorDeploymentCandidatesSchema.optional(),
   /** Shared across Auth and kernel rows; allocated once by the existing journal CAS. */
   fenceGeneration: z.number().int().positive().optional(),
+  gatewayEnvironment: managedOperatorEnvironmentRowsSchema.optional(),
   identityLink: operatorRealmIdentityLinkSchema.optional(),
   managedEnvironment: managedOperatorEnvironmentRowsSchema.optional(),
   mode: z.literal("protected-operator-v1"),
@@ -518,6 +554,30 @@ export const hostedOperatorRecordSchema = hostedOperatorRecordDataSchema.superRe
         code: "custom",
         message: "Managed environment rows must belong to this approved app operation.",
         path: ["managedEnvironment"],
+      });
+    }
+    const gatewayRows = operator.gatewayEnvironment ?? [];
+    const gatewayKeys = new Set([
+      "AUTH_DATABASE_RESOURCE",
+      "PLATFORM_AUTH_DATABASE_URL",
+      "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
+      "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+    ]);
+    if (
+      new Set(gatewayRows.map((row) => row.key)).size !== gatewayRows.length ||
+      new Set(gatewayRows.map((row) => row.id)).size !== gatewayRows.length ||
+      gatewayRows.some(
+        (row) =>
+          row.projectId !== operator.plan.publicGateway?.projectId ||
+          row.branch !== operator.plan.publicGateway?.branch ||
+          !gatewayKeys.has(row.key) ||
+          row.comment !== `App Builder protected operator ${row.operationRef}`,
+      )
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Gateway rows must remain in the owned trusted project.",
+        path: ["gatewayEnvironment"],
       });
     }
     const resources = new Set([

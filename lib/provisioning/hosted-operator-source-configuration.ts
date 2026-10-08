@@ -51,7 +51,13 @@ const workload = z.strictObject({
 export const hostedOperatorSourceConfigurationSchema = z.strictObject({
   applications: z.record(
     id,
-    z.strictObject({ appDatabase: resource, branch: id, projectId: id, repoId: id }),
+    z.strictObject({
+      appDatabase: resource,
+      branch: id,
+      deploymentId: id,
+      projectId: id,
+      repoId: id,
+    }),
   ),
   authDatabase: resource,
   builderCallbackOrigin: httpsOrigin,
@@ -62,7 +68,9 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
     environment: z.literal("preview"),
     gatewayOrigin: httpsOrigin,
     projectId: id,
+    protectedApplicationIds: z.array(id),
     publicOrigin: httpsOrigin,
+    repoId: id,
   }),
   nativeNeon: z.strictObject({
     configuration: configurationSchema.omit({ connectorInstallationId: true }),
