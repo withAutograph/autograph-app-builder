@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { hostedEveOperationScopes } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
+import { nativeObservationStateSchema } from "./native-observation-state";
 import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
 import {
   createSameOriginEveTransport,
@@ -85,7 +86,15 @@ const liveHttpSnapshot = async (events: unknown[], stall = false) => {
     });
     response.flushHeaders();
     if (!stall) {
-      response.write(`${events.map((event) => JSON.stringify(event)).join("\n")}\n`);
+      const start = Number(
+        new URL(request.url ?? "/", "http://127.0.0.1").searchParams.get("startIndex") ?? 0,
+      );
+      response.write(
+        `${events
+          .slice(start)
+          .map((event) => JSON.stringify(event))
+          .join("\n")}\n`,
+      );
     }
     // Intentionally keep the live agent stream open after its observed durable tail.
   });
@@ -490,6 +499,28 @@ describe("incremental canonical Eve stream", () => {
     const v2Observed = await observe([...v2Artifact, ...v2Read, ...v2UiPreview]);
     expect(v2Observed.artifactProjectionRequiresLegacyReadback).toBe(false);
     expect(v2Observed.prototypeRef).toMatchObject({ digest, path, version: 2 });
+    const completeEvents = [...v2Artifact, ...v2Read, ...v2UiPreview];
+    await Promise.all(
+      Array.from({ length: completeEvents.length - 1 }, async (_, offset) => {
+        const split = offset + 1;
+        const prefix = await observe(completeEvents.slice(0, split));
+        const resumed = await observeSameOriginEveStream({
+          config: { ...config, timeoutMs: 10_000 },
+          fetchImplementation: async () => {
+            const response = stream(completeEvents.slice(split));
+            response.headers.set("x-eve-stream-tail-index", String(completeEvents.length - 1));
+            return await Promise.resolve(response);
+          },
+          nativeObservationState: prefix.nativeObservationState,
+          onEvent: () => {},
+          sessionId: "wrun_1",
+          workloadIdentity: identity(),
+        });
+        expect(resumed.nativeObservationState).toEqual(v2Observed.nativeObservationState);
+        expect(resumed.prototypeRef).toEqual(v2Observed.prototypeRef);
+        expect(resumed.artifactProjectionRequiresLegacyReadback).toBe(false);
+      }),
+    );
     const mixedMarkdownObserved = await observe([...v1Markdown, ...v2Artifact, ...v2UiPreview]);
     expect(mixedMarkdownObserved.artifactProjectionRequiresLegacyReadback).toBe(false);
     const legacyObserved = await observe([
@@ -1711,5 +1742,114 @@ describe("bounded public observe over actual live HTTP streams", () => {
       timeout.mockRestore();
       await fixture.close();
     }
+  });
+});
+
+describe("durable native observer checkpoint", () => {
+  it("hydrates HITL, active turn and absolute counters across real bounded HTTP reads, including an empty delta", async () => {
+    const events: unknown[] = [
+      { data: {}, type: "session.started" },
+      { data: { turnId: "turn_native" }, type: "step.started" },
+      {
+        data: {
+          requests: [
+            {
+              allowFreeform: true,
+              display: "text",
+              kind: "question",
+              prompt: "Choose",
+              requestId: "question_native",
+            },
+          ],
+        },
+        type: "input.requested",
+      },
+    ];
+    const http = await liveHttpSnapshot(events);
+    try {
+      const observed: number[] = [];
+      const input = {
+        config: { ...config, timeoutMs: 10_000 },
+        fetchImplementation: http.fetchImplementation,
+        onEvent: (event: { index: number }) => {
+          observed.push(event.index);
+        },
+        readDeadline: true,
+        sessionId: "wrun_1",
+        workloadIdentity: identity(),
+      };
+      const first = await observeSameOriginEveStream(input);
+      expect(first.status).toBe("input_required");
+      expect(first.activeTurnId).toBe("turn_native");
+      expect(first.nextNativeIndex).toBe(3);
+      const serialized = JSON.stringify(first.nativeObservationState);
+      const state = nativeObservationStateSchema.parse(JSON.parse(serialized));
+      const empty = await observeSameOriginEveStream({ ...input, nativeObservationState: state });
+      expect(empty.nativeObservationState).toEqual(state);
+      expect(empty.pendingRequests).toEqual(first.pendingRequests);
+      expect(observed).toHaveLength(first.publicEventCount);
+      events.push(
+        { data: { resolutions: [{ requestId: "question_native" }] }, type: "input.resolved" },
+        { data: {}, type: "session.waiting" },
+      );
+      const next = await observeSameOriginEveStream({ ...input, nativeObservationState: state });
+      expect(next.status).toBe("waiting");
+      expect(next.pendingRequests).toEqual([]);
+      expect(next.activeTurnId).toBeUndefined();
+      expect(next.nextNativeIndex).toBe(5);
+      expect(next.installedEventCount).toBe(5);
+      expect(observed).toEqual(observed.map((_, index) => index));
+      expect(http.paths).toEqual([
+        "/eve/v1/session/wrun_1/stream?startIndex=0&includeTailIndex=1",
+        "/eve/v1/session/wrun_1/stream?startIndex=3&includeTailIndex=1",
+        "/eve/v1/session/wrun_1/stream?startIndex=3&includeTailIndex=1",
+      ]);
+      expect(state.nextNativeIndex).toBe(3);
+    } finally {
+      await http.close();
+    }
+  });
+  it("rejects foreign seeds and truncated native tails without advancing the caller's checkpoint", async () => {
+    const first = await observeSameOriginEveStream({
+      config: { ...config, timeoutMs: 10_000 },
+      fetchImplementation: async () => await Promise.resolve(stream()),
+      onEvent: () => {},
+      sessionId: "wrun_1",
+      workloadIdentity: identity(),
+    });
+    const before = JSON.stringify(first.nativeObservationState);
+    const fetchImplementation = vi.fn(async () => {
+      const response = stream([{ data: { turnId: "next" }, type: "step.started" }]);
+      response.headers.set("x-eve-stream-tail-index", String(first.nextNativeIndex + 1));
+      return await Promise.resolve(response);
+    });
+    const input = {
+      config: { ...config, timeoutMs: 10_000 },
+      fetchImplementation,
+      nativeObservationState: first.nativeObservationState,
+      onEvent: () => {},
+      sessionId: "wrun_1",
+      workloadIdentity: identity(),
+    };
+    await expect(
+      observeSameOriginEveStream({
+        ...input,
+        nativeObservationState: { ...first.nativeObservationState, adapterSessionId: "foreign" },
+      }),
+    ).rejects.toThrow("another adapter");
+    expect(fetchImplementation).not.toHaveBeenCalled();
+    await expect(observeSameOriginEveStream(input)).rejects.toThrow("before its durable tail");
+    expect(JSON.stringify(first.nativeObservationState)).toBe(before);
+    const controller = new AbortController();
+    await expect(
+      observeSameOriginEveStream({
+        ...input,
+        onPrivateEvent: () => {
+          controller.abort();
+        },
+        readSignal: controller.signal,
+      }),
+    ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
+    expect(JSON.stringify(first.nativeObservationState)).toBe(before);
   });
 });

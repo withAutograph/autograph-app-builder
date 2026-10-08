@@ -22,6 +22,11 @@ import {
   SubmissionRejectedBeforeDispatchError,
 } from "./hosted-service";
 import type { HostedEngineSnapshot, HostedEveTransport } from "./hosted-service";
+import {
+  nativeObservationStateSchema,
+  artifactReadbackStateSchema,
+} from "./native-observation-state";
+import type { NativeObservationState, ArtifactReadbackState } from "./native-observation-state";
 import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
 import {
   createInstalledPrototypeProjector,
@@ -286,8 +291,15 @@ export async function* streamSameOriginEveEvents(input: {
   sessionId: string;
   readDeadline?: boolean;
   readSignal?: AbortSignal;
+  startIndex?: number;
 }): AsyncGenerator<MessageStreamEvent, void, undefined> {
-  const path = `/eve/v1/session/${encodeURIComponent(input.sessionId)}/stream?startIndex=0&includeTailIndex=1`;
+  // Matches the supported SDK's absolute startIndex + follow:false contract: pin this opened durable tail.
+  const startIndex = z
+    .number()
+    .int()
+    .nonnegative()
+    .parse(input.startIndex ?? 0);
+  const path = `/eve/v1/session/${encodeURIComponent(input.sessionId)}/stream?startIndex=${startIndex}&includeTailIndex=1`;
   const signal =
     input.readSignal ??
     (input.readDeadline === true ? AbortSignal.timeout(SESSION_READ_TIMEOUT_MS) : undefined);
@@ -332,7 +344,12 @@ export async function* streamSameOriginEveEvents(input: {
   if (!Number.isSafeInteger(tail) || tail < -1) {
     throw new Error("Canonical Eve returned an invalid durable stream tail.");
   }
-  if (tail === -1) {
+  if (startIndex > tail + 1) {
+    // oxlint-disable-next-line promise/prefer-await-to-then -- Cancel best effort without waiting for a provider handshake.
+    void response.body.cancel().catch(() => null);
+    throw new Error("Canonical Eve durable tail precedes the saved native cursor.");
+  }
+  if (startIndex === tail + 1) {
     // Provider cancellation is best effort; a stalled cancel must not hold the response.
     // oxlint-disable-next-line promise/prefer-await-to-then -- Cleanup must not delay the reader.
     void response.body.cancel().catch(() => null);
@@ -341,7 +358,7 @@ export async function* streamSameOriginEveEvents(input: {
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder("utf-8", { fatal: true });
-  let eventCount = 0;
+  let eventCount = startIndex;
   let buffered = "";
   try {
     while (eventCount <= tail) {
@@ -356,6 +373,9 @@ export async function* streamSameOriginEveEvents(input: {
           ) as unknown as MessageStreamEvent;
           eventCount += 1;
           yield event;
+          if (signal?.aborted === true) {
+            throw new HostedSessionReadTimeoutError();
+          }
         }
         break;
       }
@@ -372,6 +392,9 @@ export async function* streamSameOriginEveEvents(input: {
           ) as unknown as MessageStreamEvent;
           eventCount += 1;
           yield event;
+          if (signal?.aborted === true) {
+            throw new HostedSessionReadTimeoutError();
+          }
         }
         newline = buffered.indexOf("\n");
       }
@@ -432,13 +455,20 @@ const v2ReadResultSchema = z.object({
 });
 
 /** A v2 receipt is sufficient for paged history; unresolved or v1 actions require legacy readback. */
-const createArtifactReadbackClassifier = (sessionId: string) => {
-  const references = createInstalledPrototypeReferenceReducer({ sessionId });
-  const pending = new Map<string, { input: unknown; toolName: string }>();
-  const markdownCalls = new Map<string, string>();
-  const incompleteArtifacts = new Set<string>();
-  const incompleteUiPreviews = new Set<string>();
-  let legacy = false;
+const createArtifactReadbackClassifier = (sessionId: string, seed?: ArtifactReadbackState) => {
+  const state = seed === undefined ? undefined : artifactReadbackStateSchema.parse(seed);
+  const references = createInstalledPrototypeReferenceReducer({
+    sessionId,
+    state: state?.references,
+  });
+  const pending = new Map<
+    string,
+    { input: ArtifactReadbackState["pending"][number][1]["input"]; toolName: string }
+  >(state?.pending);
+  const markdownCalls = new Map<string, string>(state?.markdownCalls);
+  const incompleteArtifacts = new Set<string>(state?.incompleteArtifacts);
+  const incompleteUiPreviews = new Set<string>(state?.incompleteUiPreviews);
+  let legacy = state?.legacy ?? false;
   return {
     accept(event: MessageStreamEvent) {
       references.accept(event);
@@ -457,7 +487,10 @@ const createArtifactReadbackClassifier = (sessionId: string) => {
             ) {
               markdownCalls.set(action.callId, action.toolName);
             } else {
-              pending.set(action.callId, { input: action.input, toolName: action.toolName });
+              pending.set(action.callId, {
+                input: z.json().parse(action.input ?? null),
+                toolName: action.toolName,
+              });
             }
           }
         }
@@ -561,6 +594,15 @@ const createArtifactReadbackClassifier = (sessionId: string) => {
         incompleteUiPreviews.delete(reference.appId);
       }
     },
+    checkpoint: (): ArtifactReadbackState =>
+      artifactReadbackStateSchema.parse({
+        incompleteArtifacts: [...incompleteArtifacts],
+        incompleteUiPreviews: [...incompleteUiPreviews],
+        legacy,
+        markdownCalls: [...markdownCalls],
+        pending: [...pending],
+        references: references.checkpoint(),
+      }),
     requiresLegacy: () =>
       legacy || pending.size > 0 || incompleteArtifacts.size > 0 || incompleteUiPreviews.size > 0,
   };
@@ -572,9 +614,12 @@ export async function observeSameOriginEveStream(
     onEvent: (event: InternalEveEvent) => Promise<void> | void;
     onInstalledEvent?: (event: MessageStreamEvent) => void;
     onPrivateEvent?: (event: MessageStreamEvent) => Promise<void> | void;
+    nativeObservationState?: NativeObservationState;
   },
 ): Promise<{
   installedEventCount: number;
+  nextNativeIndex: number;
+  nativeObservationState: NativeObservationState;
   publicEventCount: number;
   status: EveSessionStatus;
   pendingRequests: PublicInputRequest[];
@@ -585,20 +630,36 @@ export async function observeSameOriginEveStream(
   workingPreview?: PublicWorkingPreview | null;
   artifactProjectionRequiresLegacyReadback: boolean;
 }> {
-  const pending = new Map<string, PublicInputRequest>();
-  let installedEventCount = 0;
-  let publicEventCount = 0;
-  let boundary: EveSessionStatus = "working";
-  let invalidInput = false;
-  let currentTurnId: string | undefined;
-  let uiPreview: PublicUiPreview | undefined;
-  let workingPreview: PublicWorkingPreview | null | undefined;
-  const artifactReadback = createArtifactReadbackClassifier(input.sessionId);
-  const prototype = createInstalledPrototypeProjector();
+  const state =
+    input.nativeObservationState === undefined
+      ? undefined
+      : nativeObservationStateSchema.parse(input.nativeObservationState);
+  if (state !== undefined && state.adapterSessionId !== input.sessionId) {
+    throw new Error("Native observer state belongs to another adapter session.");
+  }
+  const pending = new Map<string, PublicInputRequest>(
+    state?.pendingRequests.map((request) => [request.requestId, request]),
+  );
+  let installedEventCount = state?.nextNativeIndex ?? 0;
+  let publicEventCount = state?.publicEventCount ?? 0;
+  let boundary: EveSessionStatus = state?.boundary ?? "working";
+  let invalidInput = state?.invalidInput ?? false;
+  let currentTurnId: string | undefined = state?.currentTurnId;
+  let uiPreview: PublicUiPreview | undefined = state?.uiPreview;
+  let workingPreview: PublicWorkingPreview | null | undefined = state?.workingPreview;
+  const artifactReadback = createArtifactReadbackClassifier(
+    input.sessionId,
+    state?.artifactReadback,
+  );
+  const prototype = createInstalledPrototypeProjector(state?.prototypeProjector);
   const prototypeReference = createInstalledPrototypeReferenceReducer({
     sessionId: input.sessionId,
+    state: state?.prototypeReference,
   });
-  for await (const event of streamSameOriginEveEvents(input)) {
+  for await (const event of streamSameOriginEveEvents({
+    ...input,
+    startIndex: state?.nextNativeIndex ?? 0,
+  })) {
     artifactReadback.accept(event);
     prototype.observe(event);
     prototypeReference.accept(event);
@@ -681,6 +742,22 @@ export async function observeSameOriginEveStream(
   return {
     artifactProjectionRequiresLegacyReadback: artifactReadback.requiresLegacy(),
     installedEventCount,
+    nativeObservationState: nativeObservationStateSchema.parse({
+      adapterSessionId: input.sessionId,
+      artifactReadback: artifactReadback.checkpoint(),
+      boundary,
+      invalidInput,
+      nextNativeIndex: installedEventCount,
+      pendingRequests: [...pending.values()],
+      prototypeProjector: prototype.checkpoint(),
+      prototypeReference: prototypeReference.checkpoint(),
+      publicEventCount,
+      version: 1,
+      ...(currentTurnId === undefined ? {} : { currentTurnId }),
+      ...(uiPreview === undefined ? {} : { uiPreview }),
+      ...(workingPreview === undefined ? {} : { workingPreview }),
+    }),
+    nextNativeIndex: installedEventCount,
     pendingRequests: [...pending.values()],
     ...(prototype.current() === undefined ? {} : { prototype: prototype.current() }),
     ...(prototypeReference.snapshot() === undefined
@@ -1009,6 +1086,7 @@ export function createSameOriginEveTransport(input: {
     onEvent: (event: InternalEveEvent) => Promise<void> | void;
     onPrivateEvent?: (event: MessageStreamEvent) => Promise<void> | void;
     readDeadline?: boolean;
+    nativeObservationState?: NativeObservationState;
   }) => ReturnType<typeof observeSameOriginEveStream>;
 } {
   const config = sameOriginConfigSchema.parse(input.config);
@@ -1023,6 +1101,10 @@ export function createSameOriginEveTransport(input: {
       // Public observation catches up to the opened durable tail; it never waits for a long-running turn.
       return observeSameOriginEveStream({
         ...common,
+        nativeObservationState:
+          "nativeObservationState" in request && request.nativeObservationState !== undefined
+            ? nativeObservationStateSchema.parse(request.nativeObservationState)
+            : undefined,
         onEvent: request.onEvent,
         onPrivateEvent: request.onPrivateEvent,
         readDeadline: request.readDeadline ?? true,
@@ -1044,6 +1126,10 @@ export function createSameOriginEveTransport(input: {
             }
             return observeSameOriginEveStream({
               ...common,
+              nativeObservationState:
+                "nativeObservationState" in request && request.nativeObservationState !== undefined
+                  ? nativeObservationStateSchema.parse(request.nativeObservationState)
+                  : undefined,
               onEvent: request.onEvent,
               onPrivateEvent: request.onPrivateEvent,
               readDeadline: request.readDeadline ?? true,
