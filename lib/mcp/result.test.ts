@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { HostedAuthorizationError } from "../eve/hosted-auth";
 import {
@@ -220,5 +220,50 @@ describe("MCP App UI presentation", () => {
     );
 
     expect(result._meta).toBeUndefined();
+  });
+});
+
+describe("verified send preflight public rejection", () => {
+  it("names the proven non-dispatch and preserves the session/rejected request retry boundary", () => {
+    const result = safeToolError(
+      new HostedRejectedOperationError("send_preflight_unavailable"),
+      "saved-session",
+      "autograph_send",
+    );
+    expect(result.structuredContent.error?.code).toBe("send_preflight_unavailable");
+    expect(result.structuredContent.sessionId).toBe("saved-session");
+    expect(result.structuredContent.error?.message).toContain("before the message was dispatched");
+    expect(result.structuredContent.error?.message).toContain("new clientRequestId");
+    expect(result.structuredContent.error?.message).toContain("Retry autograph_get");
+  });
+  it("does not expose arbitrary codes, secret accessors or a code copied onto an uncertain error", () => {
+    const secret = "private-source-secret-code";
+    const access = vi.fn(() => {
+      throw new Error(secret);
+    });
+    const source = new HostedRejectedOperationError();
+    Object.defineProperties(source, {
+      cause: { get: access },
+      code: { get: access },
+      message: { get: access },
+    });
+    for (const error of [source, new HostedRejectedOperationError(secret)]) {
+      const result = safeToolError(error, "saved-session", "autograph_send");
+      expect(result.structuredContent.error?.code).toBe("operation_rejected");
+      expect(JSON.stringify(result)).not.toContain(secret);
+    }
+    const uncertain = new HostedSubmissionUnknownError();
+    Object.defineProperty(uncertain, "code", { value: "send_preflight_unavailable" });
+    expect(
+      safeToolError(uncertain, "saved-session", "autograph_send").structuredContent.error?.code,
+    ).toBe("submission_unknown");
+    expect(access).not.toHaveBeenCalled();
+    expect(
+      safeToolError(
+        new HostedRejectedOperationError("send_preflight_unavailable"),
+        "saved-session",
+        "autograph_get",
+      ).structuredContent.error?.code,
+    ).toBe("operation_rejected");
   });
 });
