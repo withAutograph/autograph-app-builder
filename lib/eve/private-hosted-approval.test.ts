@@ -9,6 +9,9 @@ import { createHostedEveSessionService } from "./hosted-service";
 import type { HostedEveTransport } from "./hosted-service";
 import {
   createPrivateHostedApprovalCapture,
+  createPrivateHostedApprovalRecorder,
+  hydratePrivateHostedApprovalCaptureState,
+  serializePrivateHostedApprovalCaptureState,
   privateHostedApprovalReceiptSchema,
   readPrivateHostedApproval,
 } from "./private-hosted-approval";
@@ -426,5 +429,109 @@ describe("private hosted approval receipts", () => {
         store,
       }),
     ).resolves.toEqual(second);
+  });
+});
+
+describe("private approval delta checkpoints", () => {
+  it("hydrates an earlier pending request and produces the exact later approval receipt", () => {
+    const full = createPrivateHostedApprovalCapture(sessionId);
+    full.observe(inputRequested("split-request"));
+    const snapshot = full.snapshot();
+    const saved = serializePrivateHostedApprovalCaptureState(snapshot);
+    const resumed = createPrivateHostedApprovalCapture(
+      sessionId,
+      hydratePrivateHostedApprovalCaptureState(sessionId, saved),
+    );
+    resumed.observe(approvalSettled("split-request"));
+    full.observe(approvalSettled("split-request"));
+    expect(resumed.values()).toEqual(full.values());
+    expect(resumed.snapshot().pendingRequests).toEqual([]);
+    expect(resumed.snapshot().receipts).toEqual(full.values());
+    expect(() => hydratePrivateHostedApprovalCaptureState("foreign-session", saved)).toThrow(
+      "another session",
+    );
+  });
+  it("validates malformed, duplicate and changed scope without trusting or sharing checkpoint objects", () => {
+    const capture = createPrivateHostedApprovalCapture(sessionId);
+    capture.observe(inputRequested("split-request"));
+    const snapshot = capture.snapshot();
+    const [request] = snapshot.pendingRequests;
+    expect(() =>
+      hydratePrivateHostedApprovalCaptureState(sessionId, {
+        ...snapshot,
+        pendingRequests: [request, request],
+      }),
+    ).toThrow();
+    expect(() =>
+      hydratePrivateHostedApprovalCaptureState(sessionId, {
+        ...snapshot,
+        pendingRequests: [
+          { ...request, toolInput: { ...request.toolInput, planDigest: "f".repeat(64) } },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      hydratePrivateHostedApprovalCaptureState(sessionId, {
+        ...snapshot,
+        pendingRequests: [
+          { ...request, toolInput: { ...request.toolInput, appId: "foreign-app" } },
+        ],
+      }),
+    ).toThrow();
+    request.toolInput.appId = "changed-snapshot";
+    expect(capture.snapshot().pendingRequests[0]?.toolInput.appId).toBe(selection.appId);
+    expect(() => {
+      capture.hydrate({
+        ...capture.snapshot(),
+        pendingRequests: [{ ...capture.snapshot().pendingRequests[0], callId: "different-call" }],
+      });
+    }).toThrow("Conflicting private pending");
+    expect(capture.snapshot().pendingRequests[0]?.callId).toBe("call_fixture");
+  });
+  it("persists later delta approvals through the real owner store and revalidates hydrated receipts", async () => {
+    const { sessionId: savedSessionId, store } = await startedStore();
+    const original = createPrivateHostedApprovalRecorder({
+      principal,
+      sessionId: savedSessionId,
+      store,
+    });
+    await original.observe(
+      inputRequested(
+        "delta-store-request",
+        "prepare-app-hosted-runtime",
+        receipt(savedSessionId).toolInput,
+      ),
+    );
+    expect(original.values()).toEqual([]);
+    const state = hydratePrivateHostedApprovalCaptureState(
+      savedSessionId,
+      serializePrivateHostedApprovalCaptureState(original.snapshot()),
+    );
+    const resumed = createPrivateHostedApprovalRecorder({
+      principal,
+      sessionId: savedSessionId,
+      state,
+      store,
+    });
+    await resumed.observe(approvalSettled("delta-store-request"));
+    const saved = await store.getSession(principal, savedSessionId);
+    expect(saved?.version === 2 ? saved.privateApprovalReceipts : undefined).toEqual(
+      resumed.values(),
+    );
+    const foreign = createPrivateHostedApprovalRecorder({
+      principal: { ...principal, ownerUserId: "foreign-owner" },
+      sessionId: savedSessionId,
+      state: resumed.snapshot(),
+      store,
+    });
+    await expect(foreign.observe(approvalSettled("unrelated-delta"))).rejects.toThrow();
+    const current = createPrivateHostedApprovalRecorder({
+      principal,
+      sessionId: savedSessionId,
+      state: resumed.snapshot(),
+      store,
+    });
+    await current.observe(approvalSettled("unrelated-delta"));
+    expect(current.values()).toEqual(resumed.values());
   });
 });

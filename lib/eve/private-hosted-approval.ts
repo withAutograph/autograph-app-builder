@@ -24,6 +24,35 @@ const hostedRuntimeToolInputSchema = z.strictObject({
   projectId: z.string().min(1),
 });
 
+const matchesToolInput = (
+  toolName: z.infer<typeof hostedRuntimeToolName>,
+  input: z.infer<typeof hostedRuntimeToolInputSchema>,
+) => {
+  const expectedAction = toolName === "prepare-app-hosted-runtime" ? "prepare" : "cleanup";
+  return [
+    input.plan.action === expectedAction,
+    input.planDigest === operatorPlanDigest(input.plan),
+    sameOperatorSelection(input.plan.selection, {
+      ...input.plan.selection,
+      appId: input.appId,
+      branch: input.branch,
+      environment: input.environment,
+      projectId: input.projectId,
+    }),
+  ].every(Boolean);
+};
+const privateHostedPendingApprovalSchema = z
+  .strictObject({
+    callId: z.string().min(1),
+    requestId: z.string().min(1),
+    toolInput: hostedRuntimeToolInputSchema,
+    toolName: hostedRuntimeToolName,
+  })
+  .superRefine((request, context) => {
+    if (!matchesToolInput(request.toolName, request.toolInput)) {
+      context.addIssue({ code: "custom", message: planMismatchMessage, path: ["toolInput"] });
+    }
+  });
 export const privateHostedApprovalReceiptSchema = z
   .strictObject({
     callId: z.string().min(1),
@@ -37,19 +66,7 @@ export const privateHostedApprovalReceiptSchema = z
     turnId: z.string().min(1),
   })
   .superRefine((receipt, context) => {
-    const expectedAction =
-      receipt.toolName === "prepare-app-hosted-runtime" ? "prepare" : "cleanup";
-    const input = receipt.toolInput;
-    const selectionMatches = sameOperatorSelection(input.plan.selection, {
-      ...input.plan.selection,
-      appId: input.appId,
-      branch: input.branch,
-      environment: input.environment,
-      projectId: input.projectId,
-    });
-    const actionMatches = input.plan.action === expectedAction;
-    const digestMatches = input.planDigest === operatorPlanDigest(input.plan);
-    if (!actionMatches || !digestMatches || !selectionMatches) {
+    if (!matchesToolInput(receipt.toolName, receipt.toolInput)) {
       context.addIssue({
         code: "custom",
         message: planMismatchMessage,
@@ -59,6 +76,60 @@ export const privateHostedApprovalReceiptSchema = z
   });
 
 export type PrivateHostedApprovalReceipt = z.infer<typeof privateHostedApprovalReceiptSchema>;
+
+/** Internal JSON checkpoint only; public session DTOs never receive the pending plan or receipts. */
+export const privateHostedApprovalCaptureStateSchema = z
+  .strictObject({
+    pendingRequests: z.array(privateHostedPendingApprovalSchema),
+    receipts: z.array(privateHostedApprovalReceiptSchema),
+    sessionId: z.string().min(1),
+    version: z.literal(1),
+  })
+  .superRefine((state, context) => {
+    for (const [name, entries] of [
+      ["pendingRequests", state.pendingRequests],
+      ["receipts", state.receipts],
+    ] as const) {
+      const ids = new Set<string>();
+      for (const entry of entries) {
+        if (
+          ids.has(entry.requestId) ||
+          entry.toolInput.plan.selection.sessionId !== state.sessionId
+        ) {
+          context.addIssue({
+            code: "custom",
+            message: "Private approval checkpoint has an ambiguous request or foreign session.",
+            path: [name],
+          });
+        }
+        ids.add(entry.requestId);
+      }
+    }
+  });
+export type PrivateHostedApprovalCaptureState = z.infer<
+  typeof privateHostedApprovalCaptureStateSchema
+>;
+const privateHostedApprovalCaptureInputSchema = z.union([
+  privateHostedApprovalCaptureStateSchema,
+  z
+    .string()
+    .transform((serialized) =>
+      privateHostedApprovalCaptureStateSchema.parse(JSON.parse(serialized)),
+    ),
+]);
+export const hydratePrivateHostedApprovalCaptureState = (
+  sessionId: string,
+  value: PrivateHostedApprovalCaptureState | string,
+): PrivateHostedApprovalCaptureState => {
+  const state = privateHostedApprovalCaptureInputSchema.parse(value);
+  if (state.sessionId !== sessionId) {
+    throw new Error("Private approval checkpoint belongs to another session.");
+  }
+  return state;
+};
+export const serializePrivateHostedApprovalCaptureState = (
+  state: PrivateHostedApprovalCaptureState,
+): string => JSON.stringify(privateHostedApprovalCaptureStateSchema.parse(state));
 
 const samePrincipal = (session: HostedSessionRecord, principal: HostedPrincipal) =>
   session.principal.issuer === principal.issuer &&
@@ -119,7 +190,10 @@ const assertReceiptsMatchSession = (
 };
 
 /** Captures only protected hosted-runtime approvals from the authenticated Eve stream. */
-export const createPrivateHostedApprovalCapture = (sessionId: string) => {
+export const createPrivateHostedApprovalCapture = (
+  sessionId: string,
+  state?: PrivateHostedApprovalCaptureState,
+) => {
   const pending = new Map<
     string,
     {
@@ -130,14 +204,57 @@ export const createPrivateHostedApprovalCapture = (sessionId: string) => {
   >();
   const receipts = new Map<string, PrivateHostedApprovalReceipt>();
 
+  const hydrate = (value: PrivateHostedApprovalCaptureState | string) => {
+    const saved = hydratePrivateHostedApprovalCaptureState(sessionId, value);
+    for (const request of saved.pendingRequests) {
+      const previous = pending.get(request.requestId);
+      if (
+        previous !== undefined &&
+        [
+          previous.callId !== request.callId,
+          previous.toolName !== request.toolName,
+          previous.toolInput.operationRef !== request.toolInput.operationRef,
+          previous.toolInput.planDigest !== request.toolInput.planDigest,
+        ].some(Boolean)
+      ) {
+        throw new Error("Conflicting private pending approval checkpoint.");
+      }
+    }
+    for (const receipt of saved.receipts) {
+      const previous = receipts.get(receipt.requestId);
+      if (previous !== undefined && !sameReceipt(previous, receipt)) {
+        throw new Error("Conflicting private approval receipt checkpoint.");
+      }
+    }
+    for (const request of saved.pendingRequests) {
+      pending.set(request.requestId, {
+        callId: request.callId,
+        toolInput: request.toolInput,
+        toolName: request.toolName,
+      });
+    }
+    for (const receipt of saved.receipts) {
+      receipts.set(receipt.requestId, receipt);
+    }
+  };
+  if (state !== undefined) {
+    hydrate(state);
+  }
   return {
+    hydrate,
     observe: (event: MessageStreamEvent) => {
       if (event.type === "input.requested") {
         for (const request of event.data.requests) {
           if (request.kind === "tool-approval") {
             const toolName = hostedRuntimeToolName.safeParse(request.action.toolName);
             if (toolName.success) {
-              const toolInput = hostedRuntimeToolInputSchema.parse(request.action.input);
+              const parsed = privateHostedPendingApprovalSchema.parse({
+                callId: request.action.callId,
+                requestId: request.requestId,
+                toolInput: request.action.input,
+                toolName: toolName.data,
+              });
+              const { toolInput } = parsed;
               if (toolInput.plan.selection.sessionId !== sessionId) {
                 throw new Error("Eve returned a protected approval for another hosted session.");
               }
@@ -174,6 +291,15 @@ export const createPrivateHostedApprovalCapture = (sessionId: string) => {
       }
       receipts.set(receipt.requestId, receipt);
     },
+    snapshot: (): PrivateHostedApprovalCaptureState =>
+      hydratePrivateHostedApprovalCaptureState(sessionId, {
+        pendingRequests: [...pending.entries()]
+          .map(([requestId, request]) => ({ ...request, requestId }))
+          .toSorted((left, right) => left.requestId.localeCompare(right.requestId)),
+        receipts: [...receipts.values()].toSorted((left, right) => left.sequence - right.sequence),
+        sessionId,
+        version: 1,
+      }),
     values() {
       return [...receipts.values()].toSorted((left, right) => left.sequence - right.sequence);
     },
@@ -184,9 +310,10 @@ export const createPrivateHostedApprovalCapture = (sessionId: string) => {
 export const createPrivateHostedApprovalRecorder = (input: {
   principal: HostedPrincipal;
   sessionId: string;
+  state?: PrivateHostedApprovalCaptureState;
   store: Pick<HostedEveStore, "recordPrivateApprovalReceipts">;
 }) => {
-  const capture = createPrivateHostedApprovalCapture(input.sessionId);
+  const capture = createPrivateHostedApprovalCapture(input.sessionId, input.state);
   const persisted = new Set<string>();
   return {
     observe: async (event: MessageStreamEvent) => {
@@ -207,6 +334,7 @@ export const createPrivateHostedApprovalRecorder = (input: {
         persisted.add(receipt.requestId);
       }
     },
+    snapshot: () => capture.snapshot(),
     values: () => capture.values(),
   };
 };
