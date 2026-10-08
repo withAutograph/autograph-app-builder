@@ -6,7 +6,7 @@ import type { HostedOperatorContext } from "./hosted-operator-service";
 
 const id = z.string().regex(/^[a-z0-9-]{1,60}$/u);
 const sqlName = z.string().regex(/^[a-z][a-z0-9_]{0,62}$/u);
-const scopeSchema = z.strictObject({
+export const scopeSchema = z.strictObject({
   branchId: id,
   endpointId: id,
   hostname: z.string().endsWith(".neon.tech"),
@@ -34,7 +34,7 @@ export interface NativePreviewNeonConfiguration {
     audience: string;
   };
 }
-const configurationSchema = z.strictObject({
+export const configurationSchema = z.strictObject({
   connector: z.string().min(1),
   connectorInstallationId: z.string().min(1),
   nativeStore: z.strictObject({
@@ -83,7 +83,7 @@ export interface NativePreviewNeonIo {
 }
 const unavailable = () => new Error("Protected native Preview credential is unavailable.");
 const verifiedTls = "verify-full";
-const readSqlIdentity: NativePreviewNeonIo["readSqlIdentity"] = async (url) => {
+export const readSqlIdentity: NativePreviewNeonIo["readSqlIdentity"] = async (url) => {
   const sql = postgres(url, {
     connect_timeout: 15,
     max: 1,
@@ -111,7 +111,7 @@ const defaultIo: NativePreviewNeonIo = {
     await verifyVercelOidcToken(token, options);
   },
 };
-const privateMaintenanceUrl = (uri: string, scope: NativePreviewNeonScope) => {
+export const privateMaintenanceUrl = (uri: string, scope: NativePreviewNeonScope) => {
   const url = new URL(uri);
   const checks = [
     ["postgres:", "postgresql:"].includes(url.protocol),
