@@ -250,6 +250,31 @@ describe("trusted Node launcher", () => {
     });
   });
 
+  it("passes the Vercel CLI path while keeping provider credentials out of the launcher", () => {
+    const cleanEnvironment: NodeJS.ProcessEnv = {
+      ...process.env,
+      APP_BUILDER_DEV_VERCEL_BIN: "/mise/bin/vercel",
+      VERCEL_OIDC_TOKEN: "hostile-ambient-oidc-token",
+      VERCEL_TOKEN: "hostile-ambient-static-token",
+    };
+    delete cleanEnvironment.NODE_OPTIONS;
+    const result = spawnSync(
+      launcher,
+      [
+        pinnedNode,
+        "-e",
+        "process.stdout.write(JSON.stringify({vercel:process.env.APP_BUILDER_DEV_VERCEL_BIN, oidc:process.env.VERCEL_OIDC_TOKEN ?? null, token:process.env.VERCEL_TOKEN ?? null}))",
+      ],
+      { cwd: repositoryRoot, encoding: "utf-8", env: cleanEnvironment },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      oidc: null,
+      token: null,
+      vercel: "/mise/bin/vercel",
+    });
+  });
+
   it("uses only an owner-only development runtime home when explicitly scoped", () => {
     const runtimeHome = realpathSync(
       mkdtempSync(pathModule.join(tmpdir(), "app-builder-runtime-")),

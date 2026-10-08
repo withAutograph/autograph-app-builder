@@ -9,10 +9,7 @@ const repositoryRoot = path.resolve(".");
 
 describe("trusted local development entrypoint environment", () => {
   it("forwards the Vercel executable binding through the trusted Node launcher", () => {
-    const pinnedNode = path.join(
-      homedir(),
-      ".local/share/mise/installs/node/24.18.0/bin/node",
-    );
+    const pinnedNode = path.join(homedir(), ".local/share/mise/installs/node/24.18.0/bin/node");
     const stateRoot = realpathSync(mkdtempSync(path.join(tmpdir(), "builder-entrypoint-state-")));
     try {
       const result = spawnSync(

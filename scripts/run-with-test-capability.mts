@@ -34,7 +34,7 @@ const evalFetchPreload = pathToFileURL(
 ).href;
 const maximumFrameBytes = 4096;
 const launcher = path.resolve(repositoryRoot, ".config/mise/scripts/trusted-node-launcher");
-const launcherDigest = "64cf8dcba1bda834339c2467dca7d3d4e3d9488f0482c19a29416dbb54c9256a";
+const launcherDigest = "8167e24a12ce3c2de13ccd54966566b5debb6e3119cec57c816cf943b01d7d8e";
 const allowedEnvironment = [
   "HOME",
   "TMPDIR",
