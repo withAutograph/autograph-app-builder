@@ -36,6 +36,7 @@ import {
   latestInstalledUiPreview,
   latestInstalledWorkingPreview,
   projectInstalledEveEvent,
+  toPublicEvent,
 } from "./public-events";
 import type { InternalEveEvent } from "./public-events";
 import { reportHostedSubmissionDiagnostic } from "./hosted-submission-diagnostic";
@@ -713,7 +714,10 @@ export async function observeSameOriginEveStream(
     }
     for (const projected of projectInstalledEveEvent(event, 0)) {
       const indexed = { ...projected, index: publicEventCount };
-      publicEventCount += 1;
+      // Internal resolution events still update reducers/callbacks but have no public checkpoint row.
+      if (toPublicEvent(indexed) !== null) {
+        publicEventCount += 1;
+      }
       if (indexed.type === "input.requested" && indexed.request !== undefined) {
         pending.set(indexed.request.requestId, indexed.request);
       }

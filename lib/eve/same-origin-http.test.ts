@@ -7,6 +7,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { hostedEveOperationScopes } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
+import { toPublicEvent } from "./public-events";
+import type { InternalEveEvent } from "./public-events";
 import { nativeObservationStateSchema } from "./native-observation-state";
 import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
 import {
@@ -174,6 +176,7 @@ describe("incremental canonical Eve stream", () => {
 
   it("projects dense events and tracks only unresolved requests", async () => {
     const projected: { index: number; type: string }[] = [];
+    let internalResolutions = 0;
     const events = [
       { data: { turnId: "turn_1" }, type: "step.started" },
       {
@@ -197,11 +200,13 @@ describe("incremental canonical Eve stream", () => {
       // oxlint-disable-next-line eslint/require-await -- The fetch double follows the async fetch contract.
       fetchImplementation: vi.fn(async () => stream(events)),
       onEvent(event) {
-        projected.push({ index: event.index, type: event.type });
+        if (event.type === "input.resolved") internalResolutions += 1;
+        if (toPublicEvent(event) !== null) projected.push({ index: event.index, type: event.type });
       },
       sessionId: "wrun_1",
       workloadIdentity: identity(),
     });
+    expect(internalResolutions).toBe(1);
     expect(projected.map(({ index }) => index)).toEqual(projected.map((_, index) => index));
     expect(observed).toMatchObject({
       artifactProjectionRequiresLegacyReadback: false,
@@ -1771,8 +1776,8 @@ describe("durable native observer checkpoint", () => {
       const input = {
         config: { ...config, timeoutMs: 10_000 },
         fetchImplementation: http.fetchImplementation,
-        onEvent: (event: { index: number }) => {
-          observed.push(event.index);
+        onEvent: (event: InternalEveEvent) => {
+          if (toPublicEvent(event) !== null) observed.push(event.index);
         },
         readDeadline: true,
         sessionId: "wrun_1",
