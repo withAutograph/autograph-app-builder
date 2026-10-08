@@ -106,25 +106,12 @@ export const decideApprovedBuildContinuation = (input: {
   }
   const failure = state.validationFailure;
   const command = failure.commandFailure;
-  const appRoot = `apps/${scope.appId}/`;
-  const owned =
-    (failure.diagnostics?.length ?? 0) > 0 &&
-    (failure.diagnostics?.every((diagnostic) => {
-      if (diagnostic.path.startsWith(appRoot)) {
-        return true;
-      }
-      if (diagnostic.path.startsWith("apps/") || diagnostic.path.startsWith("packages/")) {
-        return false;
-      }
-      return state.applyReceipt.postTree.some(
-        (file) => file.path === `${appRoot}${diagnostic.path}`,
-      );
-    }) ??
-      false);
+  // The validator runs the approved app's check/test command. Diagnostic paths
+  // describe stack frames, not repair ownership: unchanged tests and shared
+  // runtime frames must not stop the approved app's private repair loop.
   if (
     failure.reason !== "command-failed" ||
     command === undefined ||
-    !owned ||
     !["check-build", "test"].includes(command.name)
   ) {
     return { ...base, decision: "blocked", scope };
