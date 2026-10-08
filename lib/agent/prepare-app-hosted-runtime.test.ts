@@ -1,13 +1,18 @@
 import type { ToolInputRequest } from "eve/tools";
-import type { OperatorPublicResult } from "../provisioning/hosted-operator-contract";
+import type { OperatorPublicResult, HostedOperatorError } from "../provisioning/hosted-operator-contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   prepareHostedRuntimeWithOperator,
+} from "../../agent/tools/prepare-app-hosted-runtime-step";
+import {
+  hostedRuntimeApprovalInputSchema,
   realmIdentityInputQuestion,
 } from "../../agent/tools/prepare-app-hosted-runtime";
 import {
+  HostedOperatorError as HostedOperatorErrorClass,
   hostedOperatorPlanSchema,
   operatorPlanDigest,
+  sameOperatorSelection,
 } from "../provisioning/hosted-operator-contract";
 import type { PreparedRuntimeSelection } from "./prepared-runtime-selection";
 
@@ -110,7 +115,6 @@ const operator = {
       sessionId: "public-session",
     });
   }),
-  bindings: vi.fn(),
   request: vi.fn(async (): Promise<OperatorPublicResult> => {
     try {
       return await Promise.resolve({
@@ -141,13 +145,37 @@ const retain = (selection: PreparedRuntimeSelection) => {
     sessionId: "public-session",
   });
 };
+const contract = {
+  createResourceMismatch: () => new HostedOperatorErrorClass("resource_mismatch"),
+  digest: (value: typeof plan) => operatorPlanDigest(value),
+  isOperatorError: (error: unknown): error is HostedOperatorError =>
+    error instanceof HostedOperatorErrorClass,
+  sameSelection: (left: typeof plan.selection, right: typeof plan.selection) =>
+    sameOperatorSelection(left, right),
+};
 describe("hosted runtime Auth identity handoff", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     order.length = 0;
   });
-  it("requests the real client identity port after execution finally and durable selection", async () => {
-    const value = await prepareHostedRuntimeWithOperator(input, ctx, operator, retain);
+  it("keeps the approval envelope strict while deferring the Node-backed plan parse", () => {
+    const approvalInput = {
+      appId: input.appId,
+      branch: input.branch,
+      environment: input.environment,
+      operationRef: input.operationRef,
+      plan: input.plan,
+      planDigest: input.planDigest,
+      projectId: input.projectId,
+    };
+    expect(hostedRuntimeApprovalInputSchema.parse(approvalInput)).toEqual(approvalInput);
+    expect(
+      hostedRuntimeApprovalInputSchema.safeParse({ ...approvalInput, unexpected: "field" }).success,
+    ).toBe(false);
+  });
+
+  it("requests identity after execution finishes and the durable selection is retained", async () => {
+    const value = await prepareHostedRuntimeWithOperator(input, ctx, operator, retain, contract);
     expect(value.result.status).toBe("auth-schema-prepared");
     expect(value.identityInput?.browserUrl).toBe("https://auth.example/link");
     expect(order).toEqual(["lease-released", "selection", "identity"]);
@@ -167,6 +195,7 @@ describe("hosted runtime Auth identity handoff", () => {
       ctx.abortSignal,
     );
   });
+
   it.each(["pending", "prepared", "blocked"] as const)(
     "does not request identity or resend execution for %s",
     async (status) => {
@@ -176,16 +205,27 @@ describe("hosted runtime Auth identity handoff", () => {
         operationRef,
         status,
       });
-      const value = await prepareHostedRuntimeWithOperator(input, ctx, operator, retain);
+      const value = await prepareHostedRuntimeWithOperator(input, ctx, operator, retain, contract);
       expect(value.result.status).toBe(status);
       expect(operator.request).toHaveBeenCalledTimes(1);
       expect(operator.authIdentityInput).not.toHaveBeenCalled();
     },
   );
+
   it("retains bootstrap selection when readiness denies the link", async () => {
     operator.authIdentityInput.mockRejectedValueOnce(new Error("not ready"));
-    const value = await prepareHostedRuntimeWithOperator(input, ctx, operator, retain);
+    const value = await prepareHostedRuntimeWithOperator(input, ctx, operator, retain, contract);
     expect(value.result.status).toBe("blocked");
     expect(order).toEqual(["lease-released", "selection"]);
+  });
+
+  it("asks the user to complete the prepared Auth identity link", () => {
+    const question = realmIdentityInputQuestion({
+      browserUrl: "https://auth.example/link",
+      expiresAt: "2027-01-01T00:00:00Z",
+    });
+    expect(question.display).toBe("confirmation");
+    expect(question.prompt).toContain("https://auth.example/link");
+    expect(question.prompt).toContain("2027-01-01T00:00:00Z");
   });
 });
