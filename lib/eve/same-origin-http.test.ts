@@ -2012,3 +2012,106 @@ describe("explicit cold-read catch-up frontier", () => {
     ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
   });
 });
+
+const responseSettlementSeed = async () => {
+  const requests = ["first-response", "second-response"].map((requestId) => ({
+    allowFreeform: true,
+    display: "text",
+    kind: "question",
+    prompt: "Choose",
+    requestId,
+  }));
+  const observed = await observeSameOriginEveStream({
+    ...catchupInput(
+      async () =>
+        await Promise.resolve(
+          stream([
+            { data: {}, type: "session.started" },
+            { data: { requests }, type: "input.requested" },
+          ]),
+        ),
+    ),
+  });
+  return observed.nativeObservationState;
+};
+
+describe("response settlement from owner-checked complete native preflight", () => {
+  it("posts once and carries seeded pending facts and native cursors across complete suffix polls", async () => {
+    const seed = await responseSettlementSeed();
+    const paths: number[] = [];
+    let postCount = 0;
+    const deltas = [
+      { data: {}, type: "session.waiting" },
+      { data: { resolutions: [{ requestId: "first-response" }] }, type: "input.resolved" },
+      { data: { resolutions: [{ requestId: "second-response" }] }, type: "input.resolved" },
+    ];
+    const fetchImplementation: typeof fetch = async (url, init) => {
+      if (init?.method === "POST") {
+        postCount += 1;
+        return accepted();
+      }
+      const next = Number(new URL(String(url)).searchParams.get("startIndex"));
+      paths.push(next);
+      const event = deltas[paths.length - 1];
+      if (event === undefined) throw new Error("unexpected settlement poll");
+      return await Promise.resolve(
+        pinnedResponse(`${JSON.stringify(event)}\n`, seed.nextNativeIndex + paths.length - 1),
+      );
+    };
+    const transport = createSameOriginEveTransport({
+      config,
+      fetchImplementation,
+      workloadIdentity: identity(),
+    });
+    await transport.respondAccepted?.({
+      adapterSessionId: "wrun_1",
+      nativeObservationState: seed,
+      operationId: "respond_operation",
+      principal,
+      responses: [
+        { requestId: "first-response", response: { kind: "answer" as const, value: "first" } },
+        { requestId: "second-response", response: { kind: "answer" as const, value: "second" } },
+      ],
+    });
+    expect(postCount).toBe(1);
+    expect(paths).toEqual([2, 3, 4]);
+    expect(seed.pendingRequests).toHaveLength(2);
+    expect(seed.nextNativeIndex).toBe(2);
+  });
+
+  it("denies foreign or changed preflight batches before mutation dispatch", async () => {
+    const seed = await responseSettlementSeed();
+    const fetchImplementation = vi.fn(async () => await Promise.resolve(accepted()));
+    const transport = createSameOriginEveTransport({
+      config,
+      fetchImplementation,
+      workloadIdentity: identity(),
+    });
+    const input = {
+      adapterSessionId: "wrun_1",
+      operationId: "respond_operation",
+      principal,
+      responses: [
+        { requestId: "first-response", response: { kind: "answer" as const, value: "first" } },
+        { requestId: "second-response", response: { kind: "answer" as const, value: "second" } },
+      ],
+    };
+    await expect(
+      transport.respondAccepted?.({
+        ...input,
+        nativeObservationState: { ...seed, adapterSessionId: "foreign" },
+      }),
+    ).rejects.toBeInstanceOf(SubmissionRejectedBeforeDispatchError);
+    await expect(
+      transport.respondAccepted?.({
+        ...input,
+        nativeObservationState: seed,
+        responses: [input.responses[1], input.responses[0]],
+      }),
+    ).rejects.toBeInstanceOf(SubmissionRejectedBeforeDispatchError);
+    await expect(
+      transport.respondAccepted?.({ ...input, nativeObservationState: seed, responses: [] }),
+    ).rejects.toBeInstanceOf(SubmissionRejectedBeforeDispatchError);
+    expect(fetchImplementation).not.toHaveBeenCalled();
+  });
+});
