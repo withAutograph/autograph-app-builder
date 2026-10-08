@@ -33,6 +33,121 @@ const waitFor = async (condition: () => boolean) => {
 };
 
 describe("generated working preview supervisor", () => {
+  it.each([
+    ["missing", "Prepared authenticated runtime environment is missing"],
+    ["malformed", "Prepared authenticated runtime environment is invalid"],
+    ["wrong-shape", "Prepared authenticated runtime environment is invalid"],
+  ] as const)(
+    "classifies a %s private runtime environment without exposing its path",
+    async (mode, expected) => {
+      const directory = await mkdtemp(nodePath.join(tmpdir(), "preview-supervisor-environment-"));
+      const gatewayPort = await unusedPort();
+      const appPort = await unusedPort();
+      const environmentPath = nodePath.join(directory, "private-environment.json");
+      const configurationPath = nodePath.join(directory, "access.json");
+      const failurePath = nodePath.join(directory, "failed.json");
+      const readyPath = nodePath.join(directory, "ready");
+      const expiresAt = Date.now() + 10_000;
+      const access = createWorkingPreviewAccess({
+        appPort,
+        configurationPath,
+        expiresAt,
+        gatewayPort,
+        origin: "https://preview.example",
+      });
+      if (mode !== "missing") {
+        await writeFile(
+          environmentPath,
+          mode === "malformed" ? "{invalid" : JSON.stringify({ APP_RUNTIME_TEST_VALUE: 42 }),
+        );
+      }
+      const supervisorPath = nodePath.join(directory, "supervisor.mjs");
+      await writeFile(
+        supervisorPath,
+        workingPreviewSupervisorSource({
+          command: { args: ["-e", "setInterval(() => {}, 1000)"], executable: process.execPath },
+          configurationPath,
+          cwd: directory,
+          environmentPath,
+          expiresAt,
+          failurePath,
+          gatewaySource: access.source,
+          readyPath,
+        }),
+      );
+      const supervisor = spawn(process.execPath, [supervisorPath], { stdio: "ignore" });
+      const exited = once(supervisor, "exit");
+      try {
+        await waitFor(() => existsSync(readyPath));
+        await writeFile(configurationPath, access.configuration);
+        await waitFor(() => existsSync(failurePath));
+        const failure = JSON.parse(await readFile(failurePath, "utf8")) as {
+          message: string;
+          stderr: string;
+        };
+        expect(failure.message).toBe(expected);
+        expect(JSON.stringify(failure)).not.toContain(environmentPath);
+        expect(JSON.stringify(failure)).not.toContain("APP_RUNTIME_TEST_VALUE");
+      } finally {
+        if (supervisor.exitCode === null && supervisor.signalCode === null) {
+          supervisor.kill("SIGTERM");
+          await exited;
+        }
+        await rm(directory, { force: true, recursive: true });
+      }
+    },
+    10_000,
+  );
+
+  it("loads a valid private runtime environment into the actual child process", async () => {
+    const directory = await mkdtemp(nodePath.join(tmpdir(), "preview-supervisor-environment-"));
+    const gatewayPort = await unusedPort();
+    const appPort = await unusedPort();
+    const environmentPath = nodePath.join(directory, "private-environment.json");
+    const markerPath = nodePath.join(directory, "child-value");
+    const configurationPath = nodePath.join(directory, "access.json");
+    const readyPath = nodePath.join(directory, "ready");
+    const expiresAt = Date.now() + 10_000;
+    const secret = "fixture-private-runtime-value";
+    const access = createWorkingPreviewAccess({
+      appPort,
+      configurationPath,
+      expiresAt,
+      gatewayPort,
+      origin: "https://preview.example",
+    });
+    await writeFile(environmentPath, JSON.stringify({ APP_RUNTIME_TEST_VALUE: secret }));
+    const supervisorPath = nodePath.join(directory, "supervisor.mjs");
+    const child = `require("node:fs").writeFileSync(${JSON.stringify(markerPath)}, process.env.APP_RUNTIME_TEST_VALUE ?? "missing"); setInterval(() => {}, 1000);`;
+    await writeFile(
+      supervisorPath,
+      workingPreviewSupervisorSource({
+        command: { args: ["-e", child], executable: process.execPath },
+        configurationPath,
+        cwd: directory,
+        environmentPath,
+        expiresAt,
+        failurePath: nodePath.join(directory, "failed.json"),
+        gatewaySource: access.source,
+        readyPath,
+      }),
+    );
+    const supervisor = spawn(process.execPath, [supervisorPath], { stdio: "ignore" });
+    const exited = once(supervisor, "exit");
+    try {
+      await waitFor(() => existsSync(readyPath));
+      await writeFile(configurationPath, access.configuration);
+      await waitFor(() => existsSync(markerPath));
+      expect(await readFile(markerPath, "utf8")).toBe(secret);
+    } finally {
+      if (supervisor.exitCode === null && supervisor.signalCode === null) {
+        supervisor.kill("SIGTERM");
+        await exited;
+      }
+      await rm(directory, { force: true, recursive: true });
+    }
+  }, 10_000);
+
   it.each(["signal", "expiry"])(
     "waits for configuration and closes the process group on %s",
     async (mode) => {
