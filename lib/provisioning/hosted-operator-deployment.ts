@@ -850,39 +850,6 @@ export const createHostedOperatorControlPlane = async (input: {
         await owner.assertPlanningAuthorized(context);
         return link === undefined ? null : operatorRealmIdentityLinkSchema.parse(link);
       },
-      async readRetirementResourceCredentials(effectInput: ResourceCredentialEffect) {
-        if (
-          effectInput.plan.action !== "cleanup" ||
-          effectInput.effect.kind !== "retire" ||
-          effectInput.effect.resourceId !== effectInput.plan.appDatabase.resourceId
-        ) {
-          throw new HostedOperatorError("authorization_required");
-        }
-        const current = await readCurrentResourceCredentialRecord({
-          assertAuthorized: owner.assertAuthorized,
-          effect: effectInput,
-          store,
-        });
-        if (current.privateState === undefined) {
-          throw new HostedOperatorError("operation_in_progress");
-        }
-        const prepared = prepareHostedOperatorResourceCredentials({
-          ...effectInput,
-          config: tokenKeyring,
-          database: "appDatabase",
-          record: current,
-        });
-        await readCurrentResourceCredentialRecord({
-          assertAuthorized: owner.assertAuthorized,
-          effect: effectInput,
-          store,
-        });
-        return {
-          bytes: Buffer.from(prepared.credentialsBytes, "utf-8"),
-          privateState: prepared.privateState,
-          sha256: prepared.credentialsSha256,
-        };
-      },
       async readResourceBindings(effectInput: ResourceCredentialEffect | ResourceBindingContext) {
         if (
           effectInput.plan.action !== "prepare" &&
@@ -951,6 +918,39 @@ export const createHostedOperatorControlPlane = async (input: {
           throw new HostedOperatorError("operation_in_progress");
         }
         return bindings;
+      },
+      async readRetirementResourceCredentials(effectInput: ResourceCredentialEffect) {
+        if (
+          effectInput.plan.action !== "cleanup" ||
+          effectInput.effect.kind !== "retire" ||
+          effectInput.effect.resourceId !== effectInput.plan.appDatabase.resourceId
+        ) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const current = await readCurrentResourceCredentialRecord({
+          assertAuthorized: owner.assertAuthorized,
+          effect: effectInput,
+          store,
+        });
+        if (current.privateState === undefined) {
+          throw new HostedOperatorError("operation_in_progress");
+        }
+        const prepared = prepareHostedOperatorResourceCredentials({
+          ...effectInput,
+          config: tokenKeyring,
+          database: "appDatabase",
+          record: current,
+        });
+        await readCurrentResourceCredentialRecord({
+          assertAuthorized: owner.assertAuthorized,
+          effect: effectInput,
+          store,
+        });
+        return {
+          bytes: Buffer.from(prepared.credentialsBytes, "utf-8"),
+          privateState: prepared.privateState,
+          sha256: prepared.credentialsSha256,
+        };
       },
       reserveRealmIdentityLink,
       async resolveRealmIdentityCallbackContext(callbackInput: {

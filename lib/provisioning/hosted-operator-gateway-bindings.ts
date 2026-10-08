@@ -68,8 +68,14 @@ const authResource = (input: GatewayManagedEnvironmentContext) => {
 
 const validGatewayInput = (input: GatewayManagedEnvironmentContext) => {
   const { gateway, plan, target } = input;
-  const { gatewayOrigin, publicOrigin, operatorOrigin, builderCallbackOrigin, catalogAppIds } =
-    gateway;
+  const {
+    authBrowserOrigin,
+    gatewayOrigin,
+    publicOrigin,
+    operatorOrigin,
+    builderCallbackOrigin,
+    catalogAppIds,
+  } = gateway;
   const boundary = plan.deploymentBoundary;
   const config = plan.gatewayBindings;
   if (!boundary || !config) {
@@ -77,7 +83,7 @@ const validGatewayInput = (input: GatewayManagedEnvironmentContext) => {
   }
   return [
     plan.action === "prepare",
-    input.effect.kind === "gateway-bindings",
+    ["gateway-bindings", "gateway-delivery"].includes(input.effect.kind),
     target.environment === "preview",
     target.scopeType === "team",
     target.scopeId === boundary.teamId,
@@ -86,12 +92,12 @@ const validGatewayInput = (input: GatewayManagedEnvironmentContext) => {
     target.projectId !== gateway.projectId,
     gateway.projectId === boundary.gateway.projectId,
     gateway.branch === boundary.gateway.branch,
-    gateway.branch === plan.selection.branch,
     gateway.projectId === plan.publicGateway?.projectId,
     gateway.branch === plan.publicGateway?.branch,
     gatewayOrigin === boundary.verification.gatewayOrigin,
     publicOrigin === boundary.verification.publicOrigin,
     operatorOrigin === config.operatorOrigin,
+    authBrowserOrigin === config.authBrowserOrigin,
     builderCallbackOrigin === config.builderCallbackOrigin,
     JSON.stringify(catalogAppIds.toSorted()) === JSON.stringify(config.catalogAppIds.toSorted()),
     catalogAppIds.includes(plan.selection.appId),
@@ -249,9 +255,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
         throw unavailable();
       }
       for (const [key, expected] of [
-        ["BETTER_AUTH_URL", `${gateway.gatewayOrigin}/api/auth`],
+        ["BETTER_AUTH_URL", `${gateway.publicOrigin}/api/auth`],
         ["BETTER_AUTH_APP_NAME", "apps"],
-        ["PLATFORM_PUBLIC_ORIGIN", gateway.gatewayOrigin],
+        ["PLATFORM_PUBLIC_ORIGIN", gateway.publicOrigin],
       ] as const) {
         const matches = byKey(key);
         if (matches.length !== 1) {
@@ -291,7 +297,8 @@ export const createHostedOperatorGatewayBindings = (deps: {
       );
       if (
         !trustedOriginValues.has(gateway.gatewayOrigin) ||
-        !trustedOriginValues.has(gateway.publicOrigin)
+        !trustedOriginValues.has(gateway.publicOrigin) ||
+        !trustedOriginValues.has(gateway.authBrowserOrigin)
       ) {
         throw unavailable();
       }
@@ -327,9 +334,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
         PLATFORM_AUTH_DATABASE_URL: runtimeUrl,
         PLATFORM_GATEWAY_PROTECTED_APPLICATIONS: JSON.stringify(protectedApplicationIds),
         PLATFORM_REALM_OPERATOR_LINK_CONFIG: JSON.stringify({
+          browserOrigin: exactHttpsOrigin(gateway.authBrowserOrigin),
           builderCallbackOrigin: exactHttpsOrigin(gateway.builderCallbackOrigin),
           builderCallbackPath: "/api/hosted-operator/realm-identity",
-          gatewayOrigin: exactHttpsOrigin(gateway.gatewayOrigin),
           operatorOrigin: exactHttpsOrigin(gateway.operatorOrigin),
         }),
       };
@@ -407,6 +414,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
   return {
     async bind(input: GatewayManagedEnvironmentContext) {
       try {
+        if (input.effect.kind !== "gateway-bindings") {
+          throw unavailable();
+        }
         const io = open(input);
         let { expected, known, rows } = await io.inspect(false);
         await io.checkpoint(rows, known);
@@ -484,6 +494,22 @@ export const createHostedOperatorGatewayBindings = (deps: {
       } catch {
         return { status: "unknown" };
       }
+    },
+    async verifyForDelivery(input: GatewayManagedEnvironmentContext) {
+      if (input.effect.kind !== "gateway-delivery") {
+        throw unavailable();
+      }
+      const io = open(input);
+      const { rows, known, expected } = await io.inspect(true);
+      if (rows.length !== Object.keys(expected).length) {
+        throw unavailable();
+      }
+      await io.guard();
+      return {
+        rows: rows.map((row) =>
+          referenceRow(row, input, new Map(known.map((item) => [item.id, item]))),
+        ),
+      };
     },
   };
 };

@@ -300,5 +300,20 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
         throw unavailable();
       }
     },
+    async verifyForDelivery(
+      input: HostedOperatorManagedEnvironmentContext,
+      values: ProtectedAppEnvironment,
+    ) {
+      if (input.effect.kind !== "delivery" || input.plan.delivery === undefined) {
+        throw unavailable();
+      }
+      const io = open(input, values);
+      const rows = await io.inspect();
+      if (rows.length !== Object.keys(io.expected).length) {
+        throw unavailable();
+      }
+      await io.guard();
+      return { rows: rows.map(io.reference) };
+    },
   };
 };

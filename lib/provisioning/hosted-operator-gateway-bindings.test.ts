@@ -26,6 +26,7 @@ const target = {
   scopeType: "team" as const,
 };
 const gateway = {
+  authBrowserOrigin: "https://auth-preview.example.test",
   branch: selection.branch,
   builderCallbackOrigin: "https://builder-preview.example.test",
   catalogAppIds: ["spend-review", "inventory"],
@@ -85,6 +86,7 @@ const plan = hostedOperatorPlanSchema.parse({
     { description: "Bind Gateway Auth", id: "gateway-bindings", kind: "gateway-bindings" },
   ],
   gatewayBindings: {
+    authBrowserOrigin: gateway.authBrowserOrigin,
     builderCallbackOrigin: gateway.builderCallbackOrigin,
     catalogAppIds: gateway.catalogAppIds,
     operatorOrigin: gateway.operatorOrigin,
@@ -150,7 +152,7 @@ const fixture = () => {
       target: ["preview"],
       gitBranch: selection.branch,
       type: "plain",
-      value: `${gateway.gatewayOrigin}/api/auth`,
+      value: `${gateway.publicOrigin}/api/auth`,
     },
     {
       id: "auth-app-name",
@@ -166,7 +168,7 @@ const fixture = () => {
       target: ["preview"],
       gitBranch: selection.branch,
       type: "plain",
-      value: gateway.gatewayOrigin,
+      value: gateway.publicOrigin,
     },
     {
       id: "trusted-origins",
@@ -178,6 +180,7 @@ const fixture = () => {
         gateway.gatewayOrigin,
         "https://separately-approved.example.test",
         gateway.publicOrigin,
+        gateway.authBrowserOrigin,
       ].join(","),
     },
     { id: "unrelated", key: "APP_TITLE", target: ["production"], type: "plain", value: "keep" },
