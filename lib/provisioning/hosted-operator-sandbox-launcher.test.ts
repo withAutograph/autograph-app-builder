@@ -93,6 +93,7 @@ const authorityNotice = (frameId: number) => ({
 type Notice = { stream: "stdout" | "stderr"; data: string };
 const makeFixture = (
   options: {
+    fenceOnly?: boolean;
     unknown?: boolean;
     staleAtAuthority?: boolean;
     wrongResource?: boolean;
@@ -220,7 +221,13 @@ const makeFixture = (
         frame({ version: 1, run_id: runId, kind: "worker_started" }),
       );
       files.set(`/vercel/sandbox/protected-installer/${runId}/lifecycle/1.ready`, ready(1));
-      files.set(`/vercel/sandbox/protected-installer/${runId}/requests/1.json`, frame(request));
+      const wireRequest = { ...request };
+      if (options.fenceOnly) {
+        Object.assign(wireRequest, { kind: "check_fence" });
+        Reflect.deleteProperty(wireRequest, "effect_id");
+        Reflect.deleteProperty(wireRequest, "sequence");
+      }
+      files.set(`/vercel/sandbox/protected-installer/${runId}/requests/1.json`, frame(wireRequest));
       files.set(`/vercel/sandbox/protected-installer/${runId}/requests/1.ready`, ready(1));
       const requestCanContinue =
         options.wrongResource !== true && options.staleAtAuthority !== true;
@@ -262,13 +269,13 @@ const makeFixture = (
         { stream: "stdout", data: `${JSON.stringify(authorityNotice(1))}\n` },
       ];
       if (!options.staleAtAuthority && !options.wrongResource) {
-        notices.push(
-          { stream: "stdout", data: `${JSON.stringify(authorityNotice(2))}\n` },
-          {
-            stream: "stdout",
-            data: `${JSON.stringify({ kind: "protected_installer_lifecycle_ready", version: 1, run_id: runId, frame_id: 2 })}\n`,
-          },
-        );
+        if (!options.fenceOnly) {
+          notices.push({ stream: "stdout", data: `${JSON.stringify(authorityNotice(2))}\n` });
+        }
+        notices.push({
+          stream: "stdout",
+          data: `${JSON.stringify({ kind: "protected_installer_lifecycle_ready", version: 1, run_id: runId, frame_id: 2 })}\n`,
+        });
       }
       workerCommand = {
         kill: vi.fn(async () => undefined),
@@ -414,6 +421,33 @@ const makeFixture = (
 };
 
 describe("hosted protected installer Sandbox launcher", () => {
+  it("checks the current real fence without authorizing an effect or recording a receipt", async () => {
+    const fixture = makeFixture({ fenceOnly: true });
+    await fixture.launcher.execute(fixture.input);
+    expect(fixture.records).toHaveLength(0);
+    expect(
+      JSON.parse(
+        fixture.files
+          .get(`/vercel/sandbox/protected-installer/${runId}/responses/1.json`)!
+          .toString(),
+      ),
+    ).toMatchObject({
+      kind: "fence_current",
+      current: true,
+      context_digest: contextDigest,
+      fence_generation: 3,
+    });
+  });
+
+  it.each([
+    { fenceOnly: true, staleAtAuthority: true },
+    { fenceOnly: true, wrongResource: true },
+  ])("denies stale or foreign fence checks without a receipt: %j", async (options) => {
+    const fixture = makeFixture(options);
+    await expect(fixture.launcher.execute(fixture.input)).rejects.toThrow();
+    expect(fixture.records).toHaveLength(0);
+  });
+
   it("uses a separate approved Auth worker and a resource-wide Auth context", async () => {
     const fixture = makeFixture({ auth: true });
     await fixture.launcher.execute(fixture.input);

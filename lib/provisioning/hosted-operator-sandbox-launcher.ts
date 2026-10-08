@@ -252,6 +252,11 @@ const authorizationRequestSchema = z.strictObject({
   installer_sha256: digestSchema,
   tenant_id: z.string().min(1).nullable(),
 });
+const fenceRequestSchema = authorizationRequestSchema
+  .omit({ effect_id: true, sequence: true })
+  .extend({
+    kind: z.literal("check_fence"),
+  });
 const checkpointRequestSchema = z.strictObject({
   kind: z.literal("checkpoint_effect"),
   version: z.literal(1),
@@ -293,6 +298,15 @@ interface EffectAuthorizedReply {
   allowed: true;
 }
 
+interface FenceCurrentReply {
+  kind: "fence_current";
+  version: 1;
+  operation_id: string;
+  context_digest: string;
+  fence_generation: number;
+  current: true;
+}
+
 interface CheckpointRecordedReply {
   kind: "checkpoint_recorded";
   version: 1;
@@ -309,6 +323,7 @@ type PrivateProtocolDocument =
   | WorkerContext
   | SpoolReadyMarker
   | EffectAuthorizedReply
+  | FenceCurrentReply
   | CheckpointRecordedReply
   | GeneratedAppReleaseMetadata;
 
@@ -556,7 +571,7 @@ const verifyWorkerPin = async (
 };
 
 const requestMatchesContext = (
-  request: AuthorizationRequest,
+  request: AuthorizationRequest | z.infer<typeof fenceRequestSchema>,
   context: WorkerContext,
   contextDigest: string,
 ) => {
@@ -1031,6 +1046,35 @@ const runSandboxWorker = async (
       path.posix.join(directory, `${frameId}.json`),
       signal,
     );
+    const fence = fenceRequestSchema.safeParse(requestValue);
+    if (fence.success) {
+      const request = fence.data;
+      if (
+        unknownSeen ||
+        !requestMatchesContext(request, context, contextDigest) ||
+        !allowedResources.has(request.resource_id)
+      ) {
+        throw resourceMismatch();
+      }
+      await input.assertCurrent();
+      await atomicReply(
+        requireSandbox(),
+        path.posix.join(SPOOL_ROOT, runId),
+        runId,
+        frameId,
+        {
+          kind: "fence_current",
+          version: 1,
+          operation_id: request.operation_id,
+          context_digest: request.context_digest,
+          fence_generation: request.fence_generation,
+          current: true,
+        },
+        signal,
+      );
+      expectedAuthorityFrame += 1;
+      return;
+    }
     const authorization = authorizationRequestSchema.safeParse(requestValue);
     if (authorization.success) {
       const request = authorization.data;
