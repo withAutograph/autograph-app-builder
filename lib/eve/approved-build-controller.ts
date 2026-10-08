@@ -28,12 +28,82 @@ interface ReadyBuild {
 }
 const waitingForWork = (result: EveSessionResult) =>
   result.status === "waiting" || result.error?.code === "approved_build_continuation_pending";
+const knownWorkflowPhases = new Set([
+  "empty",
+  "prepared",
+  "ui_previewed",
+  "ui_accepted",
+  "app_spec_accepted",
+  "dependencies_prepared",
+  "identity_resolved",
+  "planned",
+  "apply_failed",
+  "applied",
+  "validation_pending",
+  "validation_failed",
+  "validated",
+  "reviewed",
+  "publication_pending",
+  "publication_failed",
+  "published_local",
+  "branch_publication_pending",
+  "branch_publication_failed",
+  "published_branch_worktree",
+  "fresh_bootstrap_pending",
+  "fresh_bootstrap_failed",
+  "published_fresh_bootstrap",
+]);
+const continuationDecisionReason = (session: DurableHostedSessionRecord): string => {
+  if (session.status === "cancelled") {
+    return "cancelled";
+  }
+  if (session.resumability !== "live") {
+    return "not_live";
+  }
+  const decision = session.privateBuildDecision;
+  if (decision === undefined) {
+    return "projection_missing";
+  }
+  if (decision.decision !== "runnable") {
+    return "decision_not_runnable";
+  }
+  if (decision.scope === undefined) {
+    return "approved_scope_missing";
+  }
+  if (decision.adapterSessionId !== session.adapterSessionId) {
+    return "adapter_mismatch";
+  }
+  return "runnable";
+};
+/** Called only after the canonical store's tenant-scoped session read. Never logs retained source or authority. */
+const logContinuationDecision = (session: DurableHostedSessionRecord): void => {
+  const decision = session.privateBuildDecision;
+  const workflowPhase = decision?.workflowPhase;
+  console.info(
+    JSON.stringify({
+      adapterGeneration: session.adapterGeneration,
+      currentSpecPresent: decision?.currentSpec !== undefined,
+      decision: decision?.decision ?? "absent",
+      event: "app_builder.approved_build_continuation_decision",
+      projectionPresent: decision !== undefined,
+      reason: continuationDecisionReason(session),
+      scopePresent: decision?.scope !== undefined,
+      sessionIdentity: stableId("session", session.sessionId),
+      turnIdentity: decision === undefined ? null : stableId("turn", decision.turnId),
+      workflowPhase:
+        workflowPhase !== undefined && knownWorkflowPhases.has(workflowPhase)
+          ? workflowPhase
+          : "unknown",
+    }),
+  );
+};
 const readyBuild = async (input: ControllerInput): Promise<ReadyBuild | undefined> => {
   const stored = await input.store.getSession(input.principal, input.sessionId);
   if (stored === null) {
     return undefined;
   }
   const session = toDurableHostedSessionRecord(stored);
+  logContinuationDecision(session);
   const decision = session.privateBuildDecision;
   const unavailable =
     session.resumability !== "live" ||
