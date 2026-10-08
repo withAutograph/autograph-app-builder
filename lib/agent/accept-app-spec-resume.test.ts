@@ -7,7 +7,11 @@ import { normalizeBuildReadyAppSpec } from "./app-spec-validation";
 import { APP_BUILDER_WORKFLOW_VERSION, appBuilderWorkflowState, sha256 } from "./workflow-state";
 import type { AppBuilderWorkflowState } from "./workflow-state";
 
-const mocks = vi.hoisted(() => ({ prepare: vi.fn() }));
+const mocks = vi.hoisted(() => ({ prepare: vi.fn(), projection: vi.fn() }));
+// oxlint-disable-next-line anti-slop/no-module-mocking -- Acceptance state reuse is isolated from the private transport persistence port; projection routing has separate actual-profile tests.
+vi.mock("./approved-build-continuation-runtime", () => ({
+  emitCurrentBuildWorkflowProjection: mocks.projection,
+}));
 const responsePrompt = z.object({
   productAcceptance: z.object({ implementationPrompt: z.string() }),
 });

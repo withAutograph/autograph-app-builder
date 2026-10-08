@@ -1,3 +1,4 @@
+import { emitCurrentBuildWorkflowProjection } from "@/lib/agent/approved-build-continuation-runtime";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
@@ -88,6 +89,7 @@ export default defineTool({
       current.appSpec.artifactRevision === artifact.revision
     ) {
       await planAcceptedAppSpec(ctx, existingAppChanges);
+      await emitCurrentBuildWorkflowProjection(ctx);
       return acceptanceResult(current.appSpec, true);
     }
     let content: string | undefined;
@@ -132,6 +134,7 @@ export default defineTool({
       current.appSpec.appId === accepted.appId
     ) {
       await planAcceptedAppSpec(ctx, existingAppChanges);
+      await emitCurrentBuildWorkflowProjection(ctx);
       return acceptanceResult(current.appSpec, true);
     }
     updateExactWorkflow({
@@ -149,6 +152,7 @@ export default defineTool({
       }),
     });
     await planAcceptedAppSpec(ctx, existingAppChanges);
+    await emitCurrentBuildWorkflowProjection(ctx);
     return acceptanceResult(accepted, false);
   },
   inputSchema: z.strictObject({

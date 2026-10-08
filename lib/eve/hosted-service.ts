@@ -1,3 +1,5 @@
+import { continueApprovedHostedBuild } from "./approved-build-controller";
+import { assertHostedBuildDecisionOwner } from "./approved-build-owner";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdtemp, open, rm } from "node:fs/promises";
@@ -849,6 +851,33 @@ export function createHostedEveSessionService(input: {
   }
 
   // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
+  const continueApprovedWork = async (
+    sessionId: string,
+    result: EveSessionResult,
+  ): Promise<EveSessionResult> => {
+    try {
+      return await continueApprovedHostedBuild({
+        assertCurrentOwner: assertHostedBuildDecisionOwner,
+        now,
+        principal,
+        result,
+        sessionId,
+        store: input.store,
+        transport: input.transport,
+      });
+    } catch {
+      return {
+        ...result,
+        error: {
+          code: "approved_build_continuation_unavailable",
+          message:
+            "The approved build continuation could not verify current ownership or canonical settlement. Preserve this session and restore that boundary.",
+        },
+      };
+    }
+  };
+
+  // oxlint-disable-next-line eslint/func-style -- Preserve the existing hoisted canonical mutation helper.
   async function mutate<T extends { clientRequestId: string }>(options: {
     kind: HostedOperationKind;
     request: T;
@@ -1167,7 +1196,9 @@ export function createHostedEveSessionService(input: {
           throw new HostedSubmissionUnknownError();
         }
       }
-      return verifiedResult;
+      return options.sessionId === undefined
+        ? verifiedResult
+        : await continueApprovedWork(options.sessionId, verifiedResult);
     } catch (error) {
       diagnose(
         settlementPhase,
@@ -1455,7 +1486,10 @@ export function createHostedEveSessionService(input: {
             sessionId,
             stage: stageForResult(summary),
           });
-          return resultFromDurableCheckpoint(sessionId, stored, cursor, limit);
+          return await continueApprovedWork(
+            sessionId,
+            await resultFromDurableCheckpoint(sessionId, stored, cursor, limit),
+          );
         }
       } catch (error) {
         if (error instanceof HostedSessionReadTimeoutError) {
@@ -1545,7 +1579,7 @@ export function createHostedEveSessionService(input: {
         !progressUnchanged ||
         observedAt - session.lastProgressAtEpochMs < HOSTED_PROGRESS_NOTICE_MS
       ) {
-        return result;
+        return await continueApprovedWork(sessionId, result);
       }
       const operation = pendingBuilderOperation(publicSnapshotEvents(snapshot));
       const elapsedMinutes = Math.max(

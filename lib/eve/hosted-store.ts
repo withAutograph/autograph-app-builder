@@ -625,6 +625,17 @@ export const assertExistingStartSession = (
 
 const SESSION_NOT_FOUND = "Hosted session was not found.";
 
+export const isDeliveredInternalContinuation = (operation: HostedOperationRecord): boolean =>
+  operation.kind === "send" &&
+  operation.state === "submission_unknown" &&
+  operation.internalBuildContinuation?.deliveredTurnId !== undefined &&
+  operation.internalBuildContinuation.deliveredMessageSequence !== undefined;
+
+const maySettleHostedOperation = (operation: HostedOperationRecord): boolean =>
+  operation.state === "reserved" ||
+  (operation.kind === "start" && operation.state === "submission_unknown") ||
+  isDeliveredInternalContinuation(operation);
+
 export const withoutHostedOperationError = (operation: HostedOperationRecord) => {
   if (operation.state !== "submission_unknown") {
     return operation;
@@ -939,8 +950,7 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     if (operation === undefined || operation.requestDigest !== input.requestDigest) {
       throw new Error("Hosted operation cannot settle at this digest.");
     }
-    const replayableStart = operation.kind === "start" && operation.state === "submission_unknown";
-    if (operation.state !== "reserved" && !replayableStart) {
+    if (!maySettleHostedOperation(operation)) {
       throw new Error("Hosted operation cannot settle at this digest.");
     }
     const result = eveSessionResultSchema.parse(input.result);

@@ -1,3 +1,4 @@
+import { authenticatedInternalBuildMessage } from "../../lib/agent/approved-build-continuation-runtime";
 import { defineHook } from "eve/hooks";
 import {
   productRequestState,
@@ -16,7 +17,16 @@ export default defineHook({
         retainProductResolutions(current, event.data.resolutions),
       );
     },
-    "message.received"(event, ctx) {
+    async "message.received"(event, ctx) {
+      if (
+        await authenticatedInternalBuildMessage(ctx, {
+          message: event.data.message,
+          messageSequence: event.data.sequence,
+          turnId: event.data.turnId,
+        })
+      ) {
+        return;
+      }
       productRequestState.update((current) =>
         retainProductRequest(
           current,

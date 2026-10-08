@@ -991,7 +991,12 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         }
         const replayableStart =
           operation.kind === "start" && operation.state === "submission_unknown";
-        if (operation.state !== "reserved" && !replayableStart) {
+        const deliveredInternal =
+          operation.kind === "send" &&
+          operation.state === "submission_unknown" &&
+          operation.internalBuildContinuation?.deliveredTurnId !== undefined &&
+          operation.internalBuildContinuation.deliveredMessageSequence !== undefined;
+        if (operation.state !== "reserved" && !replayableStart && !deliveredInternal) {
           throw new Error(OPERATION_CANNOT_SETTLE);
         }
         const result = eveSessionResultSchema.parse(input.result);
@@ -1072,7 +1077,12 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
         }
         const replayableStart =
           operation.kind === "start" && operation.state === "submission_unknown";
-        if (operation.state !== "reserved" && !replayableStart) {
+        const deliveredInternal =
+          operation.kind === "send" &&
+          operation.state === "submission_unknown" &&
+          operation.internalBuildContinuation?.deliveredTurnId !== undefined &&
+          operation.internalBuildContinuation.deliveredMessageSequence !== undefined;
+        if (operation.state !== "reserved" && !replayableStart && !deliveredInternal) {
           throw new Error(OPERATION_CANNOT_SETTLE);
         }
         if (operation.kind !== "start") {
