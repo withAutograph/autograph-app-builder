@@ -509,8 +509,9 @@ describe("paged hosted session observation", () => {
       status: "waiting",
     });
 
-    expect(observeSessionPaged.mock.calls[0]?.[0].metadata.privateApprovalCaptureState)
-      .toMatchObject({ pendingRequests: [{ requestId }] });
+    expect(
+      observeSessionPaged.mock.calls[0]?.[0].metadata.privateApprovalCaptureState,
+    ).toMatchObject({ pendingRequests: [{ requestId }] });
     const replacementApprovalState =
       observeSessionPaged.mock.calls[1]?.[0].metadata.privateApprovalCaptureState;
     if (replacementApprovalState === undefined) {
