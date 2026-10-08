@@ -36,6 +36,10 @@ const node = process.env.APP_BUILDER_DEV_NODE_BIN;
 if (node === undefined || !node.startsWith("/")) {
   throw new Error("mise must supply the absolute development Node executable.");
 }
+const vercel = process.env.APP_BUILDER_DEV_VERCEL_BIN;
+if (vercel === undefined || !vercel.startsWith("/")) {
+  throw new Error("mise must supply absolute APP_BUILDER_DEV_VERCEL_BIN.");
+}
 
 const code = await runWithDevelopmentLock({
   args: [
