@@ -80,6 +80,9 @@ const preflight = async (input: ControllerInput, ready: ReadyBuild) => {
     throw new Error("Approved build session is unavailable.");
   }
   const fresh = toDurableHostedSessionRecord(current);
+  if (fresh.status === "cancelled" || fresh.resumability !== "live") {
+    throw new Error("Approved build session is no longer resumable.");
+  }
   const changed =
     fresh.privateBuildDecision?.turnId !== decision.turnId ||
     fresh.privateBuildDecision?.decision !== "runnable" ||

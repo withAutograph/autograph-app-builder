@@ -1,6 +1,6 @@
 /* oxlint-disable anti-slop/no-chained-type-assertions, typescript/no-unsafe-type-assertion -- The fixture supplies only the controller transport ports; canonical reservations and delivery receipts use the real store. */
 import { describe, expect, it, vi } from "vitest";
-import { InMemoryHostedEveStore } from "./hosted-store";
+import { InMemoryHostedEveStore, toDurableHostedSessionRecord } from "./hosted-store";
 import { continueApprovedHostedBuild } from "./approved-build-controller";
 import { hostedEveOperationScopes } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
@@ -175,6 +175,32 @@ describe("canonical approved private build continuation", () => {
     await continueApprovedHostedBuild(f);
     expect(f.sendAccepted).not.toHaveBeenCalled();
   });
+  it.each([
+    { resumability: "terminal" as const, status: "cancelled" as const },
+    { resumability: "terminal" as const, status: "waiting" as const },
+  ])(
+    "refuses a fresh cancellation or lost resumability before dispatch: $status",
+    async (boundary) => {
+      const f = await fixture();
+      f.assertCurrentOwner.mockImplementationOnce(async () => {
+        const saved = await f.store.getSession(principal, result.sessionId);
+        if (saved === null) {
+          throw new Error("Missing canonical fixture session");
+        }
+        const session = toDurableHostedSessionRecord(saved);
+        await f.store.observeSession({
+          checkpoint: { capturedAtEpochMs: 2, events: [], status: boundary.status, version: 1 },
+          nowEpochMs: 2,
+          principal,
+          resumability: boundary.resumability,
+          sessionId: result.sessionId,
+          stage: session.stage,
+        });
+      });
+      await continueApprovedHostedBuild(f);
+      expect(f.sendAccepted).not.toHaveBeenCalled();
+    },
+  );
   it("checks current owner and refuses a public/model forged internal marker", async () => {
     const f = await fixture();
     f.assertCurrentOwner.mockRejectedValue(new Error("owner revoked"));
