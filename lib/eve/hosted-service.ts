@@ -46,7 +46,13 @@ import {
 } from "./public-events";
 import type { InternalEveEvent } from "./public-events";
 import type { MessageStreamEvent } from "eve/client";
-import { createPrivateHostedApprovalRecorder } from "./private-hosted-approval";
+import {
+  createPrivateHostedApprovalRecorder,
+  privateHostedApprovalCaptureStateSchema,
+} from "./private-hosted-approval";
+import type { PrivateHostedApprovalCaptureState } from "./private-hosted-approval";
+import type { NativeObservationState } from "./native-observation-state";
+import { nativeObservationStateSchema } from "./native-observation-state";
 import { projectHostedSnapshot } from "./hosted-projection";
 import type { HostedEngineSnapshot } from "./hosted-projection";
 import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
@@ -106,6 +112,7 @@ export interface HostedEveTransport {
     principal: HostedPrincipal;
     sessionId: string;
     adapterSessionId: string;
+    nativeObservationState?: NativeObservationState;
     onEvent: (event: InternalEveEvent) => Promise<void> | void;
     onPrivateEvent?: (event: MessageStreamEvent) => Promise<void> | void;
     readDeadline?: boolean;
@@ -118,6 +125,8 @@ export interface HostedEveTransport {
     prototypeRef?: PublicPrototypeReference;
     publicEventCount: number;
     status: HostedEngineSnapshot["status"];
+    nativeObservationState?: NativeObservationState;
+    nextNativeIndex?: number;
     uiPreview?: HostedEngineSnapshot["uiPreview"];
     workingPreview?: HostedEngineSnapshot["workingPreview"];
   }>;
@@ -528,11 +537,14 @@ interface PagedEventSpool {
   directory: string;
   path: string;
   eventCount: number;
+  eventStartIndex?: number;
   digest: string;
 }
 
 interface PagedObservationSpool extends PagedEventSpool {
+  eventStartIndex: number;
   observation: Awaited<ReturnType<NonNullable<HostedEveTransport["observe"]>>>;
+  privateApprovalCaptureState: PrivateHostedApprovalCaptureState;
 }
 
 // eslint-disable-next-line eslint/func-style -- Snapshot transports still return one materialized value, but durable persistence is paged.
@@ -641,6 +653,8 @@ async function spoolObservedSession(input: {
   principal: HostedPrincipal;
   sessionId: string;
   adapterSessionId: string;
+  nativeObservationState?: NativeObservationState;
+  privateApprovalCaptureState?: PrivateHostedApprovalCaptureState;
 }): Promise<PagedObservationSpool> {
   let directory: string;
   try {
@@ -656,6 +670,9 @@ async function spoolObservedSession(input: {
     principal: input.principal,
     sessionId: input.sessionId,
     store: input.store,
+    ...(input.privateApprovalCaptureState === undefined
+      ? {}
+      : { state: input.privateApprovalCaptureState }),
   });
   let file: Awaited<ReturnType<typeof open>> | null = null;
   try {
@@ -663,14 +680,21 @@ async function spoolObservedSession(input: {
     const handle = file;
     const hash = createHash("sha256");
     let eventCount = 0;
+    const eventStartIndex = input.nativeObservationState?.publicEventCount ?? 0;
     const observation = await input.transport({
       adapterSessionId: input.adapterSessionId,
+      ...(input.nativeObservationState === undefined
+        ? {}
+        : { nativeObservationState: input.nativeObservationState }),
       onEvent: async (candidate) => {
         const projected = toPublicEvent(candidate);
         if (projected === null) {
           return;
         }
-        const parsed = publicEveEventSchema.safeParse({ ...projected, index: eventCount });
+        const parsed = publicEveEventSchema.safeParse({
+          ...projected,
+          index: eventStartIndex + eventCount,
+        });
         if (!parsed.success) {
           return;
         }
@@ -697,8 +721,10 @@ async function spoolObservedSession(input: {
       digest: hash.digest("hex"),
       directory,
       eventCount,
+      eventStartIndex,
       observation,
       path,
+      privateApprovalCaptureState: privateApprovals.snapshot(),
     };
   } catch (error) {
     if (file !== null) {
@@ -722,7 +748,7 @@ async function* readSpoolEvents(spool: PagedEventSpool) {
     for await (const line of lines) {
       hash.update(`${line}\n`);
       const event = publicEveEventSchema.parse(JSON.parse(line));
-      if (event.index !== count) {
+      if (event.index !== count + (spool.eventStartIndex ?? 0)) {
         throw new Error("Private Eve checkpoint spool has nonconsecutive event indexes.");
       }
       count += 1;
@@ -1383,6 +1409,78 @@ export function createHostedEveSessionService(input: {
     throw new HostedSessionRecoveryUnavailableError();
   }
 
+  // eslint-disable-next-line eslint/func-style -- Keep local checkpoint readers adjacent to the observer flow.
+  const readCheckpointMetadata = async (
+    record: HostedSessionRecord,
+  ): Promise<HostedPagedCheckpointMetadata | null> => {
+    const durable = toDurableHostedSessionRecord(record);
+    if (durable.checkpointRef === undefined || input.store.readCheckpointPage === undefined) {
+      return null;
+    }
+    const page = await input.store.readCheckpointPage({
+      checkpointRef: durable.checkpointRef,
+      cursor: 0,
+      limit: 1,
+      principal,
+      sessionId: durable.sessionId,
+    });
+    if (
+      page.checkpointDigest !== durable.checkpointRef.digest ||
+      page.totalEvents !== durable.checkpointRef.eventCount ||
+      page.cursor !== page.events.length ||
+      page.events.some((event, index) => event.index !== index)
+    ) {
+      throw new HostedSessionRecoveryUnavailableError();
+    }
+    return page.metadata;
+  };
+
+  // eslint-disable-next-line eslint/func-style -- Keep local checkpoint readers adjacent to the observer flow.
+  const readCheckpointEvents = async function* readCheckpointEvents(
+    record: HostedSessionRecord,
+  ) {
+    const durable = toDurableHostedSessionRecord(record);
+    const ref = durable.checkpointRef;
+    if (ref === undefined || input.store.readCheckpointPage === undefined) {
+      throw new HostedSessionRecoveryUnavailableError();
+    }
+    let cursor = 0;
+    while (cursor < ref.eventCount) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Pages are read in cursor order under one checkpoint digest.
+      const page = await input.store.readCheckpointPage({
+        checkpointRef: ref,
+        cursor,
+        limit: Math.min(250, ref.eventCount - cursor),
+        principal,
+        sessionId: durable.sessionId,
+      });
+      if (
+        page.checkpointDigest !== ref.digest ||
+        page.totalEvents !== ref.eventCount ||
+        page.cursor !== cursor + page.events.length ||
+        page.events.length === 0
+      ) {
+        throw new HostedSessionRecoveryUnavailableError();
+      }
+      for (const event of page.events) {
+        if (event.index !== cursor) {
+          throw new HostedSessionRecoveryUnavailableError();
+        }
+        yield event;
+        cursor += 1;
+      }
+    }
+  };
+
+  // eslint-disable-next-line eslint/func-style -- Keep local checkpoint readers adjacent to the observer flow.
+  const readCheckpointPrefixAndDelta = async function* readCheckpointPrefixAndDelta(
+    record: HostedSessionRecord,
+    spool: PagedObservationSpool,
+  ) {
+    yield* readCheckpointEvents(record);
+    yield* readSpoolEvents(spool);
+  };
+
   // eslint-disable-next-line eslint/func-style -- A timeout leaves the saved checkpoint readable without authorizing a response.
   async function delayedCheckpointResult(
     sessionId: string,
@@ -1409,6 +1507,7 @@ export function createHostedEveSessionService(input: {
     cursor: number;
     limit: number;
     recoverUnavailable?: boolean;
+    continueWork?: boolean;
   }) {
     const { sessionId, cursor, limit } = inputValue;
     const session = toDurableHostedSessionRecord(await requireSession(sessionId));
@@ -1425,27 +1524,81 @@ export function createHostedEveSessionService(input: {
     ) {
       let spool: PagedObservationSpool | undefined;
       try {
+        const checkpointMetadata = await readCheckpointMetadata(session);
+        const storedNativeState = checkpointMetadata?.nativeObservationState;
+        const parsedNativeState =
+          storedNativeState === undefined
+            ? undefined
+            : nativeObservationStateSchema.parse(storedNativeState);
+        const nativeObservationState =
+          parsedNativeState?.adapterSessionId === session.adapterSessionId
+            ? parsedNativeState
+            : undefined;
+        if (
+          nativeObservationState !== undefined &&
+          nativeObservationState.publicEventCount !== session.checkpointRef?.eventCount
+        ) {
+          throw new HostedSessionRecoveryUnavailableError();
+        }
+        const privateApprovalCaptureState =
+          checkpointMetadata?.privateApprovalCaptureState === undefined
+            ? undefined
+            : privateHostedApprovalCaptureStateSchema.parse(
+                checkpointMetadata.privateApprovalCaptureState,
+              );
+        if (
+          privateApprovalCaptureState !== undefined &&
+          privateApprovalCaptureState.sessionId !== sessionId
+        ) {
+          throw new HostedSessionRecoveryUnavailableError();
+        }
         spool = await spoolObservedSession({
           adapterSessionId: session.adapterSessionId,
+          ...(nativeObservationState === undefined ? {} : { nativeObservationState }),
+          ...(privateApprovalCaptureState === undefined ? {} : { privateApprovalCaptureState }),
           principal,
           sessionId,
           store: input.store,
           transport: input.transport.observe,
         });
+        const observedNativeState = spool.observation.nativeObservationState;
+        if (
+          nativeObservationState !== undefined &&
+          (observedNativeState === undefined ||
+            spool.observation.nextNativeIndex !== observedNativeState.nextNativeIndex)
+        ) {
+          throw new HostedSessionRecoveryUnavailableError();
+        }
+        if (
+          observedNativeState !== undefined &&
+          (observedNativeState.adapterSessionId !== session.adapterSessionId ||
+            observedNativeState.publicEventCount !==
+              spool.eventStartIndex + spool.eventCount)
+        ) {
+          throw new HostedSessionRecoveryUnavailableError();
+        }
         if (
           !spool.observation.artifactProjectionRequiresLegacyReadback ||
           spool.observation.prototype !== undefined ||
-          spool.observation.prototypeRef !== undefined
+          spool.observation.prototypeRef !== undefined ||
+          observedNativeState !== undefined
         ) {
           const capturedAtEpochMs = now();
           const metadata: HostedPagedCheckpointMetadata = {
             capturedAtEpochMs,
+            ...(spool.observation.activeTurnId === undefined
+              ? {}
+              : { activeTurnId: spool.observation.activeTurnId }),
             ...(spool.observation.pendingRequests.length === 0
               ? {}
               : { inputRequests: spool.observation.pendingRequests }),
             ...(spool.observation.prototypeRef === undefined
               ? {}
               : { prototypeRef: spool.observation.prototypeRef }),
+            ...(observedNativeState === undefined
+              ? {}
+              : { nativeObservationState: observedNativeState }),
+            privateApprovalCaptureState: spool.privateApprovalCaptureState,
             ...(spool.observation.prototype === undefined
               ? {}
               : { prototype: spool.observation.prototype }),
@@ -1475,7 +1628,10 @@ export function createHostedEveSessionService(input: {
           });
           const stored = await input.store.observeSessionPaged({
             ...(summary.uiPreview?.appId === undefined ? {} : { appId: summary.uiPreview.appId }),
-            events: readSpoolEvents(spool),
+            events:
+              nativeObservationState === undefined
+                ? readSpoolEvents(spool)
+                : readCheckpointPrefixAndDelta(session, spool),
             expectedCheckpointDigest: session.checkpointDigest,
             metadata,
             nowEpochMs: capturedAtEpochMs,
@@ -1486,10 +1642,10 @@ export function createHostedEveSessionService(input: {
             sessionId,
             stage: stageForResult(summary),
           });
-          return await continueApprovedWork(
-            sessionId,
-            await resultFromDurableCheckpoint(sessionId, stored, cursor, limit),
-          );
+          const result = await resultFromDurableCheckpoint(sessionId, stored, cursor, limit);
+          return inputValue.continueWork === false
+            ? result
+            : continueApprovedWork(sessionId, result);
         }
       } catch (error) {
         if (error instanceof HostedSessionReadTimeoutError) {
@@ -1640,6 +1796,28 @@ export function createHostedEveSessionService(input: {
     return result;
   }
 
+  // eslint-disable-next-line eslint/func-style -- Mutation preflight shares local session-service state.
+  const readMutationPreflight = async (sessionId: string) => {
+    const before = toDurableHostedSessionRecord(await requireSession(sessionId));
+    const result = await readSession({
+      continueWork: false,
+      cursor: 0,
+      limit: 100,
+      sessionId,
+    });
+    const session = toDurableHostedSessionRecord(await requireSession(sessionId));
+    const metadata = await readCheckpointMetadata(session);
+    if (result.error?.code === "session_read_delayed") {
+      throw new HostedSessionRecoveryUnavailableError();
+    }
+    return {
+      activeTurnId: metadata?.activeTurnId,
+      persisted: session.checkpointDigest !== before.checkpointDigest,
+      result,
+      session,
+    };
+  };
+
   return {
     async bindStartAlias(request) {
       requireHostedOperationScope(principal, "start");
@@ -1689,7 +1867,7 @@ export function createHostedEveSessionService(input: {
     },
     async cancel({ sessionId, turnId }) {
       requireHostedOperationScope(principal, "cancel");
-      const session = await requireSession(sessionId);
+      let session = await requireSession(sessionId);
       const paged =
         input.transport.observe !== undefined &&
         input.transport.cancelAccepted !== undefined &&
@@ -1697,18 +1875,10 @@ export function createHostedEveSessionService(input: {
         input.store.readCheckpointPage !== undefined;
       let snapshot: HostedEngineSnapshot;
       try {
-        const observed = paged
-          ? await input.transport.observe?.({
-              adapterSessionId: session.adapterSessionId,
-              onEvent: (event) => {
-                void event;
-              },
-              principal,
-              sessionId,
-            })
-          : undefined;
-        if (observed && !observed.artifactProjectionRequiresLegacyReadback) {
-          if (observed.activeTurnId === undefined) {
+        const preflight = paged ? await readMutationPreflight(sessionId) : undefined;
+        if (preflight?.persisted) {
+          ({ session } = preflight);
+          if (preflight.activeTurnId === undefined) {
             if (turnId !== undefined) {
               throw new SubmissionRejectedBeforeDispatchError("no_active_turn");
             }
@@ -1737,7 +1907,7 @@ export function createHostedEveSessionService(input: {
           });
           return readAcceptedMutation(
             sessionId,
-            toDurableHostedSessionRecord(session).checkpointDigest,
+            session.checkpointDigest,
           );
         }
         snapshot = await input.transport.cancel({
@@ -1848,7 +2018,7 @@ export function createHostedEveSessionService(input: {
     }, // oxlint-disable-next-line eslint/require-await -- preserve Promise-returning framework or interface contract
     async respond(request) {
       requireHostedOperationScope(principal, "respond");
-      const session = await requireSession(request.sessionId);
+      let session = await requireSession(request.sessionId);
       return mutate({
         async dispatch(operationId) {
           const paged =
@@ -1856,25 +2026,19 @@ export function createHostedEveSessionService(input: {
             input.transport.respondAccepted !== undefined &&
             input.store.observeSessionPaged !== undefined &&
             input.store.readCheckpointPage !== undefined;
-          const observed = paged
-            ? await input.transport.observe?.({
-                adapterSessionId: session.adapterSessionId,
-                onEvent() {
-                  // Preflight needs only the bounded observation summary.
-                },
-                principal,
-                sessionId: request.sessionId,
-              })
-            : undefined;
-          const before = observed
+          const preflight = paged ? await readMutationPreflight(request.sessionId) : undefined;
+          if (preflight) {
+            ({ session } = preflight);
+          }
+          const before = preflight?.persisted
             ? undefined
             : await input.transport.get({
                 adapterSessionId: session.adapterSessionId,
                 principal,
               });
           const expected = (
-            observed
-              ? observed.pendingRequests
+            preflight?.persisted
+              ? preflight?.result.inputRequests ?? []
               : outstandingInternalEveRequests(
                   (before?.events ?? []).filter(
                     (event): event is InternalEveEvent =>
@@ -1897,12 +2061,12 @@ export function createHostedEveSessionService(input: {
               ? { sourceHandoffId: session.sourceHandoffId }
               : {}),
           };
-          if (observed && !observed.artifactProjectionRequiresLegacyReadback) {
+          if (preflight?.persisted) {
             await input.transport.respondAccepted?.(responseInput);
             return {
               result: await readAcceptedMutation(
                 request.sessionId,
-                toDurableHostedSessionRecord(session).checkpointDigest,
+                session.version === 2 ? session.checkpointDigest : undefined,
               ),
             };
           }
@@ -1917,7 +2081,7 @@ export function createHostedEveSessionService(input: {
     },
     async send(request) {
       requireHostedOperationScope(principal, "send");
-      const session = await requireSession(request.sessionId);
+      let session = await requireSession(request.sessionId);
       return mutate({
         async dispatch(operationId) {
           const paged =
@@ -1925,17 +2089,11 @@ export function createHostedEveSessionService(input: {
             input.transport.sendAccepted !== undefined &&
             input.store.observeSessionPaged !== undefined &&
             input.store.readCheckpointPage !== undefined;
-          let observed: Awaited<ReturnType<NonNullable<HostedEveTransport["observe"]>>> | undefined;
+          let preflight: Awaited<ReturnType<typeof readMutationPreflight>> | undefined;
           if (paged) {
             try {
-              observed = await input.transport.observe?.({
-                adapterSessionId: session.adapterSessionId,
-                onEvent() {
-                  // Preflight needs only the bounded observation summary.
-                },
-                principal,
-                sessionId: request.sessionId,
-              });
+              preflight = await readMutationPreflight(request.sessionId);
+              ({ session } = preflight);
             } catch {
               // This read precedes both mutation paths. No message POST has run.
               throw new SubmissionRejectedBeforeDispatchError("send_preflight_unavailable");
@@ -1950,12 +2108,12 @@ export function createHostedEveSessionService(input: {
               ? { sourceHandoffId: session.sourceHandoffId }
               : {}),
           };
-          if (observed && !observed.artifactProjectionRequiresLegacyReadback) {
+          if (preflight?.persisted) {
             await input.transport.sendAccepted?.(sendInput);
             return {
               result: await readAcceptedMutation(
                 request.sessionId,
-                toDurableHostedSessionRecord(session).checkpointDigest,
+                session.version === 2 ? session.checkpointDigest : undefined,
               ),
             };
           }

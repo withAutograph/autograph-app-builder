@@ -20,6 +20,38 @@ import type {
   HostedSessionRecord,
 } from "./hosted-store";
 import type { PublicEveEvent } from "../mcp/contracts";
+import { nativeObservationStateSchema } from "./native-observation-state";
+
+const nativeState = (input: {
+  adapterSessionId: string;
+  nextNativeIndex: number;
+  publicEventCount: number;
+  legacy?: boolean;
+}) =>
+  nativeObservationStateSchema.parse({
+    adapterSessionId: input.adapterSessionId,
+    artifactReadback: {
+      incompleteArtifacts: [],
+      incompleteUiPreviews: [],
+      legacy: input.legacy ?? false,
+      markdownCalls: [],
+      pending: [],
+      references: { requested: [], requestedUiPreview: [] },
+    },
+    boundary: "waiting",
+    invalidInput: false,
+    nextNativeIndex: input.nextNativeIndex,
+    pendingRequests: [],
+    prototypeProjector: {
+      artifactReadRequests: [],
+      readChunks: [],
+      requested: [],
+      transfers: [],
+    },
+    prototypeReference: { requested: [], requestedUiPreview: [] },
+    publicEventCount: input.publicEventCount,
+    version: 1,
+  });
 
 const principal: HostedPrincipal = {
   audience: "autograph-app-builder",
@@ -58,24 +90,25 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
   let paged: HostedSessionRecord | null = null;
   let metadata: HostedPagedCheckpointMetadata | null = null;
   let eventCount = 0;
-  let first: PublicEveEvent | undefined;
-  let last: PublicEveEvent | undefined;
+  let checkpointEvents: PublicEveEvent[] = [];
+  let checkpointRevision = 0;
   const observeSessionPaged = vi.fn<NonNullable<HostedEveStore["observeSessionPaged"]>>(
     async (input) => {
       const previous = paged ?? (await base.getSession(principal, started.sessionId));
       if (previous?.version !== 2 || previous.checkpointDigest !== input.expectedCheckpointDigest) {
         throw new Error("Checkpoint observation raced.");
       }
-      eventCount = 0;
+      const stagedEvents: PublicEveEvent[] = [];
       for await (const event of input.events) {
-        first ??= event;
-        last = event;
-        eventCount += 1;
+        stagedEvents.push(event);
       }
+      checkpointEvents = stagedEvents;
+      eventCount = stagedEvents.length;
       ({ metadata } = input);
       const { checkpoint: previousInlineCheckpoint, ...withoutInline } = previous;
       void previousInlineCheckpoint;
-      const digest = `sha256:${"a".repeat(64)}`;
+      const digest = `sha256:${checkpointRevision.toString(16).padStart(64, "0")}`;
+      checkpointRevision += 1;
       paged = durableHostedSessionRecordSchema.parse({
         ...withoutInline,
         checkpointDigest: digest,
@@ -100,13 +133,7 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
       ) {
         throw new Error("Unknown checkpoint reference.");
       }
-      let event: PublicEveEvent | undefined;
-      if (input.cursor === 0) {
-        event = first;
-      } else if (input.cursor === eventCount - 1) {
-        event = last;
-      }
-      const events = event === undefined ? [] : [event];
+      const events = checkpointEvents.slice(input.cursor, input.cursor + input.limit);
       return {
         checkpointDigest: paged.checkpointRef.digest,
         cursor: input.cursor + events.length,
@@ -127,17 +154,17 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
     ) {
       throw new Error("Hosted session recovery raced another continuation.");
     }
-    let nextCount = 0;
+    const stagedEvents: PublicEveEvent[] = [];
     for await (const event of input.events) {
-      first ??= event;
-      last = event;
-      nextCount += 1;
+      stagedEvents.push(event);
     }
-    eventCount = nextCount;
+    checkpointEvents = stagedEvents;
+    eventCount = stagedEvents.length;
     ({ metadata } = input);
     const { checkpoint: previousInlineCheckpoint, ...withoutInline } = previous;
     void previousInlineCheckpoint;
-    const digest = `sha256:${"c".repeat(64)}`;
+    const digest = `sha256:${checkpointRevision.toString(16).padStart(64, "0")}`;
+    checkpointRevision += 1;
     paged = durableHostedSessionRecordSchema.parse({
       ...withoutInline,
       adapterGeneration: previous.adapterGeneration + 1,
@@ -192,6 +219,109 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
 };
 
 describe("paged hosted session observation", () => {
+  it("hydrates native reducer state and atomically appends absolute public event deltas", async () => {
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
+      const previous = input.nativeObservationState;
+      const eventIndex = previous?.publicEventCount ?? 0;
+      await input.onEvent({
+        index: eventIndex,
+        text: `event ${eventIndex}`,
+        turnId: "turn_1",
+        type: "assistant.message",
+      });
+      const nextNativeIndex = previous === undefined ? 2 : 3;
+      const publicEventCount = eventIndex + 1;
+      const state = nativeState({
+        adapterSessionId: input.adapterSessionId,
+        legacy: true,
+        nextNativeIndex,
+        publicEventCount,
+      });
+      return {
+        artifactProjectionRequiresLegacyReadback: true,
+        installedEventCount: nextNativeIndex,
+        nativeObservationState: state,
+        nextNativeIndex,
+        pendingRequests: [],
+        publicEventCount,
+        status: "waiting",
+      };
+    });
+    const { getPagedEventCount, observeSessionPaged, service, sessionId } = await fixture(observe);
+
+    const first = await service.get({ cursor: 0, limit: 10, sessionId });
+    const second = await service.get({ cursor: 0, limit: 10, sessionId });
+
+    expect(first.events.map((event) => event.index)).toEqual([0]);
+    expect(second.events.map((event) => event.index)).toEqual([0, 1]);
+    expect(getPagedEventCount()).toBe(2);
+    expect(observe.mock.calls[1]?.[0].nativeObservationState).toMatchObject({
+      adapterSessionId: "adapter_1",
+      nextNativeIndex: 2,
+      publicEventCount: 1,
+    });
+    const metadata = observeSessionPaged.mock.calls[1]?.[0].metadata;
+    expect(metadata?.nativeObservationState).toMatchObject({
+      nextNativeIndex: 3,
+      publicEventCount: 2,
+    });
+    expect(metadata?.privateApprovalCaptureState).toMatchObject({
+      sessionId,
+      version: 1,
+    });
+    expect(second).not.toHaveProperty("nativeObservationState");
+    expect(second).not.toHaveProperty("privateApprovalCaptureState");
+  });
+
+  it("does not advance native or approval checkpoints after a checkpoint CAS failure", async () => {
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
+      const previous = input.nativeObservationState;
+      const eventIndex = previous?.publicEventCount ?? 0;
+      await input.onEvent({
+        index: eventIndex,
+        text: `event ${eventIndex}`,
+        turnId: "turn_1",
+        type: "assistant.message",
+      });
+      const nextNativeIndex = previous === undefined ? 2 : 3;
+      const publicEventCount = eventIndex + 1;
+      const state = nativeState({
+        adapterSessionId: input.adapterSessionId,
+        nextNativeIndex,
+        publicEventCount,
+      });
+      return {
+        artifactProjectionRequiresLegacyReadback: false,
+        installedEventCount: nextNativeIndex,
+        nativeObservationState: state,
+        nextNativeIndex,
+        pendingRequests: [],
+        publicEventCount,
+        status: "waiting",
+      };
+    });
+    const { getPagedEventCount, getSession, observeSessionPaged, service, sessionId } =
+      await fixture(observe);
+    await service.get({ cursor: 0, limit: 10, sessionId });
+    const before = await getSession(principal, sessionId);
+    const savedMetadata = observeSessionPaged.mock.calls[0]?.[0].metadata;
+    observeSessionPaged.mockRejectedValueOnce(new Error("checkpoint CAS lost"));
+
+    await expect(service.get({ cursor: 0, limit: 10, sessionId })).rejects.toThrow(
+      "checkpoint CAS lost",
+    );
+
+    const after = await getSession(principal, sessionId);
+    expect(before?.version).toBe(2);
+    expect(after?.version).toBe(2);
+    if (before?.version !== 2 || after?.version !== 2) {
+      throw new Error("Expected a saved paged checkpoint before and after the failed CAS.");
+    }
+    expect(after.checkpointRef?.digest).toBe(before.checkpointRef?.digest);
+    expect(observeSessionPaged.mock.calls[0]?.[0].metadata).toBe(savedMetadata);
+    expect(getPagedEventCount()).toBe(1);
+  });
+
   it("atomically settles a new session with more than 512 paged checkpoint events", async () => {
     const base = new InMemoryHostedEveStore();
     const events = Array.from({ length: 520 }, (_, index) => ({
