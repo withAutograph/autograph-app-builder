@@ -358,6 +358,64 @@ describe("paged hosted session observation", () => {
     },
   );
 
+  it("passes the complete owner-checked native preflight to response settlement", async () => {
+    const question = {
+      allowFreeform: true,
+      kind: "question" as const,
+      requestId: "choose-target",
+      title: "Choose a Preview target",
+    };
+    let settled = false;
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
+      const previous = input.nativeObservationState;
+      if (previous === undefined) {
+        await input.onEvent({ index: 0, request: question, type: "input.requested" });
+      }
+      const publicEventCount = 1;
+      const nextNativeIndex = settled ? 11 : 10;
+      const state = nativeObservationStateSchema.parse({
+        ...nativeState({
+          adapterSessionId: input.adapterSessionId,
+          nextNativeIndex,
+          publicEventCount,
+        }),
+        pendingRequests: settled ? [] : [question],
+      });
+      return {
+        artifactProjectionRequiresLegacyReadback: false,
+        installedEventCount: nextNativeIndex,
+        nativeObservationState: state,
+        nextNativeIndex,
+        pendingRequests: state.pendingRequests,
+        publicEventCount,
+        status: settled ? "waiting" : "input_required",
+      };
+    });
+    const f = await fixture(observe);
+    const accepted = vi.fn<NonNullable<HostedEveTransport["respondAccepted"]>>(async (input) => {
+      expect(input.nativeObservationState).toMatchObject({
+        adapterSessionId: "adapter_1",
+        nextNativeIndex: 10,
+        publicEventCount: 1,
+      });
+      expect(input.nativeObservationState?.pendingRequests).toEqual([question]);
+      await Promise.resolve();
+      settled = true;
+    });
+    f.adapter.respondAccepted = accepted;
+    await f.service.get({ cursor: 0, limit: 10, sessionId: f.sessionId });
+    const result = await f.service.respond({
+      clientRequestId: randomUUID(),
+      responses: [
+        { requestId: question.requestId, response: { kind: "answer", value: "isolated Preview" } },
+      ],
+      sessionId: f.sessionId,
+    });
+    expect(result.error).toBeUndefined();
+    expect(accepted).toHaveBeenCalledOnce();
+    expect(f.adapter.respond).not.toHaveBeenCalled();
+  });
+
   it("hydrates native reducer state and atomically appends absolute public event deltas", async () => {
     const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
       const previous = input.nativeObservationState;
