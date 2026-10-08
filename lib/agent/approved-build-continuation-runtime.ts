@@ -1,9 +1,6 @@
 import type { HookContext } from "eve/hooks";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
-import { resolveHostedOperatorOwnerContext } from "../provisioning/hosted-operator-owner-context";
 import { readLocalOperatorArtifactAuthority } from "../provisioning/local-operator-artifact-store";
-import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
-import { createPostgresHostedEveStore } from "../eve/postgres-hosted-store";
 import {
   approvedBuildDecisionSchema,
   readInternalBuildMarker,
@@ -13,6 +10,8 @@ import type { ApprovedBuildDecision } from "./approved-build-continuation";
 // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Authenticate the current owner before opening its private persistence adapter.
 const ownerStore = async (ctx: Pick<HookContext, "session">) => {
   const { authority, principal } = exactForwardedSessionAuthority(ctx.session.auth);
+  const { resolveHostedOperatorOwnerContext } =
+    await import("../provisioning/hosted-operator-owner-context");
   const owner = await resolveHostedOperatorOwnerContext({
     adapterSessionId: ctx.session.id,
     authority,
@@ -21,7 +20,15 @@ const ownerStore = async (ctx: Pick<HookContext, "session">) => {
     sessionAuth: ctx.session.auth,
   });
   // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Establish current owner authority before opening the private persistence adapter.
-  const { openHostedPostgresDatabase } = await import("../mcp/hosted-route");
+  const [
+    { openHostedPostgresDatabase },
+    { readPreviewOAuthRuntimeConfig },
+    { createPostgresHostedEveStore },
+  ] = await Promise.all([
+    import("../mcp/hosted-route"),
+    import("../auth/preview-oauth-runtime"),
+    import("../eve/postgres-hosted-store"),
+  ]);
   const config = readPreviewOAuthRuntimeConfig({ ...process.env });
   const store = createPostgresHostedEveStore(openHostedPostgresDatabase(config.databaseUrl));
   return { owner, principal, store };

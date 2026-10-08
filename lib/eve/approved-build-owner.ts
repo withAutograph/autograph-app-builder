@@ -1,5 +1,4 @@
 import type { DurableHostedSessionRecord } from "./hosted-store";
-import { resolveHostedOperatorOwnerContext } from "../provisioning/hosted-operator-owner-context";
 
 interface ForwardedOwnerAttributes {
   "mcp:audience": string;
@@ -29,6 +28,8 @@ export const assertHostedBuildDecisionOwner = async (
     principalType: "user",
     subject: principal.ownerUserId,
   };
+  const { resolveHostedOperatorOwnerContext } =
+    await import("../provisioning/hosted-operator-owner-context");
   const owner = await resolveHostedOperatorOwnerContext({
     adapterSessionId: session.adapterSessionId,
     authority: principal,
