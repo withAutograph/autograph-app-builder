@@ -228,6 +228,33 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
   };
 };
 
+const seedColdCheckpoint = async (f: Awaited<ReturnType<typeof fixture>>) => {
+  const initial = await f.getSession(principal, f.sessionId);
+  if (initial?.version !== 2) {
+    throw new Error("Expected durable session");
+  }
+  const priorEvents: PublicEveEvent[] = [0, 1, 2].map((index) => ({
+    index,
+    text: `event ${index}`,
+    turnId: "turn_1",
+    type: "assistant_message",
+  }));
+  const eventStream = async function* eventStream() {
+    yield* priorEvents;
+  };
+  await f.observeSessionPaged({
+    events: eventStream(),
+    expectedCheckpointDigest: initial.checkpointDigest,
+    metadata: { capturedAtEpochMs: 1000, status: "waiting", version: 1 },
+    nowEpochMs: 1000,
+    principal,
+    resumability: "live",
+    sessionId: f.sessionId,
+    stage: "planning",
+  });
+  return priorEvents;
+};
+
 describe("paged hosted session observation", () => {
   it("retains the old public checkpoint while privately catching up and promotes only a complete tail", async () => {
     const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
@@ -260,29 +287,7 @@ describe("paged hosted session observation", () => {
       };
     });
     const f = await fixture(observe);
-    const initial = await f.getSession(principal, f.sessionId);
-    if (initial?.version !== 2) {
-      throw new Error("Expected durable session");
-    }
-    const priorEvents: PublicEveEvent[] = [0, 1, 2].map((index) => ({
-      index,
-      text: `event ${index}`,
-      turnId: "turn_1",
-      type: "assistant_message",
-    }));
-    const eventStream = async function* eventStream() {
-      yield* priorEvents;
-    };
-    await f.observeSessionPaged({
-      events: eventStream(),
-      expectedCheckpointDigest: initial.checkpointDigest,
-      metadata: { capturedAtEpochMs: 1000, status: "waiting", version: 1 },
-      nowEpochMs: 1000,
-      principal,
-      resumability: "live",
-      sessionId: f.sessionId,
-      stage: "planning",
-    });
+    const priorEvents = await seedColdCheckpoint(f);
     const partial = await f.service.get({ cursor: 3, limit: 10, sessionId: f.sessionId });
     expect(partial).toMatchObject({
       cursor: 3,
@@ -302,6 +307,50 @@ describe("paged hosted session observation", () => {
     expect(observe.mock.calls[1]?.[0].nativeObservationState?.nextNativeIndex).toBe(10);
     expect(f.observeSessionPaged.mock.calls[2]?.[0].metadata.coldReadProgress).toBeUndefined();
   });
+
+  it.each(["CAS race", "provider failure", "invalid frontier"])(
+    "does not publish private catch-up after %s",
+    async (failure) => {
+      const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
+        if (failure === "provider failure") {
+          throw new Error("provider failure");
+        }
+        await input.onEvent({
+          index: 0,
+          text: "event 0",
+          turnId: "turn_1",
+          type: "assistant.message",
+        });
+        const state = nativeState({
+          adapterSessionId: input.adapterSessionId,
+          nextNativeIndex: 10,
+          publicEventCount: failure === "invalid frontier" ? 2 : 1,
+        });
+        return {
+          artifactProjectionRequiresLegacyReadback: false,
+          installedEventCount: 10,
+          nativeObservationState: state,
+          nextNativeIndex: 10,
+          observationComplete: false,
+          pendingRequests: [],
+          publicEventCount: state.publicEventCount,
+          status: "waiting",
+        };
+      });
+      const f = await fixture(observe);
+      await seedColdCheckpoint(f);
+      const before = await f.getSession(principal, f.sessionId);
+      if (failure === "CAS race") {
+        f.observeSessionPaged.mockRejectedValueOnce(new Error("CAS race"));
+      }
+      await expect(
+        f.service.get({ cursor: 3, limit: 10, sessionId: f.sessionId }),
+      ).rejects.toThrow();
+      expect(await f.getSession(principal, f.sessionId)).toEqual(before);
+      expect(f.getPagedEventCount()).toBe(3);
+      expect(f.observeSessionPaged.mock.calls[0]?.[0].metadata.coldReadProgress).toBeUndefined();
+    },
+  );
 
   it("hydrates native reducer state and atomically appends absolute public event deltas", async () => {
     const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
