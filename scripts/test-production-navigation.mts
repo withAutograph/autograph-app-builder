@@ -158,6 +158,28 @@ try {
   }
   assertRunning();
   await symlink(path.join(source, "node_modules"), path.join(snapshot, "node_modules"), "dir");
+  const packageDirectories = [
+    ...new Set(
+      files
+        .filter((file) => path.basename(file) === "package.json")
+        .map((file) => path.dirname(file)),
+    ),
+  ].filter((directory) => directory !== ".");
+  await Promise.all(
+    packageDirectories.map(async (directory) => {
+      const dependencyView = path.join(source, directory, "node_modules");
+      const installed = await lstat(dependencyView).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") {
+          return null;
+        }
+        throw error;
+      });
+      if (installed === null) {
+        return;
+      }
+      await symlink(dependencyView, path.join(snapshot, directory, "node_modules"), "dir");
+    }),
+  );
   // This marker is never written to the checkout or a deployable artifact.
   await writeFile(
     path.join(snapshot, "lib/testing/production-navigation-artifact.ts"),

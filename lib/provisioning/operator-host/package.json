@@ -1,0 +1,8 @@
+{
+  "name": "@autograph/hosted-operator",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "hono": "4.13.5"
+  }
+}

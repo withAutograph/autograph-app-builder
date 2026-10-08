@@ -126,19 +126,21 @@ const fixture = () => {
       return Response.json({ id: "team", slug: "team-slug" });
     }
     if (path === "/v13/deployments" && method === "POST") {
-      expect(body).toMatchObject({ target: "preview" });
+      expect(body).toMatchObject({ target: "staging" });
       count += 1;
       return Response.json({ id: "dpl_new" });
     }
     if (path === "/v13/deployments/dpl_new") {
       return Response.json({
+        customEnvironment: null,
         gitSource: { ref: "feature", repoId: "repo", sha, type: "github" },
         id: "dpl_new",
         meta,
+        oidcTokenClaims: { environment: "preview" },
         ownerId: "team",
         projectId: "prj_app",
         readyState: ready,
-        target: null,
+        target: "staging",
         url: "new-native.vercel.app",
       });
     }
