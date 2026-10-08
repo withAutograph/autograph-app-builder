@@ -297,6 +297,12 @@ importers:
         specifier: 2.9.0
         version: 2.9.0
 
+  lib/provisioning/operator-host:
+    dependencies:
+      hono:
+        specifier: 4.13.5
+        version: 4.13.5
+
 packages:
 
   '@adobe/css-tools@4.5.0':

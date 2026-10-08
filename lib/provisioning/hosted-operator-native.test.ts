@@ -49,7 +49,7 @@ describe("separate native operator host", () => {
     expect(config.services).toEqual({
       operator: {
         entrypoint: "entrypoint.ts",
-        framework: "node",
+        framework: "hono",
         root: ".",
       },
     });
