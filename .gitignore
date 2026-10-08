@@ -53,6 +53,9 @@ next-env.d.ts
 !/lib/
 !/lib/**
 
+# Workspace dependencies remain caches after source visibility overrides.
+**/node_modules/
+
 *storybook.log
 storybook-static
 
