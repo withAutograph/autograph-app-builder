@@ -36,6 +36,15 @@ type Bytes = AsyncIterable<Uint8Array>;
 export const pagedCheckpointMetadataSchema = z.strictObject({
   activeTurnId: z.string().min(1).optional(),
   capturedAtEpochMs: z.number().int().nonnegative(),
+  // A validated cold-read prefix remains private until the observer reaches its durable tail.
+  coldReadProgress: z
+    .strictObject({
+      events: z.array(publicEveEventSchema),
+      nativeObservationState: nativeObservationStateSchema,
+      privateApprovalCaptureState: privateHostedApprovalCaptureStateSchema,
+      version: z.literal(1),
+    })
+    .optional(),
   implementationPlan: z.json().optional(),
   inputRequests: z.array(publicInputRequestSchema).optional(),
   // Private, owner-scoped reducer snapshots live in chunked metadata and are

@@ -229,6 +229,80 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
 };
 
 describe("paged hosted session observation", () => {
+  it("retains the old public checkpoint while privately catching up and promotes only a complete tail", async () => {
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
+      const start = input.nativeObservationState?.publicEventCount ?? 0;
+      expect(input.allowPartialObservation).toBe(true);
+      const end = start === 0 ? 1 : 3;
+      for (let index = start; index < end; index += 1) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Preserve ordered callback backpressure.
+        await input.onEvent({
+          index,
+          text: `event ${index}`,
+          turnId: "turn_1",
+          type: "assistant.message",
+        });
+      }
+      const state = nativeState({
+        adapterSessionId: input.adapterSessionId,
+        nextNativeIndex: end * 10,
+        publicEventCount: end,
+      });
+      return {
+        artifactProjectionRequiresLegacyReadback: false,
+        installedEventCount: state.nextNativeIndex,
+        nativeObservationState: state,
+        nextNativeIndex: state.nextNativeIndex,
+        observationComplete: start !== 0,
+        pendingRequests: [],
+        publicEventCount: end,
+        status: "waiting",
+      };
+    });
+    const f = await fixture(observe);
+    const initial = await f.getSession(principal, f.sessionId);
+    if (initial?.version !== 2) {
+      throw new Error("Expected durable session");
+    }
+    const priorEvents: PublicEveEvent[] = [0, 1, 2].map((index) => ({
+      index,
+      text: `event ${index}`,
+      turnId: "turn_1",
+      type: "assistant_message",
+    }));
+    const eventStream = async function* eventStream() {
+      yield* priorEvents;
+    };
+    await f.observeSessionPaged({
+      events: eventStream(),
+      expectedCheckpointDigest: initial.checkpointDigest,
+      metadata: { capturedAtEpochMs: 1000, status: "waiting", version: 1 },
+      nowEpochMs: 1000,
+      principal,
+      resumability: "live",
+      sessionId: f.sessionId,
+      stage: "planning",
+    });
+    const partial = await f.service.get({ cursor: 3, limit: 10, sessionId: f.sessionId });
+    expect(partial).toMatchObject({
+      cursor: 3,
+      error: { code: "session_read_delayed" },
+      events: [],
+      inputRequests: [],
+    });
+    expect(f.getPagedEventCount()).toBe(3);
+    const privateProgress = f.observeSessionPaged.mock.calls[1]?.[0].metadata.coldReadProgress;
+    expect(privateProgress?.events).toEqual(priorEvents.slice(0, 1));
+    expect(privateProgress?.nativeObservationState.nextNativeIndex).toBe(10);
+    const complete = await f.service.get({ cursor: 3, limit: 10, sessionId: f.sessionId });
+    expect(complete.error).toBeUndefined();
+    expect(complete.cursor).toBe(3);
+    expect(complete.events).toEqual([]);
+    expect(f.getPagedEventCount()).toBe(3);
+    expect(observe.mock.calls[1]?.[0].nativeObservationState?.nextNativeIndex).toBe(10);
+    expect(f.observeSessionPaged.mock.calls[2]?.[0].metadata.coldReadProgress).toBeUndefined();
+  });
+
   it("hydrates native reducer state and atomically appends absolute public event deltas", async () => {
     const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
       const previous = input.nativeObservationState;
