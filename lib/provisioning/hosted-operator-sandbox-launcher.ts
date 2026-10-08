@@ -37,7 +37,7 @@ const HC_COMMAND = "protected-install";
 const VENDOR_COMMAND = "protected-materialize";
 const GENERATED_COMMAND = "protected-generated-app-install";
 const AUTH_COMMAND = "auth-protected-migrate";
-const GENERATED_RELEASE_MEMBERS = [
+export const GENERATED_RELEASE_MEMBERS = [
   "app-artifact.json",
   "cue-to-sql-source-map.json",
   "data-operations.md",

@@ -9,7 +9,11 @@ import {
   deserializeContext,
   serializeContext,
 } from "../../node_modules/eve/dist/src/context/serialize.js";
-import { recordApprovedPrivateApply, requestPrivateApplyApproval } from "./private-apply-authority";
+import {
+  assertApprovedPrivateApplySession,
+  recordApprovedPrivateApply,
+  requestPrivateApplyApproval,
+} from "./private-apply-authority";
 
 const scope = {
   appId: "builder",
@@ -20,6 +24,29 @@ const scope = {
 };
 
 describe("private apply approval scope", () => {
+  it("permits artifact capture only for the actual approved session and app scope", () => {
+    contextStorage.run(new ContextContainer(), () => {
+      expect(() => {
+        assertApprovedPrivateApplySession(scope);
+      }).toThrow();
+      requestPrivateApplyApproval(scope, "approve-artifact");
+      recordApprovedPrivateApply(scope, "approve-artifact");
+      expect(() => {
+        assertApprovedPrivateApplySession(scope);
+      }).not.toThrow();
+      for (const changed of [
+        { ...scope, sessionId: "other" },
+        { ...scope, workspaceId: "other" },
+        { ...scope, appId: "other" },
+        { ...scope, appSpecDigest: "other" },
+        { ...scope, proposalDigest: "other" },
+      ]) {
+        expect(() => {
+          assertApprovedPrivateApplySession(changed);
+        }).toThrow();
+      }
+    });
+  });
   it("retains approval through an execution error and a serialized Eve turn boundary", async () => {
     const requested = new ContextContainer();
     contextStorage.run(requested, () => {

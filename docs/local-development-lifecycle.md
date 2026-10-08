@@ -83,3 +83,22 @@ local database/emulator port settings through mise when another local stack
 already owns those ports. Separate clients must trust the supplied local CA;
 browser trust alone does not establish Node/Codex client trust. Owned MCP
 readiness verifies the explicit CA and never grants that CA to remote origins.
+
+## Private compiled artifacts and validation logs
+
+The default developer profile has no forwarded hosted principal or hosted
+validation database. Its private capture uses the existing owner-only state
+root supplied by the dev launcher. The runtime verifies the OS owner and
+canonical 0700 directories; records use 0600 files and atomic publication.
+Compiled releases remain bound to the actual approved Eve session, workspace,
+app and proposal. Immutable completion records preserve selection order across
+retries and concurrent publication. These private files stay outside the app
+Sandbox and do not grant deployment or provider authority.
+
+Normal local validation uses a real private file log store rather than requiring
+`DATABASE_URL`. The existing streaming writer sanitizes output, saves acknowledged
+chunks and publishes an integrity-checked manifest last. `get_validation_log`
+reads those same owner/session-bound pages after compute cleanup. Interrupted
+capture remains distinguishable from completed output. Hosted validation retains
+its authenticated PostgreSQL store. Diagnostic simulated-target fixtures do not
+publish app releases or stand in for hosted product qualification.
