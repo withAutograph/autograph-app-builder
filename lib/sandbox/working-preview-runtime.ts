@@ -88,8 +88,21 @@ const activation = setInterval(() => {
   clearInterval(activation);
   let environment = process.env;
   if (launch.environmentPath) {
-    try { environment = { ...process.env, ...JSON.parse(supervisorReadFileSync(launch.environmentPath, "utf8")) }; }
-    catch { fail("Prepared authenticated runtime environment is unavailable"); return; }
+    let serializedEnvironment;
+    try { serializedEnvironment = supervisorReadFileSync(launch.environmentPath, "utf8"); }
+    catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+      fail(code === "ENOENT" ? "Prepared authenticated runtime environment is missing" : "Prepared authenticated runtime environment could not be read");
+      return;
+    }
+    let preparedEnvironment;
+    try { preparedEnvironment = JSON.parse(serializedEnvironment); }
+    catch { fail("Prepared authenticated runtime environment is invalid"); return; }
+    if (!preparedEnvironment || typeof preparedEnvironment !== "object" || Array.isArray(preparedEnvironment) || Object.values(preparedEnvironment).some(value => typeof value !== "string")) {
+      fail("Prepared authenticated runtime environment is invalid");
+      return;
+    }
+    environment = { ...process.env, ...preparedEnvironment };
     delete environment.APP_RUNTIME_CLUSTER_DATABASE_URL;
   }
   child = spawn(launch.command.executable, launch.command.args, { cwd: launch.cwd, env: environment, detached: true, stdio: ["ignore", "pipe", "pipe"] });

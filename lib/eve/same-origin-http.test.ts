@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { createServer } from "node:http";
+import { once } from "node:events";
+import { z } from "zod";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -68,6 +71,40 @@ function stream(
     status: 200,
   });
 }
+
+const liveHttpSnapshot = async (events: unknown[], stall = false) => {
+  const paths: string[] = [];
+  const server = createServer((request, response) => {
+    paths.push(request.url ?? "");
+    response.writeHead(200, {
+      "content-type": "application/x-ndjson",
+      "x-eve-session-id": "wrun_1",
+      "x-eve-stream-format": "ndjson",
+      "x-eve-stream-tail-index": String(events.length - 1),
+      "x-eve-stream-version": "25",
+    });
+    response.flushHeaders();
+    if (!stall) {
+      response.write(`${events.map((event) => JSON.stringify(event)).join("\n")}\n`);
+    }
+    // Intentionally keep the live agent stream open after its observed durable tail.
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = z.object({ port: z.number().int().positive() }).parse(server.address());
+  const fetchImplementation: typeof fetch = async (url, init) => {
+    const source = new URL(url instanceof Request ? url.url : url);
+    return await fetch(`http://127.0.0.1:${address.port}${source.pathname}${source.search}`, init);
+  };
+  return {
+    async close() {
+      server.closeAllConnections();
+      await server[Symbol.asyncDispose]();
+    },
+    fetchImplementation,
+    paths,
+  };
+};
 
 describe("incremental canonical Eve stream", () => {
   it("exposes observation only with tenant verification and fetches only after authorization", async () => {
@@ -1583,6 +1620,96 @@ describe("same-origin canonical Eve transport", () => {
           workloadIdentity: identity(),
         }).get({ adapterSessionId: "wrun_1", principal }),
       ).rejects.toThrow("incompatible stream contract");
+    }
+  });
+});
+
+describe("bounded public observe over actual live HTTP streams", () => {
+  it.each([
+    {
+      events: [
+        { data: {}, type: "session.started" },
+        { data: { stepIndex: 0, turnId: "turn_1" }, type: "step.started" },
+      ],
+      status: "working",
+    },
+    {
+      events: [
+        { data: { stepIndex: 0, turnId: "turn_1" }, type: "step.started" },
+        { data: { turnId: "turn_1" }, type: "turn.completed" },
+        { data: {}, type: "session.waiting" },
+      ],
+      status: "waiting",
+    },
+    { events: pendingApprovalEvents("request_live"), status: "input_required" },
+  ])(
+    "returns $status at the immutable opened tail without waiting for stream EOF",
+    async ({ events, status }) => {
+      const fixture = await liveHttpSnapshot(events);
+      const indices: number[] = [];
+      try {
+        const transport = createSameOriginEveTransport({
+          config,
+          fetchImplementation: fixture.fetchImplementation,
+          verifyReadAuthority: async () => await Promise.resolve(true),
+          workloadIdentity: identity(),
+        });
+        if (transport.observe === undefined) {
+          throw new Error("Missing actual authorized observe adapter");
+        }
+        const result = await transport.observe({
+          adapterSessionId: "wrun_1",
+          onEvent: (event) => {
+            indices.push(event.index);
+          },
+          principal,
+          sessionId: "public_session",
+        });
+        expect(result.status).toBe(status);
+        expect(result.installedEventCount).toBe(events.length);
+        expect(indices).toEqual(indices.map((_value, index) => index));
+        expect(fixture.paths).toEqual([
+          "/eve/v1/session/wrun_1/stream?startIndex=0&includeTailIndex=1",
+        ]);
+        if (status === "input_required") {
+          expect(result.pendingRequests).toHaveLength(1);
+        }
+      } finally {
+        await fixture.close();
+      }
+    },
+  );
+  it("defaults ordinary observe to a bounded read when headers arrive but the opened tail stalls", async () => {
+    const fixture = await liveHttpSnapshot([{ data: {}, type: "session.waiting" }], true);
+    const originalTimeout = AbortSignal.timeout.bind(AbortSignal);
+    const timeout = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockImplementation((milliseconds) =>
+        originalTimeout(milliseconds === 30_000 ? 40 : milliseconds),
+      );
+    try {
+      const transport = createSameOriginEveTransport({
+        config,
+        fetchImplementation: fixture.fetchImplementation,
+        verifyReadAuthority: async () => await Promise.resolve(true),
+        workloadIdentity: identity(),
+      });
+      if (transport.observe === undefined) {
+        throw new Error("Missing actual authorized observe adapter");
+      }
+      await expect(
+        transport.observe({
+          adapterSessionId: "wrun_1",
+          onEvent: () => {},
+          principal,
+          sessionId: "public_session",
+        }),
+      ).rejects.toBeInstanceOf(HostedSessionReadTimeoutError);
+      expect(timeout).toHaveBeenCalledWith(30_000);
+      expect(fixture.paths).toHaveLength(1);
+    } finally {
+      timeout.mockRestore();
+      await fixture.close();
     }
   });
 });
