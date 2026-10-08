@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { z } from "zod";
 
+import { SubmissionRejectedBeforeDispatchError } from "./submission-rejected-before-dispatch-error";
 import type { HostedOperationKind } from "./hosted-store";
 
 export type HostedSubmissionPhase =
@@ -75,16 +76,33 @@ const sqlStateSchema = z.enum([
   "57P03",
 ]);
 
+const rejectedReasonSchema = z.enum([
+  "send_preflight_unavailable",
+  "workload_identity_unavailable",
+  "eve_request_rejected",
+  "session_not_active",
+  "session_not_ready",
+  "turn_changed",
+  "session_access_denied",
+  "no_active_turn",
+  "input_batch_changed",
+  "prompt_required",
+]);
+
 export interface HostedSubmissionDiagnostic {
-  event: "builder.hosted_submission_uncertain";
+  event: "builder.hosted_submission_uncertain" | "builder.hosted_submission_rejected";
   phase: HostedSubmissionPhase;
   operationKind: HostedOperationKind;
   clientRequestIdHash?: string;
   operationIdHash?: string;
   adapterSessionIdHash?: string;
   savedState?: "reserved" | "submission_unknown";
-  category: (typeof sqlStateCategories)[SqlState] | "unclassified_failure";
+  category:
+    | (typeof sqlStateCategories)[SqlState]
+    | "unclassified_failure"
+    | "rejected_before_dispatch";
   sqlState?: SqlState;
+  rejectedReason?: z.infer<typeof rejectedReasonSchema>;
 }
 
 export type HostedSubmissionDiagnosticSink = (
@@ -132,13 +150,24 @@ export const reportHostedSubmissionDiagnostic = (input: {
   sink?: HostedSubmissionDiagnosticSink;
 }): void => {
   try {
-    const sqlState = sqlStateFor(input.error);
+    const rejected = input.error instanceof SubmissionRejectedBeforeDispatchError;
+    const reason = rejected
+      ? rejectedReasonSchema.safeParse(Object.getOwnPropertyDescriptor(input.error, "code")?.value)
+      : undefined;
+    const sqlState = rejected ? undefined : sqlStateFor(input.error);
+    const uncertainCategory =
+      sqlState === undefined ? "unclassified_failure" : sqlStateCategories[sqlState];
     const diagnostic: HostedSubmissionDiagnostic = {
-      category: sqlState === undefined ? "unclassified_failure" : sqlStateCategories[sqlState],
-      event: "builder.hosted_submission_uncertain",
+      category: rejected ? "rejected_before_dispatch" : uncertainCategory,
+      event: rejected
+        ? "builder.hosted_submission_rejected"
+        : "builder.hosted_submission_uncertain",
       operationKind: input.operationKind,
       phase: input.phase,
     };
+    if (reason?.success === true) {
+      diagnostic.rejectedReason = reason.data;
+    }
     if (sqlState !== undefined) {
       diagnostic.sqlState = sqlState;
     }

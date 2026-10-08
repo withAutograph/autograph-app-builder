@@ -10,6 +10,7 @@ import {
 } from "./hosted-service";
 import type { HostedEveTransport } from "./hosted-service";
 import { InMemoryHostedEveStore } from "./hosted-store";
+import { SubmissionRejectedBeforeDispatchError } from "./submission-rejected-before-dispatch-error";
 import { reportHostedSubmissionDiagnostic } from "./hosted-submission-diagnostic";
 import type {
   HostedSubmissionDiagnostic,
@@ -328,4 +329,60 @@ describe("sanitized hosted submission diagnostics", () => {
       }
     },
   );
+});
+
+describe("verified pre-dispatch rejection diagnostics", () => {
+  it.each(["send_preflight_unavailable", "workload_identity_unavailable", "session_not_ready"])(
+    "reports the allowlisted source reason %s without uncertainty",
+    (reason) => {
+      const sink = vi.fn<HostedSubmissionDiagnosticSink>();
+      reportHostedSubmissionDiagnostic({
+        error: new SubmissionRejectedBeforeDispatchError(reason),
+        operationKind: "send",
+        phase: "dispatch",
+        sink,
+      });
+      expect(sink.mock.calls).toEqual([
+        [
+          {
+            category: "rejected_before_dispatch",
+            event: "builder.hosted_submission_rejected",
+            operationKind: "send",
+            phase: "dispatch",
+            rejectedReason: reason,
+          },
+        ],
+      ]);
+    },
+  );
+  it("does not trust plain error codes or inspect secret source-error properties", () => {
+    const sink = vi.fn<HostedSubmissionDiagnosticSink>();
+    const access = vi.fn(() => {
+      throw new Error(canary);
+    });
+    const source = new SubmissionRejectedBeforeDispatchError(canary);
+    Object.defineProperties(source, {
+      cause: { get: access },
+      code: { get: access },
+      message: { get: access },
+    });
+    for (const error of [
+      source,
+      new SubmissionRejectedBeforeDispatchError(canary),
+      { code: "send_preflight_unavailable", message: canary },
+      new SubmissionOutcomeUnknownError(),
+    ]) {
+      reportHostedSubmissionDiagnostic({ error, operationKind: "send", phase: "dispatch", sink });
+    }
+    expect(access).not.toHaveBeenCalled();
+    expect(
+      sink.mock.calls.map(([value]) => [value.event, value.category, value.rejectedReason]),
+    ).toEqual([
+      ["builder.hosted_submission_rejected", "rejected_before_dispatch", undefined],
+      ["builder.hosted_submission_rejected", "rejected_before_dispatch", undefined],
+      ["builder.hosted_submission_uncertain", "unclassified_failure", undefined],
+      ["builder.hosted_submission_uncertain", "unclassified_failure", undefined],
+    ]);
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(canary);
+  });
 });

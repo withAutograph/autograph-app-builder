@@ -39,6 +39,29 @@ const unknownSubmissionMessage = (operation: McpOperation, sessionId: string): s
   return "The service could not confirm whether the last submission was saved, so it was not replayed. Read the same session with autograph_get before sending another request.";
 };
 
+const isVerifiedSendPreflightRejection = (error: HostedRejectedOperationError): boolean => {
+  try {
+    return Object.getOwnPropertyDescriptor(error, "code")?.value === "send_preflight_unavailable";
+  } catch {
+    return false;
+  }
+};
+
+const rejectedToolError = (error: HostedRejectedOperationError, operation: McpOperation) => {
+  if (operation === "autograph_send" && isVerifiedSendPreflightRejection(error)) {
+    return {
+      code: "send_preflight_unavailable",
+      message:
+        "Builder could not read this session before sending your message. This request was rejected before the message was dispatched. Retry autograph_get with the same session ID and cursor; once the read succeeds, submit your message with a new clientRequestId because the original ID retains this rejection.",
+    };
+  }
+  return {
+    code: "operation_rejected",
+    message:
+      "The service rejected this operation before saving a result. Read the session with autograph_get to see its current state, then retry only if the action was not applied.",
+  };
+};
+
 const safeUnexpectedCause = (error: unknown): string => {
   const messages: string[] = [];
   let current = error;
@@ -126,7 +149,9 @@ export function safeToolError(
   const localRecoveryUnavailable = error instanceof LocalSessionRecoveryUnavailableError;
   const cancellationUnsettled = error instanceof HostedCancellationUnsettledError;
   let code = "internal_error";
-  let message = `Autograph App Builder could not complete ${operation}. Cause: ${safeUnexpectedCause(error) || "The service returned no error detail."} Retry this saved session after fixing the cause; if it repeats, report the operation and session ID.`;
+  let message = rejected
+    ? "The service rejected this operation before saving a result."
+    : `Autograph App Builder could not complete ${operation}. Cause: ${safeUnexpectedCause(error) || "The service returned no error detail."} Retry this saved session after fixing the cause; if it repeats, report the operation and session ID.`;
   if (authenticationRequired) {
     code = "authentication_required";
     message = "Sign in to Autograph App Builder to continue.";
@@ -163,10 +188,9 @@ export function safeToolError(
     message =
       "This app cannot continue from its last saved point. Start again from the latest result.";
   } else if (rejected) {
-    code = "operation_rejected";
-    message =
-      "The service rejected this operation before saving a result. Read the session with autograph_get to see its current state, then retry only if the action was not applied.";
+    ({ code, message } = rejectedToolError(error, operation));
   }
+
   const result: EveSessionResult = {
     cursor: 0,
     error: {
