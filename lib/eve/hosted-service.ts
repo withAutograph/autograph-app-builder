@@ -1538,18 +1538,31 @@ export function createHostedEveSessionService(input: {
         ) {
           throw new HostedSessionRecoveryUnavailableError();
         }
-        const privateApprovalCaptureState =
+        const storedPrivateApprovalCaptureState =
           checkpointMetadata?.privateApprovalCaptureState === undefined
             ? undefined
             : privateHostedApprovalCaptureStateSchema.parse(
                 checkpointMetadata.privateApprovalCaptureState,
               );
         if (
-          privateApprovalCaptureState !== undefined &&
-          privateApprovalCaptureState.sessionId !== sessionId
+          storedPrivateApprovalCaptureState !== undefined &&
+          storedPrivateApprovalCaptureState.sessionId !== sessionId
         ) {
           throw new HostedSessionRecoveryUnavailableError();
         }
+        const privateApprovalCaptureState =
+          storedPrivateApprovalCaptureState === undefined
+            ? undefined
+            : privateHostedApprovalCaptureStateSchema.parse({
+                ...storedPrivateApprovalCaptureState,
+                // Pending settlements are meaningful only for the adapter whose native reducer
+                // checkpoint captured them. Keep canonicalized receipts, but never bind a
+                // replacement adapter's settlement to an old request ID.
+                pendingRequests:
+                  nativeObservationState === undefined
+                    ? []
+                    : storedPrivateApprovalCaptureState.pendingRequests,
+              });
         spool = await spoolObservedSession({
           adapterSessionId: session.adapterSessionId,
           ...(nativeObservationState === undefined ? {} : { nativeObservationState }),

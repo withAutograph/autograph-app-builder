@@ -21,6 +21,14 @@ import type {
 } from "./hosted-store";
 import type { PublicEveEvent } from "../mcp/contracts";
 import { nativeObservationStateSchema } from "./native-observation-state";
+import {
+  privateHostedApprovalCaptureStateSchema,
+  privateHostedApprovalReceiptSchema,
+} from "./private-hosted-approval";
+import {
+  hostedOperatorPlanSchema,
+  operatorPlanDigest,
+} from "../provisioning/hosted-operator-contract";
 
 const nativeState = (input: {
   adapterSessionId: string;
@@ -192,6 +200,7 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
     observeSession: base.observeSession.bind(base),
     observeSessionPaged,
     readCheckpointPage,
+    recordPrivateApprovalReceipts: base.recordPrivateApprovalReceipts.bind(base),
     replaceSessionAdapter: base.replaceSessionAdapter.bind(base),
     replaceSessionAdapterPaged,
     reserveOperation: base.reserveOperation.bind(base),
@@ -215,6 +224,7 @@ const fixture = async (observe: NonNullable<HostedEveTransport["observe"]>, curr
     replaceSessionAdapterPaged,
     service,
     sessionId: started.sessionId,
+    store,
   };
 };
 
@@ -320,6 +330,199 @@ describe("paged hosted session observation", () => {
     expect(after.checkpointRef?.digest).toBe(before.checkpointRef?.digest);
     expect(observeSessionPaged.mock.calls[0]?.[0].metadata).toBe(savedMetadata);
     expect(getPagedEventCount()).toBe(1);
+  });
+
+  it("drops pending approval correlation when the durable adapter generation is replaced", async () => {
+    const requestId = "request_reused_after_replacement";
+    const selection = {
+      appId: "spend-review",
+      branch: "preview",
+      environment: "preview" as const,
+      projectId: "prj_fixture",
+      sessionId: "replace-me",
+    };
+    const plan = hostedOperatorPlanSchema.parse({
+      access: [{ actorId: "reviewer", organizationId: "org", roles: ["reviewer"] }],
+      action: "prepare",
+      appDatabase: {
+        database: "spend",
+        migratorRole: "spend_owner",
+        resourceId: "app-resource",
+        runtimeRole: "spend_runtime",
+      },
+      authDatabase: {
+        database: "shared_auth",
+        migratorRole: "auth_owner",
+        resourceId: "auth-resource",
+        runtimeRole: "auth_runtime",
+      },
+      contextId: "context",
+      cost: { class: "shared-recovery-group", description: "fixture", owner: "owner" },
+      effects: [
+        { description: "verify resources", id: "resources", kind: "resources" },
+        { description: "install release", id: "install", kind: "install" },
+        { description: "grant access", id: "access", kind: "access" },
+        { description: "bind runtime", id: "bindings", kind: "bindings" },
+      ],
+      installer: { reference: "installer", sha256: "a".repeat(64) },
+      neon: {
+        branchId: "br_synthetic",
+        connectionRef: "owner-connection",
+        endpoint: "ep-fixture.us-east-1.aws.neon.tech",
+        projectId: "neon-project",
+        source: "synthetic-only",
+      },
+      publicGateway: {
+        branch: selection.branch,
+        origin: "https://apps-preview.example.test",
+        projectId: selection.projectId,
+      },
+      release: { artifactRef: "artifact", id: "release", sha256: "b".repeat(64) },
+      retention: { expiresAt: "2027-01-01T00:00:00.000Z", policy: "retain" },
+      selection,
+      version: 1,
+    });
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
+      if (input.adapterSessionId === "adapter_1") {
+        const approvalPlan = hostedOperatorPlanSchema.parse({
+          ...plan,
+          selection: { ...selection, sessionId: input.sessionId },
+        });
+        const requested = {
+          data: {
+            requests: [
+              {
+                action: {
+                  callId: "call_fixture",
+                  input: {
+                    appId: selection.appId,
+                    branch: selection.branch,
+                    environment: selection.environment,
+                    operationRef: "a3f06690-718f-41c7-a67f-c6c1c0ecdbf3",
+                    plan: approvalPlan,
+                    planDigest: operatorPlanDigest(approvalPlan),
+                    projectId: selection.projectId,
+                  },
+                  kind: "tool-call",
+                  toolName: "prepare-app-hosted-runtime",
+                },
+                kind: "tool-approval",
+                prompt: "Approve hosted runtime preparation",
+                requestId,
+              },
+            ],
+            sequence: 4,
+            stepIndex: 2,
+            turnId: "turn_fixture",
+          },
+          meta: { at: "2026-10-06T00:00:00.000Z", id: "evt_pending" },
+          type: "input.requested",
+        } as const;
+        await input.onPrivateEvent?.(requested);
+        return {
+          artifactProjectionRequiresLegacyReadback: false,
+          installedEventCount: 1,
+          nativeObservationState: nativeState({
+            adapterSessionId: input.adapterSessionId,
+            nextNativeIndex: 1,
+            publicEventCount: 0,
+          }),
+          nextNativeIndex: 1,
+          pendingRequests: [],
+          publicEventCount: 0,
+          status: "waiting",
+        };
+      }
+      await input.onPrivateEvent?.({
+        data: {
+          outcome: "approved",
+          requestId,
+          responderPrincipalId: "owner_1",
+          sequence: 5,
+          stepIndex: 2,
+          turnId: "turn_fixture",
+        },
+        meta: { at: "2026-10-06T00:00:01.000Z", id: "evt_settled_collision" },
+        type: "approval.settled",
+      });
+      return {
+        artifactProjectionRequiresLegacyReadback: false,
+        installedEventCount: 1,
+        nativeObservationState: nativeState({
+          adapterSessionId: input.adapterSessionId,
+          nextNativeIndex: 1,
+          publicEventCount: 0,
+        }),
+        nextNativeIndex: 1,
+        pendingRequests: [],
+        publicEventCount: 0,
+        status: "waiting",
+      };
+    });
+    const { getSession, observeSessionPaged, service, sessionId, store } = await fixture(observe);
+    await service.get({ cursor: 0, limit: 10, sessionId });
+    const recordReceipts = vi.spyOn(store, "recordPrivateApprovalReceipts");
+    const saved = await getSession(principal, sessionId);
+    if (saved?.version !== 2) {
+      throw new Error("Expected the initial adapter checkpoint.");
+    }
+    const priorApprovedPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      selection: { ...selection, sessionId },
+    });
+    const priorReceipt = privateHostedApprovalReceiptSchema.parse({
+      callId: "call_fixture",
+      format: "autograph-hosted-approval-v1",
+      outcome: "approved",
+      requestId: "request_from_original_adapter",
+      responderPrincipalId: "owner_1",
+      sequence: 3,
+      toolInput: {
+        appId: selection.appId,
+        branch: selection.branch,
+        environment: selection.environment,
+        operationRef: "a3f06690-718f-41c7-a67f-c6c1c0ecdbf3",
+        plan: priorApprovedPlan,
+        planDigest: operatorPlanDigest(priorApprovedPlan),
+        projectId: selection.projectId,
+      },
+      toolName: "prepare-app-hosted-runtime",
+      turnId: "turn_fixture",
+    });
+    const savedMetadata = observeSessionPaged.mock.calls[0]?.[0].metadata;
+    if (savedMetadata?.privateApprovalCaptureState === undefined) {
+      throw new Error("Expected a saved private approval capture checkpoint.");
+    }
+    savedMetadata.privateApprovalCaptureState = privateHostedApprovalCaptureStateSchema.parse({
+      ...savedMetadata.privateApprovalCaptureState,
+      receipts: [priorReceipt],
+    });
+    // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous store contract.
+    getSession.mockImplementationOnce(async () => ({
+      ...saved,
+      adapterGeneration: saved.adapterGeneration + 1,
+      adapterSessionId: "replacement_adapter",
+    }));
+
+    await expect(service.get({ cursor: 0, limit: 10, sessionId })).resolves.toMatchObject({
+      sessionId,
+      status: "waiting",
+    });
+
+    expect(observeSessionPaged.mock.calls[0]?.[0].metadata.privateApprovalCaptureState)
+      .toMatchObject({ pendingRequests: [{ requestId }] });
+    const replacementApprovalState =
+      observeSessionPaged.mock.calls[1]?.[0].metadata.privateApprovalCaptureState;
+    if (replacementApprovalState === undefined) {
+      throw new Error("Expected a replacement private approval checkpoint.");
+    }
+    expect(replacementApprovalState).toMatchObject({ pendingRequests: [] });
+    expect(replacementApprovalState.receipts).toEqual([priorReceipt]);
+    expect(observe.mock.calls[1]?.[0].nativeObservationState).toBeUndefined();
+    expect(recordReceipts).toHaveBeenCalledOnce();
+    expect(recordReceipts.mock.calls[0]?.[0].receipts.map((receipt) => receipt.requestId)).toEqual([
+      priorReceipt.requestId,
+    ]);
   });
 
   it("atomically settles a new session with more than 512 paged checkpoint events", async () => {
