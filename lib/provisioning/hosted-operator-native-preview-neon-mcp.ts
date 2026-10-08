@@ -1,0 +1,296 @@
+import { createMCPClient } from "@ai-sdk/mcp";
+import type { MCPClient, MCPClientConfig } from "@ai-sdk/mcp";
+import { connectAuthProvider } from "@vercel/connect/mcp";
+import { deleteTokenCacheEntry } from "@vercel/connect";
+import { getVercelOidcToken, verifyVercelOidcToken } from "@vercel/oidc";
+import { z } from "zod";
+import {
+  scopeSchema,
+  configurationSchema,
+  privateMaintenanceUrl,
+  readSqlIdentity,
+} from "./hosted-operator-native-preview-neon";
+import type {
+  NativePreviewNeonConfiguration,
+  NativePreviewNeonDependencies,
+  NativePreviewNeonScope,
+} from "./hosted-operator-native-preview-neon";
+import type { HostedOperatorContext } from "./hosted-operator-service";
+
+const readTools = [
+  "describe_project",
+  "get_branch",
+  "get_postgres_endpoint",
+  "get_postgres_database",
+  "get_postgres_role",
+  "get_connection_string",
+] as const;
+type NativeReadTool = (typeof readTools)[number];
+const unavailable = () => new Error("Protected Preview Neon MCP credential is unavailable.");
+const metadata = z.object({
+  content: z.array(z.object({ text: z.string(), type: z.literal("text") })),
+  isError: z.boolean().optional(),
+  structuredContent: z.json().optional(),
+});
+const decoded = (
+  value: Awaited<ReturnType<Awaited<ReturnType<typeof createMCPClient>>["callTool"]>>,
+) => {
+  const result = metadata.parse(value);
+  if (result.isError === true) {
+    throw unavailable();
+  }
+  if (result.structuredContent !== undefined) {
+    return result.structuredContent;
+  }
+  if (result.content.length !== 1) {
+    throw unavailable();
+  }
+  return z.json().parse(JSON.parse(result.content[0]?.text ?? ""));
+};
+export interface PreviewNeonMcpDependencies {
+  configuration: Omit<NativePreviewNeonConfiguration, "connectorInstallationId">;
+  assertApprovedScope: NativePreviewNeonDependencies["assertApprovedScope"];
+  readCurrentOwnerNativeStore: NativePreviewNeonDependencies["readCurrentOwnerNativeStore"];
+  io?: {
+    getOidc: typeof getVercelOidcToken;
+    verifyOidc: (
+      token: string,
+      options: Parameters<typeof verifyVercelOidcToken>[1],
+    ) => Promise<void>;
+    readSqlIdentity: typeof readSqlIdentity;
+    createClient: (config: MCPClientConfig) => Promise<Pick<MCPClient, "callTool" | "close">>;
+    createAuthProvider: typeof connectAuthProvider;
+  };
+}
+const defaultIo = {
+  createAuthProvider: connectAuthProvider,
+  createClient: createMCPClient,
+  getOidc: getVercelOidcToken,
+  readSqlIdentity,
+  verifyOidc: async (token: string, options: Parameters<typeof verifyVercelOidcToken>[1]) => {
+    await verifyVercelOidcToken(token, options);
+  },
+};
+/** Preview-only private fixed-tool transport. No model tool exposure, REST token passthrough or implicit consent/provider setup. */
+export const createPreviewNeonMcpReader = (deps: PreviewNeonMcpDependencies) => ({
+  async withMaintenanceCredential<T>(
+    context: HostedOperatorContext,
+    frozenScope: NativePreviewNeonScope,
+    consume: (material: {
+      maintenanceUrl: string;
+      scope: NativePreviewNeonScope;
+      initSource: "parent-schema" | "schema-only";
+    }) => Promise<T>,
+  ): Promise<T> {
+    let client: Pick<MCPClient, "callTool" | "close"> | undefined;
+    try {
+      const scope = Object.freeze(scopeSchema.parse(frozenScope));
+      const parsedConfiguration = configurationSchema
+        .omit({ connectorInstallationId: true })
+        .parse(deps.configuration);
+      const configuration = {
+        ...parsedConfiguration,
+        nativeStore: Object.freeze({ ...parsedConfiguration.nativeStore }),
+        operator: Object.freeze({ ...parsedConfiguration.operator }),
+      };
+      const current = Object.freeze({
+        ...context,
+        authority: Object.freeze({ ...context.authority }),
+        target: Object.freeze({ ...context.target }),
+      });
+      const assertOwner = async () => {
+        await deps.assertApprovedScope(current, scope);
+        const store = await deps.readCurrentOwnerNativeStore(current, configuration.nativeStore);
+        const checks = [
+          current.target.environment === "preview",
+          configuration.operator.projectId !== current.target.projectId,
+          configuration.nativeStore.sourceProjectId !== current.target.projectId,
+          store.ownerId === current.target.scopeId,
+          store.ownerId === configuration.operator.ownerId,
+          store.configurationId === configuration.nativeStore.configurationId,
+          store.resourceId === configuration.nativeStore.resourceId,
+          store.vercelProjectId === configuration.nativeStore.sourceProjectId,
+          store.neonProjectId === scope.projectId,
+        ];
+        if (!checks.every(Boolean)) {
+          throw unavailable();
+        }
+      };
+      const io = deps.io ?? defaultIo;
+      const params = {
+        resources: ["https://mcp.neon.tech/mcp"],
+        scopes: ["read", "write"],
+        subject: {
+          id: current.authority.ownerUserId,
+          issuer: current.authority.issuer,
+          type: "user" as const,
+        },
+      };
+      const oidc = async () => {
+        await assertOwner();
+        const token = await io.getOidc();
+        const op = configuration.operator;
+        await io.verifyOidc(token, {
+          audience: op.audience,
+          environment: op.environment,
+          issuer: op.issuer,
+          ownerId: op.ownerId,
+          projectId: op.projectId,
+        });
+        await assertOwner();
+        return token;
+      };
+      await assertOwner();
+      const broker = io.createAuthProvider(configuration.connector, params, { vercelToken: oidc });
+      const authProvider = {
+        ...broker,
+        redirectToAuthorization: async () => {
+          await Promise.resolve();
+          throw unavailable();
+        },
+        tokens: async () => {
+          await assertOwner();
+          deleteTokenCacheEntry(configuration.connector, params);
+          const tokens = await broker.tokens();
+          if (tokens === undefined) {
+            throw unavailable();
+          }
+          await assertOwner();
+          return tokens;
+        },
+      };
+      const url = new URL("https://mcp.neon.tech/mcp");
+      url.searchParams.set("projectId", scope.projectId);
+      for (const category of ["projects", "branches", "endpoints"]) {
+        url.searchParams.append("category", category);
+      }
+      client = await io.createClient({
+        clientName: "protected-preview-neon-reader",
+        transport: { authProvider, redirect: "error", type: "http", url: url.href },
+      });
+      await assertOwner();
+      const call = async (name: NativeReadTool, argumentsInput: Record<string, string>) => {
+        await assertOwner();
+        if (client === undefined) {
+          throw unavailable();
+        }
+        const result = decoded(await client.callTool({ arguments: argumentsInput, name }));
+        await assertOwner();
+        return result;
+      };
+      const project = z
+        .object({ id: z.string() })
+        .parse(await call("describe_project", { project_id: scope.projectId }));
+      if (project.id !== scope.projectId) {
+        throw unavailable();
+      }
+      const branch = z
+        .object({
+          default: z.literal(false),
+          id: z.string(),
+          init_source: z.enum(["parent-schema", "schema-only"]),
+          project_id: z.string(),
+        })
+        .parse(
+          await call("get_branch", { branch_id: scope.branchId, project_id: scope.projectId }),
+        );
+      if (branch.id !== scope.branchId || branch.project_id !== scope.projectId) {
+        throw unavailable();
+      }
+      const endpoint = z
+        .object({
+          branch_id: z.string(),
+          host: z.string(),
+          id: z.string(),
+          project_id: z.string(),
+          type: z.literal("read_write"),
+        })
+        .parse(
+          await call("get_postgres_endpoint", {
+            endpoint_id: scope.endpointId,
+            project_id: scope.projectId,
+          }),
+        );
+      if (
+        [
+          endpoint.id !== scope.endpointId,
+          endpoint.project_id !== scope.projectId,
+          endpoint.branch_id !== scope.branchId,
+          endpoint.host !== scope.hostname,
+        ].some(Boolean)
+      ) {
+        throw unavailable();
+      }
+      const database = z.object({ branch_id: z.string(), name: z.string() }).parse(
+        await call("get_postgres_database", {
+          branch_id: scope.branchId,
+          database_name: scope.maintenanceDatabase,
+          project_id: scope.projectId,
+        }),
+      );
+      if (database.name !== scope.maintenanceDatabase || database.branch_id !== scope.branchId) {
+        throw unavailable();
+      }
+      const role = z.object({ branch_id: z.string(), name: z.string() }).parse(
+        await call("get_postgres_role", {
+          branch_id: scope.branchId,
+          project_id: scope.projectId,
+          role_name: scope.maintenanceRole,
+        }),
+      );
+      if (role.name !== scope.maintenanceRole || role.branch_id !== scope.branchId) {
+        throw unavailable();
+      }
+      const credential = z
+        .object({
+          branchId: z.string(),
+          computeId: z.string(),
+          databaseName: z.string(),
+          projectId: z.string(),
+          roleName: z.string(),
+          uri: z.string(),
+        })
+        .parse(
+          await call("get_connection_string", {
+            branch_id: scope.branchId,
+            compute_id: scope.endpointId,
+            database_name: scope.maintenanceDatabase,
+            project_id: scope.projectId,
+            role_name: scope.maintenanceRole,
+          }),
+        );
+      if (
+        [
+          credential.projectId !== scope.projectId,
+          credential.branchId !== scope.branchId,
+          credential.computeId !== scope.endpointId,
+          credential.databaseName !== scope.maintenanceDatabase,
+          credential.roleName !== scope.maintenanceRole,
+        ].some(Boolean)
+      ) {
+        throw unavailable();
+      }
+      const maintenanceUrl = privateMaintenanceUrl(credential.uri, scope);
+      await assertOwner();
+      const sqlIdentity = await io.readSqlIdentity(maintenanceUrl);
+      if (
+        sqlIdentity.role !== scope.maintenanceRole ||
+        sqlIdentity.database !== scope.maintenanceDatabase
+      ) {
+        throw unavailable();
+      }
+      await assertOwner();
+      const result = await consume({ initSource: branch.init_source, maintenanceUrl, scope });
+      await assertOwner();
+      return result;
+    } catch {
+      throw unavailable();
+    } finally {
+      try {
+        await client?.close();
+      } catch {
+        /* No credentials escape connection cleanup errors. */
+      }
+    }
+  },
+});
