@@ -420,6 +420,7 @@ export const createHostedOperatorControlPlane = async (input: {
 
     return {
       assertAuthorized: owner.assertAuthorized,
+      assertPlanningAuthorized: owner.assertPlanningAuthorized,
       authorize: owner.authorize,
       async close() {
         await controlPlaneClient.end({ timeout: 5 });
@@ -460,6 +461,7 @@ export const createHostedOperatorControlPlane = async (input: {
       },
       readApproval,
       readCredential,
+      readCurrentPlanningOwner: owner.readCurrentPlanningOwner,
       async readResourceBindings(effectInput: ResourceCredentialEffect | ResourceBindingContext) {
         if (effectInput.plan.action !== "prepare") {
           throw new HostedOperatorError("authorization_required");

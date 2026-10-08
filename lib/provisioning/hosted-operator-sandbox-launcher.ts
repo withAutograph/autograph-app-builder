@@ -86,6 +86,7 @@ const authResourceSchema = z.strictObject({
 });
 const authPlanFrameSchema = z.strictObject({
   version: z.literal(1),
+  proposal: z.literal("new-empty").optional(),
   resource: authResourceSchema,
   schemaPlan: z.looseObject({
     resource: authResourceSchema,
