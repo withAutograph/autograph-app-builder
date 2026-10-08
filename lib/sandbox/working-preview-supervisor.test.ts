@@ -81,7 +81,7 @@ describe("generated working preview supervisor", () => {
         await waitFor(() => existsSync(readyPath));
         await writeFile(configurationPath, access.configuration);
         await waitFor(() => existsSync(failurePath));
-        const failure = JSON.parse(await readFile(failurePath, "utf8")) as {
+        const failure = JSON.parse(await readFile(failurePath, "utf-8")) as {
           message: string;
           stderr: string;
         };
@@ -138,7 +138,7 @@ describe("generated working preview supervisor", () => {
       await waitFor(() => existsSync(readyPath));
       await writeFile(configurationPath, access.configuration);
       await waitFor(() => existsSync(markerPath));
-      expect(await readFile(markerPath, "utf8")).toBe(secret);
+      expect(await readFile(markerPath, "utf-8")).toBe(secret);
     } finally {
       if (supervisor.exitCode === null && supervisor.signalCode === null) {
         supervisor.kill("SIGTERM");
