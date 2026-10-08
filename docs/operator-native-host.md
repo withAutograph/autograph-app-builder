@@ -62,3 +62,31 @@ approval of exact frozen plans before any effect.
 
 These are reviewed external effects and qualification requirements. This source
 slice creates no projects, deployments, secrets, provider resources or credentials.
+
+## Preparation before normal Auth identity
+
+A source-owned `auth-bootstrap` plan has two resource effects and exactly one
+Auth schema effect. It carries no actor grants and cannot complete app bindings
+or app readiness. Completion requires the fixed restricted Auth runtime query
+`_auth_schema_readiness.read_current()`, exact database/login/runtime role,
+approved target and SQL asset identities, and equality of the native catalog
+fingerprint with its own publication. This catalog algorithm is distinct from
+the TypeScript desired-target digest. Its public status is
+`auth-schema-prepared`, with authenticated behavior unassessed.
+
+Known completion without an unresolved pending attempt permits a same-resource
+full plan, preserving matching completed resource/Auth effects. The new full
+plan requires its own durable approval. Unknown effects retain their recovery
+boundary. Normal Gateway signup/sign-in, verified realm actor/organization
+mapping, and actual membership are required inputs; Builder user IDs are not
+copied into a new Auth realm. Creating an operator-owned organization/member
+requires a separately implemented and approved fixed effect for an existing
+normally authenticated user. No user seeding, recovery impersonation or app
+business implementation is part of schema preparation.
+
+Planning reads private canonical accepted AppSpec state and its exact finalized
+artifact selection under current owner authority. Native Neon planning uses a
+separate metadata-only guard and the fixed project/branch/endpoint/database/role
+read tools. It neither manufactures an approved SQL effect nor calls the
+connection-string tool. Actual approved maintenance credentials remain confined
+to the leased private resource effect.

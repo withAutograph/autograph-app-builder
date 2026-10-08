@@ -374,7 +374,11 @@ export const createHostedOperatorControlPlane = async (input: {
     });
 
     const ownedArtifacts = (inputContext: HostedOperatorContext) => {
-      const context = structuredClone(inputContext);
+      const context = structuredClone({
+        authority: inputContext.authority,
+        ownerContext: inputContext.ownerContext,
+        target: inputContext.target,
+      });
       const artifactContext: OperatorArtifactContext = {
         authority: context.authority,
         target: { appId: context.target.appId, sessionId: context.target.sessionId },

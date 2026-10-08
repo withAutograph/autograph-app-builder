@@ -4,6 +4,7 @@ import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-
 import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
 import {
   createNativePreviewNeonExecutionAuthority,
+  createNativePreviewNeonPlanningAuthority,
   createNativePreviewNeonReconciliationAuthority,
 } from "./hosted-operator-native-preview-authority";
 import type { HostedOperatorWorkerEffectContext } from "./hosted-operator-service";
@@ -272,6 +273,77 @@ const fixture = () => {
   };
 };
 describe("concrete native Preview owner and approval callbacks", () => {
+  it("reads owner-authorized planning scope and actual native store without inventing an approved plan", async () => {
+    const f = fixture();
+    const assertPlanningAuthorized = vi.fn(async () => {
+      await Promise.resolve();
+    });
+    const reader = createNativePreviewNeonPlanningAuthority({
+      context: f.effect,
+      controlPlane: { assertPlanningAuthorized, readCredential: f.controlPlane.readCredential },
+      fetch: f.fetcher,
+      nativeStore,
+      scope,
+    });
+    await reader.assertPlanningScope(f.effect, scope);
+    expect(await reader.readCurrentOwnerNativeStore(f.effect, nativeStore)).toMatchObject({
+      neonProjectId: scope.projectId,
+      ownerId: target.scopeId,
+    });
+    expect(f.controlPlane.readApproval).not.toHaveBeenCalled();
+    expect(assertPlanningAuthorized).toHaveBeenCalled();
+    await expect(
+      reader.assertPlanningScope(f.effect, { ...scope, branchId: "foreign" }),
+    ).rejects.toThrow();
+    assertPlanningAuthorized.mockRejectedValue(new Error("revoked"));
+    await expect(reader.readCurrentOwnerNativeStore(f.effect, nativeStore)).rejects.toThrow();
+  });
+
+  it("authorizes exact app retirement only under its actual cleanup approval and recorded attempt", async () => {
+    const f = fixture();
+    const cleanup = hostedOperatorPlanSchema.parse({
+      ...plan,
+      action: "cleanup",
+      effects: [
+        { description: "Close app and Auth assignments", id: "revoke", kind: "revoke" },
+        { description: "Remove owned app environment", id: "remove", kind: "remove-bindings" },
+        {
+          description: "Retire owned app database",
+          id: "retire",
+          kind: "retire",
+          resourceId: plan.appDatabase.resourceId,
+        },
+      ],
+    });
+    const effect = cleanup.effects.at(-1);
+    if (effect === undefined) {
+      throw new Error("Missing owned retirement fixture");
+    }
+    f.effect.plan = cleanup;
+    f.effect.effect = effect;
+    f.operator.plan = cleanup;
+    f.operator.planDigest = operatorPlanDigest(cleanup);
+    f.operator.pendingEffectId = effect.id;
+    f.controlPlane.readApproval = async () =>
+      await Promise.resolve({
+        action: "cleanup",
+        approvalId: "fixture-approval",
+        approved: true,
+        callId: f.record.approvedByCallId,
+        planDigest: operatorPlanDigest(cleanup),
+      });
+    await f.callbacks().assertApprovedScope(f.effect, scope);
+    f.controlPlane.readApproval = async () =>
+      await Promise.resolve({
+        action: "prepare",
+        approvalId: "fixture-approval",
+        approved: true,
+        callId: f.record.approvedByCallId,
+        planDigest: operatorPlanDigest(cleanup),
+      });
+    await expect(f.callbacks().assertApprovedScope(f.effect, scope)).rejects.toThrow();
+  });
+
   it("maps exact approved scope and reads the actual owner project and native store with allowlisted identity only", async () => {
     const f = fixture();
     const callbacks = f.callbacks();

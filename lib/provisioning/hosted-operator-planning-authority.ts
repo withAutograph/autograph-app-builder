@@ -12,7 +12,11 @@ export const readOwnedOperatorPlanningSelection = async (input: {
   context: HostedOperatorContext;
   controlPlane: ControlPlane;
 }) => {
-  const context = structuredClone(input.context);
+  const context = structuredClone({
+    authority: input.context.authority,
+    ownerContext: input.context.ownerContext,
+    target: input.context.target,
+  });
   const owned = await input.controlPlane.readCurrentPlanningOwner(context);
   const decision = owned.session.privateBuildDecision;
   const currentSpec = decision?.currentSpec;
