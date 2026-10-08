@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { z } from "zod";
 import type { appDescriptionSchema } from "../repository/app-description";
+import path from "node:path";
+import { localRuntimeEnvironmentPath } from "../repository/runtime-environment";
 
 import {
   appDeclaresLocalSetup,
@@ -29,6 +31,9 @@ const generatedWithReviewer: z.infer<typeof appDescriptionSchema>["backend"] = {
   ...generated,
   roles: ["member", "reviewer"],
 };
+const runtimeStateDirectory = path.posix.dirname(
+  localRuntimeEnvironmentPath("/workspace/repository", "spend-review"),
+);
 describe("private local preview setup", () => {
   it("discovers the source-derived backend rather than a demo setup declaration", async () => {
     const run = vi
@@ -59,7 +64,10 @@ describe("private local preview setup", () => {
     expect(run).toHaveBeenCalledTimes(3);
     expect(run).toHaveBeenLastCalledWith({
       command: localPreviewExecutionCommand("spend-review"),
-      env: { APP_RUNTIME_ROLES: "member" },
+      env: {
+        APP_RUNTIME_ROLES: "member",
+        APP_RUNTIME_STATE_DIR: runtimeStateDirectory,
+      },
       workingDirectory: "/workspace/repository",
     });
   });
@@ -76,7 +84,10 @@ describe("private local preview setup", () => {
     });
     expect(run).toHaveBeenCalledWith({
       command: localPreviewExecutionCommand("spend-review"),
-      env: { APP_RUNTIME_ROLES: "member" },
+      env: {
+        APP_RUNTIME_ROLES: "member",
+        APP_RUNTIME_STATE_DIR: runtimeStateDirectory,
+      },
       workingDirectory: "/workspace/repository",
     });
     expect(localPreviewExecutionCommand("spend-review")).toContain(
@@ -102,6 +113,7 @@ describe("private local preview setup", () => {
       env: {
         APP_RUNTIME_AUTH_ORIGIN: "https://spend-review.vercel.run",
         APP_RUNTIME_ROLES: "member,reviewer",
+        APP_RUNTIME_STATE_DIR: runtimeStateDirectory,
       },
       workingDirectory: "/workspace/repository",
     });
