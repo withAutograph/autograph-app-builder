@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 /* oxlint-disable sonarjs/no-nested-functions -- Owner authorization and journal CAS closures share the actual opened private database. */
 import postgres from "postgres";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
@@ -65,7 +66,11 @@ import {
   readVercelInstallationBindings,
   readActiveVercelInstallationToken,
 } from "../integrations/postgres-vercel-installation";
-import { readVercelTokenKeyringEnvironment } from "../integrations/vercel-installation";
+import {
+  readVercelTokenKeyringEnvironment,
+  encryptVercelToken,
+  decryptVersionedVercelToken,
+} from "../integrations/vercel-installation";
 import type { HostedPrincipal } from "../eve/hosted-auth";
 import type { OperatorWorkloadPolicy } from "./hosted-operator-workload";
 import {
@@ -408,11 +413,15 @@ export const createHostedOperatorControlPlane = async (input: {
           store: artifactStore,
         }),
         selections: createPostgresOperatorArtifactSelections({ assertCurrentOwner, database }),
+        store: artifactStore,
       };
     };
 
     const readKnownAuthBootstrap = async (context: HostedOperatorContext) => {
-      await owner.assertPlanningAuthorized(context);
+      const owned = await owner.readCurrentPlanningOwner(context);
+      if (["cancelled", "completed"].includes(owned.session.status)) {
+        throw new HostedOperatorError("authorization_required");
+      }
       const current = await store.read(context);
       const operator = current?.record.operator;
       const ready = [
@@ -433,6 +442,70 @@ export const createHostedOperatorControlPlane = async (input: {
       return { ...current, operator };
     };
 
+    const reserveRealmIdentityLink = async (linkInput: {
+      context: HostedOperatorContext;
+      bootstrapPlanDigest: string;
+      browserOrigin: string;
+      authResourceId: string;
+      issuer: string;
+      endpointOrigin: string;
+      audience: string;
+      organizationId: string | null;
+      nonceSha256: string;
+      sealedNonce?: ReturnType<typeof encryptVercelToken> & { keyVersion: string };
+      expiresAt: string;
+    }) => {
+      const known = await readKnownAuthBootstrap(linkInput.context);
+      if (
+        known.operator.planDigest !== linkInput.bootstrapPlanDigest ||
+        known.operator.plan.authDatabase.resourceId !== linkInput.authResourceId
+      ) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      const link = operatorRealmIdentityLinkSchema.parse({
+        audience: linkInput.audience,
+        authResourceId: linkInput.authResourceId,
+        bootstrapPlanDigest: linkInput.bootstrapPlanDigest,
+        browserOrigin: linkInput.browserOrigin,
+        endpointOrigin: linkInput.endpointOrigin,
+        expiresAt: linkInput.expiresAt,
+        issuer: linkInput.issuer,
+        nonceSha256: linkInput.nonceSha256,
+        organizationId: linkInput.organizationId,
+        ownerSessionId: linkInput.context.target.sessionId,
+        sealedNonce: linkInput.sealedNonce,
+      });
+      if (Date.parse(link.expiresAt) <= Date.now()) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      const saved = await updateHostedRuntimeJournal({
+        ...linkInput.context,
+        now: Date.now,
+        store,
+        update: (record) => {
+          if (
+            record.operator?.planDigest !== known.operator.planDigest ||
+            record.leaseId !== undefined ||
+            record.operator.pendingEffectId !== undefined ||
+            record.operator.pendingEffectAttempt !== undefined
+          ) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+          const existing = record.operator.identityLink;
+          if (
+            existing !== undefined &&
+            existing.consumedAt === undefined &&
+            Date.parse(existing.expiresAt) > Date.now() &&
+            existing.nonceSha256 !== link.nonceSha256
+          ) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+          return { ...record, operator: { ...record.operator, identityLink: link } };
+        },
+      });
+      await owner.assertPlanningAuthorized(linkInput.context);
+      return operatorRealmIdentityLinkSchema.parse(saved.record.operator?.identityLink);
+    };
     const operatorIdentity = createVercelWorkloadIdentity();
     const eveObserver = createSameOriginEveTransport({
       config: { baseUrl: new URL(config.resource).origin },
@@ -530,11 +603,72 @@ export const createHostedOperatorControlPlane = async (input: {
               proofRef: linkInput.proofRef,
               proofSha256: linkInput.proofSha256,
             });
+            delete captured.sealedNonce;
             return { ...record, operator: { ...record.operator, identityLink: captured } };
           },
         });
         await owner.assertPlanningAuthorized(linkInput.context);
         return operatorRealmIdentityLinkSchema.parse(saved.record.operator?.identityLink);
+      },
+      async prepareRealmIdentityLink(
+        linkInput: Omit<
+          Parameters<typeof reserveRealmIdentityLink>[0],
+          "nonceSha256" | "sealedNonce"
+        >,
+      ) {
+        const known = await readKnownAuthBootstrap(linkInput.context);
+        const existing = known.operator.identityLink;
+        const aad = JSON.stringify({
+          authority: linkInput.context.authority,
+          bootstrapPlanDigest: linkInput.bootstrapPlanDigest,
+          organizationId: linkInput.organizationId,
+          ownerSessionId: linkInput.context.target.sessionId,
+          purpose: "realm-identity-link-nonce-v1",
+        });
+        if (
+          existing !== undefined &&
+          existing.consumedAt === undefined &&
+          Date.parse(existing.expiresAt) > Date.now()
+        ) {
+          const samePending = [
+            existing.sealedNonce !== undefined,
+            existing.bootstrapPlanDigest === linkInput.bootstrapPlanDigest,
+            existing.organizationId === linkInput.organizationId,
+            existing.audience === linkInput.audience,
+            existing.browserOrigin === linkInput.browserOrigin,
+            existing.issuer === linkInput.issuer,
+            existing.endpointOrigin === linkInput.endpointOrigin,
+          ].every(Boolean);
+          if (!samePending || existing.sealedNonce === undefined) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+          const nonce = z
+            .string()
+            .regex(/^[a-f0-9]{64}$/u)
+            .parse(
+              decryptVersionedVercelToken({
+                ...existing.sealedNonce,
+                associatedData: aad,
+                config: tokenKeyring,
+              }),
+            );
+          if (createHash("sha256").update(nonce).digest("hex") !== existing.nonceSha256) {
+            throw new HostedOperatorError("resource_mismatch");
+          }
+          await owner.assertPlanningAuthorized(linkInput.context);
+          return { link: existing, nonce };
+        }
+        const nonce = randomBytes(32).toString("hex");
+        const sealedNonce = {
+          ...encryptVercelToken({ associatedData: aad, key: tokenKeyring.tokenKey, token: nonce }),
+          keyVersion: tokenKeyring.tokenKeyVersion,
+        };
+        const link = await reserveRealmIdentityLink({
+          ...linkInput,
+          nonceSha256: createHash("sha256").update(nonce).digest("hex"),
+          sealedNonce,
+        });
+        return { link, nonce };
       },
       async prepareResourceCredentials(
         effectInput: ResourceCredentialEffect & { database: ProtectedResourceDatabase },
@@ -570,6 +704,16 @@ export const createHostedOperatorControlPlane = async (input: {
           sha256: prepared.credentialsSha256,
         };
       },
+      async publishAuthPlan(
+        context: HostedOperatorContext,
+        proposal: { content: Buffer; planDigest: string; targetDigest: string },
+      ) {
+        const artifacts = ownedArtifacts(context);
+        return await artifacts.publication.publishAuthPlan({
+          ...proposal,
+          context: artifacts.context,
+        });
+      },
       readApproval,
       async readAuthPlan(
         context: HostedOperatorContext,
@@ -586,6 +730,39 @@ export const createHostedOperatorControlPlane = async (input: {
         const link = current?.record.operator?.identityLink;
         await owner.assertPlanningAuthorized(context);
         return link?.consumedAt === undefined ? null : operatorRealmIdentityLinkSchema.parse(link);
+      },
+      async readCapturedRealmIdentityProof(context: HostedOperatorContext) {
+        await owner.assertPlanningAuthorized(context);
+        const current = await store.read(context);
+        const link = current?.record.operator?.identityLink;
+        if (
+          link?.consumedAt === undefined ||
+          link.proofRef === undefined ||
+          link.proofSha256 === undefined
+        ) {
+          throw new HostedOperatorError("auth_identity_required");
+        }
+        const expectedRef = `_protected-operator/artifacts/realm-identity-proof/${context.target.appId}/${link.proofSha256}`;
+        if (link.proofRef !== expectedRef) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        const artifacts = ownedArtifacts(context);
+        const content = await artifacts.store.read(artifacts.context, expectedRef, 0);
+        if (content === undefined) {
+          throw new HostedOperatorError("auth_identity_required");
+        }
+        const bytes = Buffer.from(content, "base64");
+        const proof = bytes.toString("utf-8");
+        if (
+          bytes.length > 16 * 1024 ||
+          bytes.toString("base64") !== content ||
+          !Buffer.from(proof, "utf-8").equals(bytes) ||
+          createHash("sha256").update(bytes).digest("hex") !== link.proofSha256
+        ) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        await owner.assertPlanningAuthorized(context);
+        return { link: operatorRealmIdentityLinkSchema.parse(link), proof };
       },
       readCredential,
       readCurrentPlanningOwner: owner.readCurrentPlanningOwner,
@@ -663,7 +840,7 @@ export const createHostedOperatorControlPlane = async (input: {
             version: 1 as const,
           },
           jwksUrl: operator.plan.deploymentBoundary.verification.jwksUrl,
-          link: operatorRealmIdentityLinkSchema.parse(link),
+          link: operatorRealmIdentityLinkSchema.omit({ sealedNonce: true }).parse(link),
         };
       },
       async readRealmIdentityLink(context: HostedOperatorContext) {
@@ -672,6 +849,39 @@ export const createHostedOperatorControlPlane = async (input: {
         const link = current?.record.operator?.identityLink;
         await owner.assertPlanningAuthorized(context);
         return link === undefined ? null : operatorRealmIdentityLinkSchema.parse(link);
+      },
+      async readRetirementResourceCredentials(effectInput: ResourceCredentialEffect) {
+        if (
+          effectInput.plan.action !== "cleanup" ||
+          effectInput.effect.kind !== "retire" ||
+          effectInput.effect.resourceId !== effectInput.plan.appDatabase.resourceId
+        ) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        const current = await readCurrentResourceCredentialRecord({
+          assertAuthorized: owner.assertAuthorized,
+          effect: effectInput,
+          store,
+        });
+        if (current.privateState === undefined) {
+          throw new HostedOperatorError("operation_in_progress");
+        }
+        const prepared = prepareHostedOperatorResourceCredentials({
+          ...effectInput,
+          config: tokenKeyring,
+          database: "appDatabase",
+          record: current,
+        });
+        await readCurrentResourceCredentialRecord({
+          assertAuthorized: owner.assertAuthorized,
+          effect: effectInput,
+          store,
+        });
+        return {
+          bytes: Buffer.from(prepared.credentialsBytes, "utf-8"),
+          privateState: prepared.privateState,
+          sha256: prepared.credentialsSha256,
+        };
       },
       async readResourceBindings(effectInput: ResourceCredentialEffect | ResourceBindingContext) {
         if (
@@ -742,58 +952,7 @@ export const createHostedOperatorControlPlane = async (input: {
         }
         return bindings;
       },
-      async reserveRealmIdentityLink(linkInput: {
-        context: HostedOperatorContext;
-        bootstrapPlanDigest: string;
-        authResourceId: string;
-        issuer: string;
-        endpointOrigin: string;
-        audience: string;
-        organizationId: string | null;
-        nonceSha256: string;
-        expiresAt: string;
-      }) {
-        const known = await readKnownAuthBootstrap(linkInput.context);
-        if (
-          known.operator.planDigest !== linkInput.bootstrapPlanDigest ||
-          known.operator.plan.authDatabase.resourceId !== linkInput.authResourceId
-        ) {
-          throw new HostedOperatorError("resource_mismatch");
-        }
-        const link = operatorRealmIdentityLinkSchema.parse({
-          audience: linkInput.audience,
-          authResourceId: linkInput.authResourceId,
-          bootstrapPlanDigest: linkInput.bootstrapPlanDigest,
-          endpointOrigin: linkInput.endpointOrigin,
-          expiresAt: linkInput.expiresAt,
-          issuer: linkInput.issuer,
-          nonceSha256: linkInput.nonceSha256,
-          organizationId: linkInput.organizationId,
-          ownerSessionId: linkInput.context.target.sessionId,
-        });
-        if (Date.parse(link.expiresAt) <= Date.now()) {
-          throw new HostedOperatorError("authorization_required");
-        }
-        const saved = await updateHostedRuntimeJournal({
-          ...linkInput.context,
-          now: Date.now,
-          store,
-          update: (record) => {
-            if (
-              record.operator?.planDigest !== known.operator.planDigest ||
-              record.leaseId !== undefined ||
-              record.operator.pendingEffectId !== undefined ||
-              record.operator.pendingEffectAttempt !== undefined
-            ) {
-              throw new HostedOperatorError("operation_in_progress");
-            }
-            return { ...record, operator: { ...record.operator, identityLink: link } };
-          },
-        });
-        await owner.assertPlanningAuthorized(linkInput.context);
-        return operatorRealmIdentityLinkSchema.parse(saved.record.operator?.identityLink);
-      },
-
+      reserveRealmIdentityLink,
       async resolveRealmIdentityCallbackContext(callbackInput: {
         authority: HostedOperatorContext["authority"];
         ownerSessionId: string;
@@ -822,6 +981,9 @@ export const createHostedOperatorControlPlane = async (input: {
         }
         const parsedSession = parseHostedSessionRow(row);
         const durable = toDurableHostedSessionRecord(parsedSession);
+        if (["cancelled", "completed"].includes(durable.status)) {
+          throw new HostedOperatorError("authorization_required");
+        }
         const ownerContext = await ownerContextResolver({
           adapterSessionId: durable.adapterSessionId,
           authority,

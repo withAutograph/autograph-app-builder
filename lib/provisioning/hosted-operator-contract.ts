@@ -83,6 +83,18 @@ const hostedOperatorPlanDataSchema = z.strictObject({
       bootstrapPlanDigest: digest,
       identityNonceSha256: digest,
       identityProof: z.strictObject({ reference: id, sha256: digest }),
+      identityVerification: z.strictObject({
+        audience: httpsPublicOrigin,
+        issuer: httpsPublicOrigin,
+        jwksUrl: z.url(),
+        transportSource: z.strictObject({
+          audience: z.url(),
+          environment: z.enum(["preview", "production"]),
+          issuer: z.url(),
+          ownerId: id,
+          projectId: id,
+        }),
+      }),
       kind: z.literal("create-owned-organization"),
       name: id,
       organizationId: id,
@@ -106,7 +118,17 @@ const hostedOperatorPlanDataSchema = z.strictObject({
     description: id,
     owner: id,
   }),
-  delivery: z.strictObject({ branch: id, projectId: id, repoId: id }).optional(),
+  delivery: z
+    .strictObject({
+      branch: id,
+      gitSha: z
+        .string()
+        .regex(/^[a-f0-9]{40}$/u)
+        .optional(),
+      projectId: id,
+      repoId: id,
+    })
+    .optional(),
   deploymentBoundary: deploymentBoundarySchema.optional(),
   effects: z
     .array(
@@ -132,12 +154,23 @@ const hostedOperatorPlanDataSchema = z.strictObject({
     .min(1),
   gatewayBindings: z
     .strictObject({
+      authBrowserOrigin: httpsPublicOrigin,
       builderCallbackOrigin: httpsPublicOrigin,
       catalogAppIds: z.array(id).min(1),
       operatorOrigin: httpsPublicOrigin,
     })
     .optional(),
-  gatewayDelivery: z.strictObject({ branch: id, projectId: id, repoId: id }).optional(),
+  gatewayDelivery: z
+    .strictObject({
+      branch: id,
+      gitSha: z
+        .string()
+        .regex(/^[a-f0-9]{40}$/u)
+        .optional(),
+      projectId: id,
+      repoId: id,
+    })
+    .optional(),
   installer: z.strictObject({ reference: id, sha256: digest }),
   neon: z.strictObject({
     branchId: id,
@@ -403,6 +436,7 @@ export const operatorRealmIdentityLinkSchema = z
     audience: httpsPublicOrigin,
     authResourceId: id,
     bootstrapPlanDigest: digest,
+    browserOrigin: httpsPublicOrigin,
     consumedAt: z.iso.datetime({ offset: true }).optional(),
     endpointOrigin: httpsPublicOrigin,
     expiresAt: z.iso.datetime({ offset: true }),
@@ -412,6 +446,9 @@ export const operatorRealmIdentityLinkSchema = z
     ownerSessionId: id,
     proofRef: id.optional(),
     proofSha256: digest.optional(),
+    sealedNonce: z
+      .strictObject({ encryptedToken: id, keyVersion: id, tokenIv: id, tokenTag: id })
+      .optional(),
   })
   .superRefine((value, ctx) => {
     if (
@@ -459,9 +496,11 @@ const hostedOperatorRecordDataSchema = z.strictObject({
   approvalId: id.optional(),
   authPreparation: operatorAuthSchemaPreparationSchema.optional(),
   deliveredDeploymentId: id.optional(),
+  deliveredGatewayDeploymentId: id.optional(),
   deliveryCandidates: operatorDeploymentCandidatesSchema.optional(),
   /** Shared across Auth and kernel rows; allocated once by the existing journal CAS. */
   fenceGeneration: z.number().int().positive().optional(),
+  gatewayDeliveryCandidates: operatorDeploymentCandidatesSchema.optional(),
   gatewayEnvironment: managedOperatorEnvironmentRowsSchema.optional(),
   identityLink: operatorRealmIdentityLinkSchema.optional(),
   managedEnvironment: managedOperatorEnvironmentRowsSchema.optional(),
@@ -476,6 +515,12 @@ const hostedOperatorRecordDataSchema = z.strictObject({
   receipts: z.array(operatorReceiptSchema),
   workerCheckpoints: z.array(workerEffectCheckpointSchema).optional(),
 });
+const gatewayDeliveryOrigin = (operator: z.infer<typeof hostedOperatorRecordDataSchema>) =>
+  operator.gatewayDeliveryCandidates?.find(
+    (candidate) =>
+      candidate.deploymentId === operator.deliveredGatewayDeploymentId &&
+      candidate.readyState === "READY",
+  )?.origin;
 // oxlint-disable-next-line eslint/complexity, sonarjs/expression-complexity -- Frozen identity link and actual delivered candidate identities require every exact binding.
 const validateOperatorMetadata = (
   operator: z.infer<typeof hostedOperatorRecordDataSchema>,
@@ -485,9 +530,11 @@ const validateOperatorMetadata = (
   if (link !== undefined) {
     const matches = [
       link.authResourceId === operator.plan.authDatabase.resourceId,
+      link.browserOrigin === operator.plan.gatewayBindings?.authBrowserOrigin,
       link.ownerSessionId === operator.plan.selection.sessionId,
       link.issuer === operator.plan.deploymentBoundary?.verification.publicOrigin,
-      link.endpointOrigin === operator.plan.deploymentBoundary?.verification.gatewayOrigin,
+      link.endpointOrigin === operator.plan.deploymentBoundary?.verification.gatewayOrigin ||
+        gatewayDeliveryOrigin(operator) === link.endpointOrigin,
     ].every(Boolean);
     if (!matches) {
       context.addIssue({
@@ -496,6 +543,34 @@ const validateOperatorMetadata = (
           "Realm identity link must match the owned Auth resource, exact issuer and canonical owner session.",
       });
     }
+  }
+  const gatewayCandidates = operator.gatewayDeliveryCandidates ?? [];
+  if (
+    new Set(gatewayCandidates.map((value) => value.deploymentId)).size !==
+      gatewayCandidates.length ||
+    gatewayCandidates.some(
+      (value) =>
+        value.projectId !== operator.plan.publicGateway?.projectId ||
+        value.branch !== operator.plan.publicGateway?.branch,
+    )
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "Gateway candidates must belong to the exact approved native project and branch.",
+    });
+  }
+  if (
+    operator.deliveredGatewayDeploymentId !== undefined &&
+    !gatewayCandidates.some(
+      (value) =>
+        value.deploymentId === operator.deliveredGatewayDeploymentId &&
+        value.readyState === "READY",
+    )
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "Only an independently READY Gateway candidate may be pinned.",
+    });
   }
   const candidates = operator.deliveryCandidates ?? [];
   if (

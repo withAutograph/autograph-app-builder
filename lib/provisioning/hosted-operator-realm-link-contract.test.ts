@@ -56,7 +56,14 @@ const plan = hostedOperatorPlanSchema.parse({
     { description: "install", id: "install", kind: "install" },
     { description: "access", id: "access", kind: "access" },
     { description: "bind", id: "bind", kind: "bindings" },
+    { description: "Bind owned Gateway Auth.", id: "gateway-bindings", kind: "gateway-bindings" },
   ],
+  gatewayBindings: {
+    authBrowserOrigin: "https://auth.example.test",
+    builderCallbackOrigin: "https://builder.example.test",
+    catalogAppIds: ["spend-review"],
+    operatorOrigin: "https://operator.example",
+  },
   installer: { reference: "installer", sha256: "a".repeat(64) },
   neon: {
     branchId: "branch",
@@ -82,6 +89,7 @@ const link = {
   audience: "https://operator.example",
   authResourceId: "auth-resource",
   bootstrapPlanDigest: "c".repeat(64),
+  browserOrigin: "https://auth.example.test",
   endpointOrigin: "https://gateway.example",
   expiresAt: "2027-01-01T00:00:00Z",
   issuer: "https://public.example",

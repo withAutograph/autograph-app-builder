@@ -32,6 +32,8 @@ export const createHostedOperatorRealmHttpTransport =
       verifyOidc?: typeof verifyVercelOidcToken;
       fetch?: typeof fetch;
     } = {},
+    /** Exact operator-published immutable endpoint from its owned journal; not a caller/token URL or fresh provider observation. */
+    endpointOrigin: string = configuration.gateway.gatewayOrigin,
   ): typeof fetch =>
   async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
@@ -39,7 +41,7 @@ export const createHostedOperatorRealmHttpTransport =
     const fixedRead =
       (method === "POST" && url.pathname === "/api/auth/platform/operator-identity/readback") ||
       (method === "GET" && url.pathname === "/_platform/jwks.json");
-    const approvedRequest = isApprovedUrl(url, configuration.gateway.gatewayOrigin) && fixedRead;
+    const approvedRequest = isApprovedUrl(url, endpointOrigin) && fixedRead;
     if (!approvedRequest) {
       throw new HostedOperatorError("resource_mismatch");
     }

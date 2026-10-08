@@ -60,6 +60,7 @@ export type HostedOperatorManagedEnvironmentContext = HostedOperatorEffectContex
 };
 export type GatewayManagedEnvironmentContext = HostedOperatorEffectContext & {
   gateway: {
+    authBrowserOrigin: string;
     branch: string;
     builderCallbackOrigin: string;
     catalogAppIds: readonly string[];
@@ -84,6 +85,11 @@ export type HostedOperatorEffectContext = Context & {
   plan: HostedOperatorPlan;
   privateState?: PrivateState;
   deliveryCandidates?: OperatorDeploymentCandidate[];
+  gatewayDeliveryCandidates?: OperatorDeploymentCandidate[];
+  checkpointGatewayDelivery?: (
+    candidates: readonly OperatorDeploymentCandidate[],
+    selectedId?: string,
+  ) => Promise<void>;
   checkpointDelivery?: (
     candidates: readonly OperatorDeploymentCandidate[],
     selectedId?: string,
@@ -136,7 +142,11 @@ export interface ProtectedHostedOperatorDependencies {
   /** Inspect uncertain effects on the same frozen identities before retry. Unknown must never become absent. */
   reconcile: (
     input: HostedOperatorEffectContext,
-  ) => Promise<{ status: "absent" | "unknown" } | { status: "applied"; receipt: OperatorReceipt }>;
+  ) => Promise<
+    | { status: "absent" | "unknown" }
+    | { status: "retryable"; resourceVersion: string }
+    | { status: "applied"; receipt: OperatorReceipt }
+  >;
   /** Pinned trusted installer + verified declarative artifact only. Guard immediately before every effect; checkpoint credentials before allocation. */
   executeEffect: (input: HostedOperatorWorkerEffectContext) => Promise<OperatorReceipt>;
   /** Independently read installed identities/release/provider bindings, with no mutation. */
@@ -267,6 +277,9 @@ const handlePlanOperation = async (
       if (authStageCompleted) {
         nextOperator.authPreparation = record.operator.authPreparation;
       }
+      nextOperator.deliveryCandidates = record.operator.deliveryCandidates;
+      nextOperator.gatewayDeliveryCandidates = record.operator.gatewayDeliveryCandidates;
+      nextOperator.deliveredGatewayDeploymentId = record.operator.deliveredGatewayDeploymentId;
       if (record.operator.gatewayEnvironment !== undefined) {
         nextOperator.gatewayEnvironment = record.operator.gatewayEnvironment;
       }
@@ -620,6 +633,31 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                     })
                   ).record;
                 },
+                checkpointGatewayDelivery: async (rows, selectedId) => {
+                  await assertCurrent();
+                  const candidates = operatorDeploymentCandidatesSchema.parse(rows);
+                  record = (
+                    await ownedUpdate((value) => {
+                      const prior = requireOperator(value);
+                      if (
+                        candidates.some(
+                          (candidate) =>
+                            candidate.operationRef !== operationRef &&
+                            !(prior.gatewayDeliveryCandidates ?? []).some(
+                              (old) => JSON.stringify(old) === JSON.stringify(candidate),
+                            ),
+                        )
+                      ) {
+                        throw new HostedOperatorError("resource_mismatch");
+                      }
+                      const next = { ...prior, gatewayDeliveryCandidates: candidates };
+                      if (selectedId !== undefined) {
+                        next.deliveredGatewayDeploymentId = selectedId;
+                      }
+                      return { ...value, operator: next };
+                    })
+                  ).record;
+                },
                 checkpointGatewayEnvironment: async (rows) => {
                   await assertCurrent();
                   const gatewayEnvironment = managedOperatorEnvironmentRowsSchema.parse(rows);
@@ -669,6 +707,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 deliveryCandidates: requireOperator(record).deliveryCandidates,
                 effect,
                 fenceGeneration,
+                gatewayDeliveryCandidates: requireOperator(record).gatewayDeliveryCandidates,
                 gatewayEnvironmentRows: requireOperator(record).gatewayEnvironment,
                 managedEnvironment: requireOperator(record).managedEnvironment,
                 operationRef,

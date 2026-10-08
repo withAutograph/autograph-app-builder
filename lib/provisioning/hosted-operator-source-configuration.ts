@@ -23,14 +23,16 @@ const worker = z.strictObject({
   operationScope: z.enum([
     "generated-app-release-install-v1",
     "generated-app-access-v1",
-    "auth-protected-migrate-v1",
+    "auth-protected-schema-v1",
+    "auth-protected-membership-v1",
     "neon-resource-bootstrap-v1",
   ]),
   sha256: digest,
   subcommand: z.enum([
     "protected-generated-app-install",
     "protected-generated-app-access",
-    "auth-protected-migrate",
+    "auth-protected-schema",
+    "auth-protected-membership",
     "neon-resource-bootstrap",
   ]),
 });
@@ -52,9 +54,12 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
   applications: z.record(
     id,
     z.strictObject({
+      accessRoles: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,62}$/u)).min(1),
       appDatabase: resource,
       branch: id,
       deploymentId: id,
+      gitSha: z.string().regex(/^[a-f0-9]{40}$/u),
+      organizationProposal: z.strictObject({ name: id, organizationId: id, slug: id }).optional(),
       projectId: id,
       repoId: id,
     }),
@@ -63,10 +68,12 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
   builderCallbackOrigin: httpsOrigin,
   catalogAppIds: z.array(id).min(1),
   gateway: z.strictObject({
+    authBrowserOrigin: httpsOrigin,
     branch: id,
     deploymentId: id,
     environment: z.literal("preview"),
     gatewayOrigin: httpsOrigin,
+    gitSha: z.string().regex(/^[a-f0-9]{40}$/u),
     projectId: id,
     protectedApplicationIds: z.array(id),
     publicOrigin: httpsOrigin,
@@ -87,6 +94,7 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
     authProposal: z.strictObject({ executablePath: id, id, sha256: digest }),
     authWorker: worker,
     image: id,
+    membershipWorker: worker.optional(),
     projectId: id,
     resourcesWorker: worker,
     teamId: id,
