@@ -168,6 +168,14 @@ const fixture = () => {
       type: "plain",
       value: gateway.gatewayOrigin,
     },
+    {
+      id: "trusted-origins",
+      key: "PLATFORM_AUTH_TRUSTED_ORIGINS",
+      target: ["preview"],
+      gitBranch: selection.branch,
+      type: "plain",
+      value: [gateway.gatewayOrigin, gateway.publicOrigin].join(","),
+    },
     { id: "unrelated", key: "APP_TITLE", target: ["production"], type: "plain", value: "keep" },
   ];
   const requests: RecordedRequest[] = [];

@@ -252,6 +252,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         ["BETTER_AUTH_URL", `${gateway.gatewayOrigin}/api/auth`],
         ["BETTER_AUTH_APP_NAME", "apps"],
         ["PLATFORM_PUBLIC_ORIGIN", gateway.gatewayOrigin],
+        ["PLATFORM_AUTH_TRUSTED_ORIGINS", [gateway.gatewayOrigin, gateway.publicOrigin].join(",")],
       ] as const) {
         const matches = byKey(key);
         if (matches.length !== 1) {
