@@ -1,4 +1,5 @@
 import type { DurableHostedSessionRecord } from "./hosted-store";
+import type { resolveHostedOperatorOwnerContext } from "../provisioning/hosted-operator-owner-context";
 
 interface ForwardedOwnerAttributes {
   "mcp:audience": string;
@@ -10,8 +11,15 @@ interface ForwardedOwnerAttributes {
 /** Uses the previously authenticated canonical principal only to re-resolve live session and membership ownership. */
 export const assertHostedBuildDecisionOwner = async (
   session: DurableHostedSessionRecord,
+  dependencies?: { resolveOwner: typeof resolveHostedOperatorOwnerContext },
 ): Promise<void> => {
   const { principal } = session;
+  const authority = {
+    audience: principal.audience,
+    issuer: principal.issuer,
+    ownerUserId: principal.ownerUserId,
+    workspaceId: principal.workspaceId,
+  };
   const attributes: ForwardedOwnerAttributes = {
     "mcp:audience": principal.audience,
     "mcp:scopes": principal.scopes,
@@ -28,15 +36,30 @@ export const assertHostedBuildDecisionOwner = async (
     principalType: "user",
     subject: principal.ownerUserId,
   };
-  const { resolveHostedOperatorOwnerContext } =
-    await import("../provisioning/hosted-operator-owner-context");
-  const owner = await resolveHostedOperatorOwnerContext({
-    adapterSessionId: session.adapterSessionId,
-    authority: principal,
-    environment: process.env,
-    principal,
-    sessionAuth: { current: auth, initiator: auth },
-  });
+  let resolveOwner = dependencies?.resolveOwner;
+  if (resolveOwner === undefined) {
+    const ownerContext = await import("../provisioning/hosted-operator-owner-context");
+    resolveOwner = ownerContext.resolveHostedOperatorOwnerContext;
+  }
+  let owner;
+  try {
+    owner = await resolveOwner({
+      adapterSessionId: session.adapterSessionId,
+      authority,
+      environment: process.env,
+      principal,
+      sessionAuth: { current: auth, initiator: auth },
+    });
+  } catch (error) {
+    const { HostedOperatorError } = await import("../provisioning/hosted-operator-contract");
+    let reason = "owner_context_invalid";
+    if (error instanceof HostedOperatorError) {
+      reason =
+        error.code === "authorization_required" ? "ownership_denied" : "owner_context_unavailable";
+    }
+    console.info(JSON.stringify({ event: "app_builder.approved_build_owner_boundary", reason }));
+    throw error;
+  }
   if (
     owner.sessionId !== session.sessionId ||
     owner.adapterGeneration !== session.adapterGeneration
