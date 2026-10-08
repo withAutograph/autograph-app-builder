@@ -18,6 +18,10 @@ export { localRuntimeEnvironmentPath } from "@/lib/repository/runtime-environmen
 
 const appIdSchema = z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
 
+type LocalPreviewEnvironment = Record<string, string> & {
+  APP_RUNTIME_STATE_DIR: string;
+};
+
 export const localPreviewSetupCommand = (appId: string): string =>
   `MISE_TASK_RUN_AUTO_INSTALL=true MISE_AUTO_INSTALL=true mise run app:runtime prepare ${appIdSchema.parse(appId)} local`;
 
@@ -89,7 +93,7 @@ export const prepareAppLocalPreview = async (input: {
     });
     const roles =
       description.backend.kind === "generated-postgres" ? description.backend.roles : [];
-    const env = {
+    const env: LocalPreviewEnvironment = {
       APP_RUNTIME_STATE_DIR: path.posix.dirname(
         localRuntimeEnvironmentPath(input.root, input.appId),
       ),
