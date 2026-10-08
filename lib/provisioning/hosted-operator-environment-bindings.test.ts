@@ -282,6 +282,18 @@ it("recovers a lost POST response from exact comment, scope and decrypted value 
   await f.writer.bind(f.input, values);
   expect(f.requests.filter((row) => row.method === "POST")).toHaveLength(5);
 });
+it("does not reconcile a complete set of owned rows with a stale encrypted value as applied", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input, values);
+  const owned = f.rows.find((row) => row.key === "PLATFORM_ORIGIN");
+  if (!owned) {
+    throw new Error("Missing owned fixture row");
+  }
+  owned.value = "https://stale.example.test";
+  f.checkpointManagedEnvironment.mockClear();
+  expect(await f.writer.reconcile(f.input, values)).toEqual({ status: "unknown" });
+  expect(f.checkpointManagedEnvironment).not.toHaveBeenCalled();
+});
 it("keeps provider failures unknown and does not write", async () => {
   const f = fixture();
   f.setFailedRead();

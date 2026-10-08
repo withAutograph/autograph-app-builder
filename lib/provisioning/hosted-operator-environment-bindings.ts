@@ -255,7 +255,7 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
     > {
       try {
         const io = open(input, values);
-        const rows = await io.inspect(false);
+        const rows = await io.inspect();
         if (rows.length === 0) {
           return { status: "absent" };
         }
