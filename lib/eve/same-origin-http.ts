@@ -1,3 +1,5 @@
+import { createHostedReadTrace } from "./hosted-read-diagnostic";
+import type { HostedReadTrace } from "./hosted-read-diagnostic";
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -272,8 +274,11 @@ async function authenticatedFetch(input: {
   path: string;
   timeout?: "bounded" | "unbounded";
   init?: RequestInit;
+  readTrace?: HostedReadTrace;
 }) {
+  input.readTrace?.enter("workload_identity");
   const headers = await workloadHeaders(input.workloadIdentity);
+  input.readTrace?.enter("fetch");
   return input.fetchImplementation(endpoint(input.config, input.path), {
     ...input.init,
     headers: { ...headers, ...input.init?.headers },
@@ -293,6 +298,7 @@ export async function* streamSameOriginEveEvents(input: {
   readDeadline?: boolean;
   readSignal?: AbortSignal;
   startIndex?: number;
+  readTrace?: HostedReadTrace;
 }): AsyncGenerator<MessageStreamEvent, void, undefined> {
   // Matches the supported SDK's absolute startIndex + follow:false contract: pin this opened durable tail.
   const startIndex = z
@@ -318,6 +324,7 @@ export async function* streamSameOriginEveEvents(input: {
     }
     throw error;
   }
+  input.readTrace?.enter("headers");
   if (response.status >= 300 && response.status < 400) {
     throw new Error("Canonical Eve redirects are not allowed.");
   }
@@ -364,7 +371,10 @@ export async function* streamSameOriginEveEvents(input: {
   try {
     while (eventCount <= tail) {
       // oxlint-disable-next-line eslint/no-await-in-loop -- preserve intentional sequential control flow
+      input.readTrace?.enter("decode");
+      // oxlint-disable-next-line eslint/no-await-in-loop -- preserve stream backpressure
       const chunk = await reader.read();
+      input.readTrace?.increment("bodyBytes", chunk.value?.byteLength ?? 0);
       if (chunk.done) {
         buffered += decoder.decode();
         const line = buffered.trim();
@@ -631,148 +641,174 @@ export async function observeSameOriginEveStream(
   workingPreview?: PublicWorkingPreview | null;
   artifactProjectionRequiresLegacyReadback: boolean;
 }> {
-  const state =
-    input.nativeObservationState === undefined
-      ? undefined
-      : nativeObservationStateSchema.parse(input.nativeObservationState);
-  if (state !== undefined && state.adapterSessionId !== input.sessionId) {
-    throw new Error("Native observer state belongs to another adapter session.");
-  }
-  const pending = new Map<string, PublicInputRequest>(
-    state?.pendingRequests.map((request) => [request.requestId, request]),
-  );
-  let installedEventCount = state?.nextNativeIndex ?? 0;
-  let publicEventCount = state?.publicEventCount ?? 0;
-  let boundary: EveSessionStatus = state?.boundary ?? "working";
-  let invalidInput = state?.invalidInput ?? false;
-  let currentTurnId: string | undefined = state?.currentTurnId;
-  let uiPreview: PublicUiPreview | undefined = state?.uiPreview;
-  let workingPreview: PublicWorkingPreview | null | undefined = state?.workingPreview;
-  const artifactReadback = createArtifactReadbackClassifier(
-    input.sessionId,
-    state?.artifactReadback,
-  );
-  const prototype = createInstalledPrototypeProjector(state?.prototypeProjector);
-  const prototypeReference = createInstalledPrototypeReferenceReducer({
-    sessionId: input.sessionId,
-    state: state?.prototypeReference,
-  });
-  for await (const event of streamSameOriginEveEvents({
-    ...input,
-    startIndex: state?.nextNativeIndex ?? 0,
-  })) {
-    artifactReadback.accept(event);
-    prototype.observe(event);
-    prototypeReference.accept(event);
-    input.onInstalledEvent?.(event);
-    await input.onPrivateEvent?.(event);
-    installedEventCount += 1;
-    const turnId =
-      "data" in event && "turnId" in event.data
-        ? (event.data.turnId as string | undefined)
-        : undefined;
-    if (
-      turnId !== undefined &&
-      !["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type)
-    ) {
-      currentTurnId = turnId;
+  const readTrace = input.readTrace ?? createHostedReadTrace({ sessionId: input.sessionId });
+  const readSignal =
+    input.readSignal ??
+    (input.readDeadline === true ? AbortSignal.timeout(SESSION_READ_TIMEOUT_MS) : undefined);
+  const stopWatching = readTrace.watch(readSignal);
+  try {
+    const state =
+      input.nativeObservationState === undefined
+        ? undefined
+        : nativeObservationStateSchema.parse(input.nativeObservationState);
+    if (state !== undefined && state.adapterSessionId !== input.sessionId) {
+      throw new Error("Native observer state belongs to another adapter session.");
     }
-    if (
-      ["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type) &&
-      (turnId === undefined || turnId === currentTurnId)
-    ) {
-      currentTurnId = undefined;
-    }
-    if (["session.waiting", "session.completed", "session.failed"].includes(event.type)) {
-      currentTurnId = undefined;
-    }
-    if (event.type === "turn.cancelled") {
-      boundary = "cancelled";
-    }
-    if (event.type === "session.waiting") {
-      boundary = "waiting";
-    }
-    if (event.type === "session.completed") {
-      boundary = "completed";
-    }
-    if (event.type === "session.failed") {
-      boundary = "failed";
-    }
-    if (event.type === "step.started") {
-      boundary = "working";
-    }
-    if (event.type === "approval.settled") {
-      pending.delete(event.data.requestId);
-    }
-    const nextUiPreview = latestInstalledUiPreview([event]);
-    if (nextUiPreview !== undefined) {
-      uiPreview = nextUiPreview;
-    }
-    const nextWorkingPreview = latestInstalledWorkingPreview([event]);
-    if (nextWorkingPreview !== undefined) {
-      workingPreview = nextWorkingPreview;
-    }
-    for (const projected of projectInstalledEveEvent(event, 0)) {
-      const indexed = { ...projected, index: publicEventCount };
-      // Internal resolution events still update reducers/callbacks but have no public checkpoint row.
-      if (toPublicEvent(indexed) !== null) {
-        publicEventCount += 1;
-      }
-      if (indexed.type === "input.requested" && indexed.request !== undefined) {
-        pending.set(indexed.request.requestId, indexed.request);
-      }
-      if (indexed.type === "input.resolved") {
-        for (const requestId of indexed.requestIds ?? []) {
-          pending.delete(requestId);
-        }
+    const pending = new Map<string, PublicInputRequest>(
+      state?.pendingRequests.map((request) => [request.requestId, request]),
+    );
+    let installedEventCount = state?.nextNativeIndex ?? 0;
+    let publicEventCount = state?.publicEventCount ?? 0;
+    let boundary: EveSessionStatus = state?.boundary ?? "working";
+    let invalidInput = state?.invalidInput ?? false;
+    let currentTurnId: string | undefined = state?.currentTurnId;
+    let uiPreview: PublicUiPreview | undefined = state?.uiPreview;
+    let workingPreview: PublicWorkingPreview | null | undefined = state?.workingPreview;
+    const artifactReadback = createArtifactReadbackClassifier(
+      input.sessionId,
+      state?.artifactReadback,
+    );
+    const prototype = createInstalledPrototypeProjector(state?.prototypeProjector);
+    const prototypeReference = createInstalledPrototypeReferenceReducer({
+      sessionId: input.sessionId,
+      state: state?.prototypeReference,
+    });
+    readTrace.set("nativeStartIndex", installedEventCount);
+    readTrace.set("nativeNextIndex", installedEventCount);
+    for await (const event of streamSameOriginEveEvents({
+      ...input,
+      readSignal,
+      readTrace,
+      startIndex: state?.nextNativeIndex ?? 0,
+    })) {
+      readTrace.increment("decodedEvents");
+      artifactReadback.accept(event);
+      prototype.observe(event);
+      prototypeReference.accept(event);
+      input.onInstalledEvent?.(event);
+      readTrace.enter("private_callback");
+      await input.onPrivateEvent?.(event);
+      readTrace.increment("privateCallbacks");
+      readTrace.enter("decode");
+      installedEventCount += 1;
+      readTrace.set("nativeNextIndex", installedEventCount);
+      const turnId =
+        "data" in event && "turnId" in event.data
+          ? (event.data.turnId as string | undefined)
+          : undefined;
+      if (
+        turnId !== undefined &&
+        !["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type)
+      ) {
+        currentTurnId = turnId;
       }
       if (
-        event.type === "input.requested" &&
-        indexed.type === "status" &&
-        indexed.status === "failed"
+        ["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type) &&
+        (turnId === undefined || turnId === currentTurnId)
       ) {
-        invalidInput = true;
+        currentTurnId = undefined;
       }
-      // oxlint-disable-next-line eslint/no-await-in-loop -- the callback controls storage backpressure
-      await input.onEvent(indexed);
+      if (["session.waiting", "session.completed", "session.failed"].includes(event.type)) {
+        currentTurnId = undefined;
+      }
+      if (event.type === "turn.cancelled") {
+        boundary = "cancelled";
+      }
+      if (event.type === "session.waiting") {
+        boundary = "waiting";
+      }
+      if (event.type === "session.completed") {
+        boundary = "completed";
+      }
+      if (event.type === "session.failed") {
+        boundary = "failed";
+      }
+      if (event.type === "step.started") {
+        boundary = "working";
+      }
+      if (event.type === "approval.settled") {
+        pending.delete(event.data.requestId);
+      }
+      const nextUiPreview = latestInstalledUiPreview([event]);
+      if (nextUiPreview !== undefined) {
+        uiPreview = nextUiPreview;
+      }
+      const nextWorkingPreview = latestInstalledWorkingPreview([event]);
+      if (nextWorkingPreview !== undefined) {
+        workingPreview = nextWorkingPreview;
+      }
+      for (const projected of projectInstalledEveEvent(event, 0)) {
+        const indexed = { ...projected, index: publicEventCount };
+        // Internal resolution events still update reducers/callbacks but have no public checkpoint row.
+        if (toPublicEvent(indexed) !== null) {
+          publicEventCount += 1;
+        }
+        if (indexed.type === "input.requested" && indexed.request !== undefined) {
+          pending.set(indexed.request.requestId, indexed.request);
+        }
+        if (indexed.type === "input.resolved") {
+          for (const requestId of indexed.requestIds ?? []) {
+            pending.delete(requestId);
+          }
+        }
+        if (
+          event.type === "input.requested" &&
+          indexed.type === "status" &&
+          indexed.status === "failed"
+        ) {
+          invalidInput = true;
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- the callback controls storage backpressure
+        readTrace.enter("public_spool");
+        // oxlint-disable-next-line eslint/no-await-in-loop -- preserve storage backpressure
+        await input.onEvent(indexed);
+        readTrace.increment("publicSpoolEvents");
+        readTrace.enter("decode");
+      }
     }
-  }
-  let status: EveSessionStatus = boundary;
-  if (invalidInput) {
-    status = "failed";
-  } else if (boundary !== "completed" && boundary !== "failed" && pending.size > 0) {
-    status = "input_required";
-  }
-  return {
-    artifactProjectionRequiresLegacyReadback: artifactReadback.requiresLegacy(),
-    installedEventCount,
-    nativeObservationState: nativeObservationStateSchema.parse({
-      adapterSessionId: input.sessionId,
-      artifactReadback: artifactReadback.checkpoint(),
-      boundary,
-      invalidInput,
+    let status: EveSessionStatus = boundary;
+    if (invalidInput) {
+      status = "failed";
+    } else if (boundary !== "completed" && boundary !== "failed" && pending.size > 0) {
+      status = "input_required";
+    }
+    readTrace.completed();
+    return {
+      artifactProjectionRequiresLegacyReadback: artifactReadback.requiresLegacy(),
+      installedEventCount,
+      nativeObservationState: nativeObservationStateSchema.parse({
+        adapterSessionId: input.sessionId,
+        artifactReadback: artifactReadback.checkpoint(),
+        boundary,
+        invalidInput,
+        nextNativeIndex: installedEventCount,
+        pendingRequests: [...pending.values()],
+        prototypeProjector: prototype.checkpoint(),
+        prototypeReference: prototypeReference.checkpoint(),
+        publicEventCount,
+        version: 1,
+        ...(currentTurnId === undefined ? {} : { currentTurnId }),
+        ...(uiPreview === undefined ? {} : { uiPreview }),
+        ...(workingPreview === undefined ? {} : { workingPreview }),
+      }),
       nextNativeIndex: installedEventCount,
       pendingRequests: [...pending.values()],
-      prototypeProjector: prototype.checkpoint(),
-      prototypeReference: prototypeReference.checkpoint(),
+      ...(prototype.current() === undefined ? {} : { prototype: prototype.current() }),
+      ...(prototypeReference.snapshot() === undefined
+        ? {}
+        : { prototypeRef: prototypeReference.snapshot() }),
       publicEventCount,
-      version: 1,
-      ...(currentTurnId === undefined ? {} : { currentTurnId }),
+      status,
+      ...(currentTurnId === undefined ? {} : { activeTurnId: currentTurnId }),
       ...(uiPreview === undefined ? {} : { uiPreview }),
       ...(workingPreview === undefined ? {} : { workingPreview }),
-    }),
-    nextNativeIndex: installedEventCount,
-    pendingRequests: [...pending.values()],
-    ...(prototype.current() === undefined ? {} : { prototype: prototype.current() }),
-    ...(prototypeReference.snapshot() === undefined
-      ? {}
-      : { prototypeRef: prototypeReference.snapshot() }),
-    publicEventCount,
-    status,
-    ...(currentTurnId === undefined ? {} : { activeTurnId: currentTurnId }),
-    ...(uiPreview === undefined ? {} : { uiPreview }),
-    ...(workingPreview === undefined ? {} : { workingPreview }),
-  };
+    };
+  } catch (error) {
+    readTrace.failed();
+    throw error;
+  } finally {
+    stopWatching();
+  }
 }
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
