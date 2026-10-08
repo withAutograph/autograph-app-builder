@@ -13,21 +13,29 @@ interface DeploymentListQuery {
   until?: string;
 }
 const id = z.string().min(1);
-const deploymentSchema = z.object({
-  gitSource: z.object({
-    ref: id,
-    repoId: z.union([z.number(), id]),
-    sha: z.string().regex(/^[a-f0-9]{40}$/u),
-    type: z.literal("github"),
-  }),
-  id,
-  meta: z.record(z.string(), z.string()),
-  ownerId: id.optional(),
-  projectId: id,
-  readyState: id,
-  target: z.null(),
-  url: id,
-});
+const deploymentSchema = z
+  .object({
+    customEnvironment: z.null().optional(),
+    gitSource: z.object({
+      ref: id,
+      repoId: z.union([z.number(), id]),
+      sha: z.string().regex(/^[a-f0-9]{40}$/u),
+      type: z.literal("github"),
+    }),
+    id,
+    meta: z.record(z.string(), z.string()),
+    oidcTokenClaims: z.object({ environment: z.literal("preview") }).optional(),
+    ownerId: id.optional(),
+    projectId: id,
+    readyState: id,
+    target: z.union([z.null(), z.literal("staging")]),
+    url: id,
+  })
+  .refine(
+    (deployment) =>
+      deployment.target === null || deployment.oidcTokenClaims?.environment === "preview",
+    "Native staging target must attest the Preview environment.",
+  );
 const pageSchema = z.object({
   deployments: z.array(z.object({ meta: z.record(z.string(), z.string()).optional(), uid: id })),
   pagination: z.object({ next: z.number().nullable() }).optional(),
@@ -85,7 +93,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
         meta: Record<string, string>;
         name: string;
         project: string;
-        target: "preview";
+        target: "staging";
       },
     ) => {
       await assertCurrent();
@@ -299,7 +307,7 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
             meta: reader.expectedMeta,
             name: project.name,
             project: project.id,
-            target: "preview",
+            target: "staging",
           },
         ),
       );
