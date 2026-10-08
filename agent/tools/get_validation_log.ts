@@ -1,11 +1,12 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-import { openHostedPostgresDatabase } from "@/lib/mcp/hosted-route";
-import { createPostgresValidationLogStore } from "@/lib/repository/postgres-validation-log-store";
+import {
+  assertValidationLogSession,
+  validationLogStoreForSession,
+} from "@/lib/agent/validation-log-store-for-session";
 import { readValidationLogPage } from "@/lib/repository/validation-log";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
-import { exactForwardedSessionAuthority } from "@/lib/hosted/session-authority";
 
 export const validationLogInputSchema = z.union([
   z.strictObject({
@@ -24,16 +25,14 @@ export default defineTool({
     "Read one authenticated page of a saved validation or dependency command log after execution or sandbox cleanup. To recover saved dependency references, first use operation: dependency-attempts. For pages supply the exact attempt, command, channel, log ID and digest. Continue with each nextCursor and verify assembled UTF-8 SHA-256 against digest. Page complete means the manifest is exhausted; completion distinguishes complete capture, interrupted output, and an unavailable durable suffix.",
   async execute(input, ctx) {
     if ("operation" in input) {
-      exactForwardedSessionAuthority(ctx.session.auth);
+      await assertValidationLogSession({
+        sessionAuth: ctx.session.auth,
+        sessionId: ctx.session.id,
+      });
       const state = appBuilderWorkflowState.get();
       return { attempts: state.phase === "empty" ? [] : (state.checkoutDependencyAttempts ?? []) };
     }
-    const databaseUrl = process.env.DATABASE_URL;
-    if (databaseUrl === undefined || databaseUrl.length === 0) {
-      throw new Error("Durable validation log storage is unavailable.");
-    }
-    const store = createPostgresValidationLogStore({
-      db: openHostedPostgresDatabase(databaseUrl),
+    const store = await validationLogStoreForSession({
       sessionAuth: ctx.session.auth,
       sessionId: ctx.session.id,
     });

@@ -21,8 +21,7 @@ import {
   sandboxValidationCommandExecutor,
 } from "@/lib/repository/target-validation";
 import { hasTestCapability } from "@/lib/testing/test-capability";
-import { createPostgresValidationLogStore } from "@/lib/repository/postgres-validation-log-store";
-import { openHostedPostgresDatabase } from "@/lib/mcp/hosted-route";
+import { validationLogStoreForSession } from "@/lib/agent/validation-log-store-for-session";
 import { productionReadinessHandoff } from "@/lib/agent/production-readiness-handoff";
 import {
   invalidateProductBehaviorEvidence,
@@ -245,12 +244,12 @@ export default defineTool({
       validationPhase(ctx.callId, "declared_local_data_ready");
     }
     validationPhase(ctx.callId, "running_repository_commands");
-    const databaseUrl = process.env.DATABASE_URL;
-    if (!fixture && (databaseUrl === undefined || databaseUrl.length === 0)) {
-      throw new Error(
-        "Durable validation log storage is unavailable. Configure the hosted database, then retry validation.",
-      );
-    }
+    const logStore = fixture
+      ? undefined
+      : await validationLogStoreForSession({
+          sessionAuth: ctx.session.auth,
+          sessionId: ctx.session.id,
+        });
     const result = await executeProposalBoundValidation({
       abortSignal: ctx.abortSignal,
       appId: current.appSpec.appId,
@@ -260,17 +259,9 @@ export default defineTool({
       executor: fixture
         ? fixtureValidationCommandExecutor()
         : sandboxValidationCommandExecutor({ runtime }),
+      logStore,
       sandbox,
-      ...(databaseUrl === undefined
-        ? {}
-        : {
-            logStore: createPostgresValidationLogStore({
-              db: openHostedPostgresDatabase(databaseUrl),
-              sessionAuth: ctx.session.auth,
-              sessionId: ctx.session.id,
-            }),
-            sessionId: ctx.session.id,
-          }),
+      sessionId: ctx.session.id,
     });
     validationPhase(ctx.callId, "repository_commands_finished", result.ok);
     if (!result.ok) {
