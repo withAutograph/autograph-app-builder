@@ -48,7 +48,6 @@ describe("separate native operator host", () => {
     const root = path.resolve(import.meta.dirname, "../..");
     expect(config.services).toEqual({
       operator: {
-        buildCommand: "",
         entrypoint: "lib/provisioning/hosted-operator-function.ts",
         framework: "node",
         root: "../../..",
