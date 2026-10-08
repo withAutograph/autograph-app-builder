@@ -89,7 +89,10 @@ describe("safe hosted read trace", () => {
       () => {
         throw new Error(secret);
       },
-      async () => Promise.reject(new Error(secret)),
+      async () => {
+        await Promise.resolve();
+        throw new Error(secret);
+      },
     ];
     for (const sink of sinks) {
       const trace = createHostedReadTrace({ sessionId: secret, sink });
