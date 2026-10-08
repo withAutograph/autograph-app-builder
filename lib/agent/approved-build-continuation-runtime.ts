@@ -1,3 +1,5 @@
+import { defineState } from "eve/context";
+import { hasTestCapability } from "../testing/test-capability";
 import type { HookContext } from "eve/hooks";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { readLocalOperatorArtifactAuthority } from "../provisioning/local-operator-artifact-store";
@@ -6,6 +8,12 @@ import {
   readInternalBuildMarker,
 } from "./approved-build-continuation";
 import type { ApprovedBuildDecision } from "./approved-build-continuation";
+
+/** Structural evaluations retain their actual private Eve projection without claiming a public hosted session. */
+export const diagnosticBuildDecisionState = defineState<ApprovedBuildDecision | null>(
+  "autograph-app-builder.diagnostic-build-decision.v1",
+  () => null,
+);
 
 // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Authenticate the current owner before opening its private persistence adapter.
 const ownerStore = async (ctx: Pick<HookContext, "session">) => {
@@ -38,6 +46,10 @@ export const recordApprovedBuildDecision = async (
   decision: ApprovedBuildDecision,
 ): Promise<void> => {
   const parsed = approvedBuildDecisionSchema.parse(decision);
+  if (hasTestCapability("simulated-target")) {
+    diagnosticBuildDecisionState.update(() => parsed);
+    return;
+  }
   if ((await readLocalOperatorArtifactAuthority()) !== undefined) {
     const { recordLocalBuildDecision } = await import("./local-build-continuation");
     await recordLocalBuildDecision(ctx, parsed);
