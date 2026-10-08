@@ -28,6 +28,7 @@ const fixture = async () => {
     audience: "https://operator.example",
     authResourceId: "auth-owned",
     bootstrapPlanDigest: "b".repeat(64),
+    browserOrigin: "https://public-auth.example",
     endpointOrigin: "https://gateway.example",
     expiresAt: new Date(now.getTime() + 600_000).toISOString(),
     issuer: "https://public.example",

@@ -149,7 +149,7 @@ export const createRealmIdentityCallbackHandler =
           nonceSha256: realmIdentityNonceSha256(input.nonce),
           ownerSessionId: input.ownerSessionId,
         });
-        if (request.headers.get("origin") !== staging.link.issuer) {
+        if (request.headers.get("origin") !== staging.link.browserOrigin) {
           throw new Error("realm_callback_origin");
         }
         const getKey = createRemoteJWKSet(new URL(staging.jwksUrl), { [customFetch]: ports.fetch });
@@ -260,6 +260,7 @@ export const createRealmIdentityCallbackDeploymentHandler =
       if (new URL(runtime.issuer).origin !== configuration.builderCallbackOrigin) {
         throw new Error("realm_callback_configuration");
       }
+      let selectedEndpointOrigin: string | undefined;
       return await createRealmIdentityCallbackHandler({
         assertCurrent: controlPlane.assertPlanningAuthorized,
         authenticate: async (incoming, selector) => {
@@ -284,7 +285,17 @@ export const createRealmIdentityCallbackDeploymentHandler =
         consume: async (input) => {
           await controlPlane.consumeOwnerRealmIdentityCallback(input);
         },
-        fetch: createHostedOperatorRealmHttpTransport(configuration, "builder"),
+        fetch: async (input, init) => {
+          if (selectedEndpointOrigin === undefined) {
+            throw new Error("realm_callback_configuration");
+          }
+          return await createHostedOperatorRealmHttpTransport(
+            configuration,
+            "builder",
+            undefined,
+            selectedEndpointOrigin,
+          )(input, init);
+        },
         keyring: readVercelTokenKeyringEnvironment({ ...environment }),
         publish: async (context, proof) => {
           await controlPlane.assertPlanningAuthorized(context);
@@ -310,7 +321,11 @@ export const createRealmIdentityCallbackDeploymentHandler =
           await controlPlane.assertPlanningAuthorized(context);
           return { proofRef, proofSha256 };
         },
-        staging: async (input) => await controlPlane.readPendingRealmIdentityLinkForStaging(input),
+        staging: async (input) => {
+          const pending = await controlPlane.readPendingRealmIdentityLinkForStaging(input);
+          selectedEndpointOrigin = pending.link.endpointOrigin;
+          return pending;
+        },
       })(request);
     } catch {
       return Response.json(

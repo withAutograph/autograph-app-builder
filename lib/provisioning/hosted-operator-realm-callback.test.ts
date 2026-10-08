@@ -29,6 +29,7 @@ const fixture = async (ownerSessionId = "original-public-session") => {
     audience: "https://operator.example",
     authResourceId: "auth-owned",
     bootstrapPlanDigest: "b".repeat(64),
+    browserOrigin: "https://public-auth.example",
     endpointOrigin: "https://immutable-gateway.example",
     expiresAt: new Date(Date.now() + 600_000).toISOString(),
     issuer: "https://public-auth.example",

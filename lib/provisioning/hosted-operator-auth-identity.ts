@@ -36,6 +36,7 @@ export const pendingRealmIdentityLinkSchema = z.object({
   audience: z.url(),
   authResourceId: id,
   bootstrapPlanDigest: hash,
+  browserOrigin: z.url(),
   consumedAt: z.iso.datetime({ offset: true }).optional(),
   endpointOrigin: z.url(),
   expiresAt: z.iso.datetime({ offset: true }),
