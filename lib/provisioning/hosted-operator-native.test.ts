@@ -2,7 +2,7 @@ import config from "./operator-host/vercel.json";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import entrypoint from "./hosted-operator-function";
+import entrypoint from "./operator-host/entrypoint";
 import { createHostedOperatorNativeHandler } from "./hosted-operator-native";
 import { HostedOperatorError } from "./hosted-operator-contract";
 import type { ProtectedHostedOperatorDependencies } from "./hosted-operator-service";
@@ -48,9 +48,9 @@ describe("separate native operator host", () => {
     const root = path.resolve(import.meta.dirname, "../..");
     expect(config.services).toEqual({
       operator: {
-        entrypoint: "lib/provisioning/hosted-operator-function.ts",
+        entrypoint: "entrypoint.ts",
         framework: "node",
-        root: "../../..",
+        root: ".",
       },
     });
     expect(config.rewrites).toEqual([

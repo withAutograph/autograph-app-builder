@@ -2,9 +2,9 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "services": {
     "operator": {
-      "root": "../../..",
+      "root": ".",
       "framework": "node",
-      "entrypoint": "lib/provisioning/hosted-operator-function.ts"
+      "entrypoint": "entrypoint.ts"
     }
   },
   "rewrites": [
