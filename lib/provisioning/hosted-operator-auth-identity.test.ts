@@ -206,3 +206,69 @@ it("uses only the live canonical nonce and approved normal Auth browser origin f
     }),
   ).toThrow();
 });
+
+it("uses the immutable consumed receipt for an expired transport proof while fresh Realm readback governs authority", async () => {
+  const f = await fixture();
+  const issued = Math.floor(Date.now() / 1000) - 600;
+  const proof = await new SignJWT({ ...f.claims, exp: issued + 240, iat: issued })
+    .setProtectedHeader({
+      alg: "EdDSA",
+      kid: "actual-native-key",
+      typ: "autograph-realm-operator-link+jwt",
+    })
+    .sign(keys.privateKey);
+  const capturedAt = new Date((issued + 1) * 1000).toISOString();
+  const pending = {
+    ...f.pending,
+    consumedAt: capturedAt,
+    proofRef: "owned-private-proof",
+    proofSha256: createHash("sha256").update(proof).digest("hex"),
+  };
+  const current = vi.fn(async () => {
+    await Promise.resolve();
+  });
+  const readback = vi.fn(async (request: Request) => {
+    const body = new URLSearchParams(await request.text());
+    expect(JSON.parse(body.get("attestation") ?? "null")).toEqual({
+      capturedAt,
+      proofSha256: pending.proofSha256,
+      purpose: "realm-captured-link-readback-v1",
+      realmSessionId: f.claims.sessionId,
+      version: 1,
+    });
+    return Response.json({
+      identity: {
+        actorId: f.claims.sub,
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        organizationId: null,
+        sessionId: f.claims.sessionId,
+        version: 1,
+      },
+      resource,
+    });
+  });
+  await expect(
+    readVerifiedRealmAccess({ ...f, assertCurrent: current, pending, proof, readback }),
+  ).resolves.toMatchObject({ identity: { actorId: f.claims.sub } });
+  await expect(
+    readVerifiedRealmAccess({ ...f, assertCurrent: current, proof, readback }),
+  ).rejects.toThrow();
+  await expect(
+    readVerifiedRealmAccess({
+      ...f,
+      assertCurrent: current,
+      pending: { ...pending, consumedAt: new Date((issued - 1) * 1000).toISOString() },
+      proof,
+      readback,
+    }),
+  ).rejects.toThrow();
+  await expect(
+    readVerifiedRealmAccess({
+      ...f,
+      assertCurrent: current,
+      pending,
+      proof,
+      readback: async () => await Promise.resolve(new Response(null, { status: 401 })),
+    }),
+  ).rejects.toThrow();
+});

@@ -149,14 +149,35 @@ export const readVerifiedRealmAccess = async (input: {
   ) {
     throw new HostedOperatorError("auth_identity_required");
   }
-  const claims = await verifySignedRealmIdentityProof(input);
+  const captureTime = input.pending.consumedAt;
+  if (captureTime !== undefined && Date.parse(captureTime) > Date.now()) {
+    throw new HostedOperatorError("auth_identity_required");
+  }
+  const verificationInput: Parameters<typeof verifySignedRealmIdentityProof>[0] = { ...input };
+  if (captureTime !== undefined) {
+    verificationInput.now = new Date(captureTime);
+  }
+  const claims = await verifySignedRealmIdentityProof(verificationInput);
   const url = new URL(
     "/api/auth/platform/operator-identity/readback",
     input.pending.endpointOrigin,
   );
+  const body = new URLSearchParams({ proof: input.proof });
+  if (captureTime !== undefined) {
+    body.set(
+      "attestation",
+      JSON.stringify({
+        capturedAt: captureTime,
+        proofSha256: input.pending.proofSha256,
+        purpose: "realm-captured-link-readback-v1",
+        realmSessionId: claims.sessionId,
+        version: 1,
+      }),
+    );
+  }
   const response = await input.readback(
     new Request(url, {
-      body: new URLSearchParams({ proof: input.proof }),
+      body,
       headers: { "content-type": "application/x-www-form-urlencoded" },
       method: "POST",
       redirect: "error",
