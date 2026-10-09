@@ -1,4 +1,9 @@
 import { defineTool } from "eve/tools";
+import { getBuilderSandboxId } from "@/lib/sandbox/builder-sandbox";
+import {
+  recoverSavedWorkflowGitHubBinding,
+  throwSavedBindingGuard,
+} from "@/lib/agent/saved-github-binding";
 import { getSourceBoundSandbox } from "@/lib/agent/source-bound-sandbox";
 import { never } from "eve/tools/approval";
 import { z } from "zod";
@@ -197,11 +202,32 @@ export default defineTool({
   approval: never(),
   description:
     "Resolve and prepare an existing connected GitHub repository. In a new Builder session, select a branch or any open PR using pullRequestNumber; draftPullRequestNumber remains a legacy input. Builder uses its current branch as the private source and never replaces an occupied source. Pass selectedInstallationId=null for the single verified installation. For an initial appBaseline, prepare that same-repository historical app version before exposing app source while retaining the selected platform branch. This operation never pushes, branches, opens a PR, or grants publication approval.",
+  // oxlint-disable-next-line eslint/complexity -- Source selection and legacy recovery retain their ordered authority boundaries.
   async execute(input, ctx) {
     const pullRequestNumber = input.pullRequestNumber ?? input.draftPullRequestNumber;
-    const initialWorkflow = appBuilderWorkflowState.get();
+    let initialWorkflow = appBuilderWorkflowState.get();
     const initialSource = sourceWorkflowState.get();
     const savedBaseline = appBaselineState.get();
+    const recoveryInput = {
+      access: repositoryAccessReceiptState.get(),
+      sessionId: ctx.session.id,
+      source: initialSource,
+      stage: "resolve-workflow-state" as const,
+      workflow: initialWorkflow,
+    };
+    const recovered = recoverSavedWorkflowGitHubBinding(recoveryInput);
+    if (recovered.recovered) {
+      const ownedSandbox = await getSourceBoundSandbox(ctx);
+      const confirmed = recoverSavedWorkflowGitHubBinding({
+        ...recoveryInput,
+        providerWorkspaceId: getBuilderSandboxId(ownedSandbox),
+      });
+      appBuilderWorkflowState.update((latest) => {
+        assertExactWorkflowState(latest, initialWorkflow, "recover saved GitHub source binding");
+        return confirmed.workflow;
+      });
+      initialWorkflow = confirmed.workflow;
+    }
     assertInitialAppBaseline({
       occupied: initialWorkflow.phase !== "empty" || initialSource.phase !== "empty",
       repository: input.repository,
@@ -296,6 +322,14 @@ export default defineTool({
       sessionId: ctx.session.id,
     });
     assertExactImmutableGitHubSourceReceipt(prepared.githubSource);
+    const selectedPreparedSource = selectedGitHubSourceForSandboxRestore({
+      sourceState: prepared.githubSource,
+      workflowState: selectedGitHubSource,
+    });
+    if (selectedPreparedSource === undefined) {
+      throwSavedBindingGuard(initialWorkflow, initialSource, "resolve-source-state");
+    }
+    const preparedGitHubSource = selectedPreparedSource ?? prepared.githubSource;
     recordPreparedBaseline(selectedBaseline, prepared.appBaseline, ctx.session.id);
     repositoryAccessReceiptState.update((current) => {
       if (current?.digest !== access.receipt.digest) {
@@ -312,14 +346,14 @@ export default defineTool({
       if (current.phase !== "empty") {
         if (
           current.receipt.digest !== prepared.sourceReceipt.digest ||
-          current.githubSource?.digest !== prepared.githubSource.digest
+          current.githubSource?.digest !== preparedGitHubSource.digest
         ) {
-          throw new Error("This app build already owns a different GitHub source binding.");
+          throwSavedBindingGuard(initialWorkflow, current, "resolve-source-state");
         }
         return current;
       }
       return {
-        githubSource: prepared.githubSource,
+        githubSource: preparedGitHubSource,
         phase: "reviewed",
         receipt: prepared.sourceReceipt,
         version: APP_BUILDER_SOURCE_VERSION,
@@ -331,15 +365,15 @@ export default defineTool({
         if (
           workflowWorkspace(current)?.workspaceDigest !== prepared.workspace.workspaceDigest ||
           current.sourceReceipt.digest !== prepared.sourceReceipt.digest ||
-          current.githubSource?.digest !== prepared.githubSource.digest
+          current.githubSource?.digest !== preparedGitHubSource.digest
         ) {
-          throw new Error("This app build already owns a different GitHub source binding.");
+          throwSavedBindingGuard(current, initialSource, "resolve-workflow-state");
         }
         return current;
       }
       return {
         artifacts: [],
-        githubSource: prepared.githubSource,
+        githubSource: preparedGitHubSource,
         phase: "prepared",
         preparedByCallId: ctx.callId,
         sourceReceipt: prepared.sourceReceipt,
@@ -348,7 +382,7 @@ export default defineTool({
       };
     });
     return {
-      githubSource: prepared.githubSource,
+      githubSource: preparedGitHubSource,
       repository: access.access.repository,
       repositoryAccessReceiptDigest: prepared.accessReceipt.digest,
       scope: access.access.scope,
