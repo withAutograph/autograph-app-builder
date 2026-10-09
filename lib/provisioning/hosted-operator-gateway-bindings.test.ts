@@ -307,7 +307,10 @@ const fixture = () => {
   const assertAuthorized = vi.fn(async () => {});
   const readAuthRuntimeUrl = vi.fn(async () => privateAuthUrl);
   let canonicalRows: CanonicalGatewayEnvironmentRow[] = [];
-  const readCanonicalGatewayRows = vi.fn(async () => structuredClone(canonicalRows));
+  const readCanonicalGatewayRows = vi.fn(async () => ({
+    active: false,
+    rows: structuredClone(canonicalRows),
+  }));
   const writer = createHostedOperatorGatewayBindings({
     assertAuthorized,
     readCanonicalGatewayRows,
@@ -719,7 +722,7 @@ it("fails closed when a legacy adoption plan has no approved canonical rows", as
 it("rechecks the source journal after provider awaits and rejects a changed snapshot", async () => {
   const f = await adoptionFixture();
   f.readCanonicalGatewayRows
-    .mockResolvedValueOnce(f.canonical)
+    .mockResolvedValueOnce({ active: false, rows: f.canonical })
     .mockRejectedValue(new Error("source approval revoked"));
   await expect(f.writer.verifyCanonicalOwnership(f.input)).rejects.toThrow("operator_unavailable");
   expect(f.requests.every((request) => request.method === "GET")).toBe(true);
@@ -756,7 +759,7 @@ it("keeps the approved canonical snapshot frozen across an awaited source lookup
   forged[0].valueSha256 = "f".repeat(64);
   f.readCanonicalGatewayRows.mockImplementation(async () => {
     f.input.plan.authAdoption!.gatewayEnvironment = forged;
-    return forged;
+    return { active: false, rows: forged };
   });
   await expect(f.writer.verifyCanonicalOwnership(f.input)).rejects.toThrow("operator_unavailable");
   expect(f.requests).toHaveLength(0);
@@ -847,5 +850,40 @@ it("rechecks source authority after the prospective checkpoint and before the ad
     }
   });
   await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it("retains sibling policy updates using independently verified active target ownership", async () => {
+  const f = await adoptionFixture();
+  f.readCanonicalGatewayRows.mockResolvedValue({ active: true, rows: f.canonical });
+  const policy = f.rows.find((row) => row.key === "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS");
+  if (policy === undefined) {
+    throw new Error("missing policy");
+  }
+  policy.value = JSON.stringify([
+    ...z.array(z.string()).parse(JSON.parse(z.string().parse(policy.value))),
+    "later-sibling",
+  ]);
+  await f.writer.bind(f.input);
+  expect(JSON.parse(z.string().parse(policy.value))).toContain("later-sibling");
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+  expect(f.requests.filter((request) => request.method === "POST")).toHaveLength(0);
+});
+
+it("keeps activation preflight and fixed shared values exact even for active target ownership", async () => {
+  const f = await adoptionFixture();
+  f.readCanonicalGatewayRows.mockResolvedValue({ active: true, rows: f.canonical });
+  const policy = f.rows.find((row) => row.key === "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS");
+  if (policy === undefined) {
+    throw new Error("missing policy");
+  }
+  policy.value = JSON.stringify(["other"]);
+  await expect(f.writer.verifyCanonicalOwnership(f.input)).rejects.toThrow();
+  const fixed = f.rows.find((row) => row.key === "PLATFORM_AUTH_DATABASE_URL");
+  if (fixed === undefined) {
+    throw new Error("missing Auth URL");
+  }
+  fixed.value = "postgresql://foreign";
+  await expect(f.writer.bind(f.input)).rejects.toThrow();
   expect(f.requests.every((request) => request.method === "GET")).toBe(true);
 });

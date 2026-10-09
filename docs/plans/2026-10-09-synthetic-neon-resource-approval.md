@@ -56,9 +56,12 @@ under that enrollment remains unproven.
 The source prerequisite for a second app to continue using the same shared Auth
 realm without rewriting users or rotating credentials is owned by the shared
 Auth continuation lane. Neither is established by this resource plan.
-Generic v2 credential use remains blocked until retained Auth and Gateway
-ownership survives cleanup of the source app and later adoption through an
-existing adopter. Billing metadata does not satisfy those lifecycle checks.
+The [shared Auth lifecycle contract](../hosted-operator-shared-auth-adoption.md)
+now defines retained ownership through source-first cleanup, verified v2
+activation and adoption through an existing adopter. Pending v2 credentials
+remain unavailable until independent Auth and canonical Gateway checks succeed.
+Source fixtures and billing metadata do not establish hosted lifecycle proof
+or authorize resource effects.
 
 ## Account, billing, region, and compute
 
