@@ -1,7 +1,10 @@
 # Synthetic Neon resource and approval plan
 
-**Status (2026-10-09):** proposed owner-review plan; no provider resource,
-credential, database, Vercel binding, deployment, or customer data was changed.
+**Status (2026-10-09):** proposed resource plan; the new synthetic project,
+branch and application databases remain unapproved and uncreated. The separately
+approved canonical-owner reader, consent-only Preview deployment, Builder
+endpoint and scoped Trusted Source rule are configured as recorded below.
+Existing application/customer data remains unchanged.
 This plan supports the hosted Spend Review qualification in the
 [qualification plan](2026-10-07-hosted-operator-deployment-and-spend-review-qualification.md)
 and the Arrusted
@@ -48,7 +51,8 @@ any provider plan:
   do not auto-delete the project as part of this qualification.
 
 The source prerequisite for enrolling a new synthetic project's default root
-and its temporary descendant is owned by the separate Builder/operator lane.
+and its temporary descendant landed in Builder PR #649. Hosted preparation
+under that enrollment remains unproven.
 The source prerequisite for a second app to continue using the same shared Auth
 realm without rewriting users or rotating credentials is owned by the shared
 Auth continuation lane. Neither is established by this resource plan.
