@@ -14,7 +14,11 @@ import {
   assertExactFreshRepositoryProposal,
   githubPermissionsFor,
 } from "./github-publication";
-import type { DraftPullRequestProposal, GitHubDraftPullRequestContent } from "./github-publication";
+import type {
+  GitHubRepositoryObservation,
+  DraftPullRequestProposal,
+  GitHubDraftPullRequestContent,
+} from "./github-publication";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
 import type { ExistingDraftUpdateProposal } from "./github-draft-update";
@@ -603,6 +607,112 @@ export const createGitHubAppHttpProvider = (input: {
     return objectId.parse(stringProperty(response.body, "sha"));
   };
 
+  const destinationSnapshot = async (repository: GitHubRepositoryObservation) => {
+    decimal.parse(repository.repositoryId);
+    objectId.parse(repository.headSha);
+    objectId.parse(repository.headTree);
+    const accessToken = await repositoryReadToken(repository.repositoryId);
+    const observed = await github({
+      authorization: accessToken,
+      expected: [200],
+      path: `/repositories/${repository.repositoryId}`,
+    });
+    if (
+      String(property(observed.body, "id")) !== repository.repositoryId ||
+      stringProperty(property(observed.body, "owner"), "login") !== repository.owner ||
+      stringProperty(observed.body, "name") !== repository.name ||
+      !booleanProperty(observed.body, "private")
+    ) {
+      throw new Error("invalid-response");
+    }
+    const commit = await github({
+      authorization: accessToken,
+      expected: [200],
+      path: `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/git/commits/${repository.headSha}`,
+    });
+    if (
+      stringProperty(commit.body, "sha") !== repository.headSha ||
+      stringProperty(property(commit.body, "tree"), "sha") !== repository.headTree
+    ) {
+      throw new Error("invalid-response");
+    }
+    return accessToken;
+  };
+
+  const destinationTreeReader = (repository: GitHubRepositoryObservation, accessToken: string) => {
+    const trees = new Map<string, unknown[]>();
+    return async (treeSha: string): Promise<unknown[]> => {
+      const existing = trees.get(treeSha);
+      if (existing !== undefined) {
+        return existing;
+      }
+      const tree = await github({
+        authorization: accessToken,
+        expected: [200],
+        path: `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/git/trees/${treeSha}`,
+      });
+      if (booleanProperty(tree.body, "truncated")) {
+        throw new Error("invalid-response");
+      }
+      const entries = arrayProperty(tree.body, "tree");
+      trees.set(treeSha, entries);
+      return entries;
+    };
+  };
+
+  const readDestinationPath = async (
+    repository: GitHubRepositoryObservation,
+    path: string,
+    accessToken: string,
+    readTree: (treeSha: string) => Promise<unknown[]>,
+  ) => {
+    let treeSha = repository.headTree;
+    const segments = path.split("/");
+    for (const [index, segment] of segments.entries()) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- traverse immutable Git trees in path order
+      const entries = await readTree(treeSha);
+      const entry = entries.find((candidate) => stringProperty(candidate, "path") === segment);
+      if (entry === undefined) {
+        return null;
+      }
+      if (index < segments.length - 1) {
+        if (stringProperty(entry, "type") !== "tree") {
+          throw new Error("invalid-response");
+        }
+        treeSha = objectId.parse(stringProperty(entry, "sha"));
+        continue;
+      }
+      const gitMode = z.enum(["100644", "100755"]).parse(stringProperty(entry, "mode"));
+      if (stringProperty(entry, "type") !== "blob") {
+        throw new Error("invalid-response");
+      }
+      const blobSha = objectId.parse(stringProperty(entry, "sha"));
+      // oxlint-disable-next-line eslint/no-await-in-loop -- read the resolved immutable blob
+      const blob = await github({
+        authorization: accessToken,
+        expected: [200],
+        path: `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/git/blobs/${blobSha}`,
+      });
+      if (
+        stringProperty(blob.body, "sha") !== blobSha ||
+        stringProperty(blob.body, "encoding") !== "base64"
+      ) {
+        throw new Error("invalid-response");
+      }
+      const encoded = stringProperty(blob.body, "content").replaceAll(/\s/gu, "");
+      const bytes = Buffer.from(encoded, "base64");
+      if (bytes.toString("base64") !== encoded) {
+        throw new Error("invalid-response");
+      }
+      return {
+        bytes: new Uint8Array(bytes),
+        digest: sha256(bytes),
+        mode: gitMode === "100644" ? ("644" as const) : ("755" as const),
+      };
+    }
+    throw new Error("invalid-response");
+  };
+
   const reviewedPreimageMatches = async (preimage: {
     accessToken: string;
     owner: string;
@@ -1063,6 +1173,22 @@ export const createGitHubAppHttpProvider = (input: {
       }
       return publicRepositorySnapshot(snapshot);
     },
+    async inspectDestinationFiles({ repository, paths }) {
+      if (paths.some((path) => !safeSourcePath(path))) {
+        throw new Error("invalid-response");
+      }
+      const accessToken = await destinationSnapshot(repository);
+      const files = [];
+      const readTree = destinationTreeReader(repository, accessToken);
+      for (const path of [...new Set(paths)].toSorted(compareOverlayPaths)) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- keep scoped destination reads sequential
+        const file = await readDestinationPath(repository, path, accessToken, readTree);
+        if (file !== null) {
+          files.push({ digest: file.digest, mode: file.mode, path });
+        }
+      }
+      return files;
+    },
     async inspectDraftPublication(proposal) {
       assertExactDraftPullRequestProposal(proposal);
       const permissions: PermissionSnapshot = {
@@ -1461,6 +1587,18 @@ export const createGitHubAppHttpProvider = (input: {
         path: `/repos/${encodeURIComponent(proposal.owner)}/${encodeURIComponent(proposal.name)}/pulls`,
       });
       return { requestId: reference.requestId, status: "accepted" };
+    },
+    async readDestinationFile({ repository, path }) {
+      if (!safeSourcePath(path)) {
+        throw new Error("invalid-response");
+      }
+      const accessToken = await destinationSnapshot(repository);
+      return readDestinationPath(
+        repository,
+        path,
+        accessToken,
+        destinationTreeReader(repository, accessToken),
+      );
     },
     // oxlint-disable-next-line eslint/complexity -- verifies identity, both refs, reviewed preimages, exact tree, and atomic ref update
     async reconcileExistingDraft(

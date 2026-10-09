@@ -6,16 +6,22 @@ import { appBuilderWorkflowState, updateExactWorkflow } from "@/lib/agent/workfl
 import { sourceReceiptEvidence } from "@/lib/repository/source-receipt";
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
+import { exactNormalizedChangeSet } from "./change_set_status";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 
 export default defineTool({
   description:
-    "Read the exact reviewed workflow and fresh GitHub default-branch observation, then durably seal a draft pull-request proposal. This performs no branch, push, pull-request, release-gate, or repository mutation.",
+    "After prepare_github_draft_review, complete before/after destination diff reads, and accept_change_set, seal the initial draft pull-request proposal against that same immutable destination snapshot with freshly verified publication permissions. This performs no branch, push, pull-request, release-gate, or repository mutation.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "reviewed" || state.githubSource === undefined) {
       throw new Error("No reviewed workflow with an immutable GitHub source is available.");
+    }
+    if (state.githubDestinationReview === undefined) {
+      throw new Error(
+        "Use prepare_github_draft_review, read both complete destination diff sides, and accept_change_set before sealing initial draft publication.",
+      );
     }
     if (
       state.githubSource.digest !== input.expectedGitHubSourceDigest ||
@@ -32,7 +38,14 @@ export default defineTool({
       appBaselineState.get()?.receipt,
     );
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
+    if (state.githubDestinationReview !== undefined) {
+      const current = await exactNormalizedChangeSet({ sandbox: await ctx.getSandbox(), state });
+      if (current.digest !== state.reviewReceipt.changeSetDigest) {
+        throw new Error("Accept the current destination diff before sealing its draft proposal.");
+      }
+    }
     const proposal = await runtime.sealDraftPullRequestProposal({
+      destinationReview: state.githubDestinationReview,
       githubSource: state.githubSource,
       review: state.reviewReceipt,
       source: sourceReceiptEvidence(state.sourceReceipt),

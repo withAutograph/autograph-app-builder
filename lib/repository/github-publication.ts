@@ -6,6 +6,7 @@ import { parseSourceReceiptEvidence } from "./source-receipt";
 import type { SourceReceiptEvidence } from "./source-receipt";
 import { safeSourcePath } from "./source-path";
 import { compareOverlayPaths } from "./target-apply";
+import type { OverlayFile } from "./target-apply";
 import { githubPermissionsFor } from "./github-permissions";
 import type { GitHubOperation, GitHubPermissions } from "./github-permissions";
 import { parseGitHubTargetAccessProof } from "./github-target-access-proof";
@@ -356,6 +357,14 @@ export interface GitHubTargetSourceResolutionAdapter {
 }
 
 export interface GitHubPublicationAdapter extends GitHubSourceResolutionAdapter {
+  inspectDestinationFiles?: (input: {
+    repository: GitHubRepositoryObservation;
+    paths: readonly string[];
+  }) => Promise<readonly OverlayFile[]>;
+  readDestinationFile?: (input: {
+    repository: GitHubRepositoryObservation;
+    path: string;
+  }) => Promise<{ bytes: Uint8Array; mode: "644" | "755"; digest: string } | null>;
   inspectHistoricalAppSource?: (input: {
     repositoryId: string;
     owner: string;

@@ -934,6 +934,7 @@ const existingFindingOverrides: { files: string[]; rules: Record<string, "off"> 
       "**/lib/agent/prepare-app-creation.ts",
       "**/agent/tools/prepare_target_dependencies.ts",
       "**/agent/tools/prepared_app_context.ts",
+      "**/agent/tools/prepare_github_draft_review.ts",
       "**/agent/tools/publish_fresh_repository.ts",
       "**/agent/tools/publish_github_draft_pr.ts",
       "**/agent/tools/publish_reviewed_change_set.ts",

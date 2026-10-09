@@ -183,6 +183,25 @@ mutation and does not replace the separate publication approval. Source reads
 retain their bounded tokens; provider failures retain the supported connection
 and authorization boundaries.
 
+Initial draft publication first prepares a destination review with
+`prepare_github_draft_review`. It observes the selected repository's current
+default branch and reads immutable preimages only for the intended app change
+paths using source-read credentials. The validated private app and its original
+source and historical-baseline provenance remain intact. The complete resulting
+diff exposes both destination before content and validated after content;
+binary artifacts have explicit metadata and content omissions. Read each side's
+full paged export with `change_set_status`, then accept the fresh change set.
+Preparation invalidates the previous review and sealed proposal while retaining
+its mutation journal. A pending or potentially partial prior publication must
+be recovered before another destination review.
+
+Sealing binds that same reviewed destination commit and tree. It verifies the
+same tenant-selected installation and rebinds a fresh publication permission
+proof without advancing the reviewed base. Merely resealing an old review
+against a newer branch head cannot repair stale file preimages. The provider
+still rejects overlapping upstream changes or changed preimages before writes,
+and publication still needs a separate approval for the newly sealed proposal.
+
 The separate web handoff provisioning path is gated by
 `builder-resource-provisioning`. It journals intent before provider calls,
 creates a public or private repository from the exact content-addressed

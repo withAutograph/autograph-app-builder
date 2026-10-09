@@ -5,7 +5,12 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 
 import { exactNormalizedChangeSet } from "./change_set_status";
-import { APP_BUILDER_WORKFLOW_VERSION, appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import {
+  APP_BUILDER_WORKFLOW_VERSION,
+  appBuilderWorkflowState,
+  updateExactWorkflow,
+  assertCompleteGitHubDestinationReview,
+} from "@/lib/agent/workflow-state";
 import { createReviewedChangeSetReceipt } from "@/lib/repository/reviewed-change-set";
 
 export default defineTool({
@@ -20,6 +25,9 @@ export default defineTool({
       sandbox: await ctx.getSandbox(),
       state,
     });
+    if (state.githubDestinationReview !== undefined) {
+      assertCompleteGitHubDestinationReview(state.githubDestinationReviewRead, changeSet.digest);
+    }
     const sourceAssessment = await reviewAppliedProductSource({
       abortSignal: ctx.abortSignal,
       appSpec: state.appSpec,
@@ -50,25 +58,35 @@ export default defineTool({
       }
     }
     const receipt = createReviewedChangeSetReceipt(changeSet, ctx.callId);
-    appBuilderWorkflowState.update(() => ({
-      appSpec: state.appSpec,
-      applyReceipt: state.applyReceipt,
-      artifacts: state.artifacts,
-      ...(state.publishedGitHubDraftProposalDigest === undefined
-        ? {}
-        : { publishedGitHubDraftProposalDigest: state.publishedGitHubDraftProposalDigest }),
-      dependencyReceipt: state.dependencyReceipt,
-      ...(state.githubSource === undefined ? {} : { githubSource: state.githubSource }),
-      identityReceipt: state.identityReceipt,
-      phase: "reviewed",
-      preparedByCallId: state.preparedByCallId,
-      proposal: state.proposal,
-      reviewReceipt: receipt,
-      sourceReceipt: state.sourceReceipt,
-      validationReceipt: state.validationReceipt,
-      version: APP_BUILDER_WORKFLOW_VERSION,
-      workspace: state.workspace,
-    }));
+    updateExactWorkflow({
+      expected: state,
+      operation: "destination change-set acceptance",
+      transition: () => ({
+        appSpec: state.appSpec,
+        applyReceipt: state.applyReceipt,
+        artifacts: state.artifacts,
+        ...(state.publishedGitHubDraftProposalDigest === undefined
+          ? {}
+          : { publishedGitHubDraftProposalDigest: state.publishedGitHubDraftProposalDigest }),
+        dependencyReceipt: state.dependencyReceipt,
+        ...(state.githubSource === undefined ? {} : { githubSource: state.githubSource }),
+        ...(state.githubDestinationReview === undefined
+          ? {}
+          : { githubDestinationReview: state.githubDestinationReview }),
+        ...(state.githubDestinationReviewRead === undefined
+          ? {}
+          : { githubDestinationReviewRead: state.githubDestinationReviewRead }),
+        identityReceipt: state.identityReceipt,
+        phase: "reviewed",
+        preparedByCallId: state.preparedByCallId,
+        proposal: state.proposal,
+        reviewReceipt: receipt,
+        sourceReceipt: state.sourceReceipt,
+        validationReceipt: state.validationReceipt,
+        version: APP_BUILDER_WORKFLOW_VERSION,
+        workspace: state.workspace,
+      }),
+    });
     return {
       ...receipt,
       productAcceptance: productAcceptanceObligations(
