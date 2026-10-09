@@ -90,6 +90,7 @@ import {
 import {
   prepareHostedOperatorResourceCredentials,
   readHostedOperatorResourceBindings,
+  readActiveHostedOperatorSharedAuth,
 } from "./hosted-operator-resource-credentials";
 import type { ProtectedResourceDatabase } from "./hosted-operator-resource-credentials";
 import {
@@ -824,6 +825,30 @@ export const createHostedOperatorControlPlane = async (input: {
           context: artifacts.context,
         });
       },
+      async readActiveSharedAuth(context: HostedOperatorContext) {
+        const frozen = structuredClone(context);
+        await owner.assertPlanningAuthorized(frozen);
+        const current = await store.read(frozen);
+        const plan = current?.record.operator?.plan;
+        if (current === undefined || plan === undefined || plan.authAdoption === undefined) {
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional planning evidence has no value before activation.
+          return undefined;
+        }
+        const active = readActiveHostedOperatorSharedAuth({
+          ...frozen,
+          config: tokenKeyring,
+          plan,
+          record: current.record,
+        });
+        await owner.assertAuthorized({ ...frozen, plan });
+        const latest = await store.read(frozen);
+        if (!isDeepStrictEqual(current, latest)) {
+          throw new HostedOperatorError("operation_in_progress");
+        }
+        return active === undefined
+          ? undefined
+          : { adoption: active.adoption, authSchema: plan.authSchema };
+      },
       readApproval,
       async readAuthPlan(
         context: HostedOperatorContext,
@@ -1065,11 +1090,11 @@ export const createHostedOperatorControlPlane = async (input: {
       async readSharedAuthAdoption(adoptionInput: Parameters<typeof sharedAuth.inspect>[0]) {
         const frozen = structuredClone(adoptionInput);
         const observed = await sharedAuth.inspect(frozen);
-        const authSchema = observed.row.record.operator?.plan.authSchema;
+        const authSchema = observed.resourceRecord.operator?.plan.authSchema;
         if (authSchema === undefined) {
           throw new HostedOperatorError("reconciliation_required");
         }
-        const sourceOperator = observed.row.record.operator;
+        const sourceOperator = observed.resourceRecord.operator;
         if (sourceOperator === undefined) {
           throw new HostedOperatorError("reconciliation_required");
         }
@@ -1099,8 +1124,31 @@ export const createHostedOperatorControlPlane = async (input: {
           effect,
           store,
         });
+        const active = readActiveHostedOperatorSharedAuth({
+          ...effect,
+          config: tokenKeyring,
+          record: target,
+        });
+        if (active !== undefined) {
+          const rows = effect.plan.authAdoption?.gatewayEnvironment;
+          if (rows === undefined) {
+            throw new HostedOperatorError("resource_mismatch");
+          }
+          const current = await readCurrentResourceCredentialRecord({
+            assertAuthorized: owner.assertAuthorized,
+            effect,
+            store,
+          });
+          if (!sameSharedAuthTargetCheckpoint(current, target)) {
+            throw new HostedOperatorError("operation_in_progress");
+          }
+          return { active: true, rows };
+        }
+        if (source === undefined) {
+          throw new HostedOperatorError("reconciliation_required");
+        }
         const observed = await sharedAuth.inspect({ context: effect, source });
-        const { operator } = observed.row.record;
+        const { operator } = observed.resourceRecord;
         if (
           operator === undefined ||
           !isDeepStrictEqual(observed.adoption, effect.plan.authAdoption)
@@ -1120,7 +1168,7 @@ export const createHostedOperatorControlPlane = async (input: {
         if (!sameSharedAuthTargetCheckpoint(current, target)) {
           throw new HostedOperatorError("operation_in_progress");
         }
-        return rows;
+        return { active: false, rows };
       },
       reserveRealmIdentityLink,
       async resolveRealmIdentityCallbackContext(callbackInput: {
@@ -1194,11 +1242,8 @@ export const createHostedOperatorControlPlane = async (input: {
       },
       store,
       async verifySharedAuthAdoption(
-        adoptionInput: Omit<Parameters<typeof sharedAuth.verify>[0], "verifyReadiness"> & {
-          verifyCanonicalOwnership: () => Promise<void>;
-        },
+        adoptionInput: Omit<Parameters<typeof sharedAuth.verify>[0], "verifyReadiness">,
       ) {
-        const { verifyCanonicalOwnership } = adoptionInput;
         return await sharedAuth.verify({
           ...adoptionInput,
           verifyReadiness: async (verificationInput) => {
@@ -1220,9 +1265,7 @@ export const createHostedOperatorControlPlane = async (input: {
                 return verificationInput.runtimeUrl;
               },
             });
-            const proof = await readiness.verify(verificationInput);
-            await verifyCanonicalOwnership();
-            return proof;
+            return await readiness.verify(verificationInput);
           },
         });
       },

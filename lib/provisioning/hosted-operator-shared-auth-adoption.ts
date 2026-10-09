@@ -5,6 +5,7 @@ import {
   HostedOperatorError,
   operatorOwnerContextSchema,
   operatorPlanDigest,
+  operatorAuthSchemaPreparationSchema,
   sameOperatorSelection,
 } from "./hosted-operator-contract";
 import type {
@@ -19,11 +20,15 @@ import type {
   HostedRuntimeJournalRow,
 } from "./hosted-runtime-journal";
 import {
+  activateHostedOperatorSharedAuth,
+  readActiveHostedOperatorSharedAuth,
+  readHostedOperatorResourceBindings,
   describeHostedOperatorSharedAuth,
   sealHostedOperatorSharedAuth,
   verifyPendingHostedOperatorSharedAuth,
 } from "./hosted-operator-resource-credentials";
 
+import type { ManagedOperatorEnvironmentRow } from "./hosted-operator-contract";
 import type { SharedAuthReadinessVerifier } from "./hosted-operator-resource-credentials";
 
 /** Deployment-owned lookup hints. Authority is re-read for both journals on every use. */
@@ -95,7 +100,37 @@ export const createHostedOperatorSharedAuthAdoption = (deps: {
       throw new HostedOperatorError("reconciliation_required");
     }
     const snapshot = structuredClone(row);
-    const { record } = snapshot;
+    const retained = snapshot.record.retainedAuth;
+    // Retained ownership is the completed prepare evidence, independent of a later
+    // app cleanup plan. Preserve the raw row separately for concurrency checks.
+    if (
+      snapshot.record.leaseId !== undefined ||
+      snapshot.record.leaseExpiresAt !== undefined ||
+      snapshot.record.operator?.pendingEffectId !== undefined ||
+      snapshot.record.operator?.pendingEffectAttempt !== undefined
+    ) {
+      throw new HostedOperatorError("reconciliation_required");
+    }
+    const record =
+      retained === undefined
+        ? snapshot.record
+        : {
+            ...snapshot.record,
+            approvedByCallId: retained.approvedByCallId,
+            operator: {
+              approvalId: retained.approvalId,
+              authPreparation: retained.authPreparation,
+              fenceGeneration: retained.fenceGeneration,
+              gatewayEnvironment: retained.gatewayEnvironment,
+              mode: "protected-operator-v1" as const,
+              operationRef: retained.operationRef,
+              plan: retained.plan,
+              planDigest: retained.planDigest,
+              receipts: retained.receipts,
+            },
+            status: "prepared" as const,
+            step: "bound" as const,
+          };
     const { operator } = record;
     if (operator === undefined) {
       throw new HostedOperatorError("reconciliation_required");
@@ -127,7 +162,7 @@ export const createHostedOperatorSharedAuthAdoption = (deps: {
     });
     await deps.assertPlanningAuthorized(owned.source);
     await deps.assertPlanningAuthorized(owned.context);
-    return { description, row: snapshot };
+    return { description, resourceRecord: record, row: snapshot };
   };
   const assertSourceUnchanged = async (
     owned: ReturnType<typeof capture>,
@@ -190,13 +225,14 @@ export const createHostedOperatorSharedAuthAdoption = (deps: {
   return {
     async checkpoint(input: {
       effect: HostedOperatorEffectContext;
-      source: HostedOperatorAuthAdoptionSource;
+      source?: HostedOperatorAuthAdoptionSource;
     }) {
       // Snapshot every data field before yielding. Callbacks remain the existing leased journal callbacks.
-      const owned = capture({ context: input.effect, source: input.source });
+      const context = cloneContext(input.effect);
+      const sourceHint = input.source === undefined ? undefined : structuredClone(input.source);
       const effect = {
         ...input.effect,
-        ...owned.context,
+        ...context,
         effect: structuredClone(input.effect.effect),
         plan: structuredClone(input.effect.plan),
       };
@@ -208,13 +244,27 @@ export const createHostedOperatorSharedAuthAdoption = (deps: {
       ) {
         throw new HostedOperatorError("resource_mismatch");
       }
-      const target = await deps.readCurrentTarget(effect);
+      const target = await readTarget(effect);
+      if (
+        readActiveHostedOperatorSharedAuth({
+          ...context,
+          config: deps.config,
+          plan: effect.plan,
+          record: target,
+        }) !== undefined
+      ) {
+        return { status: "active" as const };
+      }
+      if (sourceHint === undefined) {
+        throw new HostedOperatorError("reconciliation_required");
+      }
+      const owned = capture({ context, source: sourceHint });
       // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Verify the target lease before reading another journal.
       const observed = await readSource(owned);
       if (!isDeepStrictEqual(observed.description, effect.plan.authAdoption)) {
         throw new HostedOperatorError("resource_mismatch");
       }
-      const sourceOperator = observed.row.record.operator;
+      const sourceOperator = observed.resourceRecord.operator;
       if (sourceOperator === undefined) {
         throw new HostedOperatorError("reconciliation_required");
       }
@@ -223,7 +273,7 @@ export const createHostedOperatorSharedAuthAdoption = (deps: {
           ...owned.source,
           config: deps.config,
           plan: sourceOperator.plan,
-          record: observed.row.record,
+          record: observed.resourceRecord,
         },
         target: { ...owned.context, config: deps.config, plan: effect.plan, record: target },
       });
@@ -245,22 +295,30 @@ export const createHostedOperatorSharedAuthAdoption = (deps: {
       const owned = capture(input);
       const observed = await readSource(owned);
       await assertSourceUnchanged(owned, observed.row);
-      return { adoption: observed.description, row: observed.row, source: owned.source };
+      return {
+        adoption: observed.description,
+        resourceRecord: observed.resourceRecord,
+        row: observed.row,
+        source: owned.source,
+      };
     },
     async verify(input: {
       effect: HostedOperatorEffectContext;
-      source: HostedOperatorAuthAdoptionSource;
+      source?: HostedOperatorAuthAdoptionSource;
       verifyReadiness: SharedAuthReadinessVerifier;
+      activate?: boolean;
+      verifyCanonicalOwnership?: () => Promise<ManagedOperatorEnvironmentRow[]>;
     }) {
-      const owned = capture({ context: input.effect, source: input.source });
+      const context = cloneContext(input.effect);
+      const sourceHint = input.source === undefined ? undefined : structuredClone(input.source);
       const effect = {
         ...input.effect,
-        ...owned.context,
+        ...context,
         effect: structuredClone(input.effect.effect),
         plan: structuredClone(input.effect.plan),
         workerCheckpoints: structuredClone(input.effect.workerCheckpoints),
       };
-      const { verifyReadiness } = input;
+      const { verifyReadiness, verifyCanonicalOwnership, activate } = input;
       const invalidEffect = [
         effect.plan.authAdoption === undefined,
         effect.plan.action !== "prepare",
@@ -274,9 +332,47 @@ export const createHostedOperatorSharedAuthAdoption = (deps: {
         throw new HostedOperatorError("resource_mismatch");
       }
       const target = await readTarget(effect);
+      const targetInput = { ...context, config: deps.config, plan: effect.plan, record: target };
+      const active = readActiveHostedOperatorSharedAuth(targetInput);
+      if (active !== undefined) {
+        const assertCurrent = async () => {
+          const current = await readTarget(effect);
+          if (!sameSharedAuthTargetCheckpoint(current, target)) {
+            throw new HostedOperatorError("reconciliation_required");
+          }
+        };
+        const { runtimeUrl } = readHostedOperatorResourceBindings(targetInput).authDatabase;
+        await assertCurrent();
+        let proof;
+        try {
+          proof = operatorAuthSchemaPreparationSchema.parse(
+            await verifyReadiness({
+              ...context,
+              assertCurrent,
+              plan: effect.plan,
+              runtimeUrl,
+            }),
+          );
+        } catch {
+          throw new HostedOperatorError("operator_unavailable");
+        }
+        await assertCurrent();
+        const { observedAt: priorTime, ...prior } = active.authPreparation;
+        const { observedAt: nextTime, ...next } = proof;
+        void priorTime;
+        void nextTime;
+        if (!isDeepStrictEqual(prior, next)) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        return proof;
+      }
+      if (sourceHint === undefined) {
+        throw new HostedOperatorError("reconciliation_required");
+      }
+      const owned = capture({ context, source: sourceHint });
       // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Recheck the target lease before opening the source journal.
       const observed = await readSource(owned);
-      const sourceOperator = observed.row.record.operator;
+      const sourceOperator = observed.resourceRecord.operator;
       if (
         sourceOperator === undefined ||
         !isDeepStrictEqual(observed.description, effect.plan.authAdoption)
@@ -296,13 +392,37 @@ export const createHostedOperatorSharedAuthAdoption = (deps: {
           ...owned.source,
           config: deps.config,
           plan: sourceOperator.plan,
-          record: observed.row.record,
+          record: observed.resourceRecord,
         },
         target: { ...owned.context, config: deps.config, plan: effect.plan, record: target },
         verifyReadiness,
       });
       await assertCurrent();
-      // Verification does not change the encrypted pending checkpoint or release credentials.
+      if (activate === true) {
+        if (verifyCanonicalOwnership === undefined || effect.effect.kind !== "resources") {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        const gatewayEnvironment = await verifyCanonicalOwnership();
+        await assertCurrent();
+        const privateState = activateHostedOperatorSharedAuth({
+          authPreparation: proof,
+          gatewayEnvironment,
+          source: {
+            ...owned.source,
+            config: deps.config,
+            plan: sourceOperator.plan,
+            record: observed.resourceRecord,
+          },
+          target: targetInput,
+        });
+        await deps.checkpointTarget({ effect, expected: target.privateState, privateState });
+        const acknowledged = await readTarget(effect);
+        if (!isDeepStrictEqual(acknowledged.privateState, privateState)) {
+          throw new HostedOperatorError("operation_in_progress");
+        }
+        // The acknowledged target now owns independent credentials; subsequent
+        // reads and retries no longer depend on the source app's lifecycle.
+      }
       return proof;
     },
   };

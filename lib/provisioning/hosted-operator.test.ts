@@ -18,8 +18,12 @@ import {
   operatorPlanDigest,
   restrictedOperatorEnvironment,
 } from "./hosted-operator-contract";
-import type { OperatorSelection } from "./hosted-operator-contract";
-import { hostedRuntimeIdentity, hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
+import type { ManagedOperatorEnvironmentRow, OperatorSelection } from "./hosted-operator-contract";
+import {
+  hostedRuntimeIdentity,
+  hostedRuntimeJournalRecordSchema,
+  retainedOperatorAuthFromJournal,
+} from "./hosted-runtime-journal";
 import type { HostedRuntimeJournalRow, HostedRuntimeJournalStore } from "./hosted-runtime-journal";
 import { publicApprovalDescription } from "../agent/approval-receipt";
 
@@ -347,6 +351,87 @@ const prepared = async (f: ReturnType<typeof fixture>) => {
   };
 };
 
+const adoptedGatewayPlan = () => {
+  const sourceOperation = "b209b89b-0bad-4a60-820f-4e29d5e5a4cc";
+  const keys = [
+    "AUTH_DATABASE_RESOURCE",
+    "PLATFORM_AUTH_DATABASE_URL",
+    "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
+    "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+    "PLATFORM_GATEWAY_PROJECT_BINDINGS",
+  ] as const;
+  const gatewayEnvironment = keys.map((key) => ({
+    branch: selection.branch,
+    comment: `App Builder protected operator ${sourceOperation}`,
+    id: `env_${key}`,
+    key,
+    operationRef: sourceOperation,
+    projectId: "prj_gateway",
+    target: ["preview"],
+    type: "encrypted",
+    valueSha256: "d".repeat(64),
+  }));
+  return hostedOperatorPlanSchema.parse({
+    ...plan,
+    authAdoption: {
+      gatewayEnvironment,
+      kind: "owned-journal-auth-v1",
+      resource: {
+        authDatabase: plan.authDatabase,
+        branchId: plan.neon.branchId,
+        endpoint: plan.neon.endpoint,
+        endpointId: "ep-fixture",
+        projectId: plan.neon.projectId,
+      },
+      source: {
+        checkpointSha256: "d".repeat(64),
+        journalDigest: "e".repeat(64),
+        operationRef: sourceOperation,
+        planDigest: "f".repeat(64),
+        selection: { ...selection, appId: "source-app" },
+      },
+    },
+    authSchema: {
+      artifactRef: "auth-plan",
+      installer: plan.installer,
+      planDigest: "a".repeat(64),
+      targetDigest: "b".repeat(64),
+    },
+    bootstrap: { endpointId: "ep-fixture", maintenanceDatabase: "neondb", role: "neondb_owner" },
+    effects: [
+      {
+        description: "Observe adopted Auth",
+        id: "auth-resources",
+        kind: "resources",
+        resourceId: plan.authDatabase.resourceId,
+      },
+      {
+        description: "Prepare independent app",
+        id: "app-resources",
+        kind: "resources",
+        resourceId: plan.appDatabase.resourceId,
+      },
+      ...plan.effects.filter((effect) => effect.kind !== "resources"),
+      { description: "Bind shared Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+    ],
+    gatewayBindings: {
+      authBrowserOrigin: "https://auth-preview.example.test",
+      builderCallbackOrigin: "https://builder.example",
+      catalogAppIds: [selection.appId],
+      operatorOrigin: "https://operator.example",
+      sourceWorkload: {
+        audience: "https://vercel.com",
+        environment: "preview",
+        issuer: "https://oidc.vercel.com/team_fixture",
+        ownerId: "team_fixture",
+        projectId: "prj_gateway",
+        subject: "fixture-gateway",
+      },
+    },
+    resourcesInstaller: plan.installer,
+  });
+};
+
 describe("protected hosted operator boundary", () => {
   it("serves consent-only setup before full resource configuration and refuses planning/effects", async () => {
     const f = fixture();
@@ -500,6 +585,15 @@ describe("protected hosted operator boundary", () => {
     const receipts = f.row?.record.operator?.receipts;
     expect(receipts).toHaveLength(3);
     expect(f.row?.record.environmentBound).toBe(false);
+    const retainedAuth = structuredClone(f.row?.record.retainedAuth);
+    expect(retainedAuth).toMatchObject({
+      approvalId: "durable-human-decision",
+      approvedByCallId: first.callId,
+      operationRef: first.operationRef,
+      plan: bootstrapPlan,
+      planDigest: first.planDigest,
+      receipts,
+    });
     const fullPlan = hostedOperatorPlanSchema.parse({
       ...plan,
       authSchema,
@@ -522,6 +616,239 @@ describe("protected hosted operator boundary", () => {
     expect(f.row?.record.operator?.receipts).toEqual(receipts);
     expect((await f.client.request(renewed)).status).toBe("prepared");
     expect(f.deps.verify).toHaveBeenCalledTimes(1);
+    expect(f.row?.record.retainedAuth).toEqual(retainedAuth);
+  });
+
+  it("materializes existing complete Auth provenance before source cleanup and keeps it across CAS retries", async () => {
+    const f = fixture();
+    const authSchema = {
+      artifactRef: "auth-plan",
+      installer: { reference: "auth-protected-installer-v1", sha256: "f".repeat(64) },
+      planDigest: "d".repeat(64),
+      targetDigest: "e".repeat(64),
+    };
+    const sourcePlan = hostedOperatorPlanSchema.parse({ ...plan, authSchema });
+    f.deps.plan = async () => sourcePlan;
+    const source = await prepared(f);
+    f.approve();
+    await f.client.request(source);
+    const completed = f.row;
+    if (completed?.record.operator === undefined) {
+      throw new Error("Missing completed source journal");
+    }
+    const readiness = {
+      assetSha256: "1".repeat(64),
+      catalogFingerprint: "2".repeat(64),
+      database: plan.authDatabase.database,
+      observedAt: new Date().toISOString(),
+      runtimeRole: plan.authDatabase.runtimeRole,
+      targetDigest: authSchema.targetDigest,
+    };
+    const gatewayEnvironment = [
+      {
+        branch: selection.branch,
+        comment: `App Builder protected operator ${source.operationRef}`,
+        id: "env_shared_auth",
+        key: "AUTH_DATABASE_RESOURCE",
+        operationRef: source.operationRef,
+        projectId: "prj_gateway",
+        valueSha256: "a".repeat(64),
+      },
+    ];
+    // Existing v1 sources have saved readiness but no retained provenance field.
+    f.row = {
+      ...completed,
+      record: hostedRuntimeJournalRecordSchema.parse({
+        ...completed.record,
+        operator: { ...completed.record.operator, authPreparation: readiness, gatewayEnvironment },
+      }),
+    };
+    const expected = retainedOperatorAuthFromJournal(f.row.record);
+    expect(expected).toBeDefined();
+    const cleanupPlan = hostedOperatorPlanSchema.parse({
+      ...sourcePlan,
+      action: "cleanup",
+      effects: [
+        { description: "Revoke access", id: "revoke", kind: "revoke" },
+        { description: "Remove app bindings", id: "remove-bindings", kind: "remove-bindings" },
+        { description: "Retire app", id: "retire", kind: "retire" },
+      ],
+    });
+    f.deps.plan = async () => cleanupPlan;
+    const { readApproval } = f.deps;
+    f.deps.readApproval = async () => null;
+    expect(
+      await f.client.request({ action: "plan", operation: "cleanup", selection }),
+    ).toMatchObject({
+      code: "authorization_required",
+      status: "blocked",
+    });
+    expect(f.row.record.retainedAuth).toBeUndefined();
+    expect(f.row.record.operator?.operationRef).toBe(source.operationRef);
+    const beforeRace = structuredClone(f.row);
+    f.deps.readApproval = async (input) => {
+      if (f.row?.record.privateState !== undefined) {
+        f.row.record.privateState.encryptedToken = "replaced-source-ciphertext";
+      }
+      return await readApproval(input);
+    };
+    expect(
+      await f.client.request({ action: "plan", operation: "cleanup", selection }),
+    ).toMatchObject({ code: "operation_in_progress", status: "blocked" });
+    expect(f.row?.record.retainedAuth).toBeUndefined();
+    f.row = beforeRace;
+    f.deps.readApproval = vi.fn(readApproval);
+    const { compareAndSet } = f.deps.store;
+    let missed = false;
+    f.deps.store.compareAndSet = async (input) => {
+      if (!missed && input.record.operator?.plan.action === "cleanup") {
+        missed = true;
+        if (f.row !== undefined) {
+          f.row = { ...f.row, revision: f.row.revision + 1 };
+        }
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- A stale CAS returns no row.
+        return undefined;
+      }
+      return await compareAndSet(input);
+    };
+    const cleanup = await f.client.request({ action: "plan", operation: "cleanup", selection });
+    expect(cleanup.status).toBe("planned");
+    expect(missed).toBe(true);
+    expect(f.deps.readApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "prepare",
+        callId: source.callId,
+        planDigest: source.planDigest,
+      }),
+    );
+    expect(f.row?.record.retainedAuth).toEqual(expected);
+    expect(f.row?.record.operator?.authPreparation).toEqual(readiness);
+    const updatedRows = gatewayEnvironment.map((row) => ({
+      ...row,
+      pendingOperationRef: z.uuid().parse(cleanup.operationRef),
+      pendingValueSha256: "b".repeat(64),
+    }));
+    const { executeEffect } = f.deps;
+    f.deps.executeEffect = async (input) => {
+      if (input.effect.kind === "revoke") {
+        await input.checkpointGatewayEnvironment?.(updatedRows);
+      }
+      return await executeEffect(input);
+    };
+    expect(
+      (
+        await f.client.request({
+          ...source,
+          callId: "source-cleanup",
+          operationRef: z.uuid().parse(cleanup.operationRef),
+          planDigest: z.string().parse(cleanup.planDigest),
+        })
+      ).status,
+    ).toBe("cleaned");
+    const updatedExpected = { ...expected, gatewayEnvironment: updatedRows };
+    expect(f.row?.record.retainedAuth).toEqual(updatedExpected);
+    expect(f.row?.record.operator?.fenceGeneration).toBeGreaterThan(expected?.fenceGeneration ?? 0);
+    expect(f.row?.record.retainedAuth?.fenceGeneration).toBe(expected?.fenceGeneration);
+    f.deps.plan = async () => ({ ...sourcePlan, contextId: "replacement-app" });
+    expect((await prepared(f)).planDigest).not.toBe(source.planDigest);
+    expect(f.row?.record.retainedAuth).toEqual(updatedExpected);
+    f.deps.plan = async () => ({
+      ...sourcePlan,
+      authSchema: { ...authSchema, targetDigest: "f".repeat(64) },
+      contextId: "replacement-app",
+    });
+    await prepared(f);
+    expect(f.row?.record.retainedAuth).toBeUndefined();
+    expect(f.row?.record.operator?.authPreparation).toBeUndefined();
+  });
+
+  it("captures ordinary completed prepare only with approved complete receipts and saved Auth readiness", async () => {
+    const f = fixture();
+    const authSchema = {
+      artifactRef: "auth-plan",
+      installer: { reference: "auth-protected-installer-v1", sha256: "f".repeat(64) },
+      planDigest: "d".repeat(64),
+      targetDigest: "e".repeat(64),
+    };
+    f.deps.plan = async () => ({ ...plan, authSchema });
+    const request = await prepared(f);
+    const initial = f.row;
+    if (initial?.record.operator === undefined) {
+      throw new Error("Missing planned source journal");
+    }
+    f.row = {
+      ...initial,
+      record: hostedRuntimeJournalRecordSchema.parse({
+        ...initial.record,
+        operator: {
+          ...initial.record.operator,
+          authPreparation: {
+            assetSha256: "1".repeat(64),
+            catalogFingerprint: "2".repeat(64),
+            database: plan.authDatabase.database,
+            observedAt: new Date().toISOString(),
+            runtimeRole: plan.authDatabase.runtimeRole,
+            targetDigest: authSchema.targetDigest,
+          },
+        },
+      }),
+    };
+    expect(retainedOperatorAuthFromJournal(f.row.record)).toBeUndefined();
+    expect((await f.client.request(request)).code).toBe("authorization_required");
+    expect(f.row?.record.retainedAuth).toBeUndefined();
+    f.approve();
+    expect((await f.client.request(request)).status).toBe("prepared");
+    const complete = f.row?.record;
+    if (complete?.operator === undefined) {
+      throw new Error("Missing prepared source journal");
+    }
+    expect(complete.retainedAuth).toMatchObject({
+      approvedByCallId: request.callId,
+      operationRef: request.operationRef,
+      planDigest: request.planDigest,
+      receipts: complete.operator.receipts,
+    });
+    expect(
+      retainedOperatorAuthFromJournal({
+        ...complete,
+        approvedByCallId: "operator:unapproved-plan",
+      }),
+    ).toBeUndefined();
+    expect(
+      retainedOperatorAuthFromJournal({
+        ...complete,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Missing optional approval cannot mint ownership.
+        operator: { ...complete.operator, approvalId: undefined },
+      }),
+    ).toBeUndefined();
+    expect(
+      retainedOperatorAuthFromJournal({
+        ...complete,
+        operator: { ...complete.operator, receipts: complete.operator.receipts.slice(1) },
+      }),
+    ).toBeUndefined();
+    expect(
+      retainedOperatorAuthFromJournal({
+        ...complete,
+        operator: { ...complete.operator, pendingEffectId: "install" },
+      }),
+    ).toBeUndefined();
+    expect(
+      retainedOperatorAuthFromJournal({
+        ...complete,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Missing optional readiness cannot mint ownership.
+        operator: { ...complete.operator, authPreparation: undefined },
+      }),
+    ).toBeUndefined();
+    expect(
+      retainedOperatorAuthFromJournal({
+        ...complete,
+        operator: {
+          ...complete.operator,
+          fenceGeneration: (complete.operator.fenceGeneration ?? 0) + 1,
+        },
+      }),
+    ).toBeUndefined();
   });
 
   it("CAS-checkpoints managed environment ownership and preserves it for cleanup", async () => {
@@ -919,6 +1246,119 @@ describe("protected hosted operator boundary", () => {
       }),
     ).rejects.toThrow("operation_in_progress");
   });
+  it("seeds adopted Gateway row identities and checkpoints interrupted PATCH recovery through the native handler", async () => {
+    const f = fixture();
+    const adopted = adoptedGatewayPlan();
+    f.deps.plan = async () => adopted;
+    const request = await prepared(f);
+    f.approve();
+    const canonical = (adopted.authAdoption?.gatewayEnvironment ?? []).map(
+      ({ target: _target, type: _type, ...saved }) => {
+        void _target;
+        void _type;
+        return saved;
+      },
+    );
+    const { executeEffect } = f.deps;
+    const snapshots: (ManagedOperatorEnvironmentRow[] | undefined)[] = [];
+    f.deps.executeEffect = async (input) => {
+      if (input.effect.kind === "gateway-bindings") {
+        expect(input.gatewayEnvironmentRows).toBeUndefined();
+        await input.checkpointGatewayEnvironment?.(canonical);
+        snapshots.push(structuredClone(f.row?.record.operator?.gatewayEnvironment));
+        const pending = canonical.map((saved) =>
+          saved.key === "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS"
+            ? {
+                ...saved,
+                pendingOperationRef: input.operationRef,
+                pendingValueSha256: "e".repeat(64),
+              }
+            : saved,
+        );
+        await input.checkpointGatewayEnvironment?.(pending);
+        snapshots.push(structuredClone(f.row?.record.operator?.gatewayEnvironment));
+        const settled = canonical.map((saved) =>
+          saved.key === "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS"
+            ? { ...saved, valueSha256: "e".repeat(64) }
+            : saved,
+        );
+        await input.checkpointGatewayEnvironment?.(settled);
+      }
+      return await executeEffect(input);
+    };
+    expect((await f.client.request(request)).status).toBe("prepared");
+    expect(snapshots[0]).toEqual(canonical);
+    expect(
+      snapshots[1]?.find((saved) => saved.key === "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS")
+        ?.pendingOperationRef,
+    ).toBe(request.operationRef);
+    expect(
+      f.row?.record.operator?.gatewayEnvironment?.find(
+        (saved) => saved.key === "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
+      ),
+    ).toMatchObject({
+      operationRef: adopted.authAdoption?.source.operationRef,
+      valueSha256: "e".repeat(64),
+    });
+  });
+
+  it.each([
+    "id",
+    "key",
+    "branch",
+    "projectId",
+    "operationRef",
+    "comment",
+    "pendingOperationRef",
+  ] as const)(
+    "rejects changed adopted Gateway %s through the native checkpoint callback",
+    async (field) => {
+      const f = fixture();
+      const adopted = adoptedGatewayPlan();
+      f.deps.plan = async () => adopted;
+      const request = await prepared(f);
+      f.approve();
+      const canonical = (adopted.authAdoption?.gatewayEnvironment ?? []).map(
+        ({ target: _target, type: _type, ...saved }) => {
+          void _target;
+          void _type;
+          return saved;
+        },
+      );
+      const { executeEffect } = f.deps;
+      f.deps.executeEffect = async (input) => {
+        if (input.effect.kind === "gateway-bindings") {
+          await input.checkpointGatewayEnvironment?.(canonical);
+          const [original] = canonical;
+          if (original === undefined) {
+            throw new Error("Missing fixture row");
+          }
+          const arbitraryValue = field === "key" ? "UNRELATED_KEY" : "foreign";
+          const changed = {
+            ...original,
+            [field]:
+              field === "operationRef" || field === "pendingOperationRef"
+                ? "be91e77e-f23e-49d8-b6a8-a8a5acb36dfe"
+                : arbitraryValue,
+          };
+          if (field === "operationRef") {
+            changed.comment = `App Builder protected operator ${changed.operationRef}`;
+          }
+          const row =
+            field === "pendingOperationRef"
+              ? { ...changed, pendingValueSha256: "e".repeat(64) }
+              : changed;
+          await expect(
+            input.checkpointGatewayEnvironment?.([row, ...canonical.slice(1)]),
+          ).rejects.toMatchObject({ code: "resource_mismatch" });
+          expect(f.row?.record.operator?.gatewayEnvironment).toEqual(canonical);
+        }
+        return await executeEffect(input);
+      };
+      expect((await f.client.request(request)).status).toBe("prepared");
+    },
+  );
+
   it("plans and approves app cleanup after consuming Realm identity while retaining shared resources", async () => {
     const f = fixture();
     const appPlan = hostedOperatorPlanSchema.parse({

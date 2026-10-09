@@ -1,126 +1,114 @@
-# Shared Auth adoption prerequisite
+# Shared Auth adoption and retained ownership
 
-This document describes the fail-closed prerequisite for a second app to use an
-already prepared Auth realm. It does not establish hosted two-app reuse. The
-current Builder Auth planner emits a genesis proposal carrying `new-empty`.
-The existing schema worker is not an explicit read-only adoption worker.
+The native operator can adopt an already prepared Auth realm for another app.
+It uses the existing owner-bound journal, encryption, approvals, compare-and-set
+updates and physical resource lease. Each app keeps its own database and
+migrator/runtime passwords. Adoption retains Auth users, sessions, data, roles,
+passwords and sibling Gateway settings. Source tests do not establish hosted
+multi-app continuity.
 
-## Target-scoped credential adoption
+## Approval and retained provenance
 
-An app may optionally name `authAdoptionSource`, containing the complete
-`hostedRuntimeTarget` of an existing app and the existing owner context hint.
-The frozen plan must bind that source to the source journal digest, selection,
-operation, approved plan, ciphertext hash, and exact physical Auth resource
-identity. Source and target must resolve to the same current owner and
-workspace under current authorization. Before adoption, the source journal
-must still be current and approved, with complete saved Auth readiness and a
-matching source artifact. These are reads of the protected journal and artifact
-store, not fresh database readiness proof. The native continuation then performs
-fresh read-only Auth and Gateway checks without activating the credentials.
+An initial adoption names `authAdoptionSource`: the complete source runtime
+target and owner context hint. The operator rechecks current owner/workspace
+access to both apps. The plan freezes the source journal, selection, approved
+prepare plan, operation, encrypted checkpoint hash, Auth physical identity,
+readiness artifact and canonical Gateway row references with verified value
+hashes. Source and target must have distinct app databases and roles.
 
-Under the existing physical resource lease, the target journal checkpoints an
-encrypted v2 pending credential record before any plaintext is released. It
-copies only the source Auth migrator and runtime passwords. The target's app
-database receives a separately generated credential pair. The source
-ciphertext is left untouched; a retry reuses the target's checkpointed
-ciphertext. Legacy v1 records keep their existing behavior.
+Completed Auth ownership is retained in `retainedAuth` within the same journal
+record. It contains the approved prepare plan, operation, call and approval,
+complete receipts, verified Auth readiness and Gateway metadata. Auth-bootstrap
+completion records it; an existing completed source can also record it before
+replacing its plan, after rereading the original approval and checking that the
+source ciphertext and completion evidence have not changed. Partial or
+unapproved operations cannot create retained ownership. Gateway checkpoints
+update retained row metadata through the existing fenced journal update.
 
-The v2 record is not yet authority to use credentials. Until v2 bindings,
-read-only resource adoption, and app retirement are composed, all three paths remain
-blocked. Adoption preparation checkpoints the pending record, verifies Auth
-readiness with the pending runtime credential inside the trusted control plane,
-and verifies the canonical Gateway rows through read-only provider requests.
-It then returns `reconciliation_required` before worker or provider mutation. It must not recreate
-roles, rotate or regenerate Auth passwords, or fall through to a `new-empty`
-schema install. Source cleanup, credential rotation, stale approval,
-ambiguous journal state, or incomplete saved readiness blocks adoption. A
-source or target change during an awaited check blocks completion. A CAS against
-the target's prior private state prevents concurrent callers from replacing
-the winning checkpoint. There is no source-journal write.
+App cleanup replaces the current operation and approval but preserves retained
+Auth provenance and encrypted credentials. A later adopter can use that source
+under fresh owner authorization and an exact read of the original terminal
+prepare approval. Source leases, pending effects, unresolved Gateway writes,
+missing readiness, changed ciphertext or ambiguous ownership block a new
+adoption. Provider comments alone never establish ownership.
 
-The exact approval must bind the source app and owner/workspace context; source
-journal and operation identity; source selection and approved plan digest;
-source encrypted credential hash; Auth project, branch, endpoint, database,
-schema and migrator/runtime roles; target app and its separate physical
-database and roles; Gateway project and branch; and the
-explicit intent to retain shared Auth users, sessions, data, credentials and
-Gateway settings. The operator must recheck these inputs at effect time. Any
-change requires a new plan and approval. The plan also freezes the canonical
-Gateway row references and verified value hashes from the source journal.
-Existing journals without those hashes need ordinary verified Gateway binding
-readback before they can supply an adoption plan. A provider comment alone
-never supplies ownership.
+## Pending verification and activation
 
-## Read-only preflight
+Under the physical resource lease, the target seals a pending v2 credential
+bundle before releasing any plaintext. It copies only the Auth password pair
+and generates an independent app pair. Retries reuse the acknowledged bundle.
+Pending credentials remain unavailable to ordinary workers and binding readers.
 
-The Auth verifier validates the exact target-owned Auth artifact and readiness
-asset, reads `_auth_schema_readiness.read_current()` in a read-only transaction
-using the sealed restricted runtime credential, and compares database, login,
-role, target, asset and catalog fingerprint to the independently published
-source readiness. Source and target authorization, approval, lease and journal
-state are rechecked across awaits. Only the readiness proof returns; the
-checkpoint remains pending and generic credential readers remain blocked.
+The trusted control plane reads `_auth_schema_readiness.read_current()` in a
+read-only transaction using the pending restricted Auth runtime credential.
+It validates the target-owned artifact and readiness SQL asset, database,
+login, role, target and catalog fingerprint against the source proof. The SQL
+asset hash is distinct from the Auth worker executable hash.
 
-Gateway preflight resolves the exact approved source under current owner
-authority. Its complete five-row snapshot must match the source journal and
-the frozen target approval. Provider GETs check project, branch, key, row ID,
-original operation comment, Preview target, encrypted type, unmanaged status
-and current value hash. No runtime URL, app deployment selection, provider
-write or target checkpoint is needed for this inspection. Ordinary Gateway
-binding readback saves value hashes only for values it actually verified and
-preserves sibling app policies and deployment projections during merges.
-Before an adopted Gateway PATCH, it checkpoints the exact intended value hash
-under the current operation so a lost response can be reconciled by readback.
-Unresolved pending writes cannot supply canonical ownership for a new adopter.
+Canonical Gateway verification uses provider GETs to check all five exact
+approved rows: project, branch, key, row ID, original operation comment,
+Preview target, encrypted type, unmanaged status and current value hash. It
+cannot release worker credentials or write provider configuration. Source and
+target authorization, approvals, lease and checkpoints are rechecked across
+awaits. Normal renewal of the same lease is allowed; replacement is not.
 
-## Required continuation before release
+Only after both checks succeed does a compare-and-set replace the pending
+ciphertext with an active v2 bundle containing the verified evidence. The
+operator requires independent acknowledgement of that exact checkpoint before
+returning an applied Auth-resource receipt. A failed check leaves credentials
+pending. A lost acknowledgement can resume from the active target checkpoint
+without generating passwords again.
 
-For fresh resources, schema reconciliation can mark the Auth schema effect applied when
-the existing readiness record matches the approved target and readiness asset.
-If readiness does not match, populated Auth state is unknown and blocks. An
-absent result is returned only after an empty public namespace check. Keep this
-distinction: readiness may short-circuit an already prepared shared realm,
-while absent or unknown state must never authorize the genesis proposal as an
-adoption migration. Adoption has its own path: a missing, failed or successful
-preflight never falls through to an empty-namespace probe or Auth schema worker.
-Until lifecycle activation is implemented, it returns reconciliation-required.
+## Independent app lifecycle
 
-The original app's cleanup changes its source journal plan and approval and
-drops its saved Auth preparation, while retaining shared Auth and Gateway
-resources. Activation must therefore create independent target ownership that
-survives source-first cleanup. Later adoption must resolve retained canonical
-ownership through an adopter chain without requiring the originating app to
-stay prepared. A pending checkpoint and successful preflight do not solve that
-lifecycle requirement.
+An active target validates its own encrypted identity, approved adoption and
+verified evidence. Credential reads, app resource preparation, bindings,
+retirement and replanning no longer require the original app to stay prepared
+or its configured source hint to remain available. Auth-resource retries use
+fresh read-only readiness checks with the local active credential. Adopted
+Auth schema reconciliation and execution also use read-only readiness; missing
+or mismatched readiness never falls through to genesis or the schema worker.
+The Auth resource worker cannot receive adopted Auth passwords.
 
-Before enabling v2, integrate verified activation, binding, app bootstrap and
-sibling-preserving retirement, including source-first cleanup and later
-adopters. Tests and evidence for this prerequisite should remain
-separate from provider enrollment and hosted two-app acceptance; this document
-does not claim either result.
+App resource creation uses only that app's separate credential pair. Existing
+access, membership, identity, delivery and binding paths retain their current
+authorization and lease checks. Cleanup revokes app access, removes only owned
+app bindings and retires only that app's database and roles. Shared Auth and
+Gateway ownership remain retained.
 
-## Source acceptance
+A completed adopter can itself supply the next adoption. Its current verified
+Gateway rows and its own retained prepare approval become the new source
+snapshot; the next app receives the same Auth pair and a fresh app pair. This
+does not recursively depend on the originating app's active operation.
 
-The original prerequisite acceptance covered 85 tests across shared Auth adoption,
-legacy resource credentials, native composition, the protected operator, and
-owner-context deployment. The adoption fixtures preserve source ciphertext,
-copy only Auth passwords, allocate independent app passwords, deny foreign or
-revoked authority, reject stale/missing/unknown state and physical collisions,
-and recover an interrupted checkpoint without generating replacements. They
-also exercise concurrent creation, caller mutation across awaits, lost leases,
-and missing checkpoint acknowledgement. Native composition is exercised through
-its reconciliation and execution entrypoints: it seals the checkpoint and
-blocks without worker/provider mutation. Continuation tests additionally cover
-fresh read-only verification, canonical Gateway ownership and value changes,
-and the valid app-only retirement worker context. Test results are reported with
-the source commit; they do not establish deployed continuity.
+## Shared Gateway continuation
 
-The integrated continuation passed 192 focused tests in nine files, scoped
-TypeScript, changed-file typed lint and whitespace checks. Lease renewal is
-covered: expiry may advance while the same lease, operation, approval, resource
-identity and ciphertext remain fixed. Caller data and callbacks are captured
-before awaited verification.
-These are source fixtures with no database or provider effects. No real second
-app, existing Auth users/sessions, native deployment, or hosted continuity has
-been qualified. The coordinator must approve and execute that separate proof
-after the continuation above is complete.
+Initial activation always verifies every approved value hash. Afterwards,
+local active ownership supplies the canonical row identities. Fixed Auth and
+realm-link values still require exact verification. Protected-app lists and
+app deployment projections may include later sibling additions: their values
+are parsed and validated, sibling entries preserved, and only the current app's
+projection replaced. Such changes cannot redirect a row to another project,
+branch, key or original owner operation.
+
+Before an adopted PATCH, the journal records the exact intended value hash
+under the current operation. An unknown write outcome is reconciled by GET
+readback. Pending writes prevent that app from supplying a new source snapshot,
+but do not prevent its own active credentials from supporting recovery. Caller
+inputs are captured before awaits for provider writes, checkpoints and returned
+row references.
+
+## Evidence boundary
+
+Focused source fixtures cover retained approvals and cleanup provenance,
+pending/active credential isolation, independent app passwords, adopter chains,
+source-first cleanup, activation failures and retries, caller mutation, lease
+renewal/replacement, canonical ownership and sibling-preserving Gateway updates.
+Results are reported with the source commit. No fixture performs provider
+mutation or proves real users, sessions, deployments or hosted continuity.
+
+First-app new-empty Auth creation remains a separate supported path and does
+not depend on second-app adoption. Provider enrollment, approved synthetic
+resources and configuration, native delivery, and real multi-app acceptance
+remain separate coordinator-owned work. This source change adds no database
+table or schema migration and does not approve any provider effect.

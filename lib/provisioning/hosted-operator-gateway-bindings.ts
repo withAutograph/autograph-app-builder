@@ -212,7 +212,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
   /** Reauthorize and reread the approved source journal; never infer ownership from provider comments. */
   readCanonicalGatewayRows?: (
     input: GatewayManagedEnvironmentContext,
-  ) => Promise<CanonicalGatewayEnvironmentRow[]>;
+  ) => Promise<{ active: boolean; rows: CanonicalGatewayEnvironmentRow[] }>;
   fetch?: typeof fetch;
 }) => {
   const open = (liveInput: GatewayManagedEnvironmentContext, readonlyCanonical = false) => {
@@ -479,6 +479,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         }),
       };
     };
+    let activeSharedAuth = false;
     const knownRows = async () => {
       let canonical: CanonicalGatewayEnvironmentRow[] = [];
       if (input.plan.authAdoption !== undefined) {
@@ -486,9 +487,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
           throw unavailable();
         }
         await guard();
-        canonical = canonicalGatewayEnvironmentRowsSchema.parse(
-          await deps.readCanonicalGatewayRows(input),
-        );
+        const ownership = await deps.readCanonicalGatewayRows(input);
+        canonical = canonicalGatewayEnvironmentRowsSchema.parse(ownership.rows);
+        activeSharedAuth = ownership.active;
         await guard();
         if (
           canonical.length !== managedKeys.length ||
@@ -617,6 +618,13 @@ export const createHostedOperatorGatewayBindings = (deps: {
       }
       if (
         input.plan.authAdoption !== undefined &&
+        !(
+          activeSharedAuth &&
+          !canonicalOnly &&
+          ["PLATFORM_GATEWAY_PROTECTED_APPLICATIONS", "PLATFORM_GATEWAY_PROJECT_BINDINGS"].includes(
+            row.key,
+          )
+        ) &&
         expectedDigest !== undefined &&
         valueDigest(value) !== expectedDigest &&
         !(

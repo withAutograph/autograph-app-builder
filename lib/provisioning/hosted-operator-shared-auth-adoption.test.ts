@@ -6,10 +6,15 @@ import { z } from "zod";
 import {
   HostedOperatorError,
   hostedOperatorPlanSchema,
+  canonicalGatewayEnvironmentRowsSchema,
+  retainedOperatorAuthSchema,
   operatorPlanDigest,
 } from "./hosted-operator-contract";
 import type { HostedOperatorPlan, OperatorOwnerContext } from "./hosted-operator-contract";
-import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
+import {
+  hostedRuntimeJournalRecordSchema,
+  retainedOperatorAuthFromJournal,
+} from "./hosted-runtime-journal";
 import type {
   HostedRuntimeJournalRecord,
   HostedRuntimeJournalRow,
@@ -19,11 +24,14 @@ import type { HostedOperatorContext, HostedOperatorEffectContext } from "./hoste
 import { decryptHostedRuntimeFiles } from "./hosted-runtime-service";
 import {
   describeHostedOperatorSharedAuth,
+  readActiveHostedOperatorSharedAuth,
   prepareHostedOperatorResourceCredentials,
   readHostedOperatorResourceBindings,
   sealHostedOperatorSharedAuth,
 } from "./hosted-operator-resource-credentials";
 import { createHostedOperatorSharedAuthAdoption } from "./hosted-operator-shared-auth-adoption";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy on the native readiness boundary for dispatch tests.
+import * as authReadinessModule from "./hosted-operator-auth-readiness";
 import { createHostedOperatorAuthReadiness } from "./hosted-operator-auth-readiness";
 import { composeHostedOperatorDependencies } from "./hosted-operator-composition";
 // oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy on the actual composition factory while retaining its other methods.
@@ -285,6 +293,32 @@ const fixture = () => {
     targetContext,
     targetInput,
   };
+};
+const withGateway = (f: ReturnType<typeof fixture>) => {
+  const operator = requireOperator(f.source.record);
+  const gateway = { branch: "preview", origin: "https://apps.example", projectId: "gateway" };
+  operator.plan.publicGateway = gateway;
+  operator.planDigest = operatorPlanDigest(operator.plan);
+  operator.gatewayEnvironment = [
+    "AUTH_DATABASE_RESOURCE",
+    "PLATFORM_AUTH_DATABASE_URL",
+    "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
+    "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+    "PLATFORM_GATEWAY_PROJECT_BINDINGS",
+  ].map((key) => ({
+    branch: gateway.branch,
+    comment: `App Builder protected operator ${operator.operationRef}`,
+    id: `env_${key}`,
+    key,
+    operationRef: operator.operationRef,
+    projectId: gateway.projectId,
+    valueSha256: "e".repeat(64),
+  }));
+  f.plan.publicGateway = gateway;
+  f.plan.authAdoption = describeHostedOperatorSharedAuth(f.sourceInput());
+  requireOperator(f.destination.record).plan = f.plan;
+  requireOperator(f.destination.record).planDigest = operatorPlanDigest(f.plan);
+  return f;
 };
 const credentialView = z.object({
   appDatabase: z.object({ migratorPassword: z.string(), runtimePassword: z.string() }),
@@ -815,8 +849,8 @@ describe("pending shared Auth independent readiness continuation", () => {
 });
 
 describe("native composition adoption boundary", () => {
-  it("runs protected read-only preflight then blocks all worker and schema fallback paths", async () => {
-    const f = fixture();
+  it("activates verified Auth without a worker and resumes locally after source cleanup", async () => {
+    const f = withGateway(fixture());
     const unavailable = vi.fn(() => {
       throw new Error("Unexpected provider or worker path");
     });
@@ -909,7 +943,9 @@ describe("native composition adoption boundary", () => {
     const checkpointSharedAuthAdoption = vi.fn(
       async (input: Parameters<typeof f.api.checkpoint>[0]) => await f.api.checkpoint(input),
     );
-    const verifyCanonicalOwnership = vi.fn(async () => ({ rows: [] }));
+    const verifyCanonicalOwnership = vi.fn(async () => ({
+      rows: canonicalGatewayEnvironmentRowsSchema.parse(f.plan.authAdoption?.gatewayEnvironment),
+    }));
     const originalGateway = gatewayBindings.createHostedOperatorGatewayBindings;
     vi.spyOn(gatewayBindings, "createHostedOperatorGatewayBindings").mockImplementation((deps) => ({
       ...originalGateway(deps),
@@ -966,7 +1002,6 @@ describe("native composition adoption boundary", () => {
           ...input,
           verifyReadiness: async (verification) => {
             await verification.assertCurrent();
-            await input.verifyCanonicalOwnership();
             return structuredClone(requirePreparation(f.source.record));
           },
         }),
@@ -982,6 +1017,7 @@ describe("native composition adoption boundary", () => {
       prepareRealmIdentityLink: unavailable,
       prepareResourceCredentials: unavailable,
       publishAuthPlan: unavailable,
+      readActiveSharedAuth: unavailable,
       readApproval: unavailable,
       readAuthPlan: unavailable,
       readCapturedRealmIdentity: unavailable,
@@ -1007,15 +1043,17 @@ describe("native composition adoption boundary", () => {
       verifySharedAuthAdoption,
       withResourceLease: unavailable,
     };
+    const schemaRead = vi.fn(async () => structuredClone(requirePreparation(f.source.record)));
+    vi.spyOn(authReadinessModule, "createHostedOperatorAuthReadiness").mockImplementation(() => ({
+      verify: schemaRead,
+    }));
     const native = composeHostedOperatorDependencies(configuration, controlPlane);
     checkpointSharedAuthAdoption.mockImplementationOnce(async (input) => {
       const result = await f.api.checkpoint(input);
       f.effect.plan = { ...f.plan, authDatabase: resource("unapproved") };
       return result;
     });
-    await expect(native.reconcile(f.effect)).rejects.toMatchObject({
-      code: "reconciliation_required",
-    });
+    await expect(native.reconcile(f.effect)).resolves.toMatchObject({ status: "applied" });
     f.effect.plan = f.plan;
     expect(checkpointSharedAuthAdoption).toHaveBeenCalledOnce();
     expect(f.destination.record.privateState).toBeDefined();
@@ -1031,15 +1069,16 @@ describe("native composition adoption boundary", () => {
         bindWorkerContext: unavailable,
         workerAttemptId: randomUUID(),
       }),
-    ).rejects.toMatchObject({ code: "reconciliation_required" });
+    ).resolves.toMatchObject({ effectId: "auth-resources" });
     expect(unavailable).not.toHaveBeenCalled();
-    expect(checkpointSharedAuthAdoption).toHaveBeenCalledOnce();
+    expect(checkpointSharedAuthAdoption).toHaveBeenCalledTimes(2);
+    expect(verifyCanonicalOwnership).toHaveBeenCalledOnce();
     const schemaEffect = f.plan.effects.find((effect) => effect.id === "auth-schema");
     if (schemaEffect === undefined) {
       throw new Error("Missing Auth schema fixture");
     }
-    await expect(native.reconcile({ ...f.effect, effect: schemaEffect })).rejects.toMatchObject({
-      code: "reconciliation_required",
+    await expect(native.reconcile({ ...f.effect, effect: schemaEffect })).resolves.toMatchObject({
+      status: "applied",
     });
     await expect(
       native.executeEffect({
@@ -1048,7 +1087,124 @@ describe("native composition adoption boundary", () => {
         effect: schemaEffect,
         workerAttemptId: randomUUID(),
       }),
-    ).rejects.toMatchObject({ code: "reconciliation_required" });
+    ).resolves.toMatchObject({ effectId: "auth-schema" });
+    schemaRead.mockRejectedValueOnce(new Error("readiness unavailable"));
+    await expect(native.reconcile({ ...f.effect, effect: schemaEffect })).rejects.toThrow(
+      "readiness unavailable",
+    );
     expect(unavailable).not.toHaveBeenCalled();
   });
+});
+
+describe("retained and independently activated shared Auth", () => {
+  const activate = async (f: ReturnType<typeof fixture>) => {
+    await f.api.checkpoint({ effect: f.effect, source: f.sourceHint });
+    return await f.api.verify({
+      activate: true,
+      effect: f.effect,
+      source: f.sourceHint,
+      verifyCanonicalOwnership: async () =>
+        canonicalGatewayEnvironmentRowsSchema.parse(f.plan.authAdoption?.gatewayEnvironment),
+      verifyReadiness: async () => structuredClone(requirePreparation(f.source.record)),
+    });
+  };
+  it("resumes activated credentials without reading a cleaned source", async () => {
+    const f = withGateway(fixture());
+    const proof = await activate(f);
+    const ciphertext = structuredClone(f.destination.record.privateState);
+    f.source.record.status = "cleaned";
+    delete f.source.record.operator;
+    f.store.read.mockRejectedValue(new Error("source must not be read"));
+    await expect(f.api.checkpoint({ effect: f.effect })).resolves.toEqual({ status: "active" });
+    await expect(
+      f.api.verify({ activate: true, effect: f.effect, verifyReadiness: async () => proof }),
+    ).resolves.toEqual(proof);
+    expect(f.destination.record.privateState).toEqual(ciphertext);
+    expect(readActiveHostedOperatorSharedAuth(f.targetInput())).toBeDefined();
+    expect(readHostedOperatorResourceBindings(f.targetInput()).authDatabase.runtimeUrl).toContain(
+      "auth_runtime",
+    );
+  });
+  it("uses retained prepared provenance after source-first cleanup", async () => {
+    const f = withGateway(fixture());
+    f.source.record.retainedAuth = retainedOperatorAuthFromJournal(f.source.record);
+    expect(f.source.record.retainedAuth).toBeDefined();
+    const original = retainedOperatorAuthSchema.parse(f.source.record.retainedAuth);
+    const operator = requireOperator(f.source.record);
+    operator.plan = {
+      ...operator.plan,
+      action: "cleanup",
+      effects: [
+        { description: "Revoke app", id: "revoke", kind: "revoke" },
+        { description: "Remove app bindings", id: "remove-bindings", kind: "remove-bindings" },
+        {
+          description: "Retire app only",
+          id: "retire",
+          kind: "retire",
+          resourceId: operator.plan.appDatabase.resourceId,
+        },
+      ],
+      stage: "app",
+    };
+    operator.planDigest = operatorPlanDigest(operator.plan);
+    operator.approvalId = "cleanup-approval";
+    delete operator.authPreparation;
+    f.source.record.status = "cleaned";
+    f.source.record.step = "cleaned";
+    f.readApproval.mockImplementation(async (input) => ({
+      action: "prepare",
+      approvalId: "approval",
+      approved: true,
+      callId: "call",
+      planDigest:
+        input.target.appId === "first"
+          ? original.planDigest
+          : requireOperator(f.destination.record).planDigest,
+    }));
+    const savedProof = original.authPreparation;
+    await f.api.checkpoint({ effect: f.effect, source: f.sourceHint });
+    await expect(
+      f.api.verify({
+        activate: true,
+        effect: f.effect,
+        source: f.sourceHint,
+        verifyCanonicalOwnership: async () =>
+          canonicalGatewayEnvironmentRowsSchema.parse(f.plan.authAdoption?.gatewayEnvironment),
+        verifyReadiness: async () => savedProof,
+      }),
+    ).resolves.toEqual(savedProof);
+    expect(readHostedOperatorResourceBindings(f.targetInput())).toBeDefined();
+  });
+  it.each(["canonical", "checkpoint", "authority"])(
+    "keeps credentials pending when activation %s fails",
+    async (failure) => {
+      const f = withGateway(fixture());
+      await f.api.checkpoint({ effect: f.effect, source: f.sourceHint });
+      const pending = structuredClone(f.destination.record.privateState);
+      if (failure === "checkpoint") {
+        f.checkpointTarget.mockResolvedValueOnce();
+      }
+      await expect(
+        f.api.verify({
+          activate: true,
+          effect: f.effect,
+          source: f.sourceHint,
+          verifyCanonicalOwnership: async () => {
+            if (failure === "canonical") {
+              throw new Error("canonical mismatch");
+            }
+            if (failure === "authority") {
+              f.assertAuthorized.mockRejectedValue(new Error("revoked"));
+            }
+            return canonicalGatewayEnvironmentRowsSchema.parse(
+              f.plan.authAdoption?.gatewayEnvironment,
+            );
+          },
+          verifyReadiness: async () => structuredClone(requirePreparation(f.source.record)),
+        }),
+      ).rejects.toThrow();
+      expect(f.destination.record.privateState).toEqual(pending);
+      expect(() => readHostedOperatorResourceBindings(f.targetInput())).toThrow();
+    },
+  );
 });

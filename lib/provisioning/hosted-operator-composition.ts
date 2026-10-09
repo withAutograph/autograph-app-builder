@@ -380,9 +380,6 @@ export const composeHostedOperatorDependencies = (
     },
     readCanonicalGatewayRows: async (input) => {
       const source = selectedApplication(configuration, input).authAdoptionSource;
-      if (source === undefined) {
-        throw new HostedOperatorError(RECONCILIATION_REQUIRED);
-      }
       return await controlPlane.readSharedGatewayRows({ effect: input, source });
     },
     readCredential: controlPlane.readCredential,
@@ -403,7 +400,7 @@ export const composeHostedOperatorDependencies = (
     target: "gateway",
   });
 
-  // oxlint-disable-next-line eslint/complexity -- Keep cleanup, fresh Auth, and blocked adoption plans at the same authority boundary.
+  // oxlint-disable-next-line eslint/complexity -- Keep cleanup, fresh Auth, and shared adoption plans at the same authority boundary.
   const plan = async (
     context: HostedOperatorContext & { action: "prepare" | "cleanup" },
   ): Promise<HostedOperatorPlan> => {
@@ -503,17 +500,22 @@ export const composeHostedOperatorDependencies = (
         await controlPlane.readCredential(authority, installationId),
     });
     const native = configuration.nativeNeon.scope;
+    const activeAuth = await controlPlane.readActiveSharedAuth(context);
     const adopted =
-      application.authAdoptionSource === undefined
+      activeAuth !== undefined || application.authAdoptionSource === undefined
         ? undefined
         : await controlPlane.readSharedAuthAdoption({
             context,
             source: application.authAdoptionSource,
           });
-    if (current?.record.operator?.plan.authAdoption !== undefined && adopted === undefined) {
+    if (
+      current?.record.operator?.plan.authAdoption !== undefined &&
+      adopted === undefined &&
+      activeAuth === undefined
+    ) {
       throw new HostedOperatorError(RECONCILIATION_REQUIRED);
     }
-    let authSchema = current?.record.operator?.plan.authSchema;
+    let authSchema = activeAuth?.authSchema ?? current?.record.operator?.plan.authSchema;
     if (adopted !== undefined) {
       // Re-envelope the exact source artifact through the existing target-owned artifact API.
       const artifactRef = await controlPlane.publishAuthPlan(context, {
@@ -558,7 +560,7 @@ export const composeHostedOperatorDependencies = (
       access: [],
       action: "prepare",
       appDatabase: application.appDatabase,
-      authAdoption: adopted?.adoption,
+      authAdoption: activeAuth?.adoption ?? adopted?.adoption,
       authDatabase: configuration.authDatabase,
       authSchema,
       bootstrap: {
@@ -570,9 +572,9 @@ export const composeHostedOperatorDependencies = (
       cost: {
         class: "shared-recovery-group",
         description:
-          adopted === undefined
+          adopted === undefined && activeAuth === undefined
             ? "Preview-only resources and Auth bootstrap. Explicit normal Git delivery retries may create duplicate owned Preview deployments and provider usage charges. No human login or app preparation is established by schema readiness."
-            : "Checkpoint the reviewed shared Auth credentials, independently read Auth readiness, and verify the approved canonical Gateway rows. Credential activation remains blocked pending lifecycle binding; this approval does not rotate or recreate shared Auth.",
+            : "Adopt the reviewed shared Auth credentials after independent Auth readiness and canonical Gateway checks, then prepare this app’s separate database and bindings. Retain shared Auth users, sessions, credentials, and sibling Gateway settings.",
         owner: context.authority.ownerUserId,
       },
       deploymentBoundary: {
@@ -604,9 +606,9 @@ export const composeHostedOperatorDependencies = (
       effects: [
         {
           description:
-            adopted === undefined
+            adopted === undefined && activeAuth === undefined
               ? "Prepare or observe the exact owned shared Auth database and roles."
-              : "Checkpoint the exact source Auth credentials and perform read-only readiness and canonical Gateway checks; worker execution remains blocked pending lifecycle binding.",
+              : "Verify the approved shared Auth and Gateway ownership, then activate an independent encrypted Auth credential copy; never recreate or rotate shared Auth.",
           id: "auth-resources",
           kind: "resources",
           resourceId: configuration.authDatabase.resourceId,
@@ -619,7 +621,7 @@ export const composeHostedOperatorDependencies = (
         },
         {
           description:
-            adopted === undefined
+            adopted === undefined && activeAuth === undefined
               ? "Independently replan and migrate the approved shared Auth target."
               : "Require independent read-only Auth schema adoption; migration and recreation remain blocked.",
           id: AUTH_SCHEMA_EFFECT,
@@ -743,7 +745,10 @@ export const composeHostedOperatorDependencies = (
     input: HostedOperatorEffectContext,
     execute?: HostedOperatorWorkerEffectContext,
   ) => {
-    if (input.plan.authAdoption !== undefined) {
+    if (
+      input.plan.authAdoption !== undefined &&
+      input.effect.resourceId === input.plan.authDatabase.resourceId
+    ) {
       const frozen = {
         ...input,
         authority: structuredClone(input.authority),
@@ -755,21 +760,18 @@ export const composeHostedOperatorDependencies = (
         target: structuredClone(input.target),
       };
       const source = structuredClone(selectedApplication(configuration, frozen).authAdoptionSource);
-      if (source === undefined || execute !== undefined) {
-        throw new HostedOperatorError(RECONCILIATION_REQUIRED);
-      }
       const canonicalInput = gatewayContext(frozen);
       await controlPlane.checkpointSharedAuthAdoption({ effect: frozen, source });
-      await controlPlane.verifySharedAuthAdoption({
+      const proof = await controlPlane.verifySharedAuthAdoption({
+        activate: true,
         effect: frozen,
         source,
         verifyCanonicalOwnership: async () => {
-          await gatewayEnvironment.verifyCanonicalOwnership(canonicalInput);
+          const observed = await gatewayEnvironment.verifyCanonicalOwnership(canonicalInput);
+          return observed.rows;
         },
       });
-      // Successful preflight is not credential activation. Source cleanup and adopter-chain
-      // ownership must be independent of the originating app before any v2 worker use.
-      throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+      return { readback_sha256: proof.catalogFingerprint, status: "applied" as const };
     }
     const database =
       input.effect.resourceId === input.plan.authDatabase.resourceId
@@ -890,8 +892,9 @@ export const composeHostedOperatorDependencies = (
     input: HostedOperatorEffectContext,
   ): ReturnType<ProtectedHostedOperatorDependencies["reconcile"]> => {
     if (input.plan.authAdoption !== undefined) {
-      // An adopted realm is never genesis, including when readiness is missing or unreadable.
-      throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+      // A missing or mismatched adopted realm never falls through to genesis.
+      const observed = await authReadiness.verify(input);
+      return { receipt: receipt(input, observed.catalogFingerprint), status: "applied" };
     }
     try {
       const observed = await authReadiness.verify(input);
@@ -1054,7 +1057,8 @@ export const composeHostedOperatorDependencies = (
     input: HostedOperatorWorkerEffectContext,
   ): ReturnType<ProtectedHostedOperatorDependencies["executeEffect"]> => {
     if (input.plan.authAdoption !== undefined) {
-      throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+      const observed = await authReadiness.verify(input);
+      return receipt(input, observed.catalogFingerprint);
     }
     if (input.plan.authSchema === undefined) {
       throw new HostedOperatorError(RESOURCE_MISMATCH);

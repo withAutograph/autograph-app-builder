@@ -15,6 +15,7 @@ import type { BuilderProvisionAuthority } from "./journal";
 import {
   hostedRuntimeTargetSchema,
   hostedRuntimeProofSchema,
+  retainedOperatorAuthFromJournal,
   updateHostedRuntimeJournal,
 } from "./hosted-runtime-journal";
 import type {
@@ -226,6 +227,19 @@ const resourceIdentity = (plan: HostedOperatorPlan) =>
     contextId: plan.contextId,
     neon: plan.neon,
   });
+const sameAuthPreparation = (prior: HostedOperatorPlan, next: HostedOperatorPlan) =>
+  JSON.stringify(prior.authDatabase) === JSON.stringify(next.authDatabase) &&
+  (["projectId", "branchId", "endpoint"] as const).every(
+    (key) => prior.neon[key] === next.neon[key],
+  ) &&
+  prior.bootstrap?.endpointId === next.bootstrap?.endpointId &&
+  (next.authSchema === undefined ||
+    prior.authSchema?.targetDigest === next.authSchema.targetDigest);
+
+const retainCompletedAuth = (record: HostedRuntimeJournalRecord): HostedRuntimeJournalRecord => ({
+  ...record,
+  retainedAuth: record.retainedAuth ?? retainedOperatorAuthFromJournal(record),
+});
 
 const handlePlanOperation = async (
   deps: ProtectedHostedOperatorDependencies,
@@ -260,6 +274,28 @@ const handlePlanOperation = async (
     now: new Date(now()),
     operator,
   });
+  const prior = await deps.store.read(context);
+  const retainedCandidate =
+    prior?.record.retainedAuth === undefined && prior?.record.operator?.planDigest !== planDigest
+      ? prior && retainedOperatorAuthFromJournal(prior.record)
+      : undefined;
+  if (retainedCandidate !== undefined) {
+    const approval = await deps.readApproval({
+      ...context,
+      action: "prepare",
+      callId: retainedCandidate.approvedByCallId,
+      planDigest: retainedCandidate.planDigest,
+    });
+    if (
+      approval?.approved !== true ||
+      approval.approvalId !== retainedCandidate.approvalId ||
+      approval.callId !== retainedCandidate.approvedByCallId ||
+      approval.planDigest !== retainedCandidate.planDigest ||
+      approval.action !== "prepare"
+    ) {
+      throw new HostedOperatorError("authorization_required");
+    }
+  }
   const row = await updateHostedRuntimeJournal({
     ...context,
     now,
@@ -298,9 +334,18 @@ const handlePlanOperation = async (
       if (hasResources && resourceIdentity(record.operator.plan) !== resourceIdentity(plan)) {
         throw new HostedOperatorError("resource_mismatch");
       }
+      if (
+        retainedCandidate !== undefined &&
+        (JSON.stringify(retainedOperatorAuthFromJournal(record)) !==
+          JSON.stringify(retainedCandidate) ||
+          JSON.stringify(record.privateState) !== JSON.stringify(prior?.record.privateState))
+      ) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      const retainedAuth = record.retainedAuth ?? retainedCandidate;
       // Same-resource release changes keep credentials; old proof never attests the new plan.
       const nextOperator: ReturnType<typeof requireOperator> = { ...operator };
-      if (authStageCompleted) {
+      if (sameAuthPreparation(record.operator.plan, plan)) {
         nextOperator.authPreparation = record.operator.authPreparation;
       }
       nextOperator.deliveryCandidates = record.operator.deliveryCandidates;
@@ -338,6 +383,10 @@ const handlePlanOperation = async (
         approvedByCallId: "operator:unapproved-plan",
         environmentBound: false,
         operator: nextOperator,
+        retainedAuth:
+          retainedAuth !== undefined && sameAuthPreparation(retainedAuth.plan, plan)
+            ? retainedAuth
+            : undefined,
         status: "pending" as const,
         step: "reserved" as const,
       };
@@ -742,18 +791,56 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                     await ownedUpdate((value) => {
                       const currentOperator = requireOperator(value);
                       const priorRows = currentOperator.gatewayEnvironment ?? [];
+                      const approvedRows =
+                        currentOperator.plan.authAdoption?.gatewayEnvironment ?? [];
                       if (
-                        gatewayEnvironment.some(
-                          (row) =>
+                        gatewayEnvironment.some((row) => {
+                          const prior = priorRows.find(
+                            (saved) => saved.id === row.id || saved.key === row.key,
+                          );
+                          const approved = approvedRows.find(
+                            (saved) => saved.id === row.id || saved.key === row.key,
+                          );
+                          const sameIdentity = (saved: ManagedOperatorEnvironmentRow) =>
+                            (
+                              [
+                                "branch",
+                                "comment",
+                                "id",
+                                "key",
+                                "operationRef",
+                                "projectId",
+                              ] as const
+                            ).every((key) => saved[key] === row[key]);
+                          const foreignPending =
+                            row.pendingOperationRef !== undefined &&
+                            row.pendingOperationRef !== operationRef;
+                          if (
+                            foreignPending ||
+                            (prior !== undefined && !sameIdentity(prior)) ||
+                            (approved !== undefined && !sameIdentity(approved))
+                          ) {
+                            return true;
+                          }
+                          // Approved canonical ownership seeds adopted rows. Verified value and
+                          // current-operation pending metadata may evolve while row identity stays fixed.
+                          return (
                             row.operationRef !== operationRef &&
-                            !priorRows.some(
-                              (prior) => JSON.stringify(prior) === JSON.stringify(row),
-                            ),
-                        )
+                            prior === undefined &&
+                            approved === undefined
+                          );
+                        })
                       ) {
                         throw new HostedOperatorError("resource_mismatch");
                       }
-                      return { ...value, operator: { ...currentOperator, gatewayEnvironment } };
+                      return {
+                        ...value,
+                        operator: { ...currentOperator, gatewayEnvironment },
+                        retainedAuth:
+                          value.retainedAuth === undefined
+                            ? undefined
+                            : { ...value.retainedAuth, gatewayEnvironment },
+                      };
                     })
                   ).record;
                   effectInput.gatewayEnvironmentRows = requireOperator(record).gatewayEnvironment;
@@ -986,13 +1073,15 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 throw new HostedOperatorError("resource_mismatch");
               }
               await assertCurrent();
-              const complete = await ownedUpdate((value) => ({
-                ...value,
-                environmentBound: false,
-                operator: { ...requireOperator(value), authPreparation },
-                status: "pending",
-                step: "reserved",
-              }));
+              const complete = await ownedUpdate((value) =>
+                retainCompletedAuth({
+                  ...value,
+                  environmentBound: false,
+                  operator: { ...requireOperator(value), authPreparation },
+                  status: "pending",
+                  step: "reserved",
+                }),
+              );
               return response(operatorPublicResultSchema.parse(publicStatus(complete.record)));
             }
             const proof =
@@ -1013,13 +1102,13 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 // Shared Auth remains live after app cleanup; retain its owned encrypted credentials.
                 delete value.proof;
               }
-              return {
+              return retainCompletedAuth({
                 ...value,
                 environmentBound: plan.action === "prepare",
                 proof,
                 status: plan.action === "prepare" ? "prepared" : "cleaned",
                 step: plan.action === "prepare" ? "bound" : "cleaned",
-              };
+              });
             });
             return response(operatorPublicResultSchema.parse(publicStatus(complete.record)));
           },
