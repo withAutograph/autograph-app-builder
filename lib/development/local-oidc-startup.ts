@@ -186,6 +186,16 @@ export function ensureLocalDevelopmentOidc(input: {
 
   const runCommand = input.runCommand ?? runLocalOidcStartupCommand;
   const childEnvironment = commandEnvironment(environment);
+  const ownerBindEnvironment: NodeJS.ProcessEnv = {
+    ...childEnvironment,
+    MISE_BIN_PATH: input.miseExecutable,
+  };
+  if (environment.MISE_STATE_DIR !== undefined) {
+    ownerBindEnvironment.MISE_STATE_DIR = environment.MISE_STATE_DIR;
+  }
+  if (environment.MISE_TRUSTED_CONFIG_PATHS !== undefined) {
+    ownerBindEnvironment.MISE_TRUSTED_CONFIG_PATHS = environment.MISE_TRUSTED_CONFIG_PATHS;
+  }
   try {
     runCommand({
       args: ["env", "pull", ".env.local", "--environment=development", "--yes"],
@@ -197,7 +207,7 @@ export function ensureLocalDevelopmentOidc(input: {
     runCommand({
       args: ["run", "local:install-oidc"],
       cwd: repositoryRoot,
-      environment: { ...childEnvironment, MISE_BIN_PATH: input.miseExecutable },
+      environment: ownerBindEnvironment,
       executable: input.miseExecutable,
       operation: "owner-bind",
     });

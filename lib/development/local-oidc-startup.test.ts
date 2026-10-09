@@ -124,6 +124,67 @@ describe("local Development OIDC startup", () => {
     ]);
   });
 
+  it.each([
+    {
+      MISE_STATE_DIR: "/owner/isolated-mise-state",
+      MISE_TRUSTED_CONFIG_PATHS: "/owner/trusted-checkout",
+    },
+    { MISE_STATE_DIR: "" },
+    { MISE_TRUSTED_CONFIG_PATHS: "/owner/trusted-checkout" },
+    {},
+  ])(
+    "preserves only supplied Mise state and trust settings for owner binding: %j",
+    (miseSettings) => {
+      const repositoryRoot = fixture({ expiresAt: NOW + 60 });
+      const invocations: LocalOidcStartupInvocation[] = [];
+      expect(
+        ensureLocalDevelopmentOidc({
+          ...baseInput(repositoryRoot),
+          environment: {
+            ...baseInput(repositoryRoot).environment,
+            ...miseSettings,
+            MISE_ENV: "unrequested-environment",
+            MISE_SECRET_TOKEN: "must-not-be-forwarded",
+            OPENAI_API_KEY: "must-not-be-forwarded",
+          },
+          runCommand: (invocation) => {
+            invocations.push(invocation);
+            if (invocation.operation === "development-env-pull") {
+              writeFileSync(
+                path.join(repositoryRoot, ".env.local"),
+                `VERCEL_OIDC_TOKEN=${token()}\n`,
+                { mode: 0o600 },
+              );
+            }
+          },
+        }),
+      ).toEqual({ refreshed: true });
+      expect(invocations).toHaveLength(2);
+      const [pull, ownerBind] = invocations;
+      expect(pull.operation).toBe("development-env-pull");
+      expect(ownerBind.operation).toBe("owner-bind");
+      expect(ownerBind.environment).toEqual({
+        ...pull.environment,
+        MISE_BIN_PATH: "/mise/mise",
+        ...miseSettings,
+      });
+      for (const invocation of invocations) {
+        for (const name of [
+          "VERCEL_OIDC_TOKEN",
+          "VERCEL_TOKEN",
+          "AI_GATEWAY_API_KEY",
+          "OPENAI_API_KEY",
+          "MISE_ENV",
+          "MISE_SECRET_TOKEN",
+        ]) {
+          expect(invocation.environment).not.toHaveProperty(name);
+        }
+      }
+      expect(pull.environment).not.toHaveProperty("MISE_STATE_DIR");
+      expect(pull.environment).not.toHaveProperty("MISE_TRUSTED_CONFIG_PATHS");
+    },
+  );
+
   it("validates a refreshed token against the clock after the pull", () => {
     const repositoryRoot = fixture({ expiresAt: NOW + 60 });
     const clock = vi.spyOn(Date, "now").mockReturnValue(NOW * 1000);
