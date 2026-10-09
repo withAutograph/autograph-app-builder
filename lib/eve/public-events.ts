@@ -35,7 +35,26 @@ export interface InternalEveEvent {
   message?: string;
   status?: EveSessionStatus;
   requestIds?: string[];
+  resolutionKind?: "authorization";
 }
+
+const authorizationCoordinatesSchema = z.object({
+  attemptId: z.string().min(1).optional(),
+  candidateId: z.string().min(1).optional(),
+  name: z.string().min(1),
+  turnId: z.string().min(1),
+});
+const authorizationRequestId = (data: unknown): string | undefined => {
+  const coordinates = authorizationCoordinatesSchema.safeParse(data);
+  if (!coordinates.success) {
+    return undefined;
+  }
+  return (
+    coordinates.data.attemptId ??
+    coordinates.data.candidateId ??
+    `${coordinates.data.turnId}:${coordinates.data.name}`
+  );
+};
 
 const progressStates = new Set(["started", "completed", "failed"]);
 const visibleOperations = new Map([
@@ -1289,6 +1308,10 @@ export const projectInstalledEveEvent = (
       ];
     }
     case "authorization.required": {
+      const requestId = authorizationRequestId(event.data);
+      if (requestId === undefined) {
+        return [];
+      }
       const { authorization } = event.data;
       const authorizationRecord = z.record(z.string(), z.unknown()).safeParse(authorization);
       const repositoryAccess = githubRepositoryAccessSchema.safeParse(
@@ -1303,10 +1326,7 @@ export const projectInstalledEveEvent = (
           request: {
             description: storeIn?.description ?? event.data.description,
             kind: "authorization",
-            requestId:
-              event.data.attemptId ??
-              event.data.candidateId ??
-              `${event.data.turnId}:${event.data.name}`,
+            requestId,
             title: storeIn?.title ?? event.data.name,
             ...(storeIn === undefined
               ? {}
@@ -1344,6 +1364,22 @@ export const projectInstalledEveEvent = (
         },
       ];
     }
+    case "authorization.completed": {
+      const requestId = authorizationRequestId(event.data);
+      const outcome = z
+        .enum(["authorized", "declined", "failed", "timed-out"])
+        .safeParse(event.data.outcome);
+      return requestId === undefined || !outcome.success
+        ? []
+        : [
+            {
+              index,
+              requestIds: [requestId],
+              resolutionKind: "authorization",
+              type: "input.resolved",
+            },
+          ];
+    }
     case "turn.cancelled": {
       return [{ index, status: "cancelled", type: "status" }];
     }
@@ -1380,6 +1416,18 @@ export const outstandingInstalledEveRequests = (
 ): PublicInputRequest[] => {
   const outstanding = new Map<string, PublicInputRequest>();
   for (const event of events) {
+    if (event.type === "authorization.required" || event.type === "authorization.completed") {
+      for (const projected of projectInstalledEveEvent(event, 0)) {
+        if (projected.request !== undefined) {
+          outstanding.set(projected.request.requestId, projected.request);
+        }
+        for (const requestId of projected.requestIds ?? []) {
+          if (outstanding.get(requestId)?.kind === "authorization") {
+            outstanding.delete(requestId);
+          }
+        }
+      }
+    }
     if (event.type === "input.requested") {
       const projected = event.data.requests.map(inputRequest);
       if (projected.some((request) => request === undefined)) {
@@ -1414,7 +1462,12 @@ export const outstandingInternalEveRequests = (
     }
     if (event.type === "input.resolved") {
       for (const requestId of event.requestIds ?? []) {
-        outstanding.delete(requestId);
+        if (
+          event.resolutionKind !== "authorization" ||
+          outstanding.get(requestId)?.kind === "authorization"
+        ) {
+          outstanding.delete(requestId);
+        }
       }
     }
   }
@@ -1424,7 +1477,7 @@ export const outstandingInternalEveRequests = (
 export const deriveInstalledEveStatus = (
   events: readonly MessageStreamEvent[],
 ): EveSessionStatus => {
-  const outstanding = new Set<string>();
+  const outstanding = new Map<string, PublicInputRequest["kind"]>();
   let boundary: EveSessionStatus = "working";
   for (const event of events) {
     if (event.type === "input.requested") {
@@ -1434,7 +1487,7 @@ export const deriveInstalledEveStatus = (
       }
       for (const request of projected) {
         if (request !== undefined) {
-          outstanding.add(request.requestId);
+          outstanding.set(request.requestId, request.kind);
         }
       }
     }
@@ -1445,6 +1498,18 @@ export const deriveInstalledEveStatus = (
     }
     if (event.type === "approval.settled") {
       outstanding.delete(event.data.requestId);
+    }
+    if (event.type === "authorization.required" || event.type === "authorization.completed") {
+      for (const projected of projectInstalledEveEvent(event, 0)) {
+        if (projected.request !== undefined) {
+          outstanding.set(projected.request.requestId, projected.request.kind);
+        }
+        for (const requestId of projected.requestIds ?? []) {
+          if (outstanding.get(requestId) === "authorization") {
+            outstanding.delete(requestId);
+          }
+        }
+      }
     }
     if (event.type === "turn.cancelled") {
       boundary = "cancelled";

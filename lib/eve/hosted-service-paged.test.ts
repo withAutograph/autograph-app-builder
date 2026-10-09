@@ -256,6 +256,126 @@ const seedColdCheckpoint = async (f: Awaited<ReturnType<typeof fixture>>) => {
 };
 
 describe("paged hosted session observation", () => {
+  it.each(["generation", "new-request"] as const)(
+    "rejects stale authorization cleanup after concurrent %s checkpoint replacement",
+    async (race) => {
+      const newRequest = {
+        allowFreeform: true,
+        kind: "question" as const,
+        requestId: "new-request",
+        title: "Keep this question",
+      };
+      const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>();
+      const f = await fixture(observe);
+      observe.mockImplementation(async (input) => {
+        const current = await f.getSession(principal, f.sessionId);
+        if (current?.version !== 2) {
+          throw new Error("Expected current durable session");
+        }
+        const replacementState = nativeState({
+          adapterSessionId: race === "generation" ? "replacement_adapter" : "adapter_1",
+          nextNativeIndex: 3,
+          publicEventCount: 1,
+        });
+        replacementState.pendingRequests = [newRequest];
+        const replacement = {
+          events: (async function* replacementEvents() {
+            yield { index: 0, request: newRequest, type: "input_required" as const };
+          })(),
+          expectedCheckpointDigest: current.checkpointDigest,
+          metadata: {
+            capturedAtEpochMs: 2000,
+            inputRequests: [newRequest],
+            nativeObservationState: replacementState,
+            status: "input_required" as const,
+            version: 1 as const,
+          },
+          nowEpochMs: 2000,
+          principal,
+          resumability: "live" as const,
+          sessionId: f.sessionId,
+          stage: "planning" as const,
+        };
+        await (race === "generation"
+          ? f.replaceSessionAdapterPaged({
+              ...replacement,
+              adapterSessionId: "replacement_adapter",
+              expectedAdapterGeneration: current.adapterGeneration,
+            })
+          : f.observeSessionPaged(replacement));
+        const observed = nativeObservationStateSchema.parse({
+          ...input.nativeObservationState,
+          pendingRequests: [],
+        });
+        return {
+          artifactProjectionRequiresLegacyReadback: false,
+          installedEventCount: 3,
+          nativeObservationState: observed,
+          nextNativeIndex: 3,
+          pendingRequests: [],
+          publicEventCount: 1,
+          status: "waiting",
+        };
+      });
+      const initial = await f.getSession(principal, f.sessionId);
+      if (initial?.version !== 2) {
+        throw new Error("Expected initial durable session");
+      }
+      const authorization = {
+        allowFreeform: false,
+        kind: "authorization" as const,
+        requestId: "old-auth",
+        title: "Connect",
+      };
+      const originalState = nativeState({
+        adapterSessionId: "adapter_1",
+        nextNativeIndex: 3,
+        publicEventCount: 1,
+      });
+      originalState.pendingRequests = [authorization];
+      await f.observeSessionPaged({
+        events: (async function* originalEvents() {
+          yield { index: 0, request: authorization, type: "input_required" as const };
+        })(),
+        expectedCheckpointDigest: initial.checkpointDigest,
+        metadata: {
+          capturedAtEpochMs: 1000,
+          inputRequests: [authorization],
+          nativeObservationState: originalState,
+          status: "input_required",
+          version: 1,
+        },
+        nowEpochMs: 1000,
+        principal,
+        resumability: "live",
+        sessionId: f.sessionId,
+        stage: "planning",
+      });
+      await expect(f.service.get({ cursor: 1, limit: 10, sessionId: f.sessionId })).rejects.toThrow(
+        "Checkpoint observation raced",
+      );
+      const current = await f.getSession(principal, f.sessionId);
+      expect(current).toMatchObject({
+        adapterGeneration: race === "generation" ? 2 : 1,
+        adapterSessionId: race === "generation" ? "replacement_adapter" : "adapter_1",
+        status: "input_required",
+      });
+      if (current?.version !== 2 || current.checkpointRef === undefined) {
+        throw new Error("Expected replacement checkpoint");
+      }
+      const saved = await f.readCheckpointPage({
+        checkpointRef: current.checkpointRef,
+        cursor: 0,
+        limit: 10,
+        principal,
+        sessionId: f.sessionId,
+      });
+      expect(saved.metadata?.inputRequests).toEqual([newRequest]);
+      expect(saved.metadata?.nativeObservationState).not.toHaveProperty(
+        "authorizationCompletionsReconciled",
+      );
+    },
+  );
   it("retains the old public checkpoint while privately catching up and promotes only a complete tail", async () => {
     const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
       const start = input.nativeObservationState?.publicEventCount ?? 0;

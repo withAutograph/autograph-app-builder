@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
 import type { MessageStreamEvent } from "eve/client";
+import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 
 import { readJsonStringChecks } from "../agent/streaming-json-pointer";
@@ -629,6 +630,68 @@ const createArtifactReadbackClassifier = (sessionId: string, seed?: ArtifactRead
   };
 };
 
+/** Validate the original complete pinned tail without replaying any observation callback. */
+const reconcileHistoricalAuthorizations = async (
+  input: Parameters<typeof streamSameOriginEveEvents>[0],
+  state: NativeObservationState,
+): Promise<PublicInputRequest[]> => {
+  const original = state.pendingRequests;
+  const history = new Map<
+    string,
+    {
+      completed: boolean;
+      request: PublicInputRequest;
+    }
+  >();
+  let count = 0;
+  let tail: number | undefined;
+  try {
+    for await (const event of streamSameOriginEveEvents({
+      ...input,
+      onNativeTail: (index) => {
+        tail = index;
+      },
+      startIndex: 0,
+    })) {
+      if (count < state.nextNativeIndex) {
+        if (event.type === "authorization.required") {
+          const request = projectInstalledEveEvent(event, 0)[0]?.request;
+          if (request !== undefined) {
+            history.set(request.requestId, {
+              completed: false,
+              request,
+            });
+          }
+        }
+        if (event.type === "authorization.completed") {
+          const requestId = projectInstalledEveEvent(event, 0)[0]?.requestIds?.[0];
+          const required = requestId === undefined ? undefined : history.get(requestId);
+          if (required !== undefined) {
+            required.completed = true;
+          }
+        }
+      }
+      count += 1;
+    }
+    if (tail === undefined || count !== tail + 1 || count < state.nextNativeIndex) {
+      return original;
+    }
+    return original.filter((request) => {
+      if (request.kind !== "authorization") {
+        return true;
+      }
+      const required = history.get(request.requestId);
+      if (!isDeepStrictEqual(required?.request, request)) {
+        return true;
+      }
+      return required?.completed !== true;
+    });
+  } catch {
+    // Missing or incomplete original history cannot settle a retained authorization.
+    return original;
+  }
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export async function observeSameOriginEveStream(
   input: Parameters<typeof streamSameOriginEveEvents>[0] & {
@@ -667,8 +730,15 @@ export async function observeSameOriginEveStream(
     if (state !== undefined && state.adapterSessionId !== input.sessionId) {
       throw new Error("Native observer state belongs to another adapter session.");
     }
+    let retainedRequests = state?.pendingRequests ?? [];
+    if (
+      state !== undefined &&
+      retainedRequests.some((request) => request.kind === "authorization")
+    ) {
+      retainedRequests = await reconcileHistoricalAuthorizations({ ...input, readSignal }, state);
+    }
     const pending = new Map<string, PublicInputRequest>(
-      state?.pendingRequests.map((request) => [request.requestId, request]),
+      retainedRequests.map((request) => [request.requestId, request]),
     );
     let installedEventCount = state?.nextNativeIndex ?? 0;
     let publicEventCount = state?.publicEventCount ?? 0;
@@ -770,7 +840,12 @@ export async function observeSameOriginEveStream(
           }
           if (indexed.type === "input.resolved") {
             for (const requestId of indexed.requestIds ?? []) {
-              pending.delete(requestId);
+              if (
+                indexed.resolutionKind !== "authorization" ||
+                pending.get(requestId)?.kind === "authorization"
+              ) {
+                pending.delete(requestId);
+              }
             }
           }
           if (
