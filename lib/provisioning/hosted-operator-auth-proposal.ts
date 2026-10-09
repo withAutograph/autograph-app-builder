@@ -80,7 +80,7 @@ export const createHostedOperatorAuthProposal =
       ]);
       await input.assertCurrentOwner();
       const result = await sandbox.runCommand({
-        args: ["auth-protected-propose", "--input-file", inputPath],
+        args: ["--input-file", inputPath],
         cmd: worker.executablePath,
         env: {},
       });
