@@ -74,6 +74,17 @@ export const operatorCallerWorkloadSchema = z.strictObject({
 });
 export type OperatorCallerWorkload = z.infer<typeof operatorCallerWorkloadSchema>;
 
+export const operatorOwnerStoreImportErrorCodeSchema = z.enum([
+  "ERR_MODULE_NOT_FOUND",
+  "MODULE_NOT_FOUND",
+  "ERR_PACKAGE_PATH_NOT_EXPORTED",
+  "ERR_PACKAGE_IMPORT_NOT_DEFINED",
+  "ERR_REQUIRE_ESM",
+  "ERR_UNKNOWN_FILE_EXTENSION",
+  "ERR_UNSUPPORTED_DIR_IMPORT",
+  "ERR_UNSUPPORTED_ESM_URL_SCHEME",
+]);
+
 const metadata = z.strictObject({
   accessClass: z
     .enum(["upstream_auth_denied", "application_auth_denied", "other_failed", "ok"])
@@ -91,6 +102,12 @@ const metadata = z.strictObject({
       issuerConfigured: z.boolean(),
       resourceCanonical: z.boolean(),
       resourceConfigured: z.boolean(),
+    })
+    .optional(),
+  ownerStoreImport: z
+    .strictObject({
+      errorCode: operatorOwnerStoreImportErrorCodeSchema.optional(),
+      module: z.enum(["database", "handoff", "session", "membership"]),
     })
     .optional(),
   phase,

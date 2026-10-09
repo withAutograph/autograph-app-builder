@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent-diagnostic";
+import {
+  createHostedOperatorConsentDiagnostic,
+  operatorOwnerStoreImportErrorCodeSchema,
+} from "./hosted-operator-consent-diagnostic";
 import type {
   HostedOperatorConsentDiagnosticSink,
   HostedOperatorConsentMetadata,
@@ -15,6 +18,31 @@ const value: HostedOperatorConsentMetadata = {
 };
 
 describe("closed Neon consent diagnostics", () => {
+  it.each(["database", "handoff", "session", "membership"] as const)(
+    "accepts only a closed %s import label and fixed Node error codes",
+    (module) => {
+      const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+      const report = createHostedOperatorConsentDiagnostic(secret, sink);
+      for (const errorCode of operatorOwnerStoreImportErrorCodeSchema.options) {
+        report({ ...value, ownerStoreImport: { errorCode, module }, stage: "owner_store_import" });
+      }
+      report({ ...value, ownerStoreImport: { module }, stage: "owner_store_import" });
+      expect(sink).toHaveBeenCalledTimes(
+        operatorOwnerStoreImportErrorCodeSchema.options.length + 1,
+      );
+      for (const field of ["module", "errorCode", "cause", "message", "path"]) {
+        report({
+          ...value,
+          ownerStoreImport: { module, [field]: secret },
+          stage: "owner_store_import",
+        });
+      }
+      expect(sink).toHaveBeenCalledTimes(
+        operatorOwnerStoreImportErrorCodeSchema.options.length + 1,
+      );
+      expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+    },
+  );
   it.each(["owner_configuration_parse", "owner_store_import", "owner_store_construction"] as const)(
     "accepts only fixed configuration booleans for %s",
     (stage) => {
