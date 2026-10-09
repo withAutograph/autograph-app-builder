@@ -1,4 +1,8 @@
 import { navigationReporterOptions } from "../evals/support/self-reproduction-navigation-command";
+import {
+  ensureProductionNavigationImage,
+  PRODUCTION_NAVIGATION_POSTGRES_IMAGE,
+} from "./production-navigation-image";
 import { randomBytes } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
@@ -48,6 +52,7 @@ const artifactDirectory = path.join(source, ".artifacts/production-navigation");
 const children = new Set<ChildProcess>();
 let databaseStarted = false;
 let cancelled = false;
+const imagePreparationAbort = new AbortController();
 const upgradedSockets = new Set<Duplex>();
 
 const assertRunning = () => {
@@ -113,6 +118,7 @@ const appPort = await freePort();
 const tls = createHttpsServer();
 const interrupt = async () => {
   cancelled = true;
+  imagePreparationAbort.abort();
   await Promise.allSettled([...children].map(stopChild));
 };
 // Both mise and its launcher may forward a signal; repeated delivery must not
@@ -260,6 +266,30 @@ try {
     throw new Error("Missing TLS port.");
   }
   const origin = `https://localhost:${address.port}`;
+  await ensureProductionNavigationImage({
+    async runCommand(args, { signal, timeoutMs }) {
+      assertRunning();
+      try {
+        const result = await execute(docker, ["--host", dockerHost, ...args], {
+          killSignal: "SIGKILL",
+          signal,
+          timeout: timeoutMs,
+        });
+        return { exitCode: 0, stderr: result.stderr };
+      } catch (error) {
+        signal.throwIfAborted();
+        if (error instanceof Error && "code" in error && "stderr" in error) {
+          const killed = "killed" in error && error.killed === true;
+          if (typeof error.code === "number" && typeof error.stderr === "string" && !killed) {
+            return { exitCode: error.code, stderr: error.stderr };
+          }
+        }
+        // oxlint-disable-next-line eslint/preserve-caught-error -- Arbitrary subprocess diagnostics must not escape this boundary.
+        throw new Error("Production navigation image command could not complete.");
+      }
+    },
+    signal: imagePreparationAbort.signal,
+  });
   databaseStarted = true;
   await runDocker([
     "run",
@@ -273,7 +303,7 @@ try {
     `POSTGRES_DB=${databaseName}`,
     "--publish",
     "127.0.0.1::5432",
-    "public.ecr.aws/docker/library/postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40",
+    PRODUCTION_NAVIGATION_POSTGRES_IMAGE,
   ]);
   const deadline = Date.now() + 60_000;
   while (true) {
