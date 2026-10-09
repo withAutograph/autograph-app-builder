@@ -243,44 +243,142 @@ type OpenOwnerReaderStores = (
   configuration: OwnerReaderConfiguration,
 ) => Promise<OwnerReaderStores>;
 
+type OwnerInitializationStage =
+  | "owner_configuration_parse"
+  | "owner_store_import"
+  | "owner_store_construction";
+class OwnerInitializationError extends Error {
+  readonly stage: OwnerInitializationStage;
+  readonly ownerConfiguration: HostedOperatorConsentMetadata["ownerConfiguration"];
+  constructor(
+    stage: OwnerInitializationStage,
+    ownerConfiguration?: HostedOperatorConsentMetadata["ownerConfiguration"],
+  ) {
+    super("Owner initialization unavailable.");
+    this.name = "OwnerInitializationError";
+    this.stage = stage;
+    this.ownerConfiguration = ownerConfiguration;
+  }
+}
+
+const ownerCanonicalUrl = (value: string | undefined, pathname: string): URL | null => {
+  if (value === undefined || !value.startsWith("https://")) {
+    return null;
+  }
+  try {
+    const parsed = new URL(value);
+    const valid = [
+      parsed.protocol === "https:",
+      parsed.pathname === pathname,
+      parsed.username === "",
+      parsed.password === "",
+      parsed.search === "",
+      parsed.hash === "",
+    ].every(Boolean);
+    return valid ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+/** Fixed booleans explain configuration failures without retaining any input or exception. */
+const ownerConfigurationDiagnostic = (
+  environment: Readonly<Record<string, string | undefined>>,
+): HostedOperatorConsentMetadata["ownerConfiguration"] => {
+  try {
+    const databaseUrl = environment.DATABASE_URL;
+    const issuer = environment.BETTER_AUTH_URL;
+    const resource = environment.MCP_RESOURCE_URL;
+    let databasePolicyValid = false;
+    try {
+      parseHostedDatabaseUrl(databaseUrl);
+      databasePolicyValid = true;
+    } catch {
+      /* Only the policy result is diagnostic. */
+    }
+    const issuerUrl = ownerCanonicalUrl(issuer, "/api/auth");
+    const resourceUrl = ownerCanonicalUrl(resource, "/mcp");
+    return {
+      databasePolicyValid,
+      databaseUrlConfigured: databaseUrl !== undefined && databaseUrl !== "",
+      issuerCanonical: issuerUrl !== null,
+      issuerConfigured: issuer !== undefined && issuer !== "",
+      resourceCanonical:
+        issuerUrl !== null && resourceUrl !== null && resourceUrl.origin === issuerUrl.origin,
+      resourceConfigured: resource !== undefined && resource !== "",
+    };
+  } catch {
+    // Hostile configuration getters must not change the unavailable behavior.
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional diagnostic is absent after a hostile getter.
+    return undefined;
+  }
+};
+
+const loadOwnerReaderModules = async () => {
+  try {
+    return await Promise.all([
+      import("../mcp/hosted-route"),
+      import("../handoff/postgres-store"),
+      import("../eve/postgres-hosted-store"),
+      import("../auth/postgres-organization-user-authority"),
+    ]);
+  } catch {
+    throw new OwnerInitializationError("owner_store_import");
+  }
+};
+
 const openOwnerReaderStores: OpenOwnerReaderStores = async (config) => {
   const [
     { openHostedPostgresDatabase },
     { createPostgresBuilderHandoffStore },
     { createPostgresHostedEveStore },
     { createPostgresPreviewOrganizationAuthority },
-  ] = await Promise.all([
-    import("../mcp/hosted-route"),
-    import("../handoff/postgres-store"),
-    import("../eve/postgres-hosted-store"),
-    import("../auth/postgres-organization-user-authority"),
-  ]);
-  const database = openHostedPostgresDatabase(config.databaseUrl);
-  const membership = createPostgresPreviewOrganizationAuthority(database, {
-    audience: config.resource,
-    issuer: config.issuer,
-  });
-  return {
-    handoffs: createPostgresBuilderHandoffStore(database),
-    isActiveMember: async (authority) => {
-      const active = await membership.isActiveMember(authority);
-      return active;
-    },
-    sessions: createPostgresHostedEveStore(database),
-  };
+  ] = await loadOwnerReaderModules();
+  try {
+    const database = openHostedPostgresDatabase(config.databaseUrl);
+    const membership = createPostgresPreviewOrganizationAuthority(database, {
+      audience: config.resource,
+      issuer: config.issuer,
+    });
+    return {
+      handoffs: createPostgresBuilderHandoffStore(database),
+      isActiveMember: async (authority) => {
+        const active = await membership.isActiveMember(authority);
+        return active;
+      },
+      sessions: createPostgresHostedEveStore(database),
+    };
+  } catch {
+    throw new OwnerInitializationError("owner_store_construction");
+  }
 };
 
 export const createHostedOperatorDeploymentOwnerContextResolver = async (
   environment: Readonly<Record<string, string | undefined>>,
   openStores: OpenOwnerReaderStores = openOwnerReaderStores,
 ) => {
-  const config = readHostedOperatorOwnerReaderConfiguration(environment);
-  const stores = await openStores(config);
-  return createHostedOperatorOwnerContextResolver({
-    ...stores,
-    audience: config.resource,
-    issuer: config.issuer,
-  });
+  let config: OwnerReaderConfiguration;
+  try {
+    config = readHostedOperatorOwnerReaderConfiguration(environment);
+  } catch {
+    throw new OwnerInitializationError(
+      "owner_configuration_parse",
+      ownerConfigurationDiagnostic(environment),
+    );
+  }
+  try {
+    const stores = await openStores(config);
+    return createHostedOperatorOwnerContextResolver({
+      ...stores,
+      audience: config.resource,
+      issuer: config.issuer,
+    });
+  } catch (error) {
+    if (error instanceof OwnerInitializationError) {
+      throw error;
+    }
+    throw new OwnerInitializationError("owner_store_construction");
+  }
 };
 
 /** Server-owned deployment resolver; principal and session rows are re-read for every call. */
@@ -303,14 +401,18 @@ export const resolveHostedOperatorOwnerContext = async (input: {
   let resolver: Awaited<typeof pendingResolver>;
   try {
     resolver = await pendingResolver;
-  } catch {
+  } catch (error) {
     deploymentResolver = null;
-    report({
+    const diagnostic: HostedOperatorConsentMetadata = {
       boundary: "builder",
       outcome: "setup_unavailable",
       phase: "inline",
-      stage: "owner_configuration",
-    });
+      stage: error instanceof OwnerInitializationError ? error.stage : "owner_configuration",
+    };
+    if (error instanceof OwnerInitializationError && error.ownerConfiguration !== undefined) {
+      diagnostic.ownerConfiguration = error.ownerConfiguration;
+    }
+    report(diagnostic);
     throw new HostedOperatorError("operator_unavailable");
   }
   report({

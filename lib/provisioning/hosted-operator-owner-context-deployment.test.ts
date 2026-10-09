@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+/* oxlint-disable anti-slop/no-module-mocking -- These cases exercise failures at the actual lazy import boundary while keeping constructors and database I/O inert; the existing injected opener cannot reproduce module loading failures. */
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { durableHostedSessionRecordSchema } from "../eve/hosted-store";
 import { createHostedOperatorDeploymentOwnerContextResolver } from "./hosted-operator-owner-context";
 
@@ -57,8 +58,41 @@ const fixture = () => {
     },
   };
   const openStores = vi.fn(async () => await Promise.resolve(stores));
-  return { activeMember, openStores };
+  return { activeMember, openStores, stores };
 };
+
+afterEach(async () => {
+  await vi.dynamicImportSettled();
+  vi.doUnmock("../mcp/hosted-route");
+  vi.doUnmock("../handoff/postgres-store");
+  vi.doUnmock("../eve/postgres-hosted-store");
+  vi.doUnmock("../auth/postgres-organization-user-authority");
+  vi.restoreAllMocks();
+  vi.resetModules();
+});
+
+const mockStoreModules = () => {
+  const f = fixture();
+  const openDatabase = vi.fn(() => ({}));
+  const handoff = vi.fn(() => f.stores.handoffs);
+  const sessions = vi.fn(() => f.stores.sessions);
+  const membership = vi.fn(() => ({ isActiveMember: f.activeMember }));
+  vi.doMock("../mcp/hosted-route", () => ({ openHostedPostgresDatabase: openDatabase }));
+  vi.doMock("../handoff/postgres-store", () => ({ createPostgresBuilderHandoffStore: handoff }));
+  vi.doMock("../eve/postgres-hosted-store", () => ({ createPostgresHostedEveStore: sessions }));
+  vi.doMock("../auth/postgres-organization-user-authority", () => ({
+    createPostgresPreviewOrganizationAuthority: membership,
+  }));
+  return { ...f, handoff, membership, openDatabase, sessions };
+};
+
+const ownerInput = {
+  adapterSessionId: "adapter-current",
+  authority,
+  principal,
+  sessionAuth: { current: auth, initiator: auth },
+};
+
 describe("deployed owner reader with narrow configuration", () => {
   it("composes the actual deployment resolver with only the three owner-reader inputs", async () => {
     const f = fixture();
@@ -108,5 +142,125 @@ describe("deployed owner reader with narrow configuration", () => {
       ),
     ).rejects.toThrow();
     expect(f.openStores).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["DATABASE_URL", undefined, "databaseUrlConfigured", false],
+    [
+      "DATABASE_URL",
+      "postgresql://private:credential@ep-direct.aws.neon.tech/private?sslmode=require",
+      "databasePolicyValid",
+      false,
+    ],
+    [
+      "DATABASE_URL",
+      "postgresql://private:credential@ep-direct-pooler.aws.neon.tech/private",
+      "databasePolicyValid",
+      false,
+    ],
+    ["BETTER_AUTH_URL", "https://private.example/incorrect", "issuerCanonical", false],
+    ["MCP_RESOURCE_URL", "https://foreign-private.example/mcp", "resourceCanonical", false],
+  ] as const)(
+    "classifies invalid %s using fixed booleans without retaining the configuration",
+    async (key, value, diagnostic, expected) => {
+      const f = fixture();
+      const rejected = createHostedOperatorDeploymentOwnerContextResolver(
+        { ...environment, [key]: value },
+        f.openStores,
+      );
+      await expect(rejected).rejects.toMatchObject({
+        ownerConfiguration: { [diagnostic]: expected },
+        stage: "owner_configuration_parse",
+      });
+      await expect(rejected).rejects.not.toHaveProperty("cause");
+      await expect(rejected).rejects.toHaveProperty("message", "Owner initialization unavailable.");
+      expect(f.openStores).not.toHaveBeenCalled();
+    },
+  );
+  it("classifies a failed actual store import without exposing its exception", async () => {
+    const f = mockStoreModules();
+    vi.doMock("../mcp/hosted-route", () => {
+      throw new Error("private import credential https://private.example");
+    });
+    const deployed = await import("./hosted-operator-owner-context");
+    const rejected = deployed.createHostedOperatorDeploymentOwnerContextResolver(environment);
+    await expect(rejected).rejects.toMatchObject({ stage: "owner_store_import" });
+    await expect(rejected).rejects.not.toHaveProperty("cause");
+    await expect(rejected).rejects.toHaveProperty("message", "Owner initialization unavailable.");
+    expect(f.openDatabase).not.toHaveBeenCalled();
+  });
+  it.each(["openDatabase", "handoff", "sessions", "membership"] as const)(
+    "classifies failed %s store construction without exposing its exception",
+    async (factory) => {
+      const f = mockStoreModules();
+      f[factory].mockImplementation(() => {
+        throw new Error("private constructor credential https://private.example");
+      });
+      const deployed = await import("./hosted-operator-owner-context");
+      const rejected = deployed.createHostedOperatorDeploymentOwnerContextResolver(environment);
+      await expect(rejected).rejects.toMatchObject({ stage: "owner_store_construction" });
+      await expect(rejected).rejects.not.toHaveProperty("cause");
+      await expect(rejected).rejects.toHaveProperty("message", "Owner initialization unavailable.");
+    },
+  );
+  it("classifies an injected opener failure without changing its single-config signature", async () => {
+    const f = fixture();
+    f.openStores.mockRejectedValue(new Error("private injected opener failure"));
+    await expect(
+      createHostedOperatorDeploymentOwnerContextResolver(environment, f.openStores),
+    ).rejects.toMatchObject({ stage: "owner_store_construction" });
+    expect(f.openStores).toHaveBeenCalledExactlyOnceWith({
+      databaseUrl: environment.DATABASE_URL,
+      issuer: environment.BETTER_AUTH_URL,
+      resource: environment.MCP_RESOURCE_URL,
+    });
+  });
+  it("reports the closed configuration stage and retries initialization with current owner checks", async () => {
+    const f = mockStoreModules();
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    const deployed = await import("./hosted-operator-owner-context");
+    await expect(
+      deployed.resolveHostedOperatorOwnerContext({
+        ...ownerInput,
+        environment: { ...environment, DATABASE_URL: "" },
+      }),
+    ).rejects.toMatchObject({ code: "operator_unavailable" });
+    expect(log).toHaveBeenCalledWith(
+      "[builder:hosted-neon-consent]",
+      expect.objectContaining({
+        outcome: "setup_unavailable",
+        stage: "owner_configuration_parse",
+      }),
+    );
+    expect(JSON.stringify(log.mock.calls)).toContain('"databaseUrlConfigured":false');
+    expect(JSON.stringify(log.mock.calls)).not.toContain(authority.issuer);
+    expect(f.openDatabase).not.toHaveBeenCalled();
+    await expect(
+      deployed.resolveHostedOperatorOwnerContext({ ...ownerInput, environment }),
+    ).resolves.toMatchObject({ adapterGeneration: 7, sessionId: "original-public-session" });
+    expect(f.openDatabase).toHaveBeenCalledOnce();
+    f.activeMember.mockResolvedValue(false);
+    await expect(
+      deployed.resolveHostedOperatorOwnerContext({ ...ownerInput, environment }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+  });
+  it("reports a constructor failure, resets the cached promise and retries without retaining errors", async () => {
+    const f = mockStoreModules();
+    f.openDatabase.mockImplementationOnce(() => {
+      throw new Error("private credential https://private.example");
+    });
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    const deployed = await import("./hosted-operator-owner-context");
+    await expect(
+      deployed.resolveHostedOperatorOwnerContext({ ...ownerInput, environment }),
+    ).rejects.toMatchObject({ code: "operator_unavailable" });
+    expect(log).toHaveBeenCalledWith(
+      "[builder:hosted-neon-consent]",
+      expect.objectContaining({ outcome: "setup_unavailable", stage: "owner_store_construction" }),
+    );
+    expect(JSON.stringify(log.mock.calls)).not.toContain("private");
+    await expect(
+      deployed.resolveHostedOperatorOwnerContext({ ...ownerInput, environment }),
+    ).resolves.toMatchObject({ adapterGeneration: 7, sessionId: "original-public-session" });
+    expect(f.openDatabase).toHaveBeenCalledTimes(2);
   });
 });

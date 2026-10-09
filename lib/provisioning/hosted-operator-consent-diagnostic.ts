@@ -7,6 +7,9 @@ const stage = z.enum([
   "configuration",
   "owner_context",
   "owner_configuration",
+  "owner_configuration_parse",
+  "owner_store_import",
+  "owner_store_construction",
   "owner_authority",
   "owner_membership",
   "owner_session_binding",
@@ -80,6 +83,16 @@ const metadata = z.strictObject({
   httpStatus: z.number().int().min(100).max(599).optional(),
   nativeNotFound: z.boolean().optional(),
   outcome,
+  ownerConfiguration: z
+    .strictObject({
+      databasePolicyValid: z.boolean(),
+      databaseUrlConfigured: z.boolean(),
+      issuerCanonical: z.boolean(),
+      issuerConfigured: z.boolean(),
+      resourceCanonical: z.boolean(),
+      resourceConfigured: z.boolean(),
+    })
+    .optional(),
   phase,
   probeVariant: z.enum(["both_headers", "trusted_oidc_only"]).optional(),
   stage,
