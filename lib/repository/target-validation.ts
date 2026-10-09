@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import nodePath from "node:path";
 import { localRuntimeEnvironmentPath } from "./runtime-environment";
 import type { PreparedRuntimeExecution } from "../agent/prepared-runtime-execution";
 
@@ -421,7 +422,9 @@ export const sandboxValidationCommandExecutor =
         signal: abortSignal,
       });
     }
-    const executionCommand = `if [ -f '${localRuntimeEnvironmentPath(validationRoot, appId)}' ]; then mise run app:runtime run ${appId} ${runtimeTask}${shard}; else ${command}; fi`;
+    const environmentPath = localRuntimeEnvironmentPath(validationRoot, appId);
+    const env = { APP_RUNTIME_STATE_DIR: nodePath.posix.dirname(environmentPath) };
+    const executionCommand = `if [ -f '${environmentPath}' ]; then mise run app:runtime run ${appId} ${runtimeTask}${shard}; else ${command}; fi`;
     const detachedCommand = `set +e
 log=$(mktemp /tmp/app-builder-validation.XXXXXX) || exit $?
 ${executionCommand} > "$log" 2>&1
@@ -430,11 +433,12 @@ cat "$log"
 rm -f "$log"
 exit "$status"`;
     if (onChunk === undefined) {
-      return await sandbox.run({ command: detachedCommand, workingDirectory: validationRoot });
+      return await sandbox.run({ command: detachedCommand, env, workingDirectory: validationRoot });
     }
     const process = await sandbox.spawn({
       abortSignal,
       command: executionCommand,
+      env,
       workingDirectory: validationRoot,
     });
     const drain = async (channel: ValidationLogChannel, stream: ReadableStream<Uint8Array>) => {

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 
 // oxlint-disable typescript/promise-function-async -- In-memory store fakes return settled Promises.
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { SandboxSession } from "eve/sandbox";
 
 import type { TargetApplyReceipt } from "./target-apply";
+import { localRuntimeEnvironmentPath } from "./runtime-environment";
 import type { ValidationCommandExecutor } from "./target-validation";
 import type { ValidationLogStore } from "./validation-log";
 import type { PreparedRuntimeExecution } from "../agent/prepared-runtime-execution";
@@ -88,6 +89,14 @@ function sandboxFixture() {
     } as unknown as SandboxSession,
   };
 }
+
+const outputStream = (content: string) =>
+  new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(content));
+      controller.close();
+    },
+  });
 
 describe("target validation", () => {
   it("uses the owned hosted execution for repository checks rather than probing a local environment", async () => {
@@ -524,9 +533,93 @@ status=$?
 cat "$log"
 rm -f "$log"
 exit "$status"`,
+      env: {
+        APP_RUNTIME_STATE_DIR: path.posix.dirname(
+          localRuntimeEnvironmentPath("/workspace/repository", "example"),
+        ),
+      },
       workingDirectory: "/workspace/repository",
     });
   });
+
+  it.each([
+    [false, "mise run --skip-tools app:check example", "repository-check"],
+    [false, "mise run --skip-tools app:test example 1/1", "repository-test 1/1"],
+    [true, "mise run --skip-tools app:check example", "repository-check"],
+    [true, "mise run --skip-tools app:test example 1/1", "repository-test 1/1"],
+  ] as const)(
+    "hands the prepared state directory to mise with streaming=%s for %s",
+    async (streaming, validationCommand, runtimeTask) => {
+      const directory = mkdtempSync(path.join(tmpdir(), "builder-runtime-handoff-"));
+      const environmentPath = localRuntimeEnvironmentPath(directory, "example");
+      const stateDirectory = path.posix.dirname(environmentPath);
+      mkdirSync(stateDirectory, { mode: 0o700, recursive: true });
+      writeFileSync(environmentPath, "{}", { mode: 0o600 });
+      const mise = path.join(directory, "mise");
+      writeFileSync(
+        mise,
+        `#!/bin/sh
+if [ "$*" != "run app:runtime run example ${runtimeTask}" ]; then exit 21; fi
+if [ "$APP_RUNTIME_STATE_DIR" != '${stateDirectory}' ]; then exit 22; fi
+if [ ! -f "$APP_RUNTIME_STATE_DIR/environment.json" ]; then exit 23; fi
+printf '%s\\n' "$APP_RUNTIME_STATE_DIR"
+`,
+        { mode: 0o755 },
+      );
+      const execute = ({ command, env }: Parameters<SandboxSession["run"]>[0]) => {
+        const result = spawnSync("/bin/sh", ["-c", command], {
+          cwd: directory,
+          encoding: "utf-8",
+          env: {
+            ...process.env,
+            APP_RUNTIME_STATE_DIR: "",
+            ...env,
+            PATH: `${directory}:${process.env.PATH ?? ""}`,
+          },
+          timeout: 1000,
+        });
+        if (result.error !== undefined) throw result.error;
+        return { exitCode: result.status ?? -1, stderr: result.stderr, stdout: result.stdout };
+      };
+      expect(execute({ command: `mise run app:runtime run example ${runtimeTask}` }).exitCode).toBe(
+        22,
+      );
+      const run = vi.fn((input: Parameters<SandboxSession["run"]>[0]) =>
+        Promise.resolve(execute(input)),
+      );
+      const spawn = vi.fn((input: Parameters<SandboxSession["spawn"]>[0]) => {
+        const result = execute(input);
+        return Promise.resolve({
+          kill: () => Promise.resolve(),
+          stderr: outputStream(result.stderr),
+          stdout: outputStream(result.stdout),
+          wait: () => Promise.resolve({ exitCode: result.exitCode }),
+        });
+      });
+      const chunks: string[] = [];
+      try {
+        const result = await sandboxValidationCommandExecutor()({
+          appId: "example",
+          command: validationCommand,
+          onChunk: streaming
+            ? (_channel, content) => {
+                chunks.push(content);
+                return Promise.resolve();
+              }
+            : undefined,
+          sandbox: { run, spawn } as unknown as SandboxSession,
+          validationRoot: directory,
+        });
+        expect(result.exitCode).toBe(0);
+        expect(streaming ? chunks.join("") : result.stdout).toContain(stateDirectory);
+        expect(streaming ? spawn : run).toHaveBeenCalledOnce();
+        expect(streaming ? run : spawn).not.toHaveBeenCalled();
+      } finally {
+        rmSync(stateDirectory, { force: true, recursive: true });
+        rmSync(directory, { force: true, recursive: true });
+      }
+    },
+  );
 
   it("returns a validation failure even when a local service keeps writing after the task exits", async () => {
     const directory = mkdtempSync(path.join(tmpdir(), "builder-validation-"));
