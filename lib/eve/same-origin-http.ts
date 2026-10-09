@@ -703,6 +703,7 @@ export async function observeSameOriginEveStream(
       })) {
         eventInFlight = true;
         readTrace.increment("decodedEvents");
+        readTrace.observeNativeAction(event);
         artifactReadback.accept(event);
         prototype.observe(event);
         prototypeReference.accept(event);
