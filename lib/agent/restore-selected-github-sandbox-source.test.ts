@@ -122,6 +122,16 @@ describe("selected GitHub sandbox source restoration", () => {
     ).toThrow("different GitHub repositories or branches");
   });
 
+  it("keeps the accepted binding after a same-branch head observation changes its receipt", () => {
+    const newerObservation = { ...source, digest: "f".repeat(64), resolvedSha: "a".repeat(40) };
+    expect(
+      selectedGitHubSourceForSandboxRestore({
+        sourceState: newerObservation,
+        workflowState: source,
+      }),
+    ).toBe(source);
+  });
+
   it("refreshes the selected repository and branch before replacement compute opens", async () => {
     const acquireExistingSourceCredential = vi.fn().mockResolvedValue({ token: "fresh-token" });
     configureVercelSessionGitSource({

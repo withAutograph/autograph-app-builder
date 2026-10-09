@@ -74,5 +74,7 @@ export const selectedGitHubSourceForSandboxRestore = (input: {
       "Builder cannot restore a saved checkout: source and accepted app refer to different GitHub repositories or branches. Reopen the intended repository branch in a new Builder session.",
     );
   }
-  return input.sourceState ?? input.workflowState;
+  // The accepted app owns its original repository binding. A later inspection
+  // may observe the same branch at a newer head without replacing that binding.
+  return input.workflowState ?? input.sourceState;
 };

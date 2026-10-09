@@ -9,23 +9,34 @@ import {
   appBuilderWorkflowState,
   assertExactWorkflowState,
 } from "./workflow-state";
-import type { AppBuilderWorkflowState } from "./workflow-state";
+import type { AcceptedAppSpec, AppBuilderWorkflowState } from "./workflow-state";
 import { getSourceBoundSandbox } from "./source-bound-sandbox";
 import { reconcilePlanningSource } from "../repository/planning-source-reconciliation";
 import { readAppBaselineMarker } from "../repository/app-baseline";
 import { resolveVercelSessionGitSource } from "../sandbox/vercel-session-source";
 
+type RefreshableSourceState = Extract<AppBuilderWorkflowState, { appSpec: AcceptedAppSpec }>;
+const canRefreshSource = (
+  state: AppBuilderWorkflowState,
+  purpose: "planning" | "schema-compilation",
+): state is RefreshableSourceState => {
+  if (["app_spec_accepted", "dependencies_prepared", "identity_resolved"].includes(state.phase)) {
+    return true;
+  }
+  return (
+    purpose === "schema-compilation" &&
+    ["applied", "validation_failed", "validated"].includes(state.phase)
+  );
+};
+
 /** Reconcile branch foundations before planning while retaining the accepted product and authored source. */
 export const refreshPlanningSource = async (
   ctx: Pick<ToolContext, "callId" | "getSandbox"> & { session: { auth: unknown; id: string } },
+  purpose: "planning" | "schema-compilation" = "planning",
 ) => {
   const current = appBuilderWorkflowState.get();
   const sandbox = await getSourceBoundSandbox(ctx);
-  if (
-    current.phase !== "app_spec_accepted" &&
-    current.phase !== "dependencies_prepared" &&
-    current.phase !== "identity_resolved"
-  ) {
+  if (!canRefreshSource(current, purpose)) {
     return sandbox;
   }
   const selected = current.githubSource;
@@ -102,17 +113,25 @@ export const refreshPlanningSource = async (
   }
   // The Git checkpoint/checkout and marker transition precede these durable Eve
   // state writes. New planning receipts are derived from the retained AppSpec.
-  const refreshed: AppBuilderWorkflowState = {
-    appSpec: current.appSpec,
-    artifacts: current.artifacts,
-
-    githubSource: prepared.githubSource,
-    phase: "app_spec_accepted",
-    preparedByCallId: ctx.callId,
-    sourceReceipt: prepared.sourceReceipt,
-    version: APP_BUILDER_WORKFLOW_VERSION,
-    workspace: prepared.workspace,
-  };
+  const refreshed: AppBuilderWorkflowState =
+    purpose === "schema-compilation" && "applyReceipt" in current
+      ? {
+          ...current,
+          githubSource: prepared.githubSource,
+          preparedByCallId: ctx.callId,
+          sourceReceipt: prepared.sourceReceipt,
+          workspace: prepared.workspace,
+        }
+      : {
+          appSpec: current.appSpec,
+          artifacts: current.artifacts,
+          githubSource: prepared.githubSource,
+          phase: "app_spec_accepted",
+          preparedByCallId: ctx.callId,
+          sourceReceipt: prepared.sourceReceipt,
+          version: APP_BUILDER_WORKFLOW_VERSION,
+          workspace: prepared.workspace,
+        };
   if (current.checkoutDependencyAttempts !== undefined) {
     refreshed.checkoutDependencyAttempts = current.checkoutDependencyAttempts;
   }
