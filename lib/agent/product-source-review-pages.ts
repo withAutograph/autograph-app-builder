@@ -11,10 +11,15 @@ export interface ProductReviewSourcePage {
   startColumn: number;
 }
 
+/** Source transports can release a pending byte read when review stops admission. */
+export interface ProductReviewSourcePages extends AsyncIterable<ProductReviewSourcePage> {
+  cancelPendingRead?: () => Promise<void>;
+}
+
 const pageCharacters = 16 * 1024;
 
 interface ProductReviewPageSource {
-  pages: AsyncIterable<ProductReviewSourcePage>;
+  pages: ProductReviewSourcePages;
   omissions: string[];
 }
 
@@ -31,8 +36,14 @@ export const readProductReviewSourcePages = (input: {
   ];
   const changedPaths = new Set(input.changedPaths);
   const selected = input.observed.files.filter((file) => changedPaths.has(file.path));
+  let cancelled = false;
+  let activeReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  // oxlint-disable-next-line sonarjs/cognitive-complexity -- Cancellation releases owned byte reads while preserving complete source and digest traversal.
   const pages = async function* pages(): AsyncGenerator<ProductReviewSourcePage> {
     for (const file of selected) {
+      if (cancelled) {
+        return;
+      }
       if (
         !/\.(?:[cm]?[jt]sx?|json|css|sql|cue)$/u.test(file.path) ||
         /(?:^|\/)(?:node_modules|\.next|dist|coverage)(?:\/|$)/u.test(file.path)
@@ -48,6 +59,7 @@ export const readProductReviewSourcePages = (input: {
         continue;
       }
       const reader = stream.getReader();
+      activeReader = reader;
       const digest = createHash("sha256");
       const decoder = new TextDecoder("utf-8", { fatal: true });
       let content = "";
@@ -98,9 +110,15 @@ export const readProductReviewSourcePages = (input: {
         }
       };
       try {
+        if (cancelled) {
+          return;
+        }
         for (;;) {
           // oxlint-disable-next-line eslint/no-await-in-loop -- A file stream must be consumed sequentially.
           const next = await reader.read();
+          if (cancelled) {
+            return;
+          }
           if (next.done) {
             break;
           }
@@ -127,8 +145,17 @@ export const readProductReviewSourcePages = (input: {
       } finally {
         // oxlint-disable-next-line eslint/no-await-in-loop -- Finish or cancel the current source stream before another file.
         await reader.cancel();
+        activeReader = null;
       }
     }
   };
-  return { omissions, pages: pages() };
+  return {
+    omissions,
+    pages: Object.assign(pages(), {
+      async cancelPendingRead() {
+        cancelled = true;
+        await activeReader?.cancel();
+      },
+    }),
+  };
 };
