@@ -15,6 +15,7 @@ const stage = z.enum([
   "operator_request",
   "operator_ingress",
   "workload_verification",
+  "caller_workload",
   "inline_token",
   "current_owner",
   "operator_oidc",
@@ -56,11 +57,25 @@ export const operatorWorkloadFailureSchema = z.strictObject({
 });
 export type OperatorWorkloadFailure = z.infer<typeof operatorWorkloadFailureSchema>;
 
+const callerEnvironment = z.enum(["development", "preview", "production"]);
+export const operatorCallerWorkloadSchema = z.strictObject({
+  environmentMatches: z.boolean().optional(),
+  projectMatches: z.boolean().optional(),
+  runtimeEnvironment: callerEnvironment.optional(),
+  signatureVerified: z.literal(true).optional(),
+  source: z.enum(["request_context", "environment", "unknown"]),
+  teamMatches: z.boolean().optional(),
+  tokenEnvironment: callerEnvironment.optional(),
+  verification: z.enum(["verified", "failed", "unavailable"]),
+});
+export type OperatorCallerWorkload = z.infer<typeof operatorCallerWorkloadSchema>;
+
 const metadata = z.strictObject({
   accessClass: z
     .enum(["upstream_auth_denied", "application_auth_denied", "other_failed", "ok"])
     .optional(),
   boundary,
+  callerWorkload: operatorCallerWorkloadSchema.optional(),
   httpStatus: z.number().int().min(100).max(599).optional(),
   outcome,
   phase,

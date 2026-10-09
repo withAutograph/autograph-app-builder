@@ -1,3 +1,4 @@
+import { reportHostedOperatorCallerWorkload } from "./hosted-operator-caller-workload";
 import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorConsentMetadata } from "./hosted-operator-consent-diagnostic";
 import { neonAuthorizationResultSchema } from "./hosted-operator-neon-authorization";
@@ -64,9 +65,10 @@ export const createHostedOperatorClient = (input: {
       redirect: "error",
       signal,
     });
-    const report = createHostedOperatorConsentDiagnostic(
-      body.action === "neon-authorization" ? body.sessionId : body.selection.sessionId,
-    );
+    const isConsentRequest = body.action === "neon-authorization";
+    const diagnosticSessionId = isConsentRequest ? body.sessionId : body.selection.sessionId;
+    const diagnosticPhase = isConsentRequest ? body.phase : "inline";
+    const report = createHostedOperatorConsentDiagnostic(diagnosticSessionId);
     const emit = (accessClass: NonNullable<HostedOperatorConsentMetadata["accessClass"]>) => {
       const vercelError = response.headers.get("x-vercel-error");
       let outcome: HostedOperatorConsentMetadata["outcome"] = "operator_access_denied";
@@ -81,7 +83,7 @@ export const createHostedOperatorClient = (input: {
         boundary: "builder",
         httpStatus: response.status,
         outcome,
-        phase: body.action === "neon-authorization" ? body.phase : "inline",
+        phase: diagnosticPhase,
         stage: "operator_request",
       };
       if (vercelError === "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH") {
@@ -95,6 +97,15 @@ export const createHostedOperatorClient = (input: {
           ? "upstream_auth_denied"
           : "other_failed",
       );
+      if (response.status === 401 || response.status === 403) {
+        await reportHostedOperatorCallerWorkload({
+          httpStatus: response.status,
+          phase: diagnosticPhase,
+          sessionId:
+            body.action === "neon-authorization" ? body.sessionId : body.selection.sessionId,
+          token,
+        });
+      }
       throw new HostedOperatorError(
         response.status === 401 || response.status === 403
           ? "authorization_required"

@@ -1970,18 +1970,26 @@ describe("closed operator access response diagnostics", () => {
         },
       );
       const body = vi.spyOn(response, "json");
+      const token = vi.fn(async () => secret);
+      const fetchResponse = vi.fn<typeof fetch>(async (_url, init) => {
+        expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${secret}`);
+        expect(new Headers(init?.headers).get("x-vercel-trusted-oidc-idp-token")).toBe(secret);
+        return response;
+      });
       const log = vi.spyOn(console, "info").mockImplementation(() => {});
       try {
         const client = createHostedOperatorClient({
           endpoint: "https://operator.example",
-          fetch: async () => response,
+          fetch: fetchResponse,
           ownerContext,
-          token: async () => secret,
+          token,
         });
         await expect(
           client.request({ action: "plan", operation: "prepare", selection }),
         ).rejects.toMatchObject({ code: "authorization_required" });
         expect(body).not.toHaveBeenCalled();
+        expect(token).toHaveBeenCalledOnce();
+        expect(fetchResponse).toHaveBeenCalledOnce();
         expect(log.mock.calls[0]?.[1]).toEqual(
           expect.objectContaining({
             accessClass: "upstream_auth_denied",
