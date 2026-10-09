@@ -1,4 +1,7 @@
-import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent-diagnostic";
+import {
+  createHostedOperatorConsentDiagnostic,
+  operatorOwnerStoreImportErrorCodeSchema,
+} from "./hosted-operator-consent-diagnostic";
 import type {
   HostedOperatorConsentDiagnosticSink,
   HostedOperatorConsentMetadata,
@@ -250,14 +253,17 @@ type OwnerInitializationStage =
 class OwnerInitializationError extends Error {
   readonly stage: OwnerInitializationStage;
   readonly ownerConfiguration: HostedOperatorConsentMetadata["ownerConfiguration"];
+  readonly ownerStoreImport: HostedOperatorConsentMetadata["ownerStoreImport"];
   constructor(
     stage: OwnerInitializationStage,
     ownerConfiguration?: HostedOperatorConsentMetadata["ownerConfiguration"],
+    ownerStoreImport?: HostedOperatorConsentMetadata["ownerStoreImport"],
   ) {
     super("Owner initialization unavailable.");
     this.name = "OwnerInitializationError";
     this.stage = stage;
     this.ownerConfiguration = ownerConfiguration;
+    this.ownerStoreImport = ownerStoreImport;
   }
 }
 
@@ -314,16 +320,25 @@ const ownerConfigurationDiagnostic = (
   }
 };
 
-const loadOwnerReaderModules = async () => {
+const loadOwnerReaderModule = async <ImportedModule>(
+  module: NonNullable<HostedOperatorConsentMetadata["ownerStoreImport"]>["module"],
+  load: () => Promise<ImportedModule>,
+): Promise<ImportedModule> => {
   try {
-    return await Promise.all([
-      import("../mcp/hosted-route"),
-      import("../handoff/postgres-store"),
-      import("../eve/postgres-hosted-store"),
-      import("../auth/postgres-organization-user-authority"),
-    ]);
-  } catch {
-    throw new OwnerInitializationError("owner_store_import");
+    return await load();
+  } catch (error) {
+    const failure: NonNullable<HostedOperatorConsentMetadata["ownerStoreImport"]> = { module };
+    try {
+      const parsed = z
+        .object({ code: operatorOwnerStoreImportErrorCodeSchema.optional() })
+        .safeParse(error);
+      if (parsed.success && parsed.data.code !== undefined) {
+        failure.errorCode = parsed.data.code;
+      }
+    } catch {
+      /* A hostile error getter never becomes diagnostic data. */
+    }
+    throw new OwnerInitializationError("owner_store_import", undefined, failure);
   }
 };
 
@@ -333,7 +348,15 @@ const openOwnerReaderStores: OpenOwnerReaderStores = async (config) => {
     { createPostgresBuilderHandoffStore },
     { createPostgresHostedEveStore },
     { createPostgresPreviewOrganizationAuthority },
-  ] = await loadOwnerReaderModules();
+  ] = await Promise.all([
+    loadOwnerReaderModule("database", async () => await import("../mcp/hosted-route")),
+    loadOwnerReaderModule("handoff", async () => await import("../handoff/postgres-store")),
+    loadOwnerReaderModule("session", async () => await import("../eve/postgres-hosted-store")),
+    loadOwnerReaderModule(
+      "membership",
+      async () => await import("../auth/postgres-organization-user-authority"),
+    ),
+  ]);
   try {
     const database = openHostedPostgresDatabase(config.databaseUrl);
     const membership = createPostgresPreviewOrganizationAuthority(database, {
@@ -411,6 +434,9 @@ export const resolveHostedOperatorOwnerContext = async (input: {
     };
     if (error instanceof OwnerInitializationError && error.ownerConfiguration !== undefined) {
       diagnostic.ownerConfiguration = error.ownerConfiguration;
+    }
+    if (error instanceof OwnerInitializationError && error.ownerStoreImport !== undefined) {
+      diagnostic.ownerStoreImport = error.ownerStoreImport;
     }
     report(diagnostic);
     throw new HostedOperatorError("operator_unavailable");

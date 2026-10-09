@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { durableHostedSessionRecordSchema } from "../eve/hosted-store";
 import { createHostedOperatorDeploymentOwnerContextResolver } from "./hosted-operator-owner-context";
+import type { HostedOperatorConsentMetadata } from "./hosted-operator-consent-diagnostic";
 
 const authority = {
   audience: "https://builder.example/mcp",
@@ -71,18 +72,34 @@ afterEach(async () => {
   vi.resetModules();
 });
 
-const mockStoreModules = () => {
+type OwnerImportModule = NonNullable<HostedOperatorConsentMetadata["ownerStoreImport"]>["module"];
+const mockStoreModules = (failedImport?: OwnerImportModule) => {
   const f = fixture();
   const openDatabase = vi.fn(() => ({}));
   const handoff = vi.fn(() => f.stores.handoffs);
   const sessions = vi.fn(() => f.stores.sessions);
   const membership = vi.fn(() => ({ isActiveMember: f.activeMember }));
-  vi.doMock("../mcp/hosted-route", () => ({ openHostedPostgresDatabase: openDatabase }));
-  vi.doMock("../handoff/postgres-store", () => ({ createPostgresBuilderHandoffStore: handoff }));
-  vi.doMock("../eve/postgres-hosted-store", () => ({ createPostgresHostedEveStore: sessions }));
-  vi.doMock("../auth/postgres-organization-user-authority", () => ({
-    createPostgresPreviewOrganizationAuthority: membership,
-  }));
+  const assertImport = (module: OwnerImportModule) => {
+    if (failedImport === module) {
+      throw new Error("private import credential https://private.example");
+    }
+  };
+  vi.doMock("../mcp/hosted-route", () => {
+    assertImport("database");
+    return { openHostedPostgresDatabase: openDatabase };
+  });
+  vi.doMock("../handoff/postgres-store", () => {
+    assertImport("handoff");
+    return { createPostgresBuilderHandoffStore: handoff };
+  });
+  vi.doMock("../eve/postgres-hosted-store", () => {
+    assertImport("session");
+    return { createPostgresHostedEveStore: sessions };
+  });
+  vi.doMock("../auth/postgres-organization-user-authority", () => {
+    assertImport("membership");
+    return { createPostgresPreviewOrganizationAuthority: membership };
+  });
   return { ...f, handoff, membership, openDatabase, sessions };
 };
 
@@ -176,18 +193,27 @@ describe("deployed owner reader with narrow configuration", () => {
       expect(f.openStores).not.toHaveBeenCalled();
     },
   );
-  it("classifies a failed actual store import without exposing its exception", async () => {
-    const f = mockStoreModules();
-    vi.doMock("../mcp/hosted-route", () => {
-      throw new Error("private import credential https://private.example");
-    });
-    const deployed = await import("./hosted-operator-owner-context");
-    const rejected = deployed.createHostedOperatorDeploymentOwnerContextResolver(environment);
-    await expect(rejected).rejects.toMatchObject({ stage: "owner_store_import" });
-    await expect(rejected).rejects.not.toHaveProperty("cause");
-    await expect(rejected).rejects.toHaveProperty("message", "Owner initialization unavailable.");
-    expect(f.openDatabase).not.toHaveBeenCalled();
-  });
+  it.each(["database", "handoff", "session", "membership"] as const)(
+    "reports the exact %s import without exposing its exception",
+    async (module) => {
+      const f = mockStoreModules(module);
+      const log = vi.spyOn(console, "info").mockImplementation(() => {});
+      const deployed = await import("./hosted-operator-owner-context");
+      const rejected = deployed.createHostedOperatorDeploymentOwnerContextResolver(environment);
+      await expect(rejected).rejects.toMatchObject({
+        ownerStoreImport: { module },
+        stage: "owner_store_import",
+      });
+      await expect(rejected).rejects.not.toHaveProperty("cause");
+      await expect(rejected).rejects.toHaveProperty("message", "Owner initialization unavailable.");
+      await expect(
+        deployed.resolveHostedOperatorOwnerContext({ ...ownerInput, environment }),
+      ).rejects.toMatchObject({ code: "operator_unavailable" });
+      expect(JSON.stringify(log.mock.calls)).toContain(`"module":"${module}"`);
+      expect(JSON.stringify(log.mock.calls)).not.toContain("private");
+      expect(f.openDatabase).not.toHaveBeenCalled();
+    },
+  );
   it.each(["openDatabase", "handoff", "sessions", "membership"] as const)(
     "classifies failed %s store construction without exposing its exception",
     async (factory) => {
