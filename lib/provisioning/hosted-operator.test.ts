@@ -1972,8 +1972,15 @@ describe("closed operator access response diagnostics", () => {
       const body = vi.spyOn(response, "json");
       const token = vi.fn(async () => secret);
       const fetchResponse = vi.fn<typeof fetch>(async (_url, init) => {
-        expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${secret}`);
-        expect(new Headers(init?.headers).get("x-vercel-trusted-oidc-idp-token")).toBe(secret);
+        const headers = new Headers(init?.headers);
+        expect(headers.get("x-vercel-trusted-oidc-idp-token")).toBe(secret);
+        if (init?.method === "GET") {
+          expect(init.body).toBeUndefined();
+          expect(init.redirect).toBe("error");
+          return new Response('{"code":"not_found"}', { status: 404 });
+        }
+        expect(init?.method).toBe("POST");
+        expect(headers.get("authorization")).toBe(`Bearer ${secret}`);
         return response;
       });
       const log = vi.spyOn(console, "info").mockImplementation(() => {});
@@ -1989,7 +1996,10 @@ describe("closed operator access response diagnostics", () => {
         ).rejects.toMatchObject({ code: "authorization_required" });
         expect(body).not.toHaveBeenCalled();
         expect(token).toHaveBeenCalledOnce();
-        expect(fetchResponse).toHaveBeenCalledOnce();
+        expect(fetchResponse).toHaveBeenCalledTimes(status === 403 ? 3 : 1);
+        expect(fetchResponse.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(
+          1,
+        );
         expect(log.mock.calls[0]?.[1]).toEqual(
           expect.objectContaining({
             accessClass: "upstream_auth_denied",
