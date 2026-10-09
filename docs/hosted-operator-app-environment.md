@@ -4,6 +4,23 @@ A generated app receives its own runtime database credential and public Gateway
 verification configuration. It receives no Auth realm SQL connection, Better Auth
 signing secret, installer or bootstrap connection, or another app's credential.
 
+This boundary applies to HC, Vendor and other existing Arrusted apps as well as
+new generated apps. Their code and schemas may share Arrusted's Git `main`, and
+their databases may share a Neon project/branch, but each app must connect to a
+separate PostgreSQL database using its own restricted role. Separate schemas
+inside a common database do not satisfy that requirement. Shared Auth provides
+sign-in; explicit organization/app assignment and app database authorization
+remain necessary.
+
+Treat existing apps as migrations until independent process and database
+readback proves their actual binding. A dedicated database's existence, an
+environment variable name, or code merged into `main` is insufficient. Current
+HC/Vendor Vercel runtime source selects generic `DATABASE_URL` and rejects the
+prefixed app URL; observed environment key metadata alone cannot identify the
+database behind that generic credential. Correct and qualify this boundary
+before changing live bindings or claiming separation. Follow the
+[data-preserving migration sequence](plans/2026-10-07-hosted-operator-deployment-and-spend-review-qualification.md).
+
 The protected plan's optional `deploymentBoundary` retains compatibility with
 historical journal inspection. Operational binding requires this boundary and
 an authenticated owner authority matching it. Legacy records can be inspected;
