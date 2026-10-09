@@ -13,6 +13,7 @@ import {
   projectInstalledEveEvent,
   pendingBuilderOperation,
   outstandingInstalledEveRequests,
+  outstandingInternalEveRequests,
   toPublicEvent,
 } from "./public-events";
 import {
@@ -22,6 +23,102 @@ import {
 } from "../agent/prototype-artifacts";
 
 const installedEvent = (event: unknown) => event as MessageStreamEvent;
+
+describe("authorization completion projection", () => {
+  const required = (attemptId = "old-attempt") =>
+    installedEvent({
+      data: {
+        attemptId,
+        authorization: { url: "https://consent.example/private" },
+        description: "Connect",
+        name: "hosted-neon",
+        turnId: "turn_1",
+      },
+      type: "authorization.required",
+    });
+  const completed = (attemptId: string, outcome = "authorized") =>
+    installedEvent({
+      data: { attemptId, name: "hosted-neon", outcome, turnId: "turn_1" },
+      type: "authorization.completed",
+    });
+  it.each(["authorized", "declined", "failed", "timed-out"])(
+    "resolves only the completed authorization for %s",
+    (outcome) => {
+      const events = [
+        required(),
+        required("new-attempt"),
+        completed("old-attempt", outcome),
+        installedEvent({ data: {}, type: "session.waiting" }),
+      ];
+      const projected = events.flatMap((event) => projectInstalledEveEvent(event, 0));
+      expect(outstandingInstalledEveRequests(events).map(({ requestId }) => requestId)).toEqual([
+        "new-attempt",
+      ]);
+      expect(outstandingInternalEveRequests(projected).map(({ requestId }) => requestId)).toEqual([
+        "new-attempt",
+      ]);
+      expect(deriveInstalledEveStatus(events)).toBe("input_required");
+      expect(
+        toPublicEvent(projectInstalledEveEvent(completed("old-attempt", outcome), 0)[0]),
+      ).toBeNull();
+    },
+  );
+  it("keeps unrelated and non-authorization requests with the same ID", () => {
+    const question = installedEvent({
+      data: {
+        requests: [
+          { allowFreeform: true, kind: "question", prompt: "Choose", requestId: "old-attempt" },
+        ],
+      },
+      type: "input.requested",
+    });
+    const events = [required(), question, completed("wrong-attempt"), completed("old-attempt")];
+    const projected = events.flatMap((event) => projectInstalledEveEvent(event, 0));
+    expect(outstandingInstalledEveRequests(events)).toMatchObject([
+      { kind: "question", requestId: "old-attempt" },
+    ]);
+    expect(outstandingInternalEveRequests(projected)).toMatchObject([
+      { kind: "question", requestId: "old-attempt" },
+    ]);
+    expect(deriveInstalledEveStatus(events)).toBe("input_required");
+  });
+  it("returns to the observed waiting boundary after exact completion", () => {
+    const events = [
+      required(),
+      completed("old-attempt"),
+      installedEvent({ data: {}, type: "session.waiting" }),
+    ];
+    expect(outstandingInstalledEveRequests(events)).toEqual([]);
+    expect(deriveInstalledEveStatus(events)).toBe("waiting");
+  });
+  it.each([
+    { candidateId: "candidate", name: "provider", turnId: "turn" },
+    { name: "provider", turnId: "turn" },
+  ])("shares required/completed identity fallback %j", (coordinates) => {
+    const events = [
+      installedEvent({
+        data: { ...coordinates, description: "Connect" },
+        type: "authorization.required",
+      }),
+      installedEvent({
+        data: { ...coordinates, outcome: "authorized" },
+        type: "authorization.completed",
+      }),
+    ];
+    expect(
+      outstandingInternalEveRequests(events.flatMap((event) => projectInstalledEveEvent(event, 0))),
+    ).toEqual([]);
+  });
+  it.each([
+    { attemptId: "", name: "hosted-neon", outcome: "authorized", turnId: "turn_1" },
+    { attemptId: "old-attempt", name: "hosted-neon", outcome: "unknown", turnId: "turn_1" },
+    { attemptId: "old-attempt", outcome: "authorized", turnId: "turn_1" },
+  ])("does not resolve malformed completion %j", (data) => {
+    expect(
+      projectInstalledEveEvent(installedEvent({ data, type: "authorization.completed" }), 0),
+    ).toEqual([]);
+  });
+});
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function digest(value: string): string {
