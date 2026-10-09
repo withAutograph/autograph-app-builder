@@ -2,7 +2,8 @@
 
 `lib/provisioning/hosted-operator-function.ts` loads the real
 `hosted-operator-composition.ts#createDependencies` factory. Missing or invalid
-`PROTECTED_HOSTED_OPERATOR_CONFIGURATION` returns 503. Source configuration,
+`PROTECTED_HOSTED_OPERATOR_CONFIGURATION` leaves resource operations unavailable.
+The separately configured consent-only path is described below. Source configuration,
 local fixtures, native deployment READY, database metadata, and normal human
 sign-in are separate evidence.
 
@@ -99,3 +100,33 @@ journal; a fresh bundle creates both credential pairs. Onboarding a second app
 must prove reuse of the existing realm's authority and credentials without
 rewriting users or sessions. Existing HC/Vendor database and environment names
 alone likewise do not prove that live app processes use separate databases.
+
+## Owner Neon consent before resource setup
+
+`PROTECTED_HOSTED_OPERATOR_AUTHORIZATION_CONFIGURATION` is the narrow,
+deployment-owned consent setup: `builderCallbackOrigin`, `builderWorkload`
+(exact issuer, audience, subject, owner, project and environment), and
+`operatorWorkload` (exact issuer, audience, owner, project and Preview
+environment). Its owner reader uses `DATABASE_URL`, `BETTER_AUTH_URL` and
+`MCP_RESOURCE_URL` for the existing session, handoff and membership stores.
+It requires neither an Auth signing secret nor a Vercel token keyring.
+Consent needs no app project access, app Git release, Neon branch, Gateway seed deployment
+or Sandbox image. Without full `PROTECTED_HOSTED_OPERATOR_CONFIGURATION`, the
+factory serves only the closed Neon consent action; resource planning and
+effects remain unavailable.
+
+`connect-app-hosted-owner` resolves the canonical saved-session owner before app
+planning inputs exist. `plan-app-hosted-runtime` also uses
+Eve's inline authorization flow for preparation. The operator re-reads the
+exact direct/handoff generation and current membership for
+each check, start and completion. Only verified operator Preview OIDC starts
+the fixed `mcp.neon.tech/neon-preview-operator` grant with `read`/`write` scopes
+and `https://mcp.neon.tech/mcp` resource. Eve supplies the callback under the
+configured Builder origin; the public challenge URL must use the Vercel
+consent origin. Connect owns PKCE/state, so request/verifier and provider
+tokens are neither returned to Builder nor journaled in public events.
+
+The original public session parks on its ordinary authorization request. The
+human completes provider consent; callback completion rechecks the actual
+owner grant before planning resumes. Browser return alone proves no grant,
+app preparation or hosted product behavior.

@@ -12,7 +12,10 @@ import type { HostedEveTransport } from "../eve/hosted-service";
 import { builderHandoffRecordSchema } from "../handoff/contracts";
 import type { BuilderHandoffRecord } from "../handoff/contracts";
 import { createHostedOperatorClient } from "./hosted-operator-client";
-import { createHostedOperatorOwnerContextResolver } from "./hosted-operator-owner-context";
+import {
+  createHostedOperatorOwnerContextResolver,
+  readHostedOperatorOwnerReaderConfiguration,
+} from "./hosted-operator-owner-context";
 
 const handoffId = "123e4567-e89b-42d3-a456-426614174001";
 const authority = {
@@ -147,6 +150,44 @@ const fixture = (
 };
 
 describe("hosted operator owner context", () => {
+  it("reads explicit owner database/issuer/audience without Auth secrets or runtime-mode flags", () => {
+    expect(
+      readHostedOperatorOwnerReaderConfiguration({
+        BETTER_AUTH_URL: authority.issuer,
+        DATABASE_URL:
+          "postgresql://fixture_owner:fixture_password@ep-fixture-pooler.us-east-1.aws.neon.tech/owner_db?sslmode=require",
+        MCP_RESOURCE_URL: authority.audience,
+      }),
+    ).toEqual({
+      databaseUrl:
+        "postgresql://fixture_owner:fixture_password@ep-fixture-pooler.us-east-1.aws.neon.tech/owner_db?sslmode=require",
+      issuer: authority.issuer,
+      resource: authority.audience,
+    });
+  });
+  it.each([
+    { BETTER_AUTH_URL: "http://builder.example/api/auth" },
+    { BETTER_AUTH_URL: "https://user:password@builder.example/api/auth" },
+    { BETTER_AUTH_URL: "https://builder.example/api/auth#fragment" },
+    { BETTER_AUTH_URL: "https://builder.example/other" },
+    { MCP_RESOURCE_URL: "https://foreign.example/mcp" },
+    { MCP_RESOURCE_URL: "https://builder.example/mcp?extra=1" },
+    { MCP_RESOURCE_URL: "https://builder.example/other" },
+    { DATABASE_URL: "mysql://fixture_owner@db.example/owner_db" },
+    {
+      DATABASE_URL:
+        "postgresql://fixture_owner@ep-fixture.us-east-1.aws.neon.tech/owner_db?sslmode=require",
+    },
+  ])("rejects invalid owner-reader authority before opening a database: %j", (invalid) => {
+    expect(() =>
+      readHostedOperatorOwnerReaderConfiguration({
+        BETTER_AUTH_URL: authority.issuer,
+        DATABASE_URL: "postgresql://fixture_owner@db.example/owner_db",
+        MCP_RESOURCE_URL: authority.audience,
+        ...invalid,
+      }),
+    ).toThrow();
+  });
   it("maps the authenticated source handoff to its current durable public session", async () => {
     const f = fixture();
     await expect(

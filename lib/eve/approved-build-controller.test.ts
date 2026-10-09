@@ -6,6 +6,7 @@ import { continueApprovedHostedBuild } from "./approved-build-controller";
 import { hostedEveOperationScopes } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
 import type { HostedEveTransport } from "./hosted-service";
+import { SubmissionRejectedBeforeDispatchError } from "./hosted-errors";
 import { readInternalBuildMarker } from "../agent/approved-build-continuation";
 
 const principal: HostedPrincipal = {
@@ -93,6 +94,62 @@ const fixture = async () => {
   };
 };
 describe("canonical approved private build continuation", () => {
+  it.each([
+    ["session_access_denied", "session_access_denied"],
+    ["private-secret-error", "transport_rejected"],
+  ])("logs only an allowlisted dispatch rejection: %s", async (code, reason) => {
+    const f = await fixture();
+    f.sendAccepted.mockRejectedValue(new SubmissionRejectedBeforeDispatchError(code));
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      expect(await continueApprovedHostedBuild(f)).toMatchObject({
+        error: { code: "approved_build_continuation_blocked" },
+        status: "waiting",
+      });
+      const boundary = log.mock.calls
+        .map(([value]) => JSON.parse(String(value)))
+        .find(
+          (value) => value.event === "app_builder.approved_build_continuation_dispatch_boundary",
+        );
+      expect(boundary).toEqual({
+        event: "app_builder.approved_build_continuation_dispatch_boundary",
+        reason,
+        rejected: true,
+        stage: "dispatch",
+      });
+      await continueApprovedHostedBuild(f);
+      expect(f.sendAccepted).toHaveBeenCalledOnce();
+    } finally {
+      log.mockRestore();
+    }
+  });
+  it("identifies a fresh input boundary without dispatching or retaining error text", async () => {
+    const f = await fixture();
+    f.transport.observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async () => ({
+      status: "working",
+      pendingRequests: [],
+      artifactProjectionRequiresLegacyReadback: false,
+      installedEventCount: 0,
+      publicEventCount: 0,
+    }));
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      expect(await continueApprovedHostedBuild(f)).toMatchObject({
+        error: { code: "approved_build_continuation_blocked" },
+      });
+      expect(f.sendAccepted).not.toHaveBeenCalled();
+      expect(log).toHaveBeenCalledWith(
+        JSON.stringify({
+          event: "app_builder.approved_build_continuation_dispatch_boundary",
+          reason: "active_input_or_turn",
+          rejected: true,
+          stage: "transport_observation",
+        }),
+      );
+    } finally {
+      log.mockRestore();
+    }
+  });
   it("continues the same original stopped session exactly once after canonical settlement", async () => {
     const f = await fixture();
     expect(await continueApprovedHostedBuild(f)).toMatchObject({

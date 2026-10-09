@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { parseHostedDatabaseUrl } from "../db/postgres-connection-policy";
 import {
   exactForwardedSessionAuthority,
   sourceHandoffIdForSessionAuth,
@@ -152,41 +154,98 @@ export const createHostedOperatorOwnerContextResolver =
     };
   };
 
+const ownerReaderConfigurationSchema = z
+  .strictObject({
+    databaseUrl: z.string().transform((value) => parseHostedDatabaseUrl(value)),
+    issuer: z.url().startsWith("https://"),
+    resource: z.url().startsWith("https://"),
+  })
+  .superRefine((configuration, context) => {
+    const issuer = new URL(configuration.issuer);
+    const resource = new URL(configuration.resource);
+    if (
+      issuer.pathname !== "/api/auth" ||
+      [issuer.username, issuer.password, issuer.search, issuer.hash].some(Boolean)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Owner issuer must be the exact HTTPS /api/auth URL.",
+        path: ["issuer"],
+      });
+    }
+    if (
+      resource.pathname !== "/mcp" ||
+      resource.origin !== issuer.origin ||
+      [resource.username, resource.password, resource.search, resource.hash].some(Boolean)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Owner audience must be the same-origin exact HTTPS /mcp URL.",
+        path: ["resource"],
+      });
+    }
+  });
+
+/** Reading existing ownership requires database authority and canonical identity URLs, not Auth signing credentials. */
+export const readHostedOperatorOwnerReaderConfiguration = (
+  environment: Readonly<Record<string, string | undefined>>,
+) =>
+  ownerReaderConfigurationSchema.parse({
+    databaseUrl: environment.DATABASE_URL,
+    issuer: environment.BETTER_AUTH_URL,
+    resource: environment.MCP_RESOURCE_URL,
+  });
+
 let deploymentResolver: Promise<
   ReturnType<typeof createHostedOperatorOwnerContextResolver>
 > | null = null;
 
-const createDeploymentResolver = async (
-  environment: Readonly<Record<string, string | undefined>>,
-) => {
+type OwnerReaderConfiguration = ReturnType<typeof readHostedOperatorOwnerReaderConfiguration>;
+type OwnerReaderStores = Pick<
+  OwnerContextResolverDependencies,
+  "handoffs" | "isActiveMember" | "sessions"
+>;
+type OpenOwnerReaderStores = (
+  configuration: OwnerReaderConfiguration,
+) => Promise<OwnerReaderStores>;
+
+const openOwnerReaderStores: OpenOwnerReaderStores = async (config) => {
   const [
-    { readPreviewOAuthRuntimeConfig },
     { openHostedPostgresDatabase },
     { createPostgresBuilderHandoffStore },
     { createPostgresHostedEveStore },
     { createPostgresPreviewOrganizationAuthority },
   ] = await Promise.all([
-    import("../auth/preview-oauth-runtime"),
     import("../mcp/hosted-route"),
     import("../handoff/postgres-store"),
     import("../eve/postgres-hosted-store"),
     import("../auth/postgres-organization-user-authority"),
   ]);
-  const config = readPreviewOAuthRuntimeConfig({ ...environment });
   const database = openHostedPostgresDatabase(config.databaseUrl);
   const membership = createPostgresPreviewOrganizationAuthority(database, {
     audience: config.resource,
     issuer: config.issuer,
   });
-  return createHostedOperatorOwnerContextResolver({
-    audience: config.resource,
+  return {
     handoffs: createPostgresBuilderHandoffStore(database),
     isActiveMember: async (authority) => {
       const active = await membership.isActiveMember(authority);
       return active;
     },
-    issuer: config.issuer,
     sessions: createPostgresHostedEveStore(database),
+  };
+};
+
+export const createHostedOperatorDeploymentOwnerContextResolver = async (
+  environment: Readonly<Record<string, string | undefined>>,
+  openStores: OpenOwnerReaderStores = openOwnerReaderStores,
+) => {
+  const config = readHostedOperatorOwnerReaderConfiguration(environment);
+  const stores = await openStores(config);
+  return createHostedOperatorOwnerContextResolver({
+    ...stores,
+    audience: config.resource,
+    issuer: config.issuer,
   });
 };
 
@@ -198,7 +257,7 @@ export const resolveHostedOperatorOwnerContext = async (input: {
   sessionAuth: unknown;
   environment: Readonly<Record<string, string | undefined>>;
 }): Promise<OperatorOwnerContext> => {
-  deploymentResolver ??= createDeploymentResolver(input.environment);
+  deploymentResolver ??= createHostedOperatorDeploymentOwnerContextResolver(input.environment);
   const pendingResolver = deploymentResolver;
   let resolver: Awaited<typeof pendingResolver>;
   try {

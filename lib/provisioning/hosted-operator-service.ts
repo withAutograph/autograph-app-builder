@@ -1,3 +1,12 @@
+import type { HostedOperatorConsentOwner } from "./hosted-operator-consent-owner";
+import {
+  neonAuthorizationInputSchema,
+  neonAuthorizationResultSchema,
+} from "./hosted-operator-neon-authorization";
+import type {
+  NeonAuthorizationInput,
+  NeonAuthorizationResult,
+} from "./hosted-operator-neon-authorization";
 /* oxlint-disable eslint/no-await-in-loop, eslint/no-loop-func, sonarjs/no-nested-functions, eslint/complexity, sonarjs/expression-complexity, sonarjs/cognitive-complexity, unicorn/no-await-expression-member, eslint/prefer-destructuring -- Effects, fences and journal checkpoints are deliberately sequential inside one resource lease. */
 import { randomUUID } from "node:crypto";
 import type { z } from "zod";
@@ -170,6 +179,15 @@ export interface ProtectedHostedOperatorDependencies {
   bindings: (
     input: Context & { plan: HostedOperatorPlan; privateState?: PrivateState },
   ) => Promise<Record<string, string>>;
+  authorizeNeonConsent?: (
+    request: Request,
+    sessionId: string,
+    ownerContext?: OperatorOwnerContext,
+  ) => Promise<HostedOperatorConsentOwner>;
+  neonAuthorization?: (
+    context: HostedOperatorConsentOwner,
+    input: NeonAuthorizationInput,
+  ) => Promise<NeonAuthorizationResult>;
   now?: () => number;
 }
 const selectionFor = (target: HostedRuntimeTarget): OperatorSelection => ({
@@ -189,6 +207,7 @@ const assertUnexpired = (plan: HostedOperatorPlan, now: number) => {
 const requireOperator = (record: HostedRuntimeJournalRecord) =>
   hostedOperatorRecordSchema.parse(record.operator);
 type OperatorHttpResponse =
+  | NeonAuthorizationResult
   | z.infer<typeof operatorAuthIdentityInputSchema>
   | OperatorPublicResult
   | { code: "not_found" }
@@ -442,6 +461,26 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         return response({ code: "not_found" }, 404);
       }
       const input = operatorRequestSchema.parse(await request.json());
+      if (input.action === "neon-authorization") {
+        if (deps.neonAuthorization === undefined || deps.authorizeNeonConsent === undefined) {
+          throw new HostedOperatorError("protected_operator_required");
+        }
+        const context = await deps.authorizeNeonConsent(
+          request,
+          input.sessionId,
+          input.ownerContext,
+        );
+        const consentInput: Pick<typeof input, "callbackUrl" | "phase"> = { phase: input.phase };
+        if (input.callbackUrl !== undefined) {
+          consentInput.callbackUrl = input.callbackUrl;
+        }
+        const consentRequest = neonAuthorizationInputSchema.parse(consentInput);
+        return response(
+          neonAuthorizationResultSchema.parse(
+            await deps.neonAuthorization(context, consentRequest),
+          ),
+        );
+      }
       appId = input.selection.appId;
       const authorized = await deps.authorize(request, input.selection, input.ownerContext);
       const context = normalizeOperatorContext(authorized);

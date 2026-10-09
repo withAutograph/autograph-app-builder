@@ -1,3 +1,4 @@
+import { neonAuthorizationResultSchema } from "./hosted-operator-neon-authorization";
 import { z } from "zod";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
@@ -112,8 +113,30 @@ export const createHostedOperatorClient = (input: {
         ),
       };
     },
+    async neonAuthorization(
+      request: Extract<OperatorRequest, { action: "neon-authorization" }>,
+      signal?: AbortSignal,
+    ) {
+      try {
+        const raw = await send(request, signal);
+        const blocked = operatorPublicResultSchema.safeParse(raw);
+        if (blocked.success) {
+          throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
+        }
+        return neonAuthorizationResultSchema.parse(raw);
+      } catch (error) {
+        if (error instanceof HostedOperatorError) {
+          throw error;
+        }
+        throw new HostedOperatorError("operator_unavailable");
+      }
+    },
+    ownerContext: input.ownerContext,
     async request(
-      request: Exclude<OperatorRequest, { action: "bindings" | "auth-identity-input" }>,
+      request: Exclude<
+        OperatorRequest,
+        { action: "bindings" | "auth-identity-input" | "neon-authorization" }
+      >,
       signal?: AbortSignal,
     ) {
       return operatorPublicResultSchema.parse(await send(request, signal));

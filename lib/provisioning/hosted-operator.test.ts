@@ -1,3 +1,4 @@
+import { composeHostedOperatorAuthorizationDependencies } from "./hosted-operator-composition";
 /* oxlint-disable eslint/require-await, eslint/no-await-in-loop, sonarjs/no-hardcoded-passwords, unicorn/no-await-expression-member -- Synthetic service adapters and credentials only; plan replacements run sequentially against one journal. */
 import { once } from "node:events";
 import { text } from "node:stream/consumers";
@@ -347,6 +348,94 @@ const prepared = async (f: ReturnType<typeof fixture>) => {
 };
 
 describe("protected hosted operator boundary", () => {
+  it("serves consent-only setup before full resource configuration and refuses planning/effects", async () => {
+    const f = fixture();
+    const deps = composeHostedOperatorAuthorizationDependencies(
+      {
+        builderCallbackOrigin: "https://builder.example",
+        builderWorkload: {
+          audience: "https://vercel.com/team",
+          environment: "production",
+          issuer: "https://oidc.vercel.com/team",
+          ownerId: "team",
+          projectId: "builder",
+          subject: "builder-subject",
+        },
+        operatorWorkload: {
+          audience: "https://vercel.com/team",
+          environment: "preview",
+          issuer: "https://oidc.vercel.com/team",
+          ownerId: "team",
+          projectId: "operator",
+        },
+      },
+      {
+        assertCurrent: async () => {
+          await Promise.resolve();
+        },
+        authorize: async () => await Promise.resolve({ authority, ownerContext }),
+      },
+    );
+    expect(deps.neonAuthorization).toBeDefined();
+    await expect(deps.plan({ action: "prepare", authority, target })).rejects.toMatchObject({
+      code: "protected_operator_required",
+    });
+    await expect(
+      deps.withResourceLease(
+        { authority, operationRef: "00000000-0000-4000-8000-000000000001", plan, target },
+        async () => {
+          await Promise.resolve();
+        },
+      ),
+    ).rejects.toMatchObject({ code: "protected_operator_required" });
+    expect(f.row).toBeUndefined();
+  });
+  it("uses the existing owner-authorized client/service path for consent before any plan or journal", async () => {
+    const f = fixture();
+    let activeOwner = true;
+    const authorizeConsent = vi.fn<
+      NonNullable<ProtectedHostedOperatorDependencies["authorizeNeonConsent"]>
+    >(async () => {
+      if (!activeOwner) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      return await Promise.resolve({ authority, ownerContext });
+    });
+    f.deps.authorizeNeonConsent = authorizeConsent;
+    const neonAuthorization = vi.fn<
+      NonNullable<ProtectedHostedOperatorDependencies["neonAuthorization"]>
+    >(async () => ({
+      challenge: {
+        displayName: "Connect Neon",
+        url: "https://vercel.com/connect/authorize?opaque",
+      },
+      status: "authorization-started",
+    }));
+    f.deps.neonAuthorization = neonAuthorization;
+    const result = await f.client.neonAuthorization({
+      action: "neon-authorization",
+      callbackUrl: "https://builder.example/callback",
+      phase: "start",
+      sessionId: selection.sessionId,
+    });
+    expect(result.status).toBe("authorization-started");
+    expect(neonAuthorization).toHaveBeenCalledWith(
+      expect.objectContaining({ authority, ownerContext }),
+      { callbackUrl: "https://builder.example/callback", phase: "start" },
+    );
+    expect(f.row).toBeUndefined();
+    expect(f.deps.plan).not.toHaveBeenCalled();
+    expect(f.deps.executeEffect).not.toHaveBeenCalled();
+    activeOwner = false;
+    await expect(
+      f.client.neonAuthorization({
+        action: "neon-authorization",
+        phase: "complete",
+        sessionId: selection.sessionId,
+      }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    expect(neonAuthorization).toHaveBeenCalledTimes(1);
+  });
   it("prepares actual Auth metadata without app readiness and resumes a freshly approved full plan", async () => {
     const f = fixture();
     const bootstrap = {
