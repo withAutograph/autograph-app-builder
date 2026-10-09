@@ -178,15 +178,18 @@ Its operator workload is project `prj_3ProSPRCHYQOwHvF6HscPW7S6K5X`, environment
 `/private/tmp/operator-owner-consent-environment-plan.json`; its database field
 is a reference requirement, not permission to export a broad existing URL.
 
-### Proposed owner-store capability
+### Approved owner-store capability
 
-Approve a dedicated SQL login, proposed name `operator_owner_reader`, in the
-existing canonical Builder owner store. Its exact role/credential reference
-must be inventoried and approved before creation or binding; do not reuse a
-role merely because its name matches. Required effective privileges are:
+The user approved and the coordinator created `operator_owner_reader` in
+Builder project `wispy-cherry-74541901`, Production main
+`br-autumn-cell-au6bejy0`, database `neondb`. Its fresh credential is bound only
+to the protected operator project’s Preview Secret `DATABASE_URL`. Independent
+SQL login and catalog readback confirmed its identity, read-only default and
+exact grants. No administrator URL or Auth signing secret was copied. The
+verified effective privileges are:
 
 - CONNECT to that exact database and USAGE on the actual containing schema.
-- SELECT on `agent_sessions` and `builder_handoffs`. Current readers select
+- SELECT on `agent_session` and `builder_handoff`. Current readers select
   complete stored records, so column-limited grants cannot be assumed to work.
 - SELECT on `member` and `organization` for the current membership join.
 - No table writes, sequence writes, schema/database creation, ownership,
@@ -214,9 +217,11 @@ or treat the consent grant as approval for those operations.
 
 ### Readback before relying on consent
 
-After separately authorized setup, the coordinator must verify the provider
-binding and actual pooled SQL database/current role without exposing secrets;
-inspect effective permissions and confirm writes are denied. Exercise the
+Provider binding, pooled SQL login identity and effective grants have been
+verified without exposing secrets. Builder Production now points to the
+consent-only operator; the approved Trusted Source rule permits only Builder
+Production to reach operator Preview. The operator deployment is ready, but
+these setup facts do not prove canonical-owner consent. Exercise the
 ordinary original-session consent flow for the current owner, then prove
 wrong owner/workspace, stale adapter/handoff generation and revoked membership
 are rejected. Record only sanitized outcomes, not session records or tokens.
