@@ -87,7 +87,7 @@ describe("hosted storage read-only readiness", () => {
       format: "autograph-hosted-storage-readiness-v1",
       migrations: {
         additiveOnly: true,
-        count: 27,
+        count: 28,
         exactOrder: true,
         noPendingMigration: true,
       },
@@ -104,6 +104,26 @@ describe("hosted storage read-only readiness", () => {
     const serialized = JSON.stringify(receipt);
     expect(serialized).not.toContain("postgresql://");
     expect(serialized).not.toContain("workspace_");
+  });
+
+  it("requires the durable review journal columns and owner key in readback", async () => {
+    const readBack = await exactReadBack();
+    const table = "product_source_review_journal";
+    expect(readBack.columns.filter((row) => row.table === table)).toHaveLength(8);
+    await Promise.all(
+      (["columns", "indexes", "constraints"] as const).map(async (field) => {
+        await expect(
+          verifyHostedStorageReadBack({
+            observedAt: new Date(),
+            readBack: {
+              ...readBack,
+              [field]: readBack[field].filter((row) => row.table !== table),
+            },
+            repositoryRoot: process.cwd(),
+          }),
+        ).rejects.toThrow();
+      }),
+    );
   });
 
   it("rejects migration order, schema drift, and writable verification", async () => {

@@ -1570,3 +1570,32 @@ export const validationLogManifests = pgTable(
     ),
   ],
 );
+
+/** Owner/session-scoped immutable source assessment and split decisions. */
+export const productSourceReviewJournal = pgTable(
+  "product_source_review_journal",
+  {
+    audience: text("audience").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    issuer: text("issuer").notNull(),
+    ownerUserId: text("owner_user_id").notNull(),
+    pairKey: text("pair_key").notNull(),
+    record: text("record").notNull(),
+    sessionId: text("session_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.issuer,
+        table.audience,
+        table.workspaceId,
+        table.ownerUserId,
+        table.sessionId,
+        table.pairKey,
+      ],
+      name: "product_source_review_journal_owner_pk",
+    }),
+    check("product_source_review_journal_key_check", sql`${table.pairKey} ~ '^[0-9a-f]{64}$'`),
+  ],
+);
