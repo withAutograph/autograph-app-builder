@@ -935,6 +935,36 @@ describe("resource bootstrap launcher", () => {
       }),
     ).toThrow(HostedOperatorError);
   });
+  it("accepts the exact app retirement effect from an approved cleanup plan", () => {
+    const cleanup = hostedOperatorPlanSchema.parse({
+      ...bootstrapPlan,
+      action: "cleanup",
+      effects: [
+        { description: "Revoke app access", id: "revoke", kind: "revoke" },
+        { description: "Remove app bindings", id: "remove-bindings", kind: "remove-bindings" },
+        {
+          description: "Retire the owned app resource",
+          id: "retire",
+          kind: "retire",
+          resourceId: bootstrapPlan.appDatabase.resourceId,
+        },
+      ],
+    });
+    const input = { ...resourceInput(), plan: cleanup, effect: cleanup.effects[2]! };
+    expect(buildResourceBootstrapContext(input).resource.scope).toBe("app_database");
+    expect(() =>
+      buildResourceBootstrapContext({ ...input, effect: { ...input.effect, id: "unapproved" } }),
+    ).toThrow(HostedOperatorError);
+    expect(() =>
+      buildResourceBootstrapContext({ ...input, effect: { ...input.effect, kind: "resources" } }),
+    ).toThrow(HostedOperatorError);
+    expect(() =>
+      buildResourceBootstrapContext({ ...input, database: "authDatabase" }),
+    ).toThrow(HostedOperatorError);
+    expect(() =>
+      buildResourceBootstrapContext({ ...input, plan: bootstrapPlan }),
+    ).toThrow(HostedOperatorError);
+  });
   it("does not allocate a Sandbox when the private credential checkpoint fails", async () => {
     const createSandbox = vi.fn();
     const launcher = createHostedOperatorSandboxLauncher(
