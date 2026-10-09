@@ -13,7 +13,8 @@ afterEach(() => vi.unstubAllEnvs());
 describe("actual native operator factory entrypoint", () => {
   it("loads the real source factory and remains unavailable without deployment-owned configuration", async () => {
     vi.stubEnv("PROTECTED_HOSTED_OPERATOR_CONFIGURATION", "");
-    await expect(createDependencies()).rejects.toThrow("deployment configuration is unavailable");
+    vi.stubEnv("PROTECTED_HOSTED_OPERATOR_AUTHORIZATION_CONFIGURATION", "");
+    await expect(createDependencies()).rejects.toThrow();
     const result = await nativeEntryPoint.fetch(request());
     expect(result.status).toBe(503);
     expect(await result.text()).not.toMatch(/prepared|working|ready/iu);

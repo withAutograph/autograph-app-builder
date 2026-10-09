@@ -1,3 +1,10 @@
+import { createHostedOperatorConsentOwner } from "./hosted-operator-consent-owner";
+import {
+  createHostedOperatorNeonAuthorization,
+  readNeonAuthorizationConfiguration,
+  neonAuthorizationConfigurationSchema,
+} from "./hosted-operator-neon-authorization";
+import type { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
 import { createHash } from "node:crypto";
 import postgres from "postgres";
 import { getVercelOidcToken } from "@vercel/oidc";
@@ -26,7 +33,6 @@ import type {
 } from "./hosted-operator-service";
 import { openHostedOperatorCompositionResources } from "./hosted-operator-source-configuration";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
-import type { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
 import { readOwnedOperatorPlanningSelection } from "./hosted-operator-planning-authority";
 import {
   createNativePreviewNeonPlanningAuthority,
@@ -288,6 +294,7 @@ export const composeHostedOperatorDependencies = (
   configuration: HostedOperatorSourceConfiguration,
   controlPlane: ControlPlane,
 ): ProtectedHostedOperatorDependencies => {
+  const consentOwner = createHostedOperatorConsentOwner(configuration.workloadPolicy);
   const launcher = createHostedOperatorSandboxLauncher(configuration.sandbox);
   const proposal = createHostedOperatorAuthProposal(configuration);
   const appEnvironment = createHostedOperatorEnvironmentBindings({
@@ -1176,8 +1183,17 @@ export const composeHostedOperatorDependencies = (
     assertAuthorized: controlPlane.assertAuthorized,
     authIdentityInput,
     authorize: controlPlane.authorize,
+    authorizeNeonConsent: consentOwner.authorize,
     bindings,
     executeEffect,
+    neonAuthorization: createHostedOperatorNeonAuthorization({
+      assertCurrentOwner: consentOwner.assertCurrent,
+      configuration: neonAuthorizationConfigurationSchema.parse({
+        builderCallbackOrigin: configuration.builderCallbackOrigin,
+        builderWorkload: configuration.workloadPolicy,
+        operatorWorkload: configuration.nativeNeon.configuration.operator,
+      }),
+    }),
     plan,
     readApproval: controlPlane.readApproval,
     reconcile,
@@ -1244,7 +1260,49 @@ export const composeHostedOperatorDependencies = (
   };
 };
 
+// oxlint-disable-next-line eslint/require-await -- Promise-returning resource adapters reject consent-only setup before any effect.
+const unavailable = async (): Promise<never> => {
+  throw new HostedOperatorError("protected_operator_required");
+};
+
+export const composeHostedOperatorAuthorizationDependencies = (
+  configuration: ReturnType<typeof readNeonAuthorizationConfiguration>,
+  ownerAuthority?: ReturnType<typeof createHostedOperatorConsentOwner>,
+): ProtectedHostedOperatorDependencies => {
+  const consentOwner =
+    ownerAuthority ?? createHostedOperatorConsentOwner(configuration.builderWorkload);
+  return {
+    assertAuthorized: unavailable,
+    authorize: unavailable,
+    authorizeNeonConsent: consentOwner.authorize,
+    bindings: unavailable,
+    executeEffect: unavailable,
+    neonAuthorization: createHostedOperatorNeonAuthorization({
+      assertCurrentOwner: consentOwner.assertCurrent,
+      configuration,
+    }),
+    plan: unavailable,
+    readApproval: unavailable,
+    reconcile: unavailable,
+    store: {
+      compareAndSet: unavailable,
+      read: unavailable,
+      reserve: unavailable,
+      reserveFenceGeneration: unavailable,
+    },
+    verify: unavailable,
+    withResourceLease: unavailable,
+  };
+};
+
 export const createDependencies = async (): Promise<ProtectedHostedOperatorDependencies> => {
+  if (
+    process.env.PROTECTED_HOSTED_OPERATOR_CONFIGURATION === undefined ||
+    process.env.PROTECTED_HOSTED_OPERATOR_CONFIGURATION === ""
+  ) {
+    const configuration = readNeonAuthorizationConfiguration(process.env);
+    return composeHostedOperatorAuthorizationDependencies(configuration);
+  }
   const { configuration, controlPlane } = await openHostedOperatorCompositionResources();
   return composeHostedOperatorDependencies(configuration, controlPlane);
 };
