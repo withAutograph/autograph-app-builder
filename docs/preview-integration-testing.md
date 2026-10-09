@@ -1,23 +1,35 @@
 # Preview integration testing
 
-Use a dedicated, long-lived integration branch when an external provider or
-test client needs one callback origin that survives new deployments. Vercel's
+Keep source changes on short-lived review branches flowing into the repository's
+Git `main`. A stable integration environment and callback origin are separate
+requirements; they do not require a permanent integration-only Git branch.
+Preserve current callbacks and bindings until a reviewed provider plan establishes
+their replacement. This document does not change deployment selection, branch
+assignments or Auth origins.
+
+The existing branch-bound Preview path uses Vercel's
 [branch URL](https://vercel.com/docs/deployments/generated-urls#generated-from-git)
-always points to the latest deployment for that branch and has the form:
+for the latest deployment of the selected branch, with the form:
 
 ```text
 https://<project>-git-<branch>-<scope>.vercel.app
 ```
 
 The Vercel deployment page and `VERCEL_BRANCH_URL` system variable provide the
-exact value; do not reconstruct or guess it. A custom domain assigned to that
-one Preview branch is also acceptable. Keep the branch URL or domain under
-Vercel Authentication and do not add it to Deployment Protection Exceptions.
+exact value; do not reconstruct or guess it. A custom domain needs its own
+verified environment/deployment assignment and Auth-origin support. Keep the
+branch URL or domain under Vercel Authentication and do not add it to Deployment
+Protection Exceptions.
 
 ## Environment and provider callbacks
 
-Scope these bindings to the dedicated Preview branch (or a dedicated Vercel
-custom environment), rather than every Preview:
+Scope these Builder sign-in bindings to the exact approved integration context,
+rather than every Preview. Existing branch-scoped bindings remain the current
+path. A custom environment requires separate provider review and is not a
+supported target of the protected Preview operator. That operator still verifies
+its exact Preview branch and deployment identities; a stable callback hostname
+alone proves neither. These are trusted Builder settings, not generated-app
+environment keys:
 
 ```dotenv
 BETTER_AUTH_URL=https://<stable-preview-host>/api/auth

@@ -17,7 +17,9 @@ owner/tenant, and recheck membership and provider authority. Client session
 claims and `approvedByCallId` are not approval evidence. Its mandatory approval
 adapter must read the actual authenticated durable Eve approval outcome and
 exact tool input, matching action, call, plan digest, target and approver's current
-authority. No production approval adapter is supplied or defaulted to allow.
+authority. The native composition supplies concrete owner and approval readers;
+their deployed configuration and authority still require independent proof.
+There is no default-allow approval path.
 
 Hosted Eve records terminal decisions for only the two protected runtime tools
 in a private field on the tenant-owned session record. It pairs Eve's exact
@@ -26,8 +28,8 @@ identity; replay is idempotent and a conflicting terminal result is rejected.
 The field is outside the public checkpoint and is not returned by session,
 checkpoint or MCP projections. Historical v1/v2 checkpoints remain readable.
 The operator still has to compare the receipt with the independently resolved
-owner, membership, plan digest and selected target; this persistence is not a
-production approval adapter or evidence of hosted provider authority.
+owner, membership, plan digest and selected target; receipt persistence alone
+is not evidence of hosted provider authority.
 
 `mise run operator:serve -- <absolute-reviewed-adapter-module> <sha256> [port]`
 is a separate service entrypoint bound to loopback for an authenticated HTTPS
@@ -37,7 +39,9 @@ Sandbox. The entry-module checksum does not prove its imported closure: the
 operator deployment must pin and review its complete package/toolchain and use
 trusted generated artifacts as verified declarative data. Model-authored
 repository scripts, dependencies, hooks and arbitrary SQL are never an installer
-input. The source ships no provider effects or deployment host configuration.
+input. The [native operator host](operator-native-host.md) separately wires the
+trusted [Preview composition](hosted-operator-native-composition.md). Source
+wiring does not establish deployed configuration or successful provider effects.
 
 The existing PostgreSQL `builderProvisioningJournals` row is the sole effect
 journal. The optional `operator.mode = protected-operator-v1` discriminator
@@ -78,18 +82,23 @@ Cleanup uses a separate frozen scope/approval and clears ciphertext only after
 all cleanup receipts. Shared Auth retirement must account for remaining consumers.
 
 The private `bindings` operation rechecks access, current provider/database proof
-and an unchanged journal revision. It returns only restricted app/Auth runtime
-environment plus nonsecret plan/proof. It verifies endpoint, TLS, database and
-explicit runtime role; shared Auth roles are independent of the app principal.
+and an unchanged journal revision. Its app projection returns only the app's
+restricted runtime database credential and public Gateway verification settings,
+plus nonsecret plan/proof. It verifies endpoint, TLS, database and explicit
+runtime role. Auth SQL credentials and signing secrets remain in the separate
+trusted Gateway/Auth host; installer authority remains in the protected operator.
 The actual SQL grants, schema identity and absence of elevated capabilities are
 the mandatory trusted verification adapter's responsibility. No installer state,
 provider token or cluster URL reaches the app process. An operation reference
 selects this closed launch path: failures never trigger legacy admin decryption.
 Launch compares observed release/artifact with the app description. New preparation
 plans include `publicGateway`, whose HTTPS origin the protected planner independently
-verifies for the selected Preview project and branch. Both `PLATFORM_PUBLIC_ORIGIN`
-and `BETTER_AUTH_URL` must equal that approved origin in restricted native bindings;
-private Sandbox origins are never a Gateway origin. Persisted legacy plans remain
+verifies for the selected Preview project and branch. App bindings use the approved
+public origin and verified Gateway transport/JWKS settings under the
+[app environment contract](hosted-operator-app-environment.md). They do not
+contain `BETTER_AUTH_URL`, an Auth SQL connection or a Better Auth signing secret.
+The trusted Gateway/Auth host receives its own approved authentication settings.
+Private Sandbox origins are never a Gateway origin. Persisted legacy plans remain
 readable without origin proof, and cleanup can retire their resources without
 reconstructing an origin. The concrete trusted planner still owns provider origin
 resolution. This slice projects no browser identity/session fixtures; authenticated
@@ -133,8 +142,9 @@ configured and observed:
   consumers, browser behavior, backup/restore and deployed readiness evidence.
 
 The remainder describes existing v1 recovery code and its unresolved native
-provider limitations. It does not authorize creating new legacy operations or
-claim that the protected service's production adapters are implemented.
+provider limitations. Its shared Auth environment is historical recovery
+behavior, not the current app projection contract. It does not authorize new
+legacy operations or establish hosted readiness of the protected Preview service.
 
 # Legacy v1 runtime recovery reference
 
