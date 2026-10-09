@@ -2,6 +2,7 @@ import { Sandbox } from "@vercel/sandbox";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { z } from "zod";
 import { HostedOperatorError } from "./hosted-operator-contract";
+import { hostedOperatorSandboxSourceOptions } from "./hosted-operator-sandbox-source";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -46,7 +47,7 @@ export const createHostedOperatorAuthProposal =
     });
     const sandbox = await (io.createSandbox ?? (async (options) => await Sandbox.create(options)))({
       env: {},
-      image: configuration.sandbox.image,
+      ...hostedOperatorSandboxSourceOptions(configuration.sandbox),
       networkPolicy: "allow-all",
       persistent: false,
       ports: [],

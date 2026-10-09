@@ -50,6 +50,24 @@ const workload = z.strictObject({
   projectId: id,
   subject: id,
 });
+const sandboxConfigurationFields = {
+  accessWorker: worker,
+  authProposal: z.strictObject({ executablePath: id, id, sha256: digest }),
+  authWorker: worker,
+  membershipWorker: worker.optional(),
+  projectId: id,
+  resourcesWorker: worker,
+  teamId: id,
+  workers: z.record(id, worker),
+};
+export const hostedOperatorSandboxConfigurationSchema = z.union([
+  z.strictObject({ ...sandboxConfigurationFields, image: id }),
+  z.strictObject({
+    ...sandboxConfigurationFields,
+    source: z.strictObject({ snapshotId: id, type: z.literal("snapshot") }),
+  }),
+]);
+
 export const hostedOperatorSourceConfigurationSchema = z.strictObject({
   applications: z.record(
     id,
@@ -90,17 +108,7 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
     origin: httpsOrigin,
     projectId: id,
   }),
-  sandbox: z.strictObject({
-    accessWorker: worker,
-    authProposal: z.strictObject({ executablePath: id, id, sha256: digest }),
-    authWorker: worker,
-    image: id,
-    membershipWorker: worker.optional(),
-    projectId: id,
-    resourcesWorker: worker,
-    teamId: id,
-    workers: z.record(id, worker),
-  }),
+  sandbox: hostedOperatorSandboxConfigurationSchema,
   teamId: id,
   workloadPolicy: workload,
 });
