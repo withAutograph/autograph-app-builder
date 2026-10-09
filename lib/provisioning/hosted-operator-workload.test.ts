@@ -1,6 +1,10 @@
-import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
+import { HostedOperatorError } from "./hosted-operator-contract";
+import {
+  operatorWorkloadFailureFor,
+  createOperatorWorkloadVerifier,
+} from "./hosted-operator-workload";
+import { createLocalJWKSet, errors, exportJWK, generateKeyPair, SignJWT } from "jose";
 import { beforeAll, describe, expect, it } from "vitest";
-import { createOperatorWorkloadVerifier } from "./hosted-operator-workload";
 
 const policy = {
   audience: "https://vercel.com/fixture-team",
@@ -87,5 +91,76 @@ describe("protected operator workload identity", () => {
     await expect(verify(new Request("https://operator.example.test/v1/runtime"))).rejects.toThrow(
       "authorization_required",
     );
+  });
+});
+
+const rejectedWorkload = async (pending: Promise<void>) => {
+  try {
+    await pending;
+  } catch (error) {
+    expect(error).toBeInstanceOf(HostedOperatorError);
+    if (!(error instanceof HostedOperatorError)) {
+      throw error;
+    }
+    expect(error.code).toBe("authorization_required");
+    expect(error.name).toBe("HostedOperatorError");
+    expect(error).not.toHaveProperty("workloadFailure");
+    return operatorWorkloadFailureFor(error);
+  }
+  throw new Error("Invalid workload was accepted");
+};
+
+describe("closed workload verification failure metadata", () => {
+  it.each([
+    ["iss", { issuer: "https://oidc.vercel.com/private-team" }],
+    ["aud", { audience: "https://vercel.com/private-team" }],
+    ["sub", { subject: "private-subject" }],
+    ["exp", { noExpiry: true }],
+  ])("reports only the failed %s claim name", async (failedClaim, options) => {
+    await expect(
+      rejectedWorkload(verify(request(await token({}, options)))),
+    ).resolves.toMatchObject({
+      failedClaim,
+      joseCode: "ERR_JWT_CLAIM_VALIDATION_FAILED",
+      reason: "verification_failed",
+    });
+  });
+  it("reports expiry without the token or claims", async () => {
+    await expect(
+      rejectedWorkload(verify(request(await token({}, { expired: true })))),
+    ).resolves.toMatchObject({
+      failedClaim: "exp",
+      joseCode: "ERR_JWT_EXPIRED",
+      reason: "verification_failed",
+    });
+  });
+  it.each([
+    [{ owner_id: "private-owner" }, "policy_owner_mismatch"],
+    [{ project_id: "private-project" }, "policy_project_mismatch"],
+    [{ environment: "preview" }, "policy_environment_mismatch"],
+  ])("keeps signed policy mismatches closed %j", async (claims, reason) => {
+    await expect(rejectedWorkload(verify(request(await token(claims))))).resolves.toEqual({
+      reason,
+    });
+  });
+  it("reports a missing bearer without reading request input", async () => {
+    await expect(
+      rejectedWorkload(verify(new Request("https://operator.example.test/v1/runtime"))),
+    ).resolves.toEqual({ reason: "missing_authorization" });
+  });
+});
+
+it("unreadable diagnostic error fields cannot change authorization", async () => {
+  const error = new errors.JOSEError("private-exception-token");
+  Object.defineProperty(error, "code", {
+    get() {
+      throw new Error("private-field-token");
+    },
+  });
+  const unavailable = createOperatorWorkloadVerifier(policy, () => {
+    throw error;
+  });
+  await expect(rejectedWorkload(unavailable(request(await token())))).resolves.toEqual({
+    reason: "verification_failed",
   });
 });

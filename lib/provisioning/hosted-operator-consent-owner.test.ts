@@ -1,3 +1,4 @@
+import { createOperatorWorkloadAuthorizationError } from "./hosted-operator-workload";
 import { createHash } from "node:crypto";
 import { HostedOperatorError } from "./hosted-operator-contract";
 import { describe, expect, it, vi } from "vitest";
@@ -181,6 +182,34 @@ it("reports a closed workload denial and retains the exact failing authorization
     for (const secret of [f.hint.sessionId, error.message, f.hint.principal.ownerUserId]) {
       expect(output).not.toContain(secret);
     }
+  } finally {
+    log.mockRestore();
+  }
+});
+
+it("logs only closed workload failure metadata while retaining rejection", async () => {
+  const log = vi.spyOn(console, "info").mockImplementation(() => {});
+  try {
+    const f = fixture();
+    const error = createOperatorWorkloadAuthorizationError({
+      failedClaim: "aud",
+      joseCode: "ERR_JWT_CLAIM_VALIDATION_FAILED",
+      reason: "verification_failed",
+    });
+    error.message = "private-token private-audience";
+    f.verifyWorkload.mockRejectedValue(error);
+    await expect(f.service.authorize(request(), f.hint.sessionId, f.hint)).rejects.toBe(error);
+    expect(log.mock.calls[1]?.[1]).toEqual(
+      expect.objectContaining({
+        workloadFailure: {
+          failedClaim: "aud",
+          joseCode: "ERR_JWT_CLAIM_VALIDATION_FAILED",
+          reason: "verification_failed",
+        },
+      }),
+    );
+    expect(JSON.stringify(log.mock.calls)).not.toContain(error.message);
+    expect(f.sessions.getSessionByAdapterSessionId).not.toHaveBeenCalled();
   } finally {
     log.mockRestore();
   }

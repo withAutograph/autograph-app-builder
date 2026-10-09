@@ -92,3 +92,16 @@ it("accepts only the fixed access classes and whitelisted Vercel code", () => {
   expect(sink).toHaveBeenCalledOnce();
   expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
 });
+
+it("rejects private values placed in workload diagnostic fields", () => {
+  const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+  const report = createHostedOperatorConsentDiagnostic(secret, sink);
+  for (const field of ["failedClaim", "joseCode", "reason"]) {
+    const hostile = { ...value };
+    Object.defineProperty(hostile, "workloadFailure", {
+      value: { reason: "verification_failed", [field]: secret },
+    });
+    report(hostile);
+  }
+  expect(sink).not.toHaveBeenCalled();
+});
