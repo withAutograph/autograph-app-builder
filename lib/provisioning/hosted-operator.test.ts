@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { composeHostedOperatorAuthorizationDependencies } from "./hosted-operator-composition";
 /* oxlint-disable eslint/require-await, eslint/no-await-in-loop, sonarjs/no-hardcoded-passwords, unicorn/no-await-expression-member -- Synthetic service adapters and credentials only; plan replacements run sequentially against one journal. */
 import { once } from "node:events";
@@ -1912,4 +1913,123 @@ describe("protected hosted operator boundary", () => {
       await closed;
     }
   });
+});
+
+describe("closed operator access response diagnostics", () => {
+  it("distinguishes application denial at HTTP200 and correlates ingress without private values", async () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const f = fixture();
+      f.revoke();
+      const result = await f.client.request({ action: "plan", operation: "prepare", selection });
+      expect(result.code).toBe("authorization_required");
+      const sessionIdHash = `sha256:${createHash("sha256").update(selection.sessionId).digest("hex")}`;
+      expect(log.mock.calls[0]?.[1]).toEqual(
+        expect.objectContaining({
+          boundary: "operator",
+          sessionIdHash,
+          stage: "operator_ingress",
+        }),
+      );
+      expect(log.mock.calls).toContainEqual([
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({
+          accessClass: "application_auth_denied",
+          boundary: "builder",
+          httpStatus: 200,
+          sessionIdHash,
+          stage: "operator_request",
+        }),
+      ]);
+      const output = JSON.stringify(log.mock.calls);
+      for (const privateValue of [
+        selection.sessionId,
+        "fixture-service-identity",
+        authority.ownerUserId,
+        authority.workspaceId,
+        "https://operator.example",
+      ]) {
+        expect(output).not.toContain(privateValue);
+      }
+      expect(f.row).toBeUndefined();
+    } finally {
+      log.mockRestore();
+    }
+  });
+  it.each([401, 403])(
+    "preserves HTTP%s transport denial without reading a private body",
+    async (status) => {
+      const secret = "private-body header-token owner-id";
+      const response = Response.json(
+        { error: { code: secret }, token: secret },
+        {
+          headers: {
+            "x-vercel-error": status === 403 ? "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH" : secret,
+          },
+          status,
+        },
+      );
+      const body = vi.spyOn(response, "json");
+      const log = vi.spyOn(console, "info").mockImplementation(() => {});
+      try {
+        const client = createHostedOperatorClient({
+          endpoint: "https://operator.example",
+          fetch: async () => response,
+          ownerContext,
+          token: async () => secret,
+        });
+        await expect(
+          client.request({ action: "plan", operation: "prepare", selection }),
+        ).rejects.toMatchObject({ code: "authorization_required" });
+        expect(body).not.toHaveBeenCalled();
+        expect(log.mock.calls[0]?.[1]).toEqual(
+          expect.objectContaining({
+            accessClass: "upstream_auth_denied",
+            httpStatus: status,
+            sessionIdHash: `sha256:${createHash("sha256").update(selection.sessionId).digest("hex")}`,
+          }),
+        );
+        expect(JSON.stringify(log.mock.calls)).not.toContain(secret);
+        if (status === 401) {
+          expect(log.mock.calls[0]?.[1]).not.toHaveProperty("vercelError");
+        } else {
+          expect(log.mock.calls[0]?.[1]).toHaveProperty(
+            "vercelError",
+            "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH",
+          );
+        }
+      } finally {
+        log.mockRestore();
+      }
+    },
+  );
+  it.each([200, 503])(
+    "reports HTTP%s without changing its existing public result",
+    async (status) => {
+      const log = vi.spyOn(console, "info").mockImplementation(() => {});
+      try {
+        const client = createHostedOperatorClient({
+          endpoint: "https://operator.example",
+          fetch: async () =>
+            Response.json(
+              { appId: selection.appId, authenticatedBehavior: "unassessed", status: "pending" },
+              { status },
+            ),
+          token: async () => "secret",
+        });
+        const result = client.request({ action: "plan", operation: "prepare", selection });
+        await (status === 200
+          ? expect(result).resolves.toMatchObject({ status: "pending" })
+          : expect(result).rejects.toMatchObject({ code: "operator_unavailable" }));
+        expect(log.mock.calls[0]?.[1]).toEqual(
+          expect.objectContaining({
+            accessClass: status === 200 ? "ok" : "other_failed",
+            httpStatus: status,
+          }),
+        );
+      } finally {
+        log.mockRestore();
+      }
+    },
+  );
 });

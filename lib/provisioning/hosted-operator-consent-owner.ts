@@ -1,3 +1,5 @@
+import type { HostedOperatorConsentMetadata } from "./hosted-operator-consent-diagnostic";
+import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent-diagnostic";
 import { isDeepStrictEqual } from "node:util";
 import { resolveHostedOperatorOwnerContext } from "./hosted-operator-owner-context";
 import { createOperatorWorkloadVerifier } from "./hosted-operator-workload";
@@ -79,7 +81,22 @@ export const createHostedOperatorConsentOwner = (
       sessionId: string,
       hint: OperatorOwnerContext | undefined,
     ): Promise<HostedOperatorConsentOwner> => {
-      await verifyWorkload(request);
+      const report = createHostedOperatorConsentDiagnostic(sessionId);
+      const emit = (outcome: HostedOperatorConsentMetadata["outcome"]) => {
+        report({ boundary: "operator", outcome, phase: "inline", stage: "workload_verification" });
+      };
+      emit("started");
+      try {
+        await verifyWorkload(request);
+        emit("verified");
+      } catch (error) {
+        emit(
+          error instanceof HostedOperatorError && error.code === "authorization_required"
+            ? "operator_access_denied"
+            : "setup_unavailable",
+        );
+        throw error;
+      }
       const current = await currentOwner(hint);
       if (current.ownerContext.sessionId !== sessionId) {
         throw new HostedOperatorError("authorization_required");

@@ -64,14 +64,57 @@ export const createHostedOperatorClient = (input: {
       redirect: "error",
       signal,
     });
+    const report = createHostedOperatorConsentDiagnostic(
+      body.action === "neon-authorization" ? body.sessionId : body.selection.sessionId,
+    );
+    const emit = (accessClass: NonNullable<HostedOperatorConsentMetadata["accessClass"]>) => {
+      const vercelError = response.headers.get("x-vercel-error");
+      let outcome: HostedOperatorConsentMetadata["outcome"] = "operator_access_denied";
+      if (accessClass === "ok") {
+        outcome = "verified";
+      }
+      if (accessClass === "other_failed") {
+        outcome = "setup_unavailable";
+      }
+      const metadata: HostedOperatorConsentMetadata = {
+        accessClass,
+        boundary: "builder",
+        httpStatus: response.status,
+        outcome,
+        phase: body.action === "neon-authorization" ? body.phase : "inline",
+        stage: "operator_request",
+      };
+      if (vercelError === "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH") {
+        metadata.vercelError = "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH";
+      }
+      report(metadata);
+    };
     if (!response.ok) {
+      emit(
+        response.status === 401 || response.status === 403
+          ? "upstream_auth_denied"
+          : "other_failed",
+      );
       throw new HostedOperatorError(
         response.status === 401 || response.status === 403
           ? "authorization_required"
           : "operator_unavailable",
       );
     }
-    const value: unknown = await response.json();
+    let value: unknown;
+    try {
+      value = await response.json();
+    } catch (error) {
+      emit("other_failed");
+      throw error;
+    }
+    const blocked = operatorPublicResultSchema.safeParse(value);
+    let accessClass: NonNullable<HostedOperatorConsentMetadata["accessClass"]> = "ok";
+    if (blocked.success && blocked.data.status === "blocked") {
+      accessClass =
+        blocked.data.code === "authorization_required" ? "application_auth_denied" : "other_failed";
+    }
+    emit(accessClass);
     return value;
   };
   return {

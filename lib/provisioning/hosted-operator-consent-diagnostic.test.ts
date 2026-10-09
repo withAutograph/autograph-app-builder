@@ -75,3 +75,20 @@ describe("closed Neon consent diagnostics", () => {
     }
   });
 });
+
+it("accepts only the fixed access classes and whitelisted Vercel code", () => {
+  const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+  const report = createHostedOperatorConsentDiagnostic(secret, sink);
+  report({
+    ...value,
+    accessClass: "upstream_auth_denied",
+    httpStatus: 403,
+    vercelError: "TRUSTED_SOURCES_ENVIRONMENT_MISMATCH",
+  });
+  expect(sink).toHaveBeenCalledOnce();
+  const hostile = { ...value, accessClass: "upstream_auth_denied" as const };
+  Object.defineProperty(hostile, "vercelError", { value: secret });
+  report(hostile);
+  expect(sink).toHaveBeenCalledOnce();
+  expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+});

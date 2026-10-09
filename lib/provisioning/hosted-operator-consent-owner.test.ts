@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { HostedOperatorError } from "./hosted-operator-contract";
 import { describe, expect, it, vi } from "vitest";
 import { durableHostedSessionRecordSchema } from "../eve/hosted-store";
 import { builderHandoffRecordSchema } from "../handoff/contracts";
@@ -150,4 +152,36 @@ describe("consent owner authority without app provisioning", () => {
       code: "authorization_required",
     });
   });
+});
+
+it("reports a closed workload denial and retains the exact failing authorization", async () => {
+  const log = vi.spyOn(console, "info").mockImplementation(() => {});
+  try {
+    const f = fixture();
+    const error = new HostedOperatorError("authorization_required");
+    error.message = "private-jwt owner-id claim-value";
+    f.verifyWorkload.mockRejectedValue(error);
+    await expect(f.service.authorize(request(), f.hint.sessionId, f.hint)).rejects.toBe(error);
+    expect(f.sessions.getSessionByAdapterSessionId).not.toHaveBeenCalled();
+    expect(log.mock.calls).toEqual([
+      [
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({ outcome: "started", stage: "workload_verification" }),
+      ],
+      [
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({
+          outcome: "operator_access_denied",
+          sessionIdHash: `sha256:${createHash("sha256").update(f.hint.sessionId).digest("hex")}`,
+          stage: "workload_verification",
+        }),
+      ],
+    ]);
+    const output = JSON.stringify(log.mock.calls);
+    for (const secret of [f.hint.sessionId, error.message, f.hint.principal.ownerUserId]) {
+      expect(output).not.toContain(secret);
+    }
+  } finally {
+    log.mockRestore();
+  }
 });

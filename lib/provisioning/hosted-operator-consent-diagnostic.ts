@@ -13,6 +13,8 @@ const stage = z.enum([
   "client_construction",
   "principal",
   "operator_request",
+  "operator_ingress",
+  "workload_verification",
   "inline_token",
   "current_owner",
   "operator_oidc",
@@ -31,11 +33,15 @@ const outcome = z.enum([
   "control_flow_propagated",
 ]);
 const metadata = z.strictObject({
+  accessClass: z
+    .enum(["upstream_auth_denied", "application_auth_denied", "other_failed", "ok"])
+    .optional(),
   boundary,
   httpStatus: z.number().int().min(100).max(599).optional(),
   outcome,
   phase,
   stage,
+  vercelError: z.literal("TRUSTED_SOURCES_ENVIRONMENT_MISMATCH").optional(),
 });
 export type HostedOperatorConsentMetadata = z.infer<typeof metadata>;
 export type HostedOperatorConsentDiagnostic = HostedOperatorConsentMetadata & {
