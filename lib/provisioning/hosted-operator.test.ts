@@ -19,7 +19,11 @@ import {
   restrictedOperatorEnvironment,
 } from "./hosted-operator-contract";
 import type { OperatorSelection } from "./hosted-operator-contract";
-import { hostedRuntimeIdentity, hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
+import {
+  hostedRuntimeIdentity,
+  hostedRuntimeJournalRecordSchema,
+  retainedOperatorAuthFromJournal,
+} from "./hosted-runtime-journal";
 import type { HostedRuntimeJournalRow, HostedRuntimeJournalStore } from "./hosted-runtime-journal";
 import { publicApprovalDescription } from "../agent/approval-receipt";
 
@@ -500,6 +504,15 @@ describe("protected hosted operator boundary", () => {
     const receipts = f.row?.record.operator?.receipts;
     expect(receipts).toHaveLength(3);
     expect(f.row?.record.environmentBound).toBe(false);
+    const retainedAuth = structuredClone(f.row?.record.retainedAuth);
+    expect(retainedAuth).toMatchObject({
+      approvalId: "durable-human-decision",
+      approvedByCallId: first.callId,
+      operationRef: first.operationRef,
+      plan: bootstrapPlan,
+      planDigest: first.planDigest,
+      receipts,
+    });
     const fullPlan = hostedOperatorPlanSchema.parse({
       ...plan,
       authSchema,
@@ -522,6 +535,241 @@ describe("protected hosted operator boundary", () => {
     expect(f.row?.record.operator?.receipts).toEqual(receipts);
     expect((await f.client.request(renewed)).status).toBe("prepared");
     expect(f.deps.verify).toHaveBeenCalledTimes(1);
+    expect(f.row?.record.retainedAuth).toEqual(retainedAuth);
+  });
+
+  it("materializes existing complete Auth provenance before source cleanup and keeps it across CAS retries", async () => {
+    const f = fixture();
+    const authSchema = {
+      artifactRef: "auth-plan",
+      installer: { reference: "auth-protected-installer-v1", sha256: "f".repeat(64) },
+      planDigest: "d".repeat(64),
+      targetDigest: "e".repeat(64),
+    };
+    const sourcePlan = hostedOperatorPlanSchema.parse({ ...plan, authSchema });
+    f.deps.plan = async () => sourcePlan;
+    const source = await prepared(f);
+    f.approve();
+    await f.client.request(source);
+    const completed = f.row;
+    if (completed?.record.operator === undefined) {
+      throw new Error("Missing completed source journal");
+    }
+    const readiness = {
+      assetSha256: "1".repeat(64),
+      catalogFingerprint: "2".repeat(64),
+      database: plan.authDatabase.database,
+      observedAt: new Date().toISOString(),
+      runtimeRole: plan.authDatabase.runtimeRole,
+      targetDigest: authSchema.targetDigest,
+    };
+    const gatewayEnvironment = [
+      {
+        branch: selection.branch,
+        comment: `App Builder protected operator ${source.operationRef}`,
+        id: "env_shared_auth",
+        key: "AUTH_DATABASE_RESOURCE",
+        operationRef: source.operationRef,
+        projectId: "prj_gateway",
+        valueSha256: "a".repeat(64),
+      },
+    ];
+    // Existing v1 sources have saved readiness but no retained provenance field.
+    f.row = {
+      ...completed,
+      record: hostedRuntimeJournalRecordSchema.parse({
+        ...completed.record,
+        operator: { ...completed.record.operator, authPreparation: readiness, gatewayEnvironment },
+      }),
+    };
+    const expected = retainedOperatorAuthFromJournal(f.row.record);
+    expect(expected).toBeDefined();
+    const cleanupPlan = hostedOperatorPlanSchema.parse({
+      ...sourcePlan,
+      action: "cleanup",
+      effects: [
+        { description: "Revoke access", id: "revoke", kind: "revoke" },
+        { description: "Remove app bindings", id: "remove-bindings", kind: "remove-bindings" },
+        { description: "Retire app", id: "retire", kind: "retire" },
+      ],
+    });
+    f.deps.plan = async () => cleanupPlan;
+    const { readApproval } = f.deps;
+    f.deps.readApproval = async () => null;
+    expect(
+      await f.client.request({ action: "plan", operation: "cleanup", selection }),
+    ).toMatchObject({
+      code: "authorization_required",
+      status: "blocked",
+    });
+    expect(f.row.record.retainedAuth).toBeUndefined();
+    expect(f.row.record.operator?.operationRef).toBe(source.operationRef);
+    const beforeRace = structuredClone(f.row);
+    f.deps.readApproval = async (input) => {
+      if (f.row?.record.privateState !== undefined) {
+        f.row.record.privateState.encryptedToken = "replaced-source-ciphertext";
+      }
+      return await readApproval(input);
+    };
+    expect(
+      await f.client.request({ action: "plan", operation: "cleanup", selection }),
+    ).toMatchObject({ code: "operation_in_progress", status: "blocked" });
+    expect(f.row?.record.retainedAuth).toBeUndefined();
+    f.row = beforeRace;
+    f.deps.readApproval = vi.fn(readApproval);
+    const { compareAndSet } = f.deps.store;
+    let missed = false;
+    f.deps.store.compareAndSet = async (input) => {
+      if (!missed && input.record.operator?.plan.action === "cleanup") {
+        missed = true;
+        if (f.row !== undefined) {
+          f.row = { ...f.row, revision: f.row.revision + 1 };
+        }
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- A stale CAS returns no row.
+        return undefined;
+      }
+      return await compareAndSet(input);
+    };
+    const cleanup = await f.client.request({ action: "plan", operation: "cleanup", selection });
+    expect(cleanup.status).toBe("planned");
+    expect(missed).toBe(true);
+    expect(f.deps.readApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "prepare",
+        callId: source.callId,
+        planDigest: source.planDigest,
+      }),
+    );
+    expect(f.row?.record.retainedAuth).toEqual(expected);
+    expect(f.row?.record.operator?.authPreparation).toEqual(readiness);
+    const updatedRows = gatewayEnvironment.map((row) => ({
+      ...row,
+      comment: `App Builder protected operator ${cleanup.operationRef}`,
+      operationRef: z.uuid().parse(cleanup.operationRef),
+      pendingOperationRef: z.uuid().parse(cleanup.operationRef),
+      pendingValueSha256: "b".repeat(64),
+    }));
+    const { executeEffect } = f.deps;
+    f.deps.executeEffect = async (input) => {
+      if (input.effect.kind === "revoke") {
+        await input.checkpointGatewayEnvironment?.(updatedRows);
+      }
+      return await executeEffect(input);
+    };
+    expect(
+      (
+        await f.client.request({
+          ...source,
+          callId: "source-cleanup",
+          operationRef: z.uuid().parse(cleanup.operationRef),
+          planDigest: z.string().parse(cleanup.planDigest),
+        })
+      ).status,
+    ).toBe("cleaned");
+    const updatedExpected = { ...expected, gatewayEnvironment: updatedRows };
+    expect(f.row?.record.retainedAuth).toEqual(updatedExpected);
+    expect(f.row?.record.operator?.fenceGeneration).toBeGreaterThan(expected?.fenceGeneration ?? 0);
+    expect(f.row?.record.retainedAuth?.fenceGeneration).toBe(expected?.fenceGeneration);
+    f.deps.plan = async () => ({ ...sourcePlan, contextId: "replacement-app" });
+    expect((await prepared(f)).planDigest).not.toBe(source.planDigest);
+    expect(f.row?.record.retainedAuth).toEqual(updatedExpected);
+    f.deps.plan = async () => ({
+      ...sourcePlan,
+      authSchema: { ...authSchema, targetDigest: "f".repeat(64) },
+      contextId: "replacement-app",
+    });
+    await prepared(f);
+    expect(f.row?.record.retainedAuth).toBeUndefined();
+    expect(f.row?.record.operator?.authPreparation).toBeUndefined();
+  });
+
+  it("captures ordinary completed prepare only with approved complete receipts and saved Auth readiness", async () => {
+    const f = fixture();
+    const authSchema = {
+      artifactRef: "auth-plan",
+      installer: { reference: "auth-protected-installer-v1", sha256: "f".repeat(64) },
+      planDigest: "d".repeat(64),
+      targetDigest: "e".repeat(64),
+    };
+    f.deps.plan = async () => ({ ...plan, authSchema });
+    const request = await prepared(f);
+    const initial = f.row;
+    if (initial?.record.operator === undefined) {
+      throw new Error("Missing planned source journal");
+    }
+    f.row = {
+      ...initial,
+      record: hostedRuntimeJournalRecordSchema.parse({
+        ...initial.record,
+        operator: {
+          ...initial.record.operator,
+          authPreparation: {
+            assetSha256: "1".repeat(64),
+            catalogFingerprint: "2".repeat(64),
+            database: plan.authDatabase.database,
+            observedAt: new Date().toISOString(),
+            runtimeRole: plan.authDatabase.runtimeRole,
+            targetDigest: authSchema.targetDigest,
+          },
+        },
+      }),
+    };
+    expect(retainedOperatorAuthFromJournal(f.row.record)).toBeUndefined();
+    expect((await f.client.request(request)).code).toBe("authorization_required");
+    expect(f.row?.record.retainedAuth).toBeUndefined();
+    f.approve();
+    expect((await f.client.request(request)).status).toBe("prepared");
+    const complete = f.row?.record;
+    if (complete?.operator === undefined) {
+      throw new Error("Missing prepared source journal");
+    }
+    expect(complete.retainedAuth).toMatchObject({
+      approvedByCallId: request.callId,
+      operationRef: request.operationRef,
+      planDigest: request.planDigest,
+      receipts: complete.operator.receipts,
+    });
+    expect(
+      retainedOperatorAuthFromJournal({
+        ...complete,
+        approvedByCallId: "operator:unapproved-plan",
+      }),
+    ).toBeUndefined();
+    expect(
+      retainedOperatorAuthFromJournal({
+        ...complete,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Missing optional approval cannot mint ownership.
+        operator: { ...complete.operator, approvalId: undefined },
+      }),
+    ).toBeUndefined();
+    expect(
+      retainedOperatorAuthFromJournal({
+        ...complete,
+        operator: { ...complete.operator, receipts: complete.operator.receipts.slice(1) },
+      }),
+    ).toBeUndefined();
+    expect(
+      retainedOperatorAuthFromJournal({
+        ...complete,
+        operator: { ...complete.operator, pendingEffectId: "install" },
+      }),
+    ).toBeUndefined();
+    expect(
+      retainedOperatorAuthFromJournal({
+        ...complete,
+        // oxlint-disable-next-line sonarjs/no-undefined-assignment -- Missing optional readiness cannot mint ownership.
+        operator: { ...complete.operator, authPreparation: undefined },
+      }),
+    ).toBeUndefined();
+    expect(
+      retainedOperatorAuthFromJournal({
+        ...complete,
+        operator: {
+          ...complete.operator,
+          fenceGeneration: (complete.operator.fenceGeneration ?? 0) + 1,
+        },
+      }),
+    ).toBeUndefined();
   });
 
   it("CAS-checkpoints managed environment ownership and preserves it for cleanup", async () => {

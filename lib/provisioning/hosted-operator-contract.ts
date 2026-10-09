@@ -798,6 +798,55 @@ export const operatorPlanDigest = (input: HostedOperatorPlan) =>
   createHash("sha256")
     .update(JSON.stringify(hostedOperatorPlanSchema.parse(input)))
     .digest("hex");
+/** Completed Auth ownership survives replacement of the app's current operation.
+ * This is non-secret provenance; current owner and original approval are re-read
+ * before the retained encrypted credentials may be used. */
+export const retainedOperatorAuthSchema = z
+  .strictObject({
+    approvalId: id,
+    approvedByCallId: id,
+    authPreparation: operatorAuthSchemaPreparationSchema,
+    fenceGeneration: z.number().int().positive().optional(),
+    gatewayEnvironment: managedOperatorEnvironmentRowsSchema.optional(),
+    operationRef: z.uuid(),
+    plan: hostedOperatorPlanSchema,
+    planDigest: digest,
+    receipts: z.array(operatorReceiptSchema),
+  })
+  .superRefine((value, context) => {
+    const { approvedByCallId, ...metadata } = value;
+    const operator = hostedOperatorRecordSchema.safeParse({
+      ...metadata,
+      mode: "protected-operator-v1",
+    });
+    const readiness = value.authPreparation;
+    const invalid = [
+      value.plan.action !== "prepare",
+      approvedByCallId === "operator:unapproved-plan",
+      value.planDigest !== operatorPlanDigest(value.plan),
+      readiness.database !== value.plan.authDatabase.database,
+      readiness.runtimeRole !== value.plan.authDatabase.runtimeRole,
+      readiness.targetDigest !== value.plan.authSchema?.targetDigest,
+      value.receipts.length !== value.plan.effects.length,
+      value.plan.effects.some(
+        (effect) => value.receipts.filter((receipt) => receipt.effectId === effect.id).length !== 1,
+      ),
+      value.receipts.some(
+        (receipt) =>
+          ["access", "revoke"].includes(
+            value.plan.effects.find((effect) => effect.id === receipt.effectId)?.kind ?? "",
+          ) && receipt.fenceGeneration !== value.fenceGeneration,
+      ),
+      !operator.success,
+    ].some(Boolean);
+    if (invalid) {
+      context.addIssue({
+        code: "custom",
+        message: "Retained Auth requires complete approved preparation and matching readiness.",
+      });
+    }
+  });
+export type RetainedOperatorAuth = z.infer<typeof retainedOperatorAuthSchema>;
 /** Private server-derived claims; the operator re-reads their durable authority. */
 const ownerContextBaseSchema = z.strictObject({
   adapterGeneration: z.number().int().positive(),

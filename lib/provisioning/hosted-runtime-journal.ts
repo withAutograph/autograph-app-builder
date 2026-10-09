@@ -6,7 +6,8 @@ import { z } from "zod";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import type { BuilderProvisionAuthority } from "./journal";
 import { builderAppIdSchema } from "./names";
-import { hostedOperatorRecordSchema } from "./hosted-operator-contract";
+import { hostedOperatorRecordSchema, retainedOperatorAuthSchema } from "./hosted-operator-contract";
+import type { RetainedOperatorAuth } from "./hosted-operator-contract";
 
 export const hostedRuntimeTargetSchema = z.strictObject({
   appId: builderAppIdSchema,
@@ -64,6 +65,7 @@ export const hostedRuntimeJournalRecordSchema = z.strictObject({
   privateState: encryptedStateSchema.optional(),
   proof: hostedRuntimeProofSchema.optional(),
   request: hostedRuntimeTargetSchema,
+  retainedAuth: retainedOperatorAuthSchema.optional(),
   status: z.enum(["pending", "prepared", "failed", "cleaning", "cleaned"]),
   step: z.enum([
     "reserved",
@@ -78,6 +80,46 @@ export const hostedRuntimeJournalRecordSchema = z.strictObject({
 });
 
 export type HostedRuntimeJournalRecord = z.infer<typeof hostedRuntimeJournalRecordSchema>;
+/** Structural completion evidence only. Callers must independently recheck owner
+ * authorization and the original approval before using or materializing it. */
+export const retainedOperatorAuthFromJournal = (
+  record: HostedRuntimeJournalRecord,
+): RetainedOperatorAuth | undefined => {
+  const { operator } = record;
+  if (
+    operator === undefined ||
+    record.privateState === undefined ||
+    operator.pendingEffectId !== undefined ||
+    operator.pendingEffectAttempt !== undefined
+  ) {
+    return undefined;
+  }
+  const completed =
+    operator.plan.stage === "auth-bootstrap"
+      ? record.status === "pending" && record.step === "reserved"
+      : [
+          record.status === "prepared",
+          record.step === "bound",
+          record.environmentBound === true,
+          record.proof?.manifestSha256 === operator.plan.release.sha256,
+          record.proof?.releaseId === operator.plan.release.id,
+        ].every(Boolean);
+  if (!completed) {
+    return undefined;
+  }
+  const parsed = retainedOperatorAuthSchema.safeParse({
+    approvalId: operator.approvalId,
+    approvedByCallId: record.approvedByCallId,
+    authPreparation: operator.authPreparation,
+    fenceGeneration: operator.fenceGeneration,
+    gatewayEnvironment: operator.gatewayEnvironment,
+    operationRef: operator.operationRef,
+    plan: operator.plan,
+    planDigest: operator.planDigest,
+    receipts: operator.receipts,
+  });
+  return parsed.success ? parsed.data : undefined;
+};
 export interface HostedRuntimeJournalRow {
   record: HostedRuntimeJournalRecord;
   revision: number;
