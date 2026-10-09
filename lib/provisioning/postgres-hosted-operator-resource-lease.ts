@@ -37,7 +37,7 @@ const heldLockSchema = z.strictObject({ held: z.boolean() });
 const backendIdentitySql = `select pid as backend_pid, backend_start::text as backend_start
   from pg_stat_activity
   where pid = pg_backend_pid()`;
-const readBackendIdentity = (connection: postgres.ReservedSql) =>
+const readBackendIdentity = (connection: postgres.TransactionSql) =>
   connection.unsafe(backendIdentitySql);
 type BackendIdentity = z.infer<typeof pgBackendIdentitySchema>;
 class LeaseSessionUnavailableError extends Error {
@@ -48,7 +48,7 @@ class LeaseSessionUnavailableError extends Error {
 }
 
 const assertSameBackend = async (
-  connection: postgres.ReservedSql,
+  connection: postgres.TransactionSql,
   backend: BackendIdentity,
   connectionClosed: () => boolean,
 ) => {
@@ -59,6 +59,7 @@ const assertSameBackend = async (
     const [rawCurrent] = await readBackendIdentity(connection);
     const current = pgBackendIdentitySchema.parse(rawCurrent);
     if (
+      !connectionClosed() &&
       current.backend_pid === backend.backend_pid &&
       current.backend_start === backend.backend_start
     ) {
@@ -71,7 +72,7 @@ const assertSameBackend = async (
 };
 
 const assertHeldLocks = async (
-  connection: postgres.ReservedSql,
+  connection: postgres.TransactionSql,
   backend: BackendIdentity,
   lockParts: AdvisoryLockParts[],
   connectionClosed: () => boolean,
@@ -95,6 +96,9 @@ const assertHeldLocks = async (
         ) as held
       `;
     } catch {
+      throw new LeaseSessionUnavailableError(leaseSessionLost);
+    }
+    if (connectionClosed()) {
       throw new LeaseSessionUnavailableError(leaseSessionLost);
     }
     if (!heldLockSchema.parse(rawHeld).held) {
@@ -162,13 +166,14 @@ const readLeaseSnapshot = async (
 /**
  * Locks physical Auth/app database names under the frozen Neon project and branch. Access rows
  * live in Auth, so the Auth database lock covers them. Opaque connection refs and operation IDs
- * never split a physical resource's lock.
+ * never split a physical resource's lock. Transaction locks retain the same backend through
+ * a transaction pooler. The separate journal pool commits checkpoints before resource effects.
  */
 export const createPostgresHostedOperatorResourceLease = (input: {
   /**
    * Opens a new dedicated lock pool for each operation, separate from the journal store's pool.
-   * The lease closes this client after the operation so a stale reserved handler cannot be
-   * reused by a later operation after postgres.js observes a connection loss.
+   * Transaction completion releases the locks before the client is closed. A callback retained
+   * after transaction completion or connection loss must never regain lease authority.
    */
   openLockClient: (onConnectionClosed: () => void) => postgres.Sql;
   store: HostedRuntimeJournalStore;
@@ -180,48 +185,67 @@ export const createPostgresHostedOperatorResourceLease = (input: {
     run: (assertFence: () => Promise<void>) => Promise<T>,
   ) => {
     let connectionClosed = false;
+    let transactionActive = false;
     const database = input.openLockClient(() => {
       connectionClosed = true;
+      transactionActive = false;
     });
+    const leaseClosed = () => connectionClosed || !transactionActive;
     try {
-      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Reserve the dedicated session before reading the separate journal pool.
-      const connection = await database.reserve();
-      let backend: BackendIdentity;
-      try {
-        const [rawBackend] = await readBackendIdentity(connection);
-        backend = pgBackendIdentitySchema.parse(rawBackend);
-      } catch {
-        throw new Error("Protected resource lease session is unavailable.");
-      }
-      const snapshot = await readLeaseSnapshot(input.store, leaseInput, now);
-      const lockParts: AdvisoryLockParts[] = [];
-      for (const key of lockKey(leaseInput.plan)) {
-        await connection`select pg_advisory_lock(hashtextextended(${key}, 0))`;
-        const [rawParts] = await connection`
-          select
-            ((hashtextextended(${key}, 0) >> 32) & 4294967295)::text as class_id,
-            (hashtextextended(${key}, 0) & 4294967295)::text as object_id
-        `;
-        lockParts.push(advisoryLockPartsSchema.parse(rawParts));
-      }
-      const assertFence = async () => {
-        await assertSameBackend(connection, backend, () => connectionClosed);
-        await assertHeldLocks(connection, backend, lockParts, () => connectionClosed);
-        const current = await readLeaseSnapshot(input.store, leaseInput, now);
-        if (
-          current.leaseId !== snapshot.leaseId ||
-          current.operationRef !== snapshot.operationRef ||
-          current.fenceGeneration !== snapshot.fenceGeneration
-        ) {
-          throw new Error("Protected resource lease fence is stale.");
-        }
-      };
+      const completed = await database.begin(async (connection) => {
+        transactionActive = !connectionClosed;
+        try {
+          if (leaseClosed()) {
+            throw new LeaseSessionUnavailableError(leaseSessionLost);
+          }
+          // Provider/installer awaits may exceed the shared 30-second idle transaction timeout.
+          // Only this lock transaction overrides it; the durable journal lease still expires.
+          await connection`set local idle_in_transaction_session_timeout = 0`;
+          let backend: BackendIdentity;
+          try {
+            const [rawBackend] = await readBackendIdentity(connection);
+            backend = pgBackendIdentitySchema.parse(rawBackend);
+          } catch {
+            throw new Error("Protected resource lease session is unavailable.");
+          }
+          const snapshot = await readLeaseSnapshot(input.store, leaseInput, now);
+          const lockParts: AdvisoryLockParts[] = [];
+          for (const key of lockKey(leaseInput.plan)) {
+            await connection`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
+            const [rawParts] = await connection`
+              select
+                ((hashtextextended(${key}, 0) >> 32) & 4294967295)::text as class_id,
+                (hashtextextended(${key}, 0) & 4294967295)::text as object_id
+            `;
+            lockParts.push(advisoryLockPartsSchema.parse(rawParts));
+          }
+          const assertFence = async () => {
+            await assertSameBackend(connection, backend, leaseClosed);
+            await assertHeldLocks(connection, backend, lockParts, leaseClosed);
+            const current = await readLeaseSnapshot(input.store, leaseInput, now);
+            if (leaseClosed()) {
+              throw new LeaseSessionUnavailableError(leaseSessionLost);
+            }
+            if (
+              current.leaseId !== snapshot.leaseId ||
+              current.operationRef !== snapshot.operationRef ||
+              current.fenceGeneration !== snapshot.fenceGeneration
+            ) {
+              throw new Error("Protected resource lease fence is stale.");
+            }
+          };
 
-      await assertFence();
-      return await run(assertFence);
+          await assertFence();
+          // Keep arbitrary callback results outside postgres.js's array-of-promises handling.
+          return { value: await run(assertFence) };
+        } finally {
+          transactionActive = false;
+        }
+      });
+      return completed.value;
     } finally {
-      // Closing this operation-owned pool releases every advisory lock, including after an
-      // uncertain disconnect. No shared pool handler can be returned to a later lease.
+      transactionActive = false;
+      // BEGIN owns COMMIT/ROLLBACK and transaction-lock release; closing is transport cleanup.
       await database.end({ timeout: 0 });
     }
   };
