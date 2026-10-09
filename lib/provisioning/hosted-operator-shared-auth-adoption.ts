@@ -1,7 +1,12 @@
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import type { VercelTokenKeyringConfig } from "../integrations/vercel-installation";
-import { HostedOperatorError, operatorOwnerContextSchema } from "./hosted-operator-contract";
+import {
+  HostedOperatorError,
+  operatorOwnerContextSchema,
+  operatorPlanDigest,
+  sameOperatorSelection,
+} from "./hosted-operator-contract";
 import type {
   HostedOperatorContext,
   HostedOperatorEffectContext,
@@ -16,7 +21,10 @@ import type {
 import {
   describeHostedOperatorSharedAuth,
   sealHostedOperatorSharedAuth,
+  verifyPendingHostedOperatorSharedAuth,
 } from "./hosted-operator-resource-credentials";
+
+import type { SharedAuthReadinessVerifier } from "./hosted-operator-resource-credentials";
 
 /** Deployment-owned lookup hints. Authority is re-read for both journals on every use. */
 export const hostedOperatorAuthAdoptionSourceSchema = z.strictObject({
@@ -119,6 +127,55 @@ export const createHostedOperatorSharedAuthAdoption = (deps: {
       throw new HostedOperatorError("reconciliation_required");
     }
   };
+  const readTarget = async (effect: HostedOperatorEffectContext) => {
+    await effect.assertCurrent();
+    await deps.assertPlanningAuthorized(cloneContext(effect));
+    await deps.assertAuthorized({ ...cloneContext(effect), plan: structuredClone(effect.plan) });
+    const record = structuredClone(await deps.readCurrentTarget(effect));
+    const { operator } = record;
+    if (operator === undefined) {
+      throw new HostedOperatorError("reconciliation_required");
+    }
+    const invalidTarget = [
+      record.status !== "pending",
+      record.step !== "reserved",
+      !isDeepStrictEqual(record.request, effect.target),
+      !sameOperatorSelection(effect.plan.selection, effect.target),
+      !isDeepStrictEqual(operator.plan, effect.plan),
+      operator.planDigest !== operatorPlanDigest(effect.plan),
+      operator.operationRef !== effect.operationRef,
+      operator.fenceGeneration !== effect.fenceGeneration,
+    ].some(Boolean);
+    if (invalidTarget) {
+      throw new HostedOperatorError("reconciliation_required");
+    }
+    const approval = await deps.readApproval({
+      ...cloneContext(effect),
+      action: "prepare",
+      callId: record.approvedByCallId,
+      planDigest: operator.planDigest,
+    });
+    if (approval?.approved !== true) {
+      throw new HostedOperatorError("authorization_required");
+    }
+    const invalidTargetApproval = [
+      approval.action !== "prepare",
+      approval.approvalId !== operator.approvalId,
+      approval.callId !== record.approvedByCallId,
+      approval.planDigest !== operator.planDigest,
+    ].some(Boolean);
+    if (invalidTargetApproval) {
+      throw new HostedOperatorError("authorization_required");
+    }
+    await effect.assertCurrent();
+    await deps.assertPlanningAuthorized(cloneContext(effect));
+    await deps.assertAuthorized({ ...cloneContext(effect), plan: structuredClone(effect.plan) });
+    const latest = structuredClone(await deps.readCurrentTarget(effect));
+    if (!isDeepStrictEqual(latest, record)) {
+      throw new HostedOperatorError("reconciliation_required");
+    }
+    return record;
+  };
   return {
     async checkpoint(input: {
       effect: HostedOperatorEffectContext;
@@ -178,6 +235,64 @@ export const createHostedOperatorSharedAuthAdoption = (deps: {
       const observed = await readSource(owned);
       await assertSourceUnchanged(owned, observed.row);
       return { adoption: observed.description, row: observed.row, source: owned.source };
+    },
+    async verify(input: {
+      effect: HostedOperatorEffectContext;
+      source: HostedOperatorAuthAdoptionSource;
+      verifyReadiness: SharedAuthReadinessVerifier;
+    }) {
+      const owned = capture({ context: input.effect, source: input.source });
+      const effect = {
+        ...input.effect,
+        ...owned.context,
+        effect: structuredClone(input.effect.effect),
+        plan: structuredClone(input.effect.plan),
+        workerCheckpoints: structuredClone(input.effect.workerCheckpoints),
+      };
+      const { verifyReadiness } = input;
+      const invalidEffect = [
+        effect.plan.authAdoption === undefined,
+        effect.plan.action !== "prepare",
+        !["resources", "install"].includes(effect.effect.kind),
+        !effect.plan.effects.some((candidate) => isDeepStrictEqual(candidate, effect.effect)),
+        effect.effect.kind === "resources" &&
+          effect.effect.resourceId !== effect.plan.authDatabase.resourceId,
+        effect.effect.kind === "install" && effect.effect.id !== "auth-schema",
+      ].some(Boolean);
+      if (invalidEffect) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      const target = await readTarget(effect);
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Recheck the target lease before opening the source journal.
+      const observed = await readSource(owned);
+      const sourceOperator = observed.row.record.operator;
+      if (
+        sourceOperator === undefined ||
+        !isDeepStrictEqual(observed.description, effect.plan.authAdoption)
+      ) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      const assertCurrent = async () => {
+        await assertSourceUnchanged(owned, observed.row);
+        const latest = await readTarget(effect);
+        if (!isDeepStrictEqual(latest, target)) {
+          throw new HostedOperatorError("reconciliation_required");
+        }
+      };
+      const proof = await verifyPendingHostedOperatorSharedAuth({
+        assertCurrent,
+        source: {
+          ...owned.source,
+          config: deps.config,
+          plan: sourceOperator.plan,
+          record: observed.row.record,
+        },
+        target: { ...owned.context, config: deps.config, plan: effect.plan, record: target },
+        verifyReadiness,
+      });
+      await assertCurrent();
+      // Verification does not change the encrypted pending checkpoint or release credentials.
+      return proof;
     },
   };
 };

@@ -6,10 +6,15 @@ import type { VercelTokenKeyringConfig } from "../integrations/vercel-installati
 import {
   HostedOperatorError,
   operatorPlanDigest,
+  operatorAuthSchemaPreparationSchema,
   sharedAuthAdoptionSchema,
   sameOperatorSelection,
 } from "./hosted-operator-contract";
-import type { HostedOperatorPlan, SharedAuthAdoption } from "./hosted-operator-contract";
+import type {
+  HostedOperatorPlan,
+  OperatorAuthSchemaPreparation,
+  SharedAuthAdoption,
+} from "./hosted-operator-contract";
 import type { HostedOperatorContext } from "./hosted-operator-service";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 import { hostedRuntimeIdentity } from "./hosted-runtime-journal";
@@ -348,4 +353,72 @@ export const sealHostedOperatorSharedAuth = (input: {
     version: 2,
   });
   return encryptHostedRuntimeFiles({ ...target, files: { [fileName]: JSON.stringify(bundle) } });
+};
+
+/** Trusted control-plane port. Its URL is never a worker, artifact, tool or return value. */
+export type SharedAuthReadinessVerifier = (
+  input: HostedOperatorContext & {
+    assertCurrent: () => Promise<void>;
+    plan: HostedOperatorPlan;
+    runtimeUrl: string;
+  },
+) => Promise<OperatorAuthSchemaPreparation>;
+
+/** Read pending Auth runtime metadata without releasing either password pair to general readers. */
+export const verifyPendingHostedOperatorSharedAuth = async (input: {
+  source: ResourceCredentialInput;
+  target: ResourceCredentialInput;
+  assertCurrent: () => Promise<void>;
+  verifyReadiness: SharedAuthReadinessVerifier;
+}): Promise<OperatorAuthSchemaPreparation> => {
+  const source = { ...structuredClone(input.source), config: input.source.config };
+  const target = { ...structuredClone(input.target), config: input.target.config };
+  if (target.record.privateState === undefined) {
+    throw new HostedOperatorError("reconciliation_required");
+  }
+  // Existing checkpoint only: never generate replacements during verification/retry.
+  const checkpoint = sealHostedOperatorSharedAuth({ source, target });
+  if (!isDeepStrictEqual(checkpoint, target.record.privateState)) {
+    throw new HostedOperatorError("reconciliation_required");
+  }
+  const files = decryptHostedRuntimeFiles(target);
+  if (files === undefined || files[fileName] === undefined) {
+    throw new HostedOperatorError("reconciliation_required");
+  }
+  const bundle = adoptionBundleSchema.parse(JSON.parse(files[fileName]));
+  const saved = operatorAuthSchemaPreparationSchema.parse(source.record.operator?.authPreparation);
+  await input.assertCurrent();
+  let proof: OperatorAuthSchemaPreparation;
+  try {
+    proof = operatorAuthSchemaPreparationSchema.parse(
+      await input.verifyReadiness({
+        assertCurrent: input.assertCurrent,
+        authority: target.authority,
+        ownerContext: target.ownerContext,
+        plan: target.plan,
+        runtimeUrl: directDatabaseUrl({
+          database: bundle.identity.authDatabase.database,
+          hostname: bundle.identity.endpoint,
+          password: bundle.authDatabase.runtimePassword,
+          role: bundle.identity.authDatabase.runtimeRole,
+        }),
+        target: target.target,
+      }),
+    );
+  } catch {
+    // A database/port exception can contain the connection URL; never forward it.
+    throw new HostedOperatorError("operator_unavailable");
+  }
+  await input.assertCurrent();
+  const mismatched = [
+    proof.targetDigest !== saved.targetDigest,
+    proof.assetSha256 !== saved.assetSha256,
+    proof.catalogFingerprint !== saved.catalogFingerprint,
+    proof.database !== saved.database,
+    proof.runtimeRole !== saved.runtimeRole,
+  ].some(Boolean);
+  if (mismatched) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  return proof;
 };
