@@ -1,7 +1,11 @@
 # Hosted operator deployment and Spend Review qualification
 
-**Status:** source-backed deployment plan; no operator host, owner Neon registration,
-or hosted Spend Review session has been qualified by this document.
+**Status (2026-10-09):** proposed target and source-backed qualification sequence;
+provider migration and hosted Spend Review acceptance remain unproven. The
+2026-10-07 source inventory below is historical, not the current implementation
+status. Current source includes the native composition and worker snapshot
+support described in [native composition](../hosted-operator-native-composition.md)
+and [worker snapshots](../hosted-operator-worker-snapshot.md).
 
 This plan records what the merged Builder and Arrusted sources provide, what
 must be composed and registered before hosted effects are possible, and the
@@ -9,7 +13,113 @@ evidence required to qualify the original Spend Review request. It authorizes
 no provider changes, credential creation, database writes, deployment, or
 Production activity.
 
-## Evidence boundary
+## Source, database and environment target
+
+Keep one Git `main` in each existing repository. Arrusted app code, app-owned
+schemas and checked releases share Arrusted's `main`; short-lived review
+branches flow back into it. Builder retains its own repository and `main`.
+This does not merge the two repositories or create a schema-only Git branch.
+Git publication is source review, not database migration authority.
+
+The proposed clean baseline is the default `main` branch of a **new,
+synthetic-only Neon project**, built from reviewed source. Temporary Neon
+contexts for schema changes and qualification derive from that baseline.
+The baseline is not a live application database and does not replace existing
+Production storage. Keep durable Production app databases, Auth identities,
+sessions and data on their current physical targets until a separately reviewed
+migration proves continuity. Do not empty, reset, reparent or relabel an existing
+Production branch to obtain a clean baseline.
+
+A Neon branch is an environment/recovery context, not an app ownership boundary.
+Each app owns a separate PostgreSQL database and restricted runtime principal;
+Auth owns a separate database shared by the apps in its realm. Sharing the Neon
+project or branch does not make these one database. Sharing sign-in does not
+grant app access. Generated apps receive only their own runtime credential and
+public Gateway verification settings under the
+[app environment contract](../hosted-operator-app-environment.md).
+
+HC, Vendor and other existing Arrusted apps are included in this target even
+though their source is already in Git `main`. The earlier generated-app compiler
+plan's exclusion of existing-app rewrites is not an exemption from database and
+credential separation. Preserve their existing data and behavior while bringing
+them through the supported app provisioning and binding lifecycle. Renaming or
+moving schemas inside the shared database does not meet this target.
+
+## Current implementation gaps
+
+At Builder `5b5ce4e`, both native Neon readers require `default: false` and
+`init_source` of `parent-schema` or `schema-only`. The protected plan accepts only
+`synthetic-only` Neon input. An intentionally clean default Neon `main` is
+therefore not a supported operator target today. Its branch name is not the
+reason for rejection. Supporting the proposal requires explicit enrollment and
+readback of the new synthetic project/root, while retaining exact owner,
+project, branch, endpoint, database, role and effect-approval checks. Removing
+the default-branch check for every project would not establish safe authority.
+Schema-only creation metadata alone also does not establish ongoing synthetic
+ownership or authorize a write.
+
+The current composition fixes one native Neon scope and a shared Auth resource
+alongside per-app database definitions. Credential checkpoints bind the app,
+Auth and physical context together and generate both credential pairs for a
+fresh journal. Reusing a realm across independent app journals needs explicit
+ownership and credential-continuity evidence; do not silently generate a new
+Auth realm or rotate shared Auth credentials to onboard the next app.
+
+Existing dedicated database names are inventory, not proof that running HC or
+Vendor uses them. Current Arrusted runtime source rejects their prefixed
+database URLs on Vercel and selects generic `DATABASE_URL`; observed app
+environment key metadata has generic URLs without HC/Vendor-prefixed keys.
+The database selected by the live credential remains unproved by those key
+names. Resolve and verify the runtime binding before claiming app separation.
+
+## Safe sequence and original Spend Review continuation
+
+1. Complete metadata-only inventory of every app's source release, provider
+   project/environment, physical database, runtime principal, Auth realm and
+   known consumers. Do not inspect customer rows or return credentials.
+2. Review the new synthetic project's exact ownership, baseline source,
+   database/role layout, cost and retention. Keep
+   `preview/spend-review/protected-2026-10-09` in `bitter-lab-49627418`
+   uncreated while the target is being resolved. A docs change grants no
+   provider creation, deletion or reset authority.
+3. The operator owner implements and qualifies enrolled synthetic-origin
+   support, including default-main and temporary-context readback, without
+   permitting current Production targets. Preserve the existing protected
+   operator journal, approvals, resource fencing and unknown-effect recovery.
+4. After approval of the concrete provider plan, build the synthetic baseline
+   from reviewed source and prepare the exact temporary qualification context.
+   Use the original public Spend Review session and its Builder-authored release.
+   Bootstrap or reuse the explicitly selected nonproduction Auth realm, complete
+   normal sign-in, then approve exact app preparation and requester/reviewer
+   access through the public workflow. Do not submit a replacement brief or
+   drive private stages from an evaluator.
+5. Observe the authenticated product journey, denial and concurrency cases,
+   independent readback, reload, process restart and a new native deployment
+   against the same app database. Preserve the original session and scenario
+   results. This qualification does not require moving HC/Vendor live data.
+6. For HC, Vendor and each remaining app, prepare a separate data-preserving
+   migration proposal using the same app database and credential boundary.
+   Name source and destination, supported copy/upgrade mechanism, writes during
+   transfer, verification, cutover and reversal. Keep Auth user/session identity
+   and app authorization intact. Prove restore and rollback continuity before
+   requesting production migration approval; retain old resources and bindings
+   until the approved rollback window and independent acceptance complete.
+
+Publication/integration belongs to the delivery coordinator; provider effects
+belong to the authorized operator. Source corrections, synthetic provider
+preparation, Production data migration, credential revocation and resource
+retirement are separate outcomes. The review must name which are actually
+approved. No destructive cleanup follows from source landing in `main`.
+
+## Historical 2026-10-07 evidence and implementation inventory
+
+The remaining sections retain the original source baseline and qualification
+requirements. Statements that composition or worker support is absent describe
+that baseline; they are superseded by current source and the gaps above. They
+must not be used to claim current hosted readiness or to select a replacement
+public session.
+
+### Evidence boundary
 
 The Builder source baseline is `68895726` (protected planning for direct public
 MCP sessions). The Arrusted source baseline is `1fbf221b` (strict protected
@@ -41,7 +151,7 @@ dependency** until a concrete protected installer-host composition has been
 deployed and observed preparing a new synthetic Preview target. A later
 readiness proof applies only to the tenant it actually read back.
 
-## Existing source building blocks
+### Existing source building blocks
 
 | Need                           | Existing source                                                                                                                                                                                                                                                                 | What it supplies                                                                                                                                                                                                                                                   | What remains to compose or prove                                                                                                                            |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -65,7 +175,7 @@ separate host must deploy a reviewed immutable package/toolchain and worker
 catalog; neither model-authored repository code nor arbitrary SQL is an
 installer input.
 
-## Process and credential boundaries
+### Process and credential boundaries
 
 These identities have distinct jobs and must not be substituted for one
 another:
@@ -87,7 +197,7 @@ public receipt, model context, logs or operator response. Approval and
 checkpoint receipts contain identities and sanitized readback facts, never
 passwords, URLs, OAuth tokens or signing secrets.
 
-## Remaining implementation before external registration
+### Remaining implementation before external registration
 
 These source/configuration tasks can proceed without a customer or provider
 registration:
@@ -145,7 +255,7 @@ that predicate. The project/store metadata readback is useful evidence, but it
 does not establish a branch or authorize writes. Do not require a new Neon OAuth
 registration unless the owner chooses a different provider path.
 
-## Deployment and first original-session qualification
+### Deployment and first original-session qualification
 
 After the source composition and external registrations are reviewed, perform
 these as separately approved operational steps. Capture exact resource names,
@@ -212,7 +322,7 @@ secret values.
    activation, pilot grants and any write against production data require a
    separate exact plan, review and explicit authorization.
 
-## Completion criteria
+### Completion criteria
 
 This work is complete only when the operator adapter and host are deployed,
 the owner-authorized synthetic Neon and Vercel inputs are independently

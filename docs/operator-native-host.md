@@ -1,36 +1,32 @@
 # Separate protected operator host
 
-This is an opt-in native deployment source, not an operational operator. The
-actual entrypoint currently returns HTTP 503 for `/v1/runtime`: concrete dependency
-composition has not been wired. Native deployment READY, module import and focused
-source checks do not prove operator readiness, installed resources or app behavior.
+The native entrypoint wires the trusted `createDependencies` factory from
+`hosted-operator-composition.ts`. Missing or invalid deployment-owned
+configuration returns HTTP 503 for `/v1/runtime`. Native deployment READY,
+module import and focused source checks do not prove operator readiness,
+installed resources or app behavior; see the
+[current composition contract](hosted-operator-native-composition.md).
 
 Use a physically separate Vercel project linked to the normal Builder Git
 repository, with root `lib/provisioning/operator-host` and outside-root repository
-source enabled. Its native config declares only the Node operator service rooted
-at the repository source. The empty service build command prevents the existing
-combined Eve/Next root build. Neither Builder web/Eve nor generated app processes
-are declared in this project. The only ingress rewrite is exact `/v1/runtime`;
+source enabled. Its native config declares only the operator service rooted
+at `.` within that project root, using the `hono` preset and `entrypoint.ts`.
+Neither Builder web/Eve nor generated app processes are declared in this project.
+The only ingress rewrite is exact `/v1/runtime`;
 this is a reachable protected HTTP service, not an unrouteable private-only service.
 
 The function uses Vercel's Web-standard `fetch(Request): Promise<Response>` export.
 It wraps the existing protected operator handler and does not implement planning,
 approvals, ownership, leases, effects, readback or resource orchestration again.
-Unknown paths/methods return404 before initialization. Missing, failed or incomplete
-composition returns503 with no readiness response, private error text or receipt.
+Unknown paths/methods return 404 before initialization. Missing, failed or incomplete
+composition returns 503 with no readiness response, private error text or receipt.
 Successful initialization shares the dependency instance; failed initialization
 can retry. Construction/import itself performs no provider effect.
 
-## Required source integration
+## Trusted source composition
 
-The coordinator must implement and review
-`lib/provisioning/hosted-operator-composition.ts` with the exact export:
-
-```ts
-createDependencies(): Promise<ProtectedHostedOperatorDependencies>
-```
-
-Then statically wire that function into the actual entrypoint:
+`lib/provisioning/hosted-operator-function.ts` statically wires the existing
+factory into the native handler:
 
 ```ts
 import { createDependencies } from "./hosted-operator-composition";
@@ -55,7 +51,7 @@ approval of exact frozen plans before any effect.
    Builder caller team/project/environment. The client sends its verified workload
    bearer for operator authorization and the provider Trusted Sources header for
    ingress; neither substitutes for the other.
-3. Deploy through normal Git delivery after concrete factory integration. Observe
+3. Deploy the reviewed composition through normal Git delivery. Observe
    the exact immutable operator deployment URL and source/target identity.
 4. Exercise unauthorized/mismatched callers and actual owner-approved Preview
    operations, independent provider/database readback, recovery and isolation.
@@ -80,8 +76,8 @@ plan requires its own durable approval. Unknown effects retain their recovery
 boundary. Normal Gateway signup/sign-in, verified realm actor/organization
 mapping, and actual membership are required inputs; Builder user IDs are not
 copied into a new Auth realm. Creating an operator-owned organization/member
-requires a separately implemented and approved fixed effect for an existing
-normally authenticated user. No user seeding, recovery impersonation or app
+requires the separately configured and approved fixed membership effect for an
+existing normally authenticated user. No user seeding, recovery impersonation or app
 business implementation is part of schema preparation.
 
 Planning reads private canonical accepted AppSpec state and its exact finalized

@@ -2,9 +2,25 @@
 
 `lib/provisioning/hosted-operator-function.ts` loads the real
 `hosted-operator-composition.ts#createDependencies` factory. Missing or invalid
-`PROTECTED_HOSTED_OPERATOR_CONFIGURATION` returns 503. Source configuration,
+`PROTECTED_HOSTED_OPERATOR_CONFIGURATION` leaves resource operations unavailable.
+The separately configured consent-only path is described below. Source configuration,
 local fixtures, native deployment READY, database metadata, and normal human
 sign-in are separate evidence.
+
+Git and database branches have separate purposes. Arrusted apps and their
+schemas converge on Arrusted's Git `main`; Builder keeps its own Git `main`.
+Review branches do not define permanent database ownership. Each app needs its
+own PostgreSQL database and runtime role, while the shared Auth realm has a
+separate database. The one native Neon scope in current configuration is the
+physical context containing those distinct databases.
+
+Current native readers accept only nondefault Neon branches with `parent-schema`
+or `schema-only` provenance. A new synthetic project's clean default `main`,
+built from reviewed source with temporary qualification contexts derived from
+it, is the proposed baseline; it requires a reviewed synthetic-origin enrollment
+and readback change before operator use. Do not broadly permit default branches,
+reset current Production storage, or treat a branch rename as migration. See the
+[database target and safe sequence](plans/2026-10-07-hosted-operator-deployment-and-spend-review-qualification.md).
 
 The deployment-owned configuration selects three distinct projects: app-only
 Next, Gateway/Auth-only, and private operator. It supplies exact native project,
@@ -77,6 +93,13 @@ existing encrypted resource credential checkpoint survives cleanup and renewed
 Preview preparation. Retired-state inspection uses the fixed read-only worker;
 errors, foreign ownership and unsafe live sessions remain unknown. It never
 forces database drops or equates a receipt with actual cleanup.
+
+Shared Auth retention is not proof of cross-app adoption. Current encrypted
+credential bundles bind the app and Auth resources to one physical context and
+journal; a fresh bundle creates both credential pairs. Onboarding a second app
+must prove reuse of the existing realm's authority and credentials without
+rewriting users or sessions. Existing HC/Vendor database and environment names
+alone likewise do not prove that live app processes use separate databases.
 
 ## Owner Neon consent before resource setup
 
