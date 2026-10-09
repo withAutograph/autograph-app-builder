@@ -12,7 +12,11 @@ import type { SandboxSession } from "eve/sandbox";
 import type { TargetApplyReceipt } from "./target-apply";
 import { localRuntimeEnvironmentPath } from "./runtime-environment";
 import type { ValidationCommandExecutor } from "./target-validation";
-import type { ValidationLogStore } from "./validation-log";
+import type {
+  ValidationLogKey,
+  ValidationLogReference,
+  ValidationLogStore,
+} from "./validation-log";
 import type { PreparedRuntimeExecution } from "../agent/prepared-runtime-execution";
 import { readValidationLogPage } from "./validation-log";
 import {
@@ -98,7 +102,172 @@ const outputStream = (content: string) =>
     },
   });
 
+const validationLogKey = (key: ValidationLogKey) =>
+  JSON.stringify([key.sessionId, key.attemptDigest, key.command, key.channel, key.logId]);
+
+const memoryValidationLogStore = (): ValidationLogStore => {
+  const chunks = new Map<string, { content: string; digest: string }>();
+  const references = new Map<string, ValidationLogReference>();
+  return {
+    getChunk: (key, index) => Promise.resolve(chunks.get(`${validationLogKey(key)}:${index}`)),
+    getReference: (key) => Promise.resolve(references.get(validationLogKey(key))),
+    publish: (key, reference) => {
+      references.set(validationLogKey(key), reference);
+      return Promise.resolve();
+    },
+    putChunk: (key, index, content, chunkDigest) => {
+      chunks.set(`${validationLogKey(key)}:${index}`, { content, digest: chunkDigest });
+      return Promise.resolve();
+    },
+    removeStaged: () => Promise.resolve(),
+  };
+};
+
 describe("target validation", () => {
+  it("returns late kernel and assertion details from streamed durable logs and times each command", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    vi.setSystemTime(new Date("2026-10-09T12:00:00.000Z"));
+    try {
+      const { sandbox } = sandboxFixture();
+      const store = memoryValidationLogStore();
+      const attempt = createTargetValidationAttempt(apply, "late-command-failure");
+      const result = await executeProposalBoundValidation({
+        appId: "example",
+        apply,
+        attempt,
+        executor: async ({ command, onChunk }) => {
+          if (command.includes(" app:check ")) {
+            vi.advanceTimersByTime(125);
+            return { exitCode: 0, stderr: "", stdout: "" };
+          }
+          await onChunk?.("stdout", "apps/example: checking existing files\n".repeat(1200));
+          await onChunk?.(
+            "stdout",
+            [
+              "kernel_prepare_schema_revision: unsupported_predecessor",
+              "DETAIL: active base not exact compiler-owned transition predecessor",
+              "CONTEXT: version 2026-10-08.authenticated-review-v2",
+              "FAIL apps/example/test/review.test.ts > validates a transition",
+              "Expected: canonical predecessor",
+              "Received: unknown transition",
+              "The active release cannot establish this transition.",
+              "secret=private-value",
+              " ❯ apps/example/test/review.test.ts:12:3",
+              "",
+            ].join("\n"),
+          );
+          vi.advanceTimersByTime(47);
+          return { exitCode: 1, stderr: "", stdout: "" };
+        },
+        logStore: store,
+        sandbox,
+        sessionId: "session-a",
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("Expected failed test validation.");
+      expect(result.receipt.commands).toHaveLength(2);
+      expect(result.receipt.commandFailure).toMatchObject({ exitCode: 1, name: "test" });
+      expect(result.receipt.output?.stdout).toContain("unsupported_predecessor");
+      expect(result.receipt.output?.stdout).toContain(
+        "DETAIL: active base not exact compiler-owned transition predecessor",
+      );
+      expect(result.receipt.output?.stdout).toContain("Expected: canonical predecessor");
+      expect(result.receipt.output?.stdout).toContain("Received: unknown transition");
+      expect(result.receipt.output?.stdout).toContain(
+        "The active release cannot establish this transition.",
+      );
+      expect(result.receipt.output?.stdout).not.toContain("private-value");
+      expect(result.receipt.diagnostics).toContainEqual(
+        expect.objectContaining({
+          code: "VITEST",
+          column: 3,
+          line: 12,
+          path: "apps/example/test/review.test.ts",
+        }),
+      );
+      const events = info.mock.calls.map(([entry]) => JSON.parse(entry as string));
+      expect(events).toEqual([
+        expect.objectContaining({
+          command: "check-build",
+          phase: "started",
+          startedAt: "2026-10-09T12:00:00.000Z",
+        }),
+        expect.objectContaining({
+          command: "check-build",
+          elapsedMs: 125,
+          finishedAt: "2026-10-09T12:00:00.125Z",
+          phase: "finished",
+        }),
+        expect.objectContaining({
+          command: "test",
+          phase: "started",
+          startedAt: "2026-10-09T12:00:00.125Z",
+        }),
+        expect.objectContaining({
+          command: "test",
+          elapsedMs: 47,
+          exitCode: 1,
+          finishedAt: "2026-10-09T12:00:00.172Z",
+          phase: "finished",
+        }),
+      ]);
+      const [, command] = result.receipt.commands;
+      const reference = command?.logs?.stdout;
+      if (command === undefined || reference === undefined)
+        throw new Error("Expected durable failed-command log.");
+      const page = await readValidationLogPage({
+        digest: reference.digest,
+        key: {
+          attemptDigest: attempt.digest,
+          channel: "stdout",
+          command: command.name,
+          logId: reference.logId,
+          sessionId: "session-a",
+        },
+        store,
+      });
+      expect(page.content).toContain("checking existing files");
+      expect(page.nextCursor).toBeDefined();
+      expect(result.receipt.output?.truncated).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      info.mockRestore();
+    }
+  });
+
+  it("times a provider rejection without logging its private error message", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    vi.setSystemTime(new Date("2026-10-09T12:00:00.000Z"));
+    try {
+      const { sandbox } = sandboxFixture();
+      const result = await executeProposalBoundValidation({
+        appId: "example",
+        apply,
+        attempt: createTargetValidationAttempt(apply, "provider-rejection-timing"),
+        executor: () => {
+          vi.advanceTimersByTime(31);
+          return Promise.reject(new Error("secret=private-value"));
+        },
+        sandbox,
+      });
+      expect(result.ok).toBe(false);
+      expect(JSON.parse(warn.mock.calls[0]?.[0] as string)).toMatchObject({
+        elapsedMs: 31,
+        finishedAt: "2026-10-09T12:00:00.031Z",
+        phase: "provider_error",
+        startedAt: "2026-10-09T12:00:00.000Z",
+      });
+      expect(JSON.stringify(warn.mock.calls)).not.toContain("private-value");
+    } finally {
+      vi.useRealTimers();
+      info.mockRestore();
+      warn.mockRestore();
+    }
+  });
+
   it("uses the owned hosted execution for repository checks rather than probing a local environment", async () => {
     const { sandbox } = sandboxFixture();
     const runTask = vi

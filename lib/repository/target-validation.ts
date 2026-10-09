@@ -573,6 +573,8 @@ export const executeProposalBoundValidation = (input: {
           stderr: Awaited<ReturnType<ValidationLogWriter["finish"]>>;
         }
       | undefined;
+    const startedAt = new Date().toISOString();
+    const startedMonotonic = performance.now();
     try {
       console.info(
         JSON.stringify({
@@ -580,6 +582,7 @@ export const executeProposalBoundValidation = (input: {
           command: planned.name,
           event: "app_builder.validation_command",
           phase: "started",
+          startedAt,
         }),
       );
       result = await input.executor({
@@ -596,6 +599,8 @@ export const executeProposalBoundValidation = (input: {
               },
             }),
       });
+      const finishedAt = new Date().toISOString();
+      const elapsedMs = Math.round(performance.now() - startedMonotonic);
       if (stdoutLog !== undefined && stderrLog !== undefined) {
         // Fixture executors return strings; hosted Sandbox executors stream.
         if (result.stdout) await stdoutLog.append(result.stdout);
@@ -608,9 +613,12 @@ export const executeProposalBoundValidation = (input: {
         JSON.stringify({
           callId: input.attempt.startedByCallId,
           command: planned.name,
+          elapsedMs,
           event: "app_builder.validation_command",
           exitCode: result.exitCode,
+          finishedAt,
           phase: "finished",
+          startedAt,
         }),
       );
     } catch (error) {
@@ -619,9 +627,12 @@ export const executeProposalBoundValidation = (input: {
         JSON.stringify({
           callId: input.attempt.startedByCallId,
           command: planned.name,
+          elapsedMs: Math.round(performance.now() - startedMonotonic),
           errorName: error instanceof Error ? error.name : "non_error_rejection",
           event: "app_builder.validation_command",
+          finishedAt: new Date().toISOString(),
           phase: "provider_error",
+          startedAt,
         }),
       );
       const timedOut = error instanceof Error && error.name === "TimeoutError";

@@ -149,16 +149,18 @@ type ContinuationStage =
   | "transport_observation"
   | "dispatch"
   | "settlement";
+type ContinuationPreflightReason =
+  | "session_unavailable"
+  | "session_not_resumable"
+  | "decision_changed"
+  | "active_input_or_turn"
+  | "transport_unavailable";
 class ContinuationPreflightError extends Error {
-  constructor(
-    readonly reason:
-      | "session_unavailable"
-      | "session_not_resumable"
-      | "decision_changed"
-      | "active_input_or_turn"
-      | "transport_unavailable",
-  ) {
+  readonly reason: ContinuationPreflightReason;
+  constructor(reason: ContinuationPreflightReason) {
     super("Approved build continuation preflight rejected.");
+    this.name = "ContinuationPreflightError";
+    this.reason = reason;
   }
 }
 const transportRejectionReasons = new Set([
@@ -170,8 +172,11 @@ const transportRejectionReasons = new Set([
   "input_batch_changed",
   "send_preflight_unavailable",
 ]);
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- JavaScript catch values are unknown; only typed internal errors and allowlisted transport codes reach diagnostics.
 const rejectionReason = (error: unknown, stage: ContinuationStage): string => {
-  if (error instanceof ContinuationPreflightError) return error.reason;
+  if (error instanceof ContinuationPreflightError) {
+    return error.reason;
+  }
   if (error instanceof SubmissionRejectedBeforeDispatchError) {
     return transportRejectionReasons.has(error.code) ? error.code : "transport_rejected";
   }
