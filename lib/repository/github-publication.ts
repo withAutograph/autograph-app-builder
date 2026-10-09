@@ -1959,7 +1959,8 @@ async function reclaimRejectedDraftPending(
   if (
     failed.kind !== "draft-pull-request" ||
     failed.failureCode !== "provider-rejected" ||
-    failed.providerCode !== "invalid-publication-material" ||
+    (failed.providerCode !== "invalid-publication-material" &&
+      failed.providerCode !== "reviewed-path-changed") ||
     approvedByCallId === failed.approvedByCallId
   ) {
     throw new Error("The rejected draft publication requires a new approved recovery call.");
@@ -2125,11 +2126,31 @@ export async function publishApprovedDraftPullRequest(input: {
   if (
     prior?.status === "failed" &&
     (prior.failureCode !== "provider-rejected" ||
-      prior.providerCode !== "invalid-publication-material")
+      (prior.providerCode !== "invalid-publication-material" &&
+        prior.providerCode !== "reviewed-path-changed"))
   ) {
     throw new Error(
       `The failed GitHub mutation (${prior.providerCode}) requires explicit recovery. Inspect its provider result before another publication attempt.`,
     );
+  }
+  let observed: DraftPublicationReadBack | undefined;
+  if (prior?.status === "failed") {
+    if (input.approvedByCallId === prior.approvedByCallId) {
+      throw new Error("The rejected draft publication requires a new approved recovery call.");
+    }
+    // These draft-publication rejections occur before provider writes. Verify
+    // absence independently before reclaiming the failed journal receipt.
+    try {
+      observed = await input.adapter.inspectDraftPublication(input.proposal);
+    } catch {
+      throw new GitHubOutcomeUnknownError();
+    }
+    assertDraftReadBack(observed, input.proposal);
+    if (observed.branch.status !== "absent" || observed.pullRequest.status !== "absent") {
+      throw new Error(
+        "Rejected draft publication recovery requires verified absence of its branch and pull request. Inspect the existing GitHub outcome before another publication attempt.",
+      );
+    }
   }
   const pending =
     prior?.status === "failed"
@@ -2145,11 +2166,12 @@ export async function publishApprovedDraftPullRequest(input: {
   if (pending.status !== "pending") {
     throw new Error("Unreachable journal status.");
   }
-  let observed: DraftPublicationReadBack;
-  try {
-    observed = await input.adapter.inspectDraftPublication(input.proposal);
-  } catch {
-    throw new GitHubOutcomeUnknownError();
+  if (observed === undefined) {
+    try {
+      observed = await input.adapter.inspectDraftPublication(input.proposal);
+    } catch {
+      throw new GitHubOutcomeUnknownError();
+    }
   }
   assertDraftReadBack(observed, input.proposal);
   if (observed.pullRequest.status === "present") {
