@@ -923,6 +923,10 @@ describe("protected hosted operator boundary", () => {
     const f = fixture();
     const appPlan = hostedOperatorPlanSchema.parse({
       ...plan,
+      effects: [
+        ...plan.effects,
+        { description: "Bind shared Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+      ],
       gatewayBindings: {
         authBrowserOrigin: "https://auth-preview.example.test",
         builderCallbackOrigin: "https://builder.example",
@@ -937,10 +941,6 @@ describe("protected hosted operator boundary", () => {
           subject: "fixture-gateway",
         },
       },
-      effects: [
-        ...plan.effects,
-        { description: "Bind shared Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
-      ],
     });
     f.deps.plan = async () => appPlan;
     const request = await prepared(f);

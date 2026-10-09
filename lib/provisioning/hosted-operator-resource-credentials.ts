@@ -19,6 +19,7 @@ import type { HostedOperatorContext } from "./hosted-operator-service";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 import { hostedRuntimeIdentity } from "./hosted-runtime-journal";
 import { decryptHostedRuntimeFiles, encryptHostedRuntimeFiles } from "./hosted-runtime-service";
+import { describeHostedOperatorSharedGateway } from "./hosted-operator-shared-gateway";
 
 const fileName = "protected-resource-credentials.json";
 const password = z
@@ -246,7 +247,7 @@ export const describeHostedOperatorSharedAuth = (
   const { appDatabase: _app, appId: _appId, ...resource } = bundle.identity;
   void _app;
   void _appId;
-  return sharedAuthAdoptionSchema.parse({
+  const adoption = sharedAuthAdoptionSchema.parse({
     kind: "owned-journal-auth-v1",
     resource,
     source: {
@@ -259,6 +260,13 @@ export const describeHostedOperatorSharedAuth = (
       selection: plan.selection,
     },
   });
+  if (operator.gatewayEnvironment !== undefined) {
+    adoption.gatewayEnvironment = describeHostedOperatorSharedGateway(
+      plan,
+      operator.gatewayEnvironment,
+    );
+  }
+  return adoption;
 };
 
 const assertAdoptionTarget = (

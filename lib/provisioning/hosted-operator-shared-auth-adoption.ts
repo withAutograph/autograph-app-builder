@@ -39,6 +39,17 @@ interface Input {
   context: HostedOperatorContext;
   source: HostedOperatorAuthAdoptionSource;
 }
+/** assertCurrent renews this same lease; every other checkpoint and ownership field must stay fixed. */
+export const sameSharedAuthTargetCheckpoint = (
+  left: HostedRuntimeJournalRecord,
+  right: HostedRuntimeJournalRecord,
+) => {
+  const { leaseExpiresAt: leftExpiry, ...leftState } = left;
+  const { leaseExpiresAt: rightExpiry, ...rightState } = right;
+  void leftExpiry;
+  void rightExpiry;
+  return isDeepStrictEqual(leftState, rightState);
+};
 const cloneContext = (context: HostedOperatorContext): HostedOperatorContext =>
   structuredClone({
     authority: context.authority,
@@ -171,7 +182,7 @@ export const createHostedOperatorSharedAuthAdoption = (deps: {
     await deps.assertPlanningAuthorized(cloneContext(effect));
     await deps.assertAuthorized({ ...cloneContext(effect), plan: structuredClone(effect.plan) });
     const latest = structuredClone(await deps.readCurrentTarget(effect));
-    if (!isDeepStrictEqual(latest, record)) {
+    if (!sameSharedAuthTargetCheckpoint(latest, record)) {
       throw new HostedOperatorError("reconciliation_required");
     }
     return record;
@@ -275,7 +286,7 @@ export const createHostedOperatorSharedAuthAdoption = (deps: {
       const assertCurrent = async () => {
         await assertSourceUnchanged(owned, observed.row);
         const latest = await readTarget(effect);
-        if (!isDeepStrictEqual(latest, target)) {
+        if (!sameSharedAuthTargetCheckpoint(latest, target)) {
           throw new HostedOperatorError("reconciliation_required");
         }
       };

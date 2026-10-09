@@ -1,7 +1,7 @@
 /* oxlint-disable eslint/require-await, eslint/no-await-in-loop -- Async fixture ports exercise sequential interruption and ownership races. */
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
   HostedOperatorError,
@@ -26,6 +26,8 @@ import {
 import { createHostedOperatorSharedAuthAdoption } from "./hosted-operator-shared-auth-adoption";
 import { createHostedOperatorAuthReadiness } from "./hosted-operator-auth-readiness";
 import { composeHostedOperatorDependencies } from "./hosted-operator-composition";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy on the actual composition factory while retaining its other methods.
+import * as gatewayBindings from "./hosted-operator-gateway-bindings";
 import type { createHostedOperatorControlPlane } from "./hosted-operator-deployment";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 
@@ -35,6 +37,7 @@ const authority = {
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
+afterEach(() => vi.restoreAllMocks());
 const config = { tokenKey: Buffer.alloc(32, 9), tokenKeyVersion: "fixture" };
 const resource = (name: string) => ({
   database: name,
@@ -566,6 +569,50 @@ describe("pending shared Auth independent readiness continuation", () => {
     return { ...f, verify, verifyReadiness };
   };
 
+  it("seals canonical Gateway ownership with Auth and rejects source snapshot replacement", async () => {
+    const f = fixture();
+    const sourceOperator = requireOperator(f.source.record);
+    const publicGateway = {
+      branch: "preview",
+      origin: "https://apps.example",
+      projectId: "gateway",
+    };
+    sourceOperator.plan.publicGateway = publicGateway;
+    sourceOperator.planDigest = operatorPlanDigest(sourceOperator.plan);
+    sourceOperator.gatewayEnvironment = [
+      "AUTH_DATABASE_RESOURCE",
+      "PLATFORM_AUTH_DATABASE_URL",
+      "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
+      "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+      "PLATFORM_GATEWAY_PROJECT_BINDINGS",
+    ].map((key, index) => ({
+      branch: "preview",
+      comment: `App Builder protected operator ${sourceOperator.operationRef}`,
+      id: `row-${index}`,
+      key,
+      operationRef: sourceOperator.operationRef,
+      projectId: "gateway",
+      valueSha256: "a".repeat(64),
+    }));
+    f.plan.publicGateway = publicGateway;
+    f.plan.authAdoption = describeHostedOperatorSharedAuth(f.sourceInput());
+    requireOperator(f.destination.record).plan = f.plan;
+    requireOperator(f.destination.record).planDigest = operatorPlanDigest(f.plan);
+    await f.api.checkpoint({ effect: f.effect, source: f.sourceHint });
+    const saved = structuredClone(f.destination.record.privateState);
+    await f.api.checkpoint({ effect: f.effect, source: f.sourceHint });
+    expect(f.destination.record.privateState).toEqual(saved);
+    const verifyReadiness = vi.fn(async () => structuredClone(requirePreparation(f.source.record)));
+    await f.api.verify({ effect: f.effect, source: f.sourceHint, verifyReadiness });
+    sourceOperator.gatewayEnvironment[0].valueSha256 = "f".repeat(64);
+    await expect(
+      f.api.verify({ effect: f.effect, source: f.sourceHint, verifyReadiness }),
+    ).rejects.toMatchObject({
+      code: "resource_mismatch",
+    });
+    expect(verifyReadiness).toHaveBeenCalledOnce();
+  });
+
   it("reads only the checkpointed Auth runtime identity and returns a non-secret schema proof", async () => {
     const f = await ready();
     const before = structuredClone(f.destination);
@@ -727,6 +774,22 @@ describe("pending shared Auth independent readiness continuation", () => {
     expect(f.checkpointTarget).toHaveBeenCalledOnce();
   });
 
+  it("permits renewal of the same lease but rejects replacement during readback", async () => {
+    const f = await ready();
+    f.destination.record.leaseId = randomUUID();
+    let expiry = Date.parse("2027-01-01T00:00:00Z");
+    f.assertCurrent.mockImplementation(async () => {
+      expiry += 1000;
+      f.destination.record.leaseExpiresAt = new Date(expiry).toISOString();
+    });
+    await expect(f.verify()).resolves.toMatchObject({ database: "auth" });
+    f.verifyReadiness.mockImplementationOnce(async () => {
+      f.destination.record.leaseId = randomUUID();
+      return structuredClone(requirePreparation(f.source.record));
+    });
+    await expect(f.verify()).rejects.toMatchObject({ code: "reconciliation_required" });
+  });
+
   it("snapshots caller inputs and rejects concurrent checkpoint replacement", async () => {
     const f = await ready();
     f.verifyReadiness.mockImplementationOnce(async (input) => {
@@ -752,7 +815,7 @@ describe("pending shared Auth independent readiness continuation", () => {
 });
 
 describe("native composition adoption boundary", () => {
-  it("checkpoints through the real adoption helper then blocks before worker or provider access", async () => {
+  it("runs protected read-only preflight then blocks all worker and schema fallback paths", async () => {
     const f = fixture();
     const unavailable = vi.fn(() => {
       throw new Error("Unexpected provider or worker path");
@@ -846,6 +909,68 @@ describe("native composition adoption boundary", () => {
     const checkpointSharedAuthAdoption = vi.fn(
       async (input: Parameters<typeof f.api.checkpoint>[0]) => await f.api.checkpoint(input),
     );
+    const verifyCanonicalOwnership = vi.fn(async () => ({ rows: [] }));
+    const originalGateway = gatewayBindings.createHostedOperatorGatewayBindings;
+    vi.spyOn(gatewayBindings, "createHostedOperatorGatewayBindings").mockImplementation((deps) => ({
+      ...originalGateway(deps),
+      verifyCanonicalOwnership,
+    }));
+    f.plan.gatewayBindings = {
+      authBrowserOrigin: configuration.gateway.authBrowserOrigin,
+      builderCallbackOrigin: configuration.builderCallbackOrigin,
+      catalogAppIds: configuration.gateway.protectedApplicationIds,
+      operatorOrigin: configuration.operator.origin,
+      sourceWorkload: { ...configuration.gateway.workload, environment: "preview" },
+    };
+    f.plan.publicGateway = {
+      branch: "preview",
+      origin: configuration.gateway.publicOrigin,
+      projectId: "gateway",
+    };
+    f.plan.gatewayDelivery = {
+      branch: "preview",
+      gitSha: "a".repeat(40),
+      projectId: "gateway",
+      repoId: "repo",
+    };
+    f.plan.deploymentBoundary = {
+      app: { branch: "preview", environment: "preview", projectId: "prj_second" },
+      authority,
+      gateway: { branch: "preview", environment: "preview", projectId: "gateway" },
+      operator: {
+        deploymentId: "operator-deployment",
+        environment: "preview",
+        projectId: "operator",
+      },
+      teamId: "team",
+      verification: {
+        gatewayOrigin: configuration.gateway.gatewayOrigin,
+        jwksUrl: "https://gateway.example/_platform/jwks.json",
+        publicOrigin: configuration.gateway.publicOrigin,
+      },
+    };
+    f.plan.effects.push(
+      { description: "Gateway bindings", id: "gateway-bindings", kind: "gateway-bindings" },
+      { description: "Gateway delivery", id: "gateway-delivery", kind: "gateway-delivery" },
+    );
+    requireOperator(f.destination.record).plan = f.plan;
+    requireOperator(f.destination.record).planDigest = operatorPlanDigest(f.plan);
+    f.effect.checkpointGatewayEnvironment = unavailable;
+    const verifySharedAuthAdoption = vi.fn(
+      async (
+        input: Parameters<
+          Awaited<ReturnType<typeof createHostedOperatorControlPlane>>["verifySharedAuthAdoption"]
+        >[0],
+      ) =>
+        await f.api.verify({
+          ...input,
+          verifyReadiness: async (verification) => {
+            await verification.assertCurrent();
+            await input.verifyCanonicalOwnership();
+            return structuredClone(requirePreparation(f.source.record));
+          },
+        }),
+    );
     const controlPlane: Awaited<ReturnType<typeof createHostedOperatorControlPlane>> = {
       assertAuthorized: f.assertAuthorized,
       assertMembershipCapture: unavailable,
@@ -870,6 +995,7 @@ describe("native composition adoption boundary", () => {
       readResourceBindings: unavailable,
       readRetirementResourceCredentials: unavailable,
       readSharedAuthAdoption: unavailable,
+      readSharedGatewayRows: unavailable,
       reserveRealmIdentityLink: unavailable,
       resolveRealmIdentityCallbackContext: unavailable,
       store: {
@@ -878,14 +1004,26 @@ describe("native composition adoption boundary", () => {
         reserve: unavailable,
         reserveFenceGeneration: unavailable,
       },
+      verifySharedAuthAdoption,
       withResourceLease: unavailable,
     };
     const native = composeHostedOperatorDependencies(configuration, controlPlane);
+    checkpointSharedAuthAdoption.mockImplementationOnce(async (input) => {
+      const result = await f.api.checkpoint(input);
+      f.effect.plan = { ...f.plan, authDatabase: resource("unapproved") };
+      return result;
+    });
     await expect(native.reconcile(f.effect)).rejects.toMatchObject({
       code: "reconciliation_required",
     });
+    f.effect.plan = f.plan;
     expect(checkpointSharedAuthAdoption).toHaveBeenCalledOnce();
     expect(f.destination.record.privateState).toBeDefined();
+    expect(verifySharedAuthAdoption).toHaveBeenCalledOnce();
+    expect(verifyCanonicalOwnership).toHaveBeenCalledOnce();
+    expect(verifySharedAuthAdoption.mock.calls[0]?.[0].effect.plan.authDatabase.database).toBe(
+      "auth",
+    );
     expect(unavailable).not.toHaveBeenCalled();
     await expect(
       native.executeEffect({
@@ -896,5 +1034,21 @@ describe("native composition adoption boundary", () => {
     ).rejects.toMatchObject({ code: "reconciliation_required" });
     expect(unavailable).not.toHaveBeenCalled();
     expect(checkpointSharedAuthAdoption).toHaveBeenCalledOnce();
+    const schemaEffect = f.plan.effects.find((effect) => effect.id === "auth-schema");
+    if (schemaEffect === undefined) {
+      throw new Error("Missing Auth schema fixture");
+    }
+    await expect(native.reconcile({ ...f.effect, effect: schemaEffect })).rejects.toMatchObject({
+      code: "reconciliation_required",
+    });
+    await expect(
+      native.executeEffect({
+        ...f.effect,
+        bindWorkerContext: unavailable,
+        effect: schemaEffect,
+        workerAttemptId: randomUUID(),
+      }),
+    ).rejects.toMatchObject({ code: "reconciliation_required" });
+    expect(unavailable).not.toHaveBeenCalled();
   });
 });

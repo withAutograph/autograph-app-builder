@@ -958,12 +958,12 @@ describe("resource bootstrap launcher", () => {
     expect(() =>
       buildResourceBootstrapContext({ ...input, effect: { ...input.effect, kind: "resources" } }),
     ).toThrow(HostedOperatorError);
-    expect(() =>
-      buildResourceBootstrapContext({ ...input, database: "authDatabase" }),
-    ).toThrow(HostedOperatorError);
-    expect(() =>
-      buildResourceBootstrapContext({ ...input, plan: bootstrapPlan }),
-    ).toThrow(HostedOperatorError);
+    expect(() => buildResourceBootstrapContext({ ...input, database: "authDatabase" })).toThrow(
+      HostedOperatorError,
+    );
+    expect(() => buildResourceBootstrapContext({ ...input, plan: bootstrapPlan })).toThrow(
+      HostedOperatorError,
+    );
   });
   it("does not allocate a Sandbox when the private credential checkpoint fails", async () => {
     const createSandbox = vi.fn();
