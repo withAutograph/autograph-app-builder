@@ -47,7 +47,7 @@ const databaseResource = z
   .refine((value) => value.runtimeRole !== value.migratorRole);
 const previewDeploymentSchema = z.strictObject({
   branch: id,
-  deploymentId: id,
+  deploymentId: id.optional(),
   environment: z.literal("preview"),
   projectId: id,
 });

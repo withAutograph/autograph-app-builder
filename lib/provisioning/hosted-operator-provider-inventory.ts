@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isNativePreviewDeployment } from "./hosted-operator-deployment-delivery";
 import type { readPreparedVercelAccess } from "../agent/prepared-provider-context";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { HostedOperatorError } from "./hosted-operator-contract";
@@ -10,9 +11,11 @@ type CredentialReader = Parameters<typeof readPreparedVercelAccess>[0]["readCred
 const id = z.string().min(1);
 const projectSchema = z.object({ accountId: id, id });
 const deploymentSchema = z.object({
+  customEnvironment: z.unknown().optional(),
   env: z.array(z.string()).optional(),
   gitSource: z.object({ ref: id }).optional(),
   id,
+  oidcTokenClaims: z.unknown().optional(),
   ownerId: id.optional(),
   projectId: id,
   readyState: id,
@@ -43,14 +46,14 @@ const jwksSchema = z.object({
 const keyName = /^[A-Z][A-Z0-9_]{0,199}$/u;
 
 export interface OperatorDeploymentReference {
-  deploymentId: string;
+  deploymentId?: string;
   environment: "preview" | "production";
   projectId: string;
 }
 export interface OperatorInventoryConfiguration {
   app: OperatorDeploymentReference & { branch: string };
   gateway: OperatorDeploymentReference & { branch: string };
-  operator: OperatorDeploymentReference;
+  operator: OperatorDeploymentReference & { deploymentId: string };
   verification: { gatewayOrigin: string; publicOrigin: string };
 }
 
@@ -95,10 +98,60 @@ const forbiddenAppKey = (key: string, appKey: string) => {
   return key !== appKey && forbidden;
 };
 
+interface ObservedOperatorProject {
+  branch: string | null;
+  deployedEnvironmentKeys: string[] | null;
+  deploymentId?: string;
+  environment: "preview" | "production";
+  projectEnvironmentKeys: string[];
+  projectId: string;
+}
+
+interface PublicKeyReadbackInput {
+  assertCurrentOwner: () => Promise<void>;
+  fetcher: typeof fetch;
+  jwksUrl: string;
+  signal?: AbortSignal;
+}
+const readPublicKeyIds = async (input: PublicKeyReadbackInput): Promise<string[] | null> => {
+  try {
+    await input.assertCurrentOwner();
+    // Never forward owner OAuth credentials to the public verification endpoint.
+    const response = await input.fetcher(input.jwksUrl, {
+      cache: "no-store",
+      method: "GET",
+      redirect: "error",
+      signal: input.signal,
+    });
+    if (response.ok) {
+      const value: unknown = await response.json();
+      const privateKey = z
+        .object({ keys: z.array(z.record(z.string(), z.unknown())) })
+        .safeParse(value);
+      const containsPrivateKey =
+        privateKey.success &&
+        privateKey.data.keys.some((key) =>
+          ["d", "p", "q", "dp", "dq", "qi", "k"].some((field) => Object.hasOwn(key, field)),
+        );
+      const parsed = jwksSchema.safeParse(value);
+      if (!containsPrivateKey && parsed.success && parsed.data.keys.length > 0) {
+        return parsed.data.keys.map((key) => key.kid);
+      }
+    } else {
+      await response.body?.cancel();
+    }
+  } catch {
+    /* Unavailable public keys remain unconfirmed, never ready. */
+  }
+  return null;
+};
+
 /** Concrete GET-only owner-bound Vercel inventory. This is not an operational-ready factory. */
 export const readHostedOperatorProviderInventory = async (input: {
   assertCurrentOwner: () => Promise<void>;
   configuration: OperatorInventoryConfiguration;
+  /** Trusted composition only: project inventory before first approved delivery. */
+  phase?: "bootstrap-planning";
   context: HostedOperatorContext;
   fetch?: typeof fetch;
   readVercelCredential: CredentialReader;
@@ -170,26 +223,38 @@ export const readHostedOperatorProviderInventory = async (input: {
       }
       return json.parse(await response.json());
     };
-    const observe = async (reference: OperatorDeploymentReference, branch?: string) => {
+    const observe = async (
+      reference: OperatorDeploymentReference,
+      branch?: string,
+      allowUndelivered = false,
+    ) => {
       const project = projectSchema.parse(
         await request(`/v9/projects/${encodeURIComponent(reference.projectId)}`),
       );
-      const deployment = deploymentSchema.parse(
-        await request(`/v13/deployments/${encodeURIComponent(reference.deploymentId)}`, {
-          withGitRepoInfo: "true",
-        }),
-      );
-      const invalidDeployment = [
-        project.id !== reference.projectId,
-        project.accountId !== target.scopeId,
-        deployment.projectId !== project.id,
-        deployment.id !== reference.deploymentId,
-        deployment.ownerId !== undefined && deployment.ownerId !== target.scopeId,
-        deployment.readyState !== "READY",
-        deployment.target !== (reference.environment === "production" ? "production" : null),
-        branch !== undefined && deployment.gitSource?.ref !== branch,
-      ].some(Boolean);
-      if (invalidDeployment) {
+      if (project.id !== reference.projectId || project.accountId !== target.scopeId) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      let deployment: z.infer<typeof deploymentSchema> | undefined;
+      if (reference.deploymentId !== undefined) {
+        deployment = deploymentSchema.parse(
+          await request(`/v13/deployments/${encodeURIComponent(reference.deploymentId)}`, {
+            withGitRepoInfo: "true",
+          }),
+        );
+        const invalidDeployment = [
+          deployment.projectId !== project.id,
+          deployment.id !== reference.deploymentId,
+          deployment.ownerId !== undefined && deployment.ownerId !== target.scopeId,
+          deployment.readyState !== "READY",
+          reference.environment === "production"
+            ? deployment.target !== "production"
+            : !isNativePreviewDeployment(deployment),
+          branch !== undefined && deployment.gitSource?.ref !== branch,
+        ].some(Boolean);
+        if (invalidDeployment) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+      } else if (!allowUndelivered || input.phase !== "bootstrap-planning") {
         throw new HostedOperatorError("resource_mismatch");
       }
       const query: Record<string, string> = {};
@@ -210,70 +275,50 @@ export const readHostedOperatorProviderInventory = async (input: {
         .flatMap((variable) => (keyName.test(variable.key) ? [variable.key] : []))
         .toSorted();
       const deployedKeys =
-        deployment.env !== undefined && deployment.env.every((key) => keyName.test(key))
+        deployment?.env !== undefined && deployment.env.every((key) => keyName.test(key))
           ? deployment.env.toSorted()
           : null;
-      return {
-        deployment,
-        projected,
-        summary: {
-          branch: branch ?? null,
-          deployedEnvironmentKeys: deployedKeys,
-          deploymentId: deployment.id,
-          environment: reference.environment,
-          projectEnvironmentKeys: projectKeys,
-          projectId: project.id,
-        },
+      const summary: ObservedOperatorProject = {
+        branch: branch ?? null,
+        deployedEnvironmentKeys: deployedKeys,
+        environment: reference.environment,
+        projectEnvironmentKeys: projectKeys,
+        projectId: project.id,
       };
+      if (deployment !== undefined) {
+        summary.deploymentId = deployment.id;
+      }
+      return { deployment, projected, summary };
     };
     const [app, gateway, operator] = await Promise.all([
-      observe(config.app, config.app.branch),
-      observe(config.gateway, config.gateway.branch),
+      observe(config.app, config.app.branch, true),
+      observe(config.gateway, config.gateway.branch, true),
       observe(config.operator),
     ]);
     const publicOrigin = origin(config.verification.publicOrigin);
     const gatewayOrigin = origin(config.verification.gatewayOrigin);
-    const aliases = aliasSchema.parse(
-      await request(`/v2/deployments/${encodeURIComponent(gateway.deployment.id)}/aliases`),
-    );
-    const ownedOrigins = new Set([
-      origin(`https://${gateway.deployment.url}`),
-      ...aliases.aliases.map((alias) => origin(`https://${alias.alias}`)),
-    ]);
-    if (!ownedOrigins.has(publicOrigin) || !ownedOrigins.has(gatewayOrigin)) {
-      throw new HostedOperatorError("resource_mismatch");
+    if (gateway.deployment !== undefined) {
+      const aliases = aliasSchema.parse(
+        await request(`/v2/deployments/${encodeURIComponent(gateway.deployment.id)}/aliases`),
+      );
+      const ownedOrigins = new Set([
+        origin(`https://${gateway.deployment.url}`),
+        ...aliases.aliases.map((alias) => origin(`https://${alias.alias}`)),
+      ]);
+      if (!ownedOrigins.has(publicOrigin) || !ownedOrigins.has(gatewayOrigin)) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
     }
     const jwksUrl = `${gatewayOrigin}/_platform/jwks.json`;
-    let publicKeyIds: string[] | null = null;
-    try {
-      await input.assertCurrentOwner();
-      // Never forward owner OAuth credentials to the public verification endpoint.
-      const response = await fetcher(jwksUrl, {
-        cache: "no-store",
-        method: "GET",
-        redirect: "error",
-        signal: input.signal,
-      });
-      if (response.ok) {
-        const value: unknown = await response.json();
-        const privateKey = z
-          .object({ keys: z.array(z.record(z.string(), z.unknown())) })
-          .safeParse(value);
-        const containsPrivateKey =
-          privateKey.success &&
-          privateKey.data.keys.some((key) =>
-            ["d", "p", "q", "dp", "dq", "qi", "k"].some((field) => Object.hasOwn(key, field)),
-          );
-        const parsed = jwksSchema.safeParse(value);
-        if (!containsPrivateKey && parsed.success && parsed.data.keys.length > 0) {
-          publicKeyIds = parsed.data.keys.map((key) => key.kid);
-        }
-      } else {
-        await response.body?.cancel();
-      }
-    } catch {
-      /* Unavailable public keys remain unconfirmed, never ready. */
-    }
+    const publicKeyIds =
+      gateway.deployment === undefined
+        ? null
+        : await readPublicKeyIds({
+            assertCurrentOwner: input.assertCurrentOwner,
+            fetcher,
+            jwksUrl,
+            signal: input.signal,
+          });
     const configurations = [
       ...new Set(
         operator.projected.flatMap((variable) =>

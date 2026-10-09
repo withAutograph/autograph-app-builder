@@ -483,6 +483,7 @@ export const composeHostedOperatorDependencies = (
         },
       },
       context,
+      phase: "bootstrap-planning",
       readVercelCredential: async ({ authority, installationId }) =>
         await controlPlane.readCredential(authority, installationId),
     });
@@ -1149,6 +1150,7 @@ export const composeHostedOperatorDependencies = (
         },
       },
       context: input,
+      phase: "bootstrap-planning",
       readVercelCredential: async ({ authority, installationId }) =>
         await controlPlane.readCredential(authority, installationId),
     });

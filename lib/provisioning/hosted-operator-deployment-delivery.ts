@@ -13,6 +13,28 @@ interface DeploymentListQuery {
   until?: string;
 }
 const id = z.string().min(1);
+const nativePreviewMetadataSchema = z
+  .object({
+    customEnvironment: z.null().optional(),
+    oidcTokenClaims: z.object({ environment: z.literal("preview") }).optional(),
+    target: z.union([z.null(), z.literal("staging")]),
+  })
+  .refine(
+    (deployment) =>
+      deployment.target === null || deployment.oidcTokenClaims?.environment === "preview",
+    "Native staging target must attest the Preview environment.",
+  );
+
+export interface NativeDeploymentMetadata {
+  customEnvironment?: unknown;
+  oidcTokenClaims?: unknown;
+  target: string | null;
+}
+
+/** Native Preview metadata only; never interprets custom environments as Preview. */
+export const isNativePreviewDeployment = (metadata: NativeDeploymentMetadata): boolean =>
+  nativePreviewMetadataSchema.safeParse(metadata).success;
+
 const deploymentSchema = z
   .object({
     customEnvironment: z.null().optional(),
@@ -32,8 +54,7 @@ const deploymentSchema = z
     url: id,
   })
   .refine(
-    (deployment) =>
-      deployment.target === null || deployment.oidcTokenClaims?.environment === "preview",
+    (deployment) => isNativePreviewDeployment(deployment),
     "Native staging target must attest the Preview environment.",
   );
 const pageSchema = z.object({

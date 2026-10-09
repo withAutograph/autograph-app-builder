@@ -17,6 +17,22 @@ Existing Gateway signing and Better Auth secrets, actual provider-injected
 `AUTH_PRODUCTION_DATABASE_IDENTITY` are setup prerequisites. No Production
 connection string is supplied to the Preview realm or generated app.
 
+Fresh app and Gateway projects need no seed deployments. Their configuration
+retains exact team-owned project, Preview branch, repository and commit inputs;
+`deploymentId` is optional until a deployment is observed. Bootstrap planning
+reads project ownership and Preview environment inventory even when delivery
+has not happened. Configured origins are intended routing inputs, not observed
+Gateway ownership or public-key evidence. A supplied deployment reference must
+still be independently READY and match its project and branch. The operator's
+own deployment reference remains mandatory.
+
+Gateway delivery records its candidates in the durable journal. Identity-link
+preparation requires the journal's actual READY Gateway candidate and validates
+its origins; it does not require an app candidate before the first app delivery.
+Final app verification requires both actual READY journal candidates and strict
+provider deployment readback. The request API cannot choose bootstrap inventory
+mode; that mode belongs only to the trusted planning composition.
+
 The first approved `auth-bootstrap` plan creates or observes the owned resources,
 installs only the Auth schema through `auth-protected-schema-v1`, writes the
 Gateway's private Auth runtime connection and public configuration, and delivers
