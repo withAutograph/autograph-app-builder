@@ -8,6 +8,8 @@ import { getVercelOidcToken } from "@vercel/oidc";
 import { z } from "zod";
 
 import { HostedOperatorError, operatorPlanDigest } from "./hosted-operator-contract";
+import { hostedOperatorSandboxSourceOptions } from "./hosted-operator-sandbox-source";
+import type { HostedOperatorSandboxSource } from "./hosted-operator-sandbox-source";
 import type { HostedOperatorPlan, WorkerEffectCheckpointFrame } from "./hosted-operator-contract";
 import type {
   HostedOperatorWorkerEffectContext,
@@ -138,19 +140,18 @@ export interface ProtectedInstallerWorkerDescriptor {
   subcommand: z.infer<typeof workerSubcommandSchema>;
 }
 
-export interface HostedOperatorSandboxConfiguration {
+export type HostedOperatorSandboxConfiguration = HostedOperatorSandboxSource & {
   /** Project and team IDs are deployment-owned values used to obtain project OIDC. */
   projectId: string;
   teamId: string;
-  /** Immutable control image and worker catalog are operator deployment configuration. */
-  image: string;
+  /** The immutable filesystem source and worker catalog are operator deployment configuration. */
   workers: Readonly<Record<string, ProtectedInstallerWorkerDescriptor>>;
   /** Shared Auth uses its own fixed catalog entry, separate from selected app workers. */
   authWorker?: ProtectedInstallerWorkerDescriptor;
   resourcesWorker?: ProtectedInstallerWorkerDescriptor;
   accessWorker?: ProtectedInstallerWorkerDescriptor;
   membershipWorker?: ProtectedInstallerWorkerDescriptor;
-}
+};
 
 export interface ProtectedInstallContextWire {
   version: 1;
@@ -268,9 +269,8 @@ type OperatorSandbox = Pick<
   Sandbox,
   "delete" | "extendTimeout" | "readFileToBuffer" | "runCommand" | "writeFiles"
 > & { fs: SandboxFileSystem };
-interface SandboxCreateOptions {
+type SandboxCreateOptions = HostedOperatorSandboxSource & {
   env: Record<string, string>;
-  image: string;
   networkPolicy: "allow-all";
   persistent: false;
   ports: [];
@@ -278,7 +278,7 @@ interface SandboxCreateOptions {
   signal: AbortSignal;
   teamId: string;
   timeout: number;
-}
+};
 type CreateSandbox = (options: SandboxCreateOptions) => Promise<OperatorSandbox>;
 
 const markerSchema = z.strictObject({
@@ -1388,7 +1388,7 @@ const runSandboxWorker = async (
     const create = createSandbox;
     sandbox = await create({
       env: {},
-      image: configuration.image,
+      ...hostedOperatorSandboxSourceOptions(configuration),
       networkPolicy: "allow-all",
       persistent: false,
       ports: [],

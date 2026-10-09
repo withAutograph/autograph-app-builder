@@ -90,6 +90,10 @@ const authorityNotice = (frameId: number) => ({
   frame_id: frameId,
 });
 type Notice = { stream: "stdout" | "stderr"; data: string };
+const fixtureFilesystemSource = (snapshotId?: string) =>
+  snapshotId
+    ? { source: { type: "snapshot" as const, snapshotId } }
+    : { image: "protected-installer-control-image" };
 // oxlint-disable-next-line sonarjs/cognitive-complexity -- One owned SDK fixture covers the closed installer and guard-only protocol variants.
 const makeFixture = (
   options: {
@@ -106,6 +110,7 @@ const makeFixture = (
     delayCreate?: Promise<void>;
     generated?: boolean;
     auth?: boolean;
+    snapshotId?: string;
   } = {},
 ) => {
   const generatedFiles = Object.fromEntries(
@@ -347,7 +352,7 @@ const makeFixture = (
     ),
   };
 
-  const createSandbox = vi.fn(async () => {
+  const createSandbox = vi.fn(async (_options: unknown) => {
     await options.delayCreate;
     return sandbox as never;
   });
@@ -444,7 +449,7 @@ const makeFixture = (
     {
       projectId: "control-project",
       teamId: "control-team",
-      image: "protected-installer-control-image",
+      ...fixtureFilesystemSource(options.snapshotId),
       accessWorker: {
         executablePath: "/opt/trusted-worker",
         id: selectedPlan.installer.reference,
@@ -492,6 +497,22 @@ const makeFixture = (
 };
 
 describe("hosted protected installer Sandbox launcher", () => {
+  it("runs the pinned worker from the configured snapshot without an image or source clone", async () => {
+    const fixture = makeFixture({ snapshotId: "snap_owned_workers" });
+    await fixture.launcher.execute(fixture.input);
+    const options = fixture.createSandbox.mock.calls[0]?.[0];
+    expect(options).toMatchObject({
+      source: { type: "snapshot", snapshotId: "snap_owned_workers" },
+      networkPolicy: "allow-all",
+      env: {},
+      persistent: false,
+      projectId: "control-project",
+      teamId: "control-team",
+    });
+    expect(options).not.toHaveProperty("image");
+    expect(fixture.records).toHaveLength(1);
+  });
+
   it("independently inspects access under the real leased context without a new worker attempt or receipt", async () => {
     const fixture = makeFixture({
       access: true,
