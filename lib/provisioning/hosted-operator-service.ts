@@ -791,14 +791,45 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                     await ownedUpdate((value) => {
                       const currentOperator = requireOperator(value);
                       const priorRows = currentOperator.gatewayEnvironment ?? [];
+                      const approvedRows =
+                        currentOperator.plan.authAdoption?.gatewayEnvironment ?? [];
                       if (
-                        gatewayEnvironment.some(
-                          (row) =>
+                        gatewayEnvironment.some((row) => {
+                          const prior = priorRows.find(
+                            (saved) => saved.id === row.id || saved.key === row.key,
+                          );
+                          const approved = approvedRows.find(
+                            (saved) => saved.id === row.id || saved.key === row.key,
+                          );
+                          const sameIdentity = (saved: ManagedOperatorEnvironmentRow) =>
+                            (
+                              [
+                                "branch",
+                                "comment",
+                                "id",
+                                "key",
+                                "operationRef",
+                                "projectId",
+                              ] as const
+                            ).every((key) => saved[key] === row[key]);
+                          const foreignPending =
+                            row.pendingOperationRef !== undefined &&
+                            row.pendingOperationRef !== operationRef;
+                          if (
+                            foreignPending ||
+                            (prior !== undefined && !sameIdentity(prior)) ||
+                            (approved !== undefined && !sameIdentity(approved))
+                          ) {
+                            return true;
+                          }
+                          // Approved canonical ownership seeds adopted rows. Verified value and
+                          // current-operation pending metadata may evolve while row identity stays fixed.
+                          return (
                             row.operationRef !== operationRef &&
-                            !priorRows.some(
-                              (prior) => JSON.stringify(prior) === JSON.stringify(row),
-                            ),
-                        )
+                            prior === undefined &&
+                            approved === undefined
+                          );
+                        })
                       ) {
                         throw new HostedOperatorError("resource_mismatch");
                       }
