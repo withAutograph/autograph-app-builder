@@ -326,7 +326,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         throw unavailable();
       }
       for (const [key, expected] of [
-        ["BETTER_AUTH_URL", `${gateway.publicOrigin}/api/auth`],
+        ["BETTER_AUTH_URL", gateway.publicOrigin],
         ["BETTER_AUTH_APP_NAME", "apps"],
         ["PLATFORM_PUBLIC_ORIGIN", gateway.publicOrigin],
       ] as const) {

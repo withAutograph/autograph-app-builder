@@ -168,7 +168,7 @@ const fixture = () => {
       target: ["preview"],
       gitBranch: selection.branch,
       type: "plain",
-      value: `${gateway.publicOrigin}/api/auth`,
+      value: gateway.publicOrigin,
     },
     {
       id: "auth-app-name",
@@ -427,6 +427,18 @@ it.each([
     ).toBe(true);
   },
 );
+
+it("rejects an Auth API path in the route-owned Gateway Auth origin before writes", async () => {
+  const f = fixture();
+  const authUrl = f.rows.find((row) => row.key === "BETTER_AUTH_URL");
+  if (authUrl === undefined) {
+    throw new Error("missing Auth origin");
+  }
+  authUrl.value = `${gateway.publicOrigin}/api/auth`;
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  expect(f.checkpointGatewayEnvironment).not.toHaveBeenCalled();
+});
 
 it("binds only exact encrypted Gateway Preview Auth configuration and retains existing credentials", async () => {
   const f = fixture();

@@ -37,7 +37,8 @@ describe("closed Neon consent diagnostics", () => {
           stage,
         });
       }
-      report({ ...value, ownerConfiguration: { ...ownerConfiguration, extra: secret }, stage });
+      const unexpectedOwnerConfiguration = { ...ownerConfiguration, extra: secret };
+      report({ ...value, ownerConfiguration: unexpectedOwnerConfiguration, stage });
       expect(sink).toHaveBeenCalledOnce();
       expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
     },
