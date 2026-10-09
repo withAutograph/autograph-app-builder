@@ -1,3 +1,5 @@
+import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
+import { HostedOperatorError } from "./hosted-operator-contract";
 /* oxlint-disable eslint/require-await -- Injected SDK fixture methods intentionally preserve Promise contracts. */
 import { describe, expect, it, vi } from "vitest";
 import { UserAuthorizationRequiredError } from "@vercel/connect";
@@ -53,6 +55,7 @@ const context: HostedOperatorConsentOwner = {
   },
 };
 const fixture = () => {
+  const diagnosticSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
   const assertCurrentOwner = vi.fn(async () => {});
   const io = {
     getOidc: vi.fn(async () => "private-operator-oidc"),
@@ -71,8 +74,12 @@ const fixture = () => {
   };
   return {
     assertCurrentOwner,
+    diagnosticSink,
     io,
-    run: createHostedOperatorNeonAuthorization({ assertCurrentOwner, configuration }, io),
+    run: createHostedOperatorNeonAuthorization(
+      { assertCurrentOwner, configuration, diagnosticSink },
+      io,
+    ),
   };
 };
 describe("canonical owner Neon consent", () => {
@@ -180,5 +187,45 @@ describe("canonical owner Neon consent", () => {
     await expect(
       f.run(context, { callbackUrl: "https://builder.example/callback", phase: "start" }),
     ).rejects.toThrow();
+  });
+});
+
+describe("operator consent diagnostic outcomes", () => {
+  it("reports actual provider missing consent separately from current-owner denial", async () => {
+    const f = fixture();
+    f.io.getTokenResponse.mockRejectedValueOnce(new UserAuthorizationRequiredError("fixture"));
+    await expect(f.run(context, { phase: "check" })).resolves.toEqual({
+      status: "authorization-required",
+    });
+    expect(
+      f.diagnosticSink.mock.calls.map(([entry]) => [entry.stage, entry.outcome]),
+    ).toContainEqual(["provider_token", "consent_required"]);
+    const denied = fixture();
+    denied.assertCurrentOwner.mockRejectedValueOnce(
+      new HostedOperatorError("authorization_required"),
+    );
+    await expect(denied.run(context, { phase: "check" })).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(denied.io.getTokenResponse).not.toHaveBeenCalled();
+    expect(
+      denied.diagnosticSink.mock.calls.map(([entry]) => [entry.stage, entry.outcome]),
+    ).toContainEqual(["current_owner", "operator_access_denied"]);
+  });
+  it("reports before the provider await and never logs secret-bearing failures", async () => {
+    const f = fixture();
+    const secret = "Bearer private-token https://vercel.com/consent?pkce=private";
+    f.io.getTokenResponse.mockRejectedValueOnce(new Error(secret));
+    await expect(f.run(context, { phase: "complete" })).rejects.toMatchObject({
+      code: "operator_unavailable",
+    });
+    expect(
+      f.diagnosticSink.mock.calls.map(([entry]) => [entry.phase, entry.stage, entry.outcome]),
+    ).toContainEqual(["complete", "provider_token", "started"]);
+    expect(
+      f.diagnosticSink.mock.calls.map(([entry]) => [entry.phase, entry.stage, entry.outcome]),
+    ).toContainEqual(["complete", "provider_token", "setup_unavailable"]);
+    expect(JSON.stringify(f.diagnosticSink.mock.calls)).not.toContain(secret);
+    expect(JSON.stringify(f.diagnosticSink.mock.calls)).not.toContain("private-operator-oidc");
   });
 });

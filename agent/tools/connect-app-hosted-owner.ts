@@ -1,6 +1,9 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { authorizeHostedNeonForTool } from "@/lib/agent/hosted-neon-authorization";
+import {
+  authorizeHostedNeonForTool,
+  hostedNeonBlockedResult,
+} from "@/lib/agent/hosted-neon-authorization";
 import { hostedOperatorClientForSession } from "@/lib/provisioning/hosted-operator-client";
 import { HostedOperatorError } from "@/lib/provisioning/hosted-operator-contract";
 
@@ -12,13 +15,12 @@ export default defineTool({
     try {
       operator = await hostedOperatorClientForSession(ctx.session.auth, ctx.session.id);
     } catch (error) {
-      return {
-        code: error instanceof HostedOperatorError ? error.code : "operator_unavailable",
-        status: "blocked",
-      };
+      return hostedNeonBlockedResult(
+        error instanceof HostedOperatorError ? error.code : "operator_unavailable",
+      );
     }
     const code = await authorizeHostedNeonForTool(ctx, operator);
-    return code === null ? { status: "owner-connected" } : { code, status: "blocked" };
+    return code === null ? { status: "owner-connected" } : hostedNeonBlockedResult(code);
   },
   inputSchema: z.strictObject({}),
 });
