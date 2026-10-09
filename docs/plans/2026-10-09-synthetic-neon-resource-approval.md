@@ -56,18 +56,39 @@ under that enrollment remains unproven.
 The source prerequisite for a second app to continue using the same shared Auth
 realm without rewriting users or rotating credentials is owned by the shared
 Auth continuation lane. Neither is established by this resource plan.
+Generic v2 credential use remains blocked until retained Auth and Gateway
+ownership survives cleanup of the source app and later adoption through an
+existing adopter. Billing metadata does not satisfy those lifecycle checks.
 
 ## Account, billing, region, and compute
 
-The connected Neon metadata lists the existing `Vercel: autograph`
-organization (`org-holy-waterfall-57859213`) on the Launch plan. The proposed
-project should remain under that Neon organization so the current Neon owner
-can authorize the existing account. The organization name and Launch label do
-not establish whether billing is Neon-managed or Vercel-managed. Before
-creation, verify the current native-store installation, payer and invoice path;
-retain that reviewed arrangement. Do not create another account or switch
-integration types to satisfy this proposal. No project or account is being
-created in this step.
+The coordinator's read-only native metadata verification on October 9, 2026
+establishes that the existing `Vercel: autograph` organization
+(`org-holy-waterfall-57859213`) has `managed_by=vercel` and plan `launch`.
+The existing Vercel Marketplace installation supplies the native billing and
+provisioning path; this is provider metadata, rather than an inference from
+the organization name.
+
+| Verified native metadata       | Value                                            |
+| ------------------------------ | ------------------------------------------------ |
+| Neon organization              | `org-holy-waterfall-57859213`                    |
+| Account management / Neon plan | `managed_by=vercel`; `launch`                    |
+| Vercel configuration           | `icfg_stHNCr49GwCM2z8X8bYy3ei8`                  |
+| Vercel integration             | `oac_3sK3gnG06emjIEVL09jjntDD`                   |
+| Installation owner             | `team_7NuFMkL3of4cYDt8DYpGg4ZW`                  |
+| Installation type / source     | `marketplace` / `marketplace`                    |
+| Capabilities                   | `provisioning=true`, `mcp=true`, `billable=true` |
+| Billing plan / scope           | `launch_v3`; installation scope                  |
+| Native unit quote              | $0.106 per CU-hour; $0.35 per GB-month           |
+
+This resolves the previously unknown native installation and billing path.
+The proposed project should remain under that existing organization and
+installation. Do not create another account or switch integration types to
+satisfy this proposal. Recheck the exact live quote and terms when presenting
+the resource creation approval. The metadata verification created no resource,
+bound no app, and accepted no terms. It does not establish a total charge or
+resource-execution authority; account usage and private billing totals are
+excluded from this plan.
 
 Neon reports `aws-us-east-1` as an available default region, and existing
 Autograph Neon project metadata places its projects there. This is the
@@ -79,8 +100,8 @@ owner choose a mutually supported region before project creation; do not infer
 compatibility from project names or select a cross-region route by default.
 
 Current Neon documentation describes Launch as usage-based with no monthly
-minimum. The published Launch rates are $0.106 per CU-hour and $0.35 per
-GB-month of storage. At the proposed 0.25 CU minimum, compute is $0.0265 per
+minimum. The observed native installation quote agrees with the published
+Launch rates of $0.106 per CU-hour and $0.35 per GB-month of storage. At the proposed 0.25 CU minimum, compute is $0.0265 per
 active hour; a 1 CU hour is $0.106. Compute suspends after five idle minutes by
 default, while stored data remains billable. Branches are copy-on-write, but
 writes add storage; Launch includes ten branches per project, with additional
@@ -240,7 +261,7 @@ permissions, and binding targets instead of guessing them in advance.
 
 | Stage                          | Exact effect ready for owner review                                                                                                                                                                                                                                                       | Values assigned/read back after creation                                                                                                                                |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0. Read-only preflight         | Confirm Neon organization and billing owner; Launch terms; available name; Vercel function-region compatibility; source-enrollment and shared-Auth source prerequisites.                                                                                                                  | Actual billing confirmation, runtime regions, and current supported worker output.                                                                                      |
+| 0. Read-only preflight         | Retain the verified organization and native installation; recheck the live quote and terms at approval, name availability, runtime regions, source enrollment and shared-Auth lifecycle prerequisites.                                                                                    | Quote and terms presented for approval, runtime regions, and current worker output. Native metadata does not accept terms or authorize creation.                        |
 | 0a. Owner consent              | Approve the exact canonical owner-store reader role/grants and the four operator Preview environment entries above; complete ordinary current-owner consent. No management key or signing-secret copy.                                                                                    | Actual owner-store identity, effective reader privileges, branch/environment filter, private credential reference, native deployment and current-owner grant readback.  |
 | 1. Project                     | Create one synthetic-only project under `org-holy-waterfall-57859213`, proposed name `autograph-spend-review-synthetic`, AWS `aws-us-east-1`, Launch usage-based plan, and clean default `main`. Use no Production project, branch, data, credentials, or user/session state.             | Neon project ID, generated branch ID/endpoint, Postgres version, owner, region, compute profile, and actual price/usage display.                                        |
 | 2. Qualification context       | From the clean root, create `spend-review-qualification-2026-10-09` with the proposed compute settings. Freeze the proposed `preview_auth` and `spend_review` database names and distinct role names in the protected bootstrap plan before any database/role effects.                    | Branch/endpoint IDs, reviewed resource/role identities and grant matrix.                                                                                                |
