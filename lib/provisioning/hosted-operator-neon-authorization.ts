@@ -46,6 +46,26 @@ export const neonAuthorizationInputSchema = z.discriminatedUnion("phase", [
   z.strictObject({ phase: z.enum(["check", "complete"]) }),
   z.strictObject({ callbackUrl: z.url(), phase: z.literal("start") }),
 ]);
+const challengeUrlSchema = z.url().refine((value) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+});
+const sdkChallengeFieldsSchema = z.object({
+  deviceCode: z.unknown().optional(),
+  expiresAt: z.unknown().optional(),
+  url: z.unknown().optional(),
+});
+const deviceCodeSchema = z.string().nullable().optional();
+const expiresAtSchema = z
+  .number()
+  .refine((value) => Number.isFinite(new Date(value).getTime()))
+  .transform((value) => new Date(value).toISOString())
+  .pipe(z.iso.datetime({ offset: true }))
+  .optional();
 export const neonAuthorizationResultSchema = z.discriminatedUnion("status", [
   z.strictObject({ expiresAt: z.number().positive(), status: z.literal("ready") }),
   z.strictObject({ status: z.literal("authorization-required") }),
@@ -53,10 +73,7 @@ export const neonAuthorizationResultSchema = z.discriminatedUnion("status", [
     challenge: z.strictObject({
       displayName: z.literal("Connect Neon"),
       expiresAt: z.iso.datetime({ offset: true }).optional(),
-      url: z.url().refine((value) => {
-        const url = new URL(value);
-        return url.origin === "https://vercel.com" && !url.username && !url.password;
-      }),
+      url: challengeUrlSchema,
       userCode: z.string().optional(),
     }),
     status: z.literal("authorization-started"),
@@ -64,6 +81,61 @@ export const neonAuthorizationResultSchema = z.discriminatedUnion("status", [
 ]);
 export type NeonAuthorizationInput = z.infer<typeof neonAuthorizationInputSchema>;
 export type NeonAuthorizationResult = z.infer<typeof neonAuthorizationResultSchema>;
+
+const projectSdkChallenge = (response: Awaited<ReturnType<typeof startAuthorization>>) => {
+  let challengeProjection: NonNullable<HostedOperatorConsentMetadata["challengeProjection"]> = {
+    deviceCodeValid: false,
+    expiresAtValid: false,
+    failure: "response_invalid",
+    urlPresent: false,
+    urlValid: false,
+  };
+  let result: NeonAuthorizationResult;
+  try {
+    const fields = sdkChallengeFieldsSchema.safeParse(response);
+    if (!fields.success) {
+      throw new HostedOperatorError("operator_unavailable");
+    }
+    const url = challengeUrlSchema.safeParse(fields.data.url);
+    const deviceCode = deviceCodeSchema.safeParse(fields.data.deviceCode);
+    const expiresAt = expiresAtSchema.safeParse(fields.data.expiresAt);
+    challengeProjection = {
+      deviceCodeValid: deviceCode.success,
+      expiresAtValid: expiresAt.success,
+      urlPresent:
+        fields.data.url !== undefined && fields.data.url !== null && fields.data.url !== "",
+      urlValid: url.success,
+    };
+    if (!url.success) {
+      challengeProjection.failure = challengeProjection.urlPresent ? "url_invalid" : "url_missing";
+    } else if (!deviceCode.success) {
+      challengeProjection.failure = "device_code_invalid";
+    } else if (!expiresAt.success) {
+      challengeProjection.failure = "expiry_invalid";
+    }
+    if (!url.success || !deviceCode.success || !expiresAt.success) {
+      throw new HostedOperatorError("operator_unavailable");
+    }
+    const challenge: Extract<
+      NeonAuthorizationResult,
+      { status: "authorization-started" }
+    >["challenge"] = { displayName: "Connect Neon", url: url.data };
+    if (deviceCode.data !== undefined && deviceCode.data !== null && deviceCode.data !== "") {
+      challenge.userCode = deviceCode.data;
+    }
+    if (expiresAt.data !== undefined) {
+      challenge.expiresAt = expiresAt.data;
+    }
+    result = neonAuthorizationResultSchema.parse({
+      challenge,
+      status: "authorization-started",
+    });
+  } catch {
+    challengeProjection.failure ??= "response_invalid";
+    return { diagnostic: challengeProjection };
+  }
+  return { diagnostic: challengeProjection, result };
+};
 
 /** Consent setup is independent of app releases, database branches and Sandbox images. */
 export const readNeonAuthorizationConfiguration = (
@@ -114,8 +186,18 @@ export const createHostedOperatorNeonAuthorization =
       input.diagnosticSink,
     );
     let stage: HostedOperatorConsentMetadata["stage"] = "configuration";
+    let challengeProjection: HostedOperatorConsentMetadata["challengeProjection"];
     const emit = (outcome: HostedOperatorConsentMetadata["outcome"]) => {
-      report({ boundary: "operator", outcome, phase: request.phase, stage });
+      const metadata: HostedOperatorConsentMetadata = {
+        boundary: "operator",
+        outcome,
+        phase: request.phase,
+        stage,
+      };
+      if (challengeProjection !== undefined) {
+        metadata.challengeProjection = challengeProjection;
+      }
+      report(metadata);
     };
     const begin = (next: HostedOperatorConsentMetadata["stage"]) => {
       stage = next;
@@ -167,23 +249,14 @@ export const createHostedOperatorNeonAuthorization =
           webhook: callback.href,
         });
         await assertCurrent();
-        stage = "provider_start";
-        const challenge: Extract<
-          NeonAuthorizationResult,
-          { status: "authorization-started" }
-        >["challenge"] = { displayName: "Connect Neon", url: response.url };
-        if (response.deviceCode !== undefined) {
-          challenge.userCode = response.deviceCode;
+        begin("provider_start_projection");
+        const projected = projectSdkChallenge(response);
+        challengeProjection = projected.diagnostic;
+        if (projected.result === undefined) {
+          throw new HostedOperatorError("operator_unavailable");
         }
-        if (response.expiresAt !== undefined) {
-          challenge.expiresAt = new Date(response.expiresAt).toISOString();
-        }
-        const result = neonAuthorizationResultSchema.parse({
-          challenge,
-          status: "authorization-started",
-        });
         emit("challenge_started");
-        return result;
+        return projected.result;
       }
       try {
         begin("provider_token");

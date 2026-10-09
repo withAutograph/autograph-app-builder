@@ -3,6 +3,7 @@ import { HostedOperatorError } from "./hosted-operator-contract";
 /* oxlint-disable eslint/require-await -- Injected SDK fixture methods intentionally preserve Promise contracts. */
 import { describe, expect, it, vi } from "vitest";
 import { UserAuthorizationRequiredError } from "@vercel/connect";
+import type { ConnectAuthorizationResponse, startAuthorization } from "@vercel/connect";
 import {
   createHostedOperatorNeonAuthorization,
   readNeonAuthorizationConfiguration,
@@ -64,7 +65,7 @@ const fixture = () => {
       expiresAt: Date.now() + 60_000,
       token: "private-provider-token",
     })),
-    startAuthorization: vi.fn(async () => ({
+    startAuthorization: vi.fn<typeof startAuthorization>(async () => ({
       expiresAt: Date.now() + 60_000,
       request: "private-request",
       url: "https://vercel.com/connect/authorize?request=opaque",
@@ -176,17 +177,164 @@ describe("canonical owner Neon consent", () => {
     ).rejects.toMatchObject({ code: "authorization_required" });
     expect(f.io.startAuthorization).not.toHaveBeenCalled();
   });
-  it("rejects a consent URL outside the provider origin", async () => {
+  it("accepts the fixed connector's SDK-returned HTTPS provider URL without publishing private fields", async () => {
     const f = fixture();
     f.io.startAuthorization.mockResolvedValue({
       expiresAt: Date.now() + 60_000,
-      request: "private",
-      url: "https://foreign.example/consent",
-      verifier: "private",
+      request: "private-request",
+      url: "https://console.neon.tech/oauth/authorize?public-challenge=opaque",
+      verifier: "private-verifier",
     });
+    const result = await f.run(context, {
+      callbackUrl: "https://builder.example/callback",
+      phase: "start",
+    });
+    expect(result).toMatchObject({
+      challenge: { url: "https://console.neon.tech/oauth/authorize?public-challenge=opaque" },
+      status: "authorization-started",
+    });
+    expect(JSON.stringify(result)).not.toMatch(/private-request|private-verifier/u);
+    expect(JSON.stringify(f.diagnosticSink.mock.calls)).not.toMatch(/console.neon.tech|private/u);
+  });
+});
+
+// The pinned SDK returns unchecked response.json(); these fixtures exercise that runtime boundary.
+interface UncheckedAuthorizationResponse {
+  deviceCode?: unknown;
+  expiresAt?: unknown;
+  request: string;
+  url?: unknown;
+  verifier: string;
+}
+const sdkResponse = (
+  fields: Pick<UncheckedAuthorizationResponse, "url" | "deviceCode" | "expiresAt">,
+): ConnectAuthorizationResponse =>
+  // SAFETY: Local fault fixtures deliberately model the SDK's unchecked JSON; injected IO prevents any provider call.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Invalid SDK JSON must reach the owned runtime validation boundary.
+  ({
+    request: "private-request",
+    url: "https://console.neon.tech/oauth/authorize?public-challenge=opaque",
+    verifier: "private-verifier",
+    ...fields,
+  }) as ConnectAuthorizationResponse;
+
+describe("native SDK challenge projection", () => {
+  it.each([null, ""])("omits optional empty device code %j", async (deviceCode) => {
+    const f = fixture();
+    f.io.startAuthorization.mockResolvedValue(sdkResponse({ deviceCode }));
+    const result = await f.run(context, {
+      callbackUrl: "https://builder.example/callback",
+      phase: "start",
+    });
+    expect(result).toMatchObject({ status: "authorization-started" });
+    expect(result).not.toHaveProperty("challenge.userCode");
+    expect(JSON.stringify(f.diagnosticSink.mock.calls)).not.toContain("private");
+  });
+  it("retains a public device code and projects milliseconds without adding an expiry gate", async () => {
+    const f = fixture();
+    f.io.startAuthorization.mockResolvedValue(
+      sdkResponse({ deviceCode: "PUBLIC-CODE", expiresAt: 0 }),
+    );
+    await expect(
+      f.run(context, { callbackUrl: "https://builder.example/callback", phase: "start" }),
+    ).resolves.toEqual({
+      challenge: {
+        displayName: "Connect Neon",
+        expiresAt: "1970-01-01T00:00:00.000Z",
+        url: "https://console.neon.tech/oauth/authorize?public-challenge=opaque",
+        userCode: "PUBLIC-CODE",
+      },
+      status: "authorization-started",
+    });
+    expect(JSON.stringify(f.diagnosticSink.mock.calls)).not.toContain("PUBLIC-CODE");
+  });
+  it.each([
+    // oxlint-disable-next-line sonarjs/no-clear-text-protocols -- Rejected HTTP challenge fixture, never requested.
+    [{ url: "http://console.neon.tech/consent" }, "url_invalid"],
+    [{ url: "https://user:private@console.neon.tech/consent" }, "url_invalid"],
+    [{ url: "not-a-url-private" }, "url_invalid"],
+    [{ url: null }, "url_missing"],
+    [{ deviceCode: 123 }, "device_code_invalid"],
+    [{ deviceCode: { private: "code" } }, "device_code_invalid"],
+    [{ expiresAt: null }, "expiry_invalid"],
+    [{ expiresAt: "private-expiry" }, "expiry_invalid"],
+    [{ expiresAt: Number.NaN }, "expiry_invalid"],
+    [{ expiresAt: Number.POSITIVE_INFINITY }, "expiry_invalid"],
+    [{ expiresAt: 1e20 }, "expiry_invalid"],
+  ] as const)(
+    "rejects malformed SDK fields with only closed failure %s",
+    async (fields, failure) => {
+      const f = fixture();
+      f.io.startAuthorization.mockResolvedValue(sdkResponse(fields));
+      await expect(
+        f.run(context, { callbackUrl: "https://builder.example/callback", phase: "start" }),
+      ).rejects.toMatchObject({ code: "operator_unavailable" });
+      expect(f.assertCurrentOwner).toHaveBeenCalledTimes(3);
+      expect(
+        f.diagnosticSink.mock.calls.map(([entry]) => [
+          entry.stage,
+          entry.outcome,
+          entry.challengeProjection?.failure,
+        ]),
+      ).toContainEqual(["provider_start_projection", "setup_unavailable", failure]);
+      expect(JSON.stringify(f.diagnosticSink.mock.calls)).not.toMatch(/private|console.neon.tech/u);
+    },
+  );
+  it("reports a malformed root response and hostile getters without logging SDK contents", async () => {
+    for (const response of [
+      null,
+      Object.defineProperty({ request: "private", verifier: "private" }, "url", {
+        get() {
+          throw new Error("private-response");
+        },
+      }),
+    ]) {
+      const f = fixture();
+      // SAFETY: Both inputs are synthetic unchecked SDK responses; no actual SDK or provider is invoked.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Exercise malformed response and hostile getter rejection.
+      f.io.startAuthorization.mockResolvedValue(response as ConnectAuthorizationResponse);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Isolate each malformed SDK response and its private diagnostic sink.
+      await expect(
+        f.run(context, { callbackUrl: "https://builder.example/callback", phase: "start" }),
+      ).rejects.toMatchObject({ code: "operator_unavailable" });
+      expect(
+        f.diagnosticSink.mock.calls.map(([entry]) => entry.challengeProjection?.failure),
+      ).toContain("response_invalid");
+      expect(JSON.stringify(f.diagnosticSink.mock.calls)).not.toContain("private");
+    }
+  });
+  it("rechecks the owner before accessing a returned challenge", async () => {
+    const f = fixture();
+    const readChallenge = vi.fn(() => "https://console.neon.tech/consent");
+    const response = sdkResponse({});
+    Object.defineProperty(response, "url", { get: readChallenge });
+    f.io.startAuthorization.mockResolvedValue(response);
+    f.assertCurrentOwner
+      .mockResolvedValueOnce()
+      .mockResolvedValueOnce()
+      .mockRejectedValueOnce(new HostedOperatorError("authorization_required"));
+    await expect(
+      f.run(context, { callbackUrl: "https://builder.example/callback", phase: "start" }),
+    ).rejects.toMatchObject({ code: "authorization_required" });
+    expect(readChallenge).not.toHaveBeenCalled();
+    expect(f.diagnosticSink.mock.calls.map(([entry]) => entry.stage)).not.toContain(
+      "provider_start_projection",
+    );
+  });
+  it("keeps SDK start rejection distinct from post-return projection failure", async () => {
+    const f = fixture();
+    f.io.startAuthorization.mockRejectedValue(new Error("private-sdk-error"));
     await expect(
       f.run(context, { callbackUrl: "https://builder.example/callback", phase: "start" }),
     ).rejects.toThrow();
+    expect(f.assertCurrentOwner).toHaveBeenCalledTimes(2);
+    expect(
+      f.diagnosticSink.mock.calls.map(([entry]) => [entry.stage, entry.outcome]),
+    ).toContainEqual(["provider_start", "setup_unavailable"]);
+    expect(f.diagnosticSink.mock.calls.map(([entry]) => entry.stage)).not.toContain(
+      "provider_start_projection",
+    );
+    expect(JSON.stringify(f.diagnosticSink.mock.calls)).not.toContain("private");
   });
 });
 
