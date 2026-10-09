@@ -6,12 +6,14 @@ import type { VercelTokenKeyringConfig } from "../integrations/vercel-installati
 import {
   HostedOperatorError,
   operatorPlanDigest,
+  canonicalGatewayEnvironmentRowsSchema,
   operatorAuthSchemaPreparationSchema,
   sharedAuthAdoptionSchema,
   sameOperatorSelection,
 } from "./hosted-operator-contract";
 import type {
   HostedOperatorPlan,
+  ManagedOperatorEnvironmentRow,
   OperatorAuthSchemaPreparation,
   SharedAuthAdoption,
 } from "./hosted-operator-contract";
@@ -19,9 +21,14 @@ import type { HostedOperatorContext } from "./hosted-operator-service";
 import type { HostedRuntimeJournalRecord } from "./hosted-runtime-journal";
 import { hostedRuntimeIdentity } from "./hosted-runtime-journal";
 import { decryptHostedRuntimeFiles, encryptHostedRuntimeFiles } from "./hosted-runtime-service";
-import { describeHostedOperatorSharedGateway } from "./hosted-operator-shared-gateway";
+import {
+  assertHostedOperatorSharedGateway,
+  describeHostedOperatorSharedGateway,
+} from "./hosted-operator-shared-gateway";
 
 const fileName = "protected-resource-credentials.json";
+const pendingAdoptionState = "pending-shared-auth-verification";
+const activeAdoptionState = "active-shared-auth";
 const password = z
   .string()
   .min(32)
@@ -51,9 +58,21 @@ const bundleSchema = z.strictObject({
 });
 const adoptionBundleSchema = bundleSchema.extend({
   adoption: sharedAuthAdoptionSchema,
-  state: z.literal("pending-shared-auth-verification"),
+  state: z.literal(pendingAdoptionState),
   version: z.literal(2),
 });
+const activeAdoptionBundleSchema = adoptionBundleSchema.extend({
+  state: z.literal(activeAdoptionState),
+  verification: z.strictObject({
+    authPreparation: operatorAuthSchemaPreparationSchema,
+    gatewayEnvironment: canonicalGatewayEnvironmentRowsSchema,
+  }),
+});
+const storedBundleSchema = z.union([
+  bundleSchema,
+  adoptionBundleSchema,
+  activeAdoptionBundleSchema,
+]);
 const createCredentials = () => ({
   migratorPassword: randomBytes(32).toString("base64url"),
   runtimePassword: randomBytes(32).toString("base64url"),
@@ -92,11 +111,7 @@ const resourceIdentity = (plan: HostedOperatorPlan) => {
   return identity;
 };
 
-const readMatchingBundle = (input: ResourceCredentialInput) => {
-  if (input.plan.authAdoption !== undefined) {
-    throw new HostedOperatorError("reconciliation_required");
-  }
-  const identity = resourceIdentity(input.plan);
+const readStoredBundle = (input: ResourceCredentialInput) => {
   const files = decryptHostedRuntimeFiles(input);
   if (files === undefined) {
     throw new Error("Protected resource credential checkpoint is unavailable.");
@@ -104,11 +119,82 @@ const readMatchingBundle = (input: ResourceCredentialInput) => {
   if (Object.keys(files).length !== 1 || files[fileName] === undefined) {
     throw new Error("Protected resource credential checkpoint is incompatible.");
   }
-  const bundle = bundleSchema.parse(JSON.parse(files[fileName]));
-  if (JSON.stringify(bundle.identity) !== JSON.stringify(identity)) {
+  try {
+    return storedBundleSchema.parse(JSON.parse(files[fileName]));
+  } catch {
+    // Malformed ciphertext content can contain passwords; do not forward parser errors.
+    throw new HostedOperatorError("reconciliation_required");
+  }
+};
+const sameReadiness = (
+  left: OperatorAuthSchemaPreparation,
+  right: OperatorAuthSchemaPreparation,
+) => {
+  const { observedAt: _left, ...leftIdentity } = left;
+  const { observedAt: _right, ...rightIdentity } = right;
+  void _left;
+  void _right;
+  return isDeepStrictEqual(leftIdentity, rightIdentity);
+};
+const assertActiveBundle = (
+  input: ResourceCredentialInput,
+  bundle: z.infer<typeof activeAdoptionBundleSchema>,
+) => {
+  const { plan } = input;
+  const preparation = bundle.verification.authPreparation;
+  const incompatible = [
+    !isDeepStrictEqual(bundle.identity, resourceIdentity(plan)),
+    !isDeepStrictEqual(bundle.adoption, plan.authAdoption),
+    !isDeepStrictEqual(input.record.request, input.target),
+    !sameOperatorSelection(plan.selection, input.target),
+    preparation.database !== plan.authDatabase.database,
+    preparation.runtimeRole !== plan.authDatabase.runtimeRole,
+    preparation.targetDigest !== plan.authSchema?.targetDigest,
+  ].some(Boolean);
+  if (incompatible) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  // The sealed proof names the exact approved canonical ownership snapshot.
+  assertHostedOperatorSharedGateway(plan, plan, bundle.verification.gatewayEnvironment);
+  return bundle;
+};
+const readMatchingBundle = (input: ResourceCredentialInput) => {
+  const bundle = readStoredBundle(input);
+  if (input.plan.authAdoption !== undefined) {
+    if (bundle.version !== 2 || bundle.state !== activeAdoptionState) {
+      throw new HostedOperatorError("reconciliation_required");
+    }
+    return assertActiveBundle(input, bundle);
+  }
+  if (bundle.version !== 1) {
+    throw new HostedOperatorError("reconciliation_required");
+  }
+  if (!isDeepStrictEqual(bundle.identity, resourceIdentity(input.plan))) {
     throw new Error("Protected resource credential checkpoint belongs to different resources.");
   }
   return bundle;
+};
+
+/** Local continuation evidence only: no source lookup or password leaves this helper. */
+export const readActiveHostedOperatorSharedAuth = (input: ResourceCredentialInput) => {
+  if (input.record.privateState === undefined) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional local evidence has no value before activation.
+    return undefined;
+  }
+  const bundle = readStoredBundle(input);
+  if (bundle.version !== 2 || bundle.state !== activeAdoptionState) {
+    // oxlint-disable-next-line unicorn/no-useless-undefined -- Optional local evidence has no value before activation.
+    return undefined;
+  }
+  assertActiveBundle(input, bundle);
+  // Mutable Gateway checkpoints can contain an interrupted PATCH. Local continuation
+  // uses the sealed ownership seed; source planning separately requires current verified rows.
+  const { gatewayEnvironment } = bundle.verification;
+  return {
+    adoption: bundle.adoption,
+    authPreparation: bundle.verification.authPreparation,
+    gatewayEnvironment,
+  };
 };
 
 const directDatabaseUrl = (input: {
@@ -158,14 +244,17 @@ export const prepareHostedOperatorResourceCredentials = (
     record: HostedRuntimeJournalRecord;
   },
 ) => {
-  if (input.plan.authAdoption !== undefined) {
+  if (input.plan.authAdoption !== undefined && input.database === "authDatabase") {
     throw new HostedOperatorError("reconciliation_required");
   }
   const identity = resourceIdentity(input.plan);
   const files = decryptHostedRuntimeFiles(input);
-  let bundle: z.infer<typeof bundleSchema>;
+  let bundle: ReturnType<typeof readMatchingBundle>;
   let { privateState } = input.record;
   if (files === undefined) {
+    if (input.plan.authAdoption !== undefined) {
+      throw new HostedOperatorError("reconciliation_required");
+    }
     bundle = bundleSchema.parse({
       appDatabase: createCredentials(),
       authDatabase: createCredentials(),
@@ -244,6 +333,9 @@ export const describeHostedOperatorSharedAuth = (
   }
   // Validate existing ciphertext and its full original identity without weakening v1 matching.
   const bundle = readMatchingBundle(input);
+  if (bundle.version === 2 && !sameReadiness(preparation, bundle.verification.authPreparation)) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
   const { appDatabase: _app, appId: _appId, ...resource } = bundle.identity;
   void _app;
   void _appId;
@@ -260,11 +352,11 @@ export const describeHostedOperatorSharedAuth = (
       selection: plan.selection,
     },
   });
-  if (operator.gatewayEnvironment !== undefined) {
-    adoption.gatewayEnvironment = describeHostedOperatorSharedGateway(
-      plan,
-      operator.gatewayEnvironment,
-    );
+  const sourceGateway =
+    operator.gatewayEnvironment ??
+    (bundle.version === 2 ? bundle.verification.gatewayEnvironment : undefined);
+  if (sourceGateway !== undefined) {
+    adoption.gatewayEnvironment = describeHostedOperatorSharedGateway(plan, sourceGateway);
   }
   return adoption;
 };
@@ -303,8 +395,8 @@ const assertAdoptionTarget = (
 
 /**
  * Seal only Auth credentials into the target's existing journal encryption boundary.
- * No plaintext or connection URL is returned. v2 remains unusable by every worker/binding
- * reader until read-only Auth and shared Gateway adoption have been integrated.
+ * No plaintext or connection URL is returned. Pending v2 is unusable by worker/binding
+ * readers until trusted activation seals verified Auth and shared Gateway provenance.
  */
 export const sealHostedOperatorSharedAuth = (input: {
   source: ResourceCredentialInput;
@@ -326,17 +418,18 @@ export const sealHostedOperatorSharedAuth = (input: {
   }
   const files = decryptHostedRuntimeFiles(target);
   if (files !== undefined) {
-    const parsed =
-      Object.keys(files).length === 1 && files[fileName] !== undefined
-        ? adoptionBundleSchema.safeParse(JSON.parse(files[fileName]))
-        : undefined;
-    if (parsed?.success !== true || target.record.privateState === undefined) {
+    const parsed = readStoredBundle(target);
+    if (
+      parsed.version !== 2 ||
+      parsed.state !== pendingAdoptionState ||
+      target.record.privateState === undefined
+    ) {
       throw new HostedOperatorError("resource_mismatch");
     }
     if (
-      !isDeepStrictEqual(parsed.data.identity, identity) ||
-      !isDeepStrictEqual(parsed.data.adoption, adoption) ||
-      !isDeepStrictEqual(parsed.data.authDatabase, sourceBundle.authDatabase)
+      !isDeepStrictEqual(parsed.identity, identity) ||
+      !isDeepStrictEqual(parsed.adoption, adoption) ||
+      !isDeepStrictEqual(parsed.authDatabase, sourceBundle.authDatabase)
     ) {
       throw new HostedOperatorError("resource_mismatch");
     }
@@ -357,10 +450,61 @@ export const sealHostedOperatorSharedAuth = (input: {
     appDatabase: createCredentials(),
     authDatabase: sourceBundle.authDatabase,
     identity,
-    state: "pending-shared-auth-verification",
+    state: pendingAdoptionState,
     version: 2,
   });
   return encryptHostedRuntimeFiles({ ...target, files: { [fileName]: JSON.stringify(bundle) } });
+};
+
+/** Seal verified adoption; the coordinator owns authorization, source stability and target CAS. */
+export const activateHostedOperatorSharedAuth = (input: {
+  source: ResourceCredentialInput;
+  target: ResourceCredentialInput;
+  authPreparation: OperatorAuthSchemaPreparation;
+  gatewayEnvironment: ManagedOperatorEnvironmentRow[];
+}) => {
+  const { source, target } = input;
+  if (target.record.privateState === undefined) {
+    throw new HostedOperatorError("reconciliation_required");
+  }
+  const adoption = describeHostedOperatorSharedAuth(source);
+  assertAdoptionTarget(source, target, adoption);
+  const bundle = readStoredBundle(target);
+  if (
+    bundle.version !== 2 ||
+    !isDeepStrictEqual(bundle.adoption, adoption) ||
+    !isDeepStrictEqual(bundle.identity, resourceIdentity(target.plan)) ||
+    !isDeepStrictEqual(bundle.authDatabase, readMatchingBundle(source).authDatabase)
+  ) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  const parsed = operatorAuthSchemaPreparationSchema.safeParse(input.authPreparation);
+  const saved = source.record.operator?.authPreparation;
+  if (!parsed.success || saved === undefined || !sameReadiness(parsed.data, saved)) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  const gatewayEnvironment = assertHostedOperatorSharedGateway(
+    target.plan,
+    source.plan,
+    input.gatewayEnvironment,
+  );
+  if (bundle.state === activeAdoptionState) {
+    assertActiveBundle(target, bundle);
+    if (
+      !sameReadiness(parsed.data, bundle.verification.authPreparation) ||
+      !isDeepStrictEqual(gatewayEnvironment, bundle.verification.gatewayEnvironment)
+    ) {
+      throw new HostedOperatorError("resource_mismatch");
+    }
+    return target.record.privateState;
+  }
+  const active = activeAdoptionBundleSchema.parse({
+    ...bundle,
+    state: activeAdoptionState,
+    verification: { authPreparation: parsed.data, gatewayEnvironment },
+  });
+  assertActiveBundle(target, active);
+  return encryptHostedRuntimeFiles({ ...target, files: { [fileName]: JSON.stringify(active) } });
 };
 
 /** Trusted control-plane port. Its URL is never a worker, artifact, tool or return value. */
@@ -389,11 +533,10 @@ export const verifyPendingHostedOperatorSharedAuth = async (input: {
   if (!isDeepStrictEqual(checkpoint, target.record.privateState)) {
     throw new HostedOperatorError("reconciliation_required");
   }
-  const files = decryptHostedRuntimeFiles(target);
-  if (files === undefined || files[fileName] === undefined) {
+  const bundle = readStoredBundle(target);
+  if (bundle.version !== 2 || bundle.state !== pendingAdoptionState) {
     throw new HostedOperatorError("reconciliation_required");
   }
-  const bundle = adoptionBundleSchema.parse(JSON.parse(files[fileName]));
   const saved = operatorAuthSchemaPreparationSchema.parse(source.record.operator?.authPreparation);
   await input.assertCurrent();
   let proof: OperatorAuthSchemaPreparation;
@@ -418,14 +561,7 @@ export const verifyPendingHostedOperatorSharedAuth = async (input: {
     throw new HostedOperatorError("operator_unavailable");
   }
   await input.assertCurrent();
-  const mismatched = [
-    proof.targetDigest !== saved.targetDigest,
-    proof.assetSha256 !== saved.assetSha256,
-    proof.catalogFingerprint !== saved.catalogFingerprint,
-    proof.database !== saved.database,
-    proof.runtimeRole !== saved.runtimeRole,
-  ].some(Boolean);
-  if (mismatched) {
+  if (!sameReadiness(proof, saved)) {
     throw new HostedOperatorError("resource_mismatch");
   }
   return proof;
