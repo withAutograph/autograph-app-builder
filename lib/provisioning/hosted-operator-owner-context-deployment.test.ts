@@ -64,7 +64,7 @@ const fixture = () => {
 
 afterEach(async () => {
   await vi.dynamicImportSettled();
-  vi.doUnmock("../mcp/hosted-route");
+  vi.doUnmock("../db/hosted-postgres");
   vi.doUnmock("../handoff/postgres-store");
   vi.doUnmock("../eve/postgres-hosted-store");
   vi.doUnmock("../auth/postgres-organization-user-authority");
@@ -84,7 +84,7 @@ const mockStoreModules = (failedImport?: OwnerImportModule) => {
       throw new Error("private import credential https://private.example");
     }
   };
-  vi.doMock("../mcp/hosted-route", () => {
+  vi.doMock("../db/hosted-postgres", () => {
     assertImport("database");
     return { openHostedPostgresDatabase: openDatabase };
   });

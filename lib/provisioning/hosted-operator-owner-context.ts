@@ -349,7 +349,7 @@ const openOwnerReaderStores: OpenOwnerReaderStores = async (config) => {
     { createPostgresHostedEveStore },
     { createPostgresPreviewOrganizationAuthority },
   ] = await Promise.all([
-    loadOwnerReaderModule("database", async () => await import("../mcp/hosted-route")),
+    loadOwnerReaderModule("database", async () => await import("../db/hosted-postgres")),
     loadOwnerReaderModule("handoff", async () => await import("../handoff/postgres-store")),
     loadOwnerReaderModule("session", async () => await import("../eve/postgres-hosted-store")),
     loadOwnerReaderModule(
