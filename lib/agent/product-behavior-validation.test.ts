@@ -237,7 +237,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       }),
     );
   });
-  it("validated generated reuse retries failed capture without a compiler invocation", async () => {
+  it("validated generated apps rerun current commands when retrying failed capture", async () => {
     mocks.state.current = workflow("validated");
     mocks.describe.mockResolvedValue({
       backend: { kind: "generated-postgres" },
@@ -258,6 +258,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     expect(mocks.state.current.phase).toBe("validated");
     expect(JSON.stringify(failed)).not.toContain("private storage failure");
     await validateAppCreation.execute({ implementationFiles: [] }, context as never);
+    expect(mocks.execute).toHaveBeenCalledTimes(2);
     expect(mocks.publish).toHaveBeenCalledTimes(2);
   });
   it("automatically returns source findings after technical validation without a review-tool call", async () => {
@@ -289,7 +290,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     } as never);
     expect(mocks.review).not.toHaveBeenCalled();
   });
-  it("assesses reused validation without rerunning technical commands or claiming runtime success", async () => {
+  it("runs current technical validation before assessing source without claiming runtime success", async () => {
     mocks.state.current = workflow("validated");
     mocks.review.mockResolvedValue({ findings: [], reviewCompleted: true, status: "passed" });
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
@@ -297,13 +298,42 @@ describe("behavior evidence invalidation during validation repair", () => {
       getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
       session: { auth: {}, id: "session" },
     } as never);
-    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.execute).toHaveBeenCalledOnce();
+    expect(mocks.execute).toHaveBeenCalledBefore(mocks.review);
     expect(mocks.review).toHaveBeenCalledOnce();
     expect(result).toMatchObject({
       productAcceptance: { productStatus: "unassessed" },
-      reused: true,
+      reused: false,
+      sourceAssessment: { status: "passed" },
+      technicalStatus: "passed",
     });
   });
+
+  it.each(["validated", "reviewed"] as const)(
+    "rejects old validation receipts when current commands fail in %s phase without repair files",
+    async (phase) => {
+      mocks.state.current = workflow(phase);
+      const receipt = {
+        commands: [{ exitCode: 1, name: "check-build" }],
+        reason: "current check/build failed",
+      };
+      mocks.execute.mockResolvedValue({ ok: false, receipt });
+      const result = await validateAppCreation.execute({ implementationFiles: [] }, {
+        callId: "validate_current",
+        getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
+        session: { auth: {}, id: "session" },
+      } as never);
+      expect(mocks.execute).toHaveBeenCalledOnce();
+      expect(mocks.attempt).toHaveBeenCalledOnce();
+      expect(mocks.state.current.phase).toBe("validation_failed");
+      expect(mocks.state.current).not.toHaveProperty("validationReceipt");
+      expect(mocks.review).not.toHaveBeenCalled();
+      expect(mocks.browser).not.toHaveBeenCalled();
+      expect(mocks.publish).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ reused: false, status: "needs_repair" });
+      expect(result).not.toMatchObject({ technicalStatus: "passed" });
+    },
+  );
 
   it("refreshes persistent authorization evidence and reports failed browser validation", async () => {
     mocks.state.current = workflow("validated");
