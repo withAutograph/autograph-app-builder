@@ -14,6 +14,7 @@ import type {
 import type { PublicEveEvent } from "../mcp/contracts";
 import { projectInstalledEveEvent } from "./public-events";
 import type { MessageStreamEvent } from "eve/client";
+import { nativeObservationStateSchema } from "./native-observation-state";
 
 const question = (requestId: string) => ({
   data: {
@@ -128,7 +129,6 @@ const authorizationFixture = async () => {
   if (state === undefined || request === undefined) {
     throw new Error("Expected a native checkpoint and original authorization");
   }
-  delete state.authorizationCompletionsReconciled;
   state.pendingRequests = [request];
   onEvent.mockClear();
   onPrivateEvent.mockClear();
@@ -162,19 +162,22 @@ it("reconciles old completion without replaying public history or private callba
   expect(result.pendingRequests).toEqual([]);
   expect(result.status).toBe("waiting");
   expect(result.nativeObservationState).toMatchObject({
-    authorizationCompletionsReconciled: true,
     boundary: f.state.boundary,
     nextNativeIndex: f.state.nextNativeIndex,
     publicEventCount: f.state.publicEventCount,
   });
   expect(result.nativeObservationState).toEqual({
     ...f.state,
-    authorizationCompletionsReconciled: true,
     pendingRequests: [],
   });
   expect(f.starts).toEqual([0, 3]);
   expect(f.onEvent).not.toHaveBeenCalled();
   expect(f.onPrivateEvent).not.toHaveBeenCalled();
+  const persistedCheckpoint = JSON.stringify(result.nativeObservationState);
+  expect(nativeObservationStateSchema.parse(JSON.parse(persistedCheckpoint))).toEqual(
+    result.nativeObservationState,
+  );
+  expect(result.nativeObservationState).not.toHaveProperty("authorizationCompletionsReconciled");
   f.starts.length = 0;
   await f.observe({ ...f.input, nativeObservationState: result.nativeObservationState });
   expect(f.starts).toEqual([3]);
@@ -214,16 +217,7 @@ it.each(["wrong-attempt", "changed-request"])(
     }
     const result = await f.observe({ ...f.input, nativeObservationState: f.state });
     expect(result.pendingRequests).toEqual(f.state.pendingRequests);
-    if (mismatch === "changed-request") {
-      expect(result.nativeObservationState).not.toHaveProperty(
-        "authorizationCompletionsReconciled",
-      );
-    } else {
-      expect(result.nativeObservationState).toHaveProperty(
-        "authorizationCompletionsReconciled",
-        true,
-      );
-    }
+    expect(result.nativeObservationState).not.toHaveProperty("authorizationCompletionsReconciled");
   },
 );
 
@@ -234,7 +228,7 @@ it("reconciles a stable attempt completed during a resumed turn", async () => {
   f.native[1] = completion;
   const result = await f.observe({ ...f.input, nativeObservationState: f.state });
   expect(result.pendingRequests).toEqual([]);
-  expect(result.nativeObservationState).toHaveProperty("authorizationCompletionsReconciled", true);
+  expect(result.nativeObservationState).not.toHaveProperty("authorizationCompletionsReconciled");
 });
 
 it("ignores unrelated unmatched completion while settling the exact retained attempt", async () => {
@@ -242,7 +236,7 @@ it("ignores unrelated unmatched completion while settling the exact retained att
   f.native[2] = authorizationCompleted("unrelated-attempt");
   const result = await f.observe({ ...f.input, nativeObservationState: f.state });
   expect(result.pendingRequests).toEqual([]);
-  expect(result.nativeObservationState).toHaveProperty("authorizationCompletionsReconciled", true);
+  expect(result.nativeObservationState).not.toHaveProperty("authorizationCompletionsReconciled");
   expect(f.onEvent).not.toHaveBeenCalled();
   expect(f.onPrivateEvent).not.toHaveBeenCalled();
 });
@@ -258,6 +252,24 @@ it("reconciles matching targets independently while retaining an ambiguous sibli
   const result = await f.observe({ ...f.input, nativeObservationState: f.state });
   expect(result.pendingRequests.map(({ requestId }) => requestId)).toEqual(["unknown-sibling"]);
   expect(result.nativeObservationState).not.toHaveProperty("authorizationCompletionsReconciled");
+});
+
+it("rechecks original history while an authorization remains pending without persisting a marker", async () => {
+  const f = await authorizationFixture();
+  f.native[1] = authorizationCompleted("another-attempt");
+  const first = await f.observe({ ...f.input, nativeObservationState: f.state });
+  const second = await f.observe({
+    ...f.input,
+    nativeObservationState: first.nativeObservationState,
+  });
+  expect(second.pendingRequests).toEqual(f.state.pendingRequests);
+  expect(f.starts).toEqual([0, 3, 0, 3]);
+  expect(nativeObservationStateSchema.parse(second.nativeObservationState)).toEqual(
+    second.nativeObservationState,
+  );
+  expect(second.nativeObservationState).not.toHaveProperty("authorizationCompletionsReconciled");
+  expect(f.onPrivateEvent).not.toHaveBeenCalled();
+  expect(f.onEvent).not.toHaveBeenCalled();
 });
 
 it("resumes new attempts and questions at the old native cursor", async () => {
@@ -278,7 +290,6 @@ it.each(["question", "approval"] as const)(
   "does not clear a %s whose ID matches an authorization completion",
   async (kind) => {
     const f = await authorizationFixture();
-    f.state.authorizationCompletionsReconciled = true;
     f.state.pendingRequests = [
       { allowFreeform: kind === "question", kind, requestId: "old-auth", title: "Choose" },
     ];
@@ -307,7 +318,7 @@ it("keeps product questions and resource approvals while reconciling only old au
   const result = await f.observe({ ...f.input, nativeObservationState: f.state });
   expect(result.pendingRequests).toEqual([questionRequest, approvalRequest]);
   expect(result.status).toBe("input_required");
-  expect(result.nativeObservationState).toHaveProperty("authorizationCompletionsReconciled", true);
+  expect(result.nativeObservationState).not.toHaveProperty("authorizationCompletionsReconciled");
   expect(f.onPrivateEvent).not.toHaveBeenCalled();
   expect(f.onEvent).not.toHaveBeenCalled();
 });

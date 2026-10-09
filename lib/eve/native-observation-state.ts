@@ -26,7 +26,6 @@ export type ArtifactReadbackState = z.infer<typeof artifactReadbackStateSchema>;
 export const nativeObservationStateSchema = z.strictObject({
   adapterSessionId: z.string().min(1),
   artifactReadback: artifactReadbackStateSchema,
-  authorizationCompletionsReconciled: z.literal(true).optional(),
   boundary: sessionStatusSchema,
   currentTurnId: z.string().optional(),
   invalidInput: z.boolean(),

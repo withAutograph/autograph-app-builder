@@ -305,7 +305,6 @@ describe("paged hosted session observation", () => {
           : f.observeSessionPaged(replacement));
         const observed = nativeObservationStateSchema.parse({
           ...input.nativeObservationState,
-          authorizationCompletionsReconciled: true,
           pendingRequests: [],
         });
         return {

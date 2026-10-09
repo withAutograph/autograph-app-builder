@@ -634,7 +634,7 @@ const createArtifactReadbackClassifier = (sessionId: string, seed?: ArtifactRead
 const reconcileHistoricalAuthorizations = async (
   input: Parameters<typeof streamSameOriginEveEvents>[0],
   state: NativeObservationState,
-): Promise<{ complete: boolean; requests: PublicInputRequest[] }> => {
+): Promise<PublicInputRequest[]> => {
   const original = state.pendingRequests;
   const history = new Map<
     string,
@@ -674,24 +674,21 @@ const reconcileHistoricalAuthorizations = async (
       count += 1;
     }
     if (tail === undefined || count !== tail + 1 || count < state.nextNativeIndex) {
-      return { complete: false, requests: original };
+      return original;
     }
-    let complete = true;
-    const requests = original.filter((request) => {
+    return original.filter((request) => {
       if (request.kind !== "authorization") {
         return true;
       }
       const required = history.get(request.requestId);
       if (!isDeepStrictEqual(required?.request, request)) {
-        complete = false;
         return true;
       }
       return required?.completed !== true;
     });
-    return { complete, requests };
   } catch {
     // Missing or incomplete original history cannot settle a retained authorization.
-    return { complete: false, requests: original };
+    return original;
   }
 };
 
@@ -734,17 +731,11 @@ export async function observeSameOriginEveStream(
       throw new Error("Native observer state belongs to another adapter session.");
     }
     let retainedRequests = state?.pendingRequests ?? [];
-    let authorizationCompletionsReconciled =
-      state === undefined ||
-      state.authorizationCompletionsReconciled === true ||
-      !retainedRequests.some((request) => request.kind === "authorization");
-    if (state !== undefined && !authorizationCompletionsReconciled) {
-      const reconciliation = await reconcileHistoricalAuthorizations(
-        { ...input, readSignal },
-        state,
-      );
-      retainedRequests = reconciliation.requests;
-      authorizationCompletionsReconciled = reconciliation.complete;
+    if (
+      state !== undefined &&
+      retainedRequests.some((request) => request.kind === "authorization")
+    ) {
+      retainedRequests = await reconcileHistoricalAuthorizations({ ...input, readSignal }, state);
     }
     const pending = new Map<string, PublicInputRequest>(
       retainedRequests.map((request) => [request.requestId, request]),
@@ -898,7 +889,6 @@ export async function observeSameOriginEveStream(
       ...(nativeTailIndex === undefined ? {} : { nativeTailIndex }),
       nativeObservationState: nativeObservationStateSchema.parse({
         adapterSessionId: input.sessionId,
-        ...(authorizationCompletionsReconciled ? { authorizationCompletionsReconciled: true } : {}),
         artifactReadback: artifactReadback.checkpoint(),
         boundary,
         invalidInput,
