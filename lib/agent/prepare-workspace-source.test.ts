@@ -1,17 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { repositoryAccessReceiptSchema } from "./repository-access-state";
 import prepareWorkspace from "../../agent/tools/prepare_workspace";
 
 const mocks = vi.hoisted(() => ({
   acquire: vi.fn(),
+  getSandbox: vi.fn(),
   guard: vi.fn(),
   inspectGitHub: vi.fn(),
+  repositoryAccess: vi.fn(),
   source: { phase: "empty" } as {
     phase: string;
     receipt?: Record<string, unknown>;
     githubSource?: Record<string, unknown>;
   },
   update: vi.fn(),
-  workflow: { phase: "empty" } as { phase: string; githubSource?: Record<string, unknown> },
+  workflow: { phase: "empty" } as {
+    phase: string;
+    githubSource?: Record<string, unknown>;
+    sourceReceipt?: Record<string, unknown>;
+    workspace?: Record<string, unknown>;
+  },
   workspace: { workspaceId: "sandbox", workspacePath: "/workspace/repository" },
 }));
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
@@ -21,6 +29,12 @@ vi.mock("./source-bound-sandbox", () => ({
 }));
 vi.mock("../../agent/tools/source_status", () => ({ default: { execute: mocks.acquire } }));
 vi.mock("./source-state", () => ({ sourceWorkflowState: { get: () => mocks.source } }));
+vi.mock("./repository-access-state", async (importOriginal) => {
+  const original = await importOriginal<{
+    repositoryAccessReceiptSchema: typeof repositoryAccessReceiptSchema;
+  }>();
+  return { ...original, repositoryAccessReceiptState: { get: mocks.repositoryAccess } };
+});
 vi.mock("./workflow-state", () => ({
   APP_BUILDER_WORKFLOW_VERSION: 17,
   appBuilderWorkflowState: { get: () => mocks.workflow },
@@ -54,7 +68,7 @@ const execute = () =>
     {
       abortSignal: new AbortController().signal,
       callId: "prepare",
-      getSandbox: vi.fn().mockResolvedValue({ id: "sandbox" }),
+      getSandbox: mocks.getSandbox,
       getToken: vi.fn(),
       requireAuth: (): never => {
         throw new Error("Unexpected auth request");
@@ -72,6 +86,8 @@ describe("hosted workspace source acquisition", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.guard.mockReset();
+    mocks.getSandbox.mockReset().mockResolvedValue({ id: "sandbox" });
+    mocks.repositoryAccess.mockReset();
     mocks.source = { phase: "empty" };
     mocks.workflow = { phase: "empty" };
     mocks.inspectGitHub.mockResolvedValue(mocks.workspace);
@@ -131,6 +147,42 @@ describe("hosted workspace source acquisition", () => {
     };
     await expect(execute()).rejects.toThrow("different GitHub repositories or branches");
     expect(mocks.inspectGitHub).not.toHaveBeenCalled();
+  });
+  it("blocks a lost accepted binding without saved access before opening the checkout", async () => {
+    const githubSource = {
+      digest: "saved-source",
+      repository: { name: "app", owner: "example", repositoryId: "owned" },
+      resolvedByCallId: "original-resolution",
+      resolvedRef: "refs/heads/main",
+      resolvedSha: "saved-sha",
+      resolvedTree: "saved-tree",
+    };
+    const receipt = {
+      digest: "original-receipt",
+      sourceSha: "saved-sha",
+      sourceTree: "saved-tree",
+      version: 3,
+    };
+    mocks.source = { githubSource, phase: "reviewed", receipt };
+    // SAFETY: this harness deliberately retains only fields read by the binding guard.
+    mocks.workflow = {
+      phase: "applied",
+      sourceReceipt: receipt,
+      workspace: { sourceSha: "saved-sha", sourceTree: "saved-tree", workspaceId: "sandbox" },
+    };
+    const diagnostic = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await expect(execute()).rejects.toMatchObject({
+        code: "saved_github_binding_provenance_unavailable",
+        diagnostics: { accessReceiptPresent: false, stage: "prepare-workspace" },
+      });
+      expect(mocks.repositoryAccess).toHaveBeenCalledOnce();
+      expect(mocks.getSandbox).not.toHaveBeenCalled();
+      expect(mocks.inspectGitHub).not.toHaveBeenCalled();
+      expect(mocks.update).not.toHaveBeenCalled();
+    } finally {
+      diagnostic.mockRestore();
+    }
   });
   it("retains the mutation authority check before source acquisition", async () => {
     mocks.guard.mockImplementation(() => {
