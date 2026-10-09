@@ -26,6 +26,7 @@ const stage = z.enum([
   "callback",
   "provider_token",
   "provider_start",
+  "provider_start_projection",
 ]);
 const outcome = z.enum([
   "started",
@@ -91,6 +92,23 @@ const metadata = z.strictObject({
     .optional(),
   boundary,
   callerWorkload: operatorCallerWorkloadSchema.optional(),
+  challengeProjection: z
+    .strictObject({
+      deviceCodeValid: z.boolean(),
+      expiresAtValid: z.boolean(),
+      failure: z
+        .enum([
+          "response_invalid",
+          "url_missing",
+          "url_invalid",
+          "device_code_invalid",
+          "expiry_invalid",
+        ])
+        .optional(),
+      urlPresent: z.boolean(),
+      urlValid: z.boolean(),
+    })
+    .optional(),
   httpStatus: z.number().int().min(100).max(599).optional(),
   nativeNotFound: z.boolean().optional(),
   outcome,

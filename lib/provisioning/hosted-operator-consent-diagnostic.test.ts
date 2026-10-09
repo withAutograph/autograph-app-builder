@@ -18,6 +18,52 @@ const value: HostedOperatorConsentMetadata = {
 };
 
 describe("closed Neon consent diagnostics", () => {
+  it("accepts only closed projection flags and failure reasons without SDK fields", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const report = createHostedOperatorConsentDiagnostic(secret, sink);
+    const flags = {
+      deviceCodeValid: true,
+      expiresAtValid: true,
+      urlPresent: true,
+      urlValid: true,
+    };
+    for (const failure of [
+      "response_invalid",
+      "url_missing",
+      "url_invalid",
+      "device_code_invalid",
+      "expiry_invalid",
+    ] as const) {
+      report({
+        ...value,
+        challengeProjection: { ...flags, failure },
+        stage: "provider_start_projection",
+      });
+    }
+    report({ ...value, challengeProjection: flags, stage: "provider_start_projection" });
+    expect(sink).toHaveBeenCalledTimes(6);
+    for (const field of [
+      "deviceCodeValid",
+      "expiresAtValid",
+      "urlPresent",
+      "urlValid",
+      "failure",
+      "url",
+      "request",
+      "verifier",
+      "body",
+      "cause",
+      "message",
+    ]) {
+      report({
+        ...value,
+        challengeProjection: { ...flags, [field]: secret },
+        stage: "provider_start_projection",
+      });
+    }
+    expect(sink).toHaveBeenCalledTimes(6);
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
   it.each(["database", "handoff", "session", "membership"] as const)(
     "accepts only a closed %s import label and fixed Node error codes",
     (module) => {
