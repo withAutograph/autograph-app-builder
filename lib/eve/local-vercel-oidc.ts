@@ -40,14 +40,6 @@ const assertOwnerNonWritable = (path: string): void => {
   }
 };
 
-const assertOwnerBoundDirectory = (path: string): void => {
-  const stat = lstatSync(path);
-  if (!stat.isDirectory() || stat.isSymbolicLink()) {
-    throw new Error("Installed Eve input was not an owner-bound directory.");
-  }
-  assertOwnerNonWritable(path);
-};
-
 const isContainedPath = (parent: string, candidate: string): boolean => {
   const relativeCandidate = nodePath.relative(parent, candidate);
   return (
@@ -93,22 +85,33 @@ const assertOwnerBoundResolvedDirectory = (path: string, packageRoot = path): vo
   }
 };
 
+const resolveOwnerBoundNodeModules = (repositoryRoot: string): string => {
+  assertOwnerBoundResolvedDirectory(repositoryRoot);
+  const nodeModulesLink = nodePath.join(repositoryRoot, "node_modules");
+  const nodeModulesLinkStat = lstatSync(nodeModulesLink);
+  if (nodeModulesLinkStat.uid !== process.getuid?.()) {
+    throw new Error(OWNER_BOUND_INPUT_ERROR);
+  }
+  if (!nodeModulesLinkStat.isSymbolicLink() && !nodeModulesLinkStat.isDirectory()) {
+    throw new Error("Installed Eve input was not an owner-bound directory.");
+  }
+  const nodeModules = realpathSync(nodeModulesLink);
+  assertOwnerBoundResolvedDirectory(nodeModules);
+  return nodeModules;
+};
+
 export const resolveInstalledEveCli = (repositoryRootInput: string): string => {
   const repositoryRoot = realpathSync(repositoryRootInput);
   if (repositoryRoot !== nodePath.resolve(repositoryRootInput)) {
     throw new Error("Repository root was not canonical.");
   }
-  const nodeModules = nodePath.join(repositoryRoot, "node_modules");
+  const nodeModules = resolveOwnerBoundNodeModules(repositoryRoot);
   const packageLink = nodePath.join(nodeModules, "eve");
-  assertOwnerBoundDirectory(nodeModules);
   const packageLinkStat = lstatSync(packageLink);
   if (packageLinkStat.uid !== process.getuid?.()) {
     throw new Error(OWNER_BOUND_INPUT_ERROR);
   }
   if (!packageLinkStat.isSymbolicLink() && !packageLinkStat.isDirectory()) {
-    throw new Error("Installed Eve package link was invalid.");
-  }
-  if (realpathSync(nodePath.dirname(packageLink)) !== nodePath.dirname(packageLink)) {
     throw new Error("Installed Eve package link was invalid.");
   }
 

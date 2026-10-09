@@ -1,8 +1,10 @@
 import {
   chmodSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   realpathSync,
+  renameSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -255,6 +257,31 @@ describe("installed Eve command identity", () => {
     expect(() => resolveInstalledEveCli(root)).toThrow();
   });
 
+  it("resolves an owned external node_modules cache without changing the declared package or bin", () => {
+    const fixture = installedEveFixture();
+    const cache = mkdtempSync(path.join(tmpdir(), "eve-node-modules-cache-"));
+    const cachedModules = path.join(cache, "node_modules");
+    const nodeModulesLink = path.join(fixture.root, "node_modules");
+    renameSync(nodeModulesLink, cachedModules);
+    symlinkSync(cachedModules, nodeModulesLink);
+    expect(resolveInstalledEveCli(fixture.root)).toBe(
+      realpathSync(
+        path.join(cachedModules, `.pnpm/${realPnpmStoreEntry}/node_modules/eve/bin/eve.js`),
+      ),
+    );
+    chmodSync(cache, 0o777);
+    expect(() => resolveInstalledEveCli(fixture.root)).toThrow("owner-bound");
+  });
+  it("rejects an external cache target owned by another account", () => {
+    const fixture = installedEveFixture();
+    const cache = mkdtempSync(path.join(tmpdir(), "eve-foreign-cache-"));
+    const nodeModulesLink = path.join(fixture.root, "node_modules");
+    renameSync(nodeModulesLink, path.join(cache, "node_modules"));
+    const foreignDirectory = path.parse(fixture.root).root;
+    expect(lstatSync(foreignDirectory).uid).not.toBe(process.getuid?.());
+    symlinkSync(foreignDirectory, nodeModulesLink);
+    expect(() => resolveInstalledEveCli(fixture.root)).toThrow("owner-bound");
+  });
   it("accepts a package-manager cache outside the repository when owner-bound", () => {
     const fixture = installedEveFixture({ outsideCache: true });
     expect(resolveInstalledEveCli(fixture.root)).toBe(realpathSync(fixture.cli));
