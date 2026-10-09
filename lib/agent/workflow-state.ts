@@ -13,6 +13,7 @@ import type {
 } from "@/lib/repository/target-validation";
 import type { ReviewedChangeSetReceipt } from "@/lib/repository/reviewed-change-set";
 import type { GitHubDestinationReviewBinding } from "@/lib/repository/github-destination-review";
+import type { ChangeSetReviewCursor } from "./change-set-review-pages";
 import type { ExistingDraftUpdateProposal } from "@/lib/repository/github-draft-update";
 import type { SourceReceipt } from "@/lib/repository/source-receipt";
 import type {
@@ -190,8 +191,8 @@ export interface GitHubDestinationReviewReadProgress {
   afterComplete: boolean;
   beforeReadable?: boolean;
   afterReadable?: boolean;
-  beforeCursor?: { digest: string; offsetBytes: number; path: string; side?: "before" | "after" };
-  afterCursor?: { digest: string; offsetBytes: number; path: string; side?: "before" | "after" };
+  beforeCursor?: ChangeSetReviewCursor;
+  afterCursor?: ChangeSetReviewCursor;
 }
 
 interface InitialDestinationReviewPhase {

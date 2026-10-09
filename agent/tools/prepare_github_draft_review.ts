@@ -11,6 +11,7 @@ import {
 import { createGitHubDestinationReviewBinding } from "@/lib/repository/github-destination-review";
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
+import { checkedNativeToolResult } from "@/lib/eve/payload-envelope";
 
 export default defineTool({
   description:
@@ -61,17 +62,25 @@ export default defineTool({
       operation: "destination review preparation",
       transition: () => invalidateGitHubDestinationReview(state, binding),
     });
-    return {
-      branch: binding.repository.defaultBranch,
-      candidatePaths: binding.candidatePaths,
-      destinationReviewDigest: binding.digest,
-      destinationSha: binding.repository.headSha,
-      destinationTree: binding.repository.headTree,
-      next: "Review change_set_status with includeContent=true and contentSide before and after, then accept_change_set before sealing and approving publication.",
-      originalSourceSha: state.githubSource.resolvedSha,
-      repository: `${binding.repository.owner}/${binding.repository.name}`,
-      status: "destination-review-required",
-    };
+    return checkedNativeToolResult(
+      {
+        branch: binding.repository.defaultBranch,
+        candidatePathCount: binding.candidatePaths.length,
+        destinationReviewDigest: binding.digest,
+        destinationReviewReference: {
+          digest: binding.digest,
+          kind: "current-session-destination-review",
+          sessionId: ctx.session.id,
+        },
+        destinationSha: binding.repository.headSha,
+        destinationTree: binding.repository.headTree,
+        next: "Review change_set_status with includeContent=true and contentSide before and after, then accept_change_set before sealing and approving publication.",
+        originalSourceSha: state.githubSource.resolvedSha,
+        repository: `${binding.repository.owner}/${binding.repository.name}`,
+        status: "destination-review-required",
+      },
+      { callId: ctx.callId, toolName: "prepare_github_draft_review", turnId: ctx.session.turn.id },
+    );
   },
   inputSchema: z.strictObject({}),
 });

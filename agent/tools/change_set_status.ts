@@ -22,8 +22,11 @@ import {
   deriveDestinationChanges,
 } from "@/lib/repository/github-destination-review";
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
+import { readChangeSetReviewPage } from "@/lib/agent/change-set-review-pages";
+import type { ChangeSetReviewCursor } from "@/lib/agent/change-set-review-pages";
+import { checkedNativeToolResult, largestUtf8PayloadChunk } from "@/lib/eve/payload-envelope";
+import { readCurrentOwnedReviewDetails } from "@/lib/agent/review-detail-pages";
 import type { SourceKind } from "@/lib/repository/source-receipt";
-import { largestUtf8PayloadChunk } from "@/lib/eve/payload-envelope";
 
 const isExistingRepositorySource = (sourceKind: SourceKind): boolean =>
   sourceKind === "existing-repository";
@@ -39,12 +42,7 @@ export const isCandidateExportTextPath = (path: string): boolean => {
 
 type ChangePath = Pick<OverlayChange, "path" | "kind" | "after">;
 type ChangeSetExportEnvelope = ReturnType<typeof deriveNormalizedChangeSet>;
-interface ChangeSetExportCursor {
-  digest: string;
-  offsetBytes: number;
-  path: string;
-  side?: "before" | "after";
-}
+type ChangeSetExportCursor = ChangeSetReviewCursor;
 interface ExportFile {
   content: string;
   digest: string;
@@ -207,7 +205,7 @@ export const destinationReviewReadProgress = (input: {
   const expected = input.side === "before" ? previous.beforeCursor : previous.afterCursor;
   if (
     input.cursor !== undefined &&
-    !(["digest", "offsetBytes", "path", "side"] as const).every(
+    !(["digest", "offsetBytes", "path", "side", "changeIndex", "changeSetDigest"] as const).every(
       (key) => input.cursor?.[key] === expected?.[key],
     )
   ) {
@@ -461,7 +459,7 @@ const exportAppliedTextFiles = async (input: {
 
 export default defineTool({
   description:
-    "Summarize changes after repository validation succeeds, or export the applied source for diagnosis when validation fails. A failed change set is explicitly unreviewed and cannot be accepted. This never publishes or changes an external repository.",
+    "Read one bounded page of the complete change metadata and optional source content after validation. Continue with the returned contentCursor using the same contentSide and includeContent until no cursor remains. Read destination before and after sides from their first page with includeContent=true before acceptance; metadata-only pages do not complete either side. Use view=acceptance after acceptance to read the full saved receipt and product/source evidence as UTF-8-safe JSON chunks using detailCursor and the returned session references. Failed validation remains explicitly unreviewed and cannot be accepted. This never publishes or changes an external repository.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (
@@ -470,6 +468,27 @@ export default defineTool({
       state.phase !== "validation_failed"
     ) {
       throw new Error("Run the repository validation before reviewing its changes.");
+    }
+    const metadata = {
+      callId: ctx.callId,
+      toolName: "change_set_status",
+      turnId: ctx.session.turn.id,
+    };
+    if (input.view === "acceptance") {
+      if (state.phase !== "reviewed") {
+        throw new Error("Accept the current change set before reading its stored review details.");
+      }
+      return checkedNativeToolResult(
+        readCurrentOwnedReviewDetails({
+          cursor: input.detailCursor,
+          expectedReviewDigest: input.expectedReviewDigest,
+          metadata,
+          sessionId: ctx.session.id,
+          sourceAssessmentBindingDigest: input.sourceAssessmentBindingDigest,
+          state,
+        }),
+        metadata,
+      );
     }
     const sandbox = await ctx.getSandbox();
     if (state.phase === "validation_failed") {
@@ -480,12 +499,15 @@ export default defineTool({
           validationFailure: state.validationFailure,
         };
       }
-      return {
-        ...(await exportAppliedTextFiles({ cursor: input.contentCursor, sandbox, state })),
-        reviewed: false,
-        status: "validation_failed" as const,
-        validationFailure: state.validationFailure,
-      };
+      return checkedNativeToolResult(
+        {
+          ...(await exportAppliedTextFiles({ cursor: input.contentCursor, sandbox, state })),
+          reviewed: false,
+          status: "validation_failed" as const,
+          validationFailure: state.validationFailure,
+        },
+        metadata,
+      );
     }
     const changeSet = await exactNormalizedChangeSet({ sandbox, state });
     const destination = state.githubDestinationReview;
@@ -493,32 +515,43 @@ export default defineTool({
       input.includeContent && input.contentSide === "before"
         ? await githubPublicationRuntimeForSession(ctx.session.auth)
         : undefined;
-    const exported = input.includeContent
-      ? await exportAppliedTextFiles({
-          contentSide: input.contentSide,
-          cursor: input.contentCursor,
-          envelope: changeSet,
-          readBeforeText:
-            runtime?.readDraftDestinationFile === undefined || destination === undefined
-              ? undefined
-              : async (path) => {
-                  const file = await runtime.readDraftDestinationFile?.({
-                    binding: destination,
-                    path,
-                  });
-                  if (file === undefined) {
-                    return null;
-                  }
-                  if (file === null) {
-                    return null;
-                  }
-                  return Buffer.from(file.bytes).toString("utf-8");
-                },
-          sandbox,
-          state,
-        })
-      : undefined;
-    if (destination !== undefined && exported !== undefined) {
+    if (input.includeContent && input.contentSide === "before" && destination === undefined) {
+      throw new Error("Prepare the destination review before reading its before content.");
+    }
+    const exported = await readChangeSetReviewPage({
+      changeSet,
+      cursor: input.contentCursor,
+      includeContent: input.includeContent,
+      isTextPath: isCandidateExportTextPath,
+      metadata,
+      publicationDestination:
+        destination === undefined
+          ? undefined
+          : {
+              branch: destination.repository.defaultBranch,
+              headSha: destination.repository.headSha,
+              headTree: destination.repository.headTree,
+              repository: `${destination.repository.owner}/${destination.repository.name}`,
+            },
+      readText: async (path) => {
+        if (input.contentSide === "before" && destination !== undefined) {
+          if (runtime?.readDraftDestinationFile === undefined) {
+            throw new Error(
+              "The GitHub runtime does not support immutable destination content reads.",
+            );
+          }
+          const file = await runtime.readDraftDestinationFile({ binding: destination, path });
+          return file === null ? null : Buffer.from(file.bytes).toString("utf-8");
+        }
+        return await sandbox.readTextFile({
+          path: `${state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "")}/${path}`,
+        });
+      },
+      reviewed: state.phase === "reviewed",
+      sessionId: ctx.session.id,
+      side: input.contentSide,
+    });
+    if (destination !== undefined && input.includeContent) {
       const progress = destinationReviewReadProgress({
         changeSetDigest: changeSet.digest,
         cursor: input.contentCursor,
@@ -535,33 +568,16 @@ export default defineTool({
         transition: (latest) => ({ ...latest, githubDestinationReviewRead: progress }),
       });
     }
-    return {
-      ...changeSet,
-      ...(destination === undefined
-        ? {}
-        : {
-            publicationDestination: {
-              branch: destination.repository.defaultBranch,
-              headSha: destination.repository.headSha,
-              headTree: destination.repository.headTree,
-              repository: `${destination.repository.owner}/${destination.repository.name}`,
-            },
-          }),
-      reviewed: state.phase === "reviewed",
-      ...(exported === undefined
-        ? {}
-        : {
-            absentPaths: exported.absentPaths,
-            contentCursor: exported.contentCursor,
-            contentSide: input.contentSide,
-            exportFiles: exported.exportFiles,
-            exportOmissions: exported.exportOmissions,
-          }),
-    };
+    return checkedNativeToolResult(exported, metadata);
   },
   inputSchema: z.strictObject({
     contentCursor: z
       .strictObject({
+        changeIndex: z.number().int().nonnegative().optional(),
+        changeSetDigest: z
+          .string()
+          .regex(/^[0-9a-f]{64}$/u)
+          .optional(),
         digest: z.string().regex(/^[0-9a-f]{64}$/u),
         offsetBytes: z.number().int().nonnegative(),
         path: z.string().min(1),
@@ -569,6 +585,21 @@ export default defineTool({
       })
       .optional(),
     contentSide: z.enum(["before", "after"]).default("after"),
+    detailCursor: z
+      .strictObject({
+        digest: z.string().regex(/^[0-9a-f]{64}$/u),
+        offsetBytes: z.number().int().nonnegative(),
+      })
+      .optional(),
+    expectedReviewDigest: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/u)
+      .optional(),
     includeContent: z.boolean().default(false),
+    sourceAssessmentBindingDigest: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/u)
+      .optional(),
+    view: z.enum(["changes", "acceptance"]).default("changes"),
   }),
 });

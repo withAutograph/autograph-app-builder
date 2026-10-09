@@ -202,6 +202,24 @@ against a newer branch head cannot repair stale file preimages. The provider
 still rejects overlapping upstream changes or changed preimages before writes,
 and publication still needs a separate approval for the newly sealed proposal.
 
+Review output pages both change metadata and source content within the native
+Eve event frame. Continue each side using its returned `contentCursor`; metadata
+pages do not replace full before/after reads. Page boundaries preserve UTF-8
+bytes and defer the next complete change when its metadata/content cannot fit
+after the current page. Missing text remains unreadable across the entire
+cursor chain until that side is restarted. Binary artifacts retain their
+metadata and explicit content omission.
+
+Preparation and acceptance return compact current-session references rather
+than repeating complete path lists, receipts, walkthroughs, and evidence. Their
+authoritative data remains in the authenticated session state. After acceptance,
+`change_set_status` with `view: "acceptance"` exposes full receipt and product
+evidence as reconstructable JSON chunks through `detailCursor`. References and
+cursors never select another session or supply repository authority. Native
+frame diagnostics contain only event type, tool name, byte count, and envelope
+size. Physical page sizing retains the existing provider ceiling and imposes
+no total app/file-size limit.
+
 The separate web handoff provisioning path is gated by
 `builder-resource-provisioning`. It journals intent before provider calls,
 creates a public or private repository from the exact content-addressed
