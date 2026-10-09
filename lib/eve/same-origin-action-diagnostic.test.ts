@@ -6,19 +6,20 @@ import { observeSameOriginEveStream } from "./same-origin-http";
 import type { NativeObservationState } from "./native-observation-state";
 
 const secret = "private-owner/repository bearer-secret postgres://private:password@host/db";
-const requested = (toolName: string): MessageStreamEvent => ({
+type RequestedEvent = Extract<MessageStreamEvent, { type: "actions.requested" }>;
+type ResultEvent = Extract<MessageStreamEvent, { type: "action.result" }>;
+
+const requested = (toolName: string): RequestedEvent => ({
   data: {
     actions: [{ callId: secret, input: { secret }, kind: "tool-call", toolName }],
     sequence: 1,
     stepIndex: 1,
     turnId: secret,
   },
+  meta: { at: "2026-10-09T14:00:00.000Z", id: secret },
   type: "actions.requested",
 });
-const result = (
-  toolName: string,
-  status: "completed" | "failed" | "rejected",
-): MessageStreamEvent => ({
+const result = (toolName: string, status: "completed" | "failed" | "rejected"): ResultEvent => ({
   data: {
     error: { code: secret, message: secret },
     result: { callId: secret, kind: "tool-result", output: secret, toolName },
@@ -27,6 +28,7 @@ const result = (
     stepIndex: 1,
     turnId: secret,
   },
+  meta: { at: "2026-10-09T14:00:01.000Z", id: secret },
   type: "action.result",
 });
 
