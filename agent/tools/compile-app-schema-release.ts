@@ -2,6 +2,14 @@ import { defineTool } from "eve/tools";
 import type { SandboxSession } from "eve/sandbox";
 import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled-operator-artifacts";
 import { z } from "zod";
+import { refreshPlanningSource } from "@/lib/agent/refresh-planning-source";
+import { invalidateProductBehaviorEvidence } from "@/lib/agent/product-behavior-state";
+import {
+  assertCompiledSchemaReleaseIdentity,
+  prepareCanonicalSchemaPredecessorsForSession,
+  SchemaPredecessorError,
+} from "@/lib/agent/schema-predecessor";
+import { rememberCanonicalSchemaRelease } from "@/lib/agent/schema-predecessor-state";
 
 import {
   APP_BUILDER_WORKFLOW_VERSION,
@@ -38,17 +46,18 @@ export const compileAppSchemaRelease = async (input: {
   sandbox: Pick<SandboxSession, "run">;
   signal?: AbortSignal;
   onCompiled?: () => Promise<void>;
+  environment?: Record<string, string>;
 }) => {
   const command = appSchemaReleaseCommand(input.appId);
   try {
-    const result =
-      input.signal === undefined
-        ? await input.sandbox.run({ command, workingDirectory: input.root })
-        : await input.sandbox.run({
-            abortSignal: input.signal,
-            command,
-            workingDirectory: input.root,
-          });
+    const request: Parameters<SandboxSession["run"]>[0] = { command, workingDirectory: input.root };
+    if (input.environment !== undefined) {
+      request.env = input.environment;
+    }
+    if (input.signal !== undefined) {
+      request.abortSignal = input.signal;
+    }
+    const result = await input.sandbox.run(request);
     const stdout = safeOutput(result.stdout);
     const stderr = safeOutput(result.stderr);
     if (result.exitCode !== 0) {
@@ -64,7 +73,18 @@ export const compileAppSchemaRelease = async (input: {
     if (input.onCompiled !== undefined) {
       try {
         await input.onCompiled();
-      } catch {
+      } catch (error) {
+        if (error instanceof SchemaPredecessorError) {
+          return {
+            code: error.code,
+            command,
+            exitCode: 0,
+            problem: error.message,
+            status: "failed" as const,
+            stderr,
+            stdout,
+          };
+        }
         return {
           command,
           exitCode: 0,
@@ -104,7 +124,6 @@ export default defineTool({
         "Compile the selected app schema only after the private app build is applied and before change review; rerun app validation afterward.",
       );
     }
-    const sandbox = await ctx.getSandbox();
     if (state.phase !== "applied") {
       updateExactWorkflow({
         expected: state,
@@ -126,21 +145,65 @@ export default defineTool({
         }),
       });
     }
+    invalidateProductBehaviorEvidence("source-repair");
+    const sandbox = await refreshPlanningSource(ctx, "schema-compilation");
+    const refreshed = appBuilderWorkflowState.get();
+    if (
+      refreshed.phase !== "applied" &&
+      refreshed.phase !== "validation_failed" &&
+      refreshed.phase !== "validated"
+    ) {
+      throw new Error("The approved app build is unavailable after shared source refresh.");
+    }
+    const session = {
+      adapterSessionId: ctx.session.id,
+      appId: refreshed.appSpec.appId,
+      appSpecDigest: refreshed.appSpec.digest,
+      callId: ctx.callId,
+      root: refreshed.applyReceipt.applyRoot,
+      sessionAuth: ctx.session.auth,
+      signal: ctx.abortSignal,
+    };
+    let prepared;
+    try {
+      prepared = await prepareCanonicalSchemaPredecessorsForSession({ ...session, sandbox });
+    } catch (error) {
+      return {
+        code: "canonical_schema_predecessor_unavailable" as const,
+        command: appSchemaReleaseCommand(session.appId),
+        exitCode: null,
+        problem:
+          error instanceof SchemaPredecessorError
+            ? error.message
+            : "The installed schema predecessor could not be read and restored under current owner/session authority. Retry this saved app after restoring its exact runtime and retained compiled artifact access.",
+        status: "failed" as const,
+        stderr: "",
+        stdout: "",
+      };
+    }
     return await compileAppSchemaRelease({
-      appId: state.appSpec.appId,
+      appId: session.appId,
+      environment: prepared.environment,
       onCompiled: async () => {
-        await publishCompiledOperatorArtifactsForSession({
-          adapterSessionId: ctx.session.id,
-          appId: state.appSpec.appId,
-          appSpecDigest: state.appSpec.digest,
-          callId: ctx.callId,
-          root: state.applyReceipt.applyRoot,
+        const result = await publishCompiledOperatorArtifactsForSession({
+          ...session,
+          onCaptured: async (compiled) => {
+            await assertCompiledSchemaReleaseIdentity({
+              appId: session.appId,
+              compiled,
+              prepared,
+              root: session.root,
+              sandbox,
+              signal: ctx.abortSignal,
+            });
+          },
           sandbox,
-          sessionAuth: ctx.session.auth,
-          signal: ctx.abortSignal,
         });
+        if (result.status === "published") {
+          rememberCanonicalSchemaRelease(result.selection);
+        }
       },
-      root: state.applyReceipt.applyRoot,
+      root: session.root,
       sandbox,
       signal: ctx.abortSignal,
     });

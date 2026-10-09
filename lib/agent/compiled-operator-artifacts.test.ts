@@ -148,6 +148,15 @@ describe("owned compiled artifact workflow hook", () => {
       ) => selection,
     );
   });
+  it("does not select a captured release rejected by the schema identity guard", async () => {
+    const input = frame();
+    const onCaptured = vi.fn().mockRejectedValue(new Error("schema_release_identity_reused"));
+    await expect(
+      publishCompiledOperatorArtifactsForSession({ ...input, onCaptured }),
+    ).rejects.toThrow("schema_release_identity_reused");
+    expect(onCaptured).toHaveBeenCalledOnce();
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
   it("captures all actual selected members and finalizes only under resolved owner/session", async () => {
     const input = frame();
     const result = await publishCompiledOperatorArtifactsForSession(input);

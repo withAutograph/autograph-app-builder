@@ -15,7 +15,14 @@ import {
 } from "../provisioning/hosted-operator-artifact-store";
 import type { OperatorArtifactContext } from "../provisioning/hosted-operator-artifact-store";
 import { createOperatorArtifactPublication } from "../provisioning/hosted-operator-artifacts";
-import { createPostgresOperatorArtifactSelections } from "../provisioning/hosted-operator-artifact-selection";
+import {
+  createPostgresOperatorArtifactSelections,
+  readExactCompiledOperatorRelease,
+} from "../provisioning/hosted-operator-artifact-selection";
+import type {
+  CompiledOperatorReleaseSelection,
+  ExactCompiledOperatorReleaseLookup,
+} from "../provisioning/hosted-operator-artifact-selection";
 import { describeSelectedApp } from "../repository/app-description";
 
 /** Validates an internal approved root before adapting the fixed repository-relative capture API. */
@@ -72,20 +79,18 @@ const openArtifactDatabase = async () => {
 };
 let database: ReturnType<typeof openArtifactDatabase> | null = null;
 
-/** Closed workflow hook. Public tool input cannot provide SQL, release paths, hashes or owner facts. */
-export const publishCompiledOperatorArtifactsForSession = async (input: {
+export interface CompiledOperatorArtifactSessionInput {
   appId: string;
   appSpecDigest: string;
   root: string;
   callId: string;
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The exact forwarded authority parser owns Eve's unknown auth boundary.
   sessionAuth: unknown;
   adapterSessionId: string;
-  sandbox: Pick<SandboxSession, "run" | "readBinaryFile">;
   signal?: AbortSignal;
-}) => {
+}
+
+const resolveCompiledArtifactSession = async (input: CompiledOperatorArtifactSessionInput) => {
   assertApprovedCompilation(input);
-  const relativeRoot = compiledArtifactSandboxRelativePath(input.root);
   const localAuthority = await readLocalOperatorArtifactAuthority();
   let context: OperatorArtifactContext;
   let assertCurrentOwner: (current: OperatorArtifactContext) => Promise<void>;
@@ -141,16 +146,13 @@ export const publishCompiledOperatorArtifactsForSession = async (input: {
     };
   }
   await assertCurrentOwner(context);
-  const description = await describeSelectedApp({
-    appId: input.appId,
-    root: input.root,
-    sandbox: input.sandbox,
-    signal: input.signal,
-  });
-  await assertCurrentOwner(context);
-  if (description.backend.kind === "static") {
-    return { status: "not-required" as const };
-  }
+  return { assertCurrentOwner, context, localAuthority };
+};
+
+const openCompiledArtifactStorage = async (
+  binding: Awaited<ReturnType<typeof resolveCompiledArtifactSession>>,
+) => {
+  const { assertCurrentOwner, localAuthority } = binding;
   let storage: Awaited<ReturnType<typeof createLocalOperatorArtifactStorage>>;
   if (localAuthority === undefined) {
     database ??= openArtifactDatabase();
@@ -175,6 +177,50 @@ export const publishCompiledOperatorArtifactsForSession = async (input: {
       authority: localAuthority,
     });
   }
+  return storage;
+};
+
+/** Read only the exact retained release named by actual installed identity or a saved owned reference. */
+export const readExactCompiledOperatorReleaseForSession = async (
+  input: CompiledOperatorArtifactSessionInput & { lookup: ExactCompiledOperatorReleaseLookup },
+) => {
+  const binding = await resolveCompiledArtifactSession(input);
+  const storage = await openCompiledArtifactStorage(binding);
+  return await readExactCompiledOperatorRelease({
+    assertCurrentOwner: binding.assertCurrentOwner,
+    context: binding.context,
+    lookup: input.lookup,
+    selections: storage.selections,
+    store: storage.store,
+  });
+};
+
+/** Closed workflow hook. Public tool input cannot provide SQL, release paths, hashes or owner facts. */
+export const publishCompiledOperatorArtifactsForSession = async (
+  input: CompiledOperatorArtifactSessionInput & {
+    sandbox: Pick<SandboxSession, "run" | "readBinaryFile">;
+    onCaptured?: (
+      captured: Pick<
+        CompiledOperatorReleaseSelection,
+        "artifactRef" | "releaseId" | "manifestSha256" | "schemaSha256"
+      >,
+    ) => Promise<void>;
+  },
+) => {
+  const relativeRoot = compiledArtifactSandboxRelativePath(input.root);
+  const binding = await resolveCompiledArtifactSession(input);
+  const { assertCurrentOwner, context } = binding;
+  const description = await describeSelectedApp({
+    appId: input.appId,
+    root: input.root,
+    sandbox: input.sandbox,
+    signal: input.signal,
+  });
+  await assertCurrentOwner(context);
+  if (description.backend.kind === "static") {
+    return { status: "not-required" as const };
+  }
+  const storage = await openCompiledArtifactStorage(binding);
   const publication = createOperatorArtifactPublication({
     assertCurrentOwner,
     store: storage.store,
@@ -198,6 +244,7 @@ export const publishCompiledOperatorArtifactsForSession = async (input: {
   });
   // Read every completed immutable member before recording a planner-visible selection.
   await publication.readGeneratedRelease(context, captured);
+  await input.onCaptured?.(captured);
   const selection = await storage.selections.record(context, input.callId, {
     ...captured,
     appId: input.appId,

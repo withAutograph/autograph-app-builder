@@ -4,8 +4,14 @@ import prepareWorkspace from "../../agent/tools/prepare_workspace";
 const mocks = vi.hoisted(() => ({
   acquire: vi.fn(),
   guard: vi.fn(),
-  source: { phase: "empty" } as { phase: string; receipt?: Record<string, unknown> },
+  inspectGitHub: vi.fn(),
+  source: { phase: "empty" } as {
+    phase: string;
+    receipt?: Record<string, unknown>;
+    githubSource?: Record<string, unknown>;
+  },
   update: vi.fn(),
+  workflow: { phase: "empty" } as { phase: string; githubSource?: Record<string, unknown> },
   workspace: { workspaceId: "sandbox", workspacePath: "/workspace/repository" },
 }));
 vi.mock("eve/tools", () => ({ defineTool: (value: unknown) => value }));
@@ -17,7 +23,7 @@ vi.mock("../../agent/tools/source_status", () => ({ default: { execute: mocks.ac
 vi.mock("./source-state", () => ({ sourceWorkflowState: { get: () => mocks.source } }));
 vi.mock("./workflow-state", () => ({
   APP_BUILDER_WORKFLOW_VERSION: 17,
-  appBuilderWorkflowState: { get: () => ({ phase: "empty" }) },
+  appBuilderWorkflowState: { get: () => mocks.workflow },
   assertUpstreamMutationAllowed: mocks.guard,
   updateExactWorkflow: mocks.update,
   workflowWorkspace: () => {},
@@ -35,7 +41,7 @@ vi.mock("../repository/supported-template", () => ({
   readPreparedSandboxWorkspaceRecord: () => Promise.resolve(mocks.workspace),
 }));
 vi.mock("../repository/sandbox-github-source", () => ({
-  inspectGitHubSourceSandboxWorkspace: vi.fn(),
+  inspectGitHubSourceSandboxWorkspace: mocks.inspectGitHub,
 }));
 
 const selectedSource = () => ({
@@ -67,6 +73,8 @@ describe("hosted workspace source acquisition", () => {
     vi.clearAllMocks();
     mocks.guard.mockReset();
     mocks.source = { phase: "empty" };
+    mocks.workflow = { phase: "empty" };
+    mocks.inspectGitHub.mockResolvedValue(mocks.workspace);
     mocks.acquire.mockImplementation(() => {
       mocks.source = selectedSource();
       return Promise.resolve(mocks.source);
@@ -83,6 +91,46 @@ describe("hosted workspace source acquisition", () => {
     await expect(execute()).resolves.toEqual(mocks.workspace);
     expect(mocks.source).toBe(selected);
     expect(mocks.acquire).not.toHaveBeenCalled();
+  });
+  it("prepares the original GitHub checkout after source inspection lost its GitHub slot", async () => {
+    const githubSource = {
+      digest: "accepted-source",
+      repository: { repositoryId: "owned" },
+      resolvedRef: "refs/heads/main",
+    };
+    mocks.source = selectedSource();
+    mocks.workflow = { githubSource, phase: "applied" };
+    await expect(execute()).resolves.toEqual(mocks.workspace);
+    expect(mocks.inspectGitHub).toHaveBeenCalledWith({ githubSource, sandbox: { id: "sandbox" } });
+    expect(mocks.acquire).not.toHaveBeenCalled();
+  });
+  it("retains accepted binding when the same branch has newer source metadata", async () => {
+    const githubSource = {
+      digest: "accepted-source",
+      repository: { repositoryId: "owned" },
+      resolvedRef: "refs/heads/main",
+    };
+    mocks.source = {
+      ...selectedSource(),
+      githubSource: { ...githubSource, digest: "new-head-observation" },
+    };
+    mocks.workflow = { githubSource, phase: "applied" };
+    await expect(execute()).resolves.toEqual(mocks.workspace);
+    expect(mocks.inspectGitHub).toHaveBeenCalledWith({ githubSource, sandbox: { id: "sandbox" } });
+  });
+  it("rejects a genuinely different repository or branch before opening the checkout", async () => {
+    const githubSource = {
+      digest: "accepted-source",
+      repository: { repositoryId: "owned" },
+      resolvedRef: "refs/heads/main",
+    };
+    mocks.workflow = { githubSource, phase: "applied" };
+    mocks.source = {
+      ...selectedSource(),
+      githubSource: { ...githubSource, resolvedRef: "refs/heads/another" },
+    };
+    await expect(execute()).rejects.toThrow("different GitHub repositories or branches");
+    expect(mocks.inspectGitHub).not.toHaveBeenCalled();
   });
   it("retains the mutation authority check before source acquisition", async () => {
     mocks.guard.mockImplementation(() => {

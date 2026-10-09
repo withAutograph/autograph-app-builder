@@ -10,6 +10,7 @@ import {
   workflowWorkspace,
 } from "@/lib/agent/workflow-state";
 import { sourceWorkflowState } from "@/lib/agent/source-state";
+import { selectedGitHubSourceForSandboxRestore } from "@/lib/agent/restore-selected-github-sandbox-source";
 import { SOURCE_RECEIPT_VERSION } from "@/lib/repository/source-receipt";
 import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
 import { assertExactImmutableGitHubSourceReceipt } from "@/lib/repository/github-publication";
@@ -38,8 +39,12 @@ export default defineTool({
         "Select the app source first: source_status for a new app or resolve_github_source for an existing GitHub app.",
       );
     }
-    if (!development && source.githubSource !== undefined) {
-      assertExactImmutableGitHubSourceReceipt(source.githubSource);
+    const githubSource = selectedGitHubSourceForSandboxRestore({
+      sourceState: source.githubSource,
+      workflowState: current.phase === "empty" ? undefined : current.githubSource,
+    });
+    if (!development && githubSource !== undefined) {
+      assertExactImmutableGitHubSourceReceipt(githubSource);
     }
     const sandbox = await getSourceBoundSandbox(ctx);
     let canonicalWorkspace;
@@ -53,9 +58,9 @@ export default defineTool({
       })();
     }
     let githubWorkspace;
-    if (!development && source.githubSource !== undefined) {
+    if (!development && githubSource !== undefined) {
       githubWorkspace = await inspectGitHubSourceSandboxWorkspace({
-        githubSource: source.githubSource,
+        githubSource,
         sandbox,
       });
     }
@@ -69,13 +74,13 @@ export default defineTool({
     if (
       !development &&
       current.phase !== "empty" &&
-      current.githubSource?.digest !== source.githubSource?.digest
+      current.githubSource?.digest !== githubSource?.digest
     ) {
       throw new Error("This app build already owns a different GitHub source binding.");
     }
     if (
       !development &&
-      source.githubSource === undefined &&
+      githubSource === undefined &&
       currentWorkspace !== undefined &&
       currentWorkspace.workspaceId !== getBuilderSandboxId(sandbox)
     ) {
@@ -114,7 +119,7 @@ export default defineTool({
         latest.phase === "empty" || latest.phase === "prepared"
           ? {
               artifacts: [],
-              ...(source.githubSource === undefined ? {} : { githubSource: source.githubSource }),
+              ...(githubSource === undefined ? {} : { githubSource }),
               phase: "prepared",
               preparedByCallId: ctx.callId,
               sourceReceipt: currentReceipt,

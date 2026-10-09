@@ -1,3 +1,8 @@
+import {
+  readExactCompiledOperatorRelease,
+  selectExactCompiledOperatorRelease,
+} from "./hosted-operator-artifact-selection";
+import type { OperatorArtifactSelections } from "./hosted-operator-artifact-selection";
 /* oxlint-disable unicorn/no-await-expression-member -- Concise assertions inspect the returned private release snapshots. */
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
@@ -112,6 +117,7 @@ const fixture = () => {
     },
   };
   return {
+    assertCurrentOwner,
     files,
     interrupt: (at: number) => {
       writes = 0;
@@ -125,9 +131,62 @@ const fixture = () => {
     },
     rows,
     source,
+    store,
   };
 };
 describe("immutable private operator artifacts", () => {
+  it("returns every actual predecessor member by recorded reference after source overwrite", async () => {
+    const f = fixture();
+    const oldBytes = Buffer.from(f.files["sql-bundle.sql"]);
+    const old = await f.publication.publishGeneratedRelease({
+      context,
+      description,
+      source: f.source,
+    });
+    f.files["sql-bundle.sql"] = Buffer.from("select 2;");
+    const next = await f.publication.publishGeneratedRelease({
+      context,
+      description,
+      source: f.source,
+    });
+    const original = {
+      ...old,
+      appId: "spend-review",
+      appSpecDigest: "a".repeat(64),
+      version: 1 as const,
+    };
+    const current = {
+      ...next,
+      appId: "spend-review",
+      appSpecDigest: "b".repeat(64),
+      version: 1 as const,
+    };
+    const selections: OperatorArtifactSelections = {
+      read: async () => await Promise.resolve(current),
+      readExact: async (_context, lookup) =>
+        await Promise.resolve(selectExactCompiledOperatorRelease([current, original], lookup)),
+      record: async (_context, _callId, selection) => await Promise.resolve(selection),
+    };
+    const input = {
+      assertCurrentOwner: f.assertCurrentOwner,
+      context,
+      lookup: { artifactRef: original.artifactRef },
+      selections,
+      store: f.store,
+    };
+    const captured = await readExactCompiledOperatorRelease(input);
+    expect(captured?.selection).toEqual(original);
+    expect(Object.keys(captured?.files ?? {})).toEqual([...GENERATED_RELEASE_MEMBERS]);
+    expect(captured?.files["sql-bundle.sql"]).toEqual(oldBytes);
+    await expect(
+      readExactCompiledOperatorRelease({
+        ...input,
+        context: { ...context, target: { ...context.target, sessionId: "other-session" } },
+      }),
+    ).rejects.toThrow();
+    f.revoke();
+    await expect(readExactCompiledOperatorRelease(input)).rejects.toThrow();
+  });
   it("captures actual source API fixed members, preserves both schema/manifest hashes and round-trips multi-chunk bytes", async () => {
     const f = fixture();
     const published = await f.publication.publishGeneratedRelease({
