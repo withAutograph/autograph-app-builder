@@ -130,8 +130,14 @@ describe("safe hosted read trace", () => {
       outcome: "failed",
       phase: "headers",
       phaseElapsedMs: 0,
+      prepareWorkspaceCompleted: 0,
+      prepareWorkspaceFailed: 0,
+      prepareWorkspaceRequested: 0,
       privateCallbacks: 0,
       publicSpoolEvents: 0,
+      resolveGithubSourceCompleted: 0,
+      resolveGithubSourceFailed: 0,
+      resolveGithubSourceRequested: 0,
       sessionIdHash: `sha256:${createHash("sha256").update(secret).digest("hex")}`,
     });
     expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);

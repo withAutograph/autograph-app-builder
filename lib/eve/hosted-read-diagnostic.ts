@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { z } from "zod";
+import type { MessageStreamEvent } from "eve/client";
 
 const phaseSchema = z.enum([
   "authority",
@@ -19,7 +20,39 @@ const counterSchema = z.enum([
   "decodedEvents",
   "privateCallbacks",
   "publicSpoolEvents",
+  "prepareWorkspaceRequested",
+  "prepareWorkspaceCompleted",
+  "prepareWorkspaceFailed",
+  "resolveGithubSourceRequested",
+  "resolveGithubSourceCompleted",
+  "resolveGithubSourceFailed",
 ]);
+// Installed Eve action schema supplies toolName/kind and an explicit result status.
+// This projector reads no call IDs, tool inputs, output, error or presentation fields.
+const nativeActionCounter = (
+  toolName: string,
+  status: string,
+): z.infer<typeof counterSchema> | undefined => {
+  if (toolName !== "prepare_workspace" && toolName !== "resolve_github_source") {
+    return undefined;
+  }
+  if (status !== "completed" && status !== "failed" && status !== "requested") {
+    return undefined;
+  }
+  const counters = {
+    prepare_workspace: {
+      completed: "prepareWorkspaceCompleted",
+      failed: "prepareWorkspaceFailed",
+      requested: "prepareWorkspaceRequested",
+    },
+    resolve_github_source: {
+      completed: "resolveGithubSourceCompleted",
+      failed: "resolveGithubSourceFailed",
+      requested: "resolveGithubSourceRequested",
+    },
+  } as const;
+  return counters[toolName][status];
+};
 const failureCategory = {
   authority: "authority_failure",
   checkpoint: "checkpoint_failure",
@@ -44,6 +77,12 @@ export interface HostedReadDiagnostic {
   decodedEvents: number;
   privateCallbacks: number;
   publicSpoolEvents: number;
+  prepareWorkspaceRequested: number;
+  prepareWorkspaceCompleted: number;
+  prepareWorkspaceFailed: number;
+  resolveGithubSourceRequested: number;
+  resolveGithubSourceCompleted: number;
+  resolveGithubSourceFailed: number;
 }
 export type HostedReadDiagnosticSink = (diagnostic: HostedReadDiagnostic) => void | Promise<void>;
 
@@ -72,8 +111,14 @@ export const createHostedReadTrace = (input: {
     decodedEvents: 0,
     nativeNextIndex: 0,
     nativeStartIndex: 0,
+    prepareWorkspaceCompleted: 0,
+    prepareWorkspaceFailed: 0,
+    prepareWorkspaceRequested: 0,
     privateCallbacks: 0,
     publicSpoolEvents: 0,
+    resolveGithubSourceCompleted: 0,
+    resolveGithubSourceFailed: 0,
+    resolveGithubSourceRequested: 0,
   };
   const sessionIdHash = `sha256:${createHash("sha256").update(input.sessionId).digest("hex")}`;
   const emit = (outcome: HostedReadDiagnostic["outcome"]) => {
@@ -115,6 +160,16 @@ export const createHostedReadTrace = (input: {
       /* A sink must never change reader behavior. */
     }
   };
+  const increment = (counter: z.infer<typeof counterSchema>, amount = 1) => {
+    if (
+      counterSchema.safeParse(counter).success &&
+      Number.isSafeInteger(amount) &&
+      amount >= 0 &&
+      Number.isSafeInteger(counters[counter] + amount)
+    ) {
+      counters[counter] += amount;
+    }
+  };
   return {
     completed() {
       emit("completed");
@@ -129,14 +184,27 @@ export const createHostedReadTrace = (input: {
     failed() {
       emit(expired ? "timeout" : "failed");
     },
-    increment(counter: z.infer<typeof counterSchema>, amount = 1) {
-      if (
-        counterSchema.safeParse(counter).success &&
-        Number.isSafeInteger(amount) &&
-        amount >= 0 &&
-        Number.isSafeInteger(counters[counter] + amount)
-      ) {
-        counters[counter] += amount;
+    increment,
+    /** Counts only consumed native metadata; cursor bounds describe this observation's interval. */
+    observeNativeAction(event: MessageStreamEvent) {
+      try {
+        const count = (toolName: string, status: string) => {
+          const counter = nativeActionCounter(toolName, status);
+          if (counter !== undefined) {
+            increment(counter);
+          }
+        };
+        if (event.type === "actions.requested") {
+          for (const action of event.data.actions) {
+            if (action.kind === "tool-call" || action.kind === "workflow-tool-call") {
+              count(action.toolName, "requested");
+            }
+          }
+        } else if (event.type === "action.result" && event.data.result.kind === "tool-result") {
+          count(event.data.result.toolName, event.data.status);
+        }
+      } catch {
+        /* Malformed diagnostic metadata must never change stream behavior. */
       }
     },
     set(counter: z.infer<typeof counterSchema>, value: number) {
