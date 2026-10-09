@@ -143,27 +143,67 @@ const restoreExisting = async (
   }
   return operation.state === "rejected" ? input.result : { ...input.result, status: "working" };
 };
-const preflight = async (input: ControllerInput, ready: ReadyBuild) => {
+type ContinuationStage =
+  | "session_preflight"
+  | "owner_preflight"
+  | "transport_observation"
+  | "dispatch"
+  | "settlement";
+class ContinuationPreflightError extends Error {
+  constructor(
+    readonly reason:
+      | "session_unavailable"
+      | "session_not_resumable"
+      | "decision_changed"
+      | "active_input_or_turn"
+      | "transport_unavailable",
+  ) {
+    super("Approved build continuation preflight rejected.");
+  }
+}
+const transportRejectionReasons = new Set([
+  "workload_identity_unavailable",
+  "session_access_denied",
+  "eve_request_rejected",
+  "turn_changed",
+  "no_active_turn",
+  "input_batch_changed",
+  "send_preflight_unavailable",
+]);
+const rejectionReason = (error: unknown, stage: ContinuationStage): string => {
+  if (error instanceof ContinuationPreflightError) return error.reason;
+  if (error instanceof SubmissionRejectedBeforeDispatchError) {
+    return transportRejectionReasons.has(error.code) ? error.code : "transport_rejected";
+  }
+  return stage === "owner_preflight" ? "owner_verification_failed" : "boundary_unavailable";
+};
+const preflight = async (
+  input: ControllerInput,
+  ready: ReadyBuild,
+  enter: (stage: ContinuationStage) => void,
+) => {
   const { session, decision } = ready;
   const current = await input.store.getSession(session.principal, session.sessionId);
   if (current === null) {
-    throw new Error("Approved build session is unavailable.");
+    throw new ContinuationPreflightError("session_unavailable");
   }
   const fresh = toDurableHostedSessionRecord(current);
   if (fresh.status === "cancelled" || fresh.resumability !== "live") {
-    throw new Error("Approved build session is no longer resumable.");
+    throw new ContinuationPreflightError("session_not_resumable");
   }
   const changed =
     fresh.privateBuildDecision?.turnId !== decision.turnId ||
     fresh.privateBuildDecision?.decision !== "runnable" ||
     fresh.adapterSessionId !== session.adapterSessionId;
   if (changed) {
-    throw new Error("Approved build continuation changed before dispatch.");
+    throw new ContinuationPreflightError("decision_changed");
   }
+  enter("owner_preflight");
   await input.assertCurrentOwner(fresh);
   if (input.transport.observe === undefined) {
     return;
   }
+  enter("transport_observation");
   const observed = await input.transport.observe({
     adapterSessionId: session.adapterSessionId,
     onEvent() {
@@ -173,7 +213,7 @@ const preflight = async (input: ControllerInput, ready: ReadyBuild) => {
     sessionId: session.sessionId,
   });
   if (observed.status !== "waiting" || observed.pendingRequests.length > 0) {
-    throw new Error("Approved build cannot continue across an active input or turn.");
+    throw new ContinuationPreflightError("active_input_or_turn");
   }
 };
 const dispatch = async (
@@ -183,11 +223,14 @@ const dispatch = async (
   message: string,
 ): Promise<EveSessionResult> => {
   let dispatched = false;
+  let stage: ContinuationStage = "session_preflight";
   const { session } = ready;
   try {
-    await preflight(input, ready);
+    await preflight(input, ready, (next) => {
+      stage = next;
+    });
     if (input.transport.sendAccepted === undefined) {
-      throw new Error("Continuation transport unavailable.");
+      throw new ContinuationPreflightError("transport_unavailable");
     }
     const request: Parameters<NonNullable<HostedEveTransport["sendAccepted"]>>[0] = {
       adapterSessionId: session.adapterSessionId,
@@ -198,8 +241,10 @@ const dispatch = async (
     if (session.sourceHandoffId !== undefined) {
       request.sourceHandoffId = session.sourceHandoffId;
     }
+    stage = "dispatch";
     dispatched = true;
     await input.transport.sendAccepted(request);
+    stage = "settlement";
     const accepted = await input.store.settleSucceeded({
       nowEpochMs: input.now(),
       operationId: candidate.operationId,
@@ -213,6 +258,14 @@ const dispatch = async (
     return { ...input.result, status: "working" };
   } catch (error) {
     const rejected = !dispatched || error instanceof SubmissionRejectedBeforeDispatchError;
+    console.info(
+      JSON.stringify({
+        event: "app_builder.approved_build_continuation_dispatch_boundary",
+        reason: rejectionReason(error, stage),
+        rejected,
+        stage,
+      }),
+    );
     await input.store.settleUnsuccessful({
       nowEpochMs: input.now(),
       operationId: candidate.operationId,
