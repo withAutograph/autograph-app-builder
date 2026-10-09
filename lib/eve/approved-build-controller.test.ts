@@ -106,17 +106,14 @@ describe("canonical approved private build continuation", () => {
         error: { code: "approved_build_continuation_blocked" },
         status: "waiting",
       });
-      const boundary = log.mock.calls
-        .map(([value]) => JSON.parse(String(value)))
-        .find(
-          (value) => value.event === "app_builder.approved_build_continuation_dispatch_boundary",
-        );
-      expect(boundary).toEqual({
-        event: "app_builder.approved_build_continuation_dispatch_boundary",
-        reason,
-        rejected: true,
-        stage: "dispatch",
-      });
+      expect(log).toHaveBeenCalledWith(
+        JSON.stringify({
+          event: "app_builder.approved_build_continuation_dispatch_boundary",
+          reason,
+          rejected: true,
+          stage: "dispatch",
+        }),
+      );
       await continueApprovedHostedBuild(f);
       expect(f.sendAccepted).toHaveBeenCalledOnce();
     } finally {
@@ -125,12 +122,13 @@ describe("canonical approved private build continuation", () => {
   });
   it("identifies a fresh input boundary without dispatching or retaining error text", async () => {
     const f = await fixture();
+    // oxlint-disable-next-line eslint/require-await -- The async observation fixture supplies a summary without provider I/O.
     f.transport.observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async () => ({
-      status: "working",
-      pendingRequests: [],
       artifactProjectionRequiresLegacyReadback: false,
       installedEventCount: 0,
+      pendingRequests: [],
       publicEventCount: 0,
+      status: "working",
     }));
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
