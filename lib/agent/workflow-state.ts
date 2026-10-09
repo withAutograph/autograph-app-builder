@@ -188,6 +188,8 @@ export interface GitHubDestinationReviewReadProgress {
   changeSetDigest: string;
   beforeComplete: boolean;
   afterComplete: boolean;
+  beforeReadable?: boolean;
+  afterReadable?: boolean;
   beforeCursor?: { digest: string; offsetBytes: number; path: string; side?: "before" | "after" };
   afterCursor?: { digest: string; offsetBytes: number; path: string; side?: "before" | "after" };
 }

@@ -215,16 +215,20 @@ export const destinationReviewReadProgress = (input: {
       "Resume the destination diff from its saved cursor or start this side from its first page.",
     );
   }
+  const priorReadable = input.side === "before" ? previous.beforeReadable : previous.afterReadable;
+  const readable = input.readable && (input.cursor === undefined || priorReadable !== false);
   return {
     ...previous,
     ...(input.side === "before"
       ? {
-          beforeComplete: input.readable && input.nextCursor === undefined,
+          beforeComplete: readable && input.nextCursor === undefined,
           beforeCursor: input.nextCursor,
+          beforeReadable: readable,
         }
       : {
-          afterComplete: input.readable && input.nextCursor === undefined,
+          afterComplete: readable && input.nextCursor === undefined,
           afterCursor: input.nextCursor,
+          afterReadable: readable,
         }),
   };
 };

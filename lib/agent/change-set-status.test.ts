@@ -113,6 +113,53 @@ describe("reviewed candidate export", () => {
       }),
     ).toMatchObject({ afterComplete: false, beforeComplete: false });
   });
+  it.each(["before", "after"] as const)(
+    "keeps an unreadable early %s page incomplete until the side is restarted",
+    (side) => {
+      const cursor = {
+        digest: digest("page"),
+        offsetBytes: 12,
+        path: "apps/replica/file.ts",
+        side,
+      };
+      const first = destinationReviewReadProgress({
+        changeSetDigest: "review",
+        nextCursor: cursor,
+        readable: false,
+        side,
+      });
+      const last = destinationReviewReadProgress({
+        changeSetDigest: "review",
+        cursor,
+        previous: first,
+        readable: true,
+        side,
+      });
+      const completeKey = side === "before" ? "beforeComplete" : "afterComplete";
+      const readableKey = side === "before" ? "beforeReadable" : "afterReadable";
+      expect(last[completeKey]).toBe(false);
+      expect(last[readableKey]).toBe(false);
+      const restart = destinationReviewReadProgress({
+        changeSetDigest: "review",
+        nextCursor: cursor,
+        previous: last,
+        readable: true,
+        side,
+      });
+      expect(restart[completeKey]).toBe(false);
+      expect(restart[readableKey]).toBe(true);
+      const complete = destinationReviewReadProgress({
+        changeSetDigest: "review",
+        cursor,
+        previous: restart,
+        readable: true,
+        side,
+      });
+      expect(complete[completeKey]).toBe(true);
+      expect(complete[readableKey]).toBe(true);
+    },
+  );
+
   it("keeps baseline review limited to the app and its conventional specs while excluding tool output", () => {
     const changes = [
       "apps/replica/app/page.tsx",
