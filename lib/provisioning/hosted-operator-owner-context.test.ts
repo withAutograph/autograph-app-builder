@@ -206,6 +206,10 @@ describe("hosted operator owner context", () => {
   it("reports client construction failures before inline consent diagnostics exist", async () => {
     const log = vi.spyOn(console, "info").mockImplementation(() => {});
     try {
+      for (const key of ["DATABASE_URL", "BETTER_AUTH_URL", "MCP_RESOURCE_URL"]) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- stubEnv requires this value to remove the variable.
+        vi.stubEnv(key, undefined);
+      }
       await expect(
         hostedOperatorClientForSession(sessionAuth, "private-anchor", {}),
       ).rejects.toMatchObject({ code: "protected_operator_required" });
@@ -221,7 +225,18 @@ describe("hosted operator owner context", () => {
       ).rejects.toMatchObject({ code: "operator_unavailable" });
       expect(log.mock.calls).toContainEqual([
         "[builder:hosted-neon-consent]",
-        expect.objectContaining({ outcome: "setup_unavailable", stage: "owner_configuration" }),
+        expect.objectContaining({
+          outcome: "setup_unavailable",
+          ownerConfiguration: {
+            databasePolicyValid: false,
+            databaseUrlConfigured: false,
+            issuerCanonical: false,
+            issuerConfigured: false,
+            resourceCanonical: false,
+            resourceConfigured: false,
+          },
+          stage: "owner_configuration_parse",
+        }),
       ]);
       expect(log.mock.calls.at(-1)?.[1]).toMatchObject({
         outcome: "setup_unavailable",
@@ -231,6 +246,7 @@ describe("hosted operator owner context", () => {
       expect(JSON.stringify(log.mock.calls)).not.toContain("https://operator.example");
     } finally {
       log.mockRestore();
+      vi.unstubAllEnvs();
     }
   });
 
