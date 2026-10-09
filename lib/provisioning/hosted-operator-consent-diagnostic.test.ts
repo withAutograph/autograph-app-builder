@@ -15,6 +15,33 @@ const value: HostedOperatorConsentMetadata = {
 };
 
 describe("closed Neon consent diagnostics", () => {
+  it.each(["owner_configuration_parse", "owner_store_import", "owner_store_construction"] as const)(
+    "accepts only fixed configuration booleans for %s",
+    (stage) => {
+      const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+      const report = createHostedOperatorConsentDiagnostic(secret, sink);
+      const ownerConfiguration = {
+        databasePolicyValid: false,
+        databaseUrlConfigured: true,
+        issuerCanonical: true,
+        issuerConfigured: true,
+        resourceCanonical: true,
+        resourceConfigured: true,
+      };
+      report({ ...value, outcome: "setup_unavailable", ownerConfiguration, stage });
+      expect(sink).toHaveBeenCalledOnce();
+      for (const field of Object.keys(ownerConfiguration)) {
+        report({
+          ...value,
+          ownerConfiguration: { ...ownerConfiguration, [field]: secret },
+          stage,
+        });
+      }
+      report({ ...value, ownerConfiguration: { ...ownerConfiguration, extra: secret }, stage });
+      expect(sink).toHaveBeenCalledOnce();
+      expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+    },
+  );
   it("reports closed metadata and a session hash without private context", () => {
     const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const report = createHostedOperatorConsentDiagnostic(secret, sink);
