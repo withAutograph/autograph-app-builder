@@ -84,13 +84,16 @@ forces database drops or equates a receipt with actual cleanup.
 deployment-owned consent setup: `builderCallbackOrigin`, `builderWorkload`
 (exact issuer, audience, subject, owner, project and environment), and
 `operatorWorkload` (exact issuer, audience, owner, project and Preview
-environment). It uses the existing private Builder control-plane configuration
-and current owner/session stores. Consent needs no Vercel installation keyring, app project access, app Git release, Neon branch, Gateway seed deployment
+environment). Its owner reader uses `DATABASE_URL`, `BETTER_AUTH_URL` and
+`MCP_RESOURCE_URL` for the existing session, handoff and membership stores.
+It requires neither an Auth signing secret nor a Vercel token keyring.
+Consent needs no app project access, app Git release, Neon branch, Gateway seed deployment
 or Sandbox image. Without full `PROTECTED_HOSTED_OPERATOR_CONFIGURATION`, the
 factory serves only the closed Neon consent action; resource planning and
 effects remain unavailable.
 
-`connect-app-hosted-owner` resolves the canonical saved-session owner before app planning inputs exist. `plan-app-hosted-runtime` also uses
+`connect-app-hosted-owner` resolves the canonical saved-session owner before app
+planning inputs exist. `plan-app-hosted-runtime` also uses
 Eve's inline authorization flow for preparation. The operator re-reads the
 exact direct/handoff generation and current membership for
 each check, start and completion. Only verified operator Preview OIDC starts
