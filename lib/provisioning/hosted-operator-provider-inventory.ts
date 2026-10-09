@@ -12,10 +12,10 @@ const id = z.string().min(1);
 const projectSchema = z.object({ accountId: id, id });
 const deploymentSchema = z.object({
   customEnvironment: z.unknown().optional(),
-  oidcTokenClaims: z.unknown().optional(),
   env: z.array(z.string()).optional(),
   gitSource: z.object({ ref: id }).optional(),
   id,
+  oidcTokenClaims: z.unknown().optional(),
   ownerId: id.optional(),
   projectId: id,
   readyState: id,
@@ -96,6 +96,54 @@ const forbiddenAppKey = (key: string, appKey: string) => {
     key.includes("OPERATOR_TOKEN"),
   ].some(Boolean);
   return key !== appKey && forbidden;
+};
+
+interface ObservedOperatorProject {
+  branch: string | null;
+  deployedEnvironmentKeys: string[] | null;
+  deploymentId?: string;
+  environment: "preview" | "production";
+  projectEnvironmentKeys: string[];
+  projectId: string;
+}
+
+interface PublicKeyReadbackInput {
+  assertCurrentOwner: () => Promise<void>;
+  fetcher: typeof fetch;
+  jwksUrl: string;
+  signal?: AbortSignal;
+}
+const readPublicKeyIds = async (input: PublicKeyReadbackInput): Promise<string[] | null> => {
+  try {
+    await input.assertCurrentOwner();
+    // Never forward owner OAuth credentials to the public verification endpoint.
+    const response = await input.fetcher(input.jwksUrl, {
+      cache: "no-store",
+      method: "GET",
+      redirect: "error",
+      signal: input.signal,
+    });
+    if (response.ok) {
+      const value: unknown = await response.json();
+      const privateKey = z
+        .object({ keys: z.array(z.record(z.string(), z.unknown())) })
+        .safeParse(value);
+      const containsPrivateKey =
+        privateKey.success &&
+        privateKey.data.keys.some((key) =>
+          ["d", "p", "q", "dp", "dq", "qi", "k"].some((field) => Object.hasOwn(key, field)),
+        );
+      const parsed = jwksSchema.safeParse(value);
+      if (!containsPrivateKey && parsed.success && parsed.data.keys.length > 0) {
+        return parsed.data.keys.map((key) => key.kid);
+      }
+    } else {
+      await response.body?.cancel();
+    }
+  } catch {
+    /* Unavailable public keys remain unconfirmed, never ready. */
+  }
+  return null;
 };
 
 /** Concrete GET-only owner-bound Vercel inventory. This is not an operational-ready factory. */
@@ -230,18 +278,17 @@ export const readHostedOperatorProviderInventory = async (input: {
         deployment?.env !== undefined && deployment.env.every((key) => keyName.test(key))
           ? deployment.env.toSorted()
           : null;
-      return {
-        deployment,
-        projected,
-        summary: {
-          branch: branch ?? null,
-          deployedEnvironmentKeys: deployedKeys,
-          ...(deployment === undefined ? {} : { deploymentId: deployment.id }),
-          environment: reference.environment,
-          projectEnvironmentKeys: projectKeys,
-          projectId: project.id,
-        },
+      const summary: ObservedOperatorProject = {
+        branch: branch ?? null,
+        deployedEnvironmentKeys: deployedKeys,
+        environment: reference.environment,
+        projectEnvironmentKeys: projectKeys,
+        projectId: project.id,
       };
+      if (deployment !== undefined) {
+        summary.deploymentId = deployment.id;
+      }
+      return { deployment, projected, summary };
     };
     const [app, gateway, operator] = await Promise.all([
       observe(config.app, config.app.branch, true),
@@ -263,38 +310,15 @@ export const readHostedOperatorProviderInventory = async (input: {
       }
     }
     const jwksUrl = `${gatewayOrigin}/_platform/jwks.json`;
-    let publicKeyIds: string[] | null = null;
-    if (gateway.deployment !== undefined) {
-      try {
-        await input.assertCurrentOwner();
-        // Never forward owner OAuth credentials to the public verification endpoint.
-        const response = await fetcher(jwksUrl, {
-          cache: "no-store",
-          method: "GET",
-          redirect: "error",
-          signal: input.signal,
-        });
-        if (response.ok) {
-          const value: unknown = await response.json();
-          const privateKey = z
-            .object({ keys: z.array(z.record(z.string(), z.unknown())) })
-            .safeParse(value);
-          const containsPrivateKey =
-            privateKey.success &&
-            privateKey.data.keys.some((key) =>
-              ["d", "p", "q", "dp", "dq", "qi", "k"].some((field) => Object.hasOwn(key, field)),
-            );
-          const parsed = jwksSchema.safeParse(value);
-          if (!containsPrivateKey && parsed.success && parsed.data.keys.length > 0) {
-            publicKeyIds = parsed.data.keys.map((key) => key.kid);
-          }
-        } else {
-          await response.body?.cancel();
-        }
-      } catch {
-        /* Unavailable public keys remain unconfirmed, never ready. */
-      }
-    }
+    const publicKeyIds =
+      gateway.deployment === undefined
+        ? null
+        : await readPublicKeyIds({
+            assertCurrentOwner: input.assertCurrentOwner,
+            fetcher,
+            jwksUrl,
+            signal: input.signal,
+          });
     const configurations = [
       ...new Set(
         operator.projected.flatMap((variable) =>

@@ -470,7 +470,6 @@ export const composeHostedOperatorDependencies = (
             gatewayOrigin: recordedGateway.origin,
           };
     const inventory = await readHostedOperatorProviderInventory({
-      phase: "bootstrap-planning",
       assertCurrentOwner: async () => {
         await controlPlane.assertPlanningAuthorized(context);
       },
@@ -484,6 +483,7 @@ export const composeHostedOperatorDependencies = (
         },
       },
       context,
+      phase: "bootstrap-planning",
       readVercelCredential: async ({ authority, installationId }) =>
         await controlPlane.readCredential(authority, installationId),
     });
@@ -1127,7 +1127,6 @@ export const composeHostedOperatorDependencies = (
       throw new HostedOperatorError(RECONCILIATION_REQUIRED);
     }
     await readHostedOperatorProviderInventory({
-      phase: "bootstrap-planning",
       assertCurrentOwner: async () => {
         await controlPlane.assertPlanningAuthorized(input);
       },
@@ -1151,6 +1150,7 @@ export const composeHostedOperatorDependencies = (
         },
       },
       context: input,
+      phase: "bootstrap-planning",
       readVercelCredential: async ({ authority, installationId }) =>
         await controlPlane.readCredential(authority, installationId),
     });

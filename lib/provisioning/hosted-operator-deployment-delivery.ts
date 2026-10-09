@@ -25,8 +25,14 @@ const nativePreviewMetadataSchema = z
     "Native staging target must attest the Preview environment.",
   );
 
+export interface NativeDeploymentMetadata {
+  customEnvironment?: unknown;
+  oidcTokenClaims?: unknown;
+  target: string | null;
+}
+
 /** Native Preview metadata only; never interprets custom environments as Preview. */
-export const isNativePreviewDeployment = (metadata: unknown): boolean =>
+export const isNativePreviewDeployment = (metadata: NativeDeploymentMetadata): boolean =>
   nativePreviewMetadataSchema.safeParse(metadata).success;
 
 const deploymentSchema = z

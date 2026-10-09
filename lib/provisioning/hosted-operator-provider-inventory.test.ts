@@ -170,27 +170,29 @@ describe("private read-only operator provider inventory", () => {
     });
     expect(observed.operator.environment).toBe("preview");
     expect(observed.operator.deploymentId).toBe("dpl_operator");
-    for (const metadata of [
-      { target: "production", oidcTokenClaims: { environment: "preview" } },
-      { target: "staging" },
-      { target: "staging", oidcTokenClaims: { environment: "production" } },
-      { target: "staging", oidcTokenClaims: { environment: "preview-lookalike" } },
-      { target: "staging", oidcTokenClaims: { environment: ["preview"] } },
-      {
-        target: "staging",
-        oidcTokenClaims: { environment: "preview" },
-        customEnvironment: { id: "env_custom", slug: "staging" },
-      },
-    ]) {
-      const invalid = fixture();
-      invalid.payloads.set("/v13/deployments/dpl_operator", {
-        ...invalid.payloads.get("/v13/deployments/dpl_operator"),
-        ...metadata,
-      });
-      await expect(
-        readHostedOperatorProviderInventory({ ...invalid.input, configuration: previewConfig }),
-      ).rejects.toThrow("resource_mismatch");
-    }
+    await Promise.all(
+      [
+        { oidcTokenClaims: { environment: "preview" }, target: "production" },
+        { target: "staging" },
+        { oidcTokenClaims: { environment: "production" }, target: "staging" },
+        { oidcTokenClaims: { environment: "preview-lookalike" }, target: "staging" },
+        { oidcTokenClaims: { environment: ["preview"] }, target: "staging" },
+        {
+          customEnvironment: { id: "env_custom", slug: "staging" },
+          oidcTokenClaims: { environment: "preview" },
+          target: "staging",
+        },
+      ].map(async (metadata) => {
+        const invalid = fixture();
+        invalid.payloads.set("/v13/deployments/dpl_operator", {
+          ...invalid.payloads.get("/v13/deployments/dpl_operator"),
+          ...metadata,
+        });
+        await expect(
+          readHostedOperatorProviderInventory({ ...invalid.input, configuration: previewConfig }),
+        ).rejects.toThrow("resource_mismatch");
+      }),
+    );
   });
   it("plans owned fresh projects without fabricating deployment or public-key evidence", async () => {
     const f = fixture();
@@ -208,7 +210,9 @@ describe("private read-only operator provider inventory", () => {
     expect(observed.operator.deploymentId).toBe("dpl_operator");
     expect(observed.appEnvironment.deployedKeyInventory).toBe("unconfirmed");
     expect(observed.verification.publicKeyIds).toBeNull();
-    const requested = f.fetcher.mock.calls.map(([url]) => new URL(url.toString()).pathname);
+    const requested = f.fetcher.mock.calls.map(
+      ([url]) => new URL(url instanceof Request ? url.url : url.toString()).pathname,
+    );
     expect(requested).not.toContain("/v13/deployments/undefined");
     expect(requested).not.toContain("/v13/deployments/dpl_app");
     expect(requested).not.toContain("/v13/deployments/dpl_gateway");
@@ -226,7 +230,7 @@ describe("private read-only operator provider inventory", () => {
     const f = fixture();
     const { deploymentId, ...gateway } = configuration.gateway;
     void deploymentId;
-    f.payloads.set("/v9/projects/prj_gateway", { id: "prj_gateway", accountId: "foreign" });
+    f.payloads.set("/v9/projects/prj_gateway", { accountId: "foreign", id: "prj_gateway" });
     await expect(
       readHostedOperatorProviderInventory({
         ...f.input,
@@ -247,19 +251,21 @@ describe("private read-only operator provider inventory", () => {
     ).rejects.toThrow("operator_unavailable");
   });
   it("still rejects foreign and non-READY supplied candidates during bootstrap planning", async () => {
-    for (const patch of [{ projectId: "foreign" }, { readyState: "BUILDING" }]) {
-      const f = fixture();
-      f.payloads.set("/v13/deployments/dpl_gateway", {
-        ...f.payloads.get("/v13/deployments/dpl_gateway"),
-        ...patch,
-      });
-      await expect(
-        readHostedOperatorProviderInventory({
-          ...f.input,
-          phase: "bootstrap-planning",
-        }),
-      ).rejects.toThrow("resource_mismatch");
-    }
+    await Promise.all(
+      [{ projectId: "foreign" }, { readyState: "BUILDING" }].map(async (patch) => {
+        const f = fixture();
+        f.payloads.set("/v13/deployments/dpl_gateway", {
+          ...f.payloads.get("/v13/deployments/dpl_gateway"),
+          ...patch,
+        });
+        await expect(
+          readHostedOperatorProviderInventory({
+            ...f.input,
+            phase: "bootstrap-planning",
+          }),
+        ).rejects.toThrow("resource_mismatch");
+      }),
+    );
   });
   it("observes three distinct owner-bound projects without returning provider secrets or claiming branch provenance", async () => {
     const f = fixture();
