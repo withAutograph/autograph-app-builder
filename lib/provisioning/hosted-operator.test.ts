@@ -2051,3 +2051,85 @@ describe("closed operator access response diagnostics", () => {
     },
   );
 });
+
+describe("native bindings integration", () => {
+  it("projects only pinned deliveries after fresh verification through service and client", async () => {
+    const f = fixture();
+    const selectedPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      delivery: { branch: selection.branch, projectId: selection.projectId, repoId: "repo-app" },
+      effects: [
+        ...plan.effects,
+        { description: "Native app delivery", id: "delivery", kind: "delivery" },
+        {
+          description: "Native Gateway delivery",
+          id: "gateway-delivery",
+          kind: "gateway-delivery",
+        },
+      ],
+      gatewayDelivery: {
+        branch: selection.branch,
+        projectId: "prj_gateway",
+        repoId: "repo-gateway",
+      },
+    });
+    const request = await prepared(f);
+    f.approve();
+    await f.client.request(request);
+    if (!f.row?.record.operator) {
+      throw new Error("Missing fixture journal");
+    }
+    f.row.record.operator.plan = selectedPlan;
+    f.row.record.operator.planDigest = operatorPlanDigest(selectedPlan);
+    const metadata = {
+      app: {
+        branch: selection.branch,
+        deploymentId: "dpl_actual_app",
+        operationRef: request.operationRef,
+        origin: "https://immutable-app.example.test",
+        projectId: selection.projectId,
+        readyState: "READY",
+        repoId: "repo-app",
+      },
+      gateway: {
+        branch: selection.branch,
+        deploymentId: "dpl_actual_gateway",
+        operationRef: request.operationRef,
+        origin: "https://immutable-gateway.example.test",
+        projectId: "prj_gateway",
+        readyState: "READY",
+        repoId: "repo-gateway",
+      },
+      publicOrigin: "https://apps-preview.example.test",
+    };
+    f.row.record.operator.deliveryCandidates = [metadata.app];
+    f.row.record.operator.gatewayDeliveryCandidates = [metadata.gateway];
+    f.row.record.operator.deliveredDeploymentId = metadata.app.deploymentId;
+    f.row.record.operator.deliveredGatewayDeploymentId = metadata.gateway.deploymentId;
+    const result = await f.client.bindings({
+      action: "bindings",
+      operationRef: request.operationRef,
+      selection,
+    });
+    expect(result.nativePreview).toMatchObject({
+      app: metadata.app,
+      gateway: metadata.gateway,
+      planDigest: operatorPlanDigest(selectedPlan),
+      publicOrigin: metadata.publicOrigin,
+    });
+    const replacement = {
+      ...metadata.gateway,
+      deploymentId: "dpl_replacement_gateway",
+      origin: "https://replacement-gateway.example.test",
+    };
+    f.row.record.operator.gatewayDeliveryCandidates.push(replacement);
+    f.row.record.operator.deliveredGatewayDeploymentId = replacement.deploymentId;
+    f.row.revision += 1;
+    const refreshed = await f.client.bindings({
+      action: "bindings",
+      operationRef: request.operationRef,
+      selection,
+    });
+    expect(refreshed.nativePreview?.gateway).toEqual(replacement);
+  });
+});

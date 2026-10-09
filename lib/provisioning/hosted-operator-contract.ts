@@ -576,6 +576,17 @@ export const operatorDeploymentCandidateSchema = z.strictObject({
   repoId: id,
   scopeSlug: id.optional(),
 });
+/** Verified native delivery receipt; browser origin is distinct from immutable transport origins. */
+export const operatorNativePreviewSchema = z.strictObject({
+  app: operatorDeploymentCandidateSchema,
+  expiresAt: z.iso.datetime({ offset: true }),
+  gateway: operatorDeploymentCandidateSchema,
+  operationRef: z.uuid(),
+  planDigest: digest,
+  publicOrigin: httpsPublicOrigin,
+  verifiedAt: z.iso.datetime({ offset: true }),
+});
+export type OperatorNativePreview = z.infer<typeof operatorNativePreviewSchema>;
 export type OperatorDeploymentCandidate = z.infer<typeof operatorDeploymentCandidateSchema>;
 export const operatorDeploymentCandidatesSchema = z.array(operatorDeploymentCandidateSchema);
 export const operatorAuthSchemaPreparationSchema = z.strictObject({
@@ -1068,3 +1079,35 @@ export const sameOperatorSelection = (left: OperatorSelection, right: OperatorSe
   (["appId", "branch", "environment", "projectId", "sessionId"] as const).every(
     (key) => left[key] === right[key],
   );
+
+export const assertOperatorNativePreview = (
+  preview: OperatorNativePreview,
+  plan: HostedOperatorPlan,
+  operationRef: string,
+  now = Date.now(),
+) => {
+  const matches = [
+    plan.action === "prepare",
+    plan.stage !== "auth-bootstrap",
+    preview.operationRef === operationRef,
+    preview.planDigest === operatorPlanDigest(plan),
+    preview.publicOrigin === plan.deploymentBoundary?.verification.publicOrigin,
+    preview.expiresAt === plan.retention.expiresAt,
+    Date.parse(preview.expiresAt) > now,
+    Date.parse(preview.verifiedAt) <= now,
+    Date.parse(preview.verifiedAt) < Date.parse(preview.expiresAt),
+    preview.app.operationRef === operationRef,
+    preview.gateway.operationRef === operationRef,
+    preview.app.readyState === "READY",
+    preview.gateway.readyState === "READY",
+    preview.app.projectId === plan.delivery?.projectId,
+    preview.app.branch === plan.delivery?.branch,
+    preview.app.repoId === plan.delivery?.repoId,
+    preview.gateway.projectId === plan.gatewayDelivery?.projectId,
+    preview.gateway.branch === plan.gatewayDelivery?.branch,
+    preview.gateway.repoId === plan.gatewayDelivery?.repoId,
+  ];
+  if (matches.includes(false)) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+};
