@@ -753,6 +753,13 @@ export const operatorOwnerContextSchema = z
 export type OperatorOwnerContext = z.infer<typeof operatorOwnerContextSchema>;
 export const operatorRequestSchema = z.discriminatedUnion("action", [
   z.strictObject({
+    action: z.literal("neon-authorization"),
+    callbackUrl: z.url().optional(),
+    ownerContext: operatorOwnerContextSchema.optional(),
+    phase: z.enum(["check", "start", "complete"]),
+    sessionId: id,
+  }),
+  z.strictObject({
     action: z.literal("plan"),
     operation: z.enum(["prepare", "cleanup"]),
     ownerContext: operatorOwnerContextSchema.optional(),
