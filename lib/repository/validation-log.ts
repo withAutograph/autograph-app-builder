@@ -62,6 +62,7 @@ export class ValidationLogWriter {
   private chunks = 0;
   private published = false;
   private excerpt = "";
+  private excerptContextLines = 0;
   private omitted = false;
   private unavailable = false;
   private readonly captureOptions: { bestEffort?: boolean; excerptLimit?: number };
@@ -132,20 +133,30 @@ export class ValidationLogWriter {
     const rendered = value + (newline ? "\n" : "");
     await this.emit(rendered);
     // Receipt output is a convenience sample. Durable logs carry every line.
-    if (this.captureOptions.excerptLimit !== undefined) {
-      // emit samples the same sanitized bytes even when durability is unavailable.
-    } else if (
-      !this.streamedLongLine &&
-      /apps\/|error|fail|TS\d+|cue:|cargo:|rustc:|mise/iu.test(value)
-    ) {
-      const next = this.excerpt + rendered;
-      if (Buffer.byteLength(next, "utf-8") <= CHUNK_BYTES) {
-        this.excerpt = next;
-      } else {
+    // Explicit leading samples are captured by emit with their existing limit.
+    if (this.captureOptions.excerptLimit === undefined) {
+      const diagnostic =
+        /apps\/|error|fail|TS\d+|cue:|cargo:|rustc:|mise|kernel_|unsupported_predecessor|^\s*(?:DETAIL|CONTEXT|HINT|Expected|Received):/iu.test(
+          value,
+        );
+      const inContext = this.excerptContextLines > 0;
+      if (diagnostic) {
+        this.excerptContextLines = 8;
+      } else if (inContext) {
+        this.excerptContextLines -= 1;
+      }
+      if (!this.streamedLongLine && (diagnostic || inContext)) {
+        this.excerpt += rendered;
+        // Keep complete sanitized lines from the latest failure, rather than
+        // letting early routine progress permanently fill the receipt sample.
+        while (Buffer.byteLength(this.excerpt, "utf-8") > CHUNK_BYTES) {
+          const lineEnd = this.excerpt.indexOf("\n");
+          this.excerpt = lineEnd === -1 ? "" : this.excerpt.slice(lineEnd + 1);
+          this.omitted = true;
+        }
+      } else if (value.trim()) {
         this.omitted = true;
       }
-    } else if (value.trim()) {
-      this.omitted = true;
     }
     this.line = "";
     this.lineBytes = 0;

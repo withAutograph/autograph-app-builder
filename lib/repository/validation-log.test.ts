@@ -79,6 +79,71 @@ const log = (store: ValidationLogStore, sessionId = "session-a") =>
   });
 
 describe("durable validation logs", () => {
+  it("keeps late kernel and assertion context after routine output fills the receipt sample", async () => {
+    const store = new MemoryLogStore("tenant-a");
+    const writer = log(store);
+    const routine = "apps/example: checking existing files coût ❄️\n".repeat(1200);
+    const failure = [
+      "kernel_prepare_schema_revision: unsupported_predecessor",
+      "DETAIL: active base not exact compiler-owned transition predecessor",
+      "CONTEXT: version 2026-10-08.authenticated-review-v2",
+      "HINT: restore the canonical transition predecessor",
+      "FAIL apps/example/test/review.test.ts > preserves the current release",
+      "AssertionError: expected actual to equal requested",
+      "Expected: canonical predecessor",
+      "Received: unknown transition",
+      "The transition cannot use the active release as its base.",
+      "secret=private-value",
+      " at apps/example/test/review.test.ts:12:3",
+      "",
+    ].join("\n");
+    await writer.append(routine);
+    await writer.append(failure);
+    const { excerpt, omitted, reference } = await writer.finish();
+    expect(Buffer.byteLength(excerpt, "utf-8")).toBeLessThanOrEqual(32 * 1024);
+    expect(excerpt).toContain("unsupported_predecessor");
+    expect(excerpt).toContain(
+      "DETAIL: active base not exact compiler-owned transition predecessor",
+    );
+    expect(excerpt).toContain("CONTEXT: version 2026-10-08.authenticated-review-v2");
+    expect(excerpt).toContain("Expected: canonical predecessor");
+    expect(excerpt).toContain("Received: unknown transition");
+    expect(excerpt).toContain("The transition cannot use the active release as its base.");
+    expect(excerpt).toContain("secret=[REDACTED]");
+    expect(excerpt).not.toContain("private-value");
+    expect(omitted).toBe(true);
+    let cursor: string | undefined;
+    let output = "";
+    do {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Read the complete immutable log in cursor order.
+      const page = await readValidationLogPage({
+        cursor,
+        digest: reference.digest,
+        key: writer.key,
+        store,
+      });
+      output += page.content;
+      cursor = page.nextCursor;
+    } while (cursor !== undefined);
+    expect(output).toContain(routine);
+    expect(output).toContain("unsupported_predecessor");
+    expect(output).not.toContain("private-value");
+    expect(digest(output)).toBe(reference.digest);
+  });
+
+  it("preserves explicit leading excerpt limits", async () => {
+    const store = new MemoryLogStore("tenant-a");
+    const writer = new ValidationLogWriter(
+      store,
+      { attemptDigest, channel: "stdout", command: "check-build", sessionId: "session-a" },
+      { excerptLimit: 6 },
+    );
+    await writer.append("ready\nFAIL late failure\nExpected: complete\n");
+    const { excerpt, omitted } = await writer.finish();
+    expect(excerpt).toBe("ready");
+    expect(omitted).toBe(true);
+  });
+
   it("reconstructs Unicode output beyond the old receipt and checkpoint ceilings", async () => {
     const store = new MemoryLogStore("tenant-a");
     const writer = log(store);
