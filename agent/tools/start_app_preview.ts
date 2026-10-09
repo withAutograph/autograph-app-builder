@@ -18,7 +18,11 @@ import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 import { resolvePreviewPackageManager } from "@/lib/agent/preview-package-manager";
 import { ensureCheckoutDependencies } from "@/lib/agent/checkout-dependencies";
-import { resolvePreparedRuntimeExecution } from "@/lib/agent/prepared-runtime-execution";
+import { nativeWorkingPreview } from "@/lib/agent/native-working-preview";
+import {
+  resolveProtectedRuntimeBindings,
+  resolvePreparedRuntimeExecution,
+} from "@/lib/agent/prepared-runtime-execution";
 import type { DependencyAttemptResult } from "@/lib/agent/checkout-dependencies";
 import type { ValidationLogStore } from "@/lib/repository/validation-log";
 import { exactForwardedSessionAuthority } from "@/lib/hosted/session-authority";
@@ -92,11 +96,55 @@ const dependencyLogStore = (ctx: ToolContext): ValidationLogStore | undefined =>
   return undefined;
 };
 
+const resolveNativePreview = async (
+  input: { appId?: string; landingPath: string },
+  ctx: ToolContext,
+  current: ReturnType<typeof appBuilderWorkflowState.get>,
+) => {
+  const protectedAppId = "appSpec" in current ? current.appSpec.appId : input.appId;
+  if (protectedAppId !== undefined) {
+    if (input.appId !== undefined && input.appId !== protectedAppId) {
+      throw new Error("The requested app does not match the accepted app.");
+    }
+    const bindings = await resolveProtectedRuntimeBindings({
+      appId: protectedAppId,
+      sessionAuth: ctx.session.auth,
+      sessionId: ctx.session.id,
+      signal: ctx.abortSignal,
+    });
+    if (bindings) {
+      if (
+        !("identityReceipt" in current) ||
+        current.identityReceipt.identity.appId !== protectedAppId
+      ) {
+        throw new Error(
+          "The protected Preview requires the selected app's accepted route identity.",
+        );
+      }
+      const native = nativeWorkingPreview({
+        appId: protectedAppId,
+        baseRoute: current.identityReceipt.identity.baseRoutes[0],
+        bindings,
+        landingPath: input.landingPath,
+      });
+      return native;
+    }
+  }
+  return null;
+};
+
 export default defineTool({
   description:
-    "Open the selected existing app or applied new app in its private Sandbox and return a working browser URL. For a prepared existing GitHub checkout, supply appId from the repository's apps directory; this only previews current files and does not grant build or publication approval. Discover the development script and package manager from the checkout's package.json, then use workingDirectory relative to the repository root. Configure it to listen on the supplied port. A reachable page is not proof of backend product behavior.",
+    "Open the selected existing app or applied new app and return a working browser URL. An approved protected runtime publishes its verified native Gateway app route; other apps start a private Sandbox preview. For a prepared existing GitHub checkout, supply appId from the repository's apps directory; this only previews current files and does not grant build or publication approval. Discover the development script and package manager from the checkout's package.json, then use workingDirectory relative to the repository root. Configure it to listen on the supplied port. A reachable page is not proof of backend product behavior.",
+  // oxlint-disable-next-line eslint/complexity -- Native publication and the retained private Sandbox lifecycle are separate authority paths.
   async execute(input, ctx) {
     const current = appBuilderWorkflowState.get();
+    const native = await resolveNativePreview(input, ctx, current);
+    if (native) {
+      invalidateProductBehaviorPreview("preview-replaced");
+      workingPreviewState.update(() => null);
+      return native;
+    }
     const sandbox = await ctx.getSandbox();
     const selected = await runnableSelectedApp({ appId: input.appId, sandbox, state: current });
     const cwd = resolvePreviewWorkingDirectory(selected.root, input.workingDirectory);

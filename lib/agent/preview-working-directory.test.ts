@@ -10,6 +10,7 @@ interface MockWorkflowState {
   checkoutDependencyAttempts?: readonly DependencyAttemptResult[];
   appSpec?: { appId: string };
   applyReceipt?: { applyRoot: string };
+  identityReceipt?: { identity: { appId: string; baseRoutes: string[] } };
   githubSource?: { digest: string };
   phase?: string;
   sourceReceipt?: { sourceKind: string };
@@ -25,7 +26,10 @@ const mocks = vi.hoisted(() => {
     bind: vi.fn(),
     dependencies: vi.fn().mockResolvedValue({ status: "reused" }),
     invalidate: vi.fn(),
+    nativeBindings: vi.fn().mockResolvedValue(null),
+    nativePreview: vi.fn(),
     prepare: vi.fn().mockResolvedValue({ status: "prepared" }),
+    previewStateUpdate: vi.fn<(transition: (state: { commandId: string } | null) => null) => void>(),
     runtime: vi.fn().mockResolvedValue(null),
     start: vi
       .fn()
@@ -49,14 +53,18 @@ vi.mock("./workflow-state", () => ({
 }));
 vi.mock("./working-preview-state", () => ({
   workingPreviewAttemptState: { get: () => null, update: vi.fn() },
-  workingPreviewState: { get: () => null, update: vi.fn() },
+  workingPreviewState: { get: () => null, update: mocks.previewStateUpdate },
 }));
 vi.mock("../sandbox/deployment-execution-lease", () => ({
   assertHostedSandboxCommandAuthority: vi.fn(),
 }));
 vi.mock("../sandbox/vercel-preview-provider", () => ({ getVercelPreviewProvider: vi.fn() }));
 vi.mock("../sandbox/working-preview-runtime", () => ({ startWorkingPreview: mocks.start }));
-vi.mock("./prepared-runtime-execution", () => ({ resolvePreparedRuntimeExecution: mocks.runtime }));
+vi.mock("./prepared-runtime-execution", () => ({
+  resolvePreparedRuntimeExecution: mocks.runtime,
+  resolveProtectedRuntimeBindings: mocks.nativeBindings,
+}));
+vi.mock("./native-working-preview", () => ({ nativeWorkingPreview: mocks.nativePreview }));
 vi.mock("./checkout-dependencies", () => ({ ensureCheckoutDependencies: mocks.dependencies }));
 vi.mock("../../agent/tools/prepare-app-local-preview", () => ({
   appDeclaresLocalSetup: async ({
@@ -383,5 +391,92 @@ describe("preview command working directory", () => {
       ),
     ).rejects.toThrow("PostgreSQL could not start");
     expect(mocks.start).not.toHaveBeenCalled();
+  });
+});
+
+describe("protected native preview early branch", () => {
+  it("publishes native receipt before asking for a Sandbox or discovering launch configuration", async () => {
+    const receipt = {
+      installationProof: { authenticatedBehavior: "unassessed" },
+      workingPreview: { appId: "app", status: "ready", url: "https://apps.example/app" },
+    };
+    mocks.nativeBindings.mockResolvedValueOnce({
+      nativePreview: { publicOrigin: "https://apps.example" },
+    });
+    mocks.nativePreview.mockReturnValueOnce(receipt);
+    const previous = mocks.workflowState;
+    mocks.workflowState = {
+      ...previous,
+      appSpec: { appId: "app" },
+      identityReceipt: { identity: { appId: "app", baseRoutes: ["/app", "/app/:path*"] } },
+    };
+    const getSandbox = vi.fn(() => {
+      throw new Error("Native publication must not open Sandbox");
+    });
+    try {
+      const result = await startAppPreview.execute(
+        {
+          command: { args: [], executable: "unused" },
+          landingPath: "/",
+          port: 3000,
+          workingDirectory: ".",
+        },
+        { getSandbox, session: { auth: {}, id: "session-native" } } as never,
+      );
+      expect(result).toEqual(receipt);
+      expect(getSandbox).not.toHaveBeenCalled();
+      expect(mocks.nativePreview).toHaveBeenCalledWith(
+        expect.objectContaining({ baseRoute: "/app", landingPath: "/" }),
+      );
+      expect(mocks.invalidate).toHaveBeenCalledWith("preview-replaced");
+      const clearPreview = mocks.previewStateUpdate.mock.calls.at(-1)?.[0];
+      expect(clearPreview?.({ commandId: "old-private-command" })).toBeNull();
+    } finally {
+      mocks.workflowState = previous;
+    }
+  });
+  it("does not fall back when protected native metadata is unavailable", async () => {
+    mocks.nativeBindings.mockResolvedValueOnce({});
+    mocks.nativePreview.mockImplementationOnce(() => {
+      throw new Error("resource_mismatch");
+    });
+    const previous = mocks.workflowState;
+    mocks.workflowState = {
+      ...previous,
+      identityReceipt: { identity: { appId: "app", baseRoutes: ["/app", "/app/:path*"] } },
+    };
+    const getSandbox = vi.fn();
+    try {
+      await expect(
+        startAppPreview.execute(
+          {
+            command: { args: [], executable: "unused" },
+            landingPath: "/",
+            port: 3000,
+            workingDirectory: ".",
+          },
+          { getSandbox, session: { auth: {}, id: "session-native" } } as never,
+        ),
+      ).rejects.toThrow("resource_mismatch");
+      expect(getSandbox).not.toHaveBeenCalled();
+    } finally {
+      mocks.workflowState = previous;
+    }
+  });
+  it("does not fall back to Sandbox when protected binding fails", async () => {
+    mocks.nativeBindings.mockRejectedValueOnce(new Error("resource_mismatch"));
+    const getSandbox = vi.fn();
+    await expect(
+      startAppPreview.execute(
+        {
+          command: { args: [], executable: "unused" },
+          landingPath: "/",
+          port: 3000,
+          workingDirectory: ".",
+        },
+        { getSandbox, session: { auth: {}, id: "session-native" } } as never,
+      ),
+    ).rejects.toThrow("resource_mismatch");
+    expect(getSandbox).not.toHaveBeenCalled();
   });
 });

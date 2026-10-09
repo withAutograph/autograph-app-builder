@@ -14,6 +14,8 @@ import { resolveHostedOperatorOwnerContext } from "./hosted-operator-owner-conte
 import type { OperatorOwnerContext, OperatorRequest } from "./hosted-operator-contract";
 import {
   HostedOperatorError,
+  operatorNativePreviewSchema,
+  assertOperatorNativePreview,
   hostedOperatorPlanSchema,
   operatorPublicResultSchema,
   operatorAuthIdentityInputSchema,
@@ -24,6 +26,7 @@ import {
 
 const bindingSchema = z.strictObject({
   environment: z.record(z.string(), z.string()),
+  nativePreview: operatorNativePreviewSchema.optional(),
   operationRef: z.uuid(),
   plan: hostedOperatorPlanSchema,
   proof: hostedRuntimeProofSchema,
@@ -173,6 +176,9 @@ export const createHostedOperatorClient = (input: {
         value.proof.manifestSha256 !== value.plan.release.sha256
       ) {
         throw new HostedOperatorError("resource_mismatch");
+      }
+      if (value.nativePreview) {
+        assertOperatorNativePreview(value.nativePreview, value.plan, request.operationRef);
       }
       return {
         ...value,

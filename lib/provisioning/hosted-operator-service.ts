@@ -26,6 +26,8 @@ import type {
 } from "./hosted-runtime-journal";
 import {
   HostedOperatorError,
+  operatorNativePreviewSchema,
+  assertOperatorNativePreview,
   managedOperatorEnvironmentRowsSchema,
   operatorAuthSchemaPreparationSchema,
   operatorDeploymentCandidatesSchema,
@@ -215,6 +217,7 @@ type OperatorHttpResponse =
   | { code: "not_found" }
   | {
       environment: Record<string, string>;
+      nativePreview?: z.infer<typeof operatorNativePreviewSchema>;
       operationRef: string;
       plan: HostedOperatorPlan;
       proof: z.infer<typeof hostedRuntimeProofSchema>;
@@ -416,6 +419,7 @@ const handleBindingsOperation = async (input: {
   plan: HostedOperatorPlan;
   planDigest: string;
   read: () => Promise<Awaited<ReturnType<HostedRuntimeJournalStore["read"]>>>;
+  now: () => number;
 }) => {
   const { context, current, deps, operationRef, operator, plan, planDigest, read } = input;
   if (
@@ -458,6 +462,29 @@ const handleBindingsOperation = async (input: {
   const latest = await read();
   if (latest?.revision !== current.revision) {
     throw new HostedOperatorError("operation_in_progress");
+  }
+  const app = operator.deliveryCandidates?.find(
+    (candidate) => candidate.deploymentId === operator.deliveredDeploymentId,
+  );
+  const gateway = operator.gatewayDeliveryCandidates?.find(
+    (candidate) => candidate.deploymentId === operator.deliveredGatewayDeploymentId,
+  );
+  // Legacy prepared operations remain readable, but cannot publish a native Preview without both deliveries.
+  const nativePreview =
+    app && gateway
+      ? operatorNativePreviewSchema.parse({
+          app,
+          expiresAt: plan.retention.expiresAt,
+          gateway,
+          operationRef,
+          planDigest,
+          publicOrigin: plan.deploymentBoundary?.verification.publicOrigin,
+          verifiedAt: new Date(input.now()).toISOString(),
+        })
+      : undefined;
+  if (nativePreview) {
+    assertOperatorNativePreview(nativePreview, plan, operationRef, input.now());
+    return response({ environment, nativePreview, operationRef, plan, proof });
   }
   return response({ environment, operationRef, plan, proof });
 };
@@ -599,6 +626,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
           context,
           current,
           deps,
+          now,
           operationRef,
           operator,
           plan,

@@ -1,5 +1,6 @@
 import type { Sandbox } from "@vercel/sandbox";
 import { z } from "zod";
+import { operatorPlanDigest, HostedOperatorError } from "../provisioning/hosted-operator-contract";
 import { hostedOperatorClientForSession } from "../provisioning/hosted-operator-client";
 
 import { readHostedRuntimeExecutionBinding } from "../provisioning/hosted-runtime-deployment";
@@ -346,6 +347,50 @@ const executionDependencies: PreparedRuntimeExecutionDependencies = {
   readBinding: readHostedRuntimeExecutionBinding,
 };
 
+/** Reads the same owner-bound protected selection without creating or adapting private compute. */
+export const resolveProtectedRuntimeBindings = async (
+  input: Pick<PreparedRuntimeExecutionContext, "appId" | "sessionAuth" | "sessionId" | "signal">,
+  selectionInput?: PreparedRuntimeSelection | null,
+  operatorClientFactory = hostedOperatorClientForSession,
+) => {
+  let selection = selectionInput;
+  if (selection === undefined) {
+    const selections = preparedRuntimeSelections.get();
+    selection = Object.hasOwn(selections, input.appId) ? selections[input.appId] : null;
+  }
+  if (selection?.operationRef === undefined) {
+    return null;
+  }
+  if (selection.appId !== input.appId || !selection.branch) {
+    throw new HostedRuntimeProviderError("authorization_required");
+  }
+  const client = await operatorClientFactory(input.sessionAuth, input.sessionId);
+  if (selection.sessionId !== client.sessionId) {
+    throw new HostedRuntimeProviderError("authorization_required");
+  }
+  const projection = await client.bindings(
+    {
+      action: "bindings",
+      operationRef: selection.operationRef,
+      selection: {
+        appId: input.appId,
+        branch: selection.branch,
+        environment: "preview",
+        projectId: selection.projectId,
+        sessionId: client.sessionId,
+      },
+    },
+    input.signal,
+  );
+  if (
+    selection.planDigest === undefined ||
+    selection.planDigest !== operatorPlanDigest(projection.plan)
+  ) {
+    throw new HostedOperatorError("resource_mismatch");
+  }
+  return projection;
+};
+
 // oxlint-disable-next-line eslint/complexity -- Operator references and explicitly retained v1 selections are separate closed authority paths.
 export const resolvePreparedRuntimeExecution = async (
   input: PreparedRuntimeExecutionContext,
@@ -370,40 +415,20 @@ export const resolvePreparedRuntimeExecution = async (
   if (selection && selection.appId !== input.appId) {
     throw new HostedRuntimeProviderError("authorization_required");
   }
-  const operatorClient =
-    selection?.operationRef === undefined
-      ? undefined
-      : await (dependencies.operatorClient ?? hostedOperatorClientForSession)(
-          input.sessionAuth,
-          input.sessionId,
-        );
-  const operatorSessionId = operatorClient?.sessionId ?? input.sessionId;
   if (
     selection &&
-    selection.sessionId !==
-      (selection.operationRef === undefined ? input.sessionId : operatorSessionId)
+    selection.operationRef === undefined &&
+    selection.sessionId !== input.sessionId
   ) {
-    // Legacy runtime selections stay bound to the SDK adapter ID. Protected
-    // selections use the durable public session ID resolved from the handoff.
     throw new HostedRuntimeProviderError("authorization_required");
   }
-  // An operator reference is a closed route: never read/decrypt the legacy installer journal.
   const projection =
-    selection?.operationRef === undefined || operatorClient === undefined
-      ? undefined
-      : await operatorClient.bindings(
-          {
-            action: "bindings",
-            operationRef: selection.operationRef,
-            selection: {
-              appId: input.appId,
-              branch,
-              environment: "preview",
-              projectId: selection.projectId,
-              sessionId: operatorSessionId,
-            },
-          },
-          input.signal,
+    selection?.operationRef === undefined
+      ? null
+      : await resolveProtectedRuntimeBindings(
+          input,
+          selection,
+          dependencies.operatorClient ?? hostedOperatorClientForSession,
         );
   const binding = projection
     ? {
