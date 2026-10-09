@@ -10,6 +10,11 @@ import {
   workflowWorkspace,
 } from "@/lib/agent/workflow-state";
 import { sourceWorkflowState } from "@/lib/agent/source-state";
+import { repositoryAccessReceiptState } from "@/lib/agent/repository-access-state";
+import {
+  recoverSavedWorkflowGitHubBinding,
+  throwSavedBindingGuard,
+} from "@/lib/agent/saved-github-binding";
 import { selectedGitHubSourceForSandboxRestore } from "@/lib/agent/restore-selected-github-sandbox-source";
 import { SOURCE_RECEIPT_VERSION } from "@/lib/repository/source-receipt";
 import { canAutoSelectDevelopmentSource } from "@/lib/repository/development-source";
@@ -28,7 +33,7 @@ export default defineTool({
     "Prepare the current writable repository checkout for product work. This is automatic and records the provider-created checkout without treating normal source or layout changes as failures.",
   async execute(_input, ctx) {
     const development = canAutoSelectDevelopmentSource();
-    const current = appBuilderWorkflowState.get();
+    let current = appBuilderWorkflowState.get();
     assertUpstreamMutationAllowed(current, "workspace preparation");
     if (sourceWorkflowState.get().phase === "empty" && development) {
       await sourceStatus.execute({}, ctx);
@@ -46,7 +51,32 @@ export default defineTool({
     if (!development && githubSource !== undefined) {
       assertExactImmutableGitHubSourceReceipt(githubSource);
     }
+    const recoveryInput = {
+      access: repositoryAccessReceiptState.get(),
+      sessionId: ctx.session.id,
+      source,
+      stage: "prepare-workspace" as const,
+      workflow: current,
+    };
+    // Prove original authority before a provider can open replacement compute.
+    if (!development) {
+      recoverSavedWorkflowGitHubBinding(recoveryInput);
+    }
     const sandbox = await getSourceBoundSandbox(ctx);
+    if (!development) {
+      const recovered = recoverSavedWorkflowGitHubBinding({
+        ...recoveryInput,
+        providerWorkspaceId: getBuilderSandboxId(sandbox),
+      });
+      if (recovered.recovered) {
+        updateExactWorkflow({
+          expected: current,
+          operation: "recover saved GitHub source binding",
+          transition: () => recovered.workflow,
+        });
+        current = recovered.workflow;
+      }
+    }
     let canonicalWorkspace;
     if (!development && source.receipt.version === SOURCE_RECEIPT_VERSION) {
       canonicalWorkspace = await (async () => {
@@ -76,7 +106,7 @@ export default defineTool({
       current.phase !== "empty" &&
       current.githubSource?.digest !== githubSource?.digest
     ) {
-      throw new Error("This app build already owns a different GitHub source binding.");
+      throwSavedBindingGuard(current, source, "prepare-workspace");
     }
     if (
       !development &&
