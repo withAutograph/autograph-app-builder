@@ -1,3 +1,4 @@
+import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
 import { describe, expect, it, vi } from "vitest";
 import { hostedEveOperationScopes } from "../eve/hosted-auth";
 import {
@@ -11,7 +12,10 @@ import { createHostedEveSessionService } from "../eve/hosted-service";
 import type { HostedEveTransport } from "../eve/hosted-service";
 import { builderHandoffRecordSchema } from "../handoff/contracts";
 import type { BuilderHandoffRecord } from "../handoff/contracts";
-import { createHostedOperatorClient } from "./hosted-operator-client";
+import {
+  createHostedOperatorClient,
+  hostedOperatorClientForSession,
+} from "./hosted-operator-client";
 import {
   createHostedOperatorOwnerContextResolver,
   readHostedOperatorOwnerReaderConfiguration,
@@ -136,8 +140,10 @@ const fixture = (
       return result;
     }),
   };
+  const diagnosticSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
   const resolver = createHostedOperatorOwnerContextResolver({
     audience: authority.audience,
+    diagnosticSink,
     handoffs,
     isActiveMember: async () => {
       const result = await Promise.resolve(overrides.isActiveMember ?? true);
@@ -146,10 +152,88 @@ const fixture = (
     issuer: authority.issuer,
     sessions,
   });
-  return { handoffs, resolver, sessions };
+  return { diagnosticSink, handoffs, resolver, sessions };
 };
 
 describe("hosted operator owner context", () => {
+  it.each(["owner_authority", "owner_membership", "owner_session_binding"] as const)(
+    "reports %s denial through closed metadata while preserving rejection",
+    async (stage) => {
+      const f = fixture({ isActiveMember: stage !== "owner_membership" });
+      const input = {
+        adapterSessionId:
+          stage === "owner_session_binding" ? "adapter-stale-private" : "adapter-current",
+        authority:
+          stage === "owner_authority"
+            ? { ...authority, issuer: "https://private.example/api/auth" }
+            : authority,
+        principal,
+        sessionAuth,
+      };
+      await expect(f.resolver(input)).rejects.toMatchObject({ code: "authorization_required" });
+      expect(f.diagnosticSink).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          boundary: "builder",
+          outcome: "operator_access_denied",
+          phase: "inline",
+          stage,
+        }),
+      );
+      for (const [diagnostic] of f.diagnosticSink.mock.calls) {
+        expect(Object.keys(diagnostic).toSorted()).toEqual([
+          "boundary",
+          "event",
+          "outcome",
+          "phase",
+          "sessionIdHash",
+          "stage",
+        ]);
+        expect(diagnostic.sessionIdHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
+      }
+      const recorded = JSON.stringify(f.diagnosticSink.mock.calls);
+      for (const privateValue of [
+        input.adapterSessionId,
+        authority.ownerUserId,
+        authority.workspaceId,
+        authority.issuer,
+        authority.audience,
+        handoffId,
+      ]) {
+        expect(recorded).not.toContain(privateValue);
+      }
+    },
+  );
+  it("reports client construction failures before inline consent diagnostics exist", async () => {
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      await expect(
+        hostedOperatorClientForSession(sessionAuth, "private-anchor", {}),
+      ).rejects.toMatchObject({ code: "protected_operator_required" });
+      expect(log.mock.calls.at(-1)?.[1]).toMatchObject({
+        outcome: "setup_unavailable",
+        stage: "configuration",
+      });
+      log.mockClear();
+      await expect(
+        hostedOperatorClientForSession(sessionAuth, "private-anchor", {
+          HOSTED_RUNTIME_OPERATOR_URL: "https://operator.example",
+        }),
+      ).rejects.toMatchObject({ code: "operator_unavailable" });
+      expect(log.mock.calls).toContainEqual([
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({ outcome: "setup_unavailable", stage: "owner_configuration" }),
+      ]);
+      expect(log.mock.calls.at(-1)?.[1]).toMatchObject({
+        outcome: "setup_unavailable",
+        stage: "owner_context",
+      });
+      expect(JSON.stringify(log.mock.calls)).not.toContain("private-anchor");
+      expect(JSON.stringify(log.mock.calls)).not.toContain("https://operator.example");
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it("reads explicit owner database/issuer/audience without Auth secrets or runtime-mode flags", () => {
     expect(
       readHostedOperatorOwnerReaderConfiguration({
@@ -269,8 +353,10 @@ describe("hosted operator owner context", () => {
         return new Map<string, BuilderHandoffRecord>().get("missing-handoff");
       }),
     };
+    const diagnosticSink = vi.fn<HostedOperatorConsentDiagnosticSink>();
     const resolver = createHostedOperatorOwnerContextResolver({
       audience: authority.audience,
+      diagnosticSink,
       handoffs,
       isActiveMember: async () => {
         await Promise.resolve();

@@ -6,6 +6,11 @@ const phase = z.enum(["inline", "check", "start", "complete"]);
 const stage = z.enum([
   "configuration",
   "owner_context",
+  "owner_configuration",
+  "owner_authority",
+  "owner_membership",
+  "owner_session_binding",
+  "client_construction",
   "principal",
   "operator_request",
   "inline_token",

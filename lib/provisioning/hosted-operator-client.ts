@@ -1,3 +1,5 @@
+import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent-diagnostic";
+import type { HostedOperatorConsentMetadata } from "./hosted-operator-consent-diagnostic";
 import { neonAuthorizationResultSchema } from "./hosted-operator-neon-authorization";
 import { z } from "zod";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
@@ -150,22 +152,48 @@ export const hostedOperatorClientForSession = async (
   adapterSessionId: string,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ) => {
-  const endpoint = environment.HOSTED_RUNTIME_OPERATOR_URL;
-  if (endpoint === undefined || endpoint === "") {
-    throw new HostedOperatorError("protected_operator_required");
+  const report = createHostedOperatorConsentDiagnostic(adapterSessionId);
+  let stage: HostedOperatorConsentMetadata["stage"] = "configuration";
+  const emit = (outcome: HostedOperatorConsentMetadata["outcome"]) => {
+    report({ boundary: "builder", outcome, phase: "inline", stage });
+  };
+  emit("started");
+  try {
+    const endpoint = environment.HOSTED_RUNTIME_OPERATOR_URL;
+    if (endpoint === undefined || endpoint === "") {
+      throw new HostedOperatorError("protected_operator_required");
+    }
+    emit("verified");
+    stage = "owner_authority";
+    emit("started");
+    const { authority, principal } = exactForwardedSessionAuthority(sessionAuth);
+    emit("verified");
+    stage = "owner_context";
+    emit("started");
+    const ownerContext = await resolveHostedOperatorOwnerContext({
+      adapterSessionId,
+      authority,
+      environment,
+      principal,
+      sessionAuth,
+    });
+    emit("verified");
+    stage = "client_construction";
+    emit("started");
+    const client = createHostedOperatorClient({
+      endpoint,
+      ownerContext,
+      sessionId: ownerContext.sessionId,
+      token: createVercelWorkloadIdentity().token,
+    });
+    emit("verified");
+    return client;
+  } catch (error) {
+    emit(
+      error instanceof HostedOperatorError && error.code === "authorization_required"
+        ? "operator_access_denied"
+        : "setup_unavailable",
+    );
+    throw error;
   }
-  const { authority, principal } = exactForwardedSessionAuthority(sessionAuth);
-  const ownerContext = await resolveHostedOperatorOwnerContext({
-    adapterSessionId,
-    authority,
-    environment,
-    principal,
-    sessionAuth,
-  });
-  return createHostedOperatorClient({
-    endpoint,
-    ownerContext,
-    sessionId: ownerContext.sessionId,
-    token: createVercelWorkloadIdentity().token,
-  });
 };
