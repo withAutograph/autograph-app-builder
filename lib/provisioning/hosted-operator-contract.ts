@@ -45,6 +45,25 @@ const databaseResource = z
     runtimeRole: sqlName,
   })
   .refine((value) => value.runtimeRole !== value.migratorRole);
+/** Approval names an exact owned source checkpoint, never a database-name lookup. */
+export const sharedAuthAdoptionSchema = z.strictObject({
+  kind: z.literal("owned-journal-auth-v1"),
+  resource: z.strictObject({
+    authDatabase: databaseResource,
+    branchId: id,
+    endpoint: id,
+    endpointId: id,
+    projectId: id,
+  }),
+  source: z.strictObject({
+    checkpointSha256: digest,
+    journalDigest: digest,
+    operationRef: z.uuid(),
+    planDigest: digest,
+    selection: operatorSelectionSchema,
+  }),
+});
+export type SharedAuthAdoption = z.infer<typeof sharedAuthAdoptionSchema>;
 const previewDeploymentSchema = z.strictObject({
   branch: id,
   deploymentId: id.optional(),
@@ -76,6 +95,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   ),
   action: z.enum(["prepare", "cleanup"]),
   appDatabase: databaseResource,
+  authAdoption: sharedAuthAdoptionSchema.optional(),
   authDatabase: databaseResource,
   authMembership: z
     .strictObject({
@@ -311,7 +331,32 @@ const authorizationPhases = (plan: z.infer<typeof hostedOperatorPlanDataSchema>)
   }
   return phases;
 };
+const validateAuthAdoption = (
+  plan: z.infer<typeof hostedOperatorPlanDataSchema>,
+  ctx: z.RefinementCtx,
+) => {
+  if (plan.authAdoption !== undefined) {
+    const { resource, source } = plan.authAdoption;
+    const mismatch = [
+      JSON.stringify(resource.authDatabase) !== JSON.stringify(plan.authDatabase),
+      resource.projectId !== plan.neon.projectId,
+      resource.branchId !== plan.neon.branchId,
+      resource.endpoint !== plan.neon.endpoint,
+      resource.endpointId !== plan.bootstrap?.endpointId,
+      source.selection.appId === plan.selection.appId,
+      plan.authSchema === undefined,
+    ].some(Boolean);
+    if (mismatch) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "Shared Auth adoption must preserve the exact source Auth resource for an independent app.",
+      });
+    }
+  }
+};
 export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine((plan, ctx) => {
+  validateAuthAdoption(plan, ctx);
   if ((plan.bootstrap === undefined) !== (plan.resourcesInstaller === undefined)) {
     ctx.addIssue({
       code: "custom",
