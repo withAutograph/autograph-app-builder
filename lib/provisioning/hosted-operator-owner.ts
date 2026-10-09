@@ -15,6 +15,7 @@ import {
   HostedOperatorError,
   operatorOwnerContextSchema,
   operatorPlanDigest,
+  retainedOperatorAuthSchema,
   sameOperatorSelection,
 } from "./hosted-operator-contract";
 import type {
@@ -25,7 +26,10 @@ import type {
 import { createOperatorWorkloadVerifier } from "./hosted-operator-workload";
 import type { OperatorWorkloadPolicy } from "./hosted-operator-workload";
 import { hostedRuntimeTargetSchema } from "./hosted-runtime-journal";
-import type { HostedRuntimeJournalStore } from "./hosted-runtime-journal";
+import type {
+  HostedRuntimeJournalRecord,
+  HostedRuntimeJournalStore,
+} from "./hosted-runtime-journal";
 import type { HostedOperatorContext } from "./hosted-operator-service";
 import {
   createPrivateHostedApprovalRecorder,
@@ -336,6 +340,29 @@ export const createHostedOperatorOwnerAuthority = (deps: HostedOperatorOwnerDepe
   };
 };
 
+const approvalCheckpoint = (
+  record: HostedRuntimeJournalRecord | undefined,
+  context: { action: "prepare" | "cleanup"; callId: string; planDigest: string },
+) => {
+  const retained = record?.retainedAuth;
+  const retainedPrepare =
+    context.action === "prepare" &&
+    retained?.planDigest === context.planDigest &&
+    retained.approvedByCallId === context.callId;
+  // Cleanup replaces the current operator plan; the original terminal prepare
+  // receipt remains bound to its exact retained plan, call and operation.
+  const retainedResult = retainedPrepare
+    ? retainedOperatorAuthSchema.safeParse(retained)
+    : undefined;
+  if (retainedResult?.success === false) {
+    throw unavailable();
+  }
+  return {
+    current: retainedResult?.success === true ? retainedResult.data : record?.operator,
+    retainedPrepare,
+  };
+};
+
 /** Owner-scoped terminal approval reader; the durable digest binds the closed plan. */
 export const createHostedOperatorReadApproval =
   (input: {
@@ -357,7 +384,7 @@ export const createHostedOperatorReadApproval =
   ) => {
     const owner = operatorOwnerContextSchema.safeParse(context.ownerContext);
     const row = await input.journal.read(context);
-    const current = row?.record.operator;
+    const { current, retainedPrepare } = approvalCheckpoint(row?.record, context);
     if (!owner.success || current === undefined) {
       throw unavailable();
     }
@@ -416,6 +443,7 @@ export const createHostedOperatorReadApproval =
       receipt.toolInput.appId === current.plan.selection.appId,
       receipt.toolInput.branch === current.plan.selection.branch,
       receipt.toolInput.projectId === current.plan.selection.projectId,
+      !retainedPrepare || receipt.requestId === current.approvalId,
     ].every(Boolean);
     if (!receiptMatches) {
       throw unavailable();

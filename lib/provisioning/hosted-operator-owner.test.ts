@@ -354,7 +354,219 @@ const request = (bearer = token) =>
     method: "POST",
   });
 
+const retainedApprovalFixture = () => {
+  const fixture = makeFixture();
+  const preparePlan = hostedOperatorPlanSchema.parse({
+    ...plan,
+    authSchema: {
+      artifactRef: "retained-auth-artifact",
+      installer: plan.installer,
+      planDigest: "c".repeat(64),
+      targetDigest: "d".repeat(64),
+    },
+  });
+  const cleanupPlan = hostedOperatorPlanSchema.parse({
+    ...preparePlan,
+    action: "cleanup",
+    effects: [
+      { description: "revoke", id: "revoke", kind: "revoke" },
+      { description: "remove", id: "remove-bindings", kind: "remove-bindings" },
+      {
+        description: "retire app only",
+        id: "retire",
+        kind: "retire",
+      },
+    ],
+  });
+  const prepareOperation = "a5c2b20f-0c08-49a8-a34f-cce64c72cc8c";
+  const cleanupOperation = "849497e7-38e1-413c-8264-ce0fbd82f242";
+  const makeReceipt = (selectedPlan: typeof plan, operationRef: string, callId: string) =>
+    privateHostedApprovalReceiptSchema.parse({
+      callId,
+      format: "autograph-hosted-approval-v1",
+      outcome: "approved",
+      requestId: `approval-${callId}`,
+      responderPrincipalId: principal.ownerUserId,
+      sequence: 1,
+      toolInput: {
+        appId: selection.appId,
+        branch: selection.branch,
+        environment: selection.environment,
+        operationRef,
+        plan: selectedPlan,
+        planDigest: operatorPlanDigest(selectedPlan),
+        projectId: selection.projectId,
+      },
+      toolName:
+        selectedPlan.action === "prepare"
+          ? "prepare-app-hosted-runtime"
+          : "cleanup-app-hosted-runtime",
+      turnId: "turn-1",
+    });
+  const prepareReceipt = makeReceipt(preparePlan, prepareOperation, "prepare-call");
+  const cleanupReceipt = makeReceipt(cleanupPlan, cleanupOperation, "cleanup-call");
+  fixture.currentSession.privateApprovalReceipts = [prepareReceipt, cleanupReceipt];
+  const runtimeTarget = hostedRuntimeTargetSchema.parse({
+    ...selection,
+    installationId: "icfg_1",
+    scopeId: "team_1",
+    scopeType: "team",
+  });
+  const record = hostedRuntimeJournalRecordSchema.parse({
+    approvedByCallId: cleanupReceipt.callId,
+    kind: "app-runtime",
+    operator: {
+      approvalId: cleanupReceipt.requestId,
+      mode: "protected-operator-v1",
+      operationRef: cleanupOperation,
+      plan: cleanupPlan,
+      planDigest: cleanupReceipt.toolInput.planDigest,
+      receipts: [],
+    },
+    request: runtimeTarget,
+    retainedAuth: {
+      approvalId: prepareReceipt.requestId,
+      approvedByCallId: prepareReceipt.callId,
+      authPreparation: {
+        assetSha256: "a".repeat(64),
+        catalogFingerprint: "b".repeat(64),
+        database: preparePlan.authDatabase.database,
+        observedAt: "2026-10-09T00:00:00Z",
+        runtimeRole: preparePlan.authDatabase.runtimeRole,
+        targetDigest: preparePlan.authSchema?.targetDigest,
+      },
+      fenceGeneration: 1,
+      operationRef: prepareOperation,
+      plan: preparePlan,
+      planDigest: prepareReceipt.toolInput.planDigest,
+      receipts: preparePlan.effects.map((effect) => ({
+        effectId: effect.id,
+        fenceGeneration: effect.kind === "access" ? 1 : undefined,
+        observedAt: "2026-10-09T00:00:00Z",
+        resourceVersion: "a".repeat(64),
+      })),
+    },
+    status: "cleaned",
+    step: "cleaned",
+    version: 1,
+  });
+  const journal: Pick<HostedRuntimeJournalStore, "read"> = {
+    read: vi.fn(async () => {
+      await Promise.resolve();
+      return { record, revision: 1 };
+    }),
+  };
+  const observe = vi.fn(async () => {
+    await Promise.resolve();
+    throw new Error("The exact terminal receipt is already retained.");
+  });
+  const readApproval = createHostedOperatorReadApproval({ eve: fixture.eve, journal, observe });
+  const context = {
+    authority: ownerContext.authority,
+    ownerContext,
+    target: runtimeTarget,
+  };
+  const prepareInput = {
+    ...context,
+    action: "prepare" as const,
+    callId: prepareReceipt.callId,
+    planDigest: prepareReceipt.toolInput.planDigest,
+  };
+  return {
+    cleanupReceipt,
+    context,
+    fixture,
+    observe,
+    prepareInput,
+    prepareReceipt,
+    readApproval,
+    record,
+  };
+};
+
 describe("hosted operator owner authority", () => {
+  it("reads the original exact prepare approval after source app cleanup", async () => {
+    const retained = retainedApprovalFixture();
+    await expect(retained.readApproval(retained.prepareInput)).resolves.toEqual({
+      action: "prepare",
+      approvalId: retained.prepareReceipt.requestId,
+      approved: true,
+      callId: retained.prepareReceipt.callId,
+      planDigest: retained.prepareReceipt.toolInput.planDigest,
+    });
+    expect(retained.observe).not.toHaveBeenCalled();
+  });
+
+  it("keeps cleanup approval bound to the current cleanup operation", async () => {
+    const retained = retainedApprovalFixture();
+    await expect(
+      retained.readApproval({
+        ...retained.context,
+        action: "cleanup",
+        callId: retained.cleanupReceipt.callId,
+        planDigest: retained.cleanupReceipt.toolInput.planDigest,
+      }),
+    ).resolves.toMatchObject({ action: "cleanup", approvalId: retained.cleanupReceipt.requestId });
+    await expect(
+      retained.readApproval({ ...retained.prepareInput, action: "cleanup" }),
+    ).rejects.toThrow();
+  });
+
+  it.each([
+    "call",
+    "digest",
+    "operation",
+    "plan",
+    "approval",
+    "readiness",
+    "foreign",
+    "cancelled",
+  ] as const)("rejects a mismatched retained prepare %s", async (mismatch) => {
+    const retained = retainedApprovalFixture();
+    const provenance = retained.record.retainedAuth;
+    if (provenance === undefined) {
+      throw new Error("Expected retained Auth fixture.");
+    }
+    switch (mismatch) {
+      case "call": {
+        retained.prepareInput.callId = "another-call";
+        break;
+      }
+      case "digest": {
+        retained.prepareInput.planDigest = "e".repeat(64);
+        break;
+      }
+      case "operation": {
+        provenance.operationRef = retained.cleanupReceipt.toolInput.operationRef;
+        break;
+      }
+      case "plan": {
+        provenance.plan.cost.description = "changed after approval";
+        break;
+      }
+      case "approval": {
+        provenance.approvalId = "another-approval";
+        break;
+      }
+      case "readiness": {
+        provenance.authPreparation.targetDigest = "e".repeat(64);
+        break;
+      }
+      case "foreign": {
+        retained.prepareReceipt.responderPrincipalId = "another-owner";
+        break;
+      }
+      case "cancelled": {
+        retained.prepareReceipt.outcome = "cancelled";
+        break;
+      }
+      default: {
+        throw new Error("Unexpected retained approval mismatch.");
+      }
+    }
+    await expect(retained.readApproval(retained.prepareInput)).rejects.toThrow();
+  });
+
   it("derives a target from current owner-scoped session, handoff, membership, and Vercel readback", async () => {
     const fixture = makeFixture();
     const context = await fixture.authority.authorize(request(), selection, ownerContext);
