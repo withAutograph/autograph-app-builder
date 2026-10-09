@@ -89,6 +89,7 @@ describe("protected operator immutable Sandbox source", () => {
               version: 1,
             }),
     }));
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The injected fixture implements only the SDK methods this proposal path calls; no provider object is narrowed.
     const sandbox = {
       delete: vi.fn(async () => {}),
       runCommand,
@@ -112,6 +113,7 @@ describe("protected operator immutable Sandbox source", () => {
     });
     expect(createSandbox.mock.calls[0]?.[0]).not.toHaveProperty("image");
     expect(runCommand).toHaveBeenLastCalledWith({
+      // oxlint-disable-next-line sonarjs/publicly-writable-directories -- This assertion checks the private0600 VM input path; it creates no local file.
       args: ["--input-file", "/tmp/protected-auth-proposal-input.json"],
       cmd: fields.authProposal.executablePath,
       env: {},
