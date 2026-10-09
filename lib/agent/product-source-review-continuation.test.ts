@@ -263,7 +263,9 @@ describe("durable source review continuation", () => {
       appSpecDigest: "expanded-spec",
     };
     const generate = vi.fn((_page: ProductReviewSourcePage, context: { text: string }) => {
-      if (context.text.length > 350) {throw new Error("maximum context length exceeded");}
+      if (context.text.length > 350) {
+        throw new Error("maximum context length exceeded");
+      }
       return empty;
     });
     const assessed = await assessProductSourcePages(expanded, stream([firstPage]), {
