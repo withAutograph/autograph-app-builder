@@ -919,6 +919,102 @@ describe("protected hosted operator boundary", () => {
       }),
     ).rejects.toThrow("operation_in_progress");
   });
+  it("plans and approves app cleanup after consuming Realm identity while retaining shared resources", async () => {
+    const f = fixture();
+    const appPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      gatewayBindings: {
+        authBrowserOrigin: "https://auth-preview.example.test",
+        builderCallbackOrigin: "https://builder.example",
+        catalogAppIds: [selection.appId],
+        operatorOrigin: "https://operator.example",
+        sourceWorkload: {
+          audience: "https://vercel.com",
+          environment: "preview",
+          issuer: "https://oidc.vercel.com/team_fixture",
+          ownerId: "team_fixture",
+          projectId: "prj_gateway",
+          subject: "fixture-gateway",
+        },
+      },
+      effects: [
+        ...plan.effects,
+        { description: "Bind shared Gateway", id: "gateway-bindings", kind: "gateway-bindings" },
+      ],
+    });
+    f.deps.plan = async () => appPlan;
+    const request = await prepared(f);
+    f.approve();
+    expect((await f.client.request(request)).status).toBe("prepared");
+    const current = f.row;
+    if (current?.record.operator === undefined) {
+      throw new Error("Missing completed app journal");
+    }
+    const sharedRows = [
+      {
+        branch: selection.branch,
+        comment: `App Builder protected operator ${request.operationRef}`,
+        id: "env_shared_auth",
+        key: "AUTH_DATABASE_RESOURCE",
+        operationRef: request.operationRef,
+        projectId: "prj_gateway",
+      },
+    ];
+    f.row = {
+      ...current,
+      record: hostedRuntimeJournalRecordSchema.parse({
+        ...current.record,
+        operator: {
+          ...current.record.operator,
+          gatewayEnvironment: sharedRows,
+          identityLink: {
+            audience: "https://builder.example",
+            authResourceId: plan.authDatabase.resourceId,
+            bootstrapPlanDigest: request.planDigest,
+            browserOrigin: appPlan.gatewayBindings?.authBrowserOrigin,
+            consumedAt: new Date().toISOString(),
+            endpointOrigin: plan.deploymentBoundary?.verification.gatewayOrigin,
+            expiresAt: "2027-01-01T00:00:00.000Z",
+            issuer: plan.deploymentBoundary?.verification.publicOrigin,
+            nonceSha256: "d".repeat(64),
+            organizationId: "synthetic-org",
+            ownerSessionId: selection.sessionId,
+            proofRef: "retained-proof",
+            proofSha256: "e".repeat(64),
+          },
+        },
+      }),
+    };
+    const retainedCredentials = structuredClone(f.row.record.privateState);
+    const cleanupPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      action: "cleanup",
+      effects: [
+        { description: "Revoke app access", id: "revoke", kind: "revoke" },
+        { description: "Remove app bindings", id: "remove-bindings", kind: "remove-bindings" },
+        { description: "Retire app resource", id: "retire", kind: "retire" },
+      ],
+    });
+    f.deps.plan = async () => cleanupPlan;
+    const planned = await f.client.request({ action: "plan", operation: "cleanup", selection });
+    expect(planned.status).toBe("planned");
+    expect(f.row?.record.operator?.identityLink).toBeUndefined();
+    expect(f.row?.record.privateState).toEqual(retainedCredentials);
+    expect(f.row?.record.operator?.gatewayEnvironment).toEqual(sharedRows);
+    const cleanup = {
+      ...request,
+      callId: "cleanup-consumed-identity",
+      operationRef: z.uuid().parse(planned.operationRef),
+      planDigest: z.string().parse(planned.planDigest),
+    };
+    const approval = f.deps.readApproval;
+    f.deps.readApproval = async () => null;
+    expect((await f.client.request(cleanup)).code).toBe("authorization_required");
+    f.deps.readApproval = approval;
+    expect((await f.client.request(cleanup)).status).toBe("cleaned");
+    expect(f.row?.record.privateState).toEqual(retainedCredentials);
+    expect(f.row?.record.operator?.gatewayEnvironment).toEqual(sharedRows);
+  });
   it("requires cleanup approval and retains private shared Auth credentials for the next Preview", async () => {
     const f = fixture();
     const request = await prepared(f);
