@@ -200,3 +200,11 @@ export const currentProductSourceAssessment = (
   const current = store.get();
   return current?.bindingDigest === sourceReviewBindingDigest(input) ? current : undefined;
 };
+
+/** This lookup never crosses the active owner/session context or accepts another session ID. */
+export const retainedProductSourceAssessmentForReference = (
+  bindingDigest: string,
+): ProductSourceAssessment | undefined => {
+  const current = sessionAssessmentStore.get();
+  return current?.bindingDigest === bindingDigest ? current : undefined;
+};

@@ -12,10 +12,12 @@ import {
   assertCompleteGitHubDestinationReview,
 } from "@/lib/agent/workflow-state";
 import { createReviewedChangeSetReceipt } from "@/lib/repository/reviewed-change-set";
+import { reviewedChangeSetSummary } from "@/lib/agent/review-result-summaries";
+import { checkedNativeToolResult } from "@/lib/eve/payload-envelope";
 
 export default defineTool({
   description:
-    "Record the current reviewed change summary after repository validation succeeds. This is internal and never publishes or changes an external repository.",
+    "Record the current reviewed change summary after repository validation succeeds and required complete diff reads finish. Return a compact receipt summary and current-session references; the full receipt stays authoritative in this session. Read its complete product/source evidence through change_set_status view=acceptance. This is internal and never publishes or changes an external repository.",
   async execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase !== "validated" && state.phase !== "reviewed") {
@@ -39,22 +41,32 @@ export default defineTool({
       sessionId: ctx.session.id,
     });
     ctx.abortSignal?.throwIfAborted();
+    const productAcceptance = productAcceptanceObligations(
+      state.appSpec,
+      currentProductBehaviorEvidence(state.appSpec.digest, state.applyReceipt.digest),
+      sourceAssessment,
+    );
+    const metadata = {
+      callId: ctx.callId,
+      toolName: "accept_change_set",
+      turnId: ctx.session.turn.id,
+    };
     if (state.phase === "reviewed") {
       const expectedReceipt = createReviewedChangeSetReceipt(
         changeSet,
         state.reviewReceipt.reviewedByCallId,
       );
       if (expectedReceipt.digest === state.reviewReceipt.digest) {
-        return {
-          ...state.reviewReceipt,
-          productAcceptance: productAcceptanceObligations(
-            state.appSpec,
-            currentProductBehaviorEvidence(state.appSpec.digest, state.applyReceipt.digest),
+        return checkedNativeToolResult(
+          reviewedChangeSetSummary({
+            productAcceptance,
+            receipt: state.reviewReceipt,
+            reused: true,
+            sessionId: ctx.session.id,
             sourceAssessment,
-          ),
-          reused: true,
-          sourceAssessment,
-        };
+          }),
+          metadata,
+        );
       }
     }
     const receipt = createReviewedChangeSetReceipt(changeSet, ctx.callId);
@@ -87,16 +99,16 @@ export default defineTool({
         workspace: state.workspace,
       }),
     });
-    return {
-      ...receipt,
-      productAcceptance: productAcceptanceObligations(
-        state.appSpec,
-        currentProductBehaviorEvidence(state.appSpec.digest, state.applyReceipt.digest),
+    return checkedNativeToolResult(
+      reviewedChangeSetSummary({
+        productAcceptance,
+        receipt,
+        reused: false,
+        sessionId: ctx.session.id,
         sourceAssessment,
-      ),
-      reused: false,
-      sourceAssessment,
-    };
+      }),
+      metadata,
+    );
   },
   inputSchema: z.strictObject({}),
 });
