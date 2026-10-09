@@ -3,7 +3,7 @@
 set -eu
 
 docker=$(mise which docker)
-image='postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40'
+image='public.ecr.aws/docker/library/postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40'
 container="app-builder-lease-test-$$"
 
 cleanup() {
