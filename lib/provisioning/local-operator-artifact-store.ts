@@ -13,7 +13,11 @@ import type {
   OperatorArtifactContext,
   OperatorArtifactStore,
 } from "./hosted-operator-artifact-store";
-import { compiledOperatorReleaseSelectionSchema } from "./hosted-operator-artifact-selection";
+import {
+  compiledOperatorReleaseSelectionSchema,
+  exactCompiledOperatorReleaseLookupSchema,
+  selectExactCompiledOperatorRelease,
+} from "./hosted-operator-artifact-selection";
 import type {
   CompiledOperatorReleaseSelection,
   OperatorArtifactSelections,
@@ -125,7 +129,8 @@ const selectionFrameSchema = z.strictObject({
   sequence: z.string().regex(/^[1-9][0-9]*$/u),
   version: z.literal(1),
 });
-const scanSelections = async (directory: string, callDigest?: string) => {
+const scanSelections = async (directory: string, callDigest?: string, includeHistory = false) => {
+  const frames: z.infer<typeof selectionFrameSchema>[] = [];
   let latest: z.infer<typeof selectionFrameSchema> | undefined;
   let matched: z.infer<typeof selectionFrameSchema> | undefined;
   const entries = await opendir(directory);
@@ -145,6 +150,9 @@ const scanSelections = async (directory: string, callDigest?: string) => {
     if (frame.sequence !== ordinal) {
       throw operatorArtifactUnavailable();
     }
+    if (includeHistory) {
+      frames.push(frame);
+    }
     if (latest === undefined || BigInt(frame.sequence) > BigInt(latest.sequence)) {
       latest = frame;
     }
@@ -155,7 +163,7 @@ const scanSelections = async (directory: string, callDigest?: string) => {
       matched = frame;
     }
   }
-  return { latest, matched };
+  return { frames, latest, matched };
 };
 
 /** Private owner/session/app filesystem state; the app Sandbox never receives this root. */
@@ -250,6 +258,43 @@ export const createLocalOperatorArtifactStorage = async (input: {
         throw operatorArtifactUnavailable();
       }
       return latest.selection;
+    },
+    async readExact(context, lookupInput) {
+      const lookup = exactCompiledOperatorReleaseLookupSchema.parse(lookupInput);
+      if (
+        "artifactRef" in lookup &&
+        (lookup.artifactRef.split("/")[2] !== "generated-release" ||
+          lookup.artifactRef.split("/")[3] !== context.target.appId)
+      ) {
+        throw operatorArtifactUnavailable();
+      }
+      const owned = await directory(context);
+      const candidates: CompiledOperatorReleaseSelection[] = [];
+      const entries = await opendir(owned);
+      for await (const entry of entries) {
+        const spec = /^selection-(?<digest>[a-f0-9]{64})$/u.exec(entry.name)?.groups?.digest;
+        if (
+          spec === undefined ||
+          (lookup.appSpecDigest !== undefined && spec !== lookup.appSpecDigest)
+        ) {
+          continue;
+        }
+        const selected = path.join(owned, entry.name);
+        await assertDirectory(selected);
+        const { frames } = await scanSelections(selected, undefined, true);
+        for (const frame of frames) {
+          if (
+            frame.selection.appId !== context.target.appId ||
+            frame.selection.appSpecDigest !== spec
+          ) {
+            throw operatorArtifactUnavailable();
+          }
+          candidates.push(frame.selection);
+        }
+        await input.assertCurrentOwner(context);
+      }
+      await input.assertCurrentOwner(context);
+      return selectExactCompiledOperatorRelease(candidates, lookup);
     },
     async record(context, callId, selectionInput) {
       const selection = compiledOperatorReleaseSelectionSchema.parse(selectionInput);

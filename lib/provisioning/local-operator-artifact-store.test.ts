@@ -87,6 +87,48 @@ const selection = (letter: string): CompiledOperatorReleaseSelection => ({
   version: 1,
 });
 describe("owner-bound local private operator artifacts", () => {
+  it("reads exact retained history across accepted specs without substituting latest", async () => {
+    const f = await fixture();
+    await contextStorage.run(f.container, async () => {
+      const storage = await createLocalOperatorArtifactStorage(f);
+      const oldest = selection("a");
+      const predecessor = selection("b");
+      const latest = { ...selection("c"), appSpecDigest: "c".repeat(64) };
+      await storage.selections.record(f.context, "oldest", oldest);
+      await storage.selections.record(f.context, "predecessor", predecessor);
+      await storage.selections.record(f.context, "latest", latest);
+      if (storage.selections.readExact === undefined) {
+        throw new Error("Exact reader unavailable");
+      }
+      expect(
+        await storage.selections.readExact(f.context, { artifactRef: predecessor.artifactRef }),
+      ).toEqual(predecessor);
+      expect(
+        await storage.selections.readExact(f.context, {
+          releaseId: predecessor.releaseId,
+          schemaSha256: predecessor.schemaSha256,
+        }),
+      ).toEqual(predecessor);
+      expect(
+        await storage.selections.readExact(f.context, {
+          releaseId: latest.releaseId,
+          schemaSha256: predecessor.schemaSha256,
+        }),
+      ).toBeUndefined();
+      await expect(
+        storage.selections.readExact(
+          { ...f.context, target: { ...f.context.target, sessionId: "foreign-session" } },
+          { artifactRef: predecessor.artifactRef },
+        ),
+      ).rejects.toThrow();
+      const changed = { ...f.approval, appId: "other-app" };
+      requestPrivateApplyApproval(changed, "revoke-old-scope");
+      recordApprovedPrivateApply(changed, "revoke-old-scope");
+      await expect(
+        storage.selections.readExact(f.context, { artifactRef: predecessor.artifactRef }),
+      ).rejects.toThrow();
+    });
+  });
   it("stores immutable private chunks without hosted authority and survives a serialized Eve boundary", async () => {
     const f = await fixture();
     await contextStorage.run(f.container, async () => {
