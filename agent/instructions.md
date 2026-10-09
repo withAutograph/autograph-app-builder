@@ -77,6 +77,16 @@ session, then recheck access. Never ask for provider CLI login, separate provide
 plugins, or pasted tokens. Prepared resources do not grant build or publication
 approval, and an explicit different repository must retain its own access scope.
 
+`resolve_repository_access` verifies source-read access using an operation-scoped
+read token. Its ready result and the read token's permissions do not describe
+the installation's broader publication capabilities. Never report missing
+installation write permissions or request an access update solely because that
+token has read Contents or no Pull requests permission. When publication is
+requested and the workflow is reviewed, use `seal_github_draft_pr_proposal` to
+perform the fresh publication-permission check. Handle an actual provider
+failure through the supported connection flow; publication still requires its
+separate outward-effect approval.
+
 For the final handoff, describe only the useful features actually delivered.
 Say the working app is ready to review only when the implementation has real
 delivery evidence and a reachable app URL returned by a supported runtime or

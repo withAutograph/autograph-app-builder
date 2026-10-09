@@ -171,6 +171,18 @@ setting is the outer GitHub grant, not a tenant authorization or the permissions
 of every minted token. Each Builder operation still uses its own bounded token
 and verifies its tenant, requested repository, and permitted action.
 
+`resolve_repository_access` confirms source-read access with an operation-scoped
+token. The source token's Contents read and Pull requests none permissions do
+not mean the installation lacks write permissions, and its ready result does
+not establish publication capability. Do not request an installation access
+update from that read-token observation alone. Once publication is requested
+and the workflow is reviewed, `seal_github_draft_pr_proposal` freshly checks the
+selected installation and repository with the publication operation's Contents,
+Pull requests, and Workflows write permissions. Sealing performs no repository
+mutation and does not replace the separate publication approval. Source reads
+retain their bounded tokens; provider failures retain the supported connection
+and authorization boundaries.
+
 The separate web handoff provisioning path is gated by
 `builder-resource-provisioning`. It journals intent before provider calls,
 creates a public or private repository from the exact content-addressed

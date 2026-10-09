@@ -21,7 +21,7 @@ export const inputSchema = z.strictObject({
 export default defineTool({
   approval: never(),
   description:
-    "Confirm the signed-in user's current GitHub access to one named repository. Pass selectedInstallationId=null to use the single verified installation; provide an ID only after scope-selection-required. When access is missing, this parks the same turn on the official GitHub connection flow and resumes only after a fresh provider read-back. A chat message or button click cannot grant access.",
+    "Confirm the signed-in user's current GitHub source-read access to one named repository. This uses an operation-scoped read token; ready access and that token's permissions do not measure the installation's broader publication capabilities. Do not infer missing installation write permissions from this source-read token. When publication is requested and the workflow is reviewed, seal_github_draft_pr_proposal performs a fresh publication-permission check before separate publication approval. Pass selectedInstallationId=null to use the single verified installation; provide an ID only after scope-selection-required. When source access is missing, this parks the same turn on the official GitHub connection flow and resumes only after a fresh provider read-back. A chat message or button click cannot grant access.",
   async execute(input, ctx) {
     const runtime = await repositoryAccessRuntimeForSession(ctx.session.auth);
     const result = await resolveRepositoryAccessForTool(input, ctx, runtime);
