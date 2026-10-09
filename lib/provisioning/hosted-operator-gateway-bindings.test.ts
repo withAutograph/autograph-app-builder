@@ -1,8 +1,15 @@
 /* oxlint-disable typescript/no-non-null-assertion, eslint/no-use-before-define, eslint/sort-keys, eslint/require-await, eslint/prefer-const -- Provider fixtures deliberately preserve source-shaped rows and async callbacks. */
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { expect, it, vi } from "vitest";
-import { hostedOperatorPlanSchema } from "./hosted-operator-contract";
-import type { ManagedOperatorEnvironmentRow } from "./hosted-operator-contract";
+import {
+  canonicalGatewayEnvironmentRowsSchema,
+  hostedOperatorPlanSchema,
+} from "./hosted-operator-contract";
+import type {
+  CanonicalGatewayEnvironmentRow,
+  ManagedOperatorEnvironmentRow,
+} from "./hosted-operator-contract";
 import type { GatewayManagedEnvironmentContext } from "./hosted-operator-service";
 import { createHostedOperatorGatewayBindings } from "./hosted-operator-gateway-bindings";
 
@@ -198,6 +205,8 @@ const fixture = () => {
   let journal: ManagedOperatorEnvironmentRow[] = [];
   let input: GatewayManagedEnvironmentContext;
   let losePostResponse = false;
+  let losePatchResponse = false;
+  let emptyMutationResponse = false;
   const assertCurrent = vi.fn(async () => {});
   const checkpointGatewayEnvironment = vi.fn(
     async (next: readonly ManagedOperatorEnvironmentRow[]) => {
@@ -225,7 +234,7 @@ const fixture = () => {
       },
     ],
     fenceGeneration: 1,
-    gateway,
+    gateway: structuredClone(gateway),
     gatewayEnvironmentRows: journal,
     operationRef: "prepare-operation",
     ownerContext: {
@@ -236,8 +245,8 @@ const fixture = () => {
       principal: { ...authority, scopes: ["autograph:send"] },
       sessionId: selection.sessionId,
     },
-    plan,
-    target,
+    plan: structuredClone(plan),
+    target: structuredClone(target),
     workerCheckpoints: [],
   };
   const fetcher = vi.fn(async (url: URL | string | Request, init?: RequestInit) => {
@@ -268,12 +277,17 @@ const fixture = () => {
       if (losePostResponse) {
         throw new Error("fixture lost POST response");
       }
-      return Response.json(row);
+      return emptyMutationResponse ? new Response(null, { status: 204 }) : Response.json(row);
     }
     const index = rows.findIndex((item) => item.id === parsed.pathname.split("/").at(-1));
     if (method === "PATCH") {
       Object.assign(rows[index], body);
-      return Response.json(rows[index]);
+      if (losePatchResponse) {
+        throw new Error("fixture lost PATCH response");
+      }
+      return emptyMutationResponse
+        ? new Response(null, { status: 204 })
+        : Response.json(rows[index]);
     }
     throw new Error(`Unexpected fixture method ${method}`);
   });
@@ -292,8 +306,11 @@ const fixture = () => {
   }));
   const assertAuthorized = vi.fn(async () => {});
   const readAuthRuntimeUrl = vi.fn(async () => privateAuthUrl);
+  let canonicalRows: CanonicalGatewayEnvironmentRow[] = [];
+  const readCanonicalGatewayRows = vi.fn(async () => structuredClone(canonicalRows));
   const writer = createHostedOperatorGatewayBindings({
     assertAuthorized,
+    readCanonicalGatewayRows,
     fetch: fetcher,
     readAuthRuntimeUrl,
     readCredential,
@@ -304,9 +321,15 @@ const fixture = () => {
     checkpointGatewayEnvironment,
     input,
     readAuthRuntimeUrl,
+    readCanonicalGatewayRows,
     readCredential,
     requests,
+    setCanonicalRows: (value: CanonicalGatewayEnvironmentRow[]) => {
+      canonicalRows = value;
+    },
     rows,
+    setLosePatchResponse: (value: boolean) => (losePatchResponse = value),
+    setEmptyMutationResponse: (value: boolean) => (emptyMutationResponse = value),
     setLosePostResponse: (value: boolean) => (losePostResponse = value),
     writer,
   };
@@ -439,4 +462,300 @@ it("checks the fresh execution context before making any provider mutation", asy
   });
   await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
   expect(f.requests).toHaveLength(0);
+});
+
+const adoptionFixture = async () => {
+  const f = fixture();
+  const priorOperation = "11111111-1111-4111-8111-111111111111";
+  f.input.operationRef = priorOperation;
+  f.input.deliveryCandidates![0].operationRef = priorOperation;
+  const source = await f.writer.bind(f.input);
+  const canonical = canonicalGatewayEnvironmentRowsSchema.parse(
+    source.rows.map((row) => ({
+      ...row,
+      target: ["preview"],
+      type: "encrypted",
+    })),
+  );
+  f.setCanonicalRows(canonical);
+  f.input.gatewayEnvironmentRows = [];
+  f.input.operationRef = "22222222-2222-4222-8222-222222222222";
+  f.input.target.appId = "inventory";
+  f.input.target.projectId = "prj_inventory";
+  f.input.plan = structuredClone(f.input.plan);
+  f.input.plan.selection = { ...selection, appId: "inventory", projectId: "prj_inventory" };
+  f.input.plan.deploymentBoundary!.app.projectId = "prj_inventory";
+  f.input.plan.authAdoption = {
+    gatewayEnvironment: structuredClone(canonical),
+    kind: "owned-journal-auth-v1",
+    resource: {
+      authDatabase: f.input.plan.authDatabase,
+      branchId: f.input.plan.neon.branchId,
+      endpoint: f.input.plan.neon.endpoint,
+      endpointId: "ep_fixture",
+      projectId: f.input.plan.neon.projectId,
+    },
+    source: {
+      checkpointSha256: "c".repeat(64),
+      journalDigest: "d".repeat(64),
+      operationRef: priorOperation,
+      planDigest: "e".repeat(64),
+      selection,
+    },
+  };
+  f.input.deliveryCandidates = [
+    {
+      ...f.input.deliveryCandidates![0],
+      operationRef: f.input.operationRef,
+      deploymentId: "dpl_inventory",
+      projectId: "prj_inventory",
+    },
+  ];
+  f.requests.length = 0;
+  f.readAuthRuntimeUrl.mockClear();
+  f.checkpointGatewayEnvironment.mockClear();
+  return { ...f, canonical };
+};
+
+it("proves canonical ownership during the actual Auth resource effect with GET-only access", async () => {
+  const f = await adoptionFixture();
+  f.input.effect = {
+    id: "auth",
+    kind: "resources",
+    resourceId: f.input.plan.authDatabase.resourceId,
+    description: "Adopt Auth",
+  };
+  f.readAuthRuntimeUrl.mockRejectedValue(new Error("pending credentials must not be opened"));
+  f.input.deliveryCandidates = [];
+  f.rows.splice(0, f.rows.length, ...f.rows.filter((row) => String(row.id).startsWith("env-")));
+  expect(await f.writer.verifyCanonicalOwnership(f.input)).toEqual({ rows: f.canonical });
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  expect(f.readAuthRuntimeUrl).not.toHaveBeenCalled();
+  expect(f.checkpointGatewayEnvironment).not.toHaveBeenCalled();
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+});
+
+it("merges approved canonical sibling bindings and checkpoints exact non-secret value hashes for retries", async () => {
+  const f = await adoptionFixture();
+  const result = await f.writer.bind(f.input);
+  const projection = f.rows.find((row) => row.key === "PLATFORM_GATEWAY_PROJECT_BINDINGS")!;
+  expect(
+    z
+      .object({ bindings: z.array(z.object({ appId: z.string() })) })
+      .parse(JSON.parse(String(projection.value)))
+      .bindings.map((row) => row.appId),
+  ).toEqual(["spend-review", "inventory"]);
+  expect(f.rows.filter((row) => String(row.id).startsWith("env-"))).toHaveLength(5);
+  expect(f.requests.filter((request) => request.method === "PATCH")).toHaveLength(1);
+  expect(f.requests.some((request) => request.method === "POST")).toBe(false);
+  expect(result.rows.every((row) => row.operationRef === f.canonical[0].operationRef)).toBe(true);
+  for (const reference of result.rows) {
+    const row = f.rows.find((item) => item.id === reference.id)!;
+    expect(reference.valueSha256).toBe(
+      createHash("sha256").update(String(row.value)).digest("hex"),
+    );
+  }
+  expect(JSON.stringify(result)).not.toContain("fixture-private-password");
+  f.requests.length = 0;
+  await f.writer.bind(f.input);
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+});
+
+it.each(["id", "key", "gitBranch", "comment", "target", "type", "configurationId", "value"])(
+  "rejects changed canonical provider %s before a merge or checkpoint",
+  async (field) => {
+    const f = await adoptionFixture();
+    const row = f.rows.find((item) => item.key === "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS")!;
+    const changed = {
+      id: "replacement-id",
+      key: "APP_TITLE",
+      gitBranch: "other-preview",
+      comment: `App Builder protected operator ${f.input.operationRef}`,
+      target: ["preview", "production"],
+      type: "plain",
+      configurationId: "foreign-integration",
+      value: JSON.stringify(["forged-sibling"]),
+    };
+    row[field] =
+      changed[
+        z
+          .enum(["id", "key", "gitBranch", "comment", "target", "type", "configurationId", "value"])
+          .parse(field)
+      ];
+    await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+    expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+    expect(f.checkpointGatewayEnvironment).not.toHaveBeenCalled();
+  },
+);
+
+it.each(["missing", "stale", "operation", "project", "branch", "hash"])(
+  "rejects %s canonical source references even with a matching operator comment",
+  async (kind) => {
+    const f = await adoptionFixture();
+    const source = structuredClone(f.canonical);
+    if (kind === "missing") {
+      source.pop();
+    }
+    if (kind === "stale") {
+      source[0].id = "stale-reference";
+    }
+    if (kind === "operation") {
+      source[0].operationRef = "33333333-3333-4333-8333-333333333333";
+    }
+    if (kind === "project") {
+      source[0].projectId = "foreign-project";
+    }
+    if (kind === "branch") {
+      source[0].branch = "foreign-branch";
+    }
+    if (kind === "hash") {
+      source[0].valueSha256 = "f".repeat(64);
+    }
+    f.setCanonicalRows(source);
+    await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+    expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+    expect(f.checkpointGatewayEnvironment).not.toHaveBeenCalled();
+  },
+);
+
+it("fails closed when a legacy adoption plan has no approved canonical rows", async () => {
+  const f = await adoptionFixture();
+  delete f.input.plan.authAdoption!.gatewayEnvironment;
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests).toHaveLength(0);
+});
+
+it("rechecks the source journal after provider awaits and rejects a changed snapshot", async () => {
+  const f = await adoptionFixture();
+  f.readCanonicalGatewayRows
+    .mockResolvedValueOnce(f.canonical)
+    .mockRejectedValue(new Error("source approval revoked"));
+  await expect(f.writer.verifyCanonicalOwnership(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  expect(f.checkpointGatewayEnvironment).not.toHaveBeenCalled();
+});
+
+it("does not trust a forged current-operation comment without the exact interrupted POST value", async () => {
+  const f = fixture();
+  f.rows.push({
+    id: "forged",
+    key: "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
+    gitBranch: gateway.branch,
+    comment: `App Builder protected operator ${f.input.operationRef}`,
+    target: ["preview"],
+    type: "encrypted",
+    value: JSON.stringify(["forged-sibling"]),
+  });
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it("rejects a target journal reference that drops the approved source value hash", async () => {
+  const f = await adoptionFixture();
+  f.input.gatewayEnvironmentRows = f.canonical.map(
+    ({ target: _target, type: _type, valueSha256: _valueSha256, ...row }) => row,
+  );
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests).toHaveLength(0);
+});
+
+it("keeps the approved canonical snapshot frozen across an awaited source lookup", async () => {
+  const f = await adoptionFixture();
+  const forged = structuredClone(f.canonical);
+  forged[0].valueSha256 = "f".repeat(64);
+  f.readCanonicalGatewayRows.mockImplementation(async () => {
+    f.input.plan.authAdoption!.gatewayEnvironment = forged;
+    return forged;
+  });
+  await expect(f.writer.verifyCanonicalOwnership(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests).toHaveLength(0);
+});
+
+it("uses independent provider GET readback when mutation responses are empty", async () => {
+  const f = fixture();
+  f.setEmptyMutationResponse(true);
+  const result = await f.writer.bind(f.input);
+  expect(result.rows).toHaveLength(5);
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+  const adopted = await adoptionFixture();
+  adopted.setEmptyMutationResponse(true);
+  const adoptedResult = await adopted.writer.bind(adopted.input);
+  expect(adoptedResult.rows).toHaveLength(5);
+});
+
+it("recovers an ordinary same-journal PATCH after an unknown response using approved desired values", async () => {
+  const f = fixture();
+  await f.writer.bind(f.input);
+  f.input.deliveryCandidates![0].deploymentId = "dpl_updated_app";
+  f.setLosePatchResponse(true);
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  f.setLosePatchResponse(false);
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+  f.requests.length = 0;
+  await f.writer.bind(f.input);
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it("recovers an adopted PATCH with a lost response through a durable operation-bound prospective hash", async () => {
+  const f = await adoptionFixture();
+  f.setLosePatchResponse(true);
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  const pending = f.input.gatewayEnvironmentRows!.find(
+    (row) => row.pendingValueSha256 !== undefined,
+  )!;
+  expect(pending.key).toBe("PLATFORM_GATEWAY_PROJECT_BINDINGS");
+  expect(pending.pendingOperationRef).toBe(f.input.operationRef);
+  expect(pending.pendingValueSha256).not.toBe(pending.valueSha256);
+  expect(JSON.stringify(f.input.gatewayEnvironmentRows)).not.toContain("fixture-private-password");
+  f.setLosePatchResponse(false);
+  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+  expect(
+    f.input.gatewayEnvironmentRows!.every(
+      (row) => row.pendingValueSha256 === undefined && row.pendingOperationRef === undefined,
+    ),
+  ).toBe(true);
+  f.requests.length = 0;
+  await f.writer.bind(f.input);
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it("rejects a prospective hash from a different operation", async () => {
+  const f = await adoptionFixture();
+  f.setLosePatchResponse(true);
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  const pending = f.input.gatewayEnvironmentRows!.find(
+    (row) => row.pendingValueSha256 !== undefined,
+  )!;
+  pending.pendingOperationRef = "33333333-3333-4333-8333-333333333333";
+  f.setLosePatchResponse(false);
+  f.requests.length = 0;
+  expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests).toHaveLength(0);
+});
+
+it("does not rewrite an approved shared Auth credential when the requested runtime URL differs", async () => {
+  const f = await adoptionFixture();
+  f.readAuthRuntimeUrl.mockResolvedValue(
+    privateAuthUrl.replace("fixture-private-password", "unexpected-rotation"),
+  );
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  expect(f.checkpointGatewayEnvironment).not.toHaveBeenCalled();
+});
+
+it("rechecks source authority after the prospective checkpoint and before the adopted PATCH", async () => {
+  const f = await adoptionFixture();
+  const save = f.checkpointGatewayEnvironment.getMockImplementation()!;
+  f.checkpointGatewayEnvironment.mockImplementation(async (rows) => {
+    await save(rows);
+    if (rows.some((row) => row.pendingValueSha256 !== undefined)) {
+      f.readCanonicalGatewayRows.mockRejectedValue(
+        new Error("source approval revoked during checkpoint"),
+      );
+    }
+  });
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
 });

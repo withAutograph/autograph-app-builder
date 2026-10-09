@@ -1,8 +1,16 @@
 /* oxlint-disable eslint/no-await-in-loop, sonarjs/expression-complexity, sonarjs/no-nested-functions, react-doctor/async-await-in-loop -- Provider writes and their durable readbacks are deliberately sequential. */
+import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import type { readActiveVercelInstallationToken } from "../integrations/postgres-vercel-installation";
-import { HostedOperatorError } from "./hosted-operator-contract";
-import type { ManagedOperatorEnvironmentRow } from "./hosted-operator-contract";
+import {
+  canonicalGatewayEnvironmentRowsSchema,
+  HostedOperatorError,
+} from "./hosted-operator-contract";
+import type {
+  CanonicalGatewayEnvironmentRow,
+  ManagedOperatorEnvironmentRow,
+} from "./hosted-operator-contract";
 import type {
   GatewayManagedEnvironmentContext,
   ProtectedHostedOperatorDependencies,
@@ -19,6 +27,7 @@ const providerRow = z.object({
 });
 type ProviderRow = z.infer<typeof providerRow>;
 const providerValue = z.object({ value: z.string() });
+const valueDigest = (value: string) => createHash("sha256").update(value).digest("hex");
 const unavailable = () => new HostedOperatorError("operator_unavailable");
 const managedKeys = [
   "AUTH_DATABASE_RESOURCE",
@@ -102,7 +111,7 @@ const projectionSchema = z.strictObject({
   }),
   version: z.literal(1),
 });
-const validGatewayInput = (input: GatewayManagedEnvironmentContext) => {
+const validGatewayInput = (input: GatewayManagedEnvironmentContext, readonlyCanonical = false) => {
   const { gateway, plan, target } = input;
   const {
     authBrowserOrigin,
@@ -119,7 +128,10 @@ const validGatewayInput = (input: GatewayManagedEnvironmentContext) => {
   }
   return [
     plan.action === "prepare",
-    ["gateway-bindings", "gateway-delivery"].includes(input.effect.kind),
+    ["gateway-bindings", "gateway-delivery"].includes(input.effect.kind) ||
+      (readonlyCanonical &&
+        input.effect.kind === "resources" &&
+        input.effect.resourceId === plan.authDatabase.resourceId),
     target.environment === "preview",
     target.scopeType === "team",
     target.scopeId === boundary.teamId,
@@ -182,6 +194,7 @@ const referenceRow = (
   row: ProviderRow,
   input: GatewayManagedEnvironmentContext,
   knownById: ReadonlyMap<string, ManagedOperatorEnvironmentRow>,
+  value: string,
 ) => ({
   branch: input.gateway.branch,
   comment: z.string().min(1).parse(row.comment),
@@ -189,21 +202,40 @@ const referenceRow = (
   key: row.key,
   operationRef: knownById.get(row.id)?.operationRef ?? input.operationRef,
   projectId: input.gateway.projectId,
+  valueSha256: valueDigest(value),
 });
 
 export const createHostedOperatorGatewayBindings = (deps: {
   assertAuthorized: ProtectedHostedOperatorDependencies["assertAuthorized"];
   readCredential: CredentialReader;
   readAuthRuntimeUrl: (input: GatewayManagedEnvironmentContext) => Promise<string>;
+  /** Reauthorize and reread the approved source journal; never infer ownership from provider comments. */
+  readCanonicalGatewayRows?: (
+    input: GatewayManagedEnvironmentContext,
+  ) => Promise<CanonicalGatewayEnvironmentRow[]>;
   fetch?: typeof fetch;
 }) => {
-  const open = (input: GatewayManagedEnvironmentContext) => {
-    if (!validGatewayInput(input)) {
+  const open = (liveInput: GatewayManagedEnvironmentContext, readonlyCanonical = false) => {
+    const input = {
+      ...liveInput,
+      authority: structuredClone(liveInput.authority),
+      deliveryCandidates: structuredClone(liveInput.deliveryCandidates),
+      effect: structuredClone(liveInput.effect),
+      gateway: structuredClone(liveInput.gateway),
+      gatewayEnvironmentRows: structuredClone(liveInput.gatewayEnvironmentRows),
+      ownerContext: structuredClone(liveInput.ownerContext),
+      plan: structuredClone(liveInput.plan),
+      target: structuredClone(liveInput.target),
+    };
+    if (!validGatewayInput(input, readonlyCanonical)) {
       throw unavailable();
     }
     const { gateway, target } = input;
     const { branch, projectId } = gateway;
     const comment = `App Builder protected operator ${input.operationRef}`;
+    const approvedCanonical = structuredClone(input.plan.authAdoption?.gatewayEnvironment);
+    // Written values are accepted only for writes acknowledged by this invocation, until checkpointed.
+    const acknowledgedValues = new Map<string, string>();
     const guard = async () => {
       await input.assertCurrent();
       await deps.assertAuthorized(input);
@@ -447,8 +479,46 @@ export const createHostedOperatorGatewayBindings = (deps: {
         }),
       };
     };
-    const knownRows = () => {
-      const known = input.gatewayEnvironmentRows ?? [];
+    const knownRows = async () => {
+      let canonical: CanonicalGatewayEnvironmentRow[] = [];
+      if (input.plan.authAdoption !== undefined) {
+        if (approvedCanonical === undefined || deps.readCanonicalGatewayRows === undefined) {
+          throw unavailable();
+        }
+        await guard();
+        canonical = canonicalGatewayEnvironmentRowsSchema.parse(
+          await deps.readCanonicalGatewayRows(input),
+        );
+        await guard();
+        if (
+          canonical.length !== managedKeys.length ||
+          new Set(canonical.map((row) => row.id)).size !== canonical.length ||
+          new Set(canonical.map((row) => row.key)).size !== canonical.length ||
+          !isDeepStrictEqual(canonical, approvedCanonical)
+        ) {
+          throw unavailable();
+        }
+      }
+      const local = structuredClone(input.gatewayEnvironmentRows ?? []);
+      const canonicalById = new Map(canonical.map((row) => [row.id, row]));
+      if (
+        local.some((row) => {
+          const prior = canonicalById.get(row.id);
+          return (
+            prior !== undefined &&
+            (row.key !== prior.key ||
+              row.operationRef !== prior.operationRef ||
+              row.comment !== prior.comment ||
+              row.valueSha256 === undefined)
+          );
+        })
+      ) {
+        throw unavailable();
+      }
+      const known: ManagedOperatorEnvironmentRow[] = [
+        ...canonical.filter((row) => !local.some((saved) => saved.id === row.id)),
+        ...local,
+      ];
       if (
         new Set(known.map((row) => row.id)).size !== known.length ||
         new Set(known.map((row) => row.key)).size !== known.length ||
@@ -457,7 +527,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
             row.projectId !== projectId ||
             row.branch !== branch ||
             !managedKeySchema.safeParse(row.key).success ||
-            row.comment !== `App Builder protected operator ${row.operationRef}`,
+            row.comment !== `App Builder protected operator ${row.operationRef}` ||
+            (row.pendingOperationRef !== undefined &&
+              row.pendingOperationRef !== input.operationRef),
         )
       ) {
         throw unavailable();
@@ -472,22 +544,85 @@ export const createHostedOperatorGatewayBindings = (deps: {
         row.configurationId === undefined ||
         row.configurationId === "") &&
       row.type === "encrypted" &&
-      (row.comment === comment ||
-        known.some(
-          (item) => item.id === row.id && item.key === row.key && item.comment === row.comment,
-        ));
-    const checkpoint = async (rows: ProviderRow[], known: ManagedOperatorEnvironmentRow[]) => {
+      (known.some(
+        (item) => item.id === row.id && item.key === row.key && item.comment === row.comment,
+      ) ||
+        (row.comment === comment &&
+          !known.some((item) => item.id === row.id || item.key === row.key)));
+    const checkpoint = async (
+      rows: ProviderRow[],
+      known: ManagedOperatorEnvironmentRow[],
+      values: ReadonlyMap<string, string>,
+      expected: GatewayValues,
+      pending?: { id: string; valueSha256: string },
+    ) => {
       await guard();
       const knownById = new Map(known.map((row) => [row.id, row]));
-      await input.checkpointGatewayEnvironment(
-        rows.map((row) => referenceRow(row, input, knownById)),
-      );
+      const saved = rows.map((row) => {
+        const value = z.string().parse(values.get(row.id));
+        const reference: ManagedOperatorEnvironmentRow = referenceRow(row, input, knownById, value);
+        const key = managedKeySchema.parse(row.key);
+        // Before ordinary repair, a mismatched fixed value is a row reference, not an approved value snapshot.
+        if (
+          value !== expected[key] &&
+          ![
+            "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
+            "PLATFORM_GATEWAY_PROJECT_BINDINGS",
+          ].includes(key)
+        ) {
+          delete reference.valueSha256;
+        }
+        const prior = knownById.get(row.id);
+        if (
+          prior?.pendingOperationRef === input.operationRef &&
+          prior.pendingValueSha256 !== reference.valueSha256
+        ) {
+          reference.pendingOperationRef = prior.pendingOperationRef;
+          reference.pendingValueSha256 = prior.pendingValueSha256;
+        }
+        if (pending?.id === row.id) {
+          reference.pendingOperationRef = input.operationRef;
+          reference.pendingValueSha256 = pending.valueSha256;
+        }
+        return reference;
+      });
+      await input.checkpointGatewayEnvironment(saved);
+      input.gatewayEnvironmentRows = saved;
       await guard();
     };
-    const inspect = async (verifyValues: boolean) => {
-      const known = knownRows();
+    const assertKnownValue = (
+      row: ProviderRow,
+      value: string,
+      known: ManagedOperatorEnvironmentRow[],
+      canonicalOnly: boolean,
+    ) => {
+      const reference: ManagedOperatorEnvironmentRow | undefined = canonicalOnly
+        ? approvedCanonical?.find((saved) => saved.id === row.id && saved.key === row.key)
+        : known.find((saved) => saved.id === row.id && saved.key === row.key);
+      const expectedDigest = canonicalOnly
+        ? reference?.valueSha256
+        : (acknowledgedValues.get(row.id) ?? reference?.valueSha256);
+      if (canonicalOnly && reference === undefined) {
+        throw unavailable();
+      }
+      if (
+        input.plan.authAdoption !== undefined &&
+        expectedDigest !== undefined &&
+        valueDigest(value) !== expectedDigest &&
+        !(
+          reference?.pendingOperationRef === input.operationRef &&
+          reference.pendingValueSha256 === valueDigest(value) &&
+          !canonicalOnly
+        )
+      ) {
+        throw unavailable();
+      }
+      return reference;
+    };
+    const inspectOwnership = async (canonicalOnly = false) => {
+      const known = await knownRows();
+      // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Source ownership must be established before provider readback.
       const listed = await list();
-      await requiredEnvironment(listed);
       const rows = listed.filter(
         (row) => managedKeySchema.safeParse(row.key).success && isBranchPreview(row),
       );
@@ -498,7 +633,50 @@ export const createHostedOperatorGatewayBindings = (deps: {
       ) {
         throw unavailable();
       }
+      const values = new Map<string, string>();
+      for (const row of rows) {
+        const { value } = providerValue.parse(
+          await request(
+            `/v1/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(row.id)}`,
+          ),
+        );
+        const reference = assertKnownValue(row, value, known, canonicalOnly);
+        // Unknown POST outcomes can recover only exact current-operation values, never a sibling merge.
+        if (reference === undefined) {
+          const pristine = await expectedValues([]);
+          if (value !== pristine[managedKeySchema.parse(row.key)]) {
+            throw unavailable();
+          }
+        }
+        values.set(row.id, value);
+      }
+      if (
+        known.some((saved) => !rows.some((row) => row.id === saved.id && row.key === saved.key))
+      ) {
+        throw unavailable();
+      }
+      // Re-read source authorization after provider awaits; a moved checkpoint never grants ownership.
+      if (input.plan.authAdoption !== undefined) {
+        await knownRows();
+      }
+      return { known, listed, rows, values };
+    };
+    const inspect = async (verifyValues: boolean) => {
+      const { known, listed, rows, values } = await inspectOwnership();
+      await requiredEnvironment(listed);
       const expected = await expectedValues(rows);
+      if (
+        input.plan.authAdoption !== undefined &&
+        rows.some(
+          (row) =>
+            ![
+              "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
+              "PLATFORM_GATEWAY_PROJECT_BINDINGS",
+            ].includes(row.key) && values.get(row.id) !== expected[managedKeySchema.parse(row.key)],
+        )
+      ) {
+        throw unavailable();
+      }
       if (verifyValues) {
         for (const row of rows) {
           const actual = providerValue.parse(
@@ -507,14 +685,51 @@ export const createHostedOperatorGatewayBindings = (deps: {
             ),
           );
           const key = managedKeySchema.parse(row.key);
-          if (actual.value !== expected[key]) {
+          if (actual.value !== expected[key] || actual.value !== values.get(row.id)) {
             throw unavailable();
           }
         }
       }
-      return { expected, known, rows };
+      return { expected, known, rows, values };
     };
-    return { checkpoint, comment, guard, inspect, projectId, request };
+    const prepareWrite = async (
+      existing: ProviderRow | undefined,
+      rows: ProviderRow[],
+      known: ManagedOperatorEnvironmentRow[],
+      values: ReadonlyMap<string, string>,
+      expected: GatewayValues,
+      value: string,
+    ) => {
+      const fresh = await inspectOwnership();
+      if (!isDeepStrictEqual(fresh.rows, rows) || !isDeepStrictEqual(fresh.values, values)) {
+        throw unavailable();
+      }
+      if (existing !== undefined && input.plan.authAdoption !== undefined) {
+        await checkpoint(rows, known, values, expected, {
+          id: existing.id,
+          valueSha256: valueDigest(value),
+        });
+        const acknowledged = await inspectOwnership();
+        if (
+          !isDeepStrictEqual(acknowledged.rows, rows) ||
+          !isDeepStrictEqual(acknowledged.values, values)
+        ) {
+          throw unavailable();
+        }
+      }
+    };
+    return {
+      acknowledgedValues,
+      approvedCanonical,
+      checkpoint,
+      comment,
+      guard,
+      inspect,
+      inspectOwnership,
+      prepareWrite,
+      projectId,
+      request,
+    };
   };
 
   return {
@@ -524,10 +739,12 @@ export const createHostedOperatorGatewayBindings = (deps: {
           throw unavailable();
         }
         const io = open(input);
-        let { expected, known, rows } = await io.inspect(false);
-        await io.checkpoint(rows, known);
-        for (const [keyText, value] of Object.entries(expected)) {
+        let { expected, known, rows, values } = await io.inspect(false);
+        await io.checkpoint(rows, known, values, expected);
+        for (const keyText of Object.keys(expected)) {
+          ({ expected, known, rows, values } = await io.inspect(false));
           const key = managedKeySchema.parse(keyText);
+          const value = expected[key];
           const rowsByKey = new Map(rows.map((row) => [row.key, row]));
           const existing = rowsByKey.get(key);
           const current = existing
@@ -537,9 +754,13 @@ export const createHostedOperatorGatewayBindings = (deps: {
                 ),
               ).value
             : undefined;
+          if (existing !== undefined && current !== values.get(existing.id)) {
+            throw unavailable();
+          }
           if (current === value) {
             continue;
           }
+          await io.prepareWrite(existing, rows, known, values, expected, value);
           const effect = existing
             ? io.request(
                 `/v9/projects/${encodeURIComponent(io.projectId)}/env/${encodeURIComponent(existing.id)}`,
@@ -555,7 +776,10 @@ export const createHostedOperatorGatewayBindings = (deps: {
                 value,
               });
           await effect;
-          ({ expected, known, rows } = await io.inspect(false));
+          if (existing !== undefined) {
+            io.acknowledgedValues.set(existing.id, valueDigest(value));
+          }
+          ({ expected, known, rows, values } = await io.inspect(false));
           const observed = new Map(rows.map((row) => [row.key, row])).get(key);
           if (!observed) {
             throw unavailable();
@@ -568,11 +792,15 @@ export const createHostedOperatorGatewayBindings = (deps: {
           if (actual.value !== expected[key]) {
             throw unavailable();
           }
-          await io.checkpoint(rows, known);
+          await io.checkpoint(rows, known, values, expected);
         }
-        ({ rows } = await io.inspect(true));
+        ({ known, rows, values } = await io.inspect(true));
         const knownById = new Map(known.map((row) => [row.id, row]));
-        return { rows: rows.map((row) => referenceRow(row, input, knownById)) };
+        return {
+          rows: rows.map((row) =>
+            referenceRow(row, input, knownById, z.string().parse(values.get(row.id))),
+          ),
+        };
       } catch {
         throw unavailable();
       }
@@ -585,15 +813,17 @@ export const createHostedOperatorGatewayBindings = (deps: {
     > {
       try {
         const io = open(input);
-        const { expected, known, rows } = await io.inspect(true);
+        const { expected, known, rows, values } = await io.inspect(true);
         if (rows.length === 0) {
           return { status: "absent" };
         }
-        await io.checkpoint(rows, known);
+        await io.checkpoint(rows, known, values, expected);
         const knownById = new Map(known.map((row) => [row.id, row]));
         return rows.length === Object.keys(expected).length
           ? {
-              rows: rows.map((row) => referenceRow(row, input, knownById)),
+              rows: rows.map((row) =>
+                referenceRow(row, input, knownById, z.string().parse(values.get(row.id))),
+              ),
               status: "applied",
             }
           : { status: "unknown" };
@@ -601,19 +831,41 @@ export const createHostedOperatorGatewayBindings = (deps: {
         return { status: "unknown" };
       }
     },
+    /** GET-only proof for the pending credential continuation; no runtime URL or app delivery is needed. */
+    async verifyCanonicalOwnership(input: GatewayManagedEnvironmentContext) {
+      try {
+        const io = open(input, true);
+        if (io.approvedCanonical === undefined) {
+          throw unavailable();
+        }
+        const { rows } = await io.inspectOwnership(true);
+        if (rows.length !== managedKeys.length) {
+          throw unavailable();
+        }
+        await io.guard();
+        return { rows: structuredClone(io.approvedCanonical) };
+      } catch {
+        throw unavailable();
+      }
+    },
     async verifyForDelivery(input: GatewayManagedEnvironmentContext) {
       if (input.effect.kind !== "gateway-delivery") {
         throw unavailable();
       }
       const io = open(input);
-      const { rows, known, expected } = await io.inspect(true);
+      const { rows, known, expected, values } = await io.inspect(true);
       if (rows.length !== Object.keys(expected).length) {
         throw unavailable();
       }
       await io.guard();
       return {
         rows: rows.map((row) =>
-          referenceRow(row, input, new Map(known.map((item) => [item.id, item]))),
+          referenceRow(
+            row,
+            input,
+            new Map(known.map((item) => [item.id, item])),
+            z.string().parse(values.get(row.id)),
+          ),
         ),
       };
     },
