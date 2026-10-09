@@ -16,7 +16,7 @@ import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-s
 export default defineTool({
   approval: always(),
   description:
-    "After you approve creating a draft pull request, publish the current reviewed changes to GitHub. GitHub decides whether the account can write the repository and reports any real conflict or permission error. Approval is required only for this outward effect.",
+    "After you approve creating a draft pull request, publish the current reviewed changes to GitHub. After a reviewed-path-changed rejection, refresh and review the changes, reseal the proposal, and obtain fresh publication approval; this operation verifies branch and pull-request absence before recovering the rejected attempt. GitHub decides whether the account can write the repository and reports any real conflict or permission error. Approval is required only for this outward effect.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (

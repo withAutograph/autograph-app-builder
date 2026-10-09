@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { runSequentially } from "../async-sequential";
 import { compareOverlayPaths, overlayChanges } from "./target-apply";
 
@@ -1296,46 +1296,137 @@ describe("closed GitHub publication contract", () => {
     }
   });
 
-  it("retries a proven pre-mutation draft rejection only after a new approval", async () => {
+  it.each(["invalid-publication-material", "reviewed-path-changed"] as const)(
+    "recovers a pre-mutation %s rejection only after a new approval and verified absence",
+    async (code) => {
+      const adapter = new Adapter();
+      const store = new Store();
+      const proposal = draftProposal(adapter);
+      adapter.draftAcknowledgement =
+        code === "reviewed-path-changed"
+          ? { code, path: "apps/demo/page.tsx", status: "rejected" }
+          : { code, status: "rejected" };
+      await expect(
+        publishApprovedDraftPullRequest({
+          adapter,
+          approvedByCallId: "first-approval",
+          contentSource: publicationContentSource(),
+          proposal,
+          review: review(),
+          store,
+        }),
+      ).rejects.toThrow(code === "reviewed-path-changed" ? /Reviewed content changed/u : code);
+      const failedReceipt = await store.read(proposal.digest);
+      expect(failedReceipt?.status).toBe("failed");
+
+      const inspection = vi.spyOn(adapter, "inspectDraftPublication");
+      await expect(
+        publishApprovedDraftPullRequest({
+          adapter,
+          approvedByCallId: "first-approval",
+          contentSource: publicationContentSource(),
+          proposal,
+          review: review(),
+          store,
+        }),
+      ).rejects.toThrow(/new approved recovery call/u);
+      expect(inspection).not.toHaveBeenCalled();
+      expect(await store.read(proposal.digest)).toEqual(failedReceipt);
+
+      adapter.draftAcknowledgement = { requestId: "retry-accepted", status: "accepted" };
+      const recovered = await publishApprovedDraftPullRequest({
+        adapter,
+        approvedByCallId: "second-approval",
+        contentSource: publicationContentSource(),
+        proposal,
+        review: review(),
+        store,
+      });
+      expect(recovered.status).toBe("succeeded");
+      expect(recovered.approvedByCallId).toBe("second-approval");
+      expect(inspection).toHaveBeenCalledTimes(2);
+      expect(adapter.draftCalls).toBe(2);
+    },
+  );
+
+  it.each(["unavailable", "mismatched", "overlap", "branch-only", "complete", "cas"] as const)(
+    "preserves the failed draft receipt when recovery readback or reclaim is %s",
+    async (outcome) => {
+      const adapter = new Adapter();
+      const store = new Store();
+      const proposal = draftProposal(adapter);
+      adapter.draftAcknowledgement = {
+        code: "reviewed-path-changed",
+        path: "apps/demo/page.tsx",
+        status: "rejected",
+      };
+      const request = {
+        adapter,
+        approvedByCallId: "first-approval",
+        contentSource: publicationContentSource(),
+        proposal,
+        review: review(),
+        store,
+      };
+      await expect(publishApprovedDraftPullRequest(request)).rejects.toThrow(
+        /Reviewed content changed/u,
+      );
+      const failed = await store.read(proposal.digest);
+      if (outcome === "unavailable") {
+        adapter.throwDraftReadBack = true;
+      } else if (outcome === "mismatched") {
+        adapter.draftOutcome = {
+          ...draftReadBack(proposal, adapter.publishRepo),
+          digest: "0".repeat(64),
+        };
+      } else if (outcome === "overlap") {
+        adapter.draftOutcome = draftReadBack(proposal, adapter.publishRepo, "absent", [
+          "apps/demo/page.tsx",
+        ]);
+      } else if (outcome === "branch-only" || outcome === "complete") {
+        adapter.draftOutcome = draftReadBack(proposal, adapter.publishRepo, outcome);
+      } else {
+        vi.spyOn(store, "compareAndSet").mockResolvedValue(false);
+      }
+      const inspection = vi.spyOn(adapter, "inspectDraftPublication");
+      adapter.draftAcknowledgement = { requestId: "retry-accepted", status: "accepted" };
+      await expect(
+        publishApprovedDraftPullRequest({ ...request, approvedByCallId: "second-approval" }),
+      ).rejects.toThrow();
+      expect(inspection).toHaveBeenCalledTimes(1);
+      expect(await store.read(proposal.digest)).toEqual(failed);
+      expect(adapter.draftCalls).toBe(1);
+    },
+  );
+
+  it("keeps possible partial-write rejection codes outside approved draft recovery", async () => {
     const adapter = new Adapter();
     const store = new Store();
     const proposal = draftProposal(adapter);
-    adapter.draftAcknowledgement = { code: "invalid-publication-material", status: "rejected" };
-    await expect(
-      publishApprovedDraftPullRequest({
-        adapter,
-        approvedByCallId: "first-approval",
-        contentSource: publicationContentSource(),
-        proposal,
-        review: review(),
-        store,
-      }),
-    ).rejects.toThrow(/invalid-publication-material/u);
-    const failedReceipt = await store.read(proposal.digest);
-    expect(failedReceipt?.status).toBe("failed");
-
-    await expect(
-      publishApprovedDraftPullRequest({
-        adapter,
-        approvedByCallId: "first-approval",
-        contentSource: publicationContentSource(),
-        proposal,
-        review: review(),
-        store,
-      }),
-    ).rejects.toThrow(/new approved recovery call/u);
-
-    adapter.draftAcknowledgement = { requestId: "retry-accepted", status: "accepted" };
-    const recovered = await publishApprovedDraftPullRequest({
+    adapter.draftAcknowledgement = {
+      bytes: 100,
+      code: "github-file-write-failed",
+      operation: "create-blob",
+      path: "apps/demo/page.tsx",
+      status: "rejected",
+    };
+    const request = {
       adapter,
-      approvedByCallId: "second-approval",
+      approvedByCallId: "first-approval",
       contentSource: publicationContentSource(),
       proposal,
       review: review(),
       store,
-    });
-    expect(recovered.status).toBe("succeeded");
-    expect(adapter.draftCalls).toBe(2);
+    };
+    await expect(publishApprovedDraftPullRequest(request)).rejects.toThrow(/create-blob/u);
+    const failed = await store.read(proposal.digest);
+    const inspection = vi.spyOn(adapter, "inspectDraftPublication");
+    await expect(
+      publishApprovedDraftPullRequest({ ...request, approvedByCallId: "second-approval" }),
+    ).rejects.toThrow(/requires explicit recovery/u);
+    expect(inspection).not.toHaveBeenCalled();
+    expect(await store.read(proposal.digest)).toEqual(failed);
+    expect(adapter.draftCalls).toBe(1);
   });
 
   it("refuses stale, overlapping, and branch-collision read-back before mutation", async () => {
