@@ -111,6 +111,11 @@ describe("protected operator immutable Sandbox source", () => {
       teamId: "owned-team",
     });
     expect(createSandbox.mock.calls[0]?.[0]).not.toHaveProperty("image");
+    expect(runCommand).toHaveBeenLastCalledWith({
+      args: ["--input-file", "/tmp/protected-auth-proposal-input.json"],
+      cmd: fields.authProposal.executablePath,
+      env: {},
+    });
     expect(sandbox.delete).toHaveBeenCalledOnce();
   });
 });
