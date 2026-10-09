@@ -12,6 +12,7 @@ import type {
   TargetValidationReceipt,
 } from "@/lib/repository/target-validation";
 import type { ReviewedChangeSetReceipt } from "@/lib/repository/reviewed-change-set";
+import type { GitHubDestinationReviewBinding } from "@/lib/repository/github-destination-review";
 import type { ExistingDraftUpdateProposal } from "@/lib/repository/github-draft-update";
 import type { SourceReceipt } from "@/lib/repository/source-receipt";
 import type {
@@ -183,7 +184,54 @@ export type PreparedAppCreation = TargetExecutionBinding & {
   digest: string;
 };
 
+export interface GitHubDestinationReviewReadProgress {
+  changeSetDigest: string;
+  beforeComplete: boolean;
+  afterComplete: boolean;
+  beforeCursor?: { digest: string; offsetBytes: number; path: string; side?: "before" | "after" };
+  afterCursor?: { digest: string; offsetBytes: number; path: string; side?: "before" | "after" };
+}
+
+interface InitialDestinationReviewPhase {
+  phase: "validated" | "reviewed";
+}
+
+/** Preserve validated/source bytes while discarding authority for the old diff. */
+export const invalidateGitHubDestinationReview = <T extends InitialDestinationReviewPhase>(
+  state: T,
+  binding: GitHubDestinationReviewBinding,
+) => {
+  const validated = { ...state };
+  for (const key of [
+    "reviewReceipt",
+    "githubDraftProposal",
+    "existingDraftUpdate",
+    "githubDestinationReviewRead",
+  ]) {
+    Reflect.deleteProperty(validated, key);
+  }
+  return { ...validated, githubDestinationReview: binding, phase: "validated" as const };
+};
+
+export const assertCompleteGitHubDestinationReview = (
+  progress: GitHubDestinationReviewReadProgress | undefined,
+  changeSetDigest: string,
+): void => {
+  if (
+    progress?.changeSetDigest !== changeSetDigest ||
+    !progress.beforeComplete ||
+    !progress.afterComplete
+  ) {
+    throw new Error(
+      "Read both complete sides of the current destination diff before accepting its review.",
+    );
+  }
+};
+
 interface WorkspacePhase {
+  /** Read-only destination preimages for a separately accepted initial draft review. */
+  githubDestinationReview?: GitHubDestinationReviewBinding;
+  githubDestinationReviewRead?: GitHubDestinationReviewReadProgress;
   /** Sanitized bounded samples and durable references survive replacement compute. */
   checkoutDependencyAttempts?: readonly DependencyAttemptResult[];
   workspace: PreparedSandboxWorkspace;

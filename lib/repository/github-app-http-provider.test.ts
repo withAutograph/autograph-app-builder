@@ -42,6 +42,7 @@ function unicodeDraftMaterial(
   includePreimages = false,
   inputPaths?: readonly string[],
   contentBytes = new TextEncoder().encode("export default null;\n"),
+  reviewedBeforeBytes: Uint8Array = new TextEncoder().encode("reviewed original"),
 ) {
   const bytes = contentBytes;
   const digest = createHash("sha256").update(bytes).digest("hex");
@@ -59,7 +60,7 @@ function unicodeDraftMaterial(
         ...(includePreimages
           ? {
               before: {
-                digest: createHash("sha256").update("reviewed original").digest("hex"),
+                digest: createHash("sha256").update(reviewedBeforeBytes).digest("hex"),
                 mode: "644",
               },
             }
@@ -348,6 +349,173 @@ function historicalProviderFetch(input?: {
 }
 
 describe("GitHub App fixed-origin HTTP provider", () => {
+  it("reads destination metadata and bytes from the saved immutable tree with a source-only token", async () => {
+    const { proposal } = unicodeDraftMaterial();
+    const repository = createRepositoryObservation({
+      defaultBranch: "main",
+      headSha: sourceSha,
+      headTree: sourceTree,
+      installationIdentityDigest: proposal.installationIdentityDigest,
+      name: "example-app",
+      owner: "withAutograph",
+      releaseGate: { configured: false, name: "REPOSITORY_RELEASE_ENABLED" },
+      repositoryId: "100",
+      visibility: "private",
+    });
+    const bytes = Buffer.from(
+      'export * from "./release/2026-10-07.http-expiry-v26/data-server";\n',
+    );
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    const blobSha = "e".repeat(40);
+    const appTreeSha = "f".repeat(40);
+    let destinationChanged = false;
+    const calls: { url: string; body: unknown; method: string }[] = [];
+    // oxlint-disable-next-line eslint/require-await -- mocked HTTP transport
+    const provider = createProvider(async (request, init = {}) => {
+      const url = String(request);
+      const body = typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined;
+      calls.push({ body, method: init.method ?? "GET", url });
+      if (url.endsWith("/access_tokens")) {
+        return json(
+          {
+            permissions: (body as { permissions: Record<string, string> }).permissions,
+            token: "ghs_source_only_destination_token",
+          },
+          201,
+        );
+      }
+      if (url.endsWith("/repositories/100")) {
+        return json({
+          default_branch: "main",
+          id: 100,
+          name: repository.name,
+          owner: { login: repository.owner },
+          private: true,
+        });
+      }
+      if (url.endsWith("/commits/main")) {
+        return json({ commit: { tree: { sha: "b".repeat(40) } }, sha: "a".repeat(40) });
+      }
+      if (url.includes("/actions/variables?")) {
+        return json({ variables: [] });
+      }
+      if (url.includes("/compare/")) {
+        return json({ files: [] });
+      }
+      if (url.endsWith(`/git/trees/${"b".repeat(40)}`)) {
+        return json({
+          tree: [{ mode: "040000", path: "apps", sha: "c".repeat(40), type: "tree" }],
+          truncated: false,
+        });
+      }
+      if (url.endsWith(`/git/commits/${repository.headSha}`)) {
+        return json({ sha: repository.headSha, tree: { sha: repository.headTree } });
+      }
+      if (url.endsWith(`/git/trees/${repository.headTree}`)) {
+        return json({
+          tree: [{ mode: "040000", path: "apps", sha: appTreeSha, type: "tree" }],
+          truncated: false,
+        });
+      }
+      if (
+        url.endsWith(`/git/trees/${appTreeSha}`) ||
+        url.endsWith(`/git/trees/${"c".repeat(40)}`)
+      ) {
+        return json({
+          tree: [
+            {
+              mode: "100644",
+              path: "schema.ts",
+              sha: destinationChanged ? "d".repeat(40) : blobSha,
+              type: "blob",
+            },
+            {
+              mode: "100755",
+              path: "run.ts",
+              sha: destinationChanged ? "d".repeat(40) : blobSha,
+              type: "blob",
+            },
+          ],
+          truncated: false,
+        });
+      }
+      if (url.endsWith(`/git/blobs/${blobSha}`) || url.endsWith(`/git/blobs/${"d".repeat(40)}`)) {
+        return json({
+          content: (destinationChanged
+            ? Buffer.from('export * from "./release/later-schema/data-server";\n')
+            : bytes
+          ).toString("base64"),
+          encoding: "base64",
+          sha: destinationChanged ? "d".repeat(40) : blobSha,
+        });
+      }
+      throw new Error("Unexpected destination request");
+    });
+    const adapter = createGitHubAppPublicationAdapter(provider);
+    if (
+      adapter.inspectDestinationFiles === undefined ||
+      adapter.readDestinationFile === undefined
+    ) {
+      throw new Error("Missing destination reader");
+    }
+    const paths = ["apps/schema.ts", "apps/absent.ts", "apps/run.ts"];
+    const expected = [
+      { digest, mode: "755", path: "apps/run.ts" },
+      { digest, mode: "644", path: "apps/schema.ts" },
+    ];
+    await expect(adapter.inspectDestinationFiles({ paths, repository })).resolves.toEqual(expected);
+    expect(
+      calls.filter(({ url }) => url.endsWith(`/git/trees/${repository.headTree}`)),
+    ).toHaveLength(1);
+    expect(calls.filter(({ url }) => url.endsWith(`/git/trees/${appTreeSha}`))).toHaveLength(1);
+    // A new invocation reads and verifies its snapshot independently.
+    await expect(adapter.inspectDestinationFiles({ paths, repository })).resolves.toEqual(expected);
+    expect(
+      calls.filter(({ url }) => url.endsWith(`/git/trees/${repository.headTree}`)),
+    ).toHaveLength(2);
+    expect(calls.filter(({ url }) => url.endsWith(`/git/trees/${appTreeSha}`))).toHaveLength(2);
+    await expect(
+      adapter.readDestinationFile({ path: "apps/schema.ts", repository }),
+    ).resolves.toEqual({ bytes: new Uint8Array(bytes), digest, mode: "644" });
+    await expect(
+      adapter.readDestinationFile({ path: "apps/absent.ts", repository }),
+    ).resolves.toBeNull();
+    expect(bytes.byteLength).toBe(66);
+    expect(digest).toBe("65ef3e0c6347d4b901399d48633fdc91af6eb909884227efddb7b61b971f1e01");
+    expect(digest).not.toBe(blobSha);
+    for (const { body } of calls.filter(({ url }) => url.endsWith("/access_tokens"))) {
+      expect(body).toEqual({ permissions: { contents: "read" }, repository_ids: [100] });
+    }
+    const refreshed = unicodeDraftMaterial(
+      false,
+      true,
+      ["apps/schema.ts"],
+      new TextEncoder().encode("export const schema = {};\n"),
+      bytes,
+    );
+    expect(refreshed.content.changes[0]).toMatchObject({ before: { digest, mode: "644" } });
+    destinationChanged = true;
+    const publicationCallStart = calls.length;
+    await expect(
+      provider.publishDraftPullRequest(refreshed.proposal, refreshed.content),
+    ).resolves.toEqual({
+      code: "reviewed-path-changed",
+      path: "apps/schema.ts",
+      status: "rejected",
+    });
+    expect(
+      calls
+        .slice(publicationCallStart)
+        .filter(({ method }) => method !== "GET")
+        .every(({ url }) => url.endsWith("/access_tokens")),
+    ).toBe(true);
+    expect(
+      calls
+        .slice(0, publicationCallStart)
+        .some(({ url }) => url.includes("/git/ref/") || url.includes("/actions/")),
+    ).toBe(false);
+  });
+
   it("resolves a merged PR's retained commit after its source branch is deleted", async () => {
     const mock = historicalProviderFetch();
     const provider = createProvider(mock.implementation);

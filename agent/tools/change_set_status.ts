@@ -12,10 +12,16 @@ import {
   overlayChanges,
   reviewedOverlayTreeDigest,
 } from "@/lib/repository/target-apply";
-import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { appBuilderWorkflowState, updateExactWorkflow } from "@/lib/agent/workflow-state";
+import type { GitHubDestinationReviewReadProgress } from "@/lib/agent/workflow-state";
 import type { OverlayChange } from "@/lib/repository/target-apply";
 import { deriveNormalizedChangeSet } from "@/lib/repository/reviewed-change-set";
 import { hasTestCapability } from "@/lib/testing/test-capability";
+import {
+  assertGitHubDestinationReviewBinding,
+  deriveDestinationChanges,
+} from "@/lib/repository/github-destination-review";
+import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import type { SourceKind } from "@/lib/repository/source-receipt";
 import { largestUtf8PayloadChunk } from "@/lib/eve/payload-envelope";
 
@@ -37,6 +43,7 @@ interface ChangeSetExportCursor {
   digest: string;
   offsetBytes: number;
   path: string;
+  side?: "before" | "after";
 }
 interface ExportFile {
   content: string;
@@ -159,6 +166,69 @@ export const baselineReviewableChanges = <T extends ChangePath>(
   return changes.filter(({ path }) => allowed.has(path));
 };
 
+export const reviewExportChanges = (
+  changes: readonly OverlayChange[],
+  side: "before" | "after",
+): readonly ChangePath[] => {
+  if (side === "after") {
+    return changes;
+  }
+  const oppositeKinds = { added: "deleted", deleted: "added", modified: "modified" } as const;
+  return changes.map((change) => ({
+    after: change.before,
+    kind: oppositeKinds[change.kind],
+    path: change.path,
+  }));
+};
+
+export const assertReviewExportCursorSide = (
+  cursor: ChangeSetExportCursor | undefined,
+  side: "before" | "after",
+): void => {
+  if (cursor !== undefined && (cursor.side ?? "after") !== side) {
+    throw new Error(
+      "The review export cursor belongs to the other content side. Start this side from its first page.",
+    );
+  }
+};
+
+export const destinationReviewReadProgress = (input: {
+  previous?: GitHubDestinationReviewReadProgress;
+  changeSetDigest: string;
+  side: "before" | "after";
+  cursor?: ChangeSetExportCursor;
+  nextCursor?: ChangeSetExportCursor;
+  readable: boolean;
+}) => {
+  const previous: GitHubDestinationReviewReadProgress =
+    input.previous?.changeSetDigest === input.changeSetDigest
+      ? input.previous
+      : { afterComplete: false, beforeComplete: false, changeSetDigest: input.changeSetDigest };
+  const expected = input.side === "before" ? previous.beforeCursor : previous.afterCursor;
+  if (
+    input.cursor !== undefined &&
+    !(["digest", "offsetBytes", "path", "side"] as const).every(
+      (key) => input.cursor?.[key] === expected?.[key],
+    )
+  ) {
+    throw new Error(
+      "Resume the destination diff from its saved cursor or start this side from its first page.",
+    );
+  }
+  return {
+    ...previous,
+    ...(input.side === "before"
+      ? {
+          beforeComplete: input.readable && input.nextCursor === undefined,
+          beforeCursor: input.nextCursor,
+        }
+      : {
+          afterComplete: input.readable && input.nextCursor === undefined,
+          afterCursor: input.nextCursor,
+        }),
+  };
+};
+
 export const changedAppTextExport = async (
   changes: readonly ChangePath[],
   appId: string,
@@ -237,20 +307,37 @@ export const exactNormalizedChangeSet = async (input: {
       )
     : await inspectApplyOverlay(input.sandbox, input.state.applyReceipt.applyRoot);
   const baseline = appBaselineState.get();
+  const destination = input.state.githubDestinationReview;
+  if (destination !== undefined) {
+    assertGitHubDestinationReviewBinding(destination, {
+      applyDigest: input.state.applyReceipt.digest,
+      postTreeDigest: reviewedOverlayTreeDigest(
+        observed,
+        input.state.appSpec.appId,
+        isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
+      ),
+      validationDigest: input.state.validationReceipt.digest,
+    });
+  }
   const selectedBaseline =
     baseline?.receipt?.appId === input.state.appSpec.appId ? baseline : undefined;
-  const preTree =
-    selectedBaseline === undefined
-      ? input.state.applyReceipt.preTree
-      : await appBaselineReviewPreTree(
-          input.sandbox,
-          selectedBaseline.selection,
-          input.state.applyReceipt.preTree,
-        );
-  const completeChanges = overlayChanges(
-    { files: preTree, treeDigest: input.state.applyReceipt.preTreeDigest },
-    observed,
-  );
+  let { preTree } = input.state.applyReceipt;
+  if (destination !== undefined) {
+    preTree = [...destination.preTree];
+  } else if (selectedBaseline !== undefined) {
+    preTree = await appBaselineReviewPreTree(
+      input.sandbox,
+      selectedBaseline.selection,
+      input.state.applyReceipt.preTree,
+    );
+  }
+  const completeChanges =
+    destination === undefined
+      ? overlayChanges(
+          { files: preTree, treeDigest: input.state.applyReceipt.preTreeDigest },
+          observed,
+        )
+      : deriveDestinationChanges(destination, observed);
   const changes =
     selectedBaseline === undefined
       ? reviewableChanges(
@@ -262,7 +349,7 @@ export const exactNormalizedChangeSet = async (input: {
   return deriveNormalizedChangeSet(
     {
       ...input.state.applyReceipt,
-      ...(selectedBaseline === undefined
+      ...(selectedBaseline === undefined && destination === undefined
         ? {}
         : {
             preTree,
@@ -292,7 +379,9 @@ const exportAppliedTextFiles = async (input: {
   >;
   sandbox: SandboxSession;
   envelope?: ChangeSetExportEnvelope;
-  cursor?: { digest: string; offsetBytes: number; path: string };
+  cursor?: ChangeSetExportCursor;
+  contentSide?: "before" | "after";
+  readBeforeText?: (path: string) => Promise<string | null>;
 }) => {
   const observed = hasTestCapability("simulated-target")
     ? await inspectFixtureApplyOverlay(
@@ -314,14 +403,30 @@ const exportAppliedTextFiles = async (input: {
       input.state.appSpec.appId,
       isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
     );
+  const before = input.contentSide === "before";
+  const destination = input.state.githubDestinationReview;
+  if (before && destination === undefined) {
+    throw new Error("Prepare the GitHub destination review before exporting its before content.");
+  }
+  assertReviewExportCursorSide(input.cursor, input.contentSide ?? "after");
+  const exportChanges = reviewExportChanges(changes, input.contentSide ?? "after");
   // A complete app checkout can include tens of megabytes of unchanged schema history.
   const exported = await changedAppTextExport(
-    changes,
+    exportChanges,
     input.state.appSpec.appId,
-    (path) =>
-      input.sandbox.readTextFile({
+    async (path) => {
+      if (before && destination !== undefined) {
+        if (input.readBeforeText === undefined) {
+          throw new Error(
+            "The GitHub runtime does not support immutable destination content reads.",
+          );
+        }
+        return await input.readBeforeText(path);
+      }
+      return await input.sandbox.readTextFile({
         path: `${input.state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "")}/${path}`,
-      }),
+      });
+    },
     {
       cursor: input.cursor,
       envelope: input.envelope,
@@ -335,8 +440,18 @@ const exportAppliedTextFiles = async (input: {
     },
   );
   return {
+    absentPaths: changes
+      .filter((change) => (before ? change.kind === "added" : change.kind === "deleted"))
+      .map((change) => change.path),
     changes,
     ...exported,
+    contentCursor:
+      exported.contentCursor === undefined
+        ? undefined
+        : {
+            ...exported.contentCursor,
+            side: input.contentSide ?? "after",
+          },
   };
 };
 
@@ -369,20 +484,75 @@ export default defineTool({
       };
     }
     const changeSet = await exactNormalizedChangeSet({ sandbox, state });
+    const destination = state.githubDestinationReview;
+    const runtime =
+      input.includeContent && input.contentSide === "before"
+        ? await githubPublicationRuntimeForSession(ctx.session.auth)
+        : undefined;
     const exported = input.includeContent
       ? await exportAppliedTextFiles({
+          contentSide: input.contentSide,
           cursor: input.contentCursor,
           envelope: changeSet,
+          readBeforeText:
+            runtime?.readDraftDestinationFile === undefined || destination === undefined
+              ? undefined
+              : async (path) => {
+                  const file = await runtime.readDraftDestinationFile?.({
+                    binding: destination,
+                    path,
+                  });
+                  if (file === undefined) {
+                    return null;
+                  }
+                  if (file === null) {
+                    return null;
+                  }
+                  return Buffer.from(file.bytes).toString("utf-8");
+                },
           sandbox,
           state,
         })
       : undefined;
+    if (destination !== undefined && exported !== undefined) {
+      const progress = destinationReviewReadProgress({
+        changeSetDigest: changeSet.digest,
+        cursor: input.contentCursor,
+        nextCursor: exported.contentCursor,
+        previous: state.githubDestinationReviewRead,
+        readable: exported.exportOmissions.every(
+          (omission) => omission.reason === "changed non-text artifact",
+        ),
+        side: input.contentSide,
+      });
+      updateExactWorkflow({
+        expected: state,
+        operation: "destination diff content read",
+        transition: (latest) => ({ ...latest, githubDestinationReviewRead: progress }),
+      });
+    }
     return {
       ...changeSet,
+      ...(destination === undefined
+        ? {}
+        : {
+            publicationDestination: {
+              branch: destination.repository.defaultBranch,
+              headSha: destination.repository.headSha,
+              headTree: destination.repository.headTree,
+              repository: `${destination.repository.owner}/${destination.repository.name}`,
+            },
+          }),
       reviewed: state.phase === "reviewed",
       ...(exported === undefined
         ? {}
-        : { exportFiles: exported.exportFiles, exportOmissions: exported.exportOmissions }),
+        : {
+            absentPaths: exported.absentPaths,
+            contentCursor: exported.contentCursor,
+            contentSide: input.contentSide,
+            exportFiles: exported.exportFiles,
+            exportOmissions: exported.exportOmissions,
+          }),
     };
   },
   inputSchema: z.strictObject({
@@ -391,8 +561,10 @@ export default defineTool({
         digest: z.string().regex(/^[0-9a-f]{64}$/u),
         offsetBytes: z.number().int().nonnegative(),
         path: z.string().min(1),
+        side: z.enum(["before", "after"]).optional(),
       })
       .optional(),
+    contentSide: z.enum(["before", "after"]).default("after"),
     includeContent: z.boolean().default(false),
   }),
 });

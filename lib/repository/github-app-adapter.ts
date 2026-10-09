@@ -255,6 +255,14 @@ export const createGitHubTargetAccessAdapter = (
 });
 
 export interface GitHubAppInstallationProvider {
+  inspectDestinationFiles?: (input: {
+    repository: GitHubRepositoryObservation;
+    paths: readonly string[];
+  }) => Promise<unknown>;
+  readDestinationFile?: (input: {
+    repository: GitHubRepositoryObservation;
+    path: string;
+  }) => Promise<unknown>;
   inspectHistoricalAppSource?: (input: {
     repositoryId: string;
     owner: string;
@@ -596,6 +604,45 @@ export function createGitHubAppPublicationAdapter(
       ) as GitHubMutationAcknowledgement;
     },
   };
+  const destinationFileSchema = z.object({
+    digest,
+    mode: z.enum(["644", "755"]),
+    path: z.string().refine(safeSourcePath),
+  });
+  const { inspectDestinationFiles, readDestinationFile } = provider;
+  if (inspectDestinationFiles !== undefined) {
+    adapter.inspectDestinationFiles = async (input) => {
+      const requestedPaths = new Set(input.paths);
+      const files = parseProviderResponse(
+        z.array(destinationFileSchema),
+        await sanitizedProviderCall(
+          () => inspectDestinationFiles(input),
+          "inspect destination files",
+        ),
+      );
+      if (
+        new Set(files.map((file) => file.path)).size !== files.length ||
+        files.some((file) => !requestedPaths.has(file.path))
+      ) {
+        throw new Error("Invalid GitHub destination file response.");
+      }
+      return files;
+    };
+  }
+  if (readDestinationFile !== undefined) {
+    adapter.readDestinationFile = async (input) => {
+      const file = parseProviderResponse(
+        z
+          .object({ bytes: z.instanceof(Uint8Array), digest, mode: z.enum(["644", "755"]) })
+          .nullable(),
+        await sanitizedProviderCall(() => readDestinationFile(input), "read the destination file"),
+      );
+      if (file !== null && createHash("sha256").update(file.bytes).digest("hex") !== file.digest) {
+        throw new Error("Invalid GitHub destination file digest.");
+      }
+      return file;
+    };
+  }
   const { inspectHistoricalAppSource } = provider;
   if (inspectHistoricalAppSource !== undefined) {
     adapter.inspectHistoricalAppSource = async (input) =>

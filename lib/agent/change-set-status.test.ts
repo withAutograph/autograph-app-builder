@@ -7,12 +7,112 @@ import {
   changedAppTextPaths,
   isCandidateExportTextPath,
   reviewableChanges,
+  reviewExportChanges,
+  assertReviewExportCursorSide,
+  destinationReviewReadProgress,
 } from "../../agent/tools/change_set_status";
 import { assertExistingAppReviewScope } from "../repository/reviewed-change-set";
 
 const digest = (value: string) => createHash("sha256").update(value, "utf-8").digest("hex");
 
 describe("reviewed candidate export", () => {
+  it("exports before content for modifications and deletions while identifying additions as absent", async () => {
+    const changes = [
+      {
+        after: { digest: digest("new"), mode: "644" },
+        kind: "added" as const,
+        path: "apps/replica/added.ts",
+      },
+      {
+        before: { digest: digest("old deleted"), mode: "644" },
+        kind: "deleted" as const,
+        path: "apps/replica/deleted.ts",
+      },
+      {
+        after: { digest: digest("new modified"), mode: "644" },
+        before: { digest: digest("old modified"), mode: "644" },
+        kind: "modified" as const,
+        path: "apps/replica/modified.ts",
+      },
+    ];
+    const contents = new Map([
+      ["apps/replica/deleted.ts", "old deleted"],
+      ["apps/replica/modified.ts", "old modified"],
+    ]);
+    const exported = await changedAppTextExport(
+      reviewExportChanges(changes, "before"),
+      "replica",
+      async (path) => await Promise.resolve(contents.get(path) ?? null),
+    );
+    expect(exported.exportFiles.map(({ path, content }) => ({ content, path }))).toEqual([
+      { content: "old deleted", path: "apps/replica/deleted.ts" },
+      { content: "old modified", path: "apps/replica/modified.ts" },
+    ]);
+    expect(changedAppTextPaths(reviewExportChanges(changes, "after"), "replica")).toEqual([
+      "apps/replica/added.ts",
+      "apps/replica/modified.ts",
+    ]);
+  });
+
+  it("binds content cursors to their side and preserves legacy after cursors", () => {
+    const cursor = { digest: digest("same bytes"), offsetBytes: 12, path: "apps/replica/file.ts" };
+    expect(() => {
+      assertReviewExportCursorSide(cursor, "after");
+    }).not.toThrow();
+    expect(() => {
+      assertReviewExportCursorSide(cursor, "before");
+    }).toThrow("other content side");
+    expect(() => {
+      assertReviewExportCursorSide({ ...cursor, side: "before" }, "after");
+    }).toThrow("other content side");
+  });
+
+  it("records both complete destination sides only after following each saved cursor", () => {
+    const cursor = {
+      digest: digest("base"),
+      offsetBytes: 12,
+      path: "apps/replica/file.ts",
+      side: "before" as const,
+    };
+    const first = destinationReviewReadProgress({
+      changeSetDigest: "review",
+      nextCursor: cursor,
+      readable: true,
+      side: "before",
+    });
+    expect(first.beforeComplete).toBe(false);
+    expect(() =>
+      destinationReviewReadProgress({
+        changeSetDigest: "review",
+        cursor: { ...cursor, offsetBytes: 13 },
+        previous: first,
+        readable: true,
+        side: "before",
+      }),
+    ).toThrow("saved cursor");
+    const before = destinationReviewReadProgress({
+      changeSetDigest: "review",
+      cursor,
+      previous: first,
+      readable: true,
+      side: "before",
+    });
+    const complete = destinationReviewReadProgress({
+      changeSetDigest: "review",
+      previous: before,
+      readable: true,
+      side: "after",
+    });
+    expect(complete).toMatchObject({ afterComplete: true, beforeComplete: true });
+    expect(
+      destinationReviewReadProgress({
+        changeSetDigest: "changed-review",
+        previous: complete,
+        readable: false,
+        side: "before",
+      }),
+    ).toMatchObject({ afterComplete: false, beforeComplete: false });
+  });
   it("keeps baseline review limited to the app and its conventional specs while excluding tool output", () => {
     const changes = [
       "apps/replica/app/page.tsx",

@@ -87,6 +87,15 @@ perform the fresh publication-permission check. Handle an actual provider
 failure through the supported connection flow; publication still requires its
 separate outward-effect approval.
 
+Before initial draft publication, use `prepare_github_draft_review` to compare
+the validated app with the selected repository's current destination. Read the
+complete `change_set_status` exports for both `contentSide: "before"` and
+`contentSide: "after"`, following each side's saved cursor. Explain the actual
+destination changes and accept that new review before sealing its proposal.
+This preserves the original app baseline and validated private files. A fresh
+default-branch observation alone does not refresh a reviewed file preimage.
+Existing PRs continue through their draft update or reconciliation workflow.
+
 For the final handoff, describe only the useful features actually delivered.
 Say the working app is ready to review only when the implementation has real
 delivery evidence and a reachable app URL returned by a supported runtime or

@@ -1,5 +1,7 @@
 import {
   createDraftPullRequestProposal,
+  createRepositoryObservation,
+  assertCanonicalGitHubMutationReceipt,
   createApprovedFreshRepository,
   publishApprovedDraftPullRequest,
   resolveImmutableExistingSource,
@@ -14,6 +16,7 @@ import type {
   GitHubPublicationAdapter,
   GitHubPublicationReceiptStore,
   GitHubRepositoryObservation,
+  GitHubInstallationIdentity,
   ImmutableGitHubSourceReceipt,
 } from "../repository/github-publication";
 import type { ReviewedChangeSetReceipt } from "../repository/reviewed-change-set";
@@ -39,6 +42,9 @@ import type {
 import { approvalTargetFromDraftProposal, assertApprovalReceipt } from "./approval-receipt";
 import type { ApprovalReceipt } from "./approval-receipt";
 import type { HostedGitHubTenantAuthority } from "../repository/postgres-github-installation-store";
+import type { GitHubDestinationReviewBinding } from "../repository/github-destination-review";
+import { assertGitHubDestinationReviewBinding } from "../repository/github-destination-review";
+import type { OverlayFile } from "../repository/target-apply";
 import type {
   HistoricalAppSourceObservation,
   HistoricalAppSourceSelector,
@@ -54,6 +60,8 @@ const supportedOperations = [
   "recover-lost-response-by-idempotency-key",
 ] as const;
 const draftPublicationOperation = "publish-draft-pull-request" as const;
+const sourceReadOperation = "resolve-existing-source" as const;
+const draftReceiptKind = "draft-pull-request" as const;
 
 export interface GitHubPublicationRuntimeStatus {
   version: 3;
@@ -79,6 +87,19 @@ export interface GitHubPublicationRuntimeStatus {
 }
 
 export interface GitHubPublicationRuntime {
+  inspectDraftDestination?: (input: {
+    existingProposal?: DraftPullRequestProposal;
+    githubSource: ImmutableGitHubSourceReceipt;
+    paths: readonly string[];
+  }) => Promise<{
+    repository: GitHubRepositoryObservation;
+    installation: GitHubInstallationIdentity;
+    preTree: readonly OverlayFile[];
+  }>;
+  readDraftDestinationFile?: (input: {
+    binding: GitHubDestinationReviewBinding;
+    path: string;
+  }) => Promise<{ bytes: Uint8Array; mode: string; digest: string } | null>;
   status: () => Promise<GitHubPublicationRuntimeStatus>;
   resolveImmutableSource: (input: {
     expectedInstallationId: string;
@@ -89,6 +110,7 @@ export interface GitHubPublicationRuntime {
     approvedByCallId: string;
   }) => Promise<ImmutableGitHubSourceReceipt>;
   sealDraftPullRequestProposal: (input: {
+    destinationReview?: GitHubDestinationReviewBinding;
     githubSource: ImmutableGitHubSourceReceipt;
     source: SourceReceiptEvidence;
     review: ReviewedChangeSetReceipt;
@@ -359,9 +381,75 @@ export function composeGitHubPublicationRuntime(input: {
         store: receipts,
       });
     },
+    async inspectDraftDestination(request) {
+      if (request.existingProposal !== undefined) {
+        const prior = await receipts.read(request.existingProposal.digest);
+        if (prior !== undefined) {
+          assertCanonicalGitHubMutationReceipt(prior);
+          if (
+            prior.kind !== draftReceiptKind ||
+            prior.proposalDigest !== request.existingProposal.digest
+          ) {
+            throw new Error("The prior publication journal does not match this draft proposal.");
+          }
+          if (prior.status === "pending") {
+            throw new Error(
+              "Recover the prior draft publication's unknown outcome before preparing another destination review.",
+            );
+          }
+          if (prior.status === "succeeded") {
+            throw new Error(
+              "Use the existing draft update workflow for the published pull request.",
+            );
+          }
+          if (
+            prior.failureCode !== "provider-rejected" ||
+            !["reviewed-path-changed", "invalid-publication-material"].includes(prior.providerCode)
+          ) {
+            throw new Error(
+              "The failed draft publication requires recovery before another destination review.",
+            );
+          }
+        }
+      }
+      if (adapter.inspectDestinationFiles === undefined) {
+        throw new Error("The GitHub provider does not support immutable destination review reads.");
+      }
+      const repository = await adapter.inspectRepository({
+        operation: sourceReadOperation,
+        ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
+        repositoryId: request.githubSource.repository.repositoryId,
+      });
+      if (
+        repository.repositoryId !== request.githubSource.repository.repositoryId ||
+        repository.owner !== request.githubSource.repository.owner ||
+        repository.name !== request.githubSource.repository.name
+      ) {
+        throw new Error("The publication destination differs from the selected GitHub repository.");
+      }
+      return {
+        installation: await adapter.inspectInstallation(sourceReadOperation),
+        preTree: await adapter.inspectDestinationFiles({ paths: request.paths, repository }),
+        repository,
+      };
+    },
+    async readDraftDestinationFile(request) {
+      if (adapter.readDestinationFile === undefined) {
+        throw new Error(
+          "The GitHub provider does not support immutable destination content reads.",
+        );
+      }
+      if (!request.binding.candidatePaths.includes(request.path)) {
+        throw new Error("The file is outside the prepared destination review.");
+      }
+      return await adapter.readDestinationFile({
+        path: request.path,
+        repository: request.binding.repository,
+      });
+    },
     async inspectSourceBranch(request) {
       const observed = await adapter.inspectRepository({
-        operation: "resolve-existing-source",
+        operation: sourceReadOperation,
         ref: `refs/heads/${request.branch}`,
         repositoryId: request.repositoryId,
       });
@@ -493,12 +581,45 @@ export function composeGitHubPublicationRuntime(input: {
       });
     },
     async sealDraftPullRequestProposal(request) {
-      const repository = await adapter.inspectRepository({
-        operation: draftPublicationOperation,
-        ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
-        repositoryId: request.githubSource.repository.repositoryId,
-      });
+      let repository =
+        request.destinationReview?.repository ??
+        (await adapter.inspectRepository({
+          operation: draftPublicationOperation,
+          ref: `refs/heads/${request.githubSource.repository.defaultBranch}`,
+          repositoryId: request.githubSource.repository.repositoryId,
+        }));
       const installation = await adapter.inspectInstallation(draftPublicationOperation);
+      if (request.destinationReview !== undefined) {
+        assertGitHubDestinationReviewBinding(request.destinationReview, {
+          applyDigest: request.review.applyDigest,
+          postTreeDigest: request.review.postTreeDigest,
+          validationDigest: request.review.validationDigest,
+        });
+        const sameRepository = (["repositoryId", "owner", "name"] as const).every(
+          (key) => repository[key] === request.githubSource.repository[key],
+        );
+        const sameInstallation = (
+          ["installationId", "accountId", "accountLogin", "accountType"] as const
+        ).every((key) => request.destinationReview?.installation[key] === installation[key]);
+        if (!sameRepository || !sameInstallation) {
+          throw new Error(
+            "The destination review does not match the selected repository and publication installation.",
+          );
+        }
+        // Rebind fresh publication authority while preserving the reviewed
+        // immutable destination commit/tree and all repository metadata.
+        repository = createRepositoryObservation({
+          defaultBranch: repository.defaultBranch,
+          headSha: repository.headSha,
+          headTree: repository.headTree,
+          installationIdentityDigest: installation.digest,
+          name: repository.name,
+          owner: repository.owner,
+          releaseGate: repository.releaseGate,
+          repositoryId: repository.repositoryId,
+          visibility: repository.visibility,
+        });
+      }
       const proposal = createDraftPullRequestProposal({
         changedPathsSinceBase: [],
         installation,
@@ -522,7 +643,7 @@ export function composeGitHubPublicationRuntime(input: {
           : await receipts.read(request.priorPublishedProposalDigest);
       const matchesOriginalPublication =
         prior?.status === "succeeded" &&
-        prior.kind === "draft-pull-request" &&
+        prior.kind === draftReceiptKind &&
         isDeepStrictEqual(
           [prior.repositoryId, prior.pullRequestNumber],
           [request.githubSource.repository.repositoryId, request.pullRequestNumber],
@@ -649,7 +770,7 @@ export function composeGitHubPublicationRuntime(input: {
         // oxlint-disable-next-line sonarjs/expression-complexity -- one tenant receipt predicate.
         prior !== undefined &&
         (prior.status !== "succeeded" ||
-          prior.kind !== "draft-pull-request" ||
+          prior.kind !== draftReceiptKind ||
           prior.repositoryId !== observed.repositoryId ||
           prior.pullRequestNumber !== observed.number ||
           (request.priorPublishedProposalDigest !== undefined &&
