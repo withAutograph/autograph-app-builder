@@ -39,14 +39,6 @@ const validationPhase = (callId: string, phase: string, detail?: string | boolea
   );
 };
 
-const reusableDescription = async (
-  eligible: boolean,
-  input: () => Promise<Parameters<typeof describeSelectedApp>[0]>,
-) =>
-  eligible && !hasTestCapability("simulated-target")
-    ? await describeSelectedApp(await input())
-    : undefined;
-
 const describeValidationApp = async (
   fixture: boolean,
   input: Parameters<typeof describeSelectedApp>[0],
@@ -94,9 +86,6 @@ const validatePersistentBackend = async (
 const backendValidationStatus = (status: string) =>
   status === "failed" || status === "blocked" ? ("needs_repair" as const) : ("validated" as const);
 
-const hasReusableTechnicalValidation = (phase: string, implementationFileCount: number) =>
-  ["validated", "reviewed"].includes(phase) && implementationFileCount === 0;
-
 export default defineTool({
   description:
     "Run the repository's normal validation commands against the current applied app. Command exit status is the technical validation result; successful checks also return an independent source assessment against the original product request. For persistent apps, also run the declared authenticated browser task against the prepared runtime and report its result separately. None of these results alone proves hosted durability. This does not publish or otherwise change an external repository.",
@@ -113,65 +102,6 @@ export default defineTool({
       throw new Error("Apply the requested changes before running the repository checks.");
     }
     assertExistingAppImplementationFiles(input.implementationFiles, current.proposal.target);
-    const reusableTechnicalValidation = hasReusableTechnicalValidation(
-      current.phase,
-      input.implementationFiles.length,
-    );
-    const priorDescription = await reusableDescription(reusableTechnicalValidation, async () => ({
-      appId: current.appSpec.appId,
-      root: current.applyReceipt.applyRoot,
-      sandbox: await ctx.getSandbox(),
-      signal: ctx.abortSignal,
-    }));
-    // Persistent runtime observations must be refreshed even when source checks
-    // are unchanged: sessions, assignments, and installations can be revoked.
-    if (
-      (current.phase === "validated" || current.phase === "reviewed") &&
-      input.implementationFiles.length === 0 &&
-      priorDescription?.backend.kind !== GENERATED_BACKEND
-    ) {
-      const evidence = currentProductBehaviorEvidence(
-        current.appSpec.digest,
-        current.applyReceipt.digest,
-      );
-      const sourceAssessment = await reviewAppliedProductSource({
-        abortSignal: ctx.abortSignal,
-        appSpec: current.appSpec,
-        applyReceipt: current.applyReceipt,
-        artifacts: current.artifacts,
-        callId: ctx.callId,
-        getSandbox: async () => await ctx.getSandbox(),
-        sessionAuth: ctx.session.auth,
-        sessionId: ctx.session.id,
-      });
-      ctx.abortSignal?.throwIfAborted();
-      const productionHandoff = await productionReadinessHandoff({
-        appId: current.appSpec.appId,
-        productBehaviorEvidence: evidence,
-        repositoryRoot: current.applyReceipt.applyRoot,
-        signal: ctx.abortSignal,
-        source: await ctx.getSandbox(),
-      });
-      return {
-        attemptDigest: current.validationReceipt.attemptDigest,
-        commandCount: current.validationReceipt.commands.length,
-        logs: current.validationReceipt.commands.map((command) => ({
-          name: command.name,
-          ...(command.logs === undefined ? {} : { logs: command.logs }),
-        })),
-        productAcceptance: productAcceptanceObligations(
-          current.appSpec,
-          evidence,
-          sourceAssessment,
-        ),
-        productBehaviorEvidence: evidence,
-        productionHandoff,
-        reused: true,
-        sourceAssessment,
-        status: "validated" as const,
-        technicalStatus: "passed" as const,
-      };
-    }
     validationPhase(ctx.callId, "resolving_sandbox");
     const sandbox = await ctx.getSandbox();
     validationPhase(ctx.callId, "sandbox_ready");
