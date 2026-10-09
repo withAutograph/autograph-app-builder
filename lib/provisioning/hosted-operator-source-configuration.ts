@@ -57,7 +57,7 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
       accessRoles: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,62}$/u)).min(1),
       appDatabase: resource,
       branch: id,
-      deploymentId: id,
+      deploymentId: id.optional(),
       gitSha: z.string().regex(/^[a-f0-9]{40}$/u),
       organizationProposal: z.strictObject({ name: id, organizationId: id, slug: id }).optional(),
       projectId: id,
@@ -70,7 +70,7 @@ export const hostedOperatorSourceConfigurationSchema = z.strictObject({
   gateway: z.strictObject({
     authBrowserOrigin: httpsOrigin,
     branch: id,
-    deploymentId: id,
+    deploymentId: id.optional(),
     environment: z.literal("preview"),
     gatewayOrigin: httpsOrigin,
     gitSha: z.string().regex(/^[a-f0-9]{40}$/u),
