@@ -3,6 +3,15 @@ import { getVercelOidcToken, verifyVercelOidcToken } from "@vercel/oidc";
 import postgres from "postgres";
 import { z } from "zod";
 import type { HostedOperatorContext } from "./hosted-operator-service";
+import {
+  readNativePreviewNeonProvenance,
+  snapshotSyntheticNeonEnrollment,
+  syntheticNeonEnrollmentSchema,
+} from "./hosted-operator-synthetic-neon-provenance";
+import type {
+  NativePreviewNeonInitSource,
+  SyntheticNeonEnrollment,
+} from "./hosted-operator-synthetic-neon-provenance";
 
 const id = z.string().regex(/^[a-z0-9-]{1,60}$/u);
 const sqlName = z.string().regex(/^[a-z][a-z0-9_]{0,62}$/u);
@@ -26,6 +35,8 @@ export interface NativePreviewNeonConfiguration {
   connectorInstallationId: string;
   /** Existing owner-authorized source/operator connection; never the generated app project. */
   nativeStore: NativePreviewNeonStoreBinding;
+  /** Reviewed deployment-owned authority; never derived from a request, name or init_source. */
+  syntheticEnrollment?: SyntheticNeonEnrollment;
   operator: {
     projectId: string;
     environment: "preview" | "production";
@@ -49,6 +60,7 @@ export const configurationSchema = z.strictObject({
     ownerId: z.string().min(1),
     projectId: z.string().min(1),
   }),
+  syntheticEnrollment: syntheticNeonEnrollmentSchema.optional(),
 });
 export interface NativePreviewNeonDependencies {
   configuration: NativePreviewNeonConfiguration;
@@ -136,16 +148,6 @@ export const privateMaintenanceUrl = (uri: string, scope: NativePreviewNeonScope
   return url.toString();
 };
 
-const branchSchema = z.object({
-  branch: z.object({
-    default: z.literal(false),
-    id,
-    // Neon OpenAPI: parent-schema copies schema only; schema-only creates a schema-only root.
-    // Neither missing provenance, parent-data, import nor an invented 'empty' value is accepted.
-    init_source: z.enum(["parent-schema", "schema-only"]),
-    project_id: id,
-  }),
-});
 const endpointSchema = z.object({
   endpoint: z.object({
     branch_id: id,
@@ -164,13 +166,30 @@ export const createNativePreviewNeonReader = (deps: NativePreviewNeonDependencie
     consume: (privateMaterial: {
       maintenanceUrl: string;
       scope: NativePreviewNeonScope;
-      initSource: "parent-schema" | "schema-only";
+      initSource: NativePreviewNeonInitSource;
     }) => Promise<T>,
   ): Promise<T> {
     try {
+      const ownerContext =
+        context.ownerContext === undefined
+          ? undefined
+          : {
+              ...context.ownerContext,
+              authority: Object.freeze({ ...context.ownerContext.authority }),
+              principal: {
+                ...context.ownerContext.principal,
+                scopes: [...context.ownerContext.principal.scopes],
+              },
+            };
+      if (ownerContext !== undefined) {
+        Object.freeze(ownerContext.principal.scopes);
+        Object.freeze(ownerContext.principal);
+        Object.freeze(ownerContext);
+      }
       const ownedContext = Object.freeze({
         ...context,
         authority: Object.freeze({ ...context.authority }),
+        ownerContext,
         target: Object.freeze({ ...context.target }),
       });
       const parsedConfiguration = configurationSchema.parse(deps.configuration);
@@ -178,6 +197,9 @@ export const createNativePreviewNeonReader = (deps: NativePreviewNeonDependencie
         ...parsedConfiguration,
         nativeStore: Object.freeze({ ...parsedConfiguration.nativeStore }),
         operator: Object.freeze({ ...parsedConfiguration.operator }),
+        syntheticEnrollment: snapshotSyntheticNeonEnrollment(
+          parsedConfiguration.syntheticEnrollment,
+        ),
       });
       const scope = Object.freeze(scopeSchema.parse(frozenScope));
       const assertOwner = async () => {
@@ -255,23 +277,40 @@ export const createNativePreviewNeonReader = (deps: NativePreviewNeonDependencie
         }
       };
       const projectPath = `/projects/${encodeURIComponent(scope.projectId)}`;
-      const { branch } = branchSchema.parse(
-        await read(`${projectPath}/branches/${encodeURIComponent(scope.branchId)}`),
-      );
-      if (branch.id !== scope.branchId || branch.project_id !== scope.projectId) {
-        throw unavailable();
-      }
-      const { endpoint } = endpointSchema.parse(
-        await read(`${projectPath}/endpoints/${encodeURIComponent(scope.endpointId)}`),
-      );
-      if (
-        endpoint.id !== scope.endpointId ||
-        endpoint.project_id !== scope.projectId ||
-        endpoint.branch_id !== scope.branchId ||
-        endpoint.host !== scope.hostname
-      ) {
-        throw unavailable();
-      }
+      const verifyProvenance = async () =>
+        await readNativePreviewNeonProvenance({
+          enrollment: configuration.syntheticEnrollment,
+          readBranch: async (branchId) => {
+            const value = await read(`${projectPath}/branches/${encodeURIComponent(branchId)}`);
+            return z.object({ branch: z.unknown() }).parse(value).branch;
+          },
+          readProject: async () => {
+            const value = await read(projectPath);
+            return z.object({ project: z.unknown() }).parse(value).project;
+          },
+          scope: { branchId: scope.branchId, projectId: scope.projectId },
+        });
+      const verifyEndpoint = async () => {
+        const { endpoint } = endpointSchema.parse(
+          await read(`${projectPath}/endpoints/${encodeURIComponent(scope.endpointId)}`),
+        );
+        if (
+          endpoint.id !== scope.endpointId ||
+          endpoint.project_id !== scope.projectId ||
+          endpoint.branch_id !== scope.branchId ||
+          endpoint.host !== scope.hostname
+        ) {
+          throw unavailable();
+        }
+      };
+      const initSource = await verifyProvenance();
+      await verifyEndpoint();
+      const revalidateEnrollment = async () => {
+        if (configuration.syntheticEnrollment !== undefined) {
+          await verifyProvenance();
+          await verifyEndpoint();
+        }
+      };
       const { database } = z
         .object({ database: z.object({ branch_id: id, name: sqlName }) })
         .parse(
@@ -292,6 +331,8 @@ export const createNativePreviewNeonReader = (deps: NativePreviewNeonDependencie
       if (role.name !== scope.maintenanceRole || role.branch_id !== scope.branchId) {
         throw unavailable();
       }
+      // Read fresh lineage and endpoint metadata immediately before privileged URI acquisition.
+      await revalidateEnrollment();
       const { uri } = z.object({ uri: z.string() }).parse(
         await read(`${projectPath}/connection_uri`, {
           branch_id: scope.branchId,
@@ -302,6 +343,7 @@ export const createNativePreviewNeonReader = (deps: NativePreviewNeonDependencie
         }),
       );
       const maintenanceUrl = privateMaintenanceUrl(uri, scope);
+      await revalidateEnrollment();
       await assertOwner();
       const identity = await io.readSqlIdentity(maintenanceUrl);
       if (
@@ -310,10 +352,11 @@ export const createNativePreviewNeonReader = (deps: NativePreviewNeonDependencie
       ) {
         throw unavailable();
       }
+      await revalidateEnrollment();
       await assertOwner();
       // URI/token/provider payloads are never a public result, persisted artifact or diagnostic.
       const result = await consume({
-        initSource: branch.init_source,
+        initSource,
         maintenanceUrl,
         scope,
       });

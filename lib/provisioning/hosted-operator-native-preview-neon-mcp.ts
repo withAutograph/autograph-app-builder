@@ -16,6 +16,11 @@ import type {
   NativePreviewNeonScope,
 } from "./hosted-operator-native-preview-neon";
 import type { HostedOperatorContext } from "./hosted-operator-service";
+import {
+  readNativePreviewNeonProvenance,
+  snapshotSyntheticNeonEnrollment,
+} from "./hosted-operator-synthetic-neon-provenance";
+import type { NativePreviewNeonInitSource } from "./hosted-operator-synthetic-neon-provenance";
 
 const readTools = [
   "describe_project",
@@ -74,7 +79,7 @@ const defaultIo = {
   },
 };
 type ReaderMaterial = {
-  initSource: "parent-schema" | "schema-only";
+  initSource: NativePreviewNeonInitSource;
   scope: NativePreviewNeonScope;
 } & ({ kind: "metadata" } | { kind: "credential"; maintenanceUrl: string });
 const runReader = async <T>(
@@ -90,14 +95,32 @@ const runReader = async <T>(
     const parsedConfiguration = configurationSchema
       .omit({ connectorInstallationId: true })
       .parse(deps.configuration);
-    const configuration = {
+    const configuration = Object.freeze({
       ...parsedConfiguration,
       nativeStore: Object.freeze({ ...parsedConfiguration.nativeStore }),
       operator: Object.freeze({ ...parsedConfiguration.operator }),
-    };
+      syntheticEnrollment: snapshotSyntheticNeonEnrollment(parsedConfiguration.syntheticEnrollment),
+    });
+    const ownerContext =
+      context.ownerContext === undefined
+        ? undefined
+        : {
+            ...context.ownerContext,
+            authority: Object.freeze({ ...context.ownerContext.authority }),
+            principal: {
+              ...context.ownerContext.principal,
+              scopes: [...context.ownerContext.principal.scopes],
+            },
+          };
+    if (ownerContext !== undefined) {
+      Object.freeze(ownerContext.principal.scopes);
+      Object.freeze(ownerContext.principal);
+      Object.freeze(ownerContext);
+    }
     const current = Object.freeze({
       ...context,
       authority: Object.freeze({ ...context.authority }),
+      ownerContext,
       target: Object.freeze({ ...context.target }),
     });
     const assertOwner = async () => {
@@ -187,47 +210,56 @@ const runReader = async <T>(
       await assertOwner();
       return result;
     };
-    const project = z
-      .object({ id: z.string() })
-      .parse(await call("describe_project", { project_id: scope.projectId }));
-    if (project.id !== scope.projectId) {
-      throw unavailable();
+    const readProject = async () => await call("describe_project", { project_id: scope.projectId });
+    // Keep the existing exact project check for the legacy MCP reader as well.
+    if (configuration.syntheticEnrollment === undefined) {
+      const project = z.object({ id: z.string() }).parse(await readProject());
+      if (project.id !== scope.projectId) {
+        throw unavailable();
+      }
     }
-    const branch = z
-      .object({
-        default: z.literal(false),
-        id: z.string(),
-        init_source: z.enum(["parent-schema", "schema-only"]),
-        project_id: z.string(),
-      })
-      .parse(await call("get_branch", { branch_id: scope.branchId, project_id: scope.projectId }));
-    if (branch.id !== scope.branchId || branch.project_id !== scope.projectId) {
-      throw unavailable();
-    }
-    const endpoint = z
-      .object({
-        branch_id: z.string(),
-        host: z.string(),
-        id: z.string(),
-        project_id: z.string(),
-        type: z.literal("read_write"),
-      })
-      .parse(
-        await call("get_postgres_endpoint", {
-          endpoint_id: scope.endpointId,
-          project_id: scope.projectId,
-        }),
-      );
-    if (
-      [
-        endpoint.id !== scope.endpointId,
-        endpoint.project_id !== scope.projectId,
-        endpoint.branch_id !== scope.branchId,
-        endpoint.host !== scope.hostname,
-      ].some(Boolean)
-    ) {
-      throw unavailable();
-    }
+    const verifyProvenance = async () =>
+      await readNativePreviewNeonProvenance({
+        enrollment: configuration.syntheticEnrollment,
+        readBranch: async (branchId) =>
+          await call("get_branch", { branch_id: branchId, project_id: scope.projectId }),
+        readProject,
+        scope: { branchId: scope.branchId, projectId: scope.projectId },
+      });
+    const verifyEndpoint = async () => {
+      const endpoint = z
+        .object({
+          branch_id: z.string(),
+          host: z.string(),
+          id: z.string(),
+          project_id: z.string(),
+          type: z.literal("read_write"),
+        })
+        .parse(
+          await call("get_postgres_endpoint", {
+            endpoint_id: scope.endpointId,
+            project_id: scope.projectId,
+          }),
+        );
+      if (
+        [
+          endpoint.id !== scope.endpointId,
+          endpoint.project_id !== scope.projectId,
+          endpoint.branch_id !== scope.branchId,
+          endpoint.host !== scope.hostname,
+        ].some(Boolean)
+      ) {
+        throw unavailable();
+      }
+    };
+    const initSource = await verifyProvenance();
+    await verifyEndpoint();
+    const revalidateEnrollment = async () => {
+      if (configuration.syntheticEnrollment !== undefined) {
+        await verifyProvenance();
+        await verifyEndpoint();
+      }
+    };
     const database = z.object({ branch_id: z.string(), name: z.string() }).parse(
       await call("get_postgres_database", {
         branch_id: scope.branchId,
@@ -248,9 +280,10 @@ const runReader = async <T>(
     if (role.name !== scope.maintenanceRole || role.branch_id !== scope.branchId) {
       throw unavailable();
     }
+    await revalidateEnrollment();
     if (kind === "metadata") {
       await assertOwner();
-      const result = await consume({ initSource: branch.init_source, kind, scope });
+      const result = await consume({ initSource, kind, scope });
       await assertOwner();
       return result;
     }
@@ -284,6 +317,7 @@ const runReader = async <T>(
       throw unavailable();
     }
     const maintenanceUrl = privateMaintenanceUrl(credential.uri, scope);
+    await revalidateEnrollment();
     await assertOwner();
     const sqlIdentity = await io.readSqlIdentity(maintenanceUrl);
     if (
@@ -292,9 +326,10 @@ const runReader = async <T>(
     ) {
       throw unavailable();
     }
+    await revalidateEnrollment();
     await assertOwner();
     const result = await consume({
-      initSource: branch.init_source,
+      initSource,
       kind: "credential",
       maintenanceUrl,
       scope,
@@ -327,7 +362,7 @@ export const createPreviewNeonMcpReader = (deps: PreviewNeonMcpDependencies) => 
     consume: (material: {
       maintenanceUrl: string;
       scope: NativePreviewNeonScope;
-      initSource: "parent-schema" | "schema-only";
+      initSource: NativePreviewNeonInitSource;
     }) => Promise<T>,
   ): Promise<T> {
     return await runReader(deps, context, scope, "credential", async (material) => {
