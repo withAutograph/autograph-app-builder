@@ -1,3 +1,7 @@
+import {
+  operatorHeaderProbeRequired,
+  reportHostedOperatorHeaderProbes,
+} from "./hosted-operator-header-probes";
 import { reportHostedOperatorCallerWorkload } from "./hosted-operator-caller-workload";
 import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorConsentMetadata } from "./hosted-operator-consent-diagnostic";
@@ -104,6 +108,16 @@ export const createHostedOperatorClient = (input: {
           sessionId:
             body.action === "neon-authorization" ? body.sessionId : body.selection.sessionId,
           token,
+        });
+      }
+      if (operatorHeaderProbeRequired(response)) {
+        await reportHostedOperatorHeaderProbes({
+          fetch: input.fetch ?? fetch,
+          phase: diagnosticPhase,
+          sessionId: diagnosticSessionId,
+          signal,
+          token,
+          url: new URL("/v1/runtime", url),
         });
       }
       throw new HostedOperatorError(

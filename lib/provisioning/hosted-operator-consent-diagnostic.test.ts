@@ -105,3 +105,20 @@ it("rejects private values placed in workload diagnostic fields", () => {
   }
   expect(sink).not.toHaveBeenCalled();
 });
+
+it("rejects arbitrary probe variants and accepts only closed transport metadata", () => {
+  const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+  const report = createHostedOperatorConsentDiagnostic(secret, sink);
+  report({
+    ...value,
+    httpStatus: 404,
+    nativeNotFound: true,
+    probeVariant: "trusted_oidc_only",
+    stage: "operator_header_probe",
+  });
+  const hostile = { ...value };
+  Object.defineProperty(hostile, "probeVariant", { value: secret });
+  report(hostile);
+  expect(sink).toHaveBeenCalledOnce();
+  expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+});
