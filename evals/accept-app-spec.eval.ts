@@ -104,7 +104,16 @@ export default defineEval({
 
     t.succeeded();
     retryValidation.notEvent("input.requested");
-    t.check(retryValidation.message, includes("quality checks are still passing"));
+    t.check(retryValidation.message, includes("passed its local quality checks"));
+    t.check(retryValidation.message, includes("ready for review"));
+    retryValidation.calledTool("validate_app_creation", {
+      count: 1,
+      output: {
+        commandCount: (value) => typeof value === "number" && value > 0,
+        reused: false,
+        technicalStatus: "passed",
+      },
+    });
 
     const turn10 = await session.send("Inspect the validated change set.");
     t.succeeded();
