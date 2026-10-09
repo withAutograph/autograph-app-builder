@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isNativePreviewDeployment } from "./hosted-operator-deployment-delivery";
 import type { readPreparedVercelAccess } from "../agent/prepared-provider-context";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { HostedOperatorError } from "./hosted-operator-contract";
@@ -10,6 +11,8 @@ type CredentialReader = Parameters<typeof readPreparedVercelAccess>[0]["readCred
 const id = z.string().min(1);
 const projectSchema = z.object({ accountId: id, id });
 const deploymentSchema = z.object({
+  customEnvironment: z.unknown().optional(),
+  oidcTokenClaims: z.unknown().optional(),
   env: z.array(z.string()).optional(),
   gitSource: z.object({ ref: id }).optional(),
   id,
@@ -195,7 +198,9 @@ export const readHostedOperatorProviderInventory = async (input: {
           deployment.id !== reference.deploymentId,
           deployment.ownerId !== undefined && deployment.ownerId !== target.scopeId,
           deployment.readyState !== "READY",
-          deployment.target !== (reference.environment === "production" ? "production" : null),
+          reference.environment === "production"
+            ? deployment.target !== "production"
+            : !isNativePreviewDeployment(deployment),
           branch !== undefined && deployment.gitSource?.ref !== branch,
         ].some(Boolean);
         if (invalidDeployment) {

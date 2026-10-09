@@ -149,6 +149,49 @@ const fixture = () => {
 };
 
 describe("private read-only operator provider inventory", () => {
+  it("recognizes native staging deployments only with Preview claims and no custom environment", async () => {
+    const f = fixture();
+    const previewConfig = {
+      ...configuration,
+      operator: { ...configuration.operator, environment: "preview" as const },
+    };
+    for (const role of ["app", "gateway", "operator"] as const) {
+      const key = `/v13/deployments/${configuration[role].deploymentId}`;
+      f.payloads.set(key, {
+        ...f.payloads.get(key),
+        customEnvironment: null,
+        oidcTokenClaims: { environment: "preview", project_id: configuration[role].projectId },
+        target: "staging",
+      });
+    }
+    const observed = await readHostedOperatorProviderInventory({
+      ...f.input,
+      configuration: previewConfig,
+    });
+    expect(observed.operator.environment).toBe("preview");
+    expect(observed.operator.deploymentId).toBe("dpl_operator");
+    for (const metadata of [
+      { target: "production", oidcTokenClaims: { environment: "preview" } },
+      { target: "staging" },
+      { target: "staging", oidcTokenClaims: { environment: "production" } },
+      { target: "staging", oidcTokenClaims: { environment: "preview-lookalike" } },
+      { target: "staging", oidcTokenClaims: { environment: ["preview"] } },
+      {
+        target: "staging",
+        oidcTokenClaims: { environment: "preview" },
+        customEnvironment: { id: "env_custom", slug: "staging" },
+      },
+    ]) {
+      const invalid = fixture();
+      invalid.payloads.set("/v13/deployments/dpl_operator", {
+        ...invalid.payloads.get("/v13/deployments/dpl_operator"),
+        ...metadata,
+      });
+      await expect(
+        readHostedOperatorProviderInventory({ ...invalid.input, configuration: previewConfig }),
+      ).rejects.toThrow("resource_mismatch");
+    }
+  });
   it("plans owned fresh projects without fabricating deployment or public-key evidence", async () => {
     const f = fixture();
     const { deploymentId: appDeployment, ...app } = configuration.app;
