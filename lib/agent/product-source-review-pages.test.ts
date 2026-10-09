@@ -129,6 +129,62 @@ it("rejects a changed source digest after yielding pages", async () => {
   }).rejects.toThrow("Source changed during review");
 });
 
+it("cancels a pending byte read after a concurrent pair fails", async () => {
+  const firstPage = "x".repeat(16 * 1024);
+  const readStarted = Promise.withResolvers<null>();
+  const failed = Promise.withResolvers<null>();
+  const cancel = vi.fn();
+  let emitted = false;
+  const byteStream = new ReadableStream<Uint8Array>(
+    {
+      cancel() {
+        cancel();
+      },
+      pull(controller) {
+        if (emitted) {
+          readStarted.resolve(null);
+        } else {
+          emitted = true;
+          controller.enqueue(new TextEncoder().encode(firstPage));
+        }
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  const observed = readProductReviewSourcePages({
+    applyRoot: "/workspace/repository",
+    changedPaths: [path],
+    observed: {
+      files: [{ digest: "unreachable-final-digest", mode: "644", path }],
+      treeDigest: "tree",
+    },
+    sandbox: { readFile: async () => await Promise.resolve(byteStream) },
+  });
+  const run = assessProductSourcePages(
+    {
+      appSpec: "Save records",
+      appSpecDigest: "spec",
+      clarifications: [],
+      omissions: observed.omissions,
+      originalRequest: "Save records",
+      sourceDigest: "tree",
+    },
+    observed.pages,
+    {
+      async generate() {
+        await failed.promise;
+        throw new Error("provider unavailable");
+      },
+    },
+  );
+  await readStarted.promise;
+  failed.resolve(null);
+  const assessment = await run;
+  expect(assessment.status).toBe("blocked");
+  expect(assessment.reviewCompleted).toBe(false);
+  expect(cancel).toHaveBeenCalledTimes(1);
+});
+
 it("splits a giant Unicode line without losing bytes or source coordinates", async () => {
   const content = `header\n${"🚀".repeat(30_000)}`;
   const observed = readProductReviewSourcePages({

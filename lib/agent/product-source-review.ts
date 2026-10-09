@@ -3,7 +3,10 @@ import { createGateway, generateText, Output } from "ai";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { z } from "zod";
 import { builderValidationModelId } from "../integrations/active-model";
-import type { ProductReviewSourcePage } from "./product-source-review-pages";
+import type {
+  ProductReviewSourcePage,
+  ProductReviewSourcePages,
+} from "./product-source-review-pages";
 import type {
   SourceReviewJournal,
   SourceReviewJournalRecord,
@@ -360,6 +363,7 @@ const safeTextEnd = (text: string, desired: number): number =>
 async function* reviewContexts(
   input: ProductSourceReviewInput,
   appSpecParts?: () => AsyncIterable<string>,
+  shouldStop?: () => boolean,
 ): AsyncGenerator<ReviewContext> {
   const prefix = `${[
     `Original request:\n${input.originalRequest ?? ""}`,
@@ -376,6 +380,9 @@ async function* reviewContexts(
     }
   };
   for await (const segment of segments()) {
+    if (shouldStop?.() === true) {
+      return;
+    }
     buffer += segment;
     while (buffer.length > reviewContextCharacters) {
       const end = safeTextEnd(buffer, reviewContextCharacters);
@@ -555,30 +562,190 @@ const assessReviewPair = async function* assessReviewPair(
   yield { assessment, page };
 };
 
-/** Assess source pages against every requirement excerpt without whole-result prompts. */
+interface SourceReviewProgress {
+  phase: string;
+  path: string;
+  startLine: number;
+  contextKind?: ReviewContext["kind"];
+  contextIndex?: number;
+  contextOffset?: number;
+  status?: ProductSourceAssessment["status"];
+}
+
+interface SourceReviewPagesOptions {
+  abortSignal?: AbortSignal;
+  journal?: SourceReviewJournal;
+  mockModel?: boolean;
+  /** Independent pair calls in flight; one retains the serial diagnostic path. */
+  concurrency?: number;
+  onProgress?: (progress: SourceReviewProgress) => void;
+  generate?: (
+    page: ProductReviewSourcePage,
+    context: ReviewContext,
+  ) => SourceJudgment | Promise<SourceJudgment>;
+  reviewAppSpecParts?: () => AsyncIterable<string>;
+}
+
+interface ReviewPairResult {
+  assessment: ProductSourceAssessment;
+  page: ProductReviewSourcePage;
+  sourcePage: ProductReviewSourcePage;
+  context: ReviewContext;
+  pageIndex: number;
+}
+
+// oxlint-disable-next-line eslint/func-style -- Stream descriptors without retaining all source or request history.
+async function* sourceReviewPairs(
+  base: ProductSourceReviewInput,
+  pages: AsyncIterable<ProductReviewSourcePage>,
+  options: SourceReviewPagesOptions,
+  shouldStop: () => boolean,
+) {
+  let pageIndex = 0;
+  for await (const page of pages) {
+    if (shouldStop()) {
+      return;
+    }
+    options.abortSignal?.throwIfAborted();
+    options.onProgress?.({ path: page.path, phase: "page_started", startLine: page.startLine });
+    for await (const context of reviewContexts(base, options.reviewAppSpecParts, shouldStop)) {
+      if (shouldStop()) {
+        return;
+      }
+      yield { context, page, pageIndex };
+    }
+    pageIndex += 1;
+  }
+}
+
+/**
+ * Each wave bounds live prompts and provider load, never the amount of review coverage.
+ * @yields {ReviewPairResult} Checkpointed pair results in original source/context order.
+ */
+// oxlint-disable-next-line eslint/func-style -- Ordered yielding preserves the existing aggregation and digest protocol.
+async function* concurrentSourceReviewPairs(
+  base: ProductSourceReviewInput,
+  pages: ProductReviewSourcePages,
+  options: SourceReviewPagesOptions,
+): AsyncGenerator<ReviewPairResult> {
+  const concurrency = options.concurrency ?? 4;
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1) {
+    throw new Error("Source review concurrency must be a positive safe integer.");
+  }
+  const pending: Promise<PromiseSettledResult<ReviewPairResult[]>>[] = [];
+  let stopped = false;
+  const wake = Promise.withResolvers<null>();
+  const stop = () => {
+    stopped = true;
+    wake.resolve(null);
+  };
+  const descriptors = sourceReviewPairs(base, pages, options, () => stopped);
+  let readingDescriptor = false;
+  const readDescriptor = async () => {
+    readingDescriptor = true;
+    try {
+      return await descriptors.next();
+    } finally {
+      readingDescriptor = false;
+    }
+  };
+  options.abortSignal?.addEventListener("abort", stop, { once: true });
+  const review = async (
+    page: ProductReviewSourcePage,
+    context: ReviewContext,
+    pageIndex: number,
+  ) => {
+    // Source iteration may append omissions while another pair awaits its journal.
+    const pairBase = { ...base, omissions: [...base.omissions] };
+    const progress = {
+      contextIndex: context.index,
+      contextKind: context.kind,
+      contextOffset: context.startOffset,
+      path: page.path,
+      startLine: page.startLine,
+    };
+    options.onProgress?.({ ...progress, phase: "context_started" });
+    const results: ReviewPairResult[] = [];
+    for await (const result of assessReviewPair(pairBase, page, context, options)) {
+      options.onProgress?.({
+        ...progress,
+        phase: "context_result",
+        status: result.assessment.status,
+      });
+      results.push({ ...result, context, pageIndex, sourcePage: page });
+      if (!result.assessment.reviewCompleted) {
+        stop();
+        break;
+      }
+    }
+    return results;
+  };
+  const settledReview = async (
+    page: ProductReviewSourcePage,
+    context: ReviewContext,
+    pageIndex: number,
+  ): Promise<PromiseSettledResult<ReviewPairResult[]>> => {
+    try {
+      return { status: "fulfilled", value: await review(page, context, pageIndex) };
+    } catch (error) {
+      stop();
+      return { reason: error, status: "rejected" };
+    }
+  };
+  const drain = async function* drain() {
+    // Await the entire wave, including all durable writes, before reporting any failure.
+    const settled = await Promise.all(pending);
+    pending.length = 0;
+    for (const result of settled) {
+      if (result.status === "rejected") {
+        throw result.reason;
+      }
+      yield* result.value;
+    }
+  };
+  try {
+    // oxlint-disable-next-line eslint/no-unmodified-loop-condition -- Owned pair completions and caller abort update admission asynchronously.
+    while (!stopped) {
+      options.abortSignal?.throwIfAborted();
+      // A stalled source/AppSpec transport must not hide a pair failure or cancellation.
+      // Promise.race observes a late read rejection without admitting any more pair work.
+      // oxlint-disable-next-line eslint/no-await-in-loop -- One descriptor read at a time preserves stream ordering.
+      const next = await Promise.race([readDescriptor(), wake.promise]);
+      if (stopped || next === null || next.done === true) {
+        break;
+      }
+      const { context, page, pageIndex } = next.value;
+      // Attach rejection handling immediately, including while source iteration awaits I/O.
+      pending.push(settledReview(page, context, pageIndex));
+      if (pending.length === concurrency) {
+        yield* drain();
+      }
+    }
+    yield* drain();
+  } finally {
+    stop();
+    options.abortSignal?.removeEventListener("abort", stop);
+    // Source/progress errors, cancellation and early consumer return also join owned work.
+    await Promise.all(pending);
+    await pages.cancelPendingRead?.();
+    const close = descriptors.return();
+    if (readingDescriptor) {
+      // AsyncIterable cannot interrupt arbitrary I/O. Observe queued cleanup; stop guards
+      // prevent late source/AppSpec reads from emitting progress or launching model work.
+      // oxlint-disable-next-line promise/prefer-await-to-then, github/no-then -- Awaiting an uninterruptible input read would hide the already settled failure/cancellation.
+      void close.catch(() => null);
+    } else {
+      await close;
+    }
+  }
+}
+
+/** Assess every source page/requirement excerpt with ordered, checkpointed concurrent calls. */
 // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- A complete assessment checks every page/context pair and rejects any incomplete pair.
 export const assessProductSourcePages = async (
   input: Omit<ProductSourceReviewInput, "files">,
-  pages: AsyncIterable<ProductReviewSourcePage>,
-  options: {
-    abortSignal?: AbortSignal;
-    journal?: SourceReviewJournal;
-    mockModel?: boolean;
-    onProgress?: (progress: {
-      phase: string;
-      path: string;
-      startLine: number;
-      contextKind?: ReviewContext["kind"];
-      contextIndex?: number;
-      contextOffset?: number;
-      status?: ProductSourceAssessment["status"];
-    }) => void;
-    generate?: (
-      page: ProductReviewSourcePage,
-      context: ReviewContext,
-    ) => SourceJudgment | Promise<SourceJudgment>;
-    reviewAppSpecParts?: () => AsyncIterable<string>;
-  } = {},
+  pages: ProductReviewSourcePages,
+  options: SourceReviewPagesOptions = {},
   // oxlint-disable-next-line sonarjs/cognitive-complexity -- Every page and requirement excerpt must be checked before completion.
 ): Promise<ProductSourceAssessment> => {
   const base: ProductSourceReviewInput = { ...input, files: [] };
@@ -594,67 +761,74 @@ export const assessProductSourcePages = async (
   const runtimeChecks = new Set<string>();
   const usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
   let reviewed = 0;
-  for await (const page of pages) {
+  let previousPage: ProductReviewSourcePage | undefined;
+  let previousPageIndex = -1;
+  let previousContext: ReviewContext | null = null;
+  for await (const {
+    assessment,
+    page: assessedPage,
+    sourcePage: page,
+    context,
+    pageIndex,
+  } of concurrentSourceReviewPairs(base, pages, options)) {
     options.abortSignal?.throwIfAborted();
-    options.onProgress?.({ path: page.path, phase: "page_started", startLine: page.startLine });
-    evidence.update(
-      JSON.stringify([page.path, page.startLine, page.startColumn, hashText(page.content)]),
-    );
-    for await (const context of reviewContexts(base, options.reviewAppSpecParts)) {
-      const contextProgress = {
-        contextIndex: context.index,
-        contextKind: context.kind,
-        contextOffset: context.startOffset,
-        path: page.path,
-        startLine: page.startLine,
-      };
-      options.onProgress?.({ ...contextProgress, phase: "context_started" });
+    if (previousPageIndex !== pageIndex) {
+      if (previousPage !== undefined) {
+        options.onProgress?.({
+          path: previousPage.path,
+          phase: "page_completed",
+          startLine: previousPage.startLine,
+        });
+      }
+      evidence.update(
+        JSON.stringify([page.path, page.startLine, page.startColumn, hashText(page.content)]),
+      );
+      previousPage = page;
+      previousPageIndex = pageIndex;
+      previousContext = null;
+    }
+    if (previousContext !== context) {
       evidence.update(
         JSON.stringify([context.kind, context.index, context.startOffset, context.digest]),
       );
-      // oxlint-disable-next-line eslint/no-await-in-loop -- Model review is serial to bound provider load.
-      for await (const { assessment, page: assessedPage } of assessReviewPair(
-        base,
-        page,
-        context,
-        options,
-      )) {
-        options.onProgress?.({
-          ...contextProgress,
-          phase: "context_result",
-          status: assessment.status,
-        });
-        if (!assessment.reviewCompleted) {
-          return {
-            ...unavailableSourceAssessment(
-              base,
-              `Source review stopped at ${assessedPage.path}:${assessedPage.startLine}:${assessedPage.startColumn} against ${context.kind} excerpt ${context.index} (offset ${context.startOffset}). ${assessment.reason}`,
-              "blocked",
-            ),
-            evidenceDigest: evidence.digest("hex"),
-            omissions: [...input.omissions],
-          };
-        }
-        reviewed += 1;
-        for (const finding of assessment.findings) {
-          findings.push({
-            ...finding,
-            citations: finding.citations.map((citation) => ({
-              ...citation,
-              endLine: citation.endLine + assessedPage.startLine - 1,
-              startLine: citation.startLine + assessedPage.startLine - 1,
-            })),
-          });
-        }
-        for (const check of assessment.remainingRuntimeChecks) {
-          runtimeChecks.add(check);
-        }
-        usage.inputTokens += assessment.usage?.inputTokens ?? 0;
-        usage.outputTokens += assessment.usage?.outputTokens ?? 0;
-        usage.totalTokens += assessment.usage?.totalTokens ?? 0;
-      }
+      previousContext = context;
     }
-    options.onProgress?.({ path: page.path, phase: "page_completed", startLine: page.startLine });
+    if (!assessment.reviewCompleted) {
+      return {
+        ...unavailableSourceAssessment(
+          base,
+          `Source review stopped at ${assessedPage.path}:${assessedPage.startLine}:${assessedPage.startColumn} against ${context.kind} excerpt ${context.index} (offset ${context.startOffset}). ${assessment.reason}`,
+          "blocked",
+        ),
+        evidenceDigest: evidence.digest("hex"),
+        omissions: [...input.omissions],
+      };
+    }
+    reviewed += 1;
+    for (const finding of assessment.findings) {
+      findings.push({
+        ...finding,
+        citations: finding.citations.map((citation) => ({
+          ...citation,
+          endLine: citation.endLine + assessedPage.startLine - 1,
+          startLine: citation.startLine + assessedPage.startLine - 1,
+        })),
+      });
+    }
+    for (const check of assessment.remainingRuntimeChecks) {
+      runtimeChecks.add(check);
+    }
+    usage.inputTokens += assessment.usage?.inputTokens ?? 0;
+    usage.outputTokens += assessment.usage?.outputTokens ?? 0;
+    usage.totalTokens += assessment.usage?.totalTokens ?? 0;
+  }
+  options.abortSignal?.throwIfAborted();
+  if (previousPage !== undefined) {
+    options.onProgress?.({
+      path: previousPage.path,
+      phase: "page_completed",
+      startLine: previousPage.startLine,
+    });
   }
   if (reviewed === 0) {
     return unavailableSourceAssessment(
