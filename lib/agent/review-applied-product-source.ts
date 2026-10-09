@@ -20,6 +20,7 @@ import type { SandboxSession } from "eve/sandbox";
 import type { AcceptedAppSpec, StoredPrototypeArtifact } from "./workflow-state";
 import { acceptedAppSpecTextParts } from "./accepted-app-spec-content";
 import type { TargetApplyReceipt } from "../repository/target-apply";
+import { sourceReviewJournalForSession } from "./source-review-journal-runtime";
 
 export interface AppliedSourceObservation {
   source: Pick<ProductSourceReviewInput, "files" | "omissions" | "sourceDigest">;
@@ -174,6 +175,10 @@ export const reviewAppliedProductSource = async (input: {
     const assessedInput = { ...currentInput, omissions: source.omissions };
     const reviewOptions: NonNullable<Parameters<typeof assessProductSourcePages>[2]> = {
       abortSignal: input.abortSignal,
+      journal: await sourceReviewJournalForSession({
+        sessionAuth: input.sessionAuth,
+        sessionId: input.sessionId ?? "",
+      }),
       onProgress(progress) {
         console.info(
           JSON.stringify({

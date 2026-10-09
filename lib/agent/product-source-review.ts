@@ -4,6 +4,10 @@ import { getVercelOidcToken } from "@vercel/oidc";
 import { z } from "zod";
 import { builderValidationModelId } from "../integrations/active-model";
 import type { ProductReviewSourcePage } from "./product-source-review-pages";
+import type {
+  SourceReviewJournal,
+  SourceReviewJournalRecord,
+} from "./product-source-review-journal";
 
 export interface ReviewSourceFile {
   path: string;
@@ -165,12 +169,21 @@ export const validateSourceJudgment = (
   }
   const redactReviewProse = (text: string): string => {
     let safe = safeReviewText(text);
-    const messages = input.reviewContext
-      ? [input.reviewContext.text]
-      : [input.originalRequest, ...input.clarifications];
+    const messages = [
+      input.originalRequest,
+      input.appSpec,
+      ...input.clarifications,
+      input.reviewContext?.text ?? "",
+    ];
     for (const message of messages) {
       if (message !== null && message.length > 0) {
         safe = safe.replaceAll(message, "[USER MESSAGE OMITTED]");
+      }
+    }
+    for (const finding of parsed.data.findings) {
+      safe = safe.replaceAll(finding.requirementQuote, "[REQUIREMENT QUOTE OMITTED]");
+      for (const citation of finding.citations) {
+        safe = safe.replaceAll(citation.excerpt, "[SOURCE EXCERPT OMITTED]");
       }
     }
     return safe;
@@ -312,8 +325,34 @@ interface ReviewContext {
   digest: string;
 }
 
+/** Input fingerprints identify reusable work; changed input simply has a new key. */
+export const sourceReviewPairKey = (
+  base: ProductSourceReviewInput,
+  page: ProductReviewSourcePage,
+  context: ReviewContext,
+  modelId = builderValidationModelId,
+): string =>
+  hashText(
+    JSON.stringify([
+      "source-review-pair-v1",
+      modelId,
+      hashText(rubric),
+      sourceReviewBindingDigest(base),
+      hashText(JSON.stringify(base.omissions)),
+      page.path,
+      page.startLine,
+      page.startColumn,
+      hashText(page.content),
+      context.kind,
+      context.index,
+      context.startOffset,
+      hashText(context.text),
+    ]),
+  );
+
 const reviewContextCharacters = 16 * 1024;
 const reviewContextOverlap = 256;
+const splitSourceDecision = "split-source" as const;
 const safeTextEnd = (text: string, desired: number): number =>
   desired < text.length && /[\uD800-\uDBFF]/u.test(text[desired - 1] ?? "") ? desired - 1 : desired;
 
@@ -410,6 +449,7 @@ const assessReviewPair = async function* assessReviewPair(
   context: ReviewContext,
   options: {
     abortSignal?: AbortSignal;
+    journal?: SourceReviewJournal;
     generate?: (
       page: ProductReviewSourcePage,
       context: ReviewContext,
@@ -427,8 +467,49 @@ const assessReviewPair = async function* assessReviewPair(
         startLine: page.startLine,
       },
     ],
+    omissions: [...base.omissions],
     reviewContext: context,
   };
+  const key = sourceReviewPairKey(pageInput, page, context);
+  const replay = async function* replay(
+    record: SourceReviewJournalRecord,
+  ): AsyncGenerator<{ assessment: ProductSourceAssessment; page: ProductReviewSourcePage }> {
+    if (record.kind === "completed") {
+      if (
+        !record.assessment.reviewCompleted ||
+        record.assessment.evidenceDigest !== sourceReviewEvidenceDigest(pageInput) ||
+        record.assessment.bindingDigest !== sourceReviewBindingDigest(pageInput) ||
+        record.assessment.modelId !== builderValidationModelId
+      ) {
+        throw new Error("The durable source review result does not match its recorded input.");
+      }
+      yield { assessment: record.assessment, page };
+      return;
+    }
+    if (record.kind === splitSourceDecision) {
+      const split = splitReviewPage(page);
+      if (split === null) {
+        throw new Error("The recorded source review split has no source continuation.");
+      }
+      yield* assessReviewPair(base, split[0], context, options);
+      yield* assessReviewPair(base, split[1], context, options);
+      return;
+    }
+    const split = splitReviewContext(context);
+    if (split === null) {
+      throw new Error("The recorded source review split has no requirement continuation.");
+    }
+    yield* assessReviewPair(base, page, split[0], options);
+    yield* assessReviewPair(base, page, split[1], options);
+  };
+  const persist = async (record: SourceReviewJournalRecord): Promise<SourceReviewJournalRecord> =>
+    options.journal === undefined ? record : await options.journal.put(key, record);
+  const prior = await options.journal?.read(key);
+  options.abortSignal?.throwIfAborted();
+  if (prior !== undefined) {
+    yield* replay(prior);
+    return;
+  }
   const reviewOptions: Parameters<typeof assessProductSource>[1] = {
     abortSignal: options.abortSignal,
   };
@@ -437,6 +518,7 @@ const assessReviewPair = async function* assessReviewPair(
     reviewOptions.generate = async () => await generate(page, context);
   }
   const assessment = await assessProductSource(pageInput, reviewOptions);
+  options.abortSignal?.throwIfAborted();
   if (
     !assessment.reviewCompleted &&
     assessment.reason.startsWith(
@@ -446,30 +528,29 @@ const assessReviewPair = async function* assessReviewPair(
     if (page.content.length > 1 && page.content.length >= context.text.length) {
       const split = splitReviewPage(page);
       if (split) {
-        const [first, second] = split;
-        yield* assessReviewPair(base, first, context, options);
-        yield* assessReviewPair(base, second, context, options);
+        yield* replay(await persist({ kind: splitSourceDecision }));
         return;
       }
     }
     if (context.text.length > 1) {
       const split = splitReviewContext(context);
       if (split) {
-        const [first, second] = split;
-        yield* assessReviewPair(base, page, first, options);
-        yield* assessReviewPair(base, page, second, options);
+        yield* replay(await persist({ kind: "split-context" }));
         return;
       }
     }
     if (page.content.length > 1) {
       const split = splitReviewPage(page);
       if (split) {
-        const [first, second] = split;
-        yield* assessReviewPair(base, first, context, options);
-        yield* assessReviewPair(base, second, context, options);
+        yield* replay(await persist({ kind: splitSourceDecision }));
         return;
       }
     }
+  }
+  if (assessment.reviewCompleted) {
+    options.abortSignal?.throwIfAborted();
+    yield* replay(await persist({ assessment, kind: "completed" }));
+    return;
   }
   yield { assessment, page };
 };
@@ -481,6 +562,7 @@ export const assessProductSourcePages = async (
   pages: AsyncIterable<ProductReviewSourcePage>,
   options: {
     abortSignal?: AbortSignal;
+    journal?: SourceReviewJournal;
     mockModel?: boolean;
     onProgress?: (progress: {
       phase: string;

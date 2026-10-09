@@ -190,6 +190,13 @@
       "when": 1791329366000,
       "tag": "0027_protected_access_fence_generation",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1791504000000,
+      "tag": "0028_product_source_review_journal",
+      "breakpoints": true
     }
   ]
 }
