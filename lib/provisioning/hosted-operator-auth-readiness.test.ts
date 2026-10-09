@@ -119,7 +119,8 @@ const fixture = () => {
   });
   return {
     assertAuthorized,
-    input: { ...context, assertCurrent, plan },
+    input: { ...context, assertCurrent, plan: structuredClone(plan) },
+    readAuthPlan,
     readRuntimeUrl,
     readSnapshot,
     reader,
@@ -138,7 +139,7 @@ describe("restricted Auth schema publication readiness", () => {
       targetDigest: "b".repeat(64),
     });
     expect(f.readSnapshot).toHaveBeenCalledTimes(1);
-    expect(f.assertAuthorized).toHaveBeenCalledTimes(3);
+    expect(f.assertAuthorized).toHaveBeenCalledTimes(5);
   });
   it.each(["role", "login", "database"] as const)(
     "denies foreign runtime identity %s",
@@ -166,6 +167,32 @@ describe("restricted Auth schema publication readiness", () => {
       "postgresql://auth_migrator:fixture@ep-fixture.neon.tech/auth_db?sslmode=require",
     );
     await expect(f.reader.verify(f.input)).rejects.toThrow();
+    expect(f.readSnapshot).not.toHaveBeenCalled();
+  });
+  it("captures the approved target before callers mutate it across artifact awaits", async () => {
+    const f = fixture();
+    const artifact = await f.readAuthPlan();
+    f.readAuthPlan.mockImplementationOnce(async () => {
+      f.input.plan.authDatabase.database = "foreign";
+      f.input.plan.authDatabase.runtimeRole = "foreign";
+      f.input.plan.neon.endpoint = "foreign.neon.tech";
+      return await Promise.resolve(artifact);
+    });
+    expect(await f.reader.verify(f.input)).toMatchObject({
+      database: "auth_db",
+      runtimeRole: "auth_runtime",
+      targetDigest: "b".repeat(64),
+    });
+  });
+  it("rechecks current authority after artifact reads before obtaining runtime credentials", async () => {
+    const f = fixture();
+    const artifact = await f.readAuthPlan();
+    f.readAuthPlan.mockImplementationOnce(async () => {
+      f.input.assertCurrent.mockRejectedValue(new Error("changed checkpoint"));
+      return await Promise.resolve(artifact);
+    });
+    await expect(f.reader.verify(f.input)).rejects.toMatchObject({ code: "operator_unavailable" });
+    expect(f.readRuntimeUrl).not.toHaveBeenCalled();
     expect(f.readSnapshot).not.toHaveBeenCalled();
   });
   it("preserves owner authorization denial before any SQL", async () => {

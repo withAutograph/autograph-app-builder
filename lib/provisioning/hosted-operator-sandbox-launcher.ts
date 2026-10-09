@@ -506,7 +506,7 @@ export const buildResourceBootstrapContext = (
     !plan.effects.some(
       (effect) =>
         effect.id === input.effect.id &&
-        effect.kind === "resources" &&
+        effect.kind === input.effect.kind &&
         effect.resourceId === resource.resourceId,
     )
   ) {

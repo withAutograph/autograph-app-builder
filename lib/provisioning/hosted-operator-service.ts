@@ -309,7 +309,7 @@ const handlePlanOperation = async (
       if (record.operator.gatewayEnvironment !== undefined) {
         nextOperator.gatewayEnvironment = record.operator.gatewayEnvironment;
       }
-      if (record.operator.identityLink?.consumedAt !== undefined) {
+      if (plan.action === "prepare" && record.operator.identityLink?.consumedAt !== undefined) {
         nextOperator.identityLink = record.operator.identityLink;
       }
       if (

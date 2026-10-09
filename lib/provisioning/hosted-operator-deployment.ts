@@ -92,7 +92,15 @@ import {
   readHostedOperatorResourceBindings,
 } from "./hosted-operator-resource-credentials";
 import type { ProtectedResourceDatabase } from "./hosted-operator-resource-credentials";
-import { createHostedOperatorSharedAuthAdoption } from "./hosted-operator-shared-auth-adoption";
+import {
+  createHostedOperatorSharedAuthAdoption,
+  sameSharedAuthTargetCheckpoint,
+} from "./hosted-operator-shared-auth-adoption";
+import { createHostedOperatorAuthReadiness } from "./hosted-operator-auth-readiness";
+import {
+  assertHostedOperatorSharedGateway,
+  describeHostedOperatorSharedGateway,
+} from "./hosted-operator-shared-gateway";
 import type {
   HostedRuntimeJournalRecord,
   HostedRuntimeJournalRow,
@@ -1061,6 +1069,11 @@ export const createHostedOperatorControlPlane = async (input: {
         if (authSchema === undefined) {
           throw new HostedOperatorError("reconciliation_required");
         }
+        const sourceOperator = observed.row.record.operator;
+        if (sourceOperator === undefined) {
+          throw new HostedOperatorError("reconciliation_required");
+        }
+        describeHostedOperatorSharedGateway(sourceOperator.plan, sourceOperator.gatewayEnvironment);
         const artifacts = ownedArtifacts(observed.source);
         const artifact = await artifacts.publication.readAuthPlan(artifacts.context, authSchema);
         const current = await sharedAuth.inspect(frozen);
@@ -1068,6 +1081,46 @@ export const createHostedOperatorControlPlane = async (input: {
           throw new HostedOperatorError("reconciliation_required");
         }
         return { adoption: observed.adoption, authSchema, content: artifact.content };
+      },
+      async readSharedGatewayRows(adoptionInput: Parameters<typeof sharedAuth.checkpoint>[0]) {
+        const effect = {
+          ...adoptionInput.effect,
+          ...structuredClone({
+            authority: adoptionInput.effect.authority,
+            effect: adoptionInput.effect.effect,
+            ownerContext: adoptionInput.effect.ownerContext,
+            plan: adoptionInput.effect.plan,
+            target: adoptionInput.effect.target,
+          }),
+        };
+        const source = structuredClone(adoptionInput.source);
+        const target = await readCurrentResourceCredentialRecord({
+          assertAuthorized: owner.assertAuthorized,
+          effect,
+          store,
+        });
+        const observed = await sharedAuth.inspect({ context: effect, source });
+        const { operator } = observed.row.record;
+        if (
+          operator === undefined ||
+          !isDeepStrictEqual(observed.adoption, effect.plan.authAdoption)
+        ) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        const rows = assertHostedOperatorSharedGateway(
+          effect.plan,
+          operator.plan,
+          operator.gatewayEnvironment,
+        );
+        const current = await readCurrentResourceCredentialRecord({
+          assertAuthorized: owner.assertAuthorized,
+          effect,
+          store,
+        });
+        if (!sameSharedAuthTargetCheckpoint(current, target)) {
+          throw new HostedOperatorError("operation_in_progress");
+        }
+        return rows;
       },
       reserveRealmIdentityLink,
       async resolveRealmIdentityCallbackContext(callbackInput: {
@@ -1140,6 +1193,39 @@ export const createHostedOperatorControlPlane = async (input: {
         return context;
       },
       store,
+      async verifySharedAuthAdoption(
+        adoptionInput: Omit<Parameters<typeof sharedAuth.verify>[0], "verifyReadiness"> & {
+          verifyCanonicalOwnership: () => Promise<void>;
+        },
+      ) {
+        const { verifyCanonicalOwnership } = adoptionInput;
+        return await sharedAuth.verify({
+          ...adoptionInput,
+          verifyReadiness: async (verificationInput) => {
+            const readiness = createHostedOperatorAuthReadiness({
+              assertAuthorized: owner.assertAuthorized,
+              readAuthPlan: async (context) => {
+                if (context.plan.authSchema === undefined) {
+                  throw new HostedOperatorError("resource_mismatch");
+                }
+                const artifacts = ownedArtifacts(context);
+                const artifact = await artifacts.publication.readAuthPlan(
+                  artifacts.context,
+                  context.plan.authSchema,
+                );
+                return artifact.content;
+              },
+              readRuntimeUrl: async () => {
+                await verificationInput.assertCurrent();
+                return verificationInput.runtimeUrl;
+              },
+            });
+            const proof = await readiness.verify(verificationInput);
+            await verifyCanonicalOwnership();
+            return proof;
+          },
+        });
+      },
       withResourceLease,
     };
   };

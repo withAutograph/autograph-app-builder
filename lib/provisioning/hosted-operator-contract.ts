@@ -45,8 +45,31 @@ const databaseResource = z
     runtimeRole: sqlName,
   })
   .refine((value) => value.runtimeRole !== value.migratorRole);
+/** Non-secret provider snapshot approved for read-only cross-journal ownership lookup. */
+export const canonicalGatewayEnvironmentRowSchema = z.strictObject({
+  branch: id,
+  comment: id,
+  id,
+  key: z.enum([
+    "AUTH_DATABASE_RESOURCE",
+    "PLATFORM_AUTH_DATABASE_URL",
+    "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
+    "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+    "PLATFORM_GATEWAY_PROJECT_BINDINGS",
+  ]),
+  operationRef: z.uuid(),
+  projectId: id,
+  target: z.tuple([z.literal("preview")]),
+  type: z.literal("encrypted"),
+  valueSha256: digest,
+});
+export type CanonicalGatewayEnvironmentRow = z.infer<typeof canonicalGatewayEnvironmentRowSchema>;
+export const canonicalGatewayEnvironmentRowsSchema = z
+  .array(canonicalGatewayEnvironmentRowSchema)
+  .min(1);
 /** Approval names an exact owned source checkpoint, never a database-name lookup. */
 export const sharedAuthAdoptionSchema = z.strictObject({
+  gatewayEnvironment: canonicalGatewayEnvironmentRowsSchema.optional(),
   kind: z.literal("owned-journal-auth-v1"),
   resource: z.strictObject({
     authDatabase: databaseResource,
@@ -564,14 +587,22 @@ export const operatorAuthSchemaPreparationSchema = z.strictObject({
   targetDigest: digest,
 });
 export type OperatorAuthSchemaPreparation = z.infer<typeof operatorAuthSchemaPreparationSchema>;
-export const managedOperatorEnvironmentRowSchema = z.strictObject({
-  branch: id,
-  comment: id,
-  id,
-  key: z.string().regex(/^[A-Z][A-Z0-9_]{0,199}$/u),
-  operationRef: z.uuid(),
-  projectId: id,
-});
+export const managedOperatorEnvironmentRowSchema = z
+  .strictObject({
+    branch: id,
+    comment: id,
+    id,
+    key: z.string().regex(/^[A-Z][A-Z0-9_]{0,199}$/u),
+    operationRef: z.uuid(),
+    pendingOperationRef: z.uuid().optional(),
+    pendingValueSha256: digest.optional(),
+    projectId: id,
+    valueSha256: digest.optional(),
+  })
+  .refine(
+    (row) => (row.pendingOperationRef === undefined) === (row.pendingValueSha256 === undefined),
+    "Pending Gateway value must bind its operation",
+  );
 export type ManagedOperatorEnvironmentRow = z.infer<typeof managedOperatorEnvironmentRowSchema>;
 export const managedOperatorEnvironmentRowsSchema = z.array(managedOperatorEnvironmentRowSchema);
 const hostedOperatorRecordDataSchema = z.strictObject({

@@ -59,15 +59,24 @@ export const createHostedOperatorAuthReadiness = (deps: {
   readAuthPlan: (input: Input) => Promise<Buffer>;
   readSnapshot?: typeof readSnapshot;
 }) => ({
-  async verify(input: Input) {
+  async verify(supplied: Input) {
     try {
+      const input = {
+        ...supplied,
+        authority: structuredClone(supplied.authority),
+        ownerContext: structuredClone(supplied.ownerContext),
+        plan: structuredClone(supplied.plan),
+        target: structuredClone(supplied.target),
+      };
       await input.assertCurrent?.();
       await deps.assertAuthorized(input);
       const approved = input.plan.authSchema;
       if (approved === undefined) {
         throw new HostedOperatorError("resource_mismatch");
       }
-      const approvedBytes = await deps.readAuthPlan(input);
+      const approvedBytes = Buffer.from(await deps.readAuthPlan(input));
+      await input.assertCurrent?.();
+      await deps.assertAuthorized(input);
       const frame = targetSchema.parse(JSON.parse(approvedBytes.toString("utf-8")));
       const effects = frame.schemaPlan.effects.filter((effect) => effect.owner === "readiness");
       const asset = effects.at(0);
@@ -82,6 +91,8 @@ export const createHostedOperatorAuthReadiness = (deps: {
         throw new HostedOperatorError("resource_mismatch");
       }
       const url = await deps.readRuntimeUrl(input);
+      await input.assertCurrent?.();
+      await deps.assertAuthorized(input);
       const parsed = new URL(url);
       const resource = input.plan.authDatabase;
       const exactRuntime = [
