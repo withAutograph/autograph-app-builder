@@ -1,6 +1,11 @@
+import type { HostedOperatorConsentMetadata } from "./hosted-operator-consent-diagnostic";
+import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent-diagnostic";
 import { isDeepStrictEqual } from "node:util";
 import { resolveHostedOperatorOwnerContext } from "./hosted-operator-owner-context";
-import { createOperatorWorkloadVerifier } from "./hosted-operator-workload";
+import {
+  createOperatorWorkloadVerifier,
+  operatorWorkloadFailureFor,
+} from "./hosted-operator-workload";
 import type { OperatorWorkloadPolicy } from "./hosted-operator-workload";
 import { HostedOperatorError, operatorOwnerContextSchema } from "./hosted-operator-contract";
 import type { OperatorOwnerContext } from "./hosted-operator-contract";
@@ -79,7 +84,35 @@ export const createHostedOperatorConsentOwner = (
       sessionId: string,
       hint: OperatorOwnerContext | undefined,
     ): Promise<HostedOperatorConsentOwner> => {
-      await verifyWorkload(request);
+      const report = createHostedOperatorConsentDiagnostic(sessionId);
+      const emit = (
+        outcome: HostedOperatorConsentMetadata["outcome"],
+        workloadFailure?: HostedOperatorConsentMetadata["workloadFailure"],
+      ) => {
+        const metadata: HostedOperatorConsentMetadata = {
+          boundary: "operator",
+          outcome,
+          phase: "inline",
+          stage: "workload_verification",
+        };
+        if (workloadFailure !== undefined) {
+          metadata.workloadFailure = workloadFailure;
+        }
+        report(metadata);
+      };
+      emit("started");
+      try {
+        await verifyWorkload(request);
+        emit("verified");
+      } catch (error) {
+        emit(
+          error instanceof HostedOperatorError && error.code === "authorization_required"
+            ? "operator_access_denied"
+            : "setup_unavailable",
+          error instanceof HostedOperatorError ? operatorWorkloadFailureFor(error) : undefined,
+        );
+        throw error;
+      }
       const current = await currentOwner(hint);
       if (current.ownerContext.sessionId !== sessionId) {
         throw new HostedOperatorError("authorization_required");

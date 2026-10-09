@@ -1,3 +1,4 @@
+import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorConsentOwner } from "./hosted-operator-consent-owner";
 import {
   neonAuthorizationInputSchema,
@@ -510,7 +511,16 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         return response({ code: "not_found" }, 404);
       }
       const input = operatorRequestSchema.parse(await request.json());
-      if (input.action === "neon-authorization") {
+      const isConsentRequest = input.action === "neon-authorization";
+      createHostedOperatorConsentDiagnostic(
+        isConsentRequest ? input.sessionId : input.selection.sessionId,
+      )({
+        boundary: "operator",
+        outcome: "started",
+        phase: isConsentRequest ? input.phase : "inline",
+        stage: "operator_ingress",
+      });
+      if (isConsentRequest) {
         if (deps.neonAuthorization === undefined || deps.authorizeNeonConsent === undefined) {
           throw new HostedOperatorError("protected_operator_required");
         }

@@ -13,6 +13,8 @@ const stage = z.enum([
   "client_construction",
   "principal",
   "operator_request",
+  "operator_ingress",
+  "workload_verification",
   "inline_token",
   "current_owner",
   "operator_oidc",
@@ -30,12 +32,41 @@ const outcome = z.enum([
   "setup_unavailable",
   "control_flow_propagated",
 ]);
+export const operatorWorkloadFailureSchema = z.strictObject({
+  failedClaim: z
+    .enum(["exp", "iat", "iss", "aud", "sub", "owner_id", "project_id", "environment"])
+    .optional(),
+  joseCode: z
+    .enum([
+      "ERR_JWT_CLAIM_VALIDATION_FAILED",
+      "ERR_JWT_EXPIRED",
+      "ERR_JWS_SIGNATURE_VERIFICATION_FAILED",
+      "ERR_JWKS_NO_MATCHING_KEY",
+      "ERR_JOSE_ALG_NOT_ALLOWED",
+      "ERR_JWKS_TIMEOUT",
+    ])
+    .optional(),
+  reason: z.enum([
+    "missing_authorization",
+    "verification_failed",
+    "policy_owner_mismatch",
+    "policy_project_mismatch",
+    "policy_environment_mismatch",
+  ]),
+});
+export type OperatorWorkloadFailure = z.infer<typeof operatorWorkloadFailureSchema>;
+
 const metadata = z.strictObject({
+  accessClass: z
+    .enum(["upstream_auth_denied", "application_auth_denied", "other_failed", "ok"])
+    .optional(),
   boundary,
   httpStatus: z.number().int().min(100).max(599).optional(),
   outcome,
   phase,
   stage,
+  vercelError: z.literal("TRUSTED_SOURCES_ENVIRONMENT_MISMATCH").optional(),
+  workloadFailure: operatorWorkloadFailureSchema.optional(),
 });
 export type HostedOperatorConsentMetadata = z.infer<typeof metadata>;
 export type HostedOperatorConsentDiagnostic = HostedOperatorConsentMetadata & {
