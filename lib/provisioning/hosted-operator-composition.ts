@@ -396,6 +396,7 @@ export const composeHostedOperatorDependencies = (
     target: "gateway",
   });
 
+  // oxlint-disable-next-line eslint/complexity -- Keep cleanup, fresh Auth, and blocked adoption plans at the same authority boundary.
   const plan = async (
     context: HostedOperatorContext & { action: "prepare" | "cleanup" },
   ): Promise<HostedOperatorPlan> => {
@@ -495,8 +496,26 @@ export const composeHostedOperatorDependencies = (
         await controlPlane.readCredential(authority, installationId),
     });
     const native = configuration.nativeNeon.scope;
+    const adopted =
+      application.authAdoptionSource === undefined
+        ? undefined
+        : await controlPlane.readSharedAuthAdoption({
+            context,
+            source: application.authAdoptionSource,
+          });
+    if (current?.record.operator?.plan.authAdoption !== undefined && adopted === undefined) {
+      throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+    }
     let authSchema = current?.record.operator?.plan.authSchema;
-    if (authSchema === undefined) {
+    if (adopted !== undefined) {
+      // Re-envelope the exact source artifact through the existing target-owned artifact API.
+      const artifactRef = await controlPlane.publishAuthPlan(context, {
+        content: adopted.content,
+        planDigest: adopted.authSchema.planDigest,
+        targetDigest: adopted.authSchema.targetDigest,
+      });
+      authSchema = { ...adopted.authSchema, artifactRef };
+    } else if (authSchema === undefined) {
       const proposed = await proposal({
         assertCurrentOwner: async () => {
           await controlPlane.assertPlanningAuthorized(context);
@@ -532,6 +551,7 @@ export const composeHostedOperatorDependencies = (
       access: [],
       action: "prepare",
       appDatabase: application.appDatabase,
+      authAdoption: adopted?.adoption,
       authDatabase: configuration.authDatabase,
       authSchema,
       bootstrap: {
@@ -543,7 +563,9 @@ export const composeHostedOperatorDependencies = (
       cost: {
         class: "shared-recovery-group",
         description:
-          "Preview-only resources and Auth bootstrap. Explicit normal Git delivery retries may create duplicate owned Preview deployments and provider usage charges. No human login or app preparation is established by schema readiness.",
+          adopted === undefined
+            ? "Preview-only resources and Auth bootstrap. Explicit normal Git delivery retries may create duplicate owned Preview deployments and provider usage charges. No human login or app preparation is established by schema readiness."
+            : "Import only the reviewed shared Auth credentials into this app's encrypted journal. Provider execution is blocked until read-only adoption and shared Gateway ownership are integrated; this approval does not rotate or recreate shared Auth.",
         owner: context.authority.ownerUserId,
       },
       deploymentBoundary: {
@@ -574,7 +596,10 @@ export const composeHostedOperatorDependencies = (
       },
       effects: [
         {
-          description: "Prepare or observe the exact owned shared Auth database and roles.",
+          description:
+            adopted === undefined
+              ? "Prepare or observe the exact owned shared Auth database and roles."
+              : "Checkpoint the exact source journal Auth credentials only; shared Auth execution remains blocked pending adoption verification.",
           id: "auth-resources",
           kind: "resources",
           resourceId: configuration.authDatabase.resourceId,
@@ -586,7 +611,10 @@ export const composeHostedOperatorDependencies = (
           resourceId: application.appDatabase.resourceId,
         },
         {
-          description: "Independently replan and migrate the approved shared Auth target.",
+          description:
+            adopted === undefined
+              ? "Independently replan and migrate the approved shared Auth target."
+              : "Require independent read-only Auth schema adoption; migration and recreation remain blocked.",
           id: AUTH_SCHEMA_EFFECT,
           kind: "install",
         },
@@ -708,6 +736,16 @@ export const composeHostedOperatorDependencies = (
     input: HostedOperatorEffectContext,
     execute?: HostedOperatorWorkerEffectContext,
   ) => {
+    if (input.plan.authAdoption !== undefined) {
+      const source = selectedApplication(configuration, input).authAdoptionSource;
+      if (source === undefined || execute !== undefined) {
+        throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+      }
+      await controlPlane.checkpointSharedAuthAdoption({ effect: input, source });
+      // This prerequisite never launches bootstrap against shared Auth or claims readiness.
+      // Gateway row ownership and read-only resource/schema adoption must be integrated first.
+      throw new HostedOperatorError(RECONCILIATION_REQUIRED);
+    }
     const database =
       input.effect.resourceId === input.plan.authDatabase.resourceId
         ? ("authDatabase" as const)

@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 /* oxlint-disable sonarjs/no-nested-functions -- Owner authorization and journal CAS closures share the actual opened private database. */
 import postgres from "postgres";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
@@ -91,6 +92,7 @@ import {
   readHostedOperatorResourceBindings,
 } from "./hosted-operator-resource-credentials";
 import type { ProtectedResourceDatabase } from "./hosted-operator-resource-credentials";
+import { createHostedOperatorSharedAuthAdoption } from "./hosted-operator-shared-auth-adoption";
 import type {
   HostedRuntimeJournalRecord,
   HostedRuntimeJournalRow,
@@ -567,6 +569,36 @@ export const createHostedOperatorControlPlane = async (input: {
       store,
     });
 
+    const sharedAuth = createHostedOperatorSharedAuthAdoption({
+      assertAuthorized: owner.assertAuthorized,
+      assertPlanningAuthorized: owner.assertPlanningAuthorized,
+      checkpointTarget: async ({ effect, expected, privateState }) => {
+        await owner.assertAuthorized(effect);
+        await effect.assertCurrent();
+        await updateHostedRuntimeJournal({
+          ...effect,
+          now: Date.now,
+          store,
+          update: (record) => {
+            requireCurrentResourceCredentialRecord(record, effect);
+            if (!isDeepStrictEqual(record.privateState, expected)) {
+              throw new HostedOperatorError("operation_in_progress");
+            }
+            return { ...record, privateState };
+          },
+        });
+      },
+      config: tokenKeyring,
+      readApproval,
+      readCurrentTarget: async (effect) =>
+        await readCurrentResourceCredentialRecord({
+          assertAuthorized: owner.assertAuthorized,
+          effect,
+          store,
+        }),
+      store,
+    });
+
     return {
       assertAuthorized: owner.assertAuthorized,
       async assertMembershipCapture(inputContext: HostedOperatorEffectContext) {
@@ -633,6 +665,9 @@ export const createHostedOperatorControlPlane = async (input: {
       },
       assertPlanningAuthorized: owner.assertPlanningAuthorized,
       authorize: owner.authorize,
+      checkpointSharedAuthAdoption: async (
+        adoptionInput: Parameters<typeof sharedAuth.checkpoint>[0],
+      ) => await sharedAuth.checkpoint(adoptionInput),
       async close() {
         await controlPlaneClient.end({ timeout: 5 });
       },
@@ -1018,6 +1053,21 @@ export const createHostedOperatorControlPlane = async (input: {
           privateState: prepared.privateState,
           sha256: prepared.credentialsSha256,
         };
+      },
+      async readSharedAuthAdoption(adoptionInput: Parameters<typeof sharedAuth.inspect>[0]) {
+        const frozen = structuredClone(adoptionInput);
+        const observed = await sharedAuth.inspect(frozen);
+        const authSchema = observed.row.record.operator?.plan.authSchema;
+        if (authSchema === undefined) {
+          throw new HostedOperatorError("reconciliation_required");
+        }
+        const artifacts = ownedArtifacts(observed.source);
+        const artifact = await artifacts.publication.readAuthPlan(artifacts.context, authSchema);
+        const current = await sharedAuth.inspect(frozen);
+        if (!isDeepStrictEqual(observed.row, current.row)) {
+          throw new HostedOperatorError("reconciliation_required");
+        }
+        return { adoption: observed.adoption, authSchema, content: artifact.content };
       },
       reserveRealmIdentityLink,
       async resolveRealmIdentityCallbackContext(callbackInput: {
