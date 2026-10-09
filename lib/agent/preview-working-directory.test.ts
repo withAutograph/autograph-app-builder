@@ -29,7 +29,8 @@ const mocks = vi.hoisted(() => {
     nativeBindings: vi.fn().mockResolvedValue(null),
     nativePreview: vi.fn(),
     prepare: vi.fn().mockResolvedValue({ status: "prepared" }),
-    previewStateUpdate: vi.fn<(transition: (state: { commandId: string } | null) => null) => void>(),
+    previewStateUpdate:
+      vi.fn<(transition: (state: { commandId: string } | null) => null) => void>(),
     runtime: vi.fn().mockResolvedValue(null),
     start: vi
       .fn()
