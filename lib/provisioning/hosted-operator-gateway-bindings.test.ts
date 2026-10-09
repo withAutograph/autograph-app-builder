@@ -319,6 +319,7 @@ const fixture = () => {
     assertAuthorized,
     assertCurrent,
     checkpointGatewayEnvironment,
+    fetcher,
     input,
     readAuthRuntimeUrl,
     readCanonicalGatewayRows,
@@ -334,6 +335,95 @@ const fixture = () => {
     writer,
   };
 };
+
+it.each([
+  ["bind", "credential"],
+  ["bind", "provider"],
+  ["bind", "checkpoint"],
+  ["reconcile", "credential"],
+  ["reconcile", "provider"],
+  ["reconcile", "checkpoint"],
+  ["verifyForDelivery", "credential"],
+  ["verifyForDelivery", "provider"],
+] as const)(
+  "%s retains the authorized context when caller data changes during %s await",
+  async (method, boundary) => {
+    const f = fixture();
+    const approved = structuredClone({
+      branch: f.input.gateway.branch,
+      operationRef: f.input.operationRef,
+      projectId: f.input.gateway.projectId,
+    });
+    if (method !== "bind") {
+      await f.writer.bind(f.input);
+      f.requests.length = 0;
+      f.checkpointGatewayEnvironment.mockClear();
+    }
+    if (method === "verifyForDelivery") {
+      f.input.effect = {
+        description: "Verify Gateway delivery",
+        id: "gateway-delivery",
+        kind: "gateway-delivery",
+      };
+    }
+    const mutateCaller = () => {
+      f.input.gateway.branch = "unapproved-branch";
+      f.input.gateway.projectId = "unapproved-project";
+      f.input.operationRef = "unapproved-operation";
+      f.input.target.scopeId = "unapproved-team";
+    };
+    if (boundary === "credential") {
+      const read = f.readCredential.getMockImplementation()!;
+      f.readCredential.mockImplementationOnce(async () => {
+        const credential = await read();
+        mutateCaller();
+        return credential;
+      });
+    } else if (boundary === "provider") {
+      const request = f.fetcher.getMockImplementation()!;
+      f.fetcher.mockImplementationOnce(async (...args) => {
+        const response = await request(...args);
+        mutateCaller();
+        return response;
+      });
+    } else {
+      const checkpoint = f.checkpointGatewayEnvironment.getMockImplementation()!;
+      f.checkpointGatewayEnvironment.mockImplementationOnce(async (rows) => {
+        await checkpoint(rows);
+        mutateCaller();
+      });
+    }
+    const result = await f.writer[method](f.input);
+    if (!("rows" in result)) {
+      throw new Error("Expected independently verified Gateway references");
+    }
+    expect(result.rows).toHaveLength(5);
+    expect(
+      result.rows.every(
+        (row) =>
+          row.branch === approved.branch &&
+          row.projectId === approved.projectId &&
+          row.operationRef === approved.operationRef,
+      ),
+    ).toBe(true);
+    expect(
+      f.requests.every((request) => request.path.includes(`/projects/${approved.projectId}/`)),
+    ).toBe(true);
+    const posts = f.requests.filter((request) => request.method === "POST");
+    expect(posts).toHaveLength(method === "bind" ? 5 : 0);
+    expect(posts.every((request) => request.body?.gitBranch === approved.branch)).toBe(true);
+    expect(
+      f.checkpointGatewayEnvironment.mock.calls.every(([rows]) =>
+        rows.every(
+          (row) =>
+            row.branch === approved.branch &&
+            row.projectId === approved.projectId &&
+            row.operationRef === approved.operationRef,
+        ),
+      ),
+    ).toBe(true);
+  },
+);
 
 it("binds only exact encrypted Gateway Preview Auth configuration and retains existing credentials", async () => {
   const f = fixture();

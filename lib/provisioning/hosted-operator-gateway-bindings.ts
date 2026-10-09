@@ -549,6 +549,16 @@ export const createHostedOperatorGatewayBindings = (deps: {
       ) ||
         (row.comment === comment &&
           !known.some((item) => item.id === row.id || item.key === row.key)));
+    const referenceRows = (
+      rows: ProviderRow[],
+      known: ManagedOperatorEnvironmentRow[],
+      values: ReadonlyMap<string, string>,
+    ) => {
+      const knownById = new Map(known.map((row) => [row.id, row]));
+      return rows.map((row) =>
+        referenceRow(row, input, knownById, z.string().parse(values.get(row.id))),
+      );
+    };
     const checkpoint = async (
       rows: ProviderRow[],
       known: ManagedOperatorEnvironmentRow[],
@@ -721,6 +731,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
     return {
       acknowledgedValues,
       approvedCanonical,
+      branch,
       checkpoint,
       comment,
       guard,
@@ -728,6 +739,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       inspectOwnership,
       prepareWrite,
       projectId,
+      referenceRows,
       request,
     };
   };
@@ -769,7 +781,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
               )
             : io.request(`/v10/projects/${encodeURIComponent(io.projectId)}/env`, "POST", {
                 comment: io.comment,
-                gitBranch: input.gateway.branch,
+                gitBranch: io.branch,
                 key,
                 target: ["preview"],
                 type: "encrypted",
@@ -795,11 +807,8 @@ export const createHostedOperatorGatewayBindings = (deps: {
           await io.checkpoint(rows, known, values, expected);
         }
         ({ known, rows, values } = await io.inspect(true));
-        const knownById = new Map(known.map((row) => [row.id, row]));
         return {
-          rows: rows.map((row) =>
-            referenceRow(row, input, knownById, z.string().parse(values.get(row.id))),
-          ),
+          rows: io.referenceRows(rows, known, values),
         };
       } catch {
         throw unavailable();
@@ -818,12 +827,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
           return { status: "absent" };
         }
         await io.checkpoint(rows, known, values, expected);
-        const knownById = new Map(known.map((row) => [row.id, row]));
         return rows.length === Object.keys(expected).length
           ? {
-              rows: rows.map((row) =>
-                referenceRow(row, input, knownById, z.string().parse(values.get(row.id))),
-              ),
+              rows: io.referenceRows(rows, known, values),
               status: "applied",
             }
           : { status: "unknown" };
@@ -859,14 +865,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       }
       await io.guard();
       return {
-        rows: rows.map((row) =>
-          referenceRow(
-            row,
-            input,
-            new Map(known.map((item) => [item.id, item])),
-            z.string().parse(values.get(row.id)),
-          ),
-        ),
+        rows: io.referenceRows(rows, known, values),
       };
     },
   };
