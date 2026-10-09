@@ -1,12 +1,7 @@
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
-
-import * as databaseSchema from "../db/schema";
-import {
-  hostedRuntimePostgresOptions,
-  parseHostedDatabaseUrl,
-} from "../db/postgres-connection-policy";
+import type * as databaseSchema from "../db/schema";
+import { openHostedPostgresDatabase } from "../db/hosted-postgres";
+import { parseHostedDatabaseUrl } from "../db/postgres-connection-policy";
 import { readHostedForwarderSubject } from "../eve/hosted-forwarder";
 import type { HostedPrincipal } from "../eve/hosted-auth";
 import type { HostedWorkloadIdentity } from "../eve/same-origin-http";
@@ -16,6 +11,8 @@ import { composeHostedMcpRuntime } from "./hosted-runtime";
 import { readHostedMcpAuthConfig, unavailableResponse } from "./request-auth";
 import { createMcpRequestHandler } from "./request-handler";
 import type { HostedBuilderHandoffRuntime } from "./request-handler";
+
+export { openHostedPostgresDatabase } from "../db/hosted-postgres";
 
 type Database = PostgresJsDatabase<typeof databaseSchema>;
 type ResumeRepositoryAccess = (input: {
@@ -67,12 +64,6 @@ export function readHostedDeploymentConfig(
     },
     forwarderSubject,
   };
-}
-
-// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
-export function openHostedPostgresDatabase(databaseUrl: string): Database {
-  const client = postgres(parseHostedDatabaseUrl(databaseUrl), hostedRuntimePostgresOptions);
-  return drizzle(client, { schema: databaseSchema });
 }
 
 /**
