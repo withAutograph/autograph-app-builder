@@ -34,7 +34,9 @@ const predicate = (authorityInput: CanonicalSourceActor, operationRef: string) =
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser is the boundary for untrusted JSON journal records.
 const parseRecord = (input: unknown): CustodyRecord => {
   const result = custodyRecordSchema.safeParse(input);
-  if (!result.success) {throw new CustodyUnavailableError();}
+  if (!result.success) {
+    throw new CustodyUnavailableError();
+  }
   return result.data;
 };
 const parseRow = (row: typeof builderProvisioningJournals.$inferSelect): CustodyJournalRow => {
