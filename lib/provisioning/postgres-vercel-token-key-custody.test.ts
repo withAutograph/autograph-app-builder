@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { createPostgresVercelTokenKeyCustodyStore } from "./postgres-vercel-token-key-custody";
 import {
   custodyActorDigest,
+  custodyGrantDigest,
   custodyPlanDigest,
   custodyPlanSchema,
   custodyRecordSchema,
@@ -51,16 +52,29 @@ const recordFor = (actor: CanonicalSourceActor = authority, operation = operatio
     },
     version: 1,
   });
+  const setupGrant = {
+    approvalRef: "approval",
+    approvedAt: "2026-10-10T11:00:00Z",
+    approvedPlanDigest: custodyPlanDigest(plan),
+    expiresAt: plan.approvalExpiresAt,
+    grantRef: "grant",
+    operationRef: operation,
+    originalActor: actor,
+    ownerSessionId: "session",
+    scope: "source-global-active-v1-key-custody" as const,
+    version: 1 as const,
+  };
   return custodyRecordSchema.parse({
     approvalRef: "approval",
     fenceGeneration: 0,
-    grantDigest: "a".repeat(64),
+    grantDigest: custodyGrantDigest(setupGrant),
     grantRef: "grant",
     kind: "vercel-token-key-custody-v1",
     originalActor: actor,
     phase: "reserved",
     plan,
     planDigest: custodyPlanDigest(plan),
+    setupGrant,
     version: 1,
   });
 };
@@ -338,5 +352,39 @@ describe("Postgres key custody journal", () => {
         record: { ...next, fenceGeneration: 3 },
       }),
     ).rejects.toThrow("unavailable");
+  });
+  it("refuses nonce replacement while the previous challenge is live", async () => {
+    const pending = custodyRecordSchema.parse({
+      ...recordFor(),
+      attemptedAt: now.toISOString(),
+      fenceGeneration: 1,
+      leaseExpiresAt: "2026-10-10T11:59:59Z",
+      leaseId,
+      nonce: "a".repeat(43),
+      nonceExpiresAt: "2026-10-10T12:01:00Z",
+      phase: "possession-pending",
+      receivingDeploymentId: "recipient",
+      secret: {
+        gitBranch: null,
+        id: "secret-row",
+        key: "VERCEL_INTEGRATION_TOKEN_KEY",
+        projectId: "operator",
+        target: ["preview"],
+        teamId: "team",
+        type: "sensitive",
+      },
+    });
+    const next = {
+      ...pending,
+      fenceGeneration: 2,
+      leaseExpiresAt: "2026-10-10T12:00:30Z",
+      leaseId: "33333333-3333-4333-8333-333333333333",
+      nonce: "b".repeat(43),
+    };
+    const { counts, store } = fixture([rawRow(pending, 5)]);
+    await expect(
+      store.compareAndSet({ authority, expectedRevision: 5, now, operationRef, record: next }),
+    ).rejects.toThrow("unavailable");
+    expect(counts().updateCount).toBe(0);
   });
 });

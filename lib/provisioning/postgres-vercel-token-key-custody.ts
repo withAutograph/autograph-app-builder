@@ -31,8 +31,14 @@ const predicate = (authorityInput: CanonicalSourceActor, operationRef: string) =
     sql`${builderProvisioningJournals.record} ->> 'kind' = ${custodyKind}`,
   );
 };
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser is the boundary for untrusted JSON journal records.
+const parseRecord = (input: unknown): CustodyRecord => {
+  const result = custodyRecordSchema.safeParse(input);
+  if (!result.success) {throw new CustodyUnavailableError();}
+  return result.data;
+};
 const parseRow = (row: typeof builderProvisioningJournals.$inferSelect): CustodyJournalRow => {
-  const record = custodyRecordSchema.parse(row.record);
+  const record = parseRecord(row.record);
   if (
     row.requestId !== record.plan.operationRef ||
     row.requestDigest !== record.planDigest ||
@@ -52,9 +58,11 @@ const immutableIdentity = (record: CustodyRecord) =>
     approvalRef: record.approvalRef,
     grantDigest: record.grantDigest,
     grantRef: record.grantRef,
+    grantRevokedAt: record.grantRevokedAt,
     originalActor: record.originalActor,
     plan: record.plan,
     planDigest: record.planDigest,
+    setupGrant: record.setupGrant,
   });
 const phases = [
   "reserved",
@@ -165,7 +173,7 @@ export const createPostgresVercelTokenKeyCustodyStore = (
   };
   return {
     async compareAndSet(input) {
-      const record = custodyRecordSchema.parse(input.record);
+      const record = parseRecord(input.record);
       if (
         record.plan.operationRef !== input.operationRef ||
         custodyActorDigest(input.authority) !== custodyActorDigest(record.originalActor)
@@ -199,7 +207,7 @@ export const createPostgresVercelTokenKeyCustodyStore = (
     read,
     async reserve(input) {
       const authority = hostedTenantAuthoritySchema.parse(input.authority);
-      const record = custodyRecordSchema.parse(input.record);
+      const record = parseRecord(input.record);
       if (
         record.phase !== "reserved" ||
         record.fenceGeneration !== 0 ||
@@ -216,6 +224,7 @@ export const createPostgresVercelTokenKeyCustodyStore = (
           record.nonceExpiresAt,
           record.nonceConsumedAt,
           record.receipt,
+          record.grantRevokedAt,
         ].some((value) => value !== undefined)
       ) {
         throw new CustodyUnavailableError();
