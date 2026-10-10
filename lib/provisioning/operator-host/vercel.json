@@ -14,6 +14,10 @@
   },
   "rewrites": [
     {
+      "source": "/v1/key-custody/possession",
+      "destination": { "service": "operator" }
+    },
+    {
       "source": "/v1/runtime",
       "destination": { "service": "operator" }
     }

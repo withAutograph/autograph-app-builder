@@ -59,6 +59,7 @@ describe("separate native operator host", () => {
       },
     });
     expect(config.rewrites).toEqual([
+      { destination: { service: "operator" }, source: "/v1/key-custody/possession" },
       { destination: { service: "operator" }, source: "/v1/runtime" },
     ]);
     expect(readFileSync(path.join(root, "vercel.json"), "utf-8")).toContain("next build");
@@ -68,6 +69,14 @@ describe("separate native operator host", () => {
     expect(response.status).toBe(503);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(await response.json()).toEqual({ code: "protected_operator_required" });
+  });
+  it("dispatches the exact possession ingress before full runtime initialization", async () => {
+    const response = await entrypoint.fetch(
+      new Request("https://operator.example.test/v1/key-custody/possession"),
+    );
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({ error: "key_custody_unavailable" });
   });
   it.each([
     new Request("https://operator.example.test/health"),
