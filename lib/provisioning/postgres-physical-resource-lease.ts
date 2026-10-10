@@ -158,7 +158,11 @@ export const createPostgresPhysicalResourceLease =
             `;
             lockParts.push(advisoryLockPartsSchema.parse(rawParts));
           }
-          await leaseInput.initializeUnderLock?.();
+          if (leaseInput.initializeUnderLock) {
+            await assertSameBackend(connection, backend, leaseClosed);
+            await assertHeldLocks(connection, backend, lockParts, leaseClosed);
+            await leaseInput.initializeUnderLock();
+          }
           const snapshot = initialSnapshot ?? (await leaseInput.readCurrentFence());
           const assertFence = async () => {
             await assertSameBackend(connection, backend, leaseClosed);

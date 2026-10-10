@@ -143,6 +143,22 @@ describe("physical resource transaction lease", () => {
     expect(initialized).toBe(true);
   });
 
+  it("denies initialization when the backend has already changed", async () => {
+    const test = fixture();
+    const initializeUnderLock = vi.fn(async () => {});
+    const readCurrentFence = vi.fn(async () => ({ ...test.fence }));
+    // Replace the synthetic backend immediately after the initial identity capture.
+    const originalStart = test.backend.backend_start;
+    Object.defineProperty(test.backend, "backend_start", {
+      get: vi.fn().mockReturnValueOnce(originalStart).mockReturnValue("2026-10-10T00:00:00.000Z"),
+    });
+    await expect(
+      test.lease({ ...test.input, initializeUnderLock, readCurrentFence }, async () => {}),
+    ).rejects.toThrow("session was lost");
+    expect(initializeUnderLock).not.toHaveBeenCalled();
+    expect(readCurrentFence).not.toHaveBeenCalled();
+  });
+
   it("sorts and deduplicates trusted physical identities", async () => {
     const test = fixture();
     await test.lease({ ...test.input, lockKeys: ["z", custodyKey, "z", "a"] }, async () => {});
