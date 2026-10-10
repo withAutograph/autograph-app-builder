@@ -243,3 +243,54 @@ cleanup selectors. Running earlier generic tenant retention/deletion code could
 erase the global slot claim or an unknown-outcome checkpoint. Preserve these
 exclusions when rolling back other operator changes; the custody grant and safety
 evidence retire only through their explicitly authorized global setup lifecycle.
+
+### Original-owner invocation
+
+The coordinator opens the canonical Source origin's
+`/api/hosted-operator/key-custody/invoke` in an ordinary signed-in browser.
+The protected GET shows only the already enrolled operation's frozen plan,
+admin approval/grant references and digests, exact Source deployment and
+team/project scopes, active version, create-only Secret effect, VERSION
+validate-only scope, expiry and current phase. It performs no key access,
+provider effect or grant reservation. Missing, expired, revoked or mismatched
+enrollment remains unavailable. A signed-out GET directs the browser to the
+existing Source sign-in flow; only the captured original owner can review.
+
+The page has a native same-origin POST form containing exactly one saved
+`operationRef`. It accepts neither JSON nor caller grant/approval fields, nonce,
+key, token, destination or an arbitrary message. Duplicate fields and unbounded
+form input are rejected. HTML escapes all metadata and sends no-store, no-referrer
+and restrictive form/frame/script policies. Browser cookies remain in the normal
+browser session and are never copied into scripts, operator requests or output.
+
+The invocation reader uses the existing Source Better Auth session API with
+`disableCookieCache` and `disableRefresh` to read the current browser session.
+The session's user must be the captured original actor. Each Source continuation
+rechecks that same browser session and the exact original saved public session,
+canonical authority and current workspace membership. It does not call the
+organization provisioning or activation helpers. The independent administrator
+grant remains the global custody authority; normal account or workspace roles
+cannot create one through this route.
+
+The POST calls the existing Source handler in process with a closed caller
+verification callback, and the existing handler still verifies Source's own
+Production workload and exact enrolled deployment before key/provider access.
+The external browser never obtains a Production workload token. The original
+WLI-only `/api/hosted-operator/key-custody` and fixed receiver possession handler
+keep their workload policies. The native operator service must route the exact
+`/v1/key-custody/possession` path to the operator entrypoint. No public MCP tool,
+operator runtime configuration, provider credential or signing service is added.
+
+This first hop uses the deployment invocation's supported OIDC context. The
+[project-token REST endpoint](https://vercel.com/docs/rest-api/projects/generate-a-project-oidc-token)
+exposes only a `source` body field and documents no Production environment
+selector. [Vercel's OIDC documentation](https://vercel.com/docs/oidc) describes
+Function invocation tokens separately from local Development tokens; a management
+API or local CLI token is not presumed to satisfy the Production policy.
+
+Deliver and independently observe the corrected Source deployment before freezing
+and enrolling its exact ID. The stable operation/grant selectors can remain;
+no custody enrollment, Secret write or receiving key-injection refresh follows
+from this source repair alone. Hosted acceptance still requires the separately
+approved enrollment, original-owner form submission, approved receiver refresh,
+nonce-bound possession receipt and independent readback of that saved operation.
