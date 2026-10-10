@@ -130,3 +130,116 @@ The original public session parks on its ordinary authorization request. The
 human completes provider consent; callback completion rechecks the actual
 owner grant before planning resumes. Browser return alone proves no grant,
 app preparation or hosted product behavior.
+
+## Active v1 encryption key custody
+
+The private Source POST `/api/hosted-operator/key-custody` and Operator POST
+`/v1/key-custody/possession` accept only `{ "operationRef": "<saved UUID>" }`.
+They remain unavailable without a separate trusted global custody enrollment.
+The receiver path dispatches before ordinary runtime composition and requires
+neither full operator configuration nor a Realm callback or Auth signing secret.
+Both endpoints verify the configured Source Production workload; Source also
+verifies its own exact enrolled deployment. Receiver verifies its trusted Preview
+workload and its own exact persisted receiving deployment before reading the key.
+
+`PROTECTED_VERCEL_TOKEN_KEY_CUSTODY_CONFIGURATION` is nonsecret, deployment-owned
+setup: version 1, one `operationRef` and `grantRef`, the captured canonical
+`capturedOwner` context, and fixed `source` and `recipient` HTTPS origins and
+workload policies. Source is Production and recipient is Preview, in the same
+team and separate projects. The recipient origin must be an existing stable,
+team-owned alias that will resolve to the separately approved refreshed Preview.
+This source change creates no alias, deployment or enrollment. Operator needs
+approved read access to the original session, membership and saved custody row;
+it does not need journal mutation permission for possession.
+
+The exact frozen `CustodyPlan` and full `TrustedCustodySetupGrant` are installed
+by a trusted administrator in the existing `builder_provisioning_journal`, using
+kind `vercel-token-key-custody-v1`. This adjusts the original environment-only
+setup design: install stable configuration and deploy Source first, independently
+observe its actual deployment ID, then review and enroll the exact plan and
+operation-specific grant. Thus enrollment does not require predicting a future
+Source ID or changing Source configuration after freezing that ID. Grant creation
+is confined to the private administrative channel; neither runtime route creates,
+replaces or accepts a grant. A digest closes the reviewed request; possession of
+the existing private administrative database credential and explicit human
+approval establish enrollment authority.
+
+The source entrypoint `lib/provisioning/vercel-token-key-custody-cli.mts` has
+`plan --request-file ABSOLUTE_PATH` and
+`enroll --request-file ABSOLUTE_PATH --database-url-fd 0` modes. Its owner-only,
+canonical, unsymlinked, bounded request contains `{ setup, request,
+confirmationDigest? }`; `request` contains version 1, action
+`enroll-active-v1-key-custody`, and the strict reserved metadata record. `plan`
+returns the closed confirmation digest without database access. `enroll` requires
+that exact digest, uses the existing private database credential from stdin,
+rechecks the original saved session and current membership, and reserves only
+this record under the fixed physical slot transaction lock. It reads no provider
+token or encryption key and performs no provider request. These commands are
+source capability, not evidence that an administrator ran them or approved a
+transfer. Every enrollment/transfer/receiver refresh remains separately approved.
+
+The journal stores only plan/grant metadata, captured canonical authority,
+approval reference, phase, revision, lease/fence, attempted time, owned provider
+row metadata, exact receiver ID, nonce/expiry/consumption and verified receipt.
+The full grant is nonsecret and is digest-bound to the record; an admin-controlled
+`grantRevokedAt` makes it unusable. Ordinary custody CAS cannot alter that grant
+or revocation marker. Legacy retry/read selectors now select only untagged
+records. Generic tenant retention and deletion exclude custody records, including
+settled ones, because global slot claims and unknown outcomes must survive tenant
+cleanup until the trusted global setup lifecycle revokes authority and resolves
+uncertainty. No table, migration, sequence privilege or new admin URL is added.
+
+Source rechecks the original actor/session/membership and existing active v1
+owner-bound Vercel installation. It requires destination VERSION Config `v1` in
+the exact project Preview scope with no branch override, and validates the
+original installation's team binding and fresh destination project ownership.
+Only a validated readable VERSION row may use the exact single-row decrypted
+Config GET; app values and Secret key bytes are never decrypted from provider
+storage. The Secret port sends one fixed create-only REST request with
+`type: sensitive`, target Preview, null branch and `upsert=false`, using in-memory
+active key bytes. Its `comment` binds the operation/plan/grant metadata for safe
+unknown-outcome reconciliation. Config visibility cannot substitute for Secret
+visibility. Current APIs may report Secret storage as encrypted with
+`visibility: secret`; this normalizes to the logical sensitive receipt type.
+
+The fixed lock covers team, Operator project, Preview/null branch, and the KEY
+and VERSION pair across all actor/session/operation tuples. The transaction keeps
+backend/held-lock/active-connection checks while the independent journal pool
+commits attempted state before POST. A timed durable lease and CAS fence govern
+each continuation. Transport failure or nondefinitive/partial success retains
+attempted/unknown; a missing metadata read never permits another Secret POST or
+a replacement operation. Reconciliation accepts only the saved owned row. Key
+buffers are wiped after use; durable records and safe responses contain no key,
+provider bearer, previous keyring or raw provider body.
+
+After the separately approved refreshed receiver is available, Source resolves
+the configured alias through the native alias API, then independently reads its
+exact deployment. It requires the fixed project/team, native Preview target
+(null), READY state, and creation after the attempted Secret write, and freezes
+its exact deployment ID and unique origin. READY only permits this possession
+checkpoint; it does not prove key equality. A server nonce and expiry bind the
+current fence, plan/grant digests, both workloads, active v1 and exact receiver.
+Receiver loads that persisted checkpoint, validates it before key access, computes
+the domain-separated HMAC and rechecks revision/current authority before returning
+proof. Source verifies against its own injected key and CAS-consumes the nonce
+into a metadata-only receipt. A duplicate completed Source call returns the same
+receipt; a consumed/expired/revoked receiver checkpoint cannot sign again. No
+request accepts a caller nonce, message, destination, key, token or attestation.
+
+Source-only tests cover checkpoint ordering, uncertain POST reconciliation,
+no blind retry, byte mismatch, strict grant/receipt/scope binding, key wiping,
+private selector rejection, nonce consumption, enrollment closure, Secret wire
+and VERSION-only readback. They do not prove current grants, provider permissions,
+actual Secret injection, receiver deployment or hosted possession. Hosted
+acceptance requires the newly approved exact operation, independent metadata
+readback, approved refresh and the persisted possession-verified receipt.
+
+Provider wire references: [create environment variables](https://vercel.com/docs/rest-api/projects/create-one-or-more-environment-variables),
+[read one Config value](https://vercel.com/docs/rest-api/projects/retrieve-the-decrypted-value-of-an-environment-variable-of-a-project-by-id),
+and [read an alias](https://vercel.com/docs/rest-api/aliases/get-an-alias).
+
+After custody enrollment, rollback and recovery must retain custody-aware tenant
+cleanup selectors. Running earlier generic tenant retention/deletion code could
+erase the global slot claim or an unknown-outcome checkpoint. Preserve these
+exclusions when rolling back other operator changes; the custody grant and safety
+evidence retire only through their explicitly authorized global setup lifecycle.
