@@ -130,7 +130,7 @@ const formRequest = (
     },
     method: "POST",
   });
-const fixture = () => {
+const fixture = (configuration = setup) => {
   const readBrowserActor = vi.fn(async (): Promise<CustodyBrowserActor | undefined> => ({
     sessionId: "browser-session",
     userId: "owner",
@@ -147,8 +147,8 @@ const fixture = () => {
       dependencies: NonNullable<Parameters<typeof createCustodySourceHandler>[1]> = {},
     ) =>
       async (request: Request) => {
-        await dependencies.verifyCaller?.(request, setup);
-        await dependencies.currentOwner?.(setup);
+        await dependencies.verifyCaller?.(request, configuration);
+        await dependencies.currentOwner?.(configuration);
         await sourceRequest(request);
         return await effect();
       },
@@ -161,7 +161,7 @@ const fixture = () => {
       createSourceHandler,
       now: () => now,
       readBrowserActor,
-      readSetup: async () => setup,
+      readSetup: async () => configuration,
       store: { read },
     },
   );
@@ -398,5 +398,16 @@ describe("closed owner key custody invocation", () => {
     await assertDenied(await handler(request));
     expect(read).not.toHaveBeenCalled();
     expect(factory).not.toHaveBeenCalled();
+  });
+  it("normalizes a configured source origin with a trailing slash for GET and native POST", async () => {
+    const { effect, handler } = fixture({
+      ...setup,
+      source: { ...setup.source, origin: "https://builder.example/" },
+    });
+    const review = await handler(getRequest());
+    const continued = await handler(formRequest());
+    expect(review.status).toBe(200);
+    expect(continued.status).toBe(200);
+    expect(effect).toHaveBeenCalledTimes(1);
   });
 });
