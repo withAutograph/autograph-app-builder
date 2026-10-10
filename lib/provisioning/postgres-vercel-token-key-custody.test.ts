@@ -295,4 +295,48 @@ describe("Postgres key custody journal", () => {
       }),
     ).rejects.toThrow("unavailable");
   });
+  it("rejects enrollment records carrying attempted or possession metadata", async () => {
+    const { counts, store } = fixture([]);
+    await expect(
+      store.reserve({
+        authority,
+        now,
+        record: { ...recordFor(), receivingDeploymentId: "unapproved" },
+      }),
+    ).rejects.toThrow("unavailable");
+    expect(counts().insertCount).toBe(0);
+  });
+  it("allows an expired lease to advance exactly one fence and rejects skipped fences", async () => {
+    const previous = {
+      ...recordFor(),
+      fenceGeneration: 1,
+      leaseExpiresAt: "2026-10-10T11:59:59Z",
+      leaseId,
+    };
+    const next = {
+      ...previous,
+      fenceGeneration: 2,
+      leaseExpiresAt: "2026-10-10T12:00:30Z",
+      leaseId: "33333333-3333-4333-8333-333333333333",
+    };
+    const { store } = fixture([rawRow(previous, 2)]);
+    expect(
+      await store.compareAndSet({
+        authority,
+        expectedRevision: 2,
+        now,
+        operationRef,
+        record: next,
+      }),
+    ).toEqual({ record: next, revision: 3 });
+    await expect(
+      store.compareAndSet({
+        authority,
+        expectedRevision: 2,
+        now,
+        operationRef,
+        record: { ...next, fenceGeneration: 3 },
+      }),
+    ).rejects.toThrow("unavailable");
+  });
 });

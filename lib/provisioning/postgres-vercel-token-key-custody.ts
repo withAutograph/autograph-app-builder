@@ -208,9 +208,15 @@ export const createPostgresVercelTokenKeyCustodyStore = (
         throw new CustodyUnavailableError();
       }
       if (
-        record.attemptedAt !== undefined ||
-        record.secret !== undefined ||
-        record.nonce !== undefined
+        [
+          record.attemptedAt,
+          record.secret,
+          record.receivingDeploymentId,
+          record.nonce,
+          record.nonceExpiresAt,
+          record.nonceConsumedAt,
+          record.receipt,
+        ].some((value) => value !== undefined)
       ) {
         throw new CustodyUnavailableError();
       }
