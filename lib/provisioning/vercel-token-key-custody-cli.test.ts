@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { chmod, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -121,7 +122,7 @@ afterEach(async () => {
 });
 const requestFile = async (content = JSON.stringify(packet), mode = 0o600) => {
   // oxlint-disable-next-line sonarjs/publicly-writable-directories -- mkdtemp atomically creates an unpredictable owner-only directory; request files are explicitly chmodded.
-  const directory = await mkdtemp("/private/tmp/custody-cli-test-");
+  const directory = await realpath(await mkdtemp(path.join(tmpdir(), "custody-cli-test-")));
   directories.push(directory);
   const filename = path.join(directory, "request.json");
   await writeFile(filename, content, { mode });
