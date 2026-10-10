@@ -1,4 +1,4 @@
-import { and, eq, lt, lte, ne, notExists } from "drizzle-orm";
+import { and, eq, lt, lte, ne, notExists, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import {
@@ -190,6 +190,7 @@ async function deleteExpired(
     .where(
       and(
         integrationTenantPredicate(builderProvisioningJournals, input.authority),
+        sql`${builderProvisioningJournals.record} ->> 'kind' IS DISTINCT FROM 'vercel-token-key-custody-v1'`,
         eq(builderProvisioningJournals.state, "settled"),
         lt(builderProvisioningJournals.updatedAt, input.deleteBefore),
       ),
@@ -274,7 +275,12 @@ export function createPostgresHostedAdminStore(database: Database): HostedAdminS
           });
         const provisioningJournals = await transaction
           .delete(builderProvisioningJournals)
-          .where(integrationTenantPredicate(builderProvisioningJournals, authority))
+          .where(
+            and(
+              integrationTenantPredicate(builderProvisioningJournals, authority),
+              sql`${builderProvisioningJournals.record} ->> 'kind' IS DISTINCT FROM 'vercel-token-key-custody-v1'`,
+            ),
+          )
           .returning({ requestId: builderProvisioningJournals.requestId });
         const vercelInstallations = await transaction
           .delete(hostedVercelInstallations)

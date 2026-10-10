@@ -25,7 +25,7 @@ function predicate(authority: BuilderProvisionAuthority, requestId: string) {
     eq(builderProvisioningJournals.workspaceId, authority.workspaceId),
     eq(builderProvisioningJournals.ownerUserId, authority.ownerUserId),
     eq(builderProvisioningJournals.requestId, requestId),
-    sql`${builderProvisioningJournals.record} ->> 'kind' is distinct from 'app-runtime'`,
+    sql`${builderProvisioningJournals.record} ->> 'kind' IS NULL`,
   );
 }
 
@@ -91,7 +91,7 @@ export function createPostgresBuilderProvisionJournalStore(
         .from(builderProvisioningJournals)
         .where(
           and(
-            sql`${builderProvisioningJournals.record} ->> 'kind' is distinct from 'app-runtime'`,
+            sql`${builderProvisioningJournals.record} ->> 'kind' IS NULL`,
             or(
               sql`(${builderProvisioningJournals.record} #>> '{operations,github,nextRetryAt}')::timestamptz <= ${input.now}`,
               sql`(${builderProvisioningJournals.record} #>> '{operations,vercel,nextRetryAt}')::timestamptz <= ${input.now}`,
