@@ -217,6 +217,15 @@ const fixture = () => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("closed custody state machine", () => {
+  it("leaves an untouched reservation unchanged when provider preflight fails", async () => {
+    const f = fixture();
+    const before = f.row();
+    f.secretPort.inspect.mockRejectedValueOnce(new CustodyUnavailableError());
+    await expect(f.run(operationRef)).rejects.toThrow();
+    expect(f.row()).toEqual(before);
+    expect(f.secretPort.create).not.toHaveBeenCalled();
+    expect(f.store.compareAndSet).not.toHaveBeenCalled();
+  });
   it("persists attempted before one Secret write, verifies HMAC, consumes once and reconciles duplicate delivery", async () => {
     const f = fixture();
     const receipt = await f.run(operationRef);

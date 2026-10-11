@@ -529,6 +529,13 @@ export const createCustodySourceOperation =
       ) {
         throw new CustodyUnavailableError();
       }
+      // Qualify the installation and destination before fencing an untouched reservation.
+      // The provider is checked again under the fence before any write.
+      const preflightSecret = await ports.secret.inspect(row.record.secret);
+      if (row.record.phase === "reserved" && preflightSecret !== undefined) {
+        throw new CustodyReconciliationRequiredError();
+      }
+      await assertSetup();
       leaseId = randomUUID();
       const expires = Math.min(
         now() + 120_000,
