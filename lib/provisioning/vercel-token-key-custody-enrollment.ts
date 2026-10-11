@@ -148,7 +148,6 @@ export const retireCustodyReservation = async (input: {
     },
     async (assertFence) => {
       await assertFence();
-      await assertFence();
       const retired = await input.store.retireReserved({
         authority: record.originalActor,
         expectedRecordDigest,

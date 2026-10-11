@@ -373,7 +373,7 @@ describe("private enrollment and HTTP boundary", () => {
       store: f.store,
     });
     expect(result).toMatchObject({ operationRef, retired: true, revision: 2 });
-    expect(owner).toHaveBeenCalledTimes(3);
+    expect(owner).toHaveBeenCalledTimes(2);
     expect(f.row().record.grantRevokedAt).toBeDefined();
     expect(f.store.retireReserved).toHaveBeenCalledOnce();
     await expect(f.run(operationRef)).rejects.toThrow("unavailable");
