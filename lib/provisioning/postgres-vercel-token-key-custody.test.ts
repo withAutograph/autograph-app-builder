@@ -6,10 +6,12 @@ import { describe, expect, it } from "vitest";
 import { createPostgresVercelTokenKeyCustodyStore } from "./postgres-vercel-token-key-custody";
 import {
   custodyActorDigest,
+  custodyDigest,
   custodyGrantDigest,
   custodyPlanDigest,
   custodyPlanSchema,
   custodyRecordSchema,
+  isRetiredUnattemptedReservation,
 } from "./vercel-token-key-custody";
 import type { CanonicalSourceActor, CustodyRecord } from "./vercel-token-key-custody";
 
@@ -90,6 +92,7 @@ const rawRow = (record: CustodyRecord, revision = 1) => ({
 });
 const fixture = (rows = [rawRow(recordFor())]) => {
   const queries: SQL[] = [];
+  const updateValues: Partial<ReturnType<typeof rawRow>>[] = [];
   let updateCount = 0;
   let insertCount = 0;
   let values: ReturnType<typeof rawRow> | undefined;
@@ -99,6 +102,7 @@ const fixture = (rows = [rawRow(recordFor())]) => {
     onConflictDoNothing: () => chain,
     returning: async () => (values === undefined ? [] : [values]),
     set: (input: Partial<ReturnType<typeof rawRow>>) => {
+      updateValues.push(input);
       values = { ...rows[0], ...input };
       return chain;
     },
@@ -127,7 +131,7 @@ const fixture = (rows = [rawRow(recordFor())]) => {
   };
   // SAFETY: The query double implements each chain method used by the adapter.
   const store = createPostgresVercelTokenKeyCustodyStore(database as never);
-  return { counts: () => ({ insertCount, updateCount }), queries, store };
+  return { counts: () => ({ insertCount, updateCount }), queries, store, updateValues };
 };
 
 describe("Postgres key custody journal", () => {
@@ -157,6 +161,35 @@ describe("Postgres key custody journal", () => {
     expect(query.sql).toContain("'null'::jsonb");
     expect(query.sql).toContain("VERCEL_INTEGRATION_TOKEN_KEY_VERSION");
     expect(query.sql).not.toContain('"owner_user_id"');
+  });
+  it("releases only a safely retired untouched reservation from global slot claims", async () => {
+    const safeRetirement = custodyRecordSchema.parse({
+      ...recordFor({ ...authority, ownerUserId: "other" }),
+      grantRevokedAt: now.toISOString(),
+    });
+    expect(isRetiredUnattemptedReservation(safeRetirement)).toBe(true);
+    const attemptedRetirement = custodyRecordSchema.parse({
+      ...safeRetirement,
+      attemptedAt: now.toISOString(),
+      phase: "attempted",
+    });
+    expect(isRetiredUnattemptedReservation(attemptedRetirement)).toBe(false);
+    const uncertainRetirement = custodyRecordSchema.parse({
+      ...safeRetirement,
+      fenceGeneration: 1,
+      leaseExpiresAt: "2026-10-10T11:59:59Z",
+      leaseId,
+    });
+    expect(isRetiredUnattemptedReservation(uncertainRetirement)).toBe(false);
+    const { store } = fixture([
+      rawRow(safeRetirement),
+      rawRow(attemptedRetirement, 2),
+      rawRow(uncertainRetirement, 3),
+    ]);
+    expect(await store.findSlotClaims({ plan: recordFor().plan })).toEqual([
+      { record: attemptedRetirement, revision: 2 },
+      { record: uncertainRetirement, revision: 3 },
+    ]);
   });
   it("refuses reservation over a foreign slot claim before inserting", async () => {
     const { counts, store } = fixture([
@@ -225,6 +258,92 @@ describe("Postgres key custody journal", () => {
       }),
     ).rejects.toThrow("unavailable");
     expect(counts().updateCount).toBe(0);
+  });
+  it("retires only the exact untouched reservation using scoped revision CAS", async () => {
+    const initial = recordFor();
+    const { counts, queries, store, updateValues } = fixture([rawRow(initial, 3)]);
+    const retired = await store.retireReserved({
+      authority,
+      expectedRecordDigest: custodyDigest(initial),
+      expectedRevision: 3,
+      operationRef,
+      revokedAt: now,
+    });
+    expect(retired?.revision).toBe(4);
+    expect(retired?.record.grantRevokedAt).toBe(now.toISOString());
+    const query = new PgDialect().sqlToQuery(queries[1]);
+    expect(query.params).toContain(authority.ownerUserId);
+    expect(query.params).toContain(operationRef);
+    expect(query.params).toContain(3);
+    expect(query.params).toContain(initial.planDigest);
+    expect(query.params).toContain(initial.grantDigest);
+    expect(query.params).toContain(initial.approvalRef);
+    expect(query.sql).toContain("#>> '{grantRef}'");
+    expect(query.sql).toContain("#>> '{grantDigest}'");
+    expect(query.sql).toContain("#> '{attemptedAt}' IS NULL");
+    expect(query.sql).toContain("#> '{nonce}' IS NULL");
+    expect(counts().updateCount).toBe(1);
+    expect(Object.keys(updateValues[0] ?? {}).toSorted()).toEqual(
+      ["record", "revision", "state", "updatedAt"].toSorted(),
+    );
+
+    const stale = fixture([rawRow(initial, 4)]);
+    expect(
+      await stale.store.retireReserved({
+        authority,
+        expectedRecordDigest: custodyDigest(initial),
+        expectedRevision: 3,
+        operationRef,
+        revokedAt: now,
+      }),
+    ).toBeUndefined();
+    expect(stale.counts().updateCount).toBe(0);
+
+    const foreign = fixture([rawRow(initial, 3)]);
+    expect(
+      await foreign.store.retireReserved({
+        authority: { ...authority, ownerUserId: "foreign" },
+        expectedRecordDigest: custodyDigest(initial),
+        expectedRevision: 3,
+        operationRef,
+        revokedAt: now,
+      }),
+    ).toBeUndefined();
+    expect(foreign.counts().updateCount).toBe(0);
+  });
+  it("refuses to retire any fenced or attempted reservation", async () => {
+    const fenced = { ...recordFor(), fenceGeneration: 1 };
+    const { counts, store } = fixture([rawRow(fenced)]);
+    await expect(
+      store.retireReserved({
+        authority,
+        expectedRecordDigest: custodyDigest(fenced),
+        expectedRevision: 1,
+        operationRef,
+        revokedAt: now,
+      }),
+    ).rejects.toThrow("unavailable");
+    expect(counts().updateCount).toBe(0);
+
+    const attempted = custodyRecordSchema.parse({
+      ...recordFor(),
+      attemptedAt: now.toISOString(),
+      fenceGeneration: 1,
+      leaseExpiresAt: "2026-10-10T12:00:30Z",
+      leaseId,
+      phase: "attempted",
+    });
+    const attemptedStore = fixture([rawRow(attempted)]);
+    await expect(
+      attemptedStore.store.retireReserved({
+        authority,
+        expectedRecordDigest: custodyDigest(attempted),
+        expectedRevision: 1,
+        operationRef,
+        revokedAt: now,
+      }),
+    ).rejects.toThrow("unavailable");
+    expect(attemptedStore.counts().updateCount).toBe(0);
   });
   it("denies a new fence while the old lease remains live", async () => {
     const leased = {

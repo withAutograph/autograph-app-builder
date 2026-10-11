@@ -181,6 +181,7 @@ describe("closed owner key custody invocation", () => {
     const response = await handler(getRequest());
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("referrer-policy")).toBe("same-origin");
     expect(response.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
     const body = await response.text();
     expect(body).toContain(record.planDigest);
@@ -302,8 +303,9 @@ describe("closed owner key custody invocation", () => {
     await assertDenied(await handler(formRequest(body)));
     expect(factory).not.toHaveBeenCalled();
   });
-  it("denies foreign Origin and JSON input before constructing Source", async () => {
+  it("denies null or foreign Origin and JSON input before constructing Source", async () => {
     const { factory, handler } = fixture();
+    await assertDenied(await handler(formRequest(undefined, { origin: "null" })));
     await assertDenied(
       await handler(formRequest(undefined, { origin: "https://foreign.example" })),
     );

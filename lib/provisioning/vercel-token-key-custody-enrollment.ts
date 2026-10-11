@@ -3,6 +3,8 @@ import {
   custodyDigest,
   custodyRecordSchema,
   custodySlotLockKey,
+  isRetiredUnattemptedReservation,
+  isUnattemptedUnfencedReservation,
   assertCustodyGrant,
   CustodyUnavailableError,
   CustodyReconciliationRequiredError,
@@ -82,6 +84,88 @@ export const enrollCustodyGrant = async (input: {
         grantRef: record.grantRef,
         operationRef: record.plan.operationRef,
         planDigest: record.planDigest,
+      };
+    },
+  );
+};
+
+/** A reviewed, exact revision snapshot for the private admin-only reservation retirement. */
+export const custodyRetirementRequestSchema = z
+  .strictObject({
+    action: z.literal("retire-unattempted-reserved-v1-key-custody"),
+    expectedRevision: z.number().int().positive(),
+    record: custodyRecordSchema,
+    version: z.literal(1),
+  })
+  .refine(({ record }) => isUnattemptedUnfencedReservation(record));
+export const custodyRetirementDigest = (input: z.infer<typeof custodyRetirementRequestSchema>) =>
+  custodyDigest(custodyRetirementRequestSchema.parse(input));
+
+/** Retire only the exact unattempted reservation, under its global slot lock and current owner. */
+export const retireCustodyReservation = async (input: {
+  request: z.infer<typeof custodyRetirementRequestSchema>;
+  confirmationDigest: string;
+  store: CustodyJournalStore;
+  physicalLease: CustodyPhysicalLease;
+  assertOriginalOwner: (record: CustodyRecord) => Promise<void>;
+  now?: () => number;
+}) => {
+  const request = custodyRetirementRequestSchema.parse(input.request);
+  const { record, expectedRevision } = request;
+  const expectedRecordDigest = custodyDigest(record);
+  const now = input.now ?? Date.now;
+  if (input.confirmationDigest !== custodyRetirementDigest(request)) {
+    throw new CustodyUnavailableError();
+  }
+  const assertExactReservation = async () => {
+    const current = await input.store.read({
+      authority: record.originalActor,
+      operationRef: record.plan.operationRef,
+    });
+    if (
+      current === undefined ||
+      current.revision !== expectedRevision ||
+      custodyDigest(current.record) !== expectedRecordDigest ||
+      !isUnattemptedUnfencedReservation(current.record)
+    ) {
+      throw new CustodyReconciliationRequiredError();
+    }
+    return current;
+  };
+  const beforeLock = await assertExactReservation();
+  return await input.physicalLease(
+    {
+      lockKeys: [custodySlotLockKey(record.plan)],
+      readCurrentFence: async () => {
+        await assertExactReservation();
+        await input.assertOriginalOwner(record);
+        return {
+          fenceGeneration: beforeLock.record.fenceGeneration,
+          leaseId: record.plan.operationRef,
+          operationRef: record.plan.operationRef,
+        };
+      },
+    },
+    async (assertFence) => {
+      await assertFence();
+      const retired = await input.store.retireReserved({
+        authority: record.originalActor,
+        expectedRecordDigest,
+        expectedRevision,
+        operationRef: record.plan.operationRef,
+        revokedAt: new Date(now()),
+      });
+      if (
+        retired === undefined ||
+        retired.revision !== expectedRevision + 1 ||
+        !isRetiredUnattemptedReservation(retired.record)
+      ) {
+        throw new CustodyReconciliationRequiredError();
+      }
+      return {
+        operationRef: record.plan.operationRef,
+        retired: true as const,
+        revision: retired.revision,
       };
     },
   );

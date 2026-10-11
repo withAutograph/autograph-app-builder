@@ -52,7 +52,8 @@ const noStore = {
   "content-security-policy":
     "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
   "content-type": "text/html; charset=utf-8",
-  "referrer-policy": "no-referrer",
+  // Native form POSTs need their same-origin Origin header for the strict CSRF check.
+  "referrer-policy": "same-origin",
   "x-content-type-options": "nosniff",
 };
 const html = (value: string) =>

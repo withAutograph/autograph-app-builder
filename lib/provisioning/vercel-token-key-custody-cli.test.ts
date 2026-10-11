@@ -11,7 +11,10 @@ import {
   custodyPlanSchema,
   custodyRecordSchema,
 } from "./vercel-token-key-custody";
-import { custodyEnrollmentDigest } from "./vercel-token-key-custody-enrollment";
+import {
+  custodyEnrollmentDigest,
+  custodyRetirementDigest,
+} from "./vercel-token-key-custody-enrollment";
 
 const authority = {
   audience: "https://builder.example/mcp",
@@ -112,6 +115,16 @@ const packet = {
     version: 1,
   },
 };
+const retirementRequest = {
+  action: "retire-unattempted-reserved-v1-key-custody" as const,
+  expectedRevision: 1,
+  record,
+  version: 1 as const,
+};
+const retirementPacket = {
+  request: retirementRequest,
+  setup: packet.setup,
+};
 const directories: string[] = [];
 afterEach(async () => {
   await Promise.all(
@@ -157,6 +170,54 @@ describe("private custody enrollment CLI", () => {
     });
     expect(result.stdout).not.toContain("source-deployment");
     expect(result.stdout).not.toContain("ownerUserId");
+  });
+  it("plans exact retirement revision and digest without printing owner or grant details", async () => {
+    const result = run([
+      "retire-plan",
+      "--request-file",
+      await requestFile(JSON.stringify(retirementPacket)),
+    ]);
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toMatch(
+      new RegExp(
+        `^\\{"confirmationDigest":"${custodyRetirementDigest(retirementRequest)}","expectedRevision":1,"operationRef":"${operationRef}","planDigest":"${record.planDigest}","recordDigest":"[a-f0-9]{64}"\\}\\n$`,
+        "u",
+      ),
+    );
+    expect(result.stdout).not.toContain("ownerUserId");
+    expect(result.stdout).not.toContain("source-deployment");
+  });
+  it("rejects retirement plans containing any attempt or fence", async () => {
+    const invalid = {
+      ...retirementPacket,
+      request: {
+        ...retirementRequest,
+        record: { ...record, fenceGeneration: 1 },
+      },
+    };
+    expectPrivateFailure(
+      run(["retire-plan", "--request-file", await requestFile(JSON.stringify(invalid))]),
+    );
+  });
+  it("rejects revoked records and mismatched selectors before returning a retirement plan", async () => {
+    const revoked = {
+      ...retirementPacket,
+      request: {
+        ...retirementRequest,
+        record: { ...record, grantRevokedAt: "2026-10-10T12:00:00Z" },
+      },
+    };
+    expectPrivateFailure(
+      run(["retire-plan", "--request-file", await requestFile(JSON.stringify(revoked))]),
+    );
+    const mismatched = {
+      ...retirementPacket,
+      setup: { ...packet.setup, operationRef: "22222222-2222-4222-8222-222222222222" },
+    };
+    expectPrivateFailure(
+      run(["retire-plan", "--request-file", await requestFile(JSON.stringify(mismatched))]),
+    );
   });
   it("rejects group or world readable packets", async () => {
     expectPrivateFailure(run(["plan", "--request-file", await requestFile(undefined, 0o640)]));
@@ -211,11 +272,56 @@ describe("private custody enrollment CLI", () => {
         "INVALID_PRIVATE_FRAME",
       ),
     );
+    expectPrivateFailure(
+      run([
+        "retire",
+        "--request-file",
+        await requestFile(
+          JSON.stringify({
+            ...retirementPacket,
+            confirmationDigest: custodyRetirementDigest(retirementRequest),
+          }),
+        ),
+        "--database-url-fd",
+        "0",
+      ]),
+    );
+    expectPrivateFailure(
+      run(
+        [
+          "retire",
+          "--request-file",
+          await requestFile(
+            JSON.stringify({ ...retirementPacket, confirmationDigest: "0".repeat(64) }),
+          ),
+          "--database-url-fd",
+          "0",
+        ],
+        "INVALID_PRIVATE_FRAME",
+      ),
+    );
     const wrongDescriptor = run(["enroll", "--request-file", filename, "--database-url-fd", "3"]);
     expect(wrongDescriptor.status).toBe(1);
     expect(wrongDescriptor.stdout).toBe("");
     expect(wrongDescriptor.stderr).toContain(
-      "Expected custody plan --request-file PATH or enroll --request-file PATH --database-url-fd 0.",
+      "Expected plan|retire-plan --request-file PATH or enroll|retire --request-file PATH --database-url-fd 0.",
+    );
+    expectPrivateFailure(
+      run(
+        [
+          "retire",
+          "--request-file",
+          await requestFile(
+            JSON.stringify({
+              ...retirementPacket,
+              confirmationDigest: custodyRetirementDigest(retirementRequest),
+            }),
+          ),
+          "--database-url-fd",
+          "0",
+        ],
+        "INVALID_PRIVATE_FRAME",
+      ),
     );
   });
 });

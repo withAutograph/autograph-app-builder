@@ -9,6 +9,8 @@ import {
   custodyKind,
   custodyPlanSchema,
   custodyRecordSchema,
+  isRetiredUnattemptedReservation,
+  isUnattemptedUnfencedReservation,
   CustodyReconciliationRequiredError,
   CustodyUnavailableError,
 } from "./vercel-token-key-custody";
@@ -171,7 +173,14 @@ export const createPostgresVercelTokenKeyCustodyStore = (
           sql`${builderProvisioningJournals.record} #>> '{plan,destination,versionKey}' = 'VERCEL_INTEGRATION_TOKEN_KEY_VERSION'`,
         ),
       );
-    return rows.map(parseRow);
+    const claims: CustodyJournalRow[] = [];
+    for (const candidate of rows) {
+      const row = parseRow(candidate);
+      if (!isRetiredUnattemptedReservation(row.record)) {
+        claims.push(row);
+      }
+    }
+    return claims;
   };
   return {
     async compareAndSet(input) {
@@ -266,6 +275,75 @@ export const createPostgresVercelTokenKeyCustodyStore = (
         throw new CustodyUnavailableError();
       }
       return row;
+    },
+    async retireReserved(input) {
+      const current = await read(input);
+      const matchesExpectedRevision = (
+        candidate: CustodyJournalRow | undefined,
+      ): candidate is CustodyJournalRow => {
+        if (candidate === undefined) {
+          return false;
+        }
+        if (candidate.revision !== input.expectedRevision) {
+          return false;
+        }
+        if (
+          custodyActorDigest(input.authority) !== custodyActorDigest(candidate.record.originalActor)
+        ) {
+          return false;
+        }
+        if (candidate.record.plan.operationRef !== input.operationRef) {
+          return false;
+        }
+        return custodyDigest(candidate.record) === input.expectedRecordDigest;
+      };
+      if (!matchesExpectedRevision(current)) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- Stale or foreign identities cannot retire a row.
+        return undefined;
+      }
+      if (!isUnattemptedUnfencedReservation(current.record)) {
+        throw new CustodyUnavailableError();
+      }
+      const previous = current.record;
+      const record = custodyRecordSchema.parse({
+        ...previous,
+        grantRevokedAt: input.revokedAt.toISOString(),
+      });
+      const [row] = await database
+        .update(builderProvisioningJournals)
+        .set({
+          record,
+          revision: input.expectedRevision + 1,
+          state: "pending",
+          updatedAt: input.revokedAt,
+        })
+        .where(
+          and(
+            predicate(input.authority, input.operationRef),
+            eq(builderProvisioningJournals.revision, input.expectedRevision),
+            eq(builderProvisioningJournals.requestDigest, previous.planDigest),
+            sql`${builderProvisioningJournals.record} ->> 'kind' = ${custodyKind}`,
+            sql`${builderProvisioningJournals.record} #>> '{plan,operationRef}' = ${previous.plan.operationRef}`,
+            sql`${builderProvisioningJournals.record} #>> '{grantRef}' = ${previous.grantRef}`,
+            sql`${builderProvisioningJournals.record} #>> '{approvalRef}' = ${previous.approvalRef}`,
+            sql`${builderProvisioningJournals.record} #>> '{planDigest}' = ${previous.planDigest}`,
+            sql`${builderProvisioningJournals.record} #>> '{grantDigest}' = ${previous.grantDigest}`,
+            sql`${builderProvisioningJournals.record} #>> '{phase}' = 'reserved'`,
+            sql`${builderProvisioningJournals.record} #>> '{fenceGeneration}' = '0'`,
+            sql`${builderProvisioningJournals.record} #> '{attemptedAt}' IS NULL`,
+            sql`${builderProvisioningJournals.record} #> '{grantRevokedAt}' IS NULL`,
+            sql`${builderProvisioningJournals.record} #> '{leaseId}' IS NULL`,
+            sql`${builderProvisioningJournals.record} #> '{leaseExpiresAt}' IS NULL`,
+            sql`${builderProvisioningJournals.record} #> '{secret}' IS NULL`,
+            sql`${builderProvisioningJournals.record} #> '{receivingDeploymentId}' IS NULL`,
+            sql`${builderProvisioningJournals.record} #> '{nonce}' IS NULL`,
+            sql`${builderProvisioningJournals.record} #> '{nonceExpiresAt}' IS NULL`,
+            sql`${builderProvisioningJournals.record} #> '{nonceConsumedAt}' IS NULL`,
+            sql`${builderProvisioningJournals.record} #> '{receipt}' IS NULL`,
+          ),
+        )
+        .returning();
+      return row === undefined ? undefined : parseRow(row);
     },
   };
 };

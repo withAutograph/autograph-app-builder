@@ -12,12 +12,15 @@ import { readPrivateDatabaseUrl } from "../db/private-database-url";
 import { createPostgresVercelTokenKeyCustodyStore } from "./postgres-vercel-token-key-custody";
 import { createPostgresPhysicalResourceLease } from "./postgres-physical-resource-lease";
 import { createHostedOperatorConsentOwner } from "./hosted-operator-consent-owner";
-import { custodyActorDigest } from "./vercel-token-key-custody";
+import { custodyActorDigest, custodyDigest } from "./vercel-token-key-custody";
 import { custodySetupConfigurationSchema } from "./vercel-token-key-custody-deployment";
 import {
   custodyEnrollmentRequestSchema,
   custodyEnrollmentDigest,
   enrollCustodyGrant,
+  custodyRetirementRequestSchema,
+  custodyRetirementDigest,
+  retireCustodyReservation,
 } from "./vercel-token-key-custody-enrollment";
 
 const packetSchema = z.strictObject({
@@ -25,9 +28,10 @@ const packetSchema = z.strictObject({
     .string()
     .regex(/^[a-f0-9]{64}$/u)
     .optional(),
-  request: custodyEnrollmentRequestSchema,
+  request: z.union([custodyEnrollmentRequestSchema, custodyRetirementRequestSchema]),
   setup: custodySetupConfigurationSchema,
 });
+const reviewedDigestRequired = "The reviewed custody digest is required.";
 const privatePacket = async (filename: string) => {
   if (!path.isAbsolute(filename)) {
     throw new Error("Custody setup requires an absolute private request path.");
@@ -62,18 +66,20 @@ const privatePacket = async (filename: string) => {
 };
 const args = process.argv.slice(2);
 const [mode] = args;
+const planMode = mode === "plan" || mode === "retire-plan";
+const mutationMode = mode === "enroll" || mode === "retire";
 // oxlint-disable-next-line sonarjs/expression-complexity -- Only the two exact documented administrator command forms are accepted.
 if (
   [
-    !(mode === "plan" || mode === "enroll"),
+    !(planMode || mutationMode),
     args[1] !== "--request-file",
-    mode === "plan"
+    planMode
       ? args.length !== 3
       : [args.length !== 5, args[3] !== "--database-url-fd", args[4] !== "0"].some(Boolean),
   ].some(Boolean)
 ) {
   throw new Error(
-    "Expected custody plan --request-file PATH or enroll --request-file PATH --database-url-fd 0.",
+    "Expected plan|retire-plan --request-file PATH or enroll|retire --request-file PATH --database-url-fd 0.",
   );
 }
 try {
@@ -95,11 +101,44 @@ try {
   ) {
     throw new Error("Custody setup identity mismatch.");
   }
+  let serializedOutput: string;
   if (mode === "plan") {
-    process.stdout.write(
-      `${JSON.stringify({ approvalRef: record.approvalRef, confirmationDigest: custodyEnrollmentDigest(request), grantDigest: record.grantDigest, grantRef: record.grantRef, operationRef: record.plan.operationRef, planDigest: record.planDigest })}\n`,
-    );
+    const enrollment = custodyEnrollmentRequestSchema.parse(request);
+    serializedOutput = JSON.stringify({
+      approvalRef: record.approvalRef,
+      confirmationDigest: custodyEnrollmentDigest(enrollment),
+      grantDigest: record.grantDigest,
+      grantRef: record.grantRef,
+      operationRef: record.plan.operationRef,
+      planDigest: record.planDigest,
+    });
+  } else if (mode === "retire-plan") {
+    const retirement = custodyRetirementRequestSchema.parse(request);
+    serializedOutput = JSON.stringify({
+      confirmationDigest: custodyRetirementDigest(retirement),
+      expectedRevision: retirement.expectedRevision,
+      operationRef: record.plan.operationRef,
+      planDigest: record.planDigest,
+      recordDigest: custodyDigest(record),
+    });
   } else {
+    if (packet.confirmationDigest === undefined) {
+      throw new Error(reviewedDigestRequired);
+    }
+    if (
+      mode === "enroll" &&
+      packet.confirmationDigest !==
+        custodyEnrollmentDigest(custodyEnrollmentRequestSchema.parse(request))
+    ) {
+      throw new Error(reviewedDigestRequired);
+    }
+    if (
+      mode === "retire" &&
+      packet.confirmationDigest !==
+        custodyRetirementDigest(custodyRetirementRequestSchema.parse(request))
+    ) {
+      throw new Error(reviewedDigestRequired);
+    }
     const databaseUrl = readPrivateDatabaseUrl(0);
     const client = postgres(databaseUrl, hostedTaskPostgresOptions);
     try {
@@ -108,28 +147,41 @@ try {
         DATABASE_URL: databaseUrl,
         MCP_RESOURCE_URL: setup.capturedOwner.authority.audience,
       });
-      const receipt = await enrollCustodyGrant({
-        assertOriginalOwner: async () => {
-          await owner.assertCurrent({
-            authority: setup.capturedOwner.authority,
-            ownerContext: setup.capturedOwner,
-          });
-        },
-        confirmationDigest: packet.confirmationDigest ?? "",
-        physicalLease: createPostgresPhysicalResourceLease({
-          openLockClient: (onclose) =>
-            postgres(databaseUrl, { ...hostedTaskPostgresOptions, max: 1, onclose }),
-        }),
-        request,
-        store: createPostgresVercelTokenKeyCustodyStore(
-          drizzle(client, { schema: databaseSchema }),
-        ),
+      const assertOriginalOwner = async () => {
+        await owner.assertCurrent({
+          authority: setup.capturedOwner.authority,
+          ownerContext: setup.capturedOwner,
+        });
+      };
+      const physicalLease = createPostgresPhysicalResourceLease({
+        openLockClient: (onclose) =>
+          postgres(databaseUrl, { ...hostedTaskPostgresOptions, max: 1, onclose }),
       });
-      process.stdout.write(`${JSON.stringify(receipt)}\n`);
+      const store = createPostgresVercelTokenKeyCustodyStore(
+        drizzle(client, { schema: databaseSchema }),
+      );
+      const receipt =
+        mode === "enroll"
+          ? await enrollCustodyGrant({
+              assertOriginalOwner,
+              confirmationDigest: packet.confirmationDigest,
+              physicalLease,
+              request: custodyEnrollmentRequestSchema.parse(request),
+              store,
+            })
+          : await retireCustodyReservation({
+              assertOriginalOwner,
+              confirmationDigest: packet.confirmationDigest,
+              physicalLease,
+              request: custodyRetirementRequestSchema.parse(request),
+              store,
+            });
+      serializedOutput = JSON.stringify(receipt);
     } finally {
       await client.end({ timeout: 5 });
     }
   }
+  process.stdout.write(`${serializedOutput}\n`);
 } catch {
   // No request, SQL URL, provider body or exception data becomes process output.
   process.stderr.write("Custody setup is unavailable or requires reconciliation.\n");
