@@ -106,9 +106,11 @@ const parseSelector = async (request: Request) => {
   return selectorSchema.parse(await readCustodyJson(new Response(request.body)));
 };
 interface LocalDeploymentVerificationDependencies {
-  createWorkloadVerifier?: typeof createOperatorWorkloadVerifier;
+  createWorkloadVerifier?: (
+    ...args: Parameters<typeof createOperatorWorkloadVerifier>
+  ) => (...args: Parameters<ReturnType<typeof createOperatorWorkloadVerifier>>) => Promise<unknown>;
   getToken?: typeof getVercelOidcToken;
-  verifyToken?: typeof verifyVercelOidcToken;
+  verifyToken?: (...args: Parameters<typeof verifyVercelOidcToken>) => Promise<unknown>;
 }
 export const assertLocalDeployment = async (
   environment: Readonly<Record<string, string | undefined>>,
