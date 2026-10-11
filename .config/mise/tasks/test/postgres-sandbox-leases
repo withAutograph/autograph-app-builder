@@ -3,8 +3,20 @@
 set -eu
 
 docker=$(mise which docker)
-image='public.ecr.aws/docker/library/postgres@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40'
+digest='sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40'
+image="public.ecr.aws/docker/library/postgres@$digest"
+fallback_image="docker.io/library/postgres@$digest"
 container="app-builder-lease-test-$$"
+
+# Reuse a locally cached pinned image. If the primary registry is rate limited,
+# fetch the identical immutable Docker Official Image digest from Docker Hub.
+if ! "$docker" image inspect "$image" >/dev/null 2>&1; then
+  if ! "$docker" pull "$image"; then
+    echo "primary PostgreSQL image pull failed; trying the same digest from Docker Hub" >&2
+    "$docker" pull "$fallback_image"
+    image=$fallback_image
+  fi
+fi
 
 cleanup() {
   "$docker" rm -f "$container" >/dev/null 2>&1 || true
