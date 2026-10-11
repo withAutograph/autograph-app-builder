@@ -105,11 +105,19 @@ const parseSelector = async (request: Request) => {
   }
   return selectorSchema.parse(await readCustodyJson(new Response(request.body)));
 };
-const assertLocalDeployment = async (
+interface LocalDeploymentVerificationDependencies {
+  createWorkloadVerifier?: (
+    ...args: Parameters<typeof createOperatorWorkloadVerifier>
+  ) => (...args: Parameters<ReturnType<typeof createOperatorWorkloadVerifier>>) => Promise<void>;
+  getToken?: typeof getVercelOidcToken;
+  verifyToken?: (...args: Parameters<typeof verifyVercelOidcToken>) => Promise<void>;
+}
+export const assertLocalDeployment = async (
   environment: Readonly<Record<string, string | undefined>>,
   config: CustodySetupConfiguration,
   side: "source" | "recipient",
   deploymentId: string,
+  dependencies: LocalDeploymentVerificationDependencies = {},
 ) => {
   const policy = config[side].workload;
   // oxlint-disable-next-line sonarjs/expression-complexity -- The current process must match the exact trusted deployment workload.
@@ -117,19 +125,18 @@ const assertLocalDeployment = async (
     [
       environment.VERCEL_DEPLOYMENT_ID !== deploymentId,
       environment.VERCEL_PROJECT_ID !== policy.projectId,
-      environment.VERCEL_ORG_ID !== policy.ownerId,
       (environment.VERCEL_TARGET_ENV ?? environment.VERCEL_ENV) !== policy.environment,
     ].some(Boolean)
   ) {
     throw new CustodyUnavailableError();
   }
-  const token = await getVercelOidcToken();
-  await verifyVercelOidcToken(token, {
+  const token = await (dependencies.getToken ?? getVercelOidcToken)();
+  await (dependencies.verifyToken ?? verifyVercelOidcToken)(token, {
     environment: policy.environment,
     ownerId: policy.ownerId,
     projectId: policy.projectId,
   });
-  await createOperatorWorkloadVerifier(policy)(
+  await (dependencies.createWorkloadVerifier ?? createOperatorWorkloadVerifier)(policy)(
     new Request(config[side].origin, { headers: { authorization: `Bearer ${token}` } }),
   );
 };
@@ -226,6 +233,16 @@ const failedResponse = (reconciliationRequired: boolean) =>
     },
     reconciliationRequired ? 409 : 503,
   );
+type CustodySourceFailureStage =
+  | "caller_workload"
+  | "configuration"
+  | "grant"
+  | "installation_credential"
+  | "operation"
+  | "possession_request"
+  | "selector"
+  | "source_workload"
+  | "store_composition";
 export const createCustodySourceHandler =
   (
     environment: Readonly<Record<string, string | undefined>> = process.env,
@@ -234,36 +251,48 @@ export const createCustodySourceHandler =
   // oxlint-disable-next-line eslint/complexity -- The private boundary validates and rechecks each saved possession prerequisite before key use.
   async (request: Request) => {
     let close: (() => Promise<void>) | undefined;
+    let failureStage: CustodySourceFailureStage = "configuration";
     try {
       const config = custodySetupConfigurationSchema.parse(
         await (dependencies.readSetup?.() ??
           Promise.resolve(readCustodySetupConfiguration(environment))),
       );
+      failureStage = "caller_workload";
       // oxlint-disable-next-line unicorn/prefer-ternary -- The configured verifier and test port accept different signatures.
       if (dependencies.verifyCaller === undefined) {
         await createOperatorWorkloadVerifier(config.source.workload)(request);
       } else {
         await dependencies.verifyCaller(request, config);
       }
+      failureStage = "selector";
       const { operationRef } = await parseSelector(request);
       if (operationRef !== config.operationRef) {
         throw new CustodyUnavailableError();
       }
+      failureStage = "store_composition";
       const composition = await openComposition(environment, dependencies);
       ({ close } = composition);
+      failureStage = "grant";
       const { plan, grant } = await composition.currentSetup();
       const assertSourceCurrent = async () => {
+        const priorStage = failureStage;
+        failureStage = "source_workload";
         await (dependencies.assertLocal ?? assertLocalDeployment)(
           environment,
           config,
           "source",
           plan.source.deploymentId,
         );
-        return await composition.currentSetup();
+        failureStage = "grant";
+        const setup = await composition.currentSetup();
+        failureStage = priorStage;
+        return setup;
       };
       await assertSourceCurrent();
       const readInstallationToken = async () => {
+        const priorStage = failureStage;
         await assertSourceCurrent();
+        failureStage = "installation_credential";
         const key = readCustodyActiveKey(environment);
         try {
           const credential = await readActiveVercelInstallationToken({
@@ -285,6 +314,7 @@ export const createCustodySourceHandler =
           ) {
             throw new CustodyUnavailableError();
           }
+          failureStage = priorStage;
           return credential.token;
         } finally {
           key.fill(0);
@@ -304,13 +334,16 @@ export const createCustodySourceHandler =
           return readCustodyActiveKey(environment);
         },
         requestPossession: async (savedOperationRef, recipientOrigin) => {
+          failureStage = "grant";
           await composition.currentSetup();
+          failureStage = "source_workload";
           await (dependencies.assertLocal ?? assertLocalDeployment)(
             environment,
             config,
             "source",
             plan.source.deploymentId,
           );
+          failureStage = "possession_request";
           const token = await getVercelOidcToken();
           const response = await fetch(new URL(custodyPossessionPath, recipientOrigin), {
             body: JSON.stringify({ operationRef: savedOperationRef }),
@@ -347,8 +380,10 @@ export const createCustodySourceHandler =
         }),
         store: composition.store,
       });
+      failureStage = "operation";
       return privateResponse(await operation(operationRef));
     } catch (error) {
+      console.error("Custody source request failed.", { stage: failureStage });
       return failedResponse(error instanceof CustodyReconciliationRequiredError);
     } finally {
       await close?.();
