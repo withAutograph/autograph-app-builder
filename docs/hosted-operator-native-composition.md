@@ -178,6 +178,23 @@ token or encryption key and performs no provider request. These commands are
 source capability, not evidence that an administrator ran them or approved a
 transfer. Every enrollment/transfer/receiver refresh remains separately approved.
 
+An exact reserved enrollment that never began an attempt can be retired through
+the same private administrator entrypoint with
+`retire-plan --request-file ABSOLUTE_PATH` followed by
+`retire --request-file ABSOLUTE_PATH --database-url-fd 0`. The strict request
+binds the saved operation, complete record digest and expected journal revision;
+the printed confirmation digest must be supplied unchanged. Retirement acquires
+the same global physical slot lock, rechecks the exact row/revision, and proves
+the original saved owner session and current membership before setting only
+`grantRevokedAt` through the existing scoped journal UPDATE. A stale plan, any
+attempt timestamp, effect metadata, lease or nonzero fence is rejected. Ordinary
+custody CAS remains unable to alter grant identity or revocation. A safely
+retired, untouched reservation remains as an audit tombstone but no longer blocks
+the physical slot; attempted, uncertain or effected tombstones continue to block
+replacement. A replacement requires a new operation and separately approved
+grant bound to the observed repaired Source deployment ID. This recovery changes
+no database grants and grants no new role authority.
+
 The journal stores only plan/grant metadata, captured canonical authority,
 approval reference, phase, revision, lease/fence, attempted time, owned provider
 row metadata, exact receiver ID, nonce/expiry/consumption and verified receipt.

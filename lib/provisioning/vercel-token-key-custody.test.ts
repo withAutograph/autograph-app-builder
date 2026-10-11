@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   custodyActorDigest,
   custodyGrantDigest,
+  custodyDigest,
   custodyPlanDigest,
   custodyPlanSchema,
   custodyRecordSchema,
@@ -23,7 +24,13 @@ import type {
   CustodyRecord,
 } from "./vercel-token-key-custody";
 import { createCustodySecretPort } from "./vercel-token-key-custody-secret";
-import { custodyEnrollmentDigest, enrollCustodyGrant } from "./vercel-token-key-custody-enrollment";
+import {
+  custodyEnrollmentDigest,
+  custodyRetirementDigest,
+  custodyRetirementRequestSchema,
+  enrollCustodyGrant,
+  retireCustodyReservation,
+} from "./vercel-token-key-custody-enrollment";
 import {
   createCustodyPossessionHandler,
   createCustodySourceHandler,
@@ -109,6 +116,23 @@ const fixture = () => {
     read: async () => structuredClone(row),
     reserve: vi.fn(async (input: Parameters<CustodyJournalStore["reserve"]>[0]) => {
       row = { record: input.record, revision: 1 };
+      return structuredClone(row);
+    }),
+    retireReserved: vi.fn(async (input: Parameters<CustodyJournalStore["retireReserved"]>[0]) => {
+      if (
+        input.expectedRevision !== row.revision ||
+        input.expectedRecordDigest !== custodyDigest(row.record)
+      ) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- The retirement mock reports stale revision as absent.
+        return undefined;
+      }
+      row = {
+        record: custodyRecordSchema.parse({
+          ...row.record,
+          grantRevokedAt: input.revokedAt.toISOString(),
+        }),
+        revision: row.revision + 1,
+      };
       return structuredClone(row);
     }),
   };
@@ -321,6 +345,87 @@ describe("private enrollment and HTTP boundary", () => {
       }),
     ).toMatchObject({ enrolled: true, grantRef: "grant" });
     expect(owner).toHaveBeenCalled();
+  });
+  it("retires only the exact unattempted reservation under its slot lock and current owner", async () => {
+    const f = fixture();
+    const request = custodyRetirementRequestSchema.parse({
+      action: "retire-unattempted-reserved-v1-key-custody",
+      expectedRevision: f.row().revision,
+      record: f.row().record,
+      version: 1,
+    });
+    const owner = vi.fn(async () => {});
+    const physicalLease: CustodyPhysicalLease = async (leaseInput, run) => {
+      expect(leaseInput.lockKeys).toEqual([custodySlotLockKey(request.record.plan)]);
+      const snapshot = await leaseInput.readCurrentFence();
+      const held = true;
+      return await run(async () => {
+        expect(held).toBe(true);
+        expect(await leaseInput.readCurrentFence()).toEqual(snapshot);
+      });
+    };
+    const result = await retireCustodyReservation({
+      assertOriginalOwner: owner,
+      confirmationDigest: custodyRetirementDigest(request),
+      now: f.now,
+      physicalLease,
+      request,
+      store: f.store,
+    });
+    expect(result).toMatchObject({ operationRef, retired: true, revision: 2 });
+    expect(owner).toHaveBeenCalledTimes(3);
+    expect(f.row().record.grantRevokedAt).toBeDefined();
+    expect(f.store.retireReserved).toHaveBeenCalledOnce();
+    await expect(f.run(operationRef)).rejects.toThrow("unavailable");
+    expect(f.secretPort.create).not.toHaveBeenCalled();
+  });
+  it("rejects stale retirement revisions and reservations that reached any fenced attempt", async () => {
+    const f = fixture();
+    const request = custodyRetirementRequestSchema.parse({
+      action: "retire-unattempted-reserved-v1-key-custody",
+      expectedRevision: 2,
+      record: f.row().record,
+      version: 1,
+    });
+    await expect(
+      retireCustodyReservation({
+        assertOriginalOwner: async () => {},
+        confirmationDigest: custodyRetirementDigest(request),
+        physicalLease: f.lease,
+        request,
+        store: f.store,
+      }),
+    ).rejects.toThrow("requires reconciliation");
+    expect(f.store.retireReserved).not.toHaveBeenCalled();
+    expect(() =>
+      custodyRetirementRequestSchema.parse({
+        ...request,
+        expectedRevision: 1,
+        record: { ...request.record, fenceGeneration: 1 },
+      }),
+    ).toThrow();
+  });
+  it("does not retire when original-owner session or membership proof fails", async () => {
+    const f = fixture();
+    const request = custodyRetirementRequestSchema.parse({
+      action: "retire-unattempted-reserved-v1-key-custody",
+      expectedRevision: f.row().revision,
+      record: f.row().record,
+      version: 1,
+    });
+    await expect(
+      retireCustodyReservation({
+        assertOriginalOwner: async () => {
+          throw new Error("owner proof denied");
+        },
+        confirmationDigest: custodyRetirementDigest(request),
+        physicalLease: f.lease,
+        request,
+        store: f.store,
+      }),
+    ).rejects.toThrow("owner proof denied");
+    expect(f.store.retireReserved).not.toHaveBeenCalled();
+    expect(f.row().record.grantRevokedAt).toBeUndefined();
   });
   it("leaves both private routes unavailable without enrollment/configuration", async () => {
     const request = new Request("https://builder.example", {

@@ -273,6 +273,25 @@ export const custodyRecordSchema = z
     }
   });
 export type CustodyRecord = z.infer<typeof custodyRecordSchema>;
+const isUnattemptedUnfencedReservationState = (record: CustodyRecord) =>
+  record.phase === "reserved" &&
+  record.fenceGeneration === 0 &&
+  [
+    record.attemptedAt,
+    record.leaseId,
+    record.leaseExpiresAt,
+    record.secret,
+    record.receivingDeploymentId,
+    record.nonce,
+    record.nonceExpiresAt,
+    record.nonceConsumedAt,
+    record.receipt,
+  ].every((value) => value === undefined);
+export const isUnattemptedUnfencedReservation = (record: CustodyRecord) =>
+  record.grantRevokedAt === undefined && isUnattemptedUnfencedReservationState(record);
+/** Only this revoked reservation is releasable as a physical slot claim. */
+export const isRetiredUnattemptedReservation = (record: CustodyRecord) =>
+  record.grantRevokedAt !== undefined && isUnattemptedUnfencedReservationState(record);
 export interface CustodyJournalRow {
   record: CustodyRecord;
   revision: number;
@@ -295,6 +314,14 @@ export interface CustodyJournalStore {
     expectedRevision: number;
     record: CustodyRecord;
     now: Date;
+  }) => Promise<CustodyJournalRow | undefined>;
+  /** Private admin-only escape hatch. Called under the fixed slot lock after original-owner proof. */
+  retireReserved: (input: {
+    authority: CanonicalSourceActor;
+    operationRef: string;
+    expectedRevision: number;
+    expectedRecordDigest: string;
+    revokedAt: Date;
   }) => Promise<CustodyJournalRow | undefined>;
 }
 export interface CustodyFence {
