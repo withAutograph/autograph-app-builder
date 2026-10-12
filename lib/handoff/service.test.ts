@@ -91,7 +91,7 @@ const intent = {
   appName: "Vendor Onboarding",
   brief: "Help operations review new vendors.",
   connections: ["Ramp"],
-  modelId: "openai/gpt-5.6-terra" as const,
+  modelId: "openai/gpt-6-luna" as const,
   repository: {
     private: true,
     requestedName: "vendor-onboarding",
