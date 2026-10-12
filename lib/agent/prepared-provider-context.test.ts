@@ -17,7 +17,7 @@ const intent = {
   appName: "Stock",
   brief: "Manage stock exceptions",
   connections: ["github", "vercel"],
-  modelId: "openai/gpt-5.6-terra",
+  modelId: "openai/gpt-6-luna",
   providers: { githubInstallationId: "10", vercelInstallationId: "icfg_1" },
   provisioning: {
     appId: "stock",
