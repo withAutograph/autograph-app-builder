@@ -69,7 +69,7 @@ it("retains failed scratch installation without attempting a product mutation", 
   );
   const receipt = await runCandidateCapabilityProbe({
     abortSignal: new AbortController().signal,
-    model: "openai/gpt-5.6-terra",
+    model: "openai/gpt-6-luna",
     session: { readBinaryFile: vi.fn(), readTextFile: vi.fn(), run, writeTextFile } as never,
   });
   expect(writeTextFile).toHaveBeenCalledWith(
@@ -87,7 +87,7 @@ it("runs the standalone probe only after scratch tooling setup", async () => {
   const run = vi.fn(() => Promise.resolve({ exitCode: 0, stderr: "", stdout: "" }));
   const receipt = await runCandidateCapabilityProbe({
     abortSignal: new AbortController().signal,
-    model: "openai/gpt-5.6-terra",
+    model: "openai/gpt-6-luna",
     session: {
       readBinaryFile: vi.fn(),
       readTextFile: () => Promise.resolve(JSON.stringify({ applicationFunctionalCredit: false })),

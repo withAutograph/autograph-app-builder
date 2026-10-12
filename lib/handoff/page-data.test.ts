@@ -58,7 +58,7 @@ const prepared = builderHandoffRecordSchema.parse({
     appName: "Vendor Review",
     brief: "Review new vendors.",
     connections: [],
-    modelId: "openai/gpt-5.6-terra",
+    modelId: "openai/gpt-6-luna",
     providers: {
       githubInstallationId: "123",
       vercelInstallationId: "icfg_selected",

@@ -22,7 +22,7 @@ const intent = builderHandoffIntentSchema.parse({
   appName: "Vendor Onboarding",
   brief: "Review vendors.",
   connections: [],
-  modelId: "openai/gpt-5.6-terra",
+  modelId: "openai/gpt-6-luna",
   providers: { vercelInstallationId: "icfg_1" },
   provisioning: {
     appId: selection.appId,

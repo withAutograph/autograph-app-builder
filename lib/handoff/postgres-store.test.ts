@@ -22,7 +22,7 @@ const row = {
     appName: "Vendor Review",
     brief: "Review new vendors.",
     connections: [],
-    modelId: "openai/gpt-5.6-terra",
+    modelId: "openai/gpt-6-luna",
     repository: { private: true, requestedName: "vendor-review" },
   },
   redeemedAt: null,
