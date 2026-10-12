@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createPreviewOAuthRequestHandler,
   createPreviewOAuthWellKnownHandler,
+  ensurePreviewOAuthDeploymentSessionOrganization,
   ensurePreviewSessionOrganization,
   selfServiceSignupAuthority,
 } from "./preview-oauth-deployment";
@@ -64,6 +65,90 @@ describe("Preview OAuth deployment handlers", () => {
       body: { organizationId: "organization_one" },
       headers: expect.any(Headers),
     });
+  });
+
+  it.each([
+    ["session-lookup", "getSession"],
+    ["workspace-provisioning", "ensureOrganizationForVerifiedUser"],
+    ["organization-activation", "setActiveOrganization"],
+  ] as const)("logs the %s stage and rethrows the original failure", async (stage, boundary) => {
+    const failure = new Error("private provider error with token");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    // oxlint-disable-next-line eslint/require-await -- stage-specific injected failure test double
+    const getSession = vi.fn(async () => {
+      if (boundary === "getSession") {
+        throw failure;
+      }
+      return {
+        session: { activeOrganizationId: null },
+        user: { email: "private@example.com", id: "user_private", name: "Private" },
+      };
+    });
+    // oxlint-disable-next-line eslint/require-await -- stage-specific injected failure test double
+    const ensureOrganizationForVerifiedUser = vi.fn(async () => {
+      if (boundary === "ensureOrganizationForVerifiedUser") {
+        throw failure;
+      }
+      return { organizationId: "organization_one", workspaceId: "workspace_one" };
+    });
+    // oxlint-disable-next-line eslint/require-await -- stage-specific injected failure test double
+    const setActiveOrganization = vi.fn(async () => {
+      if (boundary === "setActiveOrganization") {
+        throw failure;
+      }
+      return { id: "organization_one" };
+    });
+
+    try {
+      await expect(
+        ensurePreviewSessionOrganization({
+          auth: { api: { getSession, setActiveOrganization } },
+          authority: { ensureOrganizationForVerifiedUser },
+          headers: new Headers(),
+        }),
+      ).rejects.toBe(failure);
+      expect(log).toHaveBeenCalledWith(
+        JSON.stringify({
+          category: "unexpected",
+          event: "preview_workspace_reconciliation_failed",
+          stage,
+        }),
+      );
+      expect(String(log.mock.calls[0]?.[0])).not.toContain("private@example.com");
+      expect(String(log.mock.calls[0]?.[0])).not.toContain("token");
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("logs the runtime-initialization stage and preserves the original construction error", () => {
+    const failure = new Error("private configuration and credential data");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      let thrown: unknown;
+      try {
+        void ensurePreviewOAuthDeploymentSessionOrganization({
+          environment: {},
+          getRuntime: () => {
+            throw failure;
+          },
+          headers: new Headers(),
+        });
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBe(failure);
+      expect(log).toHaveBeenCalledWith(
+        JSON.stringify({
+          category: "unexpected",
+          event: "preview_workspace_reconciliation_failed",
+          stage: "runtime-initialization",
+        }),
+      );
+      expect(String(log.mock.calls[0]?.[0])).not.toContain("private configuration");
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it("rechecks membership without rewriting an already active organization", async () => {

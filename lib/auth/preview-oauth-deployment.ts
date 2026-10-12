@@ -8,6 +8,7 @@ import { selfServiceSignupFlag } from "../feature-flags";
 import { readProviderEmulation } from "../integrations/local-provider-emulation";
 import { createPostgresPreviewOrganizationAuthority } from "./postgres-organization-user-authority";
 import type { PreviewOrganizationUserAuthority } from "./preview-user-management";
+import { logWorkspaceOnboardingFailure } from "./workspace-onboarding";
 
 type PreviewOAuthServer = ReturnType<typeof createPreviewOAuthServer>;
 
@@ -171,21 +172,43 @@ export async function ensurePreviewSessionOrganization(input: {
   authority: PreviewOrganizationUserAuthority;
   headers: Headers;
 }) {
-  const current = await input.auth.api.getSession({ headers: input.headers });
+  let current: Awaited<ReturnType<PreviewSessionOrganizationAuth["api"]["getSession"]>>;
+  try {
+    current = await input.auth.api.getSession({ headers: input.headers });
+  } catch (error) {
+    logWorkspaceOnboardingFailure(error, "session-lookup");
+    throw error;
+  }
   if (!current?.user) {
     return;
   }
 
-  const ensured = await input.authority.ensureOrganizationForVerifiedUser({
-    userId: current.user.id,
-  });
-  if (current.session.activeOrganizationId !== ensured.organizationId) {
-    const active = await input.auth.api.setActiveOrganization({
-      body: { organizationId: ensured.organizationId },
-      headers: input.headers,
+  let ensured: Awaited<
+    ReturnType<PreviewOrganizationUserAuthority["ensureOrganizationForVerifiedUser"]>
+  >;
+  try {
+    ensured = await input.authority.ensureOrganizationForVerifiedUser({
+      userId: current.user.id,
     });
+  } catch (error) {
+    logWorkspaceOnboardingFailure(error, "workspace-provisioning");
+    throw error;
+  }
+  if (current.session.activeOrganizationId !== ensured.organizationId) {
+    let active: Awaited<ReturnType<PreviewSessionOrganizationAuth["api"]["setActiveOrganization"]>>;
+    try {
+      active = await input.auth.api.setActiveOrganization({
+        body: { organizationId: ensured.organizationId },
+        headers: input.headers,
+      });
+    } catch (error) {
+      logWorkspaceOnboardingFailure(error, "organization-activation");
+      throw error;
+    }
     if (active?.id !== ensured.organizationId) {
-      throw new Error("Unable to activate the provisioned organization.");
+      const error = new Error("Unable to activate the provisioned organization.");
+      logWorkspaceOnboardingFailure(error, "organization-activation");
+      throw error;
     }
   }
 
@@ -199,8 +222,15 @@ export async function ensurePreviewSessionOrganization(input: {
 export function ensurePreviewOAuthDeploymentSessionOrganization(input: {
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>;
   headers: Headers;
+  getRuntime?: typeof getPreviewOAuthDeploymentRuntime;
 }) {
-  const runtime = getPreviewOAuthDeploymentRuntime(input.environment);
+  let runtime: PreviewOAuthDeploymentRuntime;
+  try {
+    runtime = (input.getRuntime ?? getPreviewOAuthDeploymentRuntime)(input.environment);
+  } catch (error) {
+    logWorkspaceOnboardingFailure(error, "runtime-initialization");
+    throw error;
+  }
   return ensurePreviewSessionOrganization({
     auth: runtime.auth,
     authority: runtime.organizationAuthority,
