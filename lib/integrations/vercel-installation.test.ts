@@ -5,10 +5,13 @@ import { describe, expect, it } from "vitest";
 import {
   createVercelInstallationAuthorization,
   decryptVercelToken,
+  decryptVersionedVercelInstallationToken,
   decryptVersionedVercelToken,
   encryptVercelToken,
   readVercelIntegrationEnvironment,
   readVercelTokenKeyringEnvironment,
+  vercelInstallationTokenAssociatedData,
+  vercelInstallationTokenAssociatedDataCandidates,
   verifyVercelWebhook,
 } from "./vercel-installation";
 
@@ -77,6 +80,103 @@ describe("Vercel integration security", () => {
     ).toThrow();
     expect(() =>
       decryptVersionedVercelToken({ ...legacy, associatedData, config, keyVersion: "removed_v0" }),
+    ).toThrow("Vercel token decryption key is unavailable.");
+  });
+
+  it("keeps installation v1 AAD stable and accepts only the two documented field orders", () => {
+    const authority = {
+      audience: "https://builder.example/mcp",
+      issuer: "https://builder.example/api/auth",
+      ownerUserId: "user_one",
+      workspaceId: "workspace_one",
+    };
+    const installationId = "icfg_stable";
+    // oxlint-disable-next-line eslint/sort-keys -- This fixture locks the original persisted AAD bytes.
+    const stableAssociatedData = JSON.stringify({
+      issuer: authority.issuer,
+      audience: authority.audience,
+      workspaceId: authority.workspaceId,
+      ownerUserId: authority.ownerUserId,
+      installationId,
+    });
+    const schemaOrderAssociatedData = JSON.stringify({ ...authority, installationId });
+    const candidates = vercelInstallationTokenAssociatedDataCandidates(authority, installationId);
+    expect(vercelInstallationTokenAssociatedData(authority, installationId)).toBe(
+      stableAssociatedData,
+    );
+    expect(candidates).toEqual([stableAssociatedData, schemaOrderAssociatedData]);
+
+    const key = Buffer.alloc(32, 8);
+    const config = { tokenKey: key, tokenKeyVersion: "v1" };
+    for (const associatedData of candidates) {
+      const encrypted = encryptVercelToken({
+        associatedData,
+        key,
+        token: "installation-token-sentinel",
+      });
+      expect(
+        decryptVersionedVercelInstallationToken({
+          ...encrypted,
+          authority,
+          config,
+          installationId,
+          keyVersion: "v1",
+        }),
+      ).toBe("installation-token-sentinel");
+    }
+
+    for (const tampered of [
+      { ...authority, ownerUserId: "user_other" },
+      { ...authority, workspaceId: "workspace_other" },
+    ]) {
+      expect(() =>
+        decryptVersionedVercelInstallationToken({
+          ...encryptVercelToken({
+            associatedData: stableAssociatedData,
+            key,
+            token: "installation-token-sentinel",
+          }),
+          authority: tampered,
+          config,
+          installationId,
+          keyVersion: "v1",
+        }),
+      ).toThrow();
+    }
+    expect(() =>
+      decryptVersionedVercelInstallationToken({
+        ...encryptVercelToken({
+          associatedData: stableAssociatedData,
+          key,
+          token: "installation-token-sentinel",
+        }),
+        authority,
+        config,
+        installationId: "icfg_other",
+        keyVersion: "v1",
+      }),
+    ).toThrow();
+    expect(() =>
+      decryptVersionedVercelInstallationToken({
+        ...encryptVercelToken({ associatedData: "unbound-v1", key, token: "sentinel" }),
+        authority,
+        config,
+        installationId,
+        keyVersion: "v1",
+      }),
+    ).toThrow();
+    expect(() =>
+      decryptVersionedVercelInstallationToken({
+        ...encryptVercelToken({
+          associatedData: stableAssociatedData,
+          key,
+          token: "installation-token-sentinel",
+        }),
+        authority,
+        config,
+        installationId,
+        keyVersion: "removed_v0",
+      }),
     ).toThrow("Vercel token decryption key is unavailable.");
   });
 
