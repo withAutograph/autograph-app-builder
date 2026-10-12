@@ -101,8 +101,148 @@ describe("behavior evidence invalidation during validation repair", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
+
+  it("correlates the previously silent boundaries with finite outcomes and preserves operation order", async () => {
+    mocks.state.current = workflow("validated");
+    mocks.describe.mockResolvedValue({
+      backend: { kind: "generated-postgres" },
+      validation: { browser: { task: "test-e2e" } },
+    });
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      await validateAppCreation.execute({ implementationFiles: [] }, {
+        callId: "validate_phases",
+        getSandbox: () => Promise.resolve({ id: "private-sandbox" }),
+        session: { auth: { credential: "private-credential" }, id: "private-session" },
+      } as never);
+      const records = log.mock.calls.map(([record]) => JSON.parse(String(record)) as unknown);
+      const boundaryPhases = [
+        "describing_validation_app",
+        "validation_app_described",
+        "capturing_validated_release",
+        "validated_release_capture_finished",
+        "validating_persistent_backend",
+        "persistent_backend_validation_finished",
+      ];
+      const boundaryRecords = records.filter((record) =>
+        boundaryPhases.some((phase) => JSON.stringify(record).includes(`"phase":"${phase}"`)),
+      );
+      expect(boundaryRecords).toEqual([
+        {
+          callId: "validate_phases",
+          event: "app_builder.validation_phase",
+          phase: "describing_validation_app",
+        },
+        {
+          callId: "validate_phases",
+          detail: true,
+          event: "app_builder.validation_phase",
+          phase: "validation_app_described",
+        },
+        {
+          callId: "validate_phases",
+          event: "app_builder.validation_phase",
+          phase: "capturing_validated_release",
+        },
+        {
+          callId: "validate_phases",
+          detail: "no_repair_required",
+          event: "app_builder.validation_phase",
+          phase: "validated_release_capture_finished",
+        },
+        {
+          callId: "validate_phases",
+          event: "app_builder.validation_phase",
+          phase: "validating_persistent_backend",
+        },
+        {
+          callId: "validate_phases",
+          detail: "passed",
+          event: "app_builder.validation_phase",
+          phase: "persistent_backend_validation_finished",
+        },
+      ]);
+      expect(JSON.stringify(records)).not.toContain("private-");
+      expect(mocks.describe).toHaveBeenCalledOnce();
+      expect(mocks.publish).toHaveBeenCalledOnce();
+      expect(mocks.browser).toHaveBeenCalledOnce();
+      expect(mocks.execute).toHaveBeenCalledBefore(mocks.describe);
+      expect(mocks.describe).toHaveBeenCalledBefore(mocks.publish);
+      expect(mocks.publish).toHaveBeenCalledBefore(mocks.browser);
+      expect(mocks.browser).toHaveBeenCalledBefore(mocks.review);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("reports skipped persistent validation as unassessed and capture as requiring no repair", async () => {
+    mocks.state.current = workflow("validated");
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    const result = await validateAppCreation.execute({ implementationFiles: [] }, {
+      callId: "validate_static",
+      getSandbox: () => Promise.resolve({ id: "private-sandbox" }),
+      session: { auth: {}, id: "private-session" },
+    } as never);
+    const records = log.mock.calls.map(([record]) => JSON.parse(String(record)) as unknown);
+    expect(records).toContainEqual({
+      callId: "validate_static",
+      detail: "unassessed",
+      event: "app_builder.validation_phase",
+      phase: "persistent_backend_validation_finished",
+    });
+    expect(records).toContainEqual({
+      callId: "validate_static",
+      detail: "no_repair_required",
+      event: "app_builder.validation_phase",
+      phase: "validated_release_capture_finished",
+    });
+    expect(mocks.publish).not.toHaveBeenCalled();
+    expect(mocks.browser).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      backendValidation: { status: "unassessed" },
+      status: "validated",
+    });
+  });
+
+  it.each([
+    ["describe", "describing_validation_app"],
+    ["browser", "validating_persistent_backend"],
+  ] as const)(
+    "retains the original %s rejection and last finite phase",
+    async (boundary, phase) => {
+      mocks.state.current = workflow("validated");
+      mocks.describe.mockResolvedValue({
+        backend: { kind: "generated-postgres" },
+        validation: { browser: { task: "test-e2e" } },
+      });
+      const failure = new Error("private failure payload");
+      mocks[boundary].mockRejectedValueOnce(failure);
+      const log = vi.spyOn(console, "info").mockImplementation(() => {});
+      try {
+        await expect(
+          validateAppCreation.execute({ implementationFiles: [] }, {
+            callId: "validate_failure",
+            getSandbox: () => Promise.resolve({ id: "private-sandbox" }),
+            session: { auth: {}, id: "private-session" },
+          } as never),
+        ).rejects.toBe(failure);
+        expect(log.mock.calls.at(-1)).toEqual([
+          JSON.stringify({
+            callId: "validate_failure",
+            event: "app_builder.validation_phase",
+            phase,
+          }),
+        ]);
+        expect(JSON.stringify(log.mock.calls)).not.toContain("private");
+        expect(mocks.review).not.toHaveBeenCalled();
+      } finally {
+        log.mockRestore();
+      }
+    },
+  );
 
   it("default non-fixture developer validation writes actual durable logs without DATABASE_URL", async () => {
     const stateRoot = await realpath(
@@ -249,7 +389,17 @@ describe("behavior evidence invalidation during validation repair", () => {
       getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
       session: { auth: {}, id: "adapter" },
     };
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
     const failed = await validateAppCreation.execute({ implementationFiles: [] }, context as never);
+    expect(JSON.parse(String(log.mock.calls.at(-1)?.[0])) as unknown).toEqual({
+      callId: context.callId,
+      detail: "needs_repair",
+      event: "app_builder.validation_phase",
+      phase: "validated_release_capture_finished",
+    });
+    expect(JSON.stringify(log.mock.calls)).not.toContain("private storage failure");
+    expect(mocks.browser).not.toHaveBeenCalled();
+    log.mockRestore();
     expect(failed).toMatchObject({
       reason: "compiled-artifact-publication",
       status: "needs_repair",
