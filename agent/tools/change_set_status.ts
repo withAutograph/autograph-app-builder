@@ -31,6 +31,17 @@ import type { SourceKind } from "@/lib/repository/source-receipt";
 const isExistingRepositorySource = (sourceKind: SourceKind): boolean =>
   sourceKind === "existing-repository";
 
+export const selectAppBaselineForReview = <
+  T extends
+    | {
+        receipt?: { appId: string };
+      }
+    | undefined,
+>(
+  baseline: T,
+  appId: string,
+): T | undefined => (baseline?.receipt?.appId === appId ? baseline : undefined);
+
 export const isCandidateExportTextPath = (path: string): boolean => {
   if (/(?:^|\/)(?:\.next|node_modules|dist|coverage|storybook-static)(?:\/|$)/u.test(path)) {
     return false;
@@ -157,10 +168,13 @@ export const reviewableChanges = <T extends ChangePath>(
 export const baselineReviewableChanges = <T extends ChangePath>(
   changes: readonly T[],
   appId: string,
+  includePlanningSpecs = true,
 ): T[] => {
   const allowed = new Set(reviewableChanges(changes, appId, true).map(({ path }) => path));
-  allowed.add(`.config/app-specs/${appId}.cue`);
-  allowed.add(`.config/app-specs/${appId}.md`);
+  if (includePlanningSpecs) {
+    allowed.add(`.config/app-specs/${appId}.cue`);
+    allowed.add(`.config/app-specs/${appId}.md`);
+  }
   return changes.filter(({ path }) => allowed.has(path));
 };
 
@@ -321,8 +335,9 @@ export const exactNormalizedChangeSet = async (input: {
       validationDigest: input.state.validationReceipt.digest,
     });
   }
-  const selectedBaseline =
-    baseline?.receipt?.appId === input.state.appSpec.appId ? baseline : undefined;
+  const selectedBaseline = selectAppBaselineForReview(baseline, input.state.appSpec.appId);
+  const includeBaselinePlanningSpecs =
+    selectedBaseline?.receipt?.platform.commitSha === input.state.applyReceipt.sourceSha;
   let { preTree } = input.state.applyReceipt;
   if (destination !== undefined) {
     preTree = [...destination.preTree];
@@ -347,7 +362,11 @@ export const exactNormalizedChangeSet = async (input: {
           input.state.appSpec.appId,
           isExistingRepositorySource(input.state.sourceReceipt.sourceKind),
         )
-      : baselineReviewableChanges(completeChanges, input.state.appSpec.appId);
+      : baselineReviewableChanges(
+          completeChanges,
+          input.state.appSpec.appId,
+          includeBaselinePlanningSpecs,
+        );
   return deriveNormalizedChangeSet(
     {
       ...input.state.applyReceipt,

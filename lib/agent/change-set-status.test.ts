@@ -6,11 +6,13 @@ import {
   baselineReviewableChanges,
   changedAppTextPaths,
   isCandidateExportTextPath,
+  selectAppBaselineForReview,
   reviewableChanges,
   reviewExportChanges,
   assertReviewExportCursorSide,
   destinationReviewReadProgress,
 } from "../../agent/tools/change_set_status";
+import { overlayChanges } from "../repository/target-apply";
 import { assertExistingAppReviewScope } from "../repository/reviewed-change-set";
 
 const digest = (value: string) => createHash("sha256").update(value, "utf-8").digest("hex");
@@ -173,6 +175,61 @@ describe("reviewed candidate export", () => {
       "apps/replica/app/page.tsx",
       ".config/app-specs/replica.cue",
     ]);
+  });
+  it("keeps platform-baseline app changes after source refresh and gates stale planning specs", () => {
+    const sourceSha = "b".repeat(40);
+    const baseline = {
+      receipt: {
+        appId: "replica",
+        platform: { commitSha: "a".repeat(40) },
+      },
+      selection: {},
+    };
+    const pagePath = "apps/replica/app/page.tsx";
+    const specPath = ".config/app-specs/replica.md";
+    const changes = overlayChanges(
+      {
+        files: [
+          { digest: digest("platform N page"), mode: "644", path: pagePath },
+          { digest: digest("platform N spec"), mode: "644", path: specPath },
+        ],
+        treeDigest: "platform-N",
+      },
+      {
+        files: [
+          {
+            digest: digest("projected H page kept unchanged by apply"),
+            mode: "644",
+            path: pagePath,
+          },
+          { digest: digest("current spec"), mode: "644", path: specPath },
+        ],
+        treeDigest: "observed-A",
+      },
+    );
+
+    const selected = selectAppBaselineForReview(baseline, "replica");
+    expect(selected).toBe(baseline);
+    expect(
+      baselineReviewableChanges(
+        changes,
+        "replica",
+        selected?.receipt?.platform.commitSha === sourceSha,
+      ).map(({ path }) => path),
+    ).toEqual([pagePath]);
+    expect(changes.find(({ path }) => path === pagePath)).toMatchObject({
+      before: { digest: digest("platform N page") },
+      kind: "modified",
+      path: pagePath,
+    });
+
+    expect(
+      baselineReviewableChanges(
+        changes,
+        "replica",
+        selected?.receipt?.platform.commitSha === "a".repeat(40),
+      ).map(({ path }) => path),
+    ).toEqual([specPath, pagePath]);
   });
   it("includes baseline-owned conventional spec changes in the reviewed export", async () => {
     const specPath = ".config/app-specs/replica.cue";
