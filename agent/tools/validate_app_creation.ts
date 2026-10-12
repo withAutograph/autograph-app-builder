@@ -220,12 +220,15 @@ export default defineTool({
       current.appSpec.digest,
       current.applyReceipt.digest,
     );
+    validationPhase(ctx.callId, "describing_validation_app");
     const description = await describeValidationApp(fixture, {
       appId: current.appSpec.appId,
       root: current.applyReceipt.applyRoot,
       sandbox,
       signal: ctx.abortSignal,
     });
+    validationPhase(ctx.callId, "validation_app_described", description !== undefined);
+    validationPhase(ctx.callId, "capturing_validated_release");
     const captureFailure = await captureValidatedRelease(description, {
       adapterSessionId: ctx.session.id,
       appId: current.appSpec.appId,
@@ -236,9 +239,15 @@ export default defineTool({
       sessionAuth: ctx.session.auth,
       signal: ctx.abortSignal,
     });
+    validationPhase(
+      ctx.callId,
+      "validated_release_capture_finished",
+      captureFailure === null ? "no_repair_required" : "needs_repair",
+    );
     if (captureFailure !== null) {
       return captureFailure;
     }
+    validationPhase(ctx.callId, "validating_persistent_backend");
     const backendValidation = await validatePersistentBackend(description, {
       appId: current.appSpec.appId,
       root: current.applyReceipt.applyRoot,
@@ -246,6 +255,7 @@ export default defineTool({
       sandbox,
       signal: ctx.abortSignal,
     });
+    validationPhase(ctx.callId, "persistent_backend_validation_finished", backendValidation.status);
     validationPhase(ctx.callId, "reviewing_applied_source");
     const sourceAssessment = await reviewAppliedProductSource({
       abortSignal: ctx.abortSignal,
