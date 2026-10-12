@@ -1,6 +1,7 @@
 /* oxlint-disable anti-slop/no-module-mocking, anti-slop/require-safety-comment-for-type-assertion, anti-slop/no-unknown-returns, anti-slop/no-unsafe-dictionary-type, eslint/require-await, typescript/no-unsafe-type-assertion -- Controlled Eve/owner/DB ports isolate the production capture hook; real PostgreSQL storage has its separate owned fixture. */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
+import { z } from "zod";
 import {
   compiledArtifactSandboxRelativePath,
   publishCompiledOperatorArtifactsForSession,
@@ -20,6 +21,7 @@ import { GENERATED_RELEASE_MEMBERS } from "../provisioning/hosted-operator-sandb
 
 const mocks = vi.hoisted(() => ({
   candidate: null as Record<string, unknown> | null,
+  onRead: vi.fn<(index: number) => void | Promise<void>>(),
   owner: null as Record<string, unknown> | null,
   record: vi.fn(),
   resolve: vi.fn(),
@@ -53,6 +55,7 @@ vi.mock("../provisioning/hosted-operator-artifact-store", async (importOriginal)
     },
     read: async (context: OperatorArtifactContext, ref: string, index: number) => {
       await assertCurrentOwner(context);
+      await mocks.onRead(index);
       return mocks.rows.get(`${ref}:${index}`);
     },
   }),
@@ -121,9 +124,12 @@ const frame = () => {
 describe("owned compiled artifact workflow hook", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.onRead.mockReset();
+    vi.spyOn(console, "info").mockImplementation(() => {});
     mocks.rows.clear();
     mocks.state = {
       appSpec: { appId: "spend-review", digest },
@@ -275,6 +281,137 @@ describe("owned compiled artifact workflow hook", () => {
     } finally {
       await rm(stateRoot, { force: true, recursive: true });
     }
+  });
+  it("finishes every member and immutable readback before the callback, then records selection", async () => {
+    const input = frame();
+    const onCaptured = vi.fn(async () => {
+      expect(input.sandbox.readBinaryFile).toHaveBeenCalledTimes(GENERATED_RELEASE_MEMBERS.length);
+      expect(mocks.onRead.mock.calls.map(([index]) => index)).toEqual([0, 1]);
+      expect(mocks.record).not.toHaveBeenCalled();
+    });
+    const result = await publishCompiledOperatorArtifactsForSession({ ...input, onCaptured });
+    expect(result.status).toBe("published");
+    expect(onCaptured).toHaveBeenCalledOnce();
+    expect(mocks.record).toHaveBeenCalledOnce();
+  });
+  it("skips all authority, source, callback and selection work when pre-aborted", async () => {
+    const abort = new AbortController();
+    abort.abort();
+    const input = frame();
+    const onCaptured = vi.fn();
+    await expect(
+      publishCompiledOperatorArtifactsForSession({ ...input, onCaptured, signal: abort.signal }),
+    ).rejects.toThrow();
+    expect(mocks.resolve).not.toHaveBeenCalled();
+    expect(input.sandbox.run).not.toHaveBeenCalled();
+    expect(input.sandbox.readBinaryFile).not.toHaveBeenCalled();
+    expect(onCaptured).not.toHaveBeenCalled();
+    expect(mocks.record).not.toHaveBeenCalled();
+    expect(mocks.rows.size).toBe(0);
+  });
+  it("propagates cancellation through capture and skips selection", async () => {
+    const abort = new AbortController();
+    const input = frame();
+    const original = input.sandbox.readBinaryFile.getMockImplementation();
+    input.sandbox.readBinaryFile.mockImplementation(async (request) => {
+      expect(request).toMatchObject({ abortSignal: abort.signal });
+      const bytes = await original?.(request);
+      abort.abort();
+      return bytes ?? Buffer.alloc(0);
+    });
+    const onCaptured = vi.fn();
+    await expect(
+      publishCompiledOperatorArtifactsForSession({ ...input, onCaptured, signal: abort.signal }),
+    ).rejects.toThrow();
+    expect(input.sandbox.readBinaryFile).toHaveBeenCalledOnce();
+    expect(mocks.rows.size).toBe(0);
+    expect(onCaptured).not.toHaveBeenCalled();
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+  it("skips the captured callback and selection after cancellation during readback", async () => {
+    const abort = new AbortController();
+    mocks.onRead.mockImplementation(async (index: number) => {
+      if (index > 0) {
+        abort.abort();
+      }
+    });
+    const onCaptured = vi.fn();
+    await expect(
+      publishCompiledOperatorArtifactsForSession({ ...frame(), onCaptured, signal: abort.signal }),
+    ).rejects.toThrow();
+    expect(mocks.rows.size).toBeGreaterThan(1);
+    expect(onCaptured).not.toHaveBeenCalled();
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+  it("skips selection when the captured callback cancels after immutable readback", async () => {
+    const abort = new AbortController();
+    const onCaptured = vi.fn(async () => {
+      abort.abort();
+    });
+    await expect(
+      publishCompiledOperatorArtifactsForSession({ ...frame(), onCaptured, signal: abort.signal }),
+    ).rejects.toThrow();
+    expect(onCaptured).toHaveBeenCalledOnce();
+    expect(mocks.rows.size).toBeGreaterThan(1);
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+  it("emits only bounded approved diagnostic fields and tolerates logger failure", async () => {
+    const log = vi.mocked(console.info);
+    await publishCompiledOperatorArtifactsForSession(frame());
+    const events = log.mock.calls.map(([value]) =>
+      z.record(z.string(), z.unknown()).parse(JSON.parse(String(value))),
+    );
+    for (const event of events) {
+      expect(
+        Object.keys(event).every((key) =>
+          [
+            "callId",
+            "event",
+            "stage",
+            "outcome",
+            "member",
+            "bytes",
+            "chunkTotal",
+            "chunkCompleted",
+          ].includes(key),
+        ),
+      ).toBe(true);
+      expect(event.callId).toBe("call");
+      expect(event.event).toBe("app_builder.compiled_artifact_progress");
+      expect([
+        "authority",
+        "description",
+        "storage",
+        "capture",
+        "publication",
+        "completion",
+        "readback",
+        "captured",
+        "selection",
+      ]).toContain(event.stage);
+      expect(["started", "completed", "failed", "cancelled"]).toContain(event.outcome);
+      if (event.member !== undefined) {
+        expect(GENERATED_RELEASE_MEMBERS).toContain(event.member);
+      }
+    }
+    for (const forbidden of [
+      "owner",
+      "durable-original",
+      "adapter",
+      "spend-review",
+      "_protected-operator",
+      "fixture-v1",
+      "private-fixture",
+      "appSpecDigest",
+      "artifactRef",
+    ]) {
+      expect(JSON.stringify(events)).not.toContain(forbidden);
+    }
+    log.mockImplementation(() => {
+      throw new Error("private logger failure");
+    });
+    const result = await publishCompiledOperatorArtifactsForSession(frame());
+    expect(result.status).toBe("published");
   });
   it("rejects paths escaping the approved sandbox workspace", () => {
     expect(compiledArtifactSandboxRelativePath("/workspace/.app-builder/candidate")).toBe(
