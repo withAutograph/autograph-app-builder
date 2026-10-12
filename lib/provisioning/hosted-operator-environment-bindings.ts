@@ -117,7 +117,8 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       row.gitBranch === target.branch &&
       (row.configurationId === undefined ||
         row.configurationId === null ||
-        row.configurationId === "") &&
+        row.configurationId === "" ||
+        row.configurationId === target.installationId) &&
       row.type === "encrypted" &&
       (row.comment === comment ||
         (input.managedEnvironment ?? []).some(

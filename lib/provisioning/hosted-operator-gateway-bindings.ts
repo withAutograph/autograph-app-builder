@@ -543,7 +543,8 @@ export const createHostedOperatorGatewayBindings = (deps: {
       row.gitBranch === branch &&
       (row.configurationId === null ||
         row.configurationId === undefined ||
-        row.configurationId === "") &&
+        row.configurationId === "" ||
+        row.configurationId === input.target.installationId) &&
       row.type === "encrypted" &&
       (known.some(
         (item) => item.id === row.id && item.key === row.key && item.comment === row.comment,

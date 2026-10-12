@@ -131,7 +131,7 @@ const values = restrictedOperatorEnvironment(
   },
   authority,
 );
-const fixture = () => {
+const fixture = (configurationId?: string | null) => {
   const rows: Record<string, z.infer<typeof z.json>>[] = [
     { id: "unrelated", key: "APP_TITLE", target: ["production"], type: "plain", value: "existing" },
   ];
@@ -195,7 +195,13 @@ const fixture = () => {
       return Response.json({ envs: rows.map((item) => ({ ...item, value: null })) });
     }
     if (method === "POST") {
-      const row = { ...body, id: `env-${rows.length}` };
+      const row: (typeof rows)[number] = {
+        ...body,
+        id: `env-${rows.length}`,
+      };
+      if (configurationId !== undefined) {
+        row.configurationId = configurationId;
+      }
       rows.push(row);
       if (unknownPost) {
         throw new Error("private unknown outcome");
@@ -249,39 +255,47 @@ const fixture = () => {
     writer,
   };
 };
-it("writes only encrypted branch Preview app keys, checkpoints IDs and independently verifies plaintext", async () => {
-  const f = fixture();
-  const result = await f.writer.bind(f.input, values);
-  expect(result.rows).toHaveLength(5);
-  expect(f.rows[0]).toEqual({
-    id: "unrelated",
-    key: "APP_TITLE",
-    target: ["production"],
-    type: "plain",
-    value: "existing",
-  });
-  for (const request of f.requests.filter((row) => row.method === "POST")) {
-    expect(request.body).toMatchObject({
-      comment: `App Builder protected operator ${f.input.operationRef}`,
-      gitBranch: target.branch,
-      target: ["preview"],
-      type: "encrypted",
+it.each([undefined, null, "", target.installationId])(
+  "writes and replays exact encrypted app rows with configurationId %s",
+  async (configurationId) => {
+    const f = fixture(configurationId);
+    const result = await f.writer.bind(f.input, values);
+    expect(result.rows).toHaveLength(5);
+    expect(f.rows[0]).toEqual({
+      id: "unrelated",
+      key: "APP_TITLE",
+      target: ["production"],
+      type: "plain",
+      value: "existing",
     });
-  }
-  expect(f.checkpointManagedEnvironment).toHaveBeenCalledTimes(6);
-  expect(f.readCredential).toHaveBeenCalledWith(authority, target.installationId);
-  expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "applied" });
-  expect(JSON.stringify(result)).not.toContain("private-password");
-});
-it("recovers a lost POST response from exact comment, scope and decrypted value without repeating creation", async () => {
-  const f = fixture();
-  f.setUnknownPost(true);
-  await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
-  f.setUnknownPost(false);
-  expect(await f.writer.reconcile(f.input, values)).toEqual({ status: "unknown" });
-  await f.writer.bind(f.input, values);
-  expect(f.requests.filter((row) => row.method === "POST")).toHaveLength(5);
-});
+    for (const request of f.requests.filter((row) => row.method === "POST")) {
+      expect(request.body).toMatchObject({
+        comment: `App Builder protected operator ${f.input.operationRef}`,
+        gitBranch: target.branch,
+        target: ["preview"],
+        type: "encrypted",
+      });
+    }
+    expect(f.checkpointManagedEnvironment).toHaveBeenCalledTimes(6);
+    expect(f.readCredential).toHaveBeenCalledWith(authority, target.installationId);
+    expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "applied" });
+    expect(JSON.stringify(result)).not.toContain("private-password");
+    await f.writer.bind(f.input, values);
+    expect(f.requests.filter((row) => row.method === "POST")).toHaveLength(5);
+  },
+);
+it.each([undefined, target.installationId])(
+  "recovers a lost app POST response with configurationId %s without duplicate creation",
+  async (configurationId) => {
+    const f = fixture(configurationId);
+    f.setUnknownPost(true);
+    await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
+    f.setUnknownPost(false);
+    expect(await f.writer.reconcile(f.input, values)).toEqual({ status: "unknown" });
+    await f.writer.bind(f.input, values);
+    expect(f.requests.filter((row) => row.method === "POST")).toHaveLength(5);
+  },
+);
 it("does not reconcile a complete set of owned rows with a stale encrypted value as applied", async () => {
   const f = fixture();
   await f.writer.bind(f.input, values);
@@ -330,8 +344,8 @@ it.each(["integration", "foreign", "duplicate"])(
     expect(f.requests.every((request) => request.method === "GET")).toBe(true);
   },
 );
-it("updates only exact previously journaled IDs across ordinary replan", async () => {
-  const f = fixture();
+it("updates only exact previously journaled installation-attributed IDs across ordinary replan", async () => {
+  const f = fixture(target.installationId);
   await f.writer.bind(f.input, values);
   f.input.operationRef = "new-operation";
   const next = {
@@ -409,3 +423,40 @@ it("does not depend on checkpoint mutating the copied effect context", async () 
   expect(f.input.managedEnvironment).toBeUndefined();
   expect(await f.writer.reconcile(f.input, values)).toMatchObject({ status: "applied" });
 });
+
+it.each([false, true])(
+  "rejects foreign installation attribution even with matching operation ownership (journaled: %s)",
+  async (journaled) => {
+    const f = fixture(target.installationId);
+    await f.writer.bind(f.input, values);
+    const row = f.rows.find((item) => item.key === "PLATFORM_ORIGIN")!;
+    row.configurationId = "icfg_foreign";
+    if (!journaled) {
+      f.input.managedEnvironment = [];
+    }
+    f.requests.length = 0;
+    expect(await f.writer.reconcile(f.input, values)).toEqual({ status: "unknown" });
+    await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
+    expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  },
+);
+
+it.each([
+  { comment: "App Builder protected operator unrelated-operation" },
+  { gitBranch: null },
+  { target: ["preview", "production"] },
+  { type: "plain" },
+  { id: "replacement-provider-row" },
+])(
+  "retains exact operation, branch, target, type and saved ID guards for installation attribution %j",
+  async (change) => {
+    const f = fixture(target.installationId);
+    await f.writer.bind(f.input, values);
+    const row = f.rows.find((item) => item.key === "PLATFORM_ORIGIN")!;
+    Object.assign(row, change);
+    f.requests.length = 0;
+    expect(await f.writer.reconcile(f.input, values)).toEqual({ status: "unknown" });
+    await expect(f.writer.bind(f.input, values)).rejects.toThrow("operator_unavailable");
+    expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  },
+);
