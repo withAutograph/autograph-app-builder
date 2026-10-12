@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { decryptVersionedVercelToken, encryptVercelToken } from "./vercel-installation";
+import {
+  decryptVersionedVercelToken,
+  encryptVercelToken,
+  vercelInstallationTokenAssociatedData,
+} from "./vercel-installation";
 import {
   createPostgresVercelAuthorizationStateStore,
   createPostgresVercelInstallationStore,
@@ -136,13 +140,118 @@ describe("durable Vercel connection return", () => {
     ]);
   });
 
-  it("reads an installation token encrypted under a retained version with tenant-bound AAD", async () => {
-    const oldKey = Buffer.alloc(32, 3);
-    const activeKey = Buffer.alloc(32, 4);
-    const installationId = "icfg_rotated";
+  it.each(["original-field-order", "schema-field-order"] as const)(
+    "reads an installation token encrypted with the documented %s v1 AAD",
+    async (format) => {
+      const oldKey = Buffer.alloc(32, 3);
+      const activeKey = Buffer.alloc(32, 4);
+      const installationId = "icfg_rotated";
+      const encrypted = encryptVercelToken({
+        associatedData:
+          format === "original-field-order"
+            ? // oxlint-disable-next-line eslint/sort-keys -- Reproduce the historical persisted AAD bytes.
+              JSON.stringify({
+                issuer: authority.issuer,
+                audience: authority.audience,
+                workspaceId: authority.workspaceId,
+                ownerUserId: authority.ownerUserId,
+                installationId,
+              })
+            : JSON.stringify({ ...authority, installationId }),
+        key: oldKey,
+        token: "provider-token-sentinel",
+      });
+      const { database } = databaseFixture([
+        {
+          ...authority,
+          ...encrypted,
+          active: true,
+          displayName: "Owner",
+          installationId,
+          plan: "pro",
+          scopeId: "team_1",
+          scopeType: "team",
+          slug: "owner",
+          tokenKeyVersion: "previous_v1",
+          updatedAt: new Date(),
+        },
+      ]);
+      const config = {
+        previousTokenKeys: [{ key: oldKey, version: "previous_v1" }],
+        tokenKey: activeKey,
+        tokenKeyVersion: "current_v2",
+      };
+      expect(
+        await readActiveVercelInstallationToken({
+          authority,
+          config,
+          database,
+          installationId,
+        }),
+      ).toMatchObject({
+        binding: { active: true, installationId },
+        token: "provider-token-sentinel",
+      });
+      await expect(
+        readActiveVercelInstallationToken({
+          authority: { ...authority, workspaceId: "other_workspace" },
+          config,
+          database,
+          installationId,
+        }),
+      ).rejects.toThrow();
+    },
+  );
+
+  it.each([
+    ["owner", { ...authority, ownerUserId: "user_other" }, "icfg_selected"],
+    ["workspace", { ...authority, workspaceId: "workspace_other" }, "icfg_selected"],
+    ["installation", authority, "icfg_other"],
+  ] as const)(
+    "rejects an installation token whose AAD has a tampered %s binding",
+    async (_label, encryptedAuthority, encryptedInstallationId) => {
+      const key = Buffer.alloc(32, 9);
+      const installationId = "icfg_selected";
+      const encrypted = encryptVercelToken({
+        associatedData: JSON.stringify({
+          ...encryptedAuthority,
+          installationId: encryptedInstallationId,
+        }),
+        key,
+        token: "provider-token-sentinel",
+      });
+      const { database } = databaseFixture([
+        {
+          ...authority,
+          ...encrypted,
+          active: true,
+          displayName: "Owner",
+          installationId,
+          plan: "pro",
+          scopeId: "team_1",
+          scopeType: "team",
+          slug: "owner",
+          tokenKeyVersion: "v1",
+          updatedAt: new Date(),
+        },
+      ]);
+      await expect(
+        readActiveVercelInstallationToken({
+          authority,
+          config: { tokenKey: key, tokenKeyVersion: "v1" },
+          database,
+          installationId,
+        }),
+      ).rejects.toThrow();
+    },
+  );
+
+  it("does not try installation AAD alternatives for an unknown key version", async () => {
+    const key = Buffer.alloc(32, 10);
+    const installationId = "icfg_unknown_key";
     const encrypted = encryptVercelToken({
-      associatedData: JSON.stringify({ ...authority, installationId }),
-      key: oldKey,
+      associatedData: vercelInstallationTokenAssociatedData(authority, installationId),
+      key,
       token: "provider-token-sentinel",
     });
     const { database } = databaseFixture([
@@ -156,34 +265,18 @@ describe("durable Vercel connection return", () => {
         scopeId: "team_1",
         scopeType: "team",
         slug: "owner",
-        tokenKeyVersion: "previous_v1",
+        tokenKeyVersion: "removed_v0",
         updatedAt: new Date(),
       },
     ]);
-    const config = {
-      previousTokenKeys: [{ key: oldKey, version: "previous_v1" }],
-      tokenKey: activeKey,
-      tokenKeyVersion: "current_v2",
-    };
     expect(
       await readActiveVercelInstallationToken({
         authority,
-        config,
+        config: { tokenKey: key, tokenKeyVersion: "v1" },
         database,
         installationId,
       }),
-    ).toMatchObject({
-      binding: { active: true, installationId },
-      token: "provider-token-sentinel",
-    });
-    await expect(
-      readActiveVercelInstallationToken({
-        authority: { ...authority, workspaceId: "other_workspace" },
-        config,
-        database,
-        installationId,
-      }),
-    ).rejects.toThrow();
+    ).toBeUndefined();
   });
 
   it("writes new installation tokens with the active key version", async () => {
@@ -234,7 +327,7 @@ describe("durable Vercel connection return", () => {
           tokenTag: string;
           tokenKeyVersion: string;
         }),
-        associatedData: JSON.stringify({ ...authority, installationId: "icfg_current" }),
+        associatedData: vercelInstallationTokenAssociatedData(authority, "icfg_current"),
         config: {
           previousTokenKeys: config.previousTokenKeys,
           tokenKey: config.tokenKey,

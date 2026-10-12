@@ -18,6 +18,10 @@ import { VercelTokenDecryptionKeyError } from "./vercel-token-decryption-key-err
 export { VercelTokenDecryptionKeyError } from "./vercel-token-decryption-key-error";
 
 type Authority = HostedAdminPlanRequest["authority"];
+interface VercelInstallationTokenKeyVersionInput {
+  keyVersion: string;
+  config: VercelTokenKeyringConfig | VercelIntegrationConfig;
+}
 
 const tokenKeyVersionSchema = z.string().regex(/^[A-Za-z0-9._-]{1,32}$/u);
 const previousTokenKeySchema = z.strictObject({
@@ -79,6 +83,26 @@ const configSchema = z
 export type VercelIntegrationConfig = z.infer<typeof configSchema>;
 /** Encryption-only key material for reading previously stored owner tokens. */
 export type VercelTokenKeyringConfig = z.infer<typeof tokenKeyringSchema>;
+
+const versionedVercelTokenKey = (input: VercelInstallationTokenKeyVersionInput): Buffer => {
+  const config = tokenKeyringSchema.parse({
+    previousTokenKeys: input.config.previousTokenKeys,
+    tokenKey: input.config.tokenKey,
+    tokenKeyVersion: input.config.tokenKeyVersion,
+  });
+  const keyVersion = tokenKeyVersionSchema.safeParse(input.keyVersion);
+  if (!keyVersion.success) {
+    throw new VercelTokenDecryptionKeyError();
+  }
+  const key =
+    keyVersion.data === config.tokenKeyVersion
+      ? config.tokenKey
+      : config.previousTokenKeys?.find((entry) => entry.version === keyVersion.data)?.key;
+  if (key === undefined) {
+    throw new VercelTokenDecryptionKeyError();
+  }
+  return key;
+};
 
 const readTokenKeyringCandidate = (
   environment: NodeJS.ProcessEnv | Record<string, string | undefined>,
@@ -201,6 +225,43 @@ function authorityDigest(authority: Authority) {
   return digest(JSON.stringify(hostedTenantAuthoritySchema.parse(authority)));
 }
 
+/** Stable v1 installation-token AAD, retaining the original persisted field order. */
+export const vercelInstallationTokenAssociatedData = (
+  authorityInput: Authority,
+  installationId: string,
+): string => {
+  const authority = hostedTenantAuthoritySchema.parse(authorityInput);
+  const id = z.string().min(1).parse(installationId);
+  // oxlint-disable-next-line eslint/sort-keys -- Persisted AES-GCM AAD depends on this v1 byte order.
+  return JSON.stringify({
+    issuer: authority.issuer,
+    audience: authority.audience,
+    workspaceId: authority.workspaceId,
+    ownerUserId: authority.ownerUserId,
+    installationId: id,
+  });
+};
+
+/** The sole later v1 encoding accepted for rows written after the authority schema was reordered. */
+export const vercelInstallationTokenAssociatedDataCandidates = (
+  authorityInput: Authority,
+  installationId: string,
+): readonly [string, string] => {
+  const authority = hostedTenantAuthoritySchema.parse(authorityInput);
+  const id = z.string().min(1).parse(installationId);
+  return [
+    vercelInstallationTokenAssociatedData(authority, id),
+    // oxlint-disable-next-line eslint/sort-keys -- Reproduce the only later schema-spread v1 byte order.
+    JSON.stringify({
+      audience: authority.audience,
+      issuer: authority.issuer,
+      ownerUserId: authority.ownerUserId,
+      workspaceId: authority.workspaceId,
+      installationId: id,
+    }),
+  ];
+};
+
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function encryptVercelToken(input: { token: string; key: Buffer; associatedData: string }) {
   const iv = randomBytes(12);
@@ -241,23 +302,37 @@ export function decryptVersionedVercelToken(input: {
   config: VercelTokenKeyringConfig | VercelIntegrationConfig;
   associatedData: string;
 }) {
-  const config = tokenKeyringSchema.parse({
-    previousTokenKeys: input.config.previousTokenKeys,
-    tokenKey: input.config.tokenKey,
-    tokenKeyVersion: input.config.tokenKeyVersion,
+  return decryptVercelToken({
+    ...input,
+    key: versionedVercelTokenKey(input),
   });
-  const keyVersion = tokenKeyVersionSchema.safeParse(input.keyVersion);
-  if (!keyVersion.success) {
-    throw new VercelTokenDecryptionKeyError();
+}
+
+/** Decrypt with one selected key and only the explicitly supported installation v1 AAD encodings. */
+// eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting for integration callers.
+export function decryptVersionedVercelInstallationToken(input: {
+  encryptedToken: string;
+  tokenIv: string;
+  tokenTag: string;
+  keyVersion: string;
+  config: VercelTokenKeyringConfig | VercelIntegrationConfig;
+  authority: Authority;
+  installationId: string;
+}) {
+  const key = versionedVercelTokenKey(input);
+  const { authority, installationId, ...encrypted } = input;
+  let lastError: unknown;
+  for (const associatedData of vercelInstallationTokenAssociatedDataCandidates(
+    authority,
+    installationId,
+  )) {
+    try {
+      return decryptVercelToken({ ...encrypted, associatedData, key });
+    } catch (error) {
+      lastError = error;
+    }
   }
-  const key =
-    keyVersion.data === config.tokenKeyVersion
-      ? config.tokenKey
-      : config.previousTokenKeys?.find((entry) => entry.version === keyVersion.data)?.key;
-  if (key === undefined) {
-    throw new VercelTokenDecryptionKeyError();
-  }
-  return decryptVercelToken({ ...input, key });
+  throw lastError;
 }
 
 const tokenResponseSchema = z.object({ access_token: z.string().min(1).max(8192) }).passthrough();

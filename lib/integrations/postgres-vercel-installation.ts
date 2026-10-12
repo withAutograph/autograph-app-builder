@@ -6,9 +6,10 @@ import { parseProviderConnectionReturn } from "./provider-connection-return";
 import type * as databaseSchema from "../db/schema";
 import { hostedVercelInstallations, vercelInstallationAuthorizationStates } from "../db/schema";
 import {
-  decryptVersionedVercelToken,
+  decryptVersionedVercelInstallationToken,
   encryptVercelToken,
   VercelTokenDecryptionKeyError,
+  vercelInstallationTokenAssociatedData,
 } from "./vercel-installation";
 import type {
   VercelAuthorizationStateStore,
@@ -56,13 +57,11 @@ export async function readActiveVercelInstallationToken(input: {
   }
   let token: string;
   try {
-    token = decryptVersionedVercelToken({
-      associatedData: JSON.stringify({
-        ...authority,
-        installationId: row.installationId,
-      }),
+    token = decryptVersionedVercelInstallationToken({
+      authority,
       config: input.config,
       encryptedToken: row.encryptedToken,
+      installationId: row.installationId,
       keyVersion: row.tokenKeyVersion,
       tokenIv: row.tokenIv,
       tokenTag: row.tokenTag,
@@ -195,10 +194,10 @@ export function createPostgresVercelInstallationStore(input: {
   return {
     async bind(value) {
       const authority = hostedTenantAuthoritySchema.parse(value.authority);
-      const associatedData = JSON.stringify({
-        ...authority,
-        installationId: value.binding.installationId,
-      });
+      const associatedData = vercelInstallationTokenAssociatedData(
+        authority,
+        value.binding.installationId,
+      );
       const encrypted = encryptVercelToken({
         associatedData,
         key: input.config.tokenKey,
