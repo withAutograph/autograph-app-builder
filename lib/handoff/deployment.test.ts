@@ -114,7 +114,7 @@ const validBody = {
   brief: "Review new vendors before activation.",
   connections: [],
   creationRequestId,
-  modelId: "openai/gpt-5.6-terra",
+  modelId: "openai/gpt-6-luna",
   repository: { name: "vendor-review", private: true },
   version: 1,
 };

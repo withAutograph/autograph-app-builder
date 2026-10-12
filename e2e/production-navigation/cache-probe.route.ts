@@ -26,7 +26,7 @@ const installCatalogFixture = () => {
     return Response.json({
       data: [
         {
-          id: "openai/gpt-5.6-terra",
+          id: "openai/gpt-6-luna",
           name: `Navigation catalog ${revision}`,
           owned_by: "openai",
           tags: ["tool-use"],

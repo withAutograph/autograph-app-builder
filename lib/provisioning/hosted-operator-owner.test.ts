@@ -195,7 +195,7 @@ const makeFixture = (
     appName: "Vendor Onboarding",
     brief: "Review vendors.",
     connections: [],
-    modelId: "openai/gpt-5.6-terra" as const,
+    modelId: "openai/gpt-6-luna" as const,
     providers: { vercelInstallationId: "icfg_1" },
     provisioning: {
       appId: selection.appId,

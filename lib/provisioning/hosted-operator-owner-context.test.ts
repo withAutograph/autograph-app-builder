@@ -76,7 +76,7 @@ const handoff: BuilderHandoffRecord = builderHandoffRecordSchema.parse({
     appName: "Sample app",
     brief: "Build a sample app",
     connections: [],
-    modelId: "openai/gpt-5.6-terra",
+    modelId: "openai/gpt-6-luna",
     repository: { private: true, requestedName: "sample-app" },
   },
   redeemedAt: new Date("2026-10-01T01:00:00.000Z"),

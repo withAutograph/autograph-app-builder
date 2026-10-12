@@ -55,7 +55,7 @@ const fixture = (kind: "direct" | "handoff" = "direct") => {
       appName: "Original app",
       brief: "Original brief",
       connections: [],
-      modelId: "openai/gpt-5.6-terra",
+      modelId: "openai/gpt-6-luna",
       repository: { private: true, requestedName: "original-app" },
     },
     redeemedAt: new Date("2026-10-01T01:00:00Z"),

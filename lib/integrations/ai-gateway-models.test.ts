@@ -10,8 +10,8 @@ describe("AI Gateway model catalog", () => {
       Response.json({
         data: [
           {
-            id: "openai/gpt-5.6-terra",
-            name: "GPT 5.6 Terra",
+            id: "openai/gpt-6-luna",
+            name: "GPT 6 Luna",
             owned_by: "openai",
             tags: ["tool-use"],
             type: "language",
@@ -29,20 +29,20 @@ describe("AI Gateway model catalog", () => {
       }),
     );
     const result = await loadGatewayModels({
-      defaultModelId: "openai/gpt-5.6-terra",
+      defaultModelId: "openai/gpt-6-luna",
       fetch: request,
     });
     expect(result.status).toBe("ready");
     expect(result.entries).toEqual([
       {
         capabilities: ["tool-use"],
-        id: "openai/gpt-5.6-terra",
-        name: "GPT 5.6 Terra",
+        id: "openai/gpt-6-luna",
+        name: "GPT 6 Luna",
         provider: "openai",
         zdr: "all",
       },
     ]);
-    expect(result.defaultModelId).toBe("openai/gpt-5.6-terra");
+    expect(result.defaultModelId).toBe("openai/gpt-6-luna");
   });
 
   it("uses a validated cached catalog during a transient provider failure", async () => {
@@ -51,8 +51,8 @@ describe("AI Gateway model catalog", () => {
         Response.json({
           data: [
             {
-              id: "openai/gpt-5.6-terra",
-              name: "GPT 5.6 Terra",
+              id: "openai/gpt-6-luna",
+              name: "GPT 6 Luna",
               owned_by: "openai",
               tags: [],
               type: "language",
@@ -89,7 +89,7 @@ describe("AI Gateway model catalog", () => {
         Response.json({
           data: [
             {
-              id: "openai/gpt-5.6-terra",
+              id: "openai/gpt-6-luna",
               name: "Terra",
               owned_by: "openai",
               tags: [],

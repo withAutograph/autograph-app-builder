@@ -202,7 +202,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
             brief: "Review new vendors before activation.",
             connections: ["Ramp"],
             creationRequestId: randomUUID(),
-            modelId: "openai/gpt-5.6-terra",
+            modelId: "openai/gpt-6-luna",
             provisioningRequestId,
             repository: { name: "vendor-review", private: true },
             version: 1,

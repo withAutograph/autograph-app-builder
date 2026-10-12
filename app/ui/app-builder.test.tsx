@@ -137,7 +137,7 @@ const integrationState = {
   },
   models: {
     cached: false,
-    defaultModelId: "openai/gpt-5.6-terra",
+    defaultModelId: "openai/gpt-6-luna",
     entries: [
       {
         capabilities: ["tool-use"],
@@ -150,6 +150,13 @@ const integrationState = {
         capabilities: ["tool-use"],
         id: "openai/gpt-5.6-terra",
         name: "GPT 5.6 Terra",
+        provider: "openai",
+        zdr: "all" as const,
+      },
+      {
+        capabilities: ["tool-use"],
+        id: "openai/gpt-6-luna",
+        name: "GPT 6 Luna",
         provider: "openai",
         zdr: "all" as const,
       },
@@ -510,7 +517,7 @@ describe("Vercel-faithful App Builder flow", () => {
         requireElement(model.parentElement),
       ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(view.querySelector('[aria-label="GPT 5.6 Terra"]')).not.toBeNull();
+    expect(view.querySelector('[aria-label="GPT 6 Luna"]')).not.toBeNull();
     expect(
       view.querySelector(
         'button[aria-label="Only use providers that support Zero Data Retention."]',
