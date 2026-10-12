@@ -136,7 +136,7 @@ interface RecordedRequest {
   body?: Record<string, z.infer<typeof z.json>>;
 }
 
-const fixture = () => {
+const fixture = (configurationId?: string | null) => {
   const rows: Record<string, z.infer<typeof z.json>>[] = [
     {
       id: "auth-secret",
@@ -272,7 +272,13 @@ const fixture = () => {
       return Response.json({ envs: rows.map(({ value: _value, ...row }) => row) });
     }
     if (method === "POST") {
-      const row = { ...body, id: `env-${rows.length}` };
+      const row: (typeof rows)[number] = {
+        ...body,
+        id: `env-${rows.length}`,
+      };
+      if (configurationId !== undefined) {
+        row.configurationId = configurationId;
+      }
       rows.push(row);
       if (losePostResponse) {
         throw new Error("fixture lost POST response");
@@ -440,45 +446,53 @@ it("rejects an Auth API path in the route-owned Gateway Auth origin before write
   expect(f.checkpointGatewayEnvironment).not.toHaveBeenCalled();
 });
 
-it("binds only exact encrypted Gateway Preview Auth configuration and retains existing credentials", async () => {
-  const f = fixture();
-  const result = await f.writer.bind(f.input);
-  const created = f.rows.filter((row) => String(row.id).startsWith("env-"));
-  expect(
-    created.map((row) => z.string().parse(row.key)).toSorted((a, b) => a.localeCompare(b)),
-  ).toEqual([
-    "AUTH_DATABASE_RESOURCE",
-    "PLATFORM_AUTH_DATABASE_URL",
-    "PLATFORM_GATEWAY_PROJECT_BINDINGS",
-    "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
-    "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
-  ]);
-  expect(
-    created.every((row) => {
-      const targets = z.array(z.string()).parse(row.target);
-      return (
-        targets[0] === "preview" && row.gitBranch === gateway.branch && row.type === "encrypted"
-      );
-    }),
-  ).toBe(true);
-  expect(f.rows.find((row) => row.id === "auth-secret")?.value).toBe("fixture-better-auth-secret");
-  expect(f.rows.find((row) => row.id === "trusted-origins")?.value).toContain(
-    "https://separately-approved.example.test",
-  );
-  expect(f.requests.some((request) => request.path.endsWith("/auth-secret"))).toBe(false);
-  expect(f.checkpointGatewayEnvironment).toHaveBeenCalledTimes(6);
-  expect(f.readCredential).toHaveBeenCalledWith(authority, target.installationId);
-  expect(result.rows).toHaveLength(5);
-  expect(JSON.stringify(result)).not.toContain("fixture-private-password");
-  expect(JSON.stringify(result)).not.toContain("fixture-private-key");
-  expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
-});
+it.each([undefined, null, "", target.installationId])(
+  "writes and replays exact encrypted Gateway rows with configurationId %s",
+  async (configurationId) => {
+    const f = fixture(configurationId);
+    const result = await f.writer.bind(f.input);
+    const created = f.rows.filter((row) => String(row.id).startsWith("env-"));
+    expect(
+      created.map((row) => z.string().parse(row.key)).toSorted((a, b) => a.localeCompare(b)),
+    ).toEqual([
+      "AUTH_DATABASE_RESOURCE",
+      "PLATFORM_AUTH_DATABASE_URL",
+      "PLATFORM_GATEWAY_PROJECT_BINDINGS",
+      "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
+      "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
+    ]);
+    expect(
+      created.every((row) => {
+        const targets = z.array(z.string()).parse(row.target);
+        return (
+          targets[0] === "preview" && row.gitBranch === gateway.branch && row.type === "encrypted"
+        );
+      }),
+    ).toBe(true);
+    expect(f.rows.find((row) => row.id === "auth-secret")?.value).toBe(
+      "fixture-better-auth-secret",
+    );
+    expect(f.rows.find((row) => row.id === "trusted-origins")?.value).toContain(
+      "https://separately-approved.example.test",
+    );
+    expect(f.requests.some((request) => request.path.endsWith("/auth-secret"))).toBe(false);
+    expect(f.checkpointGatewayEnvironment).toHaveBeenCalledTimes(6);
+    expect(f.readCredential).toHaveBeenCalledWith(authority, target.installationId);
+    expect(result.rows).toHaveLength(5);
+    expect(JSON.stringify(result)).not.toContain("fixture-private-password");
+    expect(JSON.stringify(result)).not.toContain("fixture-private-key");
+    expect(await f.writer.reconcile(f.input)).toMatchObject({ status: "applied" });
+    await f.writer.bind(f.input);
+    expect(f.requests.filter((row) => row.method === "POST")).toHaveLength(5);
+  },
+);
 
-it("preserves sibling protected applications and patches only the previously journaled row", async () => {
-  const f = fixture();
+it("preserves sibling policy and patches only the previously journaled installation-attributed row", async () => {
+  const f = fixture(target.installationId);
   const priorValue = JSON.stringify(["catalog-sibling"]);
   const prior = {
     comment: "App Builder protected operator prior-operation",
+    configurationId: target.installationId,
     gitBranch: gateway.branch,
     id: "owned-policy",
     key: "PLATFORM_GATEWAY_PROTECTED_APPLICATIONS",
@@ -509,17 +523,22 @@ it("preserves sibling protected applications and patches only the previously jou
   );
 });
 
-it("recovers a created row after an unknown POST outcome without duplicating it", async () => {
-  const f = fixture();
-  f.setLosePostResponse(true);
-  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
-  f.setLosePostResponse(false);
-  expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
-  const afterFirstTry = f.requests.filter((request) => request.method === "POST").length;
-  await f.writer.bind(f.input);
-  expect(f.requests.filter((request) => request.method === "POST")).toHaveLength(afterFirstTry + 4);
-  expect(f.rows.filter((row) => row.key === "AUTH_DATABASE_RESOURCE")).toHaveLength(1);
-});
+it.each([undefined, target.installationId])(
+  "recovers a lost Gateway POST response with configurationId %s without duplicate creation",
+  async (configurationId) => {
+    const f = fixture(configurationId);
+    f.setLosePostResponse(true);
+    await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+    f.setLosePostResponse(false);
+    expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+    const afterFirstTry = f.requests.filter((request) => request.method === "POST").length;
+    await f.writer.bind(f.input);
+    expect(f.requests.filter((request) => request.method === "POST")).toHaveLength(
+      afterFirstTry + 4,
+    );
+    expect(f.rows.filter((row) => row.key === "AUTH_DATABASE_RESOURCE")).toHaveLength(1);
+  },
+);
 
 it("does not adopt a branchwide or foreign pre-existing Gateway config row", async () => {
   const f = fixture();
@@ -899,3 +918,40 @@ it("keeps activation preflight and fixed shared values exact even for active tar
   await expect(f.writer.bind(f.input)).rejects.toThrow();
   expect(f.requests.every((request) => request.method === "GET")).toBe(true);
 });
+
+it.each([false, true])(
+  "rejects foreign installation attribution even with matching operation ownership (journaled: %s)",
+  async (journaled) => {
+    const f = fixture(target.installationId);
+    await f.writer.bind(f.input);
+    const row = f.rows.find((item) => item.key === "AUTH_DATABASE_RESOURCE")!;
+    row.configurationId = "icfg_foreign";
+    if (!journaled) {
+      f.input.gatewayEnvironmentRows = [];
+    }
+    f.requests.length = 0;
+    expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+    await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+    expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  },
+);
+
+it.each([
+  { comment: "App Builder protected operator unrelated-operation" },
+  { gitBranch: null },
+  { target: ["preview", "production"] },
+  { type: "plain" },
+  { id: "replacement-provider-row" },
+])(
+  "retains exact operation, branch, target, type and saved ID guards for installation attribution %j",
+  async (change) => {
+    const f = fixture(target.installationId);
+    await f.writer.bind(f.input);
+    const row = f.rows.find((item) => item.key === "AUTH_DATABASE_RESOURCE")!;
+    Object.assign(row, change);
+    f.requests.length = 0;
+    expect(await f.writer.reconcile(f.input)).toEqual({ status: "unknown" });
+    await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+    expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  },
+);
