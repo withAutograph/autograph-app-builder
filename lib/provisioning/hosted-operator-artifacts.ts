@@ -1,4 +1,4 @@
-/* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Ordered capture/chunk publication rechecks owner authority at each step and commits completion last. */
+/* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Serial capture and drained chunk waves recheck owner authority and commit completion last. */
 import { createHash } from "node:crypto";
 import type { SandboxSession } from "eve/sandbox";
 import { z } from "zod";
@@ -79,18 +79,93 @@ const sourcePath = (directory: string, member: string) => {
   }
   return `repository/${directory}/${member}`;
 };
+const publicationStages = ["capture", "publication", "completion", "readback"] as const;
+const publicationOutcomes = ["started", "completed", "failed", "cancelled"] as const;
+export interface OperatorArtifactPublicationDiagnostic {
+  stage: (typeof publicationStages)[number];
+  outcome: (typeof publicationOutcomes)[number];
+  member?: (typeof GENERATED_RELEASE_MEMBERS)[number];
+  bytes?: number;
+  chunkTotal?: number;
+  chunkCompleted?: number;
+}
 export interface OperatorArtifactPublicationDependencies {
   store: OperatorArtifactStore;
+  signal?: AbortSignal;
+  observe?: (diagnostic: OperatorArtifactPublicationDiagnostic) => void | Promise<void>;
   assertCurrentOwner: (context: OperatorArtifactContext) => Promise<void>;
 }
 /** Storage verifies immutable captured identity. The catalog-pinned worker remains authoritative for compiled release semantics before any SQL effect. */
 export const createOperatorArtifactPublication = (
   deps: OperatorArtifactPublicationDependencies,
 ) => {
+  const checkStopped = () => {
+    if (deps.signal?.aborted === true) {
+      throw operatorArtifactUnavailable();
+    }
+  };
+  const observe = async (diagnostic: OperatorArtifactPublicationDiagnostic) => {
+    try {
+      await deps.observe?.(diagnostic);
+    } catch {
+      // Best-effort diagnostics have no publication authority, including async rejections.
+    }
+  };
+  const chunksInWaves = async <T>(
+    count: number,
+    stage: "publication" | "readback",
+    run: (index: number, checkWaveStopped: () => void) => Promise<T>,
+  ): Promise<T[]> => {
+    const values: T[] = [];
+    let failed = false;
+    let completed = 0;
+    const checkWaveStopped = () => {
+      checkStopped();
+      if (failed) {
+        throw operatorArtifactUnavailable();
+      }
+    };
+    const runChunk = async (index: number) => {
+      try {
+        checkWaveStopped();
+        const value = await run(index, checkWaveStopped);
+        completed += 1;
+        return value;
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
+    };
+    for (let start = 0; start < count; start += 4) {
+      checkWaveStopped();
+      void observe({ chunkCompleted: completed, chunkTotal: count, outcome: "started", stage });
+      // Every started callback is drained, even when another callback fails or cancellation arrives.
+      const settled = await Promise.allSettled(
+        Array.from({ length: Math.min(4, count - start) }, (_, offset) => start + offset).map(
+          runChunk,
+        ),
+      );
+      let outcome: OperatorArtifactPublicationDiagnostic["outcome"] = failed
+        ? "failed"
+        : "completed";
+      if (deps.signal?.aborted === true) {
+        outcome = "cancelled";
+      }
+      void observe({ chunkCompleted: completed, chunkTotal: count, outcome, stage });
+      checkWaveStopped();
+      for (const result of settled) {
+        if (result.status === "fulfilled") {
+          values.push(result.value);
+        }
+      }
+    }
+    return values;
+  };
   const publish = async (
     context: OperatorArtifactContext,
     envelope: z.infer<typeof envelopeSchema>,
   ) => {
+    checkStopped();
     const parsed = envelopeSchema.parse(envelope);
     if (parsed.appId !== context.target.appId) {
       throw operatorArtifactUnavailable();
@@ -103,12 +178,21 @@ export const createOperatorArtifactPublication = (
     const chunks = Array.from({ length: Math.ceil(encoded.length / 65_536) }, (_, index) =>
       encoded.slice(index * 65_536, (index + 1) * 65_536),
     );
-    for (const [index, chunk] of chunks.entries()) {
+    await chunksInWaves(chunks.length, "publication", async (index, checkWaveStopped) => {
       await deps.assertCurrentOwner(context);
+      checkWaveStopped();
+      const chunk = chunks[index];
+      if (chunk === undefined) {
+        throw operatorArtifactUnavailable();
+      }
       await deps.store.put(context, { artifactRef, chunkIndex: index + 1, content: chunk });
+      // A completed put must finish its post-owner assertion even after a peer fails or aborts.
       await deps.assertCurrentOwner(context);
-    }
+    });
+    checkStopped();
+    void observe({ outcome: "started", stage: "completion" });
     await deps.assertCurrentOwner(context);
+    checkStopped();
     await deps.store.put(context, {
       artifactRef,
       chunkIndex: 0,
@@ -119,25 +203,34 @@ export const createOperatorArtifactPublication = (
       }),
     });
     await deps.assertCurrentOwner(context);
+    checkStopped();
+    void observe({ outcome: "completed", stage: "completion" });
     return artifactRef;
   };
   const read = async (context: OperatorArtifactContext, artifactRef: string) => {
+    checkStopped();
     operatorArtifactReferenceSchema.parse(artifactRef);
     await deps.assertCurrentOwner(context);
+    checkStopped();
     const completion = await deps.store.read(context, artifactRef, 0);
     if (completion === undefined || completion.length === 0) {
       throw operatorArtifactUnavailable();
     }
     const metadata = completionSchema.parse(JSON.parse(completion));
-    let content = "";
-    for (let index = 1; index <= metadata.chunkCount; index += 1) {
-      await deps.assertCurrentOwner(context);
-      const chunk = await deps.store.read(context, artifactRef, index);
-      if (chunk === undefined || chunk.length === 0) {
-        throw operatorArtifactUnavailable();
-      }
-      content += chunk;
-    }
+    const chunks = await chunksInWaves(
+      metadata.chunkCount,
+      "readback",
+      async (index, checkWaveStopped) => {
+        await deps.assertCurrentOwner(context);
+        checkWaveStopped();
+        const chunk = await deps.store.read(context, artifactRef, index + 1);
+        if (chunk === undefined || chunk.length === 0) {
+          throw operatorArtifactUnavailable();
+        }
+        return chunk;
+      },
+    );
+    let content = chunks.join("");
     const payload = Buffer.from(content, "base64");
     if (payload.toString("base64") !== content) {
       throw operatorArtifactUnavailable();
@@ -154,6 +247,7 @@ export const createOperatorArtifactPublication = (
       throw operatorArtifactUnavailable();
     }
     await deps.assertCurrentOwner(context);
+    checkStopped();
     return envelope;
   };
   return {
@@ -164,6 +258,7 @@ export const createOperatorArtifactPublication = (
       targetDigest: string;
     }) {
       try {
+        checkStopped();
         noCredentials(input.content.toString("utf-8"));
         const frame = authFrameSchema.parse(JSON.parse(input.content.toString("utf-8")));
         if (
@@ -190,6 +285,7 @@ export const createOperatorArtifactPublication = (
       source: Pick<SandboxSession, "readBinaryFile">;
     }) {
       try {
+        checkStopped();
         const description = appDescriptionSchema.parse(input.description);
         if (
           description.app.id !== input.context.target.appId ||
@@ -199,16 +295,21 @@ export const createOperatorArtifactPublication = (
         }
         const files: Record<string, string> = {};
         for (const member of GENERATED_RELEASE_MEMBERS) {
+          checkStopped();
+          void observe({ member, outcome: "started", stage: "capture" });
           await deps.assertCurrentOwner(input.context);
+          checkStopped();
           const captured = await input.source.readBinaryFile({
             path: sourcePath(description.backend.release.directory, member),
           });
+          checkStopped();
           if (captured === null) {
             throw operatorArtifactUnavailable();
           }
           const bytes = Buffer.from(captured);
           noCredentials(bytes.toString("utf-8"));
           files[member] = bytes.toString("base64");
+          void observe({ bytes: bytes.byteLength, member, outcome: "completed", stage: "capture" });
         }
         const manifestBytes = Buffer.from(requiredMember(files, "release-manifest.json"), "base64");
         const manifest = manifestSchema.parse(JSON.parse(manifestBytes.toString("utf-8")));

@@ -15,6 +15,7 @@ import {
 } from "../provisioning/hosted-operator-artifact-store";
 import type { OperatorArtifactContext } from "../provisioning/hosted-operator-artifact-store";
 import { createOperatorArtifactPublication } from "../provisioning/hosted-operator-artifacts";
+import type { OperatorArtifactPublicationDiagnostic } from "../provisioning/hosted-operator-artifacts";
 import {
   createPostgresOperatorArtifactSelections,
   readExactCompiledOperatorRelease,
@@ -207,49 +208,99 @@ export const publishCompiledOperatorArtifactsForSession = async (
     ) => Promise<void>;
   },
 ) => {
-  const relativeRoot = compiledArtifactSandboxRelativePath(input.root);
-  const binding = await resolveCompiledArtifactSession(input);
-  const { assertCurrentOwner, context } = binding;
-  const description = await describeSelectedApp({
-    appId: input.appId,
-    root: input.root,
-    sandbox: input.sandbox,
-    signal: input.signal,
-  });
-  await assertCurrentOwner(context);
-  if (description.backend.kind === "static") {
-    return { status: "not-required" as const };
-  }
-  const storage = await openCompiledArtifactStorage(binding);
-  const publication = createOperatorArtifactPublication({
-    assertCurrentOwner,
-    store: storage.store,
-  });
-  const captured = await publication.publishGeneratedRelease({
-    context,
-    description,
-    source: {
-      readBinaryFile: async (request) => {
-        if (!request.path.startsWith("repository/")) {
-          throw operatorArtifactUnavailable();
-        }
-        await assertCurrentOwner(context);
-        return await input.sandbox.readBinaryFile({
-          ...request,
-          abortSignal: input.signal,
-          path: `${relativeRoot}/${request.path.slice("repository/".length)}`,
-        });
+  const wrapperStages = ["authority", "description", "storage", "captured", "selection"] as const;
+  type Diagnostic = Omit<OperatorArtifactPublicationDiagnostic, "stage"> & {
+    stage: OperatorArtifactPublicationDiagnostic["stage"] | (typeof wrapperStages)[number];
+  };
+  let stage: Diagnostic["stage"] = "authority";
+  const observe = (diagnostic: Diagnostic) => {
+    ({ stage } = diagnostic);
+    try {
+      console.info(
+        JSON.stringify({
+          callId: input.callId,
+          event: "app_builder.compiled_artifact_progress",
+          ...diagnostic,
+        }),
+      );
+    } catch {
+      // Best-effort progress cannot change capture or selection.
+    }
+  };
+  const checkStopped = () => {
+    if (input.signal?.aborted === true) {
+      throw operatorArtifactUnavailable();
+    }
+  };
+  try {
+    checkStopped();
+    observe({ outcome: "started", stage: "authority" });
+    const relativeRoot = compiledArtifactSandboxRelativePath(input.root);
+    const binding = await resolveCompiledArtifactSession(input);
+    const { assertCurrentOwner, context } = binding;
+    checkStopped();
+    observe({ outcome: "completed", stage: "authority" });
+    observe({ outcome: "started", stage: "description" });
+    const description = await describeSelectedApp({
+      appId: input.appId,
+      root: input.root,
+      sandbox: input.sandbox,
+      signal: input.signal,
+    });
+    await assertCurrentOwner(context);
+    checkStopped();
+    observe({ outcome: "completed", stage: "description" });
+    if (description.backend.kind === "static") {
+      return { status: "not-required" as const };
+    }
+    observe({ outcome: "started", stage: "storage" });
+    const storage = await openCompiledArtifactStorage(binding);
+    checkStopped();
+    observe({ outcome: "completed", stage: "storage" });
+    const publication = createOperatorArtifactPublication({
+      assertCurrentOwner,
+      observe,
+      signal: input.signal,
+      store: storage.store,
+    });
+    const captured = await publication.publishGeneratedRelease({
+      context,
+      description,
+      source: {
+        readBinaryFile: async (request) => {
+          if (!request.path.startsWith("repository/")) {
+            throw operatorArtifactUnavailable();
+          }
+          await assertCurrentOwner(context);
+          return await input.sandbox.readBinaryFile({
+            ...request,
+            abortSignal: input.signal,
+            path: `${relativeRoot}/${request.path.slice("repository/".length)}`,
+          });
+        },
       },
-    },
-  });
-  // Read every completed immutable member before recording a planner-visible selection.
-  await publication.readGeneratedRelease(context, captured);
-  await input.onCaptured?.(captured);
-  const selection = await storage.selections.record(context, input.callId, {
-    ...captured,
-    appId: input.appId,
-    appSpecDigest: input.appSpecDigest,
-    version: 1,
-  });
-  return { selection, status: "published" as const };
+    });
+    // Read every completed immutable member before recording a planner-visible selection.
+    await publication.readGeneratedRelease(context, captured);
+    checkStopped();
+    observe({ outcome: "started", stage: "captured" });
+    checkStopped();
+    await input.onCaptured?.(captured);
+    checkStopped();
+    observe({ outcome: "completed", stage: "captured" });
+    observe({ outcome: "started", stage: "selection" });
+    checkStopped();
+    const selection = await storage.selections.record(context, input.callId, {
+      ...captured,
+      appId: input.appId,
+      appSpecDigest: input.appSpecDigest,
+      version: 1,
+    });
+    checkStopped();
+    observe({ outcome: "completed", stage: "selection" });
+    return { selection, status: "published" as const };
+  } catch (error) {
+    observe({ outcome: input.signal?.aborted === true ? "cancelled" : "failed", stage });
+    throw error;
+  }
 };
