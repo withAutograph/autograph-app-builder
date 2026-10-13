@@ -1,3 +1,6 @@
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Observe the native continuation boundary without replacing its implementation.
+import * as approvedBuildController from "./approved-build-controller";
+import { HostedCheckpointObservationConflictError } from "./hosted-checkpoint-observation-conflict-error";
 import { randomUUID } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
@@ -1393,4 +1396,190 @@ describe("send preflight dispatch classification", () => {
       expect(adapter.send).not.toHaveBeenCalled();
     },
   );
+});
+
+const conflictObservation = (complete = true) =>
+  vi.fn<NonNullable<HostedEveTransport["observe"]>>(async (input) => {
+    await input.onEvent({
+      index: 0,
+      text: "losing observer event",
+      turnId: "losing_turn",
+      type: "assistant.message",
+    });
+    return {
+      artifactProjectionRequiresLegacyReadback: false,
+      installedEventCount: 10,
+      nativeObservationState: nativeState({
+        adapterSessionId: input.adapterSessionId,
+        nextNativeIndex: 10,
+        publicEventCount: 1,
+      }),
+      nextNativeIndex: 10,
+      observationComplete: complete,
+      pendingRequests: [],
+      publicEventCount: 1,
+      status: "waiting",
+    };
+  });
+
+describe("paged read observation digest conflicts", () => {
+  it.each([true, false])(
+    "returns the owner-scoped winner at the requested public cursor without committing the loser (complete=%s)",
+    async (complete) => {
+      const observe = conflictObservation(complete);
+      const f = await fixture(observe);
+      const priorEvents = await seedColdCheckpoint(f);
+      const commitWinner = f.observeSessionPaged.getMockImplementation();
+      if (commitWinner === undefined) {
+        throw new Error("Expected the fixture's checkpoint commit boundary.");
+      }
+      const winnerMetadata: HostedPagedCheckpointMetadata = {
+        capturedAtEpochMs: 2001,
+        nativeObservationState: nativeState({
+          adapterSessionId: "adapter_1",
+          nextNativeIndex: 7,
+          publicEventCount: 3,
+        }),
+        privateApprovalCaptureState: {
+          pendingRequests: [],
+          receipts: [],
+          sessionId: f.sessionId,
+          version: 1,
+        },
+        status: "waiting",
+        version: 1,
+      };
+      let winner: HostedSessionRecord | undefined;
+      f.observeSessionPaged.mockImplementationOnce(async (loser) => {
+        // A different observer commits while the caller retains its original digest.
+        winner = await commitWinner({
+          ...loser,
+          events: (async function* winnerEvents() {
+            yield* priorEvents;
+          })(),
+          metadata: winnerMetadata,
+          nowEpochMs: 2001,
+        });
+        throw new HostedCheckpointObservationConflictError();
+      });
+      const result = await f.service.get({ cursor: 1, limit: 1, sessionId: f.sessionId });
+      expect(result).toMatchObject({
+        cursor: 2,
+        events: [priorEvents[1]],
+        sessionId: f.sessionId,
+        status: "waiting",
+      });
+      expect(result).not.toHaveProperty("error");
+      expect(result).not.toHaveProperty("nativeObservationState");
+      expect(result).not.toHaveProperty("privateApprovalCaptureState");
+      expect(observe).toHaveBeenCalledOnce();
+      // One seed and one losing write attempt; no replay with the winner's digest.
+      expect(f.observeSessionPaged).toHaveBeenCalledTimes(2);
+      expect(await f.getSession(principal, f.sessionId)).toEqual(winner);
+      expect(f.getPagedEventCount()).toBe(3);
+      expect(f.readCheckpointPage).toHaveBeenLastCalledWith({
+        checkpointRef: winner?.version === 2 ? winner.checkpointRef : undefined,
+        cursor: 1,
+        limit: 1,
+        principal,
+        sessionId: f.sessionId,
+      });
+      if (winner?.version !== 2 || winner.checkpointRef === undefined) {
+        throw new Error("Expected a durable winner reference.");
+      }
+      const saved = await f.readCheckpointPage({
+        checkpointRef: winner.checkpointRef,
+        cursor: 0,
+        limit: 10,
+        principal,
+        sessionId: f.sessionId,
+      });
+      expect(saved.metadata).toEqual(winnerMetadata);
+      expect(saved.metadata.nativeObservationState?.nextNativeIndex).toBe(7);
+      expect(saved.metadata.privateApprovalCaptureState).toEqual(
+        winnerMetadata.privateApprovalCaptureState,
+      );
+      expect(saved.events).toEqual(priorEvents);
+      expect(saved.metadata).not.toHaveProperty("coldReadProgress");
+    },
+  );
+
+  it.each(["missing", "foreign-owner", "foreign-workspace", "foreign-session"] as const)(
+    "rejects a %s winner after the typed conflict",
+    async (kind) => {
+      const f = await fixture(conflictObservation());
+      await seedColdCheckpoint(f);
+      const current = await f.getSession(principal, f.sessionId);
+      if (current?.version !== 2) {
+        throw new Error("Expected an owned durable checkpoint.");
+      }
+      // oxlint-disable-next-line eslint/require-await -- Preserve the async store conflict boundary.
+      f.observeSessionPaged.mockImplementationOnce(async () => {
+        const owner = { ...principal };
+        if (kind === "foreign-owner") {
+          owner.ownerUserId = "other-owner";
+        }
+        if (kind === "foreign-workspace") {
+          owner.workspaceId = "other-workspace";
+        }
+        const winner =
+          kind === "missing"
+            ? null
+            : {
+                ...current,
+                principal: owner,
+                sessionId: kind === "foreign-session" ? "other-session" : current.sessionId,
+              };
+        f.getSession.mockResolvedValueOnce(winner);
+        throw new HostedCheckpointObservationConflictError();
+      });
+      await expect(
+        f.service.get({ cursor: 1, limit: 1, sessionId: f.sessionId }),
+      ).rejects.toBeInstanceOf(HostedSessionNotFoundError);
+      expect(f.observeSessionPaged).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("propagates an unrelated error even when its message matches the observation conflict", async () => {
+    const f = await fixture(conflictObservation());
+    await seedColdCheckpoint(f);
+    const unrelated = new Error("Hosted paged checkpoint observation raced another update.");
+    f.observeSessionPaged.mockRejectedValueOnce(unrelated);
+    await expect(f.service.get({ cursor: 1, limit: 1, sessionId: f.sessionId })).rejects.toBe(
+      unrelated,
+    );
+    expect(f.observeSessionPaged).toHaveBeenCalledTimes(2);
+    expect(f.getPagedEventCount()).toBe(3);
+  });
+});
+
+it("does not continue approved work during a conflict-recovered mutation preflight", async () => {
+  const f = await fixture(conflictObservation());
+  await seedColdCheckpoint(f);
+  // Enable the native paged preflight path; this run uses its ordinary send fallback.
+  // oxlint-disable-next-line eslint/require-await -- Preserve the asynchronous accepted transport signature.
+  f.adapter.sendAccepted = vi.fn(async () => {
+    throw new Error("Unexpected accepted send");
+  });
+  const continuation = vi.spyOn(approvedBuildController, "continueApprovedHostedBuild");
+  // oxlint-disable-next-line eslint/require-await -- Preserve the native asynchronous send contract.
+  vi.mocked(f.adapter.send).mockImplementation(async () => {
+    expect(continuation).not.toHaveBeenCalled();
+    return emptySnapshot;
+  });
+  f.observeSessionPaged.mockRejectedValueOnce(new HostedCheckpointObservationConflictError());
+  try {
+    await f.service.send({
+      clientRequestId: "conflict-preflight-send",
+      message: "Continue the owned task",
+      sessionId: f.sessionId,
+    });
+    expect(f.adapter.send).toHaveBeenCalledOnce();
+    expect(f.adapter.sendAccepted).not.toHaveBeenCalled();
+    // Continuation runs after mutation settlement, once, rather than in preflight.
+    expect(continuation).toHaveBeenCalledOnce();
+    expect(f.observeSessionPaged).toHaveBeenCalledTimes(3);
+  } finally {
+    continuation.mockRestore();
+  }
 });
