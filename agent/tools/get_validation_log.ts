@@ -1,3 +1,4 @@
+import { validationAttemptLogReadInputs } from "@/lib/agent/validation-log-read-input";
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
@@ -18,11 +19,12 @@ export const validationLogInputSchema = z.union([
     logId: z.uuid(),
   }),
   z.strictObject({ operation: z.literal("dependency-attempts") }),
+  z.strictObject({ operation: z.literal("validation-attempts") }),
 ]);
 
 export default defineTool({
   description:
-    "Read one authenticated page of a saved validation or dependency command log after execution or sandbox cleanup. To recover saved dependency references, first use operation: dependency-attempts. For pages supply the exact attempt, command, channel, log ID and digest. Continue with each nextCursor and verify assembled UTF-8 SHA-256 against digest. Page complete means the manifest is exhausted; completion distinguishes complete capture, interrupted output, and an unavailable durable suffix.",
+    "Read one authenticated page of a saved validation or dependency command log after execution or sandbox cleanup. To recover the current saved validation references, use operation: validation-attempts and copy a complete channel readInput. For saved dependency references, use operation: dependency-attempts. Discovery lists retained workflow receipts, not historical attempts removed by later apply or reset. For pages supply the exact attempt, command, channel, log ID and digest. Continue with each nextCursor and verify assembled UTF-8 SHA-256 against digest. Page complete means the manifest is exhausted; completion distinguishes complete capture, interrupted output, and an unavailable durable suffix.",
   async execute(input, ctx) {
     if ("operation" in input) {
       await assertValidationLogSession({
@@ -30,7 +32,18 @@ export default defineTool({
         sessionId: ctx.session.id,
       });
       const state = appBuilderWorkflowState.get();
-      return { attempts: state.phase === "empty" ? [] : (state.checkoutDependencyAttempts ?? []) };
+      if (input.operation === "dependency-attempts") {
+        return {
+          attempts: state.phase === "empty" ? [] : (state.checkoutDependencyAttempts ?? []),
+        };
+      }
+      if (state.phase === "validation_failed") {
+        return { attempts: [validationAttemptLogReadInputs(state.validationFailure)] };
+      }
+      if ("validationReceipt" in state) {
+        return { attempts: [validationAttemptLogReadInputs(state.validationReceipt)] };
+      }
+      return { attempts: [] };
     }
     const store = await validationLogStoreForSession({
       sessionAuth: ctx.session.auth,
