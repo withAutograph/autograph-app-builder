@@ -97,8 +97,9 @@ until that side has no cursor or returns `alreadyComplete`. Read
 its minimal `nextCall` resumes incomplete sides without granting coverage.
 For an unreadable side or an intentional restart, use legacy `view: "changes"`
 with `includeContent: true` and omit `contentCursor`, then follow each returned
-cursor verbatim through completion. Recover after errors and explain the diff before
-sealing its proposal.
+cursor verbatim through completion. Recover after errors. Once both current
+sides are complete and readable, call `accept_change_set`, then explain the
+destination diff and seal its proposal.
 This preserves the original app baseline and validated private files. A fresh
 default-branch observation alone does not refresh a reviewed file preimage.
 Existing PRs continue through their draft update or reconciliation workflow.
