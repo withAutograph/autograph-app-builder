@@ -42,7 +42,7 @@ export const inspectSandboxCommand = async (
 
 export default defineTool({
   description:
-    "Inspect the fixed sandbox build-tool allowlist without installing packages or mutating the workspace.",
+    "Read advisory Sandbox command availability/version and image/cache observations without installing packages or mutating the workspace. toolchainReady and required.matches describe this inspector's configuration comparisons, not repository access, workspace readiness or build admission. Optional image/cache metadata or version mismatches alone do not require installation, reconnection or source re-resolution. Retain and diagnose actual backend blockers and command failures.",
   async execute(_input, ctx) {
     const sandbox = await ctx.getSandbox();
     const tools = await Promise.all(
@@ -84,7 +84,10 @@ export default defineTool({
       backendBlockers: backend.blockers,
       dependencyCacheDigest:
         cache === undefined ? "unverified" : dependencyCacheReceiptDigest(cache),
+      diagnosticOnly: true,
       imageConfiguration: execution === undefined ? "unconfigured" : "configured",
+      note: "Advisory observation only: toolchainReady compares image/cache bindings and configured exact versions, not workspace readiness or build admission. Missing optional metadata or a version mismatch alone is not a build blocker and does not require installation, reconnection, or source re-resolution. backendBlockers and command availability/failure observations retain their factual meaning.",
+      readinessScope: "toolchain-configuration-observations",
       required,
       sandboxId: getBuilderSandboxId(sandbox),
       toolchainReady:
