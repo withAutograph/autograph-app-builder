@@ -28,6 +28,7 @@ import { appBaselineInputSchema, appBaselineSelectionSchema } from "@/lib/reposi
 import type { AppBaselineInput, AppBaselineReceipt } from "@/lib/repository/app-baseline";
 import { appBaselineState, assertInitialAppBaseline } from "@/lib/agent/app-baseline-state";
 import type { SelectedAppBaseline } from "@/lib/agent/app-baseline-state";
+import { savedAppBaselineBranchCorrection } from "@/lib/agent/saved-app-baseline-selection";
 
 const selectInitialBaseline = async (input: {
   callId: string;
@@ -259,12 +260,22 @@ export default defineTool({
       session: ctx.session,
     });
 
-    const revision = await inspectSelectedRevision({
+    const selectionCorrection = savedAppBaselineBranchCorrection({
+      baseline: savedBaseline,
       branch: input.branch,
-      pullRequestNumber,
+      githubSource: initialWorkflow.phase === "empty" ? undefined : selectedGitHubSource,
       repository: access.access.repository,
-      sessionAuth: ctx.session.auth,
+      sessionId: ctx.session.id,
     });
+    const revision =
+      selectionCorrection === null
+        ? await inspectSelectedRevision({
+            branch: input.branch,
+            pullRequestNumber,
+            repository: access.access.repository,
+            sessionAuth: ctx.session.auth,
+          })
+        : null;
     assertSelectedSourceBranch({
       requestedBranch: revision?.branch,
       resolvedRef: selectedGitHubSource?.resolvedRef,
@@ -292,6 +303,7 @@ export default defineTool({
           branch: selectedGitHubSource.resolvedRef.slice("refs/heads/".length),
           pullRequestNumber,
         },
+        ...(selectionCorrection === null ? {} : { selectionCorrection }),
         ...(selectedBaseline?.receipt === undefined
           ? {}
           : { appBaseline: selectedBaseline.receipt }),
