@@ -52,6 +52,12 @@ describe("high-fidelity design guidance", () => {
     },
   );
 
+  it("delivers current build and final-review guidance in the hosted bundle", () => {
+    expect(
+      HOSTED_MANAGED_SKILL_CONTENTS.find((entry) => entry.path === "create-app/SKILL.md")?.content,
+    ).toBe(readFileSync("agent/skills/create-app/SKILL.md", "utf-8"));
+  });
+
   it("inspects public components, compositions, stories, and consumers in order", () => {
     const evidence = [
       "public `@autograph/components` exports",

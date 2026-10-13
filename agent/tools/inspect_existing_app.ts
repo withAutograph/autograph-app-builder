@@ -34,9 +34,14 @@ interface SourceInspectionContinuation {
   path: string;
 }
 
-interface SourceInspectionOutput {
+interface SourceInspectionListing {
+  availablePathCount?: number;
+  availablePaths?: string[];
+  pathListing?: string;
+}
+
+interface SourceInspectionOutput extends SourceInspectionListing {
   appId: string;
-  availablePaths: string[];
   continuation?: SourceInspectionContinuation;
   files: SourceInspectionFile[];
   missingPaths?: string[];
@@ -83,19 +88,39 @@ const listSourcePathPage = function listSourcePathPage(
   return { nextPathIndex, pathPage };
 };
 
+const sourceInspectionListing = function sourceInspectionListing(
+  appId: string,
+  availablePaths: string[],
+  pathIndex: number,
+  contentRequested: boolean,
+): { listing: SourceInspectionListing; nextPathIndex: number } {
+  if (contentRequested) {
+    return {
+      listing: {
+        availablePathCount: availablePaths.length,
+        pathListing:
+          "Call without paths or contentPath to list files; use nextPathIndex as pathIndex.",
+      },
+      nextPathIndex: availablePaths.length,
+    };
+  }
+  const { nextPathIndex, pathPage } = listSourcePathPage(appId, availablePaths, pathIndex);
+  return { listing: { availablePaths: pathPage }, nextPathIndex };
+};
+
 const readSourceFilePage = async function readSourceFilePage(
   sandbox: Pick<SandboxSession, "readTextFile">,
   input: {
     appId: string;
-    availablePaths: string[];
     expectedDigest?: string;
     files: SourceInspectionFile[];
+    listing: SourceInspectionListing;
     missingPaths: string[];
     offsetBytes: number;
     path: string;
   },
 ): Promise<{ continuation?: SourceInspectionContinuation; file?: SourceInspectionFile } | null> {
-  const { appId, availablePaths, expectedDigest, files, missingPaths, offsetBytes, path } = input;
+  const { appId, expectedDigest, files, listing, missingPaths, offsetBytes, path } = input;
   const content = await sandbox.readTextFile({ path: `repository/${path}` });
   if (content === null) {
     return null;
@@ -110,7 +135,7 @@ const readSourceFilePage = async function readSourceFilePage(
 
   const payloadBase = {
     appId,
-    availablePaths,
+    ...listing,
     files,
     missingPaths,
   };
@@ -233,7 +258,7 @@ const normalizeRequestedSourcePaths = function normalizeRequestedSourcePaths(
   );
 };
 
-const buildSourceInspectionOutput = async function buildSourceInspectionOutput(input: {
+export const buildSourceInspectionOutput = async function buildSourceInspectionOutput(input: {
   appId: string;
   availablePaths: string[];
   contentPath?: string;
@@ -253,7 +278,12 @@ const buildSourceInspectionOutput = async function buildSourceInspectionOutput(i
     paths,
     sandbox,
   } = input;
-  const { nextPathIndex, pathPage } = listSourcePathPage(appId, availablePaths, pathIndex);
+  const { listing, nextPathIndex } = sourceInspectionListing(
+    appId,
+    availablePaths,
+    pathIndex,
+    contentPath !== undefined || paths.length > 0,
+  );
   const files: SourceInspectionFile[] = [];
   const missingPaths: string[] = [];
   let continuation: SourceInspectionContinuation | undefined;
@@ -261,9 +291,9 @@ const buildSourceInspectionOutput = async function buildSourceInspectionOutput(i
     // oxlint-disable-next-line eslint/no-await-in-loop -- Keep source chunks ordered and stop at the first continuation.
     const readResult = await readSourceFilePage(sandbox, {
       appId,
-      availablePaths: pathPage,
       expectedDigest: contentPath === undefined ? undefined : expectedDigest,
       files,
+      listing,
       missingPaths,
       offsetBytes: contentPath === undefined ? 0 : (offsetBytes ?? 0),
       path,
@@ -285,7 +315,7 @@ const buildSourceInspectionOutput = async function buildSourceInspectionOutput(i
   }
   const response: SourceInspectionOutput = {
     appId,
-    availablePaths: pathPage,
+    ...listing,
     ...(nextPathIndex < availablePaths.length ? { nextPathIndex } : {}),
     files,
     ...(missingPaths.length === 0 ? {} : { missingPaths }),
@@ -304,7 +334,7 @@ export default defineDynamic({
     "step.started": () =>
       defineTool({
         description:
-          "Read regular text files from one existing application after selecting its source. First call with no paths to list app-owned files; continue path listings with nextPathIndex. Request a small relevant set of paths for content. Large files return a digest and UTF-8 byte offset; continue with contentPath, offsetBytes, and expectedDigest until complete. This is read-only and never writes or publishes.",
+          "Read regular text files from one existing application after selecting its source. First call without paths or contentPath to list app-owned files; pass the returned nextPathIndex as pathIndex to continue discovery. For paths and contentPath, use app-relative paths such as app/page.tsx or repository-relative paths such as apps/<appId>/app/page.tsx, not absolute /workspace paths. Request a relevant set of paths for content. Content reads return the current availablePathCount and requested bytes without repeating the path index; call without paths or contentPath when the index is needed. Large files return a digest and UTF-8 byte offset; continue with contentPath, offsetBytes, and expectedDigest until no continuation remains. This is read-only and never writes or publishes.",
         async execute({ appId, paths, pathIndex, contentPath, offsetBytes, expectedDigest }, ctx) {
           let state = appBuilderWorkflowState.get();
           // Local development can use its configured checkout. Hosted
