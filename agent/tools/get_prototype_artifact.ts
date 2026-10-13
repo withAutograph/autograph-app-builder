@@ -14,7 +14,7 @@ import { openHostedPostgresDatabase } from "@/lib/mcp/hosted-route";
 
 export default defineTool({
   description:
-    "Deliberately read or export exact session-scoped raw artifact bytes by digest and revision, including Markdown product documents or a targeted artifact diagnostic. Hosted compiled HTML is served and verified by the authenticated Browser preview route; do not routinely drain it into model context for viewing or planning. Inspect readable authored preview source for planning. Raw reads remain available when their content is specifically needed. Omit offsetBytes to preserve the original full-content response when its serialized result fits one Eve event. For a larger artifact, provide the exact revision and repeatedly read with each returned nextOffsetBytes until complete is true; verify the assembled SHA-256 against digest and each chunk against chunkDigest.",
+    "Deliberately read or export exact session-scoped raw artifact bytes by digest and revision, including Markdown product documents or a targeted artifact diagnostic. Hosted compiled HTML is served and verified by the authenticated Browser preview route; do not routinely drain it into model context for viewing or planning. Inspect readable authored preview source for planning. Raw reads remain available when their content is specifically needed. For an inline v1 artifact, omit offsetBytes to read its full content when the serialized result fits one Eve event. For a durable v2 artifact, provide the exact revision; offsetBytes may be omitted to start the first verified page at zero. Continue with each returned nextOffsetBytes until complete is true; verify the assembled SHA-256 against digest and each page against chunkDigest.",
   async execute({ path, digest, revision, offsetBytes }, ctx) {
     const current = appBuilderWorkflowState.get();
     if (current.phase === "empty") {
@@ -30,9 +30,9 @@ export default defineTool({
     }
     const artifact = exactPrototypeArtifact(current.artifacts, artifactReference);
     if (isPrototypeArtifactV2(artifact)) {
-      if (offsetBytes === undefined || revision === undefined) {
+      if (revision === undefined) {
         throw new Error(
-          "Durable prototype artifacts require the exact revision and offsetBytes: 0, then each returned nextOffsetBytes.",
+          "Durable prototype artifacts require the exact revision before reading their stored content.",
         );
       }
       const store = createHostedPrototypeChunkStore({
@@ -42,7 +42,7 @@ export default defineTool({
       });
       return await readVerifiedPrototypeArtifactChunk({
         artifact,
-        offsetBytes,
+        offsetBytes: offsetBytes ?? 0,
         readChunk: async (chunkIndex) =>
           await store.get({
             chunkIndex,
