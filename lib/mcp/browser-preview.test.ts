@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 
 import type { EveSessionService } from "../eve/service";
+import type { StreamedPrototypePreviewResolver } from "./browser-preview";
 import {
   attachPrototypePreviewUrl,
   createPrototypePreviewRequestHandler,
@@ -31,6 +32,52 @@ const result = {
 };
 
 describe("Browser prototype preview", () => {
+  it.each(["authorized", "missing", "wrong-public", "wrong-native"])(
+    "requires a server-authorized exact %s public/native alias tuple",
+    async (kind) => {
+      const path = "prototype/vendor-onboarding/index.html";
+      const artifact = {
+        appId: "vendor-onboarding",
+        chunkCount: 1,
+        contentBytes: Buffer.byteLength(content),
+        digest,
+        mediaType: "text/html" as const,
+        path,
+        recordedByCallId: "call-one",
+        revision: createHash("sha256")
+          .update(JSON.stringify({ digest, mediaType: "text/html", path }))
+          .digest("hex"),
+        sessionId: "wrun_native",
+        version: 2 as const,
+      };
+      const readChunk = vi.fn(async () => await Promise.resolve(content));
+      const alias = {
+        artifactSessionId: kind === "wrong-native" ? "wrun_other" : artifact.sessionId,
+        publicSessionId: kind === "wrong-public" ? "ses_other" : "ses_public",
+      };
+      const resolverResult: NonNullable<Awaited<ReturnType<StreamedPrototypePreviewResolver>>> = {
+        artifact,
+        readChunk,
+      };
+      if (kind !== "missing") {
+        resolverResult.authorizedSessionAlias = alias;
+      }
+      const handler = createPrototypePreviewRequestHandler({
+        // oxlint-disable-next-line unicorn/no-useless-undefined, typescript/no-confusing-void-expression -- No legacy artifact can authorize the unmatched alias.
+        resolvePrototype: async () => await Promise.resolve(undefined),
+        resolveStreamedPrototype: async () => await Promise.resolve(resolverResult),
+      });
+      // Browser-supplied aliases cannot replace the server's stored binding.
+      const request = new Request(
+        `https://builder.example.test/preview/ses_public/${digest}?artifactSessionId=wrun_native&publicSessionId=ses_public`,
+      );
+      const response = await handler(request, { digest, sessionId: "ses_public" });
+      expect(response.status).toBe(kind === "authorized" ? 200 : 404);
+      await expect(response.text()).resolves.toBe(kind === "authorized" ? content : "");
+      expect(readChunk).toHaveBeenCalledTimes(kind === "authorized" ? 2 : 0);
+      expect(artifact.sessionId).toBe("wrun_native");
+    },
+  );
   it("verifies a v2 manifest before streaming its exact chunks", async () => {
     const path = "prototype/vendor-onboarding/index.html";
     const chunks = [content.slice(0, 19), content.slice(19)];

@@ -184,7 +184,15 @@ export type PrototypePreviewResolver = (input: {
 export type StreamedPrototypePreviewResolver = (input: {
   request: Request;
   sessionId: string;
-}) => Promise<{ artifact: PrototypeArtifactV2; readChunk: ReadPrototypeChunk } | undefined>;
+}) => Promise<
+  | {
+      artifact: PrototypeArtifactV2;
+      /** Server-authorized stored public/native binding; never supplied by the Browser. */
+      authorizedSessionAlias?: { publicSessionId: string; artifactSessionId: string };
+      readChunk: ReadPrototypeChunk;
+    }
+  | undefined
+>;
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 export function createPrototypePreviewRequestHandler(input: {
@@ -205,9 +213,14 @@ export function createPrototypePreviewRequestHandler(input: {
         sessionId: route.data.sessionId,
       });
       if (streamed !== undefined) {
-        const { artifact, readChunk } = streamed;
+        const { artifact, authorizedSessionAlias, readChunk } = streamed;
+        const sessionBound =
+          authorizedSessionAlias === undefined
+            ? artifact.sessionId === route.data.sessionId
+            : authorizedSessionAlias.publicSessionId === route.data.sessionId &&
+              authorizedSessionAlias.artifactSessionId === artifact.sessionId;
         if (
-          artifact.sessionId !== route.data.sessionId ||
+          !sessionBound ||
           artifact.mediaType !== "text/html" ||
           !artifact.path.endsWith("/index.html") ||
           !equalDigest(artifact.digest, route.data.digest)
