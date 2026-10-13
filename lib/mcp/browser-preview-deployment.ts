@@ -1,10 +1,13 @@
 import { getPreviewOAuthDeploymentAuth } from "../auth/preview-oauth-deployment";
 import { getPrototypeChunk } from "../agent/postgres-prototype-chunks";
+import type { PrototypeChunkKey } from "../agent/postgres-prototype-chunks";
 import { createPostgresPreviewOrganizationAuthority } from "../auth/postgres-organization-user-authority";
 import { readPreviewOAuthRuntimeConfig } from "../auth/preview-oauth-runtime";
 import { createHostedEveSessionService } from "../eve/hosted-service";
 import type { HostedEveTransport } from "../eve/hosted-service";
 import { hostedPrincipalSchema } from "../eve/hosted-auth";
+import type { HostedPrincipal } from "../eve/hosted-auth";
+import type { HostedEveStore } from "../eve/hosted-store";
 import { createPostgresHostedEveStore } from "../eve/postgres-hosted-store";
 import { createSameOriginEveTransport } from "../eve/same-origin-http";
 import type { HostedWorkloadIdentity } from "../eve/same-origin-http";
@@ -14,9 +17,68 @@ import {
   createPrototypePreviewRequestHandler,
   createServicePrototypePreviewResolver,
 } from "./browser-preview";
+import type { StreamedPrototypePreviewResolver } from "./browser-preview";
 import { openHostedPostgresDatabase } from "./hosted-route";
 
 type Environment = NodeJS.ProcessEnv | Record<string, string | undefined>;
+
+/** Context is supplied only after Browser authentication and active membership. */
+interface OwnedPrototypePreviewContext {
+  principal: HostedPrincipal;
+  service: Pick<EveSessionService, "get">;
+  store: Pick<HostedEveStore, "getSession">;
+  readChunk: (key: PrototypeChunkKey) => Promise<string | undefined>;
+}
+
+export const createOwnedSessionStreamedPrototypePreviewResolver =
+  (input: {
+    contextForRequest: (request: Request) => Promise<OwnedPrototypePreviewContext | undefined>;
+  }): StreamedPrototypePreviewResolver =>
+  async ({ request, sessionId }) => {
+    const context = await input.contextForRequest(request);
+    if (context === undefined) {
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Keep the optional resolver result explicit.
+      return undefined;
+    }
+    const session = await context.service.get({ cursor: 0, limit: 1, sessionId });
+    // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- get may recover the owned adapter; read its current binding afterwards.
+    const stored = await context.store.getSession(context.principal, sessionId);
+    const artifact = session.prototypeRef;
+    if (stored === null || session.sessionId !== sessionId || stored.sessionId !== sessionId) {
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Keep the optional resolver result explicit.
+      return undefined;
+    }
+    const sameOwner =
+      stored.principal.issuer === context.principal.issuer &&
+      stored.principal.audience === context.principal.audience &&
+      stored.principal.ownerUserId === context.principal.ownerUserId &&
+      stored.principal.workspaceId === context.principal.workspaceId;
+    if (!sameOwner || artifact === undefined) {
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Keep the optional resolver result explicit.
+      return undefined;
+    }
+    const adapterBound =
+      artifact.sessionId === stored.adapterSessionId ||
+      (stored.version === 2 && artifact.sessionId === stored.originAdapterSessionId);
+    if (!adapterBound) {
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Keep the optional resolver result explicit.
+      return undefined;
+    }
+    // Keep the original manifest immutable. Same-handle adapter recovery may
+    // retain artifacts from its recorded origin, never from a parent session.
+    return {
+      artifact,
+      authorizedSessionAlias: { artifactSessionId: artifact.sessionId, publicSessionId: sessionId },
+      readChunk: async (chunkIndex) =>
+        await context.readChunk({
+          chunkIndex,
+          path: artifact.path,
+          principal: context.principal,
+          sessionId: artifact.sessionId,
+          transferDigest: artifact.digest,
+        }),
+    };
+  };
 
 // eslint-disable-next-line eslint/func-style -- Preserve function declaration hoisting and initialization timing.
 function adapterMode(environment: Environment): "local" | "hosted" | "unavailable" {
@@ -119,7 +181,7 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
       store: hosted.store,
       transport: hosted.transport,
     });
-    return { database: hosted.database, principal, service };
+    return { database: hosted.database, principal, service, store: hosted.store };
   };
 
   const defaultServiceForRequest = async (
@@ -140,33 +202,22 @@ export function createDeploymentPrototypePreviewRequestHandler(input: {
     resolvePrototype: createServicePrototypePreviewResolver({
       serviceForRequest: input.serviceForRequest ?? defaultServiceForRequest,
     }),
-    resolveStreamedPrototype: async ({ request, sessionId }) => {
-      if (adapterMode(input.environment) !== "hosted") {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- Keep a consistent optional resolver result.
-        return undefined;
-      }
-      const context = await hostedContextForRequest(request);
-      if (context === undefined) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- Keep a consistent optional resolver result.
-        return undefined;
-      }
-      const session = await context.service.get({ cursor: 0, limit: 1, sessionId });
-      const artifact = session.prototypeRef;
-      if (artifact === undefined || artifact.sessionId !== sessionId) {
-        // oxlint-disable-next-line unicorn/no-useless-undefined -- Keep a consistent optional resolver result.
-        return undefined;
-      }
-      const key = {
-        path: artifact.path,
-        principal: context.principal,
-        sessionId,
-        transferDigest: artifact.digest,
-      };
-      return {
-        artifact,
-        readChunk: async (chunkIndex: number) =>
-          await getPrototypeChunk(context.database, { ...key, chunkIndex }),
-      };
-    },
+    resolveStreamedPrototype: createOwnedSessionStreamedPrototypePreviewResolver({
+      contextForRequest: async (request) => {
+        if (adapterMode(input.environment) !== "hosted") {
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- Keep a consistent optional resolver result.
+          return undefined;
+        }
+        const context = await hostedContextForRequest(request);
+        if (context === undefined) {
+          // oxlint-disable-next-line unicorn/no-useless-undefined -- Keep a consistent optional resolver result.
+          return undefined;
+        }
+        return {
+          ...context,
+          readChunk: async (key) => await getPrototypeChunk(context.database, key),
+        };
+      },
+    }),
   });
 }
