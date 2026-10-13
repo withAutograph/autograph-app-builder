@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { defineDynamic } from "eve";
 import type { AgentStaticModelDefinition } from "eve";
 
@@ -31,16 +33,31 @@ export const builderModelConfiguration = ({
     model: defineDynamic({
       events: {
         // Read the saved state at each native model step, including resumed turns.
-        "step.started": () => ({
-          model: builderModelForPhase(appBuilderWorkflowState.get().phase),
-          modelContextWindowTokens: 128_000,
-          modelOptions: {
-            providerOptions: {
-              gateway: { only: ["openai"], order: ["openai"] },
+        "step.started": (_event, ctx) => {
+          const { phase } = appBuilderWorkflowState.get();
+          const modelId = builderModelForPhase(phase);
+          // Selection evidence only: this does not assert a provider call succeeded.
+          try {
+            console.info("[builder:model-selection]", {
+              event: "builder.model_selection",
+              modelId,
+              phase,
+              sessionIdHash: `sha256:${createHash("sha256").update(ctx.session.id).digest("hex")}`,
+            });
+          } catch {
+            // Diagnostics have no authority over native model selection.
+          }
+          return {
+            model: modelId,
+            modelContextWindowTokens: 128_000,
+            modelOptions: {
+              providerOptions: {
+                gateway: { only: ["openai"], order: ["openai"] },
+              },
             },
-          },
-          reasoning,
-        }),
+            reasoning,
+          };
+        },
       },
     }),
   };
