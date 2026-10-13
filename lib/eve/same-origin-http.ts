@@ -1434,10 +1434,12 @@ export function createSameOriginEveTransport(input: {
           turnId: guardedTurnId,
         });
       } catch (error) {
-        if (error instanceof HostedSessionReadTimeoutError) {
-          throw new HostedCancellationUnsettledError();
+        if (error instanceof HostedCancellationUnsettledError) {
+          throw error;
         }
-        throw error;
+        // Eve acknowledged this exact cancellation. Any unread settlement
+        // boundary requires reconciliation rather than implying no dispatch.
+        throw new HostedCancellationUnsettledError();
       }
     },
     get: (request) =>

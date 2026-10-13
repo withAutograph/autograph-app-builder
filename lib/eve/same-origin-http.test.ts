@@ -2415,3 +2415,49 @@ it("does not treat a newer turn's waiting boundary as settlement of the original
     fetchImplementation.mock.calls.filter(([request]) => String(request).endsWith("/cancel")),
   ).toHaveLength(1);
 });
+
+it.each(["preguard", "accepted-settlement"] as const)(
+  "preserves the dispatch stage when a generic durable-tail read fails during %s",
+  async (stage) => {
+    const seed = await cancellationSeed();
+    let posted = false;
+    const readFailure = new Error("Canonical Eve durable-tail read failed");
+    // oxlint-disable-next-line eslint/require-await -- Terminal fetch preserves the native HTTP boundary.
+    const fetchImplementation = vi.fn<typeof fetch>(async (request) => {
+      if (String(request).endsWith("/cancel")) {
+        posted = true;
+        return Response.json(
+          { ok: true, sessionId: "wrun_1", status: "accepted" },
+          { status: 202 },
+        );
+      }
+      if (stage === "preguard" || posted) {
+        throw readFailure;
+      }
+      return cancellationDelta([], 0);
+    });
+    const transport = createSameOriginEveTransport({
+      config,
+      fetchImplementation,
+      workloadIdentity: identity(),
+    });
+    const cancellation = transport.cancelAccepted?.({
+      adapterSessionId: "wrun_1",
+      nativeObservationState: seed,
+      principal,
+      turnId: "turn_1",
+    });
+    if (stage === "preguard") {
+      await expect(cancellation).rejects.toBe(readFailure);
+    } else {
+      await expect(cancellation).rejects.toBeInstanceOf(HostedCancellationUnsettledError);
+      await expect(cancellation).rejects.toThrow(
+        "Cancellation was accepted but has not settled; use autograph_get.",
+      );
+    }
+    expect(
+      fetchImplementation.mock.calls.filter(([request]) => String(request).endsWith("/cancel")),
+    ).toHaveLength(stage === "preguard" ? 0 : 1);
+    expect(fetchImplementation).toHaveBeenCalledTimes(stage === "preguard" ? 1 : 3);
+  },
+);
