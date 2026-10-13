@@ -31,6 +31,7 @@ import type { SourceKind } from "@/lib/repository/source-receipt";
 const isExistingRepositorySource = (sourceKind: SourceKind): boolean =>
   sourceKind === "existing-repository";
 const READ_PROGRESS_VIEW = "read-progress";
+const NEXT_PAGE_VIEW = "next-page";
 
 export const selectAppBaselineForReview = <
   T extends
@@ -258,16 +259,13 @@ export const destinationReviewReadStatus = (input: {
       (side === "before" ? progress?.beforeComplete : progress?.afterComplete) ?? false;
     const readable =
       (side === "before" ? progress?.beforeReadable : progress?.afterReadable) ?? null;
-    const cursor = side === "before" ? progress?.beforeCursor : progress?.afterCursor;
     return {
       complete,
       nextCall: complete
         ? null
         : {
-            ...(cursor === undefined ? {} : { contentCursor: { ...cursor } }),
             contentSide: side,
-            includeContent: true as const,
-            view: "changes" as const,
+            view: NEXT_PAGE_VIEW,
           },
       readable,
     };
@@ -426,6 +424,104 @@ export const exactNormalizedChangeSet = async (input: {
   );
 };
 
+const currentDestinationProgress = (
+  progress: GitHubDestinationReviewReadProgress | undefined,
+  changeSetDigest: string,
+) => (progress?.changeSetDigest === changeSetDigest ? progress : undefined);
+
+const destinationReviewSide = (
+  progress: GitHubDestinationReviewReadProgress | undefined,
+  side: "before" | "after",
+) => ({
+  complete: (side === "before" ? progress?.beforeComplete : progress?.afterComplete) === true,
+  cursor: side === "before" ? progress?.beforeCursor : progress?.afterCursor,
+});
+
+const assertNextPageInput = (
+  input: { view: string; contentCursor?: ChangeSetExportCursor },
+  phase: string,
+) => {
+  if (input.view !== NEXT_PAGE_VIEW) {
+    return;
+  }
+  if (input.contentCursor !== undefined) {
+    throw new Error("next-page does not accept contentCursor; use the saved side progress.");
+  }
+  if (phase === "validation_failed") {
+    throw new Error("Run successful repository validation before reading its next page.");
+  }
+};
+
+const needsBeforeRuntime = (
+  input: { view: string; includeContent: boolean; contentSide: "before" | "after" },
+  progress: GitHubDestinationReviewReadProgress | undefined,
+) => {
+  if (input.contentSide !== "before") {
+    return false;
+  }
+  if (input.view === NEXT_PAGE_VIEW) {
+    return !destinationReviewSide(progress, input.contentSide).complete;
+  }
+  return input.includeContent;
+};
+
+/** Execute an actual bounded content read before committing its checked receipt. */
+export const executeDestinationReviewPage = async (input: {
+  page: Parameters<typeof readChangeSetReviewPage>[0];
+  previous?: GitHubDestinationReviewReadProgress;
+  nextPage?: boolean;
+  destination: boolean;
+  abortSignal?: AbortSignal;
+  commit: (progress: GitHubDestinationReviewReadProgress) => void;
+}) => {
+  input.abortSignal?.throwIfAborted();
+  const { side } = input.page;
+  const previous =
+    input.previous?.changeSetDigest === input.page.changeSet.digest ? input.previous : undefined;
+  if (input.nextPage === true && input.page.cursor !== undefined) {
+    throw new Error("next-page does not accept contentCursor; use the saved side progress.");
+  }
+  if (input.nextPage === true && !input.destination) {
+    throw new Error("Prepare the GitHub destination review before reading its next page.");
+  }
+  const savedSide = destinationReviewSide(previous, side);
+  if (input.nextPage === true && savedSide.complete) {
+    return checkedNativeToolResult(
+      {
+        ...destinationReviewReadStatus({ changeSetDigest: input.page.changeSet.digest, previous }),
+        alreadyComplete: true,
+        contentSide: side,
+        reviewReference: {
+          digest: input.page.changeSet.digest,
+          kind: "current-session-change-set",
+          sessionId: input.page.sessionId,
+        },
+      },
+      input.page.metadata,
+    );
+  }
+  const cursor = input.nextPage === true ? savedSide.cursor : input.page.cursor;
+  const includeContent = input.nextPage === true ? true : input.page.includeContent;
+  const exported = await readChangeSetReviewPage({ ...input.page, cursor, includeContent });
+  input.abortSignal?.throwIfAborted();
+  const result = checkedNativeToolResult(exported, input.page.metadata);
+  if (input.destination && includeContent) {
+    const progress = destinationReviewReadProgress({
+      changeSetDigest: input.page.changeSet.digest,
+      cursor,
+      nextCursor: exported.contentCursor,
+      previous: input.previous,
+      readable: exported.exportOmissions.every(
+        (omission) => omission.reason === "changed non-text artifact",
+      ),
+      side,
+    });
+    input.abortSignal?.throwIfAborted();
+    input.commit(progress);
+  }
+  return result;
+};
+
 const exportAppliedTextFiles = async (input: {
   state: Extract<
     ReturnType<typeof appBuilderWorkflowState.get>,
@@ -511,7 +607,7 @@ const exportAppliedTextFiles = async (input: {
 
 export default defineTool({
   description:
-    "Read one bounded page of the complete change metadata and optional source content after validation. Continue with the entire returned contentCursor verbatim using the same contentSide and includeContent until no cursor remains. Read destination before and after sides from their first page with includeContent=true before acceptance; metadata-only pages do not complete either side. If a cursor is lost or rejected, use view=read-progress to read current saved side coverage and exact nextCall arguments; this status read grants no completion. To restart an unreadable side, omit its contentCursor and read that side completely again. Use view=acceptance after acceptance to read the full saved receipt and product/source evidence as UTF-8-safe JSON chunks using detailCursor and the returned session references. Failed validation remains explicitly unreviewed and cannot be accepted. This never publishes or changes an external repository.",
+    "Read one bounded page of the complete change metadata and optional source content after validation. Prefer view=next-page with contentSide for destination content: it reads actual content from the current session saved cursor without caller contentCursor, and returns alreadyComplete without resetting completed sides. In next-page mode repeat the same minimal call until no cursor remains. In legacy changes mode continue with the entire returned contentCursor verbatim using the same contentSide and includeContent until no cursor remains. Read destination before and after sides from their first page with includeContent=true before acceptance; metadata-only pages do not complete either side. If a cursor is lost or rejected, use view=read-progress to read current saved side coverage and exact nextCall arguments; this status read grants no completion. To restart an unreadable side, omit its contentCursor and read that side completely again. Use view=acceptance after acceptance to read the full saved receipt and product/source evidence as UTF-8-safe JSON chunks using detailCursor and the returned session references. Failed validation remains explicitly unreviewed and cannot be accepted. This never publishes or changes an external repository.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (
@@ -547,6 +643,8 @@ export default defineTool({
         "Run successful repository validation before reading destination review progress.",
       );
     }
+    assertNextPageInput(input, state.phase);
+    ctx.abortSignal?.throwIfAborted();
     const sandbox = await ctx.getSandbox();
     if (state.phase === "validation_failed") {
       if (!input.includeContent) {
@@ -587,64 +685,65 @@ export default defineTool({
         metadata,
       );
     }
-    const runtime =
-      input.includeContent && input.contentSide === "before"
-        ? await githubPublicationRuntimeForSession(ctx.session.auth)
-        : undefined;
+    if (input.view === NEXT_PAGE_VIEW && destination === undefined) {
+      throw new Error("Prepare the GitHub destination review before reading its next page.");
+    }
+    const currentProgress = currentDestinationProgress(
+      state.githubDestinationReviewRead,
+      changeSet.digest,
+    );
+    const runtime = needsBeforeRuntime(input, currentProgress)
+      ? await githubPublicationRuntimeForSession(ctx.session.auth)
+      : undefined;
     if (input.includeContent && input.contentSide === "before" && destination === undefined) {
       throw new Error("Prepare the destination review before reading its before content.");
     }
-    const exported = await readChangeSetReviewPage({
-      changeSet,
-      cursor: input.contentCursor,
-      includeContent: input.includeContent,
-      isTextPath: isCandidateExportTextPath,
-      metadata,
-      publicationDestination:
-        destination === undefined
-          ? undefined
-          : {
-              branch: destination.repository.defaultBranch,
-              headSha: destination.repository.headSha,
-              headTree: destination.repository.headTree,
-              repository: `${destination.repository.owner}/${destination.repository.name}`,
-            },
-      readText: async (path) => {
-        if (input.contentSide === "before" && destination !== undefined) {
-          if (runtime?.readDraftDestinationFile === undefined) {
-            throw new Error(
-              "The GitHub runtime does not support immutable destination content reads.",
-            );
-          }
-          const file = await runtime.readDraftDestinationFile({ binding: destination, path });
-          return file === null ? null : Buffer.from(file.bytes).toString("utf-8");
-        }
-        return await sandbox.readTextFile({
-          path: `${state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "")}/${path}`,
+    return await executeDestinationReviewPage({
+      abortSignal: ctx.abortSignal,
+      commit: (progress) => {
+        updateExactWorkflow({
+          expected: state,
+          operation: "destination diff content read",
+          transition: (latest) => ({ ...latest, githubDestinationReviewRead: progress }),
         });
       },
-      reviewed: state.phase === "reviewed",
-      sessionId: ctx.session.id,
-      side: input.contentSide,
-    });
-    if (destination !== undefined && input.includeContent) {
-      const progress = destinationReviewReadProgress({
-        changeSetDigest: changeSet.digest,
+      destination: destination !== undefined,
+      nextPage: input.view === NEXT_PAGE_VIEW,
+      page: {
+        changeSet,
         cursor: input.contentCursor,
-        nextCursor: exported.contentCursor,
-        previous: state.githubDestinationReviewRead,
-        readable: exported.exportOmissions.every(
-          (omission) => omission.reason === "changed non-text artifact",
-        ),
+        includeContent: input.includeContent,
+        isTextPath: isCandidateExportTextPath,
+        metadata,
+        publicationDestination:
+          destination === undefined
+            ? undefined
+            : {
+                branch: destination.repository.defaultBranch,
+                headSha: destination.repository.headSha,
+                headTree: destination.repository.headTree,
+                repository: `${destination.repository.owner}/${destination.repository.name}`,
+              },
+        readText: async (path) => {
+          if (input.contentSide === "before" && destination !== undefined) {
+            if (runtime?.readDraftDestinationFile === undefined) {
+              throw new Error(
+                "The GitHub runtime does not support immutable destination content reads.",
+              );
+            }
+            const file = await runtime.readDraftDestinationFile({ binding: destination, path });
+            return file === null ? null : Buffer.from(file.bytes).toString("utf-8");
+          }
+          return await sandbox.readTextFile({
+            path: `${state.applyReceipt.applyRoot.replace(/^\/workspace\//u, "")}/${path}`,
+          });
+        },
+        reviewed: state.phase === "reviewed",
+        sessionId: ctx.session.id,
         side: input.contentSide,
-      });
-      updateExactWorkflow({
-        expected: state,
-        operation: "destination diff content read",
-        transition: (latest) => ({ ...latest, githubDestinationReviewRead: progress }),
-      });
-    }
-    return checkedNativeToolResult(exported, metadata);
+      },
+      previous: state.githubDestinationReviewRead,
+    });
   },
   inputSchema: z.strictObject({
     contentCursor: z
@@ -676,6 +775,6 @@ export default defineTool({
       .string()
       .regex(/^[0-9a-f]{64}$/u)
       .optional(),
-    view: z.enum(["changes", "acceptance", READ_PROGRESS_VIEW]).default("changes"),
+    view: z.enum(["changes", "acceptance", READ_PROGRESS_VIEW, NEXT_PAGE_VIEW]).default("changes"),
   }),
 });
