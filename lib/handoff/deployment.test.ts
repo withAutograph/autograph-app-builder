@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 
+import { activeBuilderModelId } from "../integrations/active-model";
 import type { BuilderProvisionJournalStore } from "../provisioning/journal";
 import { initialBuilderProvisionJournalRecord } from "../provisioning/journal";
 import {
@@ -114,7 +115,7 @@ const validBody = {
   brief: "Review new vendors before activation.",
   connections: [],
   creationRequestId,
-  modelId: "openai/gpt-6-luna",
+  modelId: activeBuilderModelId,
   repository: { name: "vendor-review", private: true },
   version: 1,
 };

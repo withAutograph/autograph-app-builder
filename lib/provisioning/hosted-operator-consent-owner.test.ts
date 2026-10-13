@@ -2,6 +2,7 @@ import { createOperatorWorkloadAuthorizationError } from "./hosted-operator-work
 import { createHash } from "node:crypto";
 import { HostedOperatorError } from "./hosted-operator-contract";
 import { describe, expect, it, vi } from "vitest";
+import { activeBuilderModelId } from "../integrations/active-model";
 import { durableHostedSessionRecordSchema } from "../eve/hosted-store";
 import { builderHandoffRecordSchema } from "../handoff/contracts";
 import { createHostedOperatorOwnerContextResolver } from "./hosted-operator-owner-context";
@@ -55,7 +56,7 @@ const fixture = (kind: "direct" | "handoff" = "direct") => {
       appName: "Original app",
       brief: "Original brief",
       connections: [],
-      modelId: "openai/gpt-6-luna",
+      modelId: activeBuilderModelId,
       repository: { private: true, requestedName: "original-app" },
     },
     redeemedAt: new Date("2026-10-01T01:00:00Z"),

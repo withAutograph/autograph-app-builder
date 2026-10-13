@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { expect, it, vi } from "vitest";
+import { activeBuilderModelId } from "../../lib/integrations/active-model";
 import {
   exerciseCandidateCapabilities,
   runCandidateCapabilityProbe,
@@ -69,7 +70,7 @@ it("retains failed scratch installation without attempting a product mutation", 
   );
   const receipt = await runCandidateCapabilityProbe({
     abortSignal: new AbortController().signal,
-    model: "openai/gpt-6-luna",
+    model: activeBuilderModelId,
     session: { readBinaryFile: vi.fn(), readTextFile: vi.fn(), run, writeTextFile } as never,
   });
   expect(writeTextFile).toHaveBeenCalledWith(
@@ -87,7 +88,7 @@ it("runs the standalone probe only after scratch tooling setup", async () => {
   const run = vi.fn(() => Promise.resolve({ exitCode: 0, stderr: "", stdout: "" }));
   const receipt = await runCandidateCapabilityProbe({
     abortSignal: new AbortController().signal,
-    model: "openai/gpt-6-luna",
+    model: activeBuilderModelId,
     session: {
       readBinaryFile: vi.fn(),
       readTextFile: () => Promise.resolve(JSON.stringify({ applicationFunctionalCredit: false })),

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { activeBuilderModelId } from "../integrations/active-model";
 import type { BuilderHandoffIntent } from "../handoff/contracts";
 import {
   createPreparedAppContextReader,
@@ -17,7 +18,7 @@ const intent = {
   appName: "Stock",
   brief: "Manage stock exceptions",
   connections: ["github", "vercel"],
-  modelId: "openai/gpt-6-luna",
+  modelId: activeBuilderModelId,
   providers: { githubInstallationId: "10", vercelInstallationId: "icfg_1" },
   provisioning: {
     appId: "stock",

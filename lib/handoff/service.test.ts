@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { randomUUID } from "node:crypto";
 
+import { activeBuilderModelId } from "../integrations/active-model";
 import { builderHandoffIntentSchema, builderHandoffRequestDigest } from "./contracts";
 import type { BuilderHandoffRecord } from "./contracts";
 import {
@@ -86,12 +87,12 @@ function memoryStore(): BuilderHandoffStore {
   };
 }
 
-const intent = {
+const intent: BuilderHandoffRecord["intent"] = {
   appId: "vendor-onboarding",
   appName: "Vendor Onboarding",
   brief: "Help operations review new vendors.",
   connections: ["Ramp"],
-  modelId: "openai/gpt-6-luna" as const,
+  modelId: activeBuilderModelId,
   repository: {
     private: true,
     requestedName: "vendor-onboarding",

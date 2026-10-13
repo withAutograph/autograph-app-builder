@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
+import { activeBuilderModelId } from "../integrations/active-model";
 import {
   createRealOAuthHarness,
   codexClientMetadata,
@@ -202,7 +203,7 @@ describe("web session to real OAuth to hosted MCP handoff", () => {
             brief: "Review new vendors before activation.",
             connections: ["Ramp"],
             creationRequestId: randomUUID(),
-            modelId: "openai/gpt-6-luna",
+            modelId: activeBuilderModelId,
             provisioningRequestId,
             repository: { name: "vendor-review", private: true },
             version: 1,

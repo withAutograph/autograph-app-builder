@@ -4,6 +4,7 @@ import { connection } from "next/server";
 
 import { loadNextGatewayModels } from "@/lib/integrations/ai-gateway-models.next";
 import { readProductionNavigationRuntimeConfig } from "@/lib/testing/production-navigation";
+import { activeBuilderModelId } from "@/lib/integrations/active-model";
 
 const catalogUrl = "https://ai-gateway.vercel.sh/v1/models";
 let installed = false;
@@ -26,7 +27,7 @@ const installCatalogFixture = () => {
     return Response.json({
       data: [
         {
-          id: "openai/gpt-6-luna",
+          id: activeBuilderModelId,
           name: `Navigation catalog ${revision}`,
           owned_by: "openai",
           tags: ["tool-use"],

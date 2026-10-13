@@ -2,6 +2,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 
+import { activeBuilderModelId } from "../integrations/active-model";
 import type { builderHandoffs } from "../db/schema";
 import { createPostgresBuilderHandoffStore } from "./postgres-store";
 
@@ -22,7 +23,7 @@ const row = {
     appName: "Vendor Review",
     brief: "Review new vendors.",
     connections: [],
-    modelId: "openai/gpt-6-luna",
+    modelId: activeBuilderModelId,
     repository: { private: true, requestedName: "vendor-review" },
   },
   redeemedAt: null,
