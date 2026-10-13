@@ -33,9 +33,33 @@ const isReviewedPhase = (
   state.phase === "fresh_bootstrap_failed" ||
   state.phase === "published_fresh_bootstrap";
 
+const acceptedUIReference = (state: ReturnType<typeof appBuilderWorkflowState.get>) => {
+  if (!("appSpec" in state) || state.appSpec.uiRevision === undefined) {
+    return {};
+  }
+  return {
+    acceptedUIReference: {
+      appId: state.appSpec.appId,
+      revision: state.appSpec.uiRevision,
+    },
+  };
+};
+
+const appSpecSummary = (appSpec: {
+  artifactRevision: string;
+  artifactPath: string;
+  digest: string;
+  uiRevision?: string;
+}) => ({
+  artifactRevision: appSpec.artifactRevision,
+  digest: appSpec.digest,
+  path: appSpec.artifactPath,
+  ...(appSpec.uiRevision === undefined ? {} : { uiRevision: appSpec.uiRevision }),
+});
+
 export default defineTool({
   description:
-    "Return session-bound artifact workflow receipt metadata without artifact content or mutation. uiPreview.revision is the current component-backed UI revision for accept_ui_preview expectedRevision and record_ui_preview baseRevision. artifacts[].revision identifies a document artifact and must not be used as a UI revision.",
+    "Return session-bound artifact workflow receipt metadata without artifact content or mutation. uiPreview.revision is the current component-backed UI revision for accept_ui_preview expectedRevision and record_ui_preview baseRevision. artifacts[].revision identifies a document artifact and must not be used as a UI revision. After AppSpec acceptance, the full uiPreview object may be absent; acceptedUIReference and appSpec.uiRevision preserve the UI revision accepted with that AppSpec. This is historical acceptance metadata, not the current component-backed UI revision or source. Its absence from uiPreview is expected and does not mean the design is missing or should be regenerated. Actual UI source changes still follow normal preview, validation, and acceptance. A planned phase continues through the ordinary private implementation path and separate Build approval; no approval is implied.",
   execute(_input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (state.phase === "empty") {
@@ -125,6 +149,7 @@ export default defineTool({
             },
           }
         : {}),
+      ...acceptedUIReference(state),
       phase: state.phase,
       sessionId: ctx.session.id,
       version: state.version,
@@ -145,11 +170,7 @@ export default defineTool({
       state.phase === "validated" ||
       isReviewedPhase(state)
         ? {
-            appSpec: {
-              artifactRevision: state.appSpec.artifactRevision,
-              digest: state.appSpec.digest,
-              path: state.appSpec.artifactPath,
-            },
+            appSpec: appSpecSummary(state.appSpec),
           }
         : {}),
       ...(state.phase === "dependencies_prepared" ||
