@@ -22,6 +22,9 @@ const isReviewedPhase = (
   state.phase === "publication_failed" ||
   state.phase === "published_local";
 
+const unplannedAppNextAction = (): string =>
+  "No canonical implementation proposal exists yet. For an existing app, author complete replacement contents and pass them as existingAppChanges to accept_app_spec. Planning creates a proposal without applying app files; normal Build approval still precedes apply_app_creation.";
+
 const statusReceipt = (
   state: Exclude<ReturnType<typeof appBuilderWorkflowState.get>, { phase: "empty" }>,
   recovered: boolean,
@@ -32,6 +35,11 @@ const statusReceipt = (
   recovered,
   version: state.version,
   workspace: state.workspace,
+  ...(state.phase === "app_spec_accepted" ||
+  state.phase === "dependencies_prepared" ||
+  state.phase === "identity_resolved"
+    ? { nextAction: unplannedAppNextAction() }
+    : {}),
   ...(state.phase === "app_spec_accepted" ||
   state.phase === "dependencies_prepared" ||
   state.phase === "identity_resolved" ||
@@ -147,7 +155,7 @@ const statusReceipt = (
 
 export default defineTool({
   description:
-    "Report the durable App Builder workflow phase and verify any prepared repository workspace without mutating it.",
+    "Report the durable App Builder workflow phase and verify any prepared repository workspace without mutating it. When the accepted AppSpec has no canonical proposal yet, nextAction gives the normal planning step; it is advisory and grants no build approval.",
   async execute(_input, ctx) {
     const durable = appBuilderWorkflowState.get();
     if (hasTestCapability("simulated-target")) {

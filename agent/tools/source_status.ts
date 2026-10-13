@@ -12,7 +12,7 @@ import { savedAppBaselineSummary } from "@/lib/agent/saved-app-baseline-selectio
 
 export default defineTool({
   description:
-    "Return the durable source-review phase and current app baseline provenance when selected. receipt.sourceSha identifies the platform checkout, while appBaseline.commitSha identifies the historical app version; a pending baseline is not prepared. To start a new hosted app, explicitly pass sourceKind=fresh-template to acquire the canonical Arrusted starter. Existing hosted apps use resolve_github_source instead.",
+    "Return the durable source-review phase and current app baseline provenance when selected. receipt.sourceSha identifies the platform checkout, while appBaseline.commitSha identifies the historical app version. For an owned prepared baseline, historical app files are projected into the selected platform checkout; the platform branch (which may be main) remains selected, and the source-bound sandbox restores that projection on use. There is no separate baseline activation or ref switch. A pending baseline is not prepared. To start a new hosted app, explicitly pass sourceKind=fresh-template to acquire the canonical Arrusted starter. Existing hosted apps use resolve_github_source instead.",
   async execute(input, ctx) {
     let state = sourceWorkflowState.get();
     if (state.phase === "empty") {
@@ -49,8 +49,9 @@ export default defineTool({
       workflow.phase === "empty"
         ? state.githubSource
         : (workflow.githubSource ?? state.githubSource);
+    const savedBaseline = appBaselineState.get();
     const appBaseline = savedAppBaselineSummary({
-      baseline: appBaselineState.get(),
+      baseline: savedBaseline,
       githubSource,
       sessionId: ctx.session.id,
     });
@@ -63,7 +64,20 @@ export default defineTool({
       return result;
     }
     const platformResult = { ...result, sourceShaScope: "platform" as const };
-    return appBaseline === null ? platformResult : { ...platformResult, appBaseline };
+    if (appBaseline === null) {
+      return platformResult;
+    }
+    if (appBaseline.status !== "prepared") {
+      return { ...platformResult, appBaseline };
+    }
+    return {
+      ...platformResult,
+      appBaseline: {
+        ...appBaseline,
+        guidance:
+          "Historical app files are the baseline in the selected platform checkout and are restored on use. Platform Git HEAD, including main, may differ from appBaseline.commitSha; no separate activation or HEAD switch is needed.",
+      },
+    };
   },
   inputSchema: z.strictObject({
     sourceKind: z.literal("fresh-template").optional(),
