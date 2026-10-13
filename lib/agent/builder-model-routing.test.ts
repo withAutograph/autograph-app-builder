@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
+
 import { defineAgent } from "eve";
 import { mockModel } from "eve/evals";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { activeBuilderModelId, builderValidationModelId } from "../integrations/active-model";
 import { builderModelConfiguration, builderModelForPhase } from "./builder-model-routing";
@@ -57,6 +59,12 @@ const nativeModel = (localDevelopment = false) => {
   return { configuration, handler, model };
 };
 
+beforeEach(() => {
+  vi.spyOn(console, "info").mockImplementation(() => {
+    // Capture metadata without writing fixture diagnostics to the test output.
+  });
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -112,6 +120,59 @@ describe("Builder model routing", () => {
     });
   });
 
+  it("logs only selected phase/model and a stable hashed native session identity at callback time", async () => {
+    const state = vi.spyOn(appBuilderWorkflowState, "get");
+    const { handler } = nativeModel();
+    expect(console.info).not.toHaveBeenCalled();
+    const rawSessionId = "private-native-session-id";
+    const privatePayload = "private-provider-message-auth-source-secret";
+    const diagnosticContext = {
+      ...context,
+      channel: { metadata: { privatePayload } },
+      messages: [{ content: privatePayload, role: "user" as const }],
+      session: { ...context.session, id: rawSessionId },
+    };
+    const sessionIdHash = `sha256:${createHash("sha256").update(rawSessionId).digest("hex")}`;
+    state.mockReturnValue(savedState("ui_accepted"));
+    await handler({ privatePayload, type: "step.started" }, diagnosticContext);
+    expect(console.info).toHaveBeenNthCalledWith(1, "[builder:model-selection]", {
+      event: "builder.model_selection",
+      modelId: activeBuilderModelId,
+      phase: "ui_accepted",
+      sessionIdHash,
+    });
+    state.mockReturnValue(savedState("app_spec_accepted"));
+    await handler({ privatePayload, type: "step.started" }, diagnosticContext);
+    expect(console.info).toHaveBeenNthCalledWith(2, "[builder:model-selection]", {
+      event: "builder.model_selection",
+      modelId: builderValidationModelId,
+      phase: "app_spec_accepted",
+      sessionIdHash,
+    });
+    expect(state).toHaveBeenCalledTimes(2);
+    expect(console.info).toHaveBeenCalledTimes(2);
+    const logged = JSON.stringify(vi.mocked(console.info).mock.calls);
+    expect(logged).not.toContain(rawSessionId);
+    expect(logged).not.toContain(privatePayload);
+    expect(sessionIdHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
+  });
+
+  it("keeps native selection unchanged when the diagnostic sink throws", async () => {
+    vi.mocked(console.info).mockImplementation(() => {
+      throw new Error("diagnostic sink unavailable");
+    });
+    vi.spyOn(appBuilderWorkflowState, "get").mockReturnValue(savedState("validation_failed"));
+    const { handler } = nativeModel();
+    expect(await handler({ type: "step.started" }, context)).toEqual({
+      model: builderValidationModelId,
+      modelContextWindowTokens: 128_000,
+      modelOptions: {
+        providerOptions: { gateway: { only: ["openai"], order: ["openai"] } },
+      },
+      reasoning: "high",
+    });
+  });
+
   it.each([true, false])("preserves the static mock branch (local=%s)", (localDevelopment) => {
     const state = vi.spyOn(appBuilderWorkflowState, "get");
     const testModel = mockModel(() => "fixture");
@@ -121,5 +182,6 @@ describe("Builder model routing", () => {
     expect(agent.reasoning).toBe(localDevelopment ? "low" : "high");
     expect(agent).not.toHaveProperty("modelOptions");
     expect(state).not.toHaveBeenCalled();
+    expect(console.info).not.toHaveBeenCalled();
   });
 });
