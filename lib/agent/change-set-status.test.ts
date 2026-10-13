@@ -51,9 +51,10 @@ describe("destination review progress readback", () => {
         nextCall: { contentSide: side, view: "next-page" },
         readable: null,
       });
-      expect(reviewInputSchema.parse(status.sides[side].nextCall)).toMatchObject(
-        status.sides[side].nextCall,
-      );
+      expect(reviewInputSchema.parse(status.sides[side].nextCall)).toMatchObject({
+        contentSide: side,
+        view: "next-page",
+      });
     }
     expect(reviewInputSchema.parse({ view: "read-progress" })).toMatchObject({
       view: "read-progress",
@@ -93,7 +94,10 @@ describe("destination review progress readback", () => {
       contentSide: "before",
       view: "next-page",
     });
-    expect(reviewInputSchema.parse(nextCall)).toMatchObject(nextCall ?? {});
+    expect(reviewInputSchema.parse(nextCall)).toMatchObject({
+      contentSide: "before",
+      view: "next-page",
+    });
     expect(advanced).toEqual(beforeReadback);
     expect(() => {
       assertCompleteGitHubDestinationReview(advanced, changeSetDigest);
