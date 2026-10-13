@@ -10,6 +10,7 @@ import type { HostedPrincipal } from "./hosted-auth";
 import { toPublicEvent } from "./public-events";
 import type { InternalEveEvent } from "./public-events";
 import { nativeObservationStateSchema } from "./native-observation-state";
+import { pagedCheckpointMetadataSchema } from "./postgres-hosted-checkpoint-history";
 import { HostedSessionReadTimeoutError } from "./hosted-session-read-timeout-error";
 import {
   createSameOriginEveTransport,
@@ -1751,6 +1752,134 @@ describe("bounded public observe over actual live HTTP streams", () => {
 });
 
 describe("durable native observer checkpoint", () => {
+  it.each(["event", "seed"])(
+    "normalizes an empty idle turn %s while retaining the prototype and absolute history",
+    async (kind) => {
+      const content = "<html>Saved prototype</html>";
+      const path = "prototype/spend-review/index.html";
+      const digest = createHash("sha256").update(content).digest("hex");
+      const revision = createHash("sha256")
+        .update(JSON.stringify({ digest, mediaType: "text/html", path }))
+        .digest("hex");
+      const events: unknown[] = [
+        { data: {}, type: "session.started" },
+        { data: { turnId: "turn_real" }, type: "step.started" },
+        {
+          data: {
+            actions: [
+              {
+                callId: "artifact",
+                input: { content, mediaType: "text/html", path },
+                kind: "tool-call",
+                toolName: "record_prototype_artifact",
+              },
+            ],
+            turnId: "turn_real",
+          },
+          type: "actions.requested",
+        },
+        {
+          data: {
+            result: {
+              callId: "artifact",
+              kind: "tool-result",
+              output: {
+                appId: "spend-review",
+                chunkCount: 1,
+                complete: true,
+                contentBytes: Buffer.byteLength(content),
+                digest,
+                mediaType: "text/html",
+                path,
+                recordedByCallId: "artifact",
+                revision,
+                sessionId: "wrun_1",
+                version: 2,
+              },
+              toolName: "record_prototype_artifact",
+            },
+            status: "completed",
+            turnId: "turn_real",
+          },
+          type: "action.result",
+        },
+        { data: { turnId: "turn_real" }, type: "turn.completed" },
+        { data: {}, type: "session.waiting" },
+      ];
+      const http = await liveHttpSnapshot(events);
+      try {
+        const input = {
+          config: { ...config, timeoutMs: 10_000 },
+          fetchImplementation: http.fetchImplementation,
+          onEvent: () => {},
+          sessionId: "wrun_1",
+          workloadIdentity: identity(),
+        };
+        const first = await observeSameOriginEveStream(input);
+        expect(first.prototypeRef).toMatchObject({ digest, path, version: 2 });
+        expect(first.activeTurnId).toBeUndefined();
+        const retained = { ...first.nativeObservationState };
+        if (kind === "event") {
+          events.push({ data: { resolutions: [], turnId: "" }, type: "input.resolved" });
+        }
+        if (kind === "seed") {
+          retained.currentTurnId = "";
+        }
+        const original = JSON.stringify(retained);
+        const resumed = await observeSameOriginEveStream({
+          ...input,
+          nativeObservationState: retained,
+        });
+        expect(() =>
+          pagedCheckpointMetadataSchema.parse({
+            activeTurnId: resumed.activeTurnId,
+            capturedAtEpochMs: 1000,
+            nativeObservationState: resumed.nativeObservationState,
+            prototypeRef: resumed.prototypeRef,
+            status: resumed.status,
+            version: 1,
+          }),
+        ).not.toThrow();
+        expect(resumed.activeTurnId).toBeUndefined();
+        expect(resumed.nativeObservationState.currentTurnId).toBeUndefined();
+        expect(resumed.prototypeRef).toEqual(first.prototypeRef);
+        expect(resumed.status).toBe("waiting");
+        expect(resumed.nextNativeIndex).toBe(events.length);
+        expect(resumed.publicEventCount).toBe(first.publicEventCount);
+        expect(JSON.stringify(retained)).toBe(original);
+        events.push({ data: { turnId: "turn_new" }, type: "step.started" });
+        const next = await observeSameOriginEveStream({
+          ...input,
+          nativeObservationState: resumed.nativeObservationState,
+        });
+        expect(next.activeTurnId).toBe("turn_new");
+        expect(next.nextNativeIndex).toBe(events.length);
+        expect(next.prototypeRef).toEqual(first.prototypeRef);
+      } finally {
+        await http.close();
+      }
+    },
+  );
+
+  it("does not replace a real active turn with an empty between-turn event ID", async () => {
+    const http = await liveHttpSnapshot([
+      { data: { turnId: "turn_real" }, type: "step.started" },
+      { data: { resolutions: [], turnId: "" }, type: "input.resolved" },
+    ]);
+    try {
+      const result = await observeSameOriginEveStream({
+        config: { ...config, timeoutMs: 10_000 },
+        fetchImplementation: http.fetchImplementation,
+        onEvent: () => {},
+        sessionId: "wrun_1",
+        workloadIdentity: identity(),
+      });
+      expect(result.activeTurnId).toBe("turn_real");
+      expect(result.nativeObservationState.currentTurnId).toBe("turn_real");
+    } finally {
+      await http.close();
+    }
+  });
   it("hydrates HITL, active turn and absolute counters across real bounded HTTP reads, including an empty delta", async () => {
     const events: unknown[] = [
       { data: {}, type: "session.started" },

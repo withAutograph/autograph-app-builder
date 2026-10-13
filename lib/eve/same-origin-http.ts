@@ -744,7 +744,10 @@ export async function observeSameOriginEveStream(
     let publicEventCount = state?.publicEventCount ?? 0;
     let boundary: EveSessionStatus = state?.boundary ?? "working";
     let invalidInput = state?.invalidInput ?? false;
-    let currentTurnId: string | undefined = state?.currentTurnId;
+    // Eve's emission state uses an empty ID between turns. It is absence,
+    // including in a retained observer seed, rather than an active identity.
+    let currentTurnId: string | undefined =
+      state?.currentTurnId === "" ? undefined : state?.currentTurnId;
     let uiPreview: PublicUiPreview | undefined = state?.uiPreview;
     let workingPreview: PublicWorkingPreview | null | undefined = state?.workingPreview;
     const artifactReadback = createArtifactReadbackClassifier(
@@ -790,6 +793,7 @@ export async function observeSameOriginEveStream(
             : undefined;
         if (
           turnId !== undefined &&
+          turnId !== "" &&
           !["turn.completed", "turn.failed", "turn.cancelled"].includes(event.type)
         ) {
           currentTurnId = turnId;
