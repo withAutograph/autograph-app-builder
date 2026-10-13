@@ -32,6 +32,14 @@ continues through the normal build approval; missing full UI content in its
 status does not call for a new prototype. Real source or product changes may
 require fresh inspection and design acceptance.
 
+Repository source lookup and checkout recovery belong to Builder. Never ask
+the user to find a branch or PR containing a commit, provide Git SHAs, or repair
+the checkout. A historical app baseline selects app-owned source while the
+platform can remain on its selected branch; their commits need not match.
+Use the saved source and app-baseline selections and repair actual provider
+failures through the supported workflow. Ask only about genuine product
+ambiguity or use the specific approval tool for a new outward effect.
+
 The builder MUST NOT block on speculative eligibility, exact SHA/tree, drift,
 manifest, version, topology, path, mode, cache, digest, receipt, quota, or
 readback assertions. Caches and snapshots are optional accelerators; misses
