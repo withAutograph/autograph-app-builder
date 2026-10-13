@@ -1583,3 +1583,74 @@ it("does not continue approved work during a conflict-recovered mutation preflig
     continuation.mockRestore();
   }
 });
+
+it.each([true, false])(
+  "uses trusted unchanged-checkpoint preflight for cancellation (active=%s)",
+  async (active) => {
+    const seed = nativeObservationStateSchema.parse({
+      ...nativeState({
+        adapterSessionId: "adapter_1",
+        nextNativeIndex: 100_000,
+        publicEventCount: 1,
+      }),
+      boundary: active ? "working" : "waiting",
+      currentTurnId: active ? "turn_1" : undefined,
+    });
+    // oxlint-disable-next-line eslint/require-await -- Preserve the native observation contract for an empty delta.
+    const observe = vi.fn<NonNullable<HostedEveTransport["observe"]>>(async () => ({
+      activeTurnId: active ? "turn_1" : undefined,
+      artifactProjectionRequiresLegacyReadback: false,
+      installedEventCount: 100_000,
+      nativeObservationState: seed,
+      nextNativeIndex: 100_000,
+      pendingRequests: [],
+      publicEventCount: 1,
+      status: active ? "working" : "waiting",
+    }));
+    const f = await fixture(observe);
+    const initial = await f.getSession(principal, f.sessionId);
+    if (initial?.version !== 2) {
+      throw new Error("Expected the owned durable session.");
+    }
+    const saved = await f.observeSessionPaged({
+      events: (async function* retainedEvents() {
+        yield { index: 0, text: f.sessionId, turnId: "turn_1", type: "assistant_message" as const };
+      })(),
+      expectedCheckpointDigest: initial.checkpointDigest,
+      metadata: {
+        activeTurnId: active ? "turn_1" : undefined,
+        capturedAtEpochMs: 1000,
+        nativeObservationState: seed,
+        status: active ? "working" : "waiting",
+        version: 1,
+      },
+      nowEpochMs: 1000,
+      principal,
+      resumability: "live",
+      sessionId: f.sessionId,
+      stage: "planning",
+    });
+    // An empty delta returns the same digest: valid native seed, persisted=false.
+    f.observeSessionPaged.mockResolvedValueOnce(saved);
+    const acceptedBoundary = new Error("Reached seeded cancellation boundary");
+    f.adapter.cancelAccepted = vi.fn().mockRejectedValue(acceptedBoundary);
+    if (active) {
+      await expect(f.service.cancel({ sessionId: f.sessionId, turnId: "turn_1" })).rejects.toBe(
+        acceptedBoundary,
+      );
+      expect(f.adapter.cancelAccepted).toHaveBeenCalledExactlyOnceWith({
+        adapterSessionId: "adapter_1",
+        nativeObservationState: seed,
+        principal,
+        turnId: "turn_1",
+      });
+    } else {
+      expect(await f.service.cancel({ sessionId: f.sessionId })).toMatchObject({
+        status: "waiting",
+      });
+      expect(f.adapter.cancelAccepted).not.toHaveBeenCalled();
+    }
+    expect(f.adapter.cancel).not.toHaveBeenCalled();
+    expect(observe.mock.calls[0]?.[0].nativeObservationState).toEqual(seed);
+  },
+);

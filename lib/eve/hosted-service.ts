@@ -182,6 +182,7 @@ export interface HostedEveTransport {
   /** Resolves after Eve accepts and verifies settlement of the response batch. */
   respondAccepted?: (input: Parameters<HostedEveTransport["respond"]>[0]) => Promise<void>;
   cancel: (input: {
+    nativeObservationState?: NativeObservationState;
     principal: HostedPrincipal;
     adapterSessionId: string;
     turnId?: string;
@@ -1996,7 +1997,7 @@ export function createHostedEveSessionService(input: {
       let snapshot: HostedEngineSnapshot;
       try {
         const preflight = paged ? await readMutationPreflight(sessionId) : undefined;
-        if (preflight?.persisted) {
+        if (preflight && (preflight.persisted || preflight.nativeObservationState !== undefined)) {
           ({ session } = preflight);
           if (preflight.activeTurnId === undefined) {
             if (turnId !== undefined) {
@@ -2022,6 +2023,7 @@ export function createHostedEveSessionService(input: {
           }
           await input.transport.cancelAccepted?.({
             adapterSessionId: session.adapterSessionId,
+            nativeObservationState: preflight.nativeObservationState,
             principal,
             ...(turnId === undefined ? {} : { turnId }),
           });

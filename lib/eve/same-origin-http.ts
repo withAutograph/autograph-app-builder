@@ -1173,16 +1173,21 @@ async function readCancellationSettlementIncremental(input: {
   beforeEventCount: number;
 }): Promise<void> {
   const readSignal = AbortSignal.timeout(SESSION_READ_TIMEOUT_MS);
+  let nextNativeIndex = input.beforeEventCount;
+  let cancelled = false;
+  let currentTurnId: string | undefined = input.turnId;
   while (true) {
     if (readSignal.aborted) {
       throw new HostedSessionReadTimeoutError();
     }
-    let index = 0;
-    let cancelled = false;
     let settled = false;
-    let currentTurnId: string | undefined;
-    // oxlint-disable-next-line eslint/no-await-in-loop -- Observe the full durable tail before another poll.
-    for await (const event of streamSameOriginEveEvents({ ...input, readSignal })) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Observe each unseen durable tail before another poll.
+    for await (const event of streamSameOriginEveEvents({
+      ...input,
+      readSignal,
+      startIndex: nextNativeIndex,
+    })) {
+      nextNativeIndex += 1;
       const eventTurnId =
         "data" in event && "turnId" in event.data
           ? (event.data.turnId as string | undefined)
@@ -1199,20 +1204,18 @@ async function readCancellationSettlementIncremental(input: {
       ) {
         currentTurnId = undefined;
       }
+      if (currentTurnId !== undefined && currentTurnId !== input.turnId) {
+        throw new SubmissionRejectedBeforeDispatchError("turn_changed");
+      }
       if (["session.waiting", "session.completed", "session.failed"].includes(event.type)) {
         currentTurnId = undefined;
       }
-      if (
-        index >= input.beforeEventCount &&
-        event.type === "turn.cancelled" &&
-        event.data.turnId === input.turnId
-      ) {
+      if (event.type === "turn.cancelled" && event.data.turnId === input.turnId) {
         cancelled = true;
       }
       if (cancelled && event.type === "session.waiting") {
         settled = true;
       }
-      index += 1;
     }
     if (settled) {
       return;
@@ -1369,8 +1372,19 @@ export function createSameOriginEveTransport(input: {
       }
     },
     async cancelAccepted(request) {
+      const nativeObservationState =
+        request.nativeObservationState === undefined
+          ? undefined
+          : nativeObservationStateSchema.parse(request.nativeObservationState);
+      if (
+        nativeObservationState !== undefined &&
+        nativeObservationState.adapterSessionId !== request.adapterSessionId
+      ) {
+        throw new SubmissionRejectedBeforeDispatchError("turn_changed");
+      }
       const before = await observeSameOriginEveStream({
         ...common,
+        nativeObservationState,
         onEvent() {
           // Guarding cancellation needs only the durable stream summary.
         },
