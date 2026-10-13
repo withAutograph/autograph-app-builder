@@ -10,6 +10,7 @@ import { hostedPrincipalSchema, tenantKeyFor } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
 import {
   hostedOperationRecordSchema,
+  hostedCheckpointRefSchema,
   durableHostedSessionRecordSchema,
   hostedSessionCheckpointDigest,
   hostedSessionCheckpointProgressDigest,
@@ -568,17 +569,16 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
 
     async readCheckpointPage(input) {
       const principal = hostedPrincipalSchema.parse(input.principal);
+      const checkpointRef = hostedCheckpointRefSchema.parse(input.checkpointRef);
       const current = await sessionById(database, principal, input.sessionId);
-      if (
-        current?.version !== 2 ||
-        current.checkpointRef?.id !== input.checkpointRef.id ||
-        current.checkpointRef.digest !== input.checkpointRef.digest ||
-        current.checkpointRef.eventCount !== input.checkpointRef.eventCount
-      ) {
-        throw new Error("Hosted checkpoint reference is stale or belongs to another tenant.");
+      if (current?.version !== 2) {
+        throw new Error("Hosted checkpoint session was not found or is not durable.");
       }
+      // A reader retains one immutable published manifest while concurrent
+      // observations advance the session's active pointer. History independently
+      // binds that selected manifest to the same tenant, owner, and session.
       const page = await checkpointHistory.readPage({
-        checkpointId: input.checkpointRef.id,
+        checkpointId: checkpointRef.id,
         cursor: input.cursor,
         limit: input.limit,
         principal,
@@ -586,12 +586,12 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
       });
       if (
         page === null ||
-        page.checkpointDigest !== input.checkpointRef.digest ||
-        page.totalEvents !== input.checkpointRef.eventCount
+        page.checkpointDigest !== checkpointRef.digest ||
+        page.totalEvents !== checkpointRef.eventCount
       ) {
-        throw new Error("Hosted checkpoint manifest does not match the active reference.");
+        throw new Error("Hosted checkpoint manifest does not match the selected reference.");
       }
-      return { ...page, checkpointDigest: input.checkpointRef.digest };
+      return { ...page, checkpointDigest: checkpointRef.digest };
     },
 
     async recordPrivateApprovalReceipts(input) {
