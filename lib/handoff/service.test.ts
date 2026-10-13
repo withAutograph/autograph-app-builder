@@ -87,12 +87,12 @@ function memoryStore(): BuilderHandoffStore {
   };
 }
 
-const intent = {
+const intent: BuilderHandoffRecord["intent"] = {
   appId: "vendor-onboarding",
   appName: "Vendor Onboarding",
   brief: "Help operations review new vendors.",
   connections: ["Ramp"],
-  modelId: activeBuilderModelId as typeof activeBuilderModelId,
+  modelId: activeBuilderModelId,
   repository: {
     private: true,
     requestedName: "vendor-onboarding",
