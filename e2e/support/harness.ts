@@ -193,6 +193,9 @@ export async function registerPasskey(context: BrowserContext, page: Page, callb
   await expect
     .poll(() => currentSession(page), { timeout: 30_000 })
     .toMatchObject({ user: { emailVerified: false } });
+  // Session creation precedes the setting-up route's final navigation. Wait
+  // for the callback before a caller navigates away, as finishOAuth does.
+  await expect(page).toHaveURL(new URL(callbackURL, appOrigin).href, { timeout: 30_000 });
   return authenticator;
 }
 
