@@ -59,9 +59,26 @@ const authFrameSchema = z.object({
   resource: z.object({ database: z.string(), migratorRole: z.string(), runtimeRole: z.string() }),
   schemaPlan: z.object({ planDigest: digest, targetDigest: digest }),
 });
+/** Preserve the credential URL pattern without backtracking over colons or nested schemes. */
+export const containsPostgresUrlCredentials = (content: string): boolean => {
+  for (const match of content.matchAll(/[^\s"'<>]+/gu)) {
+    const [token] = match;
+    const scheme = /postgres(?:ql)?:\/\//iu.exec(token);
+    if (scheme === null) {
+      continue;
+    }
+    // The first scheme can consume any later scheme within this delimiter-free token.
+    const bodyStart = scheme.index + scheme[0].length;
+    const colon = token.indexOf(":", bodyStart + 1);
+    if (colon !== -1 && token.lastIndexOf("@") > colon + 1) {
+      return true;
+    }
+  }
+  return false;
+};
 const noCredentials = (content: string) => {
   if (
-    /postgres(?:ql)?:\/\/[^\s"'<>]+:[^\s"'<>]+@/iu.test(content) ||
+    containsPostgresUrlCredentials(content) ||
     /["'](?:runtimePassword|migratorPassword|databaseUrl|migrationUrl|maintenanceUrl|privateKey|BETTER_AUTH_SECRET|NEON_API_KEY)["']\s*:\s*["'][^"']+["']/u.test(
       content,
     )

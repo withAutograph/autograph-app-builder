@@ -8,7 +8,10 @@ import type { OperatorArtifactSelections } from "./hosted-operator-artifact-sele
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { describe, expect, it, vi } from "vitest";
-import { createOperatorArtifactPublication } from "./hosted-operator-artifacts";
+import {
+  containsPostgresUrlCredentials,
+  createOperatorArtifactPublication,
+} from "./hosted-operator-artifacts";
 import type { OperatorArtifactPublicationDiagnostic } from "./hosted-operator-artifacts";
 import type {
   OperatorArtifactContext,
@@ -137,6 +140,74 @@ const fixture = () => {
     store,
   };
 };
+const legacy = (content: string) => /postgres(?:ql)?:\/\/[^\s"'<>]+:[^\s"'<>]+@/iu.test(content);
+describe("Postgres credential URL scan", () => {
+  it("preserves legacy matches across malformed URLs, schemes and delimiters", () => {
+    const bodies = [
+      "",
+      ":",
+      "@",
+      ":@",
+      "u:p@",
+      ":p@",
+      "u:@",
+      "u:p",
+      "host:5432/db",
+      "u::@",
+      "u:p@@",
+      "u@x:p@",
+      "u:p@x:y@",
+      "u:p@postgres://x:y@",
+      "postgres://",
+      "postgres://x:y@",
+      "postgres://:@",
+      "postgresql://u:p@",
+      "😀:😀@",
+      "\uD800:p@",
+      "u:\uDFFF@",
+      "u:p\n@",
+      "u:p\u00A0@",
+      "u\n:p@",
+      "u: p@",
+      'u:"p@',
+      "u:<p@",
+      "u:>p@",
+    ];
+    const schemes = ["postgres://", "postgresql://", "POSTGRES://", "poſtgreſ://"];
+    const delimiters = ["", " ", "\t", "\n", "\r", '"', "'", "<", ">", "\u00A0", "\u2028"];
+    for (const scheme of schemes) {
+      for (const body of bodies) {
+        for (const delimiter of delimiters) {
+          const content = `prefix${scheme}${body}${delimiter}postgres://x:y@`;
+          expect(containsPostgresUrlCredentials(content)).toBe(legacy(content));
+          const withoutSuffix = `prefix${scheme}${body}${delimiter}`;
+          expect(containsPostgresUrlCredentials(withoutSuffix)).toBe(legacy(withoutSuffix));
+        }
+      }
+    }
+  });
+
+  it("matches the legacy pattern on exhaustive short token bodies", () => {
+    let bodies = [""];
+    for (let length = 0; length <= 5; length += 1) {
+      for (const body of bodies) {
+        const content = `postgres://${body}`;
+        expect(containsPostgresUrlCredentials(content)).toBe(legacy(content));
+      }
+      bodies = bodies.flatMap((body) => ["x", ":", "@", '"', "\u00A0"].map((char) => body + char));
+    }
+  });
+
+  it("scans long negative colon and nested-scheme tokens and still finds appended credentials", () => {
+    const negatives = [`postgres://x${":".repeat(100_000)}`, "postgres://".repeat(10_000)];
+    for (const content of negatives) {
+      expect(containsPostgresUrlCredentials(content)).toBe(false);
+      expect(containsPostgresUrlCredentials(`${content}x:p@`)).toBe(true);
+    }
+    // A later colon can be part of the password, matching the original permissive pattern.
+    expect(containsPostgresUrlCredentials(`postgres://x${":".repeat(100_000)}@`)).toBe(true);
+  });
+});
 describe("immutable private operator artifacts", () => {
   it("returns every actual predecessor member by recorded reference after source overwrite", async () => {
     const f = fixture();
@@ -335,7 +406,16 @@ describe("immutable private operator artifacts", () => {
   });
   it.each([
     "postgresql://owner:private-password@host.neon.tech/db",
-    '{"runtimePassword":"private-password"}',
+    ...[
+      "runtimePassword",
+      "migratorPassword",
+      "databaseUrl",
+      "migrationUrl",
+      "maintenanceUrl",
+      "privateKey",
+      "BETTER_AUTH_SECRET",
+      "NEON_API_KEY",
+    ].map((property) => JSON.stringify({ [property]: "synthetic-secret" })),
   ])("rejects credential material and never captures runtime/env files", async (secret) => {
     const f = fixture();
     f.files["sql-bundle.sql"] = Buffer.from(secret);
