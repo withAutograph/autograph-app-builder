@@ -357,9 +357,12 @@ describe("concurrent product source review", () => {
       true,
     );
     const replay = vi.fn(() => judgment("unreachable"));
-    expect(
-      await assessProductSourcePages(input, stream(pages), { generate: replay, journal }),
-    ).toEqual(concurrent);
+    const replayed = await assessProductSourcePages(input, stream(pages), {
+      generate: replay,
+      journal,
+    });
+    expect({ ...replayed, invocation: concurrent.invocation }).toEqual(concurrent);
+    expect(replayed.invocation).toMatchObject({ journalReuses: 48, requestAttempts: 0 });
     expect(replay).not.toHaveBeenCalled();
   });
 

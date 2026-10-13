@@ -4,6 +4,42 @@ A request to build a complete app includes its UI, authenticated backend,
 persistence and tests. Builder authors the whole app through the same public
 workflow; a manually completed Arrusted patch is not evidence of that capability.
 
+## Build phases and delivery
+
+The intended complete-app journey has four business phases:
+
+1. **Initial version and approval.** Turn the product brief into a usable visual
+   prototype and implementation plan, then present **Build this app?** through
+   the existing approval card. Infer safe defaults and ask only material product
+   questions.
+2. **Build.** Implement the approved app, including its authenticated backend and
+   persistence. Keep the private checkout and accepted session; repair concrete
+   failures through supported tools. Use focused checks during implementation
+   and one final local acceptance pass when the behavior is ready.
+3. **Independent review.** Assess the implementation against the original brief,
+   product clarifications and accepted plan. Keep technical checks, independent
+   source judgments and executed product behavior distinct. Reuse current
+   evidence when its inputs match; a source repair requires current validation
+   and assessment before presenting the repaired result as reviewed.
+4. **Deliver.** Complete the requested deployment and submission through supported
+   capabilities and the existing approvals for their visible effects. Delivery
+   is part of the requested outcome when the brief includes it. A private preview
+   or draft pull request alone does not establish deployed product behavior.
+
+These phases describe product work, not exactly four model API requests. Tool
+loops, product questions, genuine repairs and provider context limits can require
+additional calls. Deterministic setup, command execution, paging and receipt
+handling belong to the shared workflow; they should not each require a new model
+judgment. See [model cost and process audit](builder-model-cost.md).
+
+The current workflow provides private implementation, review and preview, with
+separately approved publication when requested. Production activation remains a
+protected operator handoff. The fourth phase is the intended delivery contract;
+this documentation does not add an automatic deploy-and-submit operation or
+expand private build approval. Report unavailable delivery capabilities and
+remaining handoff work precisely. Preserve the original public session and all
+approval decisions throughout these phases.
+
 ## Backend ownership
 
 - Use Arrusted's CUE/PostgreSQL generated data boundary for app-owned durable

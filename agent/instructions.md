@@ -148,6 +148,16 @@ Follow `docs/hosted-app-runtime.md`. Preparation is not hosted behavior or
 activation proof. Disconnecting a provider blocks new access but does not revoke
 credentials already issued. Never remove persistent resources during turn
 cleanup or overwrite another app's shared authentication bindings.
+
+Organize the complete-app journey around the four business phases in
+`docs/full-app-authoring.md`: initial version and build approval, build,
+independent review, and requested delivery. These phases are not a promise of
+exactly four model requests. Reuse current assessment and behavioral evidence;
+do not add a second independent review or repeat a covered browser scenario for
+ceremony. The current validation tool owns its automatic source assessment.
+Preserve separate effect approvals and report unavailable deployment/submission
+capabilities as delivery work still required.
+
 After a successful apply, call `validate_app_creation` in the approved private
 checkout. Applied files are not validated files. Successful repository commands
 establish technical validation, not proof that the accepted product behaviors

@@ -72,11 +72,12 @@ describe("durable source review continuation", () => {
     const result = await assessProductSourcePages(input, stream(), { generate: resumed, journal });
     expect(resumed).toHaveBeenCalledTimes(1);
     const fresh = await assessProductSourcePages(input, stream(), { generate: () => empty });
-    expect(result).toEqual(fresh);
+    expect(result).toEqual({ ...fresh, invocation: result.invocation });
+    expect(result.invocation).toMatchObject({ journalReuses: 1, requestAttempts: 1 });
     const replay = vi.fn(() => empty);
-    expect(await assessProductSourcePages(input, stream(), { generate: replay, journal })).toEqual(
-      fresh,
-    );
+    const replayed = await assessProductSourcePages(input, stream(), { generate: replay, journal });
+    expect({ ...replayed, invocation: fresh.invocation }).toEqual(fresh);
+    expect(replayed.invocation).toMatchObject({ journalReuses: 2, requestAttempts: 0 });
     expect(replay).not.toHaveBeenCalled();
   });
 
@@ -102,13 +103,13 @@ describe("durable source review continuation", () => {
     expect(generate.mock.calls.some(([page]) => page.path === pages[0]?.path)).toBe(true);
     expect(generate.mock.calls.some(([page]) => page.path === pages[1]?.path)).toBe(true);
     const replay = vi.fn(() => empty);
-    expect(
-      await assessProductSourcePages(input, stream(), {
-        generate: replay,
-        journal,
-        reviewAppSpecParts: parts,
-      }),
-    ).toEqual(result);
+    const replayed = await assessProductSourcePages(input, stream(), {
+      generate: replay,
+      journal,
+      reviewAppSpecParts: parts,
+    });
+    expect({ ...replayed, invocation: result.invocation }).toEqual(result);
+    expect(replayed.invocation?.requestAttempts).toBe(0);
     expect(replay).not.toHaveBeenCalled();
   });
 
@@ -277,12 +278,12 @@ describe("durable source review continuation", () => {
       [...contextJournal.records.values()].some((record) => record.kind === "split-context"),
     ).toBe(true);
     const replay = vi.fn(() => empty);
-    expect(
-      await assessProductSourcePages(expanded, stream([firstPage]), {
-        generate: replay,
-        journal: contextJournal,
-      }),
-    ).toEqual(assessed);
+    const replayed = await assessProductSourcePages(expanded, stream([firstPage]), {
+      generate: replay,
+      journal: contextJournal,
+    });
+    expect({ ...replayed, invocation: assessed.invocation }).toEqual(assessed);
+    expect(replayed.invocation?.requestAttempts).toBe(0);
     expect(replay).not.toHaveBeenCalled();
   });
 
