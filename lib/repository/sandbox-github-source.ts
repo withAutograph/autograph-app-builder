@@ -445,6 +445,7 @@ const findProviderCheckout = async (
   sandbox: SandboxSession,
   expected: { repository: string; sourceSha?: string; sourceTree?: string },
   paths: readonly string[],
+  materialize?: () => Promise<void>,
 ): Promise<string> => {
   const failures: string[] = [];
   for (const candidate of paths) {
@@ -462,6 +463,10 @@ const findProviderCheckout = async (
       `${candidate}: ${sandboxFailureDetail(result.stderr || result.stdout) || `exit ${result.exitCode} with no diagnostic output`}`,
     );
   }
+  if (materialize !== undefined) {
+    await materialize();
+    return SANDBOX_WORKSPACE;
+  }
   throw new Error(
     `Vercel did not materialize the selected GitHub source in either provider location. Check the selected repository access and sandbox source configuration, then retry this session. Observed: ${failures.join(" | ")}`,
   );
@@ -470,6 +475,7 @@ const findProviderCheckout = async (
 export const readSandboxGitHubSourceSnapshot = async function readSandboxGitHubSourceSnapshot(
   sandbox: SandboxSession,
   expected: { repository: string; sourceSha?: string; sourceTree?: string },
+  materialize?: () => Promise<void>,
 ): Promise<CanonicalTemplateSnapshot> {
   const canonical = await runSourceSandboxCommand(
     sandbox,
@@ -513,15 +519,23 @@ export const readSandboxGitHubSourceSnapshot = async function readSandboxGitHubS
     // The Eve image places Vercel's Git source below /workspace. The
     // standard Vercel image uses its working-directory root instead.
     const providerPaths = [`/workspace/${repositoryName.slice(0, -4)}`, "/vercel/sandbox"];
-    const providerCheckout = await findProviderCheckout(sandbox, expected, providerPaths);
+    const providerCheckout = await findProviderCheckout(
+      sandbox,
+      expected,
+      providerPaths,
+      materialize,
+    );
     // Keep the provider's one checkout, but put that directory at the
     // canonical working path. The sandbox file API rejects writes through a
     // symlink even when Git and shell reads through it succeed.
-    const moved = await runSourceSandboxCommand(
-      sandbox,
-      "place the provider checkout in the Builder workspace",
-      `node -e ${shellQuote('require("node:fs").renameSync(process.argv[1], process.argv[2])')} ${shellQuote(providerCheckout)} ${shellQuote(SANDBOX_WORKSPACE)}`,
-    );
+    const moved =
+      providerCheckout === SANDBOX_WORKSPACE
+        ? { exitCode: 0, stderr: "", stdout: "" }
+        : await runSourceSandboxCommand(
+            sandbox,
+            "place the provider checkout in the Builder workspace",
+            `node -e ${shellQuote('require("node:fs").renameSync(process.argv[1], process.argv[2])')} ${shellQuote(providerCheckout)} ${shellQuote(SANDBOX_WORKSPACE)}`,
+          );
     const placed = await runSourceSandboxCommand(
       sandbox,
       "inspect the placed Builder checkout",

@@ -53,6 +53,7 @@ import {
 } from "./repository-access-state";
 import type { RepositoryAccessReceipt } from "./repository-access-state";
 import { configureVercelSessionGitSource } from "../sandbox/vercel-session-source";
+import { materializeBuilderSandboxGitSource } from "../sandbox/builder-sandbox";
 import type { BuilderHandoffIntent } from "../handoff/contracts";
 import {
   preparedHandoffReturnPath,
@@ -501,20 +502,25 @@ export function createRepositoryAccessRuntime(input: {
         value.revision?.branch,
         githubSource.resolvedSha,
       );
+      const sandboxSource = {
+        token: credential.token,
+        url: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
+        ...(cloneRevision === undefined ? {} : { revision: cloneRevision }),
+      };
       configureVercelSessionGitSource({
         sessionId: value.sessionId,
-        source: {
-          token: credential.token,
-          url: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
-          ...(cloneRevision === undefined ? {} : { revision: cloneRevision }),
-        },
+        source: sandboxSource,
       });
-      // The Vercel backend supplies this source directly to Sandbox.create.
-      // A second shell clone would collide with the provider-created checkout.
+      // Source intent may arrive after eager execution-lease acquisition created
+      // the VM. Recover that same VM only when no existing checkout is present.
       const sandbox = typeof value.sandbox === "function" ? await value.sandbox() : value.sandbox;
-      const snapshot = await readSandboxGitHubSourceSnapshot(sandbox, {
-        repository: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
-      });
+      const snapshot = await readSandboxGitHubSourceSnapshot(
+        sandbox,
+        {
+          repository: `https://github.com/${value.access.repository.owner}/${value.access.repository.name}.git`,
+        },
+        () => materializeBuilderSandboxGitSource(sandbox, sandboxSource),
+      );
       const appBaseline =
         value.appBaseline === undefined
           ? undefined
