@@ -44,11 +44,9 @@ export const validationAttemptLogReadInputs = (
   >,
 ) => ({
   attemptDigest: receipt.attemptDigest,
-  commands: receipt.commands.map((command) => {
-    const logs = validationLogsWithReadInputs(receipt.attemptDigest, command);
-    const { logs: priorLogs, ...metadata } = command;
-    void priorLogs;
-    return { ...metadata, logs };
-  }),
+  commands: receipt.commands.map((command) => ({
+    logs: validationLogsWithReadInputs(receipt.attemptDigest, command),
+    name: command.name,
+  })),
   status: receipt.status,
 });

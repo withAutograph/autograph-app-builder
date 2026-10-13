@@ -61,6 +61,18 @@ describe("canonical validation log read inputs", () => {
       const presented = validationAttemptLogReadInputs(receipt);
       expect(presented.attemptDigest).toBe(attemptDigest);
       expect(presented.status).toBe(status);
+      expect(Object.keys(presented.commands[0] ?? {})).toEqual(["logs", "name"]);
+      expect(presented.commands[0]?.name).toBe("check-build");
+      for (const field of [
+        "command",
+        "validationRoot",
+        "inputTreeDigest",
+        "stdoutDigest",
+        "stderrDigest",
+        "exitCode",
+      ]) {
+        expect(presented.commands[0]).not.toHaveProperty(field);
+      }
       expect(presented.commands[0]?.logs?.stderr).toMatchObject({
         completion: "interrupted",
         readInput: {
@@ -87,6 +99,6 @@ describe("canonical validation log read inputs", () => {
     expect(validationLogsWithReadInputs(attemptDigest, withoutLogs)).toBeUndefined();
     expect(
       validationAttemptLogReadInputs({ attemptDigest, commands: [withoutLogs], status: "passed" }),
-    ).toEqual({ attemptDigest, commands: [withoutLogs], status: "passed" });
+    ).toEqual({ attemptDigest, commands: [{ name: "check-build" }], status: "passed" });
   });
 });
