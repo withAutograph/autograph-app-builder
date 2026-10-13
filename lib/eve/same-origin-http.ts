@@ -1205,7 +1205,7 @@ async function readCancellationSettlementIncremental(input: {
         currentTurnId = undefined;
       }
       if (currentTurnId !== undefined && currentTurnId !== input.turnId) {
-        throw new SubmissionRejectedBeforeDispatchError("turn_changed");
+        throw new HostedCancellationUnsettledError();
       }
       if (["session.waiting", "session.completed", "session.failed"].includes(event.type)) {
         currentTurnId = undefined;
@@ -1221,7 +1221,7 @@ async function readCancellationSettlementIncremental(input: {
       return;
     }
     if (currentTurnId !== undefined && currentTurnId !== input.turnId) {
-      throw new SubmissionRejectedBeforeDispatchError("turn_changed");
+      throw new HostedCancellationUnsettledError();
     }
     try {
       // oxlint-disable-next-line eslint/no-await-in-loop -- Poll only after reading the durable tail.

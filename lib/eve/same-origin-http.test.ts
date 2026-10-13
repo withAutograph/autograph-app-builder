@@ -2399,13 +2399,19 @@ it("does not treat a newer turn's waiting boundary as settlement of the original
     fetchImplementation,
     workloadIdentity: identity(),
   });
-  await expect(
-    transport.cancelAccepted?.({
-      adapterSessionId: "wrun_1",
-      nativeObservationState: seed,
-      principal,
-      turnId: "turn_1",
-    }),
-  ).rejects.toBeInstanceOf(SubmissionRejectedBeforeDispatchError);
+  const cancellation = transport.cancelAccepted?.({
+    adapterSessionId: "wrun_1",
+    nativeObservationState: seed,
+    principal,
+    turnId: "turn_1",
+  });
+  await expect(cancellation).rejects.toBeInstanceOf(HostedCancellationUnsettledError);
+  await expect(cancellation).rejects.toThrow(
+    "Cancellation was accepted but has not settled; use autograph_get.",
+  );
   expect(starts).toEqual([1, 1, 2]);
+  expect(fetchImplementation).toHaveBeenCalledTimes(4);
+  expect(
+    fetchImplementation.mock.calls.filter(([request]) => String(request).endsWith("/cancel")),
+  ).toHaveLength(1);
 });
