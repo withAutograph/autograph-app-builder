@@ -92,7 +92,7 @@ const intent = {
   appName: "Vendor Onboarding",
   brief: "Help operations review new vendors.",
   connections: ["Ramp"],
-  modelId: activeBuilderModelId,
+  modelId: activeBuilderModelId as typeof activeBuilderModelId,
   repository: {
     private: true,
     requestedName: "vendor-onboarding",
