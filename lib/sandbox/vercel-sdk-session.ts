@@ -4,6 +4,7 @@ import type { SandboxRunOptions, SandboxProcess } from "eve/sandbox";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import type { BuilderSandboxSession } from "./builder-sandbox";
+import { materializeVercelGitSource } from "./vercel-git-source";
 
 export type VercelSdkSessionNative = Pick<
   Sandbox,
@@ -60,6 +61,9 @@ export const createVercelSdkSession = (
   return {
     get id() {
       return current().name;
+    },
+    async materializeGitSource(source) {
+      await materializeVercelGitSource({ authorize, current, source });
     },
     readBinaryFile,
     async readFile(options) {

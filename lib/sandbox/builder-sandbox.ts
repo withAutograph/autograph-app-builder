@@ -1,6 +1,7 @@
 import { defineState } from "eve/context";
 import { hasTestCapability } from "../testing/test-capability";
 import type { SandboxSession, SandboxNetworkPolicy } from "eve/sandbox";
+import type { VercelGitSessionSource } from "./vercel-session-source";
 
 // JustBash has no native identity. This fixture-only durable slot keeps the
 // synthetic session's identity across the provider's resume lifecycle.
@@ -13,7 +14,20 @@ export const simulatedSandboxIdentity = defineState<string | null>(
 export interface BuilderSandboxSession extends SandboxSession {
   readonly id: string;
   readonly setNetworkPolicy: (policy: SandboxNetworkPolicy) => Promise<void>;
+  readonly materializeGitSource?: (source: VercelGitSessionSource) => Promise<void>;
 }
+
+/** Private workflow capability; credentials never enter Eve's command interface. */
+export const materializeBuilderSandboxGitSource = async (
+  sandbox: SandboxSession,
+  source: VercelGitSessionSource,
+): Promise<void> => {
+  const builder: Partial<BuilderSandboxSession> = sandbox;
+  if (builder.materializeGitSource === undefined) {
+    throw new Error("The Builder sandbox cannot acquire source on its existing VM.");
+  }
+  await builder.materializeGitSource(source);
+};
 
 export const getBuilderSandboxId = (sandbox: SandboxSession): string => {
   const builder: Partial<BuilderSandboxSession> = sandbox;
