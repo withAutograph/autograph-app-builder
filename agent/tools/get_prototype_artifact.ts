@@ -14,7 +14,7 @@ import { openHostedPostgresDatabase } from "@/lib/mcp/hosted-route";
 
 export default defineTool({
   description:
-    "Read one exact session-scoped prototype artifact by digest and revision. Omit offsetBytes to preserve the original full-content response when its serialized result fits one Eve event. For a larger artifact, provide the exact revision and repeatedly read with each returned nextOffsetBytes until complete is true; verify the assembled SHA-256 against digest and each chunk against chunkDigest.",
+    "Deliberately read or export exact session-scoped raw artifact bytes by digest and revision, including Markdown product documents or a targeted artifact diagnostic. Hosted compiled HTML is served and verified by the authenticated Browser preview route; do not routinely drain it into model context for viewing or planning. Inspect readable authored preview source for planning. Raw reads remain available when their content is specifically needed. Omit offsetBytes to preserve the original full-content response when its serialized result fits one Eve event. For a larger artifact, provide the exact revision and repeatedly read with each returned nextOffsetBytes until complete is true; verify the assembled SHA-256 against digest and each chunk against chunkDigest.",
   async execute({ path, digest, revision, offsetBytes }, ctx) {
     const current = appBuilderWorkflowState.get();
     if (current.phase === "empty") {

@@ -42,6 +42,18 @@ If `record_ui_preview` reports an import, syntax, or compilation error, repair
 the reported source and call `record_ui_preview` again. Call `accept-ui-preview`
 only after `record_ui_preview` has returned a current valid preview revision.
 
+Hosted durable receipts use `contentDelivery: hosted-browser-stream`. Open the
+authenticated preview URL from the public session result directly; the server
+authorizes the read and verifies the immutable manifest and chunks before
+streaming HTML. `browserReady` means ready to open, while browser rendering and
+control verification still need observation. `routineReadNotRequired` means
+compiled HTML does not need a `get_prototype_artifact` drain for viewing or
+planning. Use the readable authored React source to plan revisions. The retained
+`requiresChunkedRead` flag describes deliberate raw export for this hosted path;
+Markdown documents and targeted raw diagnostics remain readable through the
+artifact tool. Local inline output and oversized local/legacy chunk readback
+retain their existing delivery behavior.
+
 ## Minimal source and matching manifest
 
 After confirming that the current `Button` supports `onClick` and `children`,
