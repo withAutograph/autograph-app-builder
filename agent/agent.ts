@@ -13,6 +13,7 @@ import { sha256 } from "@/lib/agent/workflow-state";
 import { developmentInspectionPath } from "@/lib/development/source-routing";
 import { hasTestCapability } from "@/lib/testing/test-capability";
 import { activeBuilderModelId } from "@/lib/integrations/active-model";
+import { builderSessionUsageLimits } from "@/lib/agent/session-usage-policy";
 
 export const vendorOnboardingPrototype = `<!doctype html>
 <html lang="en">
@@ -1800,6 +1801,7 @@ export default defineAgent({
     // __dirname into Eve's authored bundle collides with Eve's own banner.
     externalDependencies: ["@emulators/adapter-next", "@emulators/github", "@emulators/vercel"],
   },
+  limits: builderSessionUsageLimits,
   model: hasTestCapability("mock-model") ? testModel : activeBuilderModelId,
   ...(hasTestCapability("mock-model")
     ? {}
