@@ -12,7 +12,16 @@ import { validationLogStoreForSession } from "./validation-log-store-for-session
 import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
-import validateAppCreation from "../../agent/tools/validate_app_creation";
+import validationToolDefinition from "../../agent/tools/validate_app_creation";
+const validateAppCreation = {
+  ...validationToolDefinition,
+  async execute(...args: Parameters<typeof validationToolDefinition.execute>) {
+    return await contextStorage.run(
+      contextStorage.getStore() ?? new ContextContainer(),
+      async () => await validationToolDefinition.execute(...args),
+    );
+  },
+};
 
 interface CapturedValidationLog {
   reference?: ValidationLogReference;
@@ -172,7 +181,7 @@ describe("behavior evidence invalidation during validation repair", () => {
       expect(mocks.execute).toHaveBeenCalledBefore(mocks.describe);
       expect(mocks.describe).toHaveBeenCalledBefore(mocks.publish);
       expect(mocks.publish).toHaveBeenCalledBefore(mocks.browser);
-      expect(mocks.browser).toHaveBeenCalledBefore(mocks.review);
+      expect(mocks.review).not.toHaveBeenCalled();
     } finally {
       log.mockRestore();
     }
@@ -411,19 +420,18 @@ describe("behavior evidence invalidation during validation repair", () => {
     expect(mocks.execute).toHaveBeenCalledTimes(2);
     expect(mocks.publish).toHaveBeenCalledTimes(2);
   });
-  it("automatically returns source findings after technical validation without a review-tool call", async () => {
+  it("defers independent source assessment after successful technical validation", async () => {
     mocks.state.current = { ...workflow("validated"), phase: "applied" };
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
       callId: "validate",
       getSandbox: () => Promise.resolve({ id: "validation-sandbox" }),
       session: { auth: {}, id: "session" },
     } as never);
-    expect(mocks.execute).toHaveBeenCalledBefore(mocks.review);
-    expect(mocks.review).toHaveBeenCalledOnce();
+    expect(mocks.review).not.toHaveBeenCalled();
     expect(mocks.state.current.phase).toBe("validated");
     expect(result).toMatchObject({
-      productAcceptance: { productStatus: "failed" },
-      sourceAssessment: { status: "failed" },
+      productAcceptance: { productStatus: "unassessed" },
+      sourceAssessment: { reviewCompleted: false, status: "unassessed" },
       technicalStatus: "passed",
     });
   });
@@ -440,7 +448,7 @@ describe("behavior evidence invalidation during validation repair", () => {
     } as never);
     expect(mocks.review).not.toHaveBeenCalled();
   });
-  it("runs current technical validation before assessing source without claiming runtime success", async () => {
+  it("runs current technical validation and defers source assessment without claiming runtime success", async () => {
     mocks.state.current = workflow("validated");
     mocks.review.mockResolvedValue({ findings: [], reviewCompleted: true, status: "passed" });
     const result = await validateAppCreation.execute({ implementationFiles: [] }, {
@@ -449,12 +457,11 @@ describe("behavior evidence invalidation during validation repair", () => {
       session: { auth: {}, id: "session" },
     } as never);
     expect(mocks.execute).toHaveBeenCalledOnce();
-    expect(mocks.execute).toHaveBeenCalledBefore(mocks.review);
-    expect(mocks.review).toHaveBeenCalledOnce();
+    expect(mocks.review).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       productAcceptance: { productStatus: "unassessed" },
       reused: false,
-      sourceAssessment: { status: "passed" },
+      sourceAssessment: { reviewCompleted: false, status: "unassessed" },
       technicalStatus: "passed",
     });
   });

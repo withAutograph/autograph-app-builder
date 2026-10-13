@@ -171,12 +171,13 @@ export const reviewCurrentProductSource = async (
   currentDigest: () => string | Promise<string>,
   store: SourceAssessmentStore = sessionAssessmentStore,
   abortSignal?: AbortSignal,
+  assess: typeof assessProductSource = assessProductSource,
 ): Promise<ProductSourceAssessment> => {
   const cached = store.get();
   const assessment =
-    cached?.evidenceDigest === sourceReviewEvidenceDigest(input)
+    cached?.reviewCompleted === true && cached.evidenceDigest === sourceReviewEvidenceDigest(input)
       ? cached
-      : await assessProductSource(input, { abortSignal, mockModel });
+      : await assess(input, { abortSignal, mockModel });
   if ((await currentDigest()) !== input.sourceDigest) {
     return unavailableSourceAssessment(
       input,

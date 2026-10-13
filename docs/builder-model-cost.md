@@ -17,6 +17,22 @@ The workflow currently supplies private preview and separately approved
 publication; Production activation remains an operator handoff. Automatic
 end-to-end delivery has not been implemented by this cost change.
 
+## Review scheduling
+
+Intermediate `validate_app_creation` runs fresh repository commands, runtime
+preparation, release capture and applicable persistent-backend browser tests.
+It returns deferred/unassessed source evidence without starting paid independent
+review. This is not a technical failure and should not cause another validation
+attempt merely to obtain an assessment.
+
+When implementation and required product QA are ready, `accept_change_set`
+observes current source and performs the independent assessment. This final
+review is required for private preview completion as well as publication.
+Matching completed assessments are reused; interrupted matching reviews resume
+journaled work. Concrete review findings are repaired through the supported
+implementation/validation path before another final acceptance. Technical checks
+are not cached or skipped by this scheduling change.
+
 ## Source review optimization
 
 Previously, each selected source page and each chronological requirements excerpt
@@ -44,8 +60,9 @@ Implementation pointers:
 - `lib/agent/product-source-review-state.ts`: original request and clarification
   retention.
 - `agent/tools/validate_app_creation.ts`: repository checks, persistent backend
-  browser task and automatic independent assessment.
-- `agent/tools/accept_change_set.ts`: change receipt and shared assessment reuse.
+  browser task and deferred source evidence.
+- `agent/tools/accept_change_set.ts`: final independent assessment, matching
+  evidence reuse and change receipt.
 
 ## Accounting and evidence
 
@@ -85,14 +102,42 @@ public polling counts and workflow phase counts cannot substitute for that
 attribution. Provider usage and local source evidence still need exact deployed
 version and dashboard-window readback before claiming measured savings.
 
+## Measuring the next public build
+
+Measure through the supported web workflow or five public MCP tools. Preserve the
+original session, cursors, ordinary product replies and approvals. The evaluator
+observes the product flow; it does not force internal stages or repair a generated
+app manually. Keep the accepted app QA scope unchanged, including its declared
+actors, tenants, roles and independent readbacks. Cost optimization must not
+narrow the accepted actor/tenant matrix or drop product scenarios.
+
+For an authorized next build, collect these measurements privately:
+
+1. Record the deployed source revision and measurement window. Correlate the
+   public build with its native runtime session and review tool-call identifiers.
+2. Count fresh `requestAttempts` and `successfulRequests` by review invocation.
+   Keep `journalReuses` and historical judgment coverage separate from these
+   generation counts. Validation should emit deferred source evidence without
+   new independent review requests.
+3. Sum fresh provider-reported input/output tokens and cache-read/cache-write
+   tokens from allowlisted per-request observations. Report incomplete usage and
+   rejected or truncated responses rather than assuming they cost nothing.
+4. Use authorized read-only Gateway generation lookup to obtain available
+   generation costs and cache details. Reconcile these with the same session and
+   window; account totals or a model name alone cannot identify one app's spend.
+5. Report request count, token usage, measured generation cost and final product
+   QA separately. A batching estimate or local test does not establish live
+   savings or review quality.
+
+No paid custom reporting tags are required. Keep account costs, session IDs,
+journal aggregates and financial observations out of public repository content.
+Use protected task evidence for measurement results; this guide defines the
+procedure without publishing a private run's data.
+
 ## Remaining process work
 
 The following changes are prospective and require shared workflow implementation:
 
-- Separate focused repair checks from the final independent assessment so each
-  technically successful intermediate repair does not automatically launch a
-  complete paid review. The current validation tool still runs source assessment
-  after successful technical checks.
 - Reuse executed behavioral evidence for matching source and runtime inputs; run
   missing scenarios rather than repeating already covered browser journeys.
 - Drain deterministic diff paging, command sequencing and receipt handling in

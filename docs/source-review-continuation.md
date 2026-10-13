@@ -1,5 +1,11 @@
 # Durable source review continuation
 
+Final change acceptance owns independent source review. Technical validation
+returns `status: "unassessed"` and `reviewCompleted: false` with empty findings
+without starting paid review or retaining a completed assessment. Resume
+an interrupted final review through `accept_change_set` in the same saved session;
+repeat validation only for changed implementation or a concrete technical failure.
+
 Changed-source review still covers every selected source page and every original
 request, clarification and accepted AppSpec context. Pending page/context pairs
 may share one bounded model request. Completed, mechanically validated judgments

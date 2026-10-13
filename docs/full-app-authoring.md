@@ -19,8 +19,11 @@ The intended complete-app journey has four business phases:
 3. **Independent review.** Assess the implementation against the original brief,
    product clarifications and accepted plan. Keep technical checks, independent
    source judgments and executed product behavior distinct. Reuse current
-   evidence when its inputs match; a source repair requires current validation
-   and assessment before presenting the repaired result as reviewed.
+   evidence when its inputs match. Technical validation returns deferred source
+   evidence; final `accept_change_set` performs independent assessment before
+   private preview completion or publication. A source repair requires current
+   validation and final acceptance before presenting the repaired result as
+   reviewed. A review interruption alone does not require another technical run.
 4. **Deliver.** Complete the requested deployment and submission through supported
    capabilities and the existing approvals for their visible effects. Delivery
    is part of the requested outcome when the brief includes it. A private preview
@@ -30,7 +33,7 @@ These phases describe product work, not exactly four model API requests. Tool
 loops, product questions, genuine repairs and provider context limits can require
 additional calls. Deterministic setup, command execution, paging and receipt
 handling belong to the shared workflow; they should not each require a new model
-judgment. See [model cost and process audit](builder-model-cost.md).
+judgment. See [model use and cost accounting](builder-model-cost.md).
 
 The current workflow provides private implementation, review and preview, with
 separately approved publication when requested. Production activation remains a
