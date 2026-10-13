@@ -1,3 +1,4 @@
+import { validationLogsWithReadInputs } from "@/lib/agent/validation-log-read-input";
 import { publishCompiledOperatorArtifactsForSession } from "@/lib/agent/compiled-operator-artifacts";
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { describeSelectedApp } from "@/lib/repository/app-description";
@@ -217,11 +218,15 @@ export const createAppValidationTool = (
           phase: "validation_failed",
           validationFailure: result.receipt,
         }));
+        const lastCommand = result.receipt.commands.at(-1);
         return {
           attemptDigest: result.receipt.attemptDigest,
           commandFailure: result.receipt.commandFailure,
           diagnostics: result.receipt.diagnostics ?? [],
-          logs: result.receipt.commands.at(-1)?.logs,
+          logs:
+            lastCommand === undefined
+              ? undefined
+              : validationLogsWithReadInputs(result.receipt.attemptDigest, lastCommand),
           output: result.receipt.output,
           reason: result.receipt.reason,
           reused: false,
@@ -262,7 +267,14 @@ export const createAppValidationTool = (
         captureFailure === null ? "no_repair_required" : "needs_repair",
       );
       if (captureFailure !== null) {
-        return captureFailure;
+        return {
+          ...captureFailure,
+          attemptDigest: result.receipt.attemptDigest,
+          logs: result.receipt.commands.map((command) => ({
+            logs: validationLogsWithReadInputs(result.receipt.attemptDigest, command),
+            name: command.name,
+          })),
+        };
       }
       validationPhase(ctx.callId, "validating_persistent_backend");
       const backendValidation = await executionPorts.validateBackend(description, {
@@ -308,7 +320,11 @@ export const createAppValidationTool = (
         commandCount: result.receipt.commands.length,
         logs: result.receipt.commands.map((command) => ({
           name: command.name,
-          ...(command.logs === undefined ? {} : { logs: command.logs }),
+          ...(command.logs === undefined
+            ? {}
+            : {
+                logs: validationLogsWithReadInputs(result.receipt.attemptDigest, command),
+              }),
         })),
         productAcceptance: productAcceptanceObligations(
           current.appSpec,

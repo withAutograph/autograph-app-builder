@@ -202,8 +202,12 @@ scaffolded dependency versions (`catalog:` and `workspace:*` included) and
 repository tasks; app-specific dependencies do not automatically require a
 new generator profile.
 When validation returns a truncated repair excerpt, use `get_validation_log`
-with the exact returned reference and each continuation cursor to inspect the
-complete sanitized command output before deciding on a repair.
+by copying the complete channel `readInput` and each continuation cursor to inspect
+complete sanitized command output before deciding on a repair. If a reference is
+missing or mismatched, call `get_validation_log` with `operation: validation-attempts`
+and copy the complete canonical input from the current retained receipt; do not mix
+attempts or substitute the validation receipt digest for `attemptDigest`. Discovery
+may be empty after a later apply or reset and does not recover removed history.
 For dependency restoration failures, read saved attempts with
 `get_validation_log` using `operation: dependency-attempts`, then page both
 `dependency-probe` and `dependency-install` channels with their exact references
