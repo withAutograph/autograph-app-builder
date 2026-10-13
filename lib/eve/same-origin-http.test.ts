@@ -76,6 +76,12 @@ function stream(
   });
 }
 
+const streamFromIndex = (events: unknown[], startIndex: number) => {
+  const response = stream(events.slice(startIndex));
+  response.headers.set("x-eve-stream-tail-index", String(events.length - 1));
+  return response;
+};
+
 const liveHttpSnapshot = async (events: unknown[], stall = false) => {
   const paths: string[] = [];
   const server = createServer((request, response) => {
@@ -1312,7 +1318,9 @@ describe("same-origin canonical Eve transport", () => {
         );
       }
       streamReads += 1;
-      return stream(streamReads === 1 ? active : settled);
+      const events = streamReads === 1 ? active : settled;
+      const start = Number(new URL(String(url)).searchParams.get("startIndex"));
+      return streamFromIndex(events, start);
     });
     const transport = createSameOriginEveTransport({
       config,
@@ -1335,7 +1343,7 @@ describe("same-origin canonical Eve transport", () => {
       const fetchImplementation = vi.fn<typeof fetch>(async (url) =>
         String(url).endsWith("/cancel")
           ? Response.json({ ok: true, sessionId: "wrun_1", status: "accepted" }, { status: 202 })
-          : stream(active),
+          : streamFromIndex(active, Number(new URL(String(url)).searchParams.get("startIndex"))),
       );
       const transport = createSameOriginEveTransport({
         config,
@@ -2244,3 +2252,212 @@ describe("response settlement from owner-checked complete native preflight", () 
     expect(fetchImplementation).not.toHaveBeenCalled();
   });
 });
+
+const cancellationSeed = async () => {
+  const observed = await observeSameOriginEveStream({
+    config: { ...config, timeoutMs: 1000 },
+    // oxlint-disable-next-line eslint/require-await -- Seed derives from the actual native reducer against a terminal stream fixture.
+    fetchImplementation: async () => stream([{ data: { turnId: "turn_1" }, type: "step.started" }]),
+    onEvent() {
+      /* No public projection is needed by this cancellation fixture. */
+    },
+    sessionId: "wrun_1",
+    workloadIdentity: identity(),
+  });
+  return observed.nativeObservationState;
+};
+
+const cancellationDelta = (events: unknown[], tailIndex: number) => {
+  const response = stream(events);
+  response.headers.set("x-eve-stream-tail-index", String(tailIndex));
+  return response;
+};
+
+it("uses a retained large-history seed and advances split cancellation settlement without replay", async () => {
+  const seed = nativeObservationStateSchema.parse({
+    ...(await cancellationSeed()),
+    nextNativeIndex: 250_000,
+  });
+  const starts: number[] = [];
+  let cancelledPosted = false;
+  let settlementReads = 0;
+  // oxlint-disable-next-line eslint/require-await -- Preserve the terminal fetch contract.
+  const fetchImplementation = vi.fn<typeof fetch>(async (request, init) => {
+    const url = new URL(String(request));
+    if (url.pathname.endsWith("/cancel")) {
+      expect(JSON.parse(String(init?.body))).toEqual({ turnId: "turn_1" });
+      cancelledPosted = true;
+      return Response.json({ ok: true, sessionId: "wrun_1", status: "accepted" }, { status: 202 });
+    }
+    const start = Number(url.searchParams.get("startIndex"));
+    starts.push(start);
+    if (!cancelledPosted) {
+      return cancellationDelta([], 249_999);
+    }
+    settlementReads += 1;
+    return settlementReads === 1
+      ? cancellationDelta([{ data: { turnId: "turn_1" }, type: "turn.cancelled" }], 250_000)
+      : cancellationDelta([{ data: {}, type: "session.waiting" }], 250_001);
+  });
+  const transport = createSameOriginEveTransport({
+    config,
+    fetchImplementation,
+    workloadIdentity: identity(),
+  });
+  await expect(
+    transport.cancelAccepted?.({
+      adapterSessionId: "wrun_1",
+      nativeObservationState: seed,
+      principal,
+      turnId: "turn_1",
+    }),
+  ).resolves.toBeUndefined();
+  expect(starts).toEqual([250_000, 250_000, 250_001]);
+  expect(settlementReads).toBe(2);
+});
+
+it("rejects a foreign adapter seed before native reads or cancellation POST", async () => {
+  const seed = nativeObservationStateSchema.parse({
+    ...(await cancellationSeed()),
+    adapterSessionId: "foreign-adapter",
+  });
+  const fetchImplementation = vi.fn<typeof fetch>();
+  const transport = createSameOriginEveTransport({
+    config,
+    fetchImplementation,
+    workloadIdentity: identity(),
+  });
+  await expect(
+    transport.cancelAccepted?.({
+      adapterSessionId: "wrun_1",
+      nativeObservationState: seed,
+      principal,
+      turnId: "turn_1",
+    }),
+  ).rejects.toBeInstanceOf(SubmissionRejectedBeforeDispatchError);
+  expect(fetchImplementation).not.toHaveBeenCalled();
+});
+
+it.each(["changed-turn", "no-active-turn"] as const)(
+  "fresh seeded cancel guard rejects %s before POST",
+  async (kind) => {
+    const seed = await cancellationSeed();
+    // oxlint-disable-next-line eslint/require-await -- Preserve the terminal stream fetch contract.
+    const fetchImplementation = vi.fn<typeof fetch>(async () =>
+      cancellationDelta(
+        kind === "changed-turn"
+          ? [{ data: { turnId: "new-turn" }, type: "step.started" }]
+          : [{ data: {}, type: "session.waiting" }],
+        1,
+      ),
+    );
+    const transport = createSameOriginEveTransport({
+      config,
+      fetchImplementation,
+      workloadIdentity: identity(),
+    });
+    await expect(
+      transport.cancelAccepted?.({
+        adapterSessionId: "wrun_1",
+        nativeObservationState: seed,
+        principal,
+        turnId: "turn_1",
+      }),
+    ).rejects.toBeInstanceOf(SubmissionRejectedBeforeDispatchError);
+    expect(fetchImplementation).toHaveBeenCalledOnce();
+    expect(String(fetchImplementation.mock.calls[0]?.[0])).toContain("startIndex=1");
+  },
+);
+
+it("does not treat a newer turn's waiting boundary as settlement of the original cancellation", async () => {
+  const seed = await cancellationSeed();
+  let posted = false;
+  let settlementReads = 0;
+  const starts: number[] = [];
+  // oxlint-disable-next-line eslint/require-await -- Preserve the terminal stream fetch contract.
+  const fetchImplementation = vi.fn<typeof fetch>(async (request) => {
+    const url = new URL(String(request));
+    if (url.pathname.endsWith("/cancel")) {
+      posted = true;
+      return Response.json({ ok: true, sessionId: "wrun_1", status: "accepted" }, { status: 202 });
+    }
+    starts.push(Number(url.searchParams.get("startIndex")));
+    if (!posted) return cancellationDelta([], 0);
+    settlementReads += 1;
+    return settlementReads === 1
+      ? cancellationDelta([{ data: { turnId: "turn_1" }, type: "turn.cancelled" }], 1)
+      : cancellationDelta(
+          [
+            { data: { turnId: "newer-turn" }, type: "step.started" },
+            { data: {}, type: "session.waiting" },
+          ],
+          3,
+        );
+  });
+  const transport = createSameOriginEveTransport({
+    config,
+    fetchImplementation,
+    workloadIdentity: identity(),
+  });
+  const cancellation = transport.cancelAccepted?.({
+    adapterSessionId: "wrun_1",
+    nativeObservationState: seed,
+    principal,
+    turnId: "turn_1",
+  });
+  await expect(cancellation).rejects.toBeInstanceOf(HostedCancellationUnsettledError);
+  await expect(cancellation).rejects.toThrow(
+    "Cancellation was accepted but has not settled; use autograph_get.",
+  );
+  expect(starts).toEqual([1, 1, 2]);
+  expect(fetchImplementation).toHaveBeenCalledTimes(4);
+  expect(
+    fetchImplementation.mock.calls.filter(([request]) => String(request).endsWith("/cancel")),
+  ).toHaveLength(1);
+});
+
+it.each(["preguard", "accepted-settlement"] as const)(
+  "preserves the dispatch stage when a generic durable-tail read fails during %s",
+  async (stage) => {
+    const seed = await cancellationSeed();
+    let posted = false;
+    const readFailure = new Error("Canonical Eve durable-tail read failed");
+    // oxlint-disable-next-line eslint/require-await -- Terminal fetch preserves the native HTTP boundary.
+    const fetchImplementation = vi.fn<typeof fetch>(async (request) => {
+      if (String(request).endsWith("/cancel")) {
+        posted = true;
+        return Response.json(
+          { ok: true, sessionId: "wrun_1", status: "accepted" },
+          { status: 202 },
+        );
+      }
+      if (stage === "preguard" || posted) {
+        throw readFailure;
+      }
+      return cancellationDelta([], 0);
+    });
+    const transport = createSameOriginEveTransport({
+      config,
+      fetchImplementation,
+      workloadIdentity: identity(),
+    });
+    const cancellation = transport.cancelAccepted?.({
+      adapterSessionId: "wrun_1",
+      nativeObservationState: seed,
+      principal,
+      turnId: "turn_1",
+    });
+    if (stage === "preguard") {
+      await expect(cancellation).rejects.toBe(readFailure);
+    } else {
+      await expect(cancellation).rejects.toBeInstanceOf(HostedCancellationUnsettledError);
+      await expect(cancellation).rejects.toThrow(
+        "Cancellation was accepted but has not settled; use autograph_get.",
+      );
+    }
+    expect(
+      fetchImplementation.mock.calls.filter(([request]) => String(request).endsWith("/cancel")),
+    ).toHaveLength(stage === "preguard" ? 0 : 1);
+    expect(fetchImplementation).toHaveBeenCalledTimes(stage === "preguard" ? 1 : 3);
+  },
+);
