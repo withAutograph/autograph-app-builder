@@ -37,6 +37,111 @@ const inputFor = (
 });
 
 describe("native review result pages", () => {
+  it.each(["before", "after"] as const)(
+    "fits the complete final %s file when its partial cursor would overflow",
+    async (side) => {
+      const path = "apps/replica/final.ts";
+      const content = side === "before" ? "ab" : "xy";
+      const changes: OverlayChange[] = [
+        {
+          after: { digest: digest("xy"), mode: "644" },
+          before: { digest: digest("ab"), mode: "644" },
+          kind: "modified",
+          path,
+        },
+      ];
+      const input = { ...inputFor(changes, new Map([[path, content]]), 20_000), side };
+      const complete = await readChangeSetReviewPage(input);
+      const budget = serializedNativeActionResultBytes(complete, metadata);
+      const partial = {
+        ...complete,
+        contentCursor: {
+          changeIndex: 0,
+          changeSetDigest: input.changeSet.digest,
+          digest: digest(content),
+          offsetBytes: 1,
+          path,
+          side,
+        },
+        exportFiles: [{ ...complete.exportFiles[0], content: content[0] }],
+      };
+      expect(serializedNativeActionResultBytes(partial, metadata)).toBeGreaterThan(budget);
+      const page = await readChangeSetReviewPage({ ...input, maxBytes: budget });
+      expect(page).toEqual(complete);
+      expect(page.contentCursor).toBeUndefined();
+      expect(page.reviewReference.sessionId).toBe(input.sessionId);
+      expect(serializedNativeActionResultBytes(page, metadata)).toBe(budget);
+    },
+  );
+
+  it.each(["before", "after"] as const)(
+    "keeps a complete final %s file with preceding content at the exact frame budget",
+    async (side) => {
+      const firstPath = "apps/replica/a.ts";
+      const finalPath = "apps/replica/b.ts";
+      const changes: OverlayChange[] = [firstPath, finalPath].map((path) => ({
+        after: { digest: digest(path === firstPath ? "p" : "ab"), mode: "644" },
+        before: { digest: digest(path === firstPath ? "p" : "ab"), mode: "644" },
+        kind: "modified",
+        path,
+      }));
+      const input = {
+        ...inputFor(
+          changes,
+          new Map([
+            [firstPath, "p"],
+            [finalPath, "ab"],
+          ]),
+          20_000,
+        ),
+        side,
+      };
+      const complete = await readChangeSetReviewPage(input);
+      const budget = serializedNativeActionResultBytes(complete, metadata);
+      const page = await readChangeSetReviewPage({ ...input, maxBytes: budget });
+      expect(page).toEqual(complete);
+      expect(page.exportFiles.map((file) => file.content)).toEqual(["p", "ab"]);
+      expect(page.contentCursor).toBeUndefined();
+      expect(serializedNativeActionResultBytes(page, metadata)).toBe(budget);
+    },
+  );
+
+  it.each(["before", "after"] as const)(
+    "fits a resumed final %s remainder while retaining the immutable full-file digest",
+    async (side) => {
+      const path = "apps/replica/final.ts";
+      const content = "界ab";
+      const changes: OverlayChange[] = [
+        {
+          after: { digest: digest(content), mode: "644" },
+          before: { digest: digest(content), mode: "644" },
+          kind: "modified",
+          path,
+        },
+      ];
+      const input = { ...inputFor(changes, new Map([[path, content]]), 20_000), side };
+      const cursor = {
+        changeIndex: 0,
+        changeSetDigest: input.changeSet.digest,
+        digest: digest(content),
+        offsetBytes: Buffer.byteLength("界", "utf-8"),
+        path,
+        side,
+      };
+      const complete = await readChangeSetReviewPage({ ...input, cursor });
+      const budget = serializedNativeActionResultBytes(complete, metadata);
+      const page = await readChangeSetReviewPage({ ...input, cursor, maxBytes: budget });
+      expect(page).toEqual(complete);
+      expect(page.exportFiles).toEqual([
+        { content: "ab", digest: digest(content), offsetBytes: cursor.offsetBytes, path },
+      ]);
+      expect(page.contentCursor).toBeUndefined();
+      await expect(
+        readChangeSetReviewPage({ ...input, cursor: { ...cursor, offsetBytes: 1 } }),
+      ).rejects.toThrow("UTF-8 character boundary");
+    },
+  );
+
   it("pages a source result larger than the provider frame and reconstructs every UTF-8 byte", async () => {
     const path = "apps/replica/schema/data-server.ts";
     const content = 'export const value = "\\\n☀️";\n'.repeat(500_000);

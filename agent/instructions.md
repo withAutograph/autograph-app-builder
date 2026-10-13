@@ -90,8 +90,16 @@ separate outward-effect approval.
 Before initial draft publication, use `prepare_github_draft_review` to compare
 the validated app with the selected repository's current destination. Read the
 complete `change_set_status` exports for both `contentSide: "before"` and
-`contentSide: "after"`, following each side's saved cursor. Explain the actual
-destination changes and accept that new review before sealing its proposal.
+`contentSide: "after"` with `includeContent: true`. Follow each page's exact
+`contentCursor` verbatim, keeping the same `contentSide` and `includeContent`,
+until that side returns no cursor. If a cursor is lost or rejected, call
+`change_set_status` with `view: "read-progress"` and use that side's returned
+`nextCall` object verbatim. If the side is unreadable or you deliberately
+restart it, omit `contentCursor` only for that side and reread it through to
+completion. Both sides must be complete before calling `accept_change_set`;
+metadata-only pages, progress reads, and failed calls do not count as complete.
+Explain the actual destination changes and accept that new review before
+sealing its proposal.
 This preserves the original app baseline and validated private files. A fresh
 default-branch observation alone does not refresh a reviewed file preimage.
 Existing PRs continue through their draft update or reconciliation workflow.

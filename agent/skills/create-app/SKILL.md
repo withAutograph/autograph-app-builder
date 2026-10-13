@@ -203,6 +203,18 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    review again. An unavailable or clean source review never proves runtime
    success. Keep incomplete previews inspectable and report remaining checks;
    do not replace a requested backend outcome with a simulated transition.
+   Before initial draft publication, run `prepare_github_draft_review` and read
+   both destination sides with `change_set_status`, `includeContent: true`, and
+   the selected `contentSide`. Follow each returned `contentCursor` verbatim
+   with the same side and `includeContent: true` until no cursor remains. If a
+   cursor is lost or rejected, read `change_set_status` with
+   `view: "read-progress"` and pass that side's returned `nextCall` object
+   verbatim. If that side is unreadable or must be restarted, omit its cursor
+   and reread only that side through completion. Require both sides complete
+   before `accept_change_set`; metadata-only pages, progress reads, and failed
+   calls never count as completion. Explain the destination changes before
+   sealing a new proposal. After a tool error, recover or restart the affected
+   side and complete both sides before calling `accept_change_set`.
    When revising an existing draft pull request, first use
    `prepare_github_draft_pr_reconciliation` to inspect its live base and head
    commits and prepare the private merge candidate. This step determines actual
