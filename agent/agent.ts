@@ -12,7 +12,7 @@ import { renewalReviewUiPreview } from "@/lib/testing/prompt-driven-design";
 import { sha256 } from "@/lib/agent/workflow-state";
 import { developmentInspectionPath } from "@/lib/development/source-routing";
 import { hasTestCapability } from "@/lib/testing/test-capability";
-import { activeBuilderModelId } from "@/lib/integrations/active-model";
+import { builderModelConfiguration } from "@/lib/agent/builder-model-routing";
 import { builderSessionUsageLimits } from "@/lib/agent/session-usage-policy";
 
 export const vendorOnboardingPrototype = `<!doctype html>
@@ -1802,19 +1802,8 @@ export default defineAgent({
     externalDependencies: ["@emulators/adapter-next", "@emulators/github", "@emulators/vercel"],
   },
   limits: builderSessionUsageLimits,
-  model: hasTestCapability("mock-model") ? testModel : activeBuilderModelId,
-  ...(hasTestCapability("mock-model")
-    ? {}
-    : {
-        modelOptions: {
-          providerOptions: {
-            gateway: {
-              only: ["openai"],
-              order: ["openai"],
-            },
-          },
-        },
-      }),
-  modelContextWindowTokens: 128_000,
-  reasoning: localDevelopmentAgent ? "low" : "high",
+  ...builderModelConfiguration({
+    localDevelopment: localDevelopmentAgent,
+    testModel: hasTestCapability("mock-model") ? testModel : undefined,
+  }),
 });

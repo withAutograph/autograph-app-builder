@@ -1,0 +1,47 @@
+import { defineDynamic } from "eve";
+import type { AgentStaticModelDefinition } from "eve";
+
+import { activeBuilderModelId, builderValidationModelId } from "@/lib/integrations/active-model";
+import { appBuilderWorkflowState } from "./workflow-state";
+import type { AppBuilderWorkflowState } from "./workflow-state";
+
+const discoveryPhases = new Set<AppBuilderWorkflowState["phase"]>([
+  "empty",
+  "prepared",
+  "ui_previewed",
+  "ui_accepted",
+]);
+
+/** Product discovery stays on Luna; accepted functional work uses Sol. */
+export const builderModelForPhase = (phase: AppBuilderWorkflowState["phase"]) =>
+  discoveryPhases.has(phase) ? activeBuilderModelId : builderValidationModelId;
+
+export const builderModelConfiguration = ({
+  localDevelopment,
+  testModel,
+}: {
+  localDevelopment: boolean;
+  testModel?: AgentStaticModelDefinition;
+}) => {
+  const reasoning: "low" | "high" = localDevelopment ? "low" : "high";
+  if (testModel !== undefined) {
+    return { model: testModel, modelContextWindowTokens: 128_000, reasoning };
+  }
+  return {
+    model: defineDynamic({
+      events: {
+        // Read the saved state at each native model step, including resumed turns.
+        "step.started": () => ({
+          model: builderModelForPhase(appBuilderWorkflowState.get().phase),
+          modelContextWindowTokens: 128_000,
+          modelOptions: {
+            providerOptions: {
+              gateway: { only: ["openai"], order: ["openai"] },
+            },
+          },
+          reasoning,
+        }),
+      },
+    }),
+  };
+};
