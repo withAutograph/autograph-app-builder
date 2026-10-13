@@ -30,6 +30,7 @@ import type { SourceKind } from "@/lib/repository/source-receipt";
 
 const isExistingRepositorySource = (sourceKind: SourceKind): boolean =>
   sourceKind === "existing-repository";
+const READ_PROGRESS_VIEW = "read-progress";
 
 export const selectAppBaselineForReview = <
   T extends
@@ -224,7 +225,7 @@ export const destinationReviewReadProgress = (input: {
     )
   ) {
     throw new Error(
-      "Resume the destination diff from its saved cursor or start this side from its first page.",
+      "Resume the destination diff from its saved cursor or start this side from its first page. Use change_set_status with view=read-progress to recover the saved next-call arguments.",
     );
   }
   const priorReadable = input.side === "before" ? previous.beforeReadable : previous.afterReadable;
@@ -242,6 +243,38 @@ export const destinationReviewReadProgress = (input: {
           afterCursor: input.nextCursor,
           afterReadable: readable,
         }),
+  };
+};
+
+/** Read saved coverage only for the freshly derived current destination diff. */
+export const destinationReviewReadStatus = (input: {
+  previous?: GitHubDestinationReviewReadProgress;
+  changeSetDigest: string;
+}) => {
+  const progress =
+    input.previous?.changeSetDigest === input.changeSetDigest ? input.previous : undefined;
+  const sideStatus = (side: "before" | "after") => {
+    const complete =
+      (side === "before" ? progress?.beforeComplete : progress?.afterComplete) ?? false;
+    const readable =
+      (side === "before" ? progress?.beforeReadable : progress?.afterReadable) ?? null;
+    const cursor = side === "before" ? progress?.beforeCursor : progress?.afterCursor;
+    return {
+      complete,
+      nextCall: complete
+        ? null
+        : {
+            ...(cursor === undefined ? {} : { contentCursor: { ...cursor } }),
+            contentSide: side,
+            includeContent: true as const,
+            view: "changes" as const,
+          },
+      readable,
+    };
+  };
+  return {
+    changeSetDigest: input.changeSetDigest,
+    sides: { after: sideStatus("after"), before: sideStatus("before") },
   };
 };
 
@@ -478,7 +511,7 @@ const exportAppliedTextFiles = async (input: {
 
 export default defineTool({
   description:
-    "Read one bounded page of the complete change metadata and optional source content after validation. Continue with the returned contentCursor using the same contentSide and includeContent until no cursor remains. Read destination before and after sides from their first page with includeContent=true before acceptance; metadata-only pages do not complete either side. Use view=acceptance after acceptance to read the full saved receipt and product/source evidence as UTF-8-safe JSON chunks using detailCursor and the returned session references. Failed validation remains explicitly unreviewed and cannot be accepted. This never publishes or changes an external repository.",
+    "Read one bounded page of the complete change metadata and optional source content after validation. Continue with the entire returned contentCursor verbatim using the same contentSide and includeContent until no cursor remains. Read destination before and after sides from their first page with includeContent=true before acceptance; metadata-only pages do not complete either side. If a cursor is lost or rejected, use view=read-progress to read current saved side coverage and exact nextCall arguments; this status read grants no completion. To restart an unreadable side, omit its contentCursor and read that side completely again. Use view=acceptance after acceptance to read the full saved receipt and product/source evidence as UTF-8-safe JSON chunks using detailCursor and the returned session references. Failed validation remains explicitly unreviewed and cannot be accepted. This never publishes or changes an external repository.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     if (
@@ -509,6 +542,11 @@ export default defineTool({
         metadata,
       );
     }
+    if (state.phase === "validation_failed" && input.view === READ_PROGRESS_VIEW) {
+      throw new Error(
+        "Run successful repository validation before reading destination review progress.",
+      );
+    }
     const sandbox = await ctx.getSandbox();
     if (state.phase === "validation_failed") {
       if (!input.includeContent) {
@@ -530,6 +568,25 @@ export default defineTool({
     }
     const changeSet = await exactNormalizedChangeSet({ sandbox, state });
     const destination = state.githubDestinationReview;
+    if (input.view === READ_PROGRESS_VIEW) {
+      if (destination === undefined) {
+        throw new Error("Prepare the GitHub destination review before reading its progress.");
+      }
+      return checkedNativeToolResult(
+        {
+          ...destinationReviewReadStatus({
+            changeSetDigest: changeSet.digest,
+            previous: state.githubDestinationReviewRead,
+          }),
+          reviewReference: {
+            digest: changeSet.digest,
+            kind: "current-session-change-set" as const,
+            sessionId: ctx.session.id,
+          },
+        },
+        metadata,
+      );
+    }
     const runtime =
       input.includeContent && input.contentSide === "before"
         ? await githubPublicationRuntimeForSession(ctx.session.auth)
@@ -619,6 +676,6 @@ export default defineTool({
       .string()
       .regex(/^[0-9a-f]{64}$/u)
       .optional(),
-    view: z.enum(["changes", "acceptance"]).default("changes"),
+    view: z.enum(["changes", "acceptance", READ_PROGRESS_VIEW]).default("changes"),
   }),
 });

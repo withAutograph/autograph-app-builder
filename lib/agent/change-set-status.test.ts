@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
+import { z } from "zod";
 
-import {
+import changeSetStatus, {
   changedAppTextExport,
   baselineReviewableChanges,
   changedAppTextPaths,
@@ -11,11 +12,165 @@ import {
   reviewExportChanges,
   assertReviewExportCursorSide,
   destinationReviewReadProgress,
+  destinationReviewReadStatus,
 } from "../../agent/tools/change_set_status";
 import { overlayChanges } from "../repository/target-apply";
 import { assertExistingAppReviewScope } from "../repository/reviewed-change-set";
+import { assertCompleteGitHubDestinationReview } from "./workflow-state";
 
 const digest = (value: string) => createHash("sha256").update(value, "utf-8").digest("hex");
+const reviewInputSchema = (() => {
+  const schema = changeSetStatus.inputSchema;
+  if (!(schema instanceof z.ZodObject)) {
+    throw new Error("The change-set tool requires its declared Zod input schema.");
+  }
+  return schema;
+})();
+
+describe("destination review progress readback", () => {
+  const changeSetDigest = digest("current diff");
+  const cursor = {
+    changeIndex: 0,
+    changeSetDigest,
+    digest: digest("file"),
+    offsetBytes: 12,
+    path: "apps/replica/file.ts",
+    side: "before" as const,
+  };
+
+  it("returns first-page calls without awarding unobserved coverage", () => {
+    const status = destinationReviewReadStatus({ changeSetDigest });
+    expect(status.changeSetDigest).toBe(changeSetDigest);
+    for (const side of ["before", "after"] as const) {
+      expect(status.sides[side]).toEqual({
+        complete: false,
+        nextCall: { contentSide: side, includeContent: true, view: "changes" },
+        readable: null,
+      });
+      expect(reviewInputSchema.parse(status.sides[side].nextCall)).toEqual(
+        status.sides[side].nextCall,
+      );
+    }
+    expect(reviewInputSchema.parse({ view: "read-progress" })).toMatchObject({
+      view: "read-progress",
+    });
+  });
+
+  it("recovers the exact saved next call after a consumed-cursor retry fails", () => {
+    const first = destinationReviewReadProgress({
+      changeSetDigest,
+      nextCursor: cursor,
+      readable: true,
+      side: "before",
+    });
+    const nextCursor = { ...cursor, offsetBytes: 24 };
+    const advanced = destinationReviewReadProgress({
+      changeSetDigest,
+      cursor,
+      nextCursor,
+      previous: first,
+      readable: true,
+      side: "before",
+    });
+    const beforeReadback = structuredClone(advanced);
+    expect(() =>
+      destinationReviewReadProgress({
+        changeSetDigest,
+        cursor,
+        nextCursor,
+        previous: advanced,
+        readable: true,
+        side: "before",
+      }),
+    ).toThrow("saved cursor");
+    const status = destinationReviewReadStatus({ changeSetDigest, previous: advanced });
+    const { nextCall } = status.sides.before;
+    expect(nextCall).toEqual({
+      contentCursor: nextCursor,
+      contentSide: "before",
+      includeContent: true,
+      view: "changes",
+    });
+    expect(reviewInputSchema.parse(nextCall)).toEqual(nextCall);
+    expect(advanced).toEqual(beforeReadback);
+    expect(() => {
+      assertCompleteGitHubDestinationReview(advanced, changeSetDigest);
+    }).toThrow("both complete sides");
+    const beforeComplete = destinationReviewReadProgress({
+      changeSetDigest,
+      cursor: nextCall?.contentCursor,
+      previous: advanced,
+      readable: true,
+      side: "before",
+    });
+    expect(
+      destinationReviewReadStatus({ changeSetDigest, previous: beforeComplete }).sides.before,
+    ).toEqual({ complete: true, nextCall: null, readable: true });
+    expect(() => {
+      assertCompleteGitHubDestinationReview(beforeComplete, changeSetDigest);
+    }).toThrow("both complete sides");
+    const complete = destinationReviewReadProgress({
+      changeSetDigest,
+      previous: beforeComplete,
+      readable: true,
+      side: "after",
+    });
+    expect(() => {
+      assertCompleteGitHubDestinationReview(complete, changeSetDigest);
+    }).not.toThrow();
+  });
+
+  it("does not expose stale completed coverage or cursors for a changed diff", () => {
+    const previous = {
+      afterComplete: true,
+      afterReadable: true,
+      beforeComplete: true,
+      beforeCursor: cursor,
+      beforeReadable: true,
+      changeSetDigest,
+    };
+    const status = destinationReviewReadStatus({
+      changeSetDigest: digest("new diff"),
+      previous,
+    });
+    expect(status.sides.before.complete).toBe(false);
+    expect(status.sides.after.complete).toBe(false);
+    expect(status.sides.before.readable).toBeNull();
+    expect(status.sides.before.nextCall).not.toHaveProperty("contentCursor");
+    expect(previous.beforeComplete).toBe(true);
+    expect(previous.beforeCursor).toEqual(cursor);
+  });
+
+  it("preserves unreadable state until actual content is read again", () => {
+    const previous = destinationReviewReadProgress({
+      changeSetDigest,
+      readable: false,
+      side: "before",
+    });
+    const status = destinationReviewReadStatus({ changeSetDigest, previous });
+    expect(status.sides.before).toMatchObject({ complete: false, readable: false });
+    expect(status.sides.before.nextCall).not.toHaveProperty("contentCursor");
+    expect(previous.beforeComplete).toBe(false);
+    expect(previous.beforeReadable).toBe(false);
+  });
+
+  it("copies saved cursors without sharing mutable references across readbacks", () => {
+    const previous = destinationReviewReadProgress({
+      changeSetDigest,
+      nextCursor: cursor,
+      readable: true,
+      side: "before",
+    });
+    const status = destinationReviewReadStatus({ changeSetDigest, previous });
+    if (status.sides.before.nextCall?.contentCursor !== undefined) {
+      status.sides.before.nextCall.contentCursor.offsetBytes = 999;
+    }
+    expect(previous.beforeCursor?.offsetBytes).toBe(12);
+    expect(
+      destinationReviewReadStatus({ changeSetDigest, previous }).sides.before.nextCall,
+    ).toHaveProperty("contentCursor.offsetBytes", 12);
+  });
+});
 
 describe("reviewed candidate export", () => {
   it("exports before content for modifications and deletions while identifying additions as absent", async () => {

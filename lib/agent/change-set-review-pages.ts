@@ -209,7 +209,12 @@ const textChangePage = async (read: ReviewChangeRead) => {
   if (offsetBytes === contentBytes) {
     return { deferred: false, page };
   }
-  const firstCodePoint = Buffer.from(content, "utf-8")
+  const bytes = Buffer.from(content, "utf-8");
+  const firstByte = bytes[offsetBytes];
+  if (firstByte !== undefined && firstByte >= 0x80 && firstByte <= 0xbf) {
+    throw new Error("The payload chunk offset must identify a UTF-8 character boundary.");
+  }
+  const firstCodePoint = bytes
     .subarray(offsetBytes, offsetBytes + 4)
     .toString("utf-8")
     .codePointAt(0);
@@ -225,6 +230,15 @@ const textChangePage = async (read: ReviewChangeRead) => {
         : continuation(input, index + 1),
     exportFiles: [...page.exportFiles, { content: piece, digest, offsetBytes, path: change.path }],
   });
+  const maxBytes = input.maxBytes ?? EVE_NATIVE_RESULT_PAGE_BYTES;
+  // Finishing the file removes its partial cursor, so the full remainder may fit first.
+  const complete = output(bytes.subarray(offsetBytes).toString("utf-8"), contentBytes);
+  if (serializedNativeActionResultBytes(complete, input.metadata) <= maxBytes) {
+    return {
+      deferred: false,
+      page: fitOutputNativeFrame(complete, input.metadata, maxBytes),
+    };
+  }
   const minimum = fitOrDeferReviewChange(
     input,
     previous,
@@ -234,7 +248,6 @@ const textChangePage = async (read: ReviewChangeRead) => {
   if (minimum.deferred) {
     return minimum;
   }
-  const maxBytes = input.maxBytes ?? EVE_NATIVE_RESULT_PAGE_BYTES;
   const chunk = largestUtf8PayloadChunk({
     content,
     makePayload: output,
