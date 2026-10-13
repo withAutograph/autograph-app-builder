@@ -1,9 +1,11 @@
 import { getBuilderSandboxId } from "../../lib/sandbox/builder-sandbox";
 import { defineTool } from "eve/tools";
 import type { SandboxSession } from "eve/sandbox";
+import path from "node:path";
 import { z } from "zod";
 
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { localRuntimeEnvironmentPath } from "@/lib/repository/runtime-environment";
 import { runnableSelectedApp } from "@/lib/agent/runnable-selected-app";
 import { resolvePreparedRuntimeExecution } from "@/lib/agent/prepared-runtime-execution";
 import type {
@@ -51,11 +53,17 @@ export const runAppBrowserTests = async (input: {
       if (runtime) {
         return await runtime.runTask({ signal: input.signal, task: "test-e2e" });
       }
+      const env = {
+        APP_RUNTIME_STATE_DIR: path.posix.dirname(
+          localRuntimeEnvironmentPath(input.root, input.appId),
+        ),
+      };
       return input.signal === undefined
-        ? await input.sandbox.run({ command, workingDirectory: input.root })
+        ? await input.sandbox.run({ command, env, workingDirectory: input.root })
         : await input.sandbox.run({
             abortSignal: input.signal,
             command,
+            env,
             workingDirectory: input.root,
           });
     };
