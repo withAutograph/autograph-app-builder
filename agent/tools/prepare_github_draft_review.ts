@@ -74,7 +74,7 @@ export default defineTool({
         },
         destinationSha: binding.repository.headSha,
         destinationTree: binding.repository.headTree,
-        next: "Review change_set_status with includeContent=true and contentSide before and after, then accept_change_set before sealing and approving publication.",
+        next: 'Read both destination diff sides with change_set_status view="next-page" and contentSide="before" or "after", without contentCursor. Repeat each minimal call until no cursor remains or alreadyComplete is returned. Use view="read-progress" to confirm both sides are complete for the current changeSetDigest, then accept_change_set, seal_github_draft_pr_proposal, and request publication approval.',
         originalSourceSha: state.githubSource.resolvedSha,
         repository: `${binding.repository.owner}/${binding.repository.name}`,
         status: "destination-review-required",

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { createGateway, generateText, Output } from "ai";
+import { createGateway, generateText, NoObjectGeneratedError, Output } from "ai";
+import type { LanguageModel, LanguageModelCallEndEvent } from "ai";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { z } from "zod";
 import { builderValidationModelId } from "../integrations/active-model";
@@ -11,6 +12,19 @@ import type {
   SourceReviewJournal,
   SourceReviewJournalRecord,
 } from "./product-source-review-journal";
+import {
+  addSourceReviewUsage,
+  createSourceReviewBatch,
+  emptySourceReviewInvocation,
+  serializedSourceReviewBatchBytes,
+  sourceReviewPromptBytes,
+} from "./product-source-review-batches";
+import type {
+  SourceReviewBatch,
+  SourceReviewBatchResult,
+  SourceReviewInvocation,
+  SourceReviewRequest,
+} from "./product-source-review-batches";
 
 export interface ReviewSourceFile {
   path: string;
@@ -73,6 +87,8 @@ export interface ProductSourceAssessment {
   omissions: string[];
   remainingRuntimeChecks: string[];
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+  /** Fresh work for this invocation; usage above retains historical evidence usage. */
+  invocation?: SourceReviewInvocation;
 }
 export const sourceReviewEvidenceDigest = (input: ProductSourceReviewInput): string =>
   createHash("sha256").update(JSON.stringify(input)).digest("hex");
@@ -242,12 +258,74 @@ const providerContextRejected = (error: Error): boolean => {
   return false;
 };
 
+const providerOutputCapacityRejectedReason =
+  "The model provider exhausted source review output capacity. Split the affected batch or source/context pair and retry.";
+const providerReviewUnavailableReason =
+  "Independent source review was unavailable. No product success or failure was inferred from the provider error.";
+const singletonReviewAbortSignal = (signal?: AbortSignal) =>
+  signal === undefined
+    ? AbortSignal.timeout(120_000)
+    : AbortSignal.any([signal, AbortSignal.timeout(120_000)]);
+const providerReviewFailureReason = (error: Error): string => {
+  // Structured-output parsing failures are capacity evidence only when the SDK
+  // reports actual length termination, never based on their text or cause.
+  if (NoObjectGeneratedError.isInstance(error)) {
+    return error.finishReason === "length"
+      ? providerOutputCapacityRejectedReason
+      : providerReviewUnavailableReason;
+  }
+  return providerContextRejected(error)
+    ? "The model provider rejected this source review prompt for context size. Split the affected source page or requirement excerpt and retry."
+    : providerReviewUnavailableReason;
+};
+
+const recordSourceReviewRequest = (
+  options: {
+    invocation?: SourceReviewInvocation;
+    onRequest?: (request: SourceReviewRequest) => void;
+  },
+  event: LanguageModelCallEndEvent,
+): void => {
+  if (options.invocation !== undefined) {
+    options.invocation.successfulRequests += 1;
+  }
+  addSourceReviewUsage(options.invocation, event.usage);
+  if (
+    options.invocation !== undefined &&
+    event.usage.inputTokens !== undefined &&
+    event.usage.outputTokens !== undefined &&
+    event.usage.totalTokens !== undefined
+  ) {
+    options.invocation.requestsWithIncompleteUsage -= 1;
+  }
+  const idSchema = z.string().regex(/^[A-Za-z0-9_.:-]{1,256}$/u);
+  options.onRequest?.({
+    cacheReadTokens: event.usage.inputTokenDetails.cacheReadTokens,
+    cacheWriteTokens: event.usage.inputTokenDetails.cacheWriteTokens,
+    gatewayGenerationId: idSchema.safeParse(event.providerMetadata?.gateway?.generationId).data,
+    modelId: builderValidationModelId,
+    noCacheTokens: event.usage.inputTokenDetails.noCacheTokens,
+    reasoningTokens: event.usage.outputTokenDetails.reasoningTokens,
+    responseId: idSchema.safeParse(event.responseId).data,
+    sdkCallId: idSchema.safeParse(event.callId).data,
+    textTokens: event.usage.outputTokenDetails.textTokens,
+    usage: {
+      inputTokens: event.usage.inputTokens,
+      outputTokens: event.usage.outputTokens,
+      totalTokens: event.usage.totalTokens,
+    },
+  });
+};
+
 export const assessProductSource = async (
   input: ProductSourceReviewInput,
   options: {
     abortSignal?: AbortSignal;
     mockModel?: boolean;
     generate?: () => SourceJudgment | Promise<SourceJudgment>;
+    sessionId?: string;
+    invocation?: SourceReviewInvocation;
+    onRequest?: (request: SourceReviewRequest) => void;
   } = {},
 ): Promise<ProductSourceAssessment> => {
   if (options.mockModel === true) {
@@ -271,17 +349,29 @@ export const assessProductSource = async (
   }
   try {
     if (options.generate) {
-      return validateSourceJudgment(input, await options.generate());
+      if (options.invocation !== undefined) {
+        options.invocation.requestAttempts += 1;
+        options.invocation.requestsWithIncompleteUsage += 1;
+      }
+      const judgment = await options.generate();
+      if (options.invocation !== undefined) {
+        options.invocation.successfulRequests += 1;
+      }
+      return validateSourceJudgment(input, judgment);
     }
     const token = await getVercelOidcToken();
+    if (options.invocation !== undefined) {
+      options.invocation.requestAttempts += 1;
+      options.invocation.requestsWithIncompleteUsage += 1;
+    }
     const result = await generateText({
-      abortSignal:
-        options.abortSignal === undefined
-          ? AbortSignal.timeout(120_000)
-          : AbortSignal.any([options.abortSignal, AbortSignal.timeout(120_000)]),
+      abortSignal: singletonReviewAbortSignal(options.abortSignal),
       instructions: rubric,
       maxRetries: 0,
       model: createGateway({ apiKey: token })(builderValidationModelId),
+      onLanguageModelCallEnd(event) {
+        recordSourceReviewRequest(options, event);
+      },
       output: Output.object({ schema: judgmentSchema }),
       prompt: JSON.stringify(
         input.reviewContext
@@ -305,18 +395,14 @@ export const assessProductSource = async (
     };
   } catch (error) {
     const parsedError = z.instanceof(Error).safeParse(error);
-    if (parsedError.success && providerContextRejected(parsedError.data)) {
+    if (parsedError.success) {
       return unavailableSourceAssessment(
         input,
-        "The model provider rejected this source review prompt for context size. Split the affected source page or requirement excerpt and retry.",
+        providerReviewFailureReason(parsedError.data),
         "blocked",
       );
     }
-    return unavailableSourceAssessment(
-      input,
-      "Independent source review was unavailable. No product success or failure was inferred from the provider error.",
-      "blocked",
-    );
+    return unavailableSourceAssessment(input, providerReviewUnavailableReason, "blocked");
   }
 };
 
@@ -449,19 +535,154 @@ const splitReviewContext = (context: ReviewContext): [ReviewContext, ReviewConte
   ];
 };
 
+interface ReviewPairDescriptor {
+  base: ProductSourceReviewInput;
+  page: ProductReviewSourcePage;
+  context: ReviewContext;
+  pageIndex: number;
+}
+const reviewPairInput = ({
+  base,
+  page,
+  context,
+}: ReviewPairDescriptor): ProductSourceReviewInput => ({
+  ...base,
+  files: [
+    {
+      content: page.content,
+      path: page.path,
+      startColumn: page.startColumn,
+      startLine: page.startLine,
+    },
+  ],
+  omissions: [...base.omissions],
+  reviewContext: context,
+});
+const batchForPairs = (pairs: readonly ReviewPairDescriptor[]): SourceReviewBatch =>
+  createSourceReviewBatch(
+    pairs[0].base,
+    pairs.map((pair) => ({
+      context: pair.context,
+      id: sourceReviewPairKey(pair.base, pair.page, pair.context),
+      page: pair.page,
+    })),
+  );
+const batchJudgmentSchema = z.strictObject({
+  judgments: z.array(
+    z.strictObject({
+      judgment: judgmentSchema.describe(
+        "Apply the review rubric independently to this pair's pageId in files and contextId in reviewContexts. Cite only that page and quote only that context. Return every supplied pair, including pairs with no findings.",
+      ),
+      pairId: z.string().describe("One supplied pairs[].pairId, returned exactly once."),
+    }),
+  ),
+});
+
+const serializedPromptTooLarge = "The source review prompt exceeds its serialized byte bound.";
+
+/** One provider response must cover every admitted pair exactly once. */
+// oxlint-disable-next-line eslint/complexity -- Response coverage, evidence validation and fresh usage accounting share one provider boundary.
+const generateReviewBatch = async (
+  pairs: readonly ReviewPairDescriptor[],
+  options: SourceReviewPagesOptions,
+): Promise<ProductSourceAssessment[]> => {
+  const batch = batchForPairs(pairs);
+  const blocked = (reason: string) =>
+    pairs.map((pair) => unavailableSourceAssessment(reviewPairInput(pair), reason, "blocked"));
+  if (serializedSourceReviewBatchBytes(batch) > sourceReviewPromptBytes) {
+    return blocked(serializedPromptTooLarge);
+  }
+  try {
+    let generated: SourceReviewBatchResult;
+    if (options.generateBatch === undefined) {
+      const model =
+        options.testModel ??
+        createGateway({ apiKey: await getVercelOidcToken() })(builderValidationModelId);
+      if (options.invocation !== undefined) {
+        options.invocation.requestAttempts += 1;
+        options.invocation.requestsWithIncompleteUsage += 1;
+      }
+      const result = await generateText({
+        abortSignal:
+          pairs.length > 1 ? options.abortSignal : singletonReviewAbortSignal(options.abortSignal),
+        instructions: `${rubric}\nThis request batches independent reviews. Each pairs entry names exactly one files page by pageId and one reviewContexts excerpt by contextId. Apply the singular source-page/reviewContext rubric to that pair alone, preserving its exact citation and requirement-quote boundaries. Return exactly one judgment for every supplied pairId, including pairs without findings. Other pairs are not evidence for this pair.`,
+        maxRetries: 0,
+        model,
+        onLanguageModelCallEnd(event) {
+          recordSourceReviewRequest(options, event);
+        },
+        output: Output.object({ schema: batchJudgmentSchema }),
+        prompt: JSON.stringify(batch),
+        providerOptions: { gateway: { only: ["openai"] } },
+      });
+      generated = {
+        ...result.output,
+        usage: {
+          inputTokens: result.usage.inputTokens,
+          outputTokens: result.usage.outputTokens,
+          totalTokens: result.usage.totalTokens,
+        },
+      };
+    } else {
+      if (options.invocation !== undefined) {
+        options.invocation.requestAttempts += 1;
+        options.invocation.requestsWithIncompleteUsage += 1;
+      }
+      generated = await options.generateBatch(batch);
+      if (options.invocation !== undefined) {
+        options.invocation.successfulRequests += 1;
+      }
+      addSourceReviewUsage(options.invocation, generated.usage ?? {});
+      if (
+        options.invocation !== undefined &&
+        generated.usage?.inputTokens !== undefined &&
+        generated.usage.outputTokens !== undefined &&
+        generated.usage.totalTokens !== undefined
+      ) {
+        options.invocation.requestsWithIncompleteUsage -= 1;
+      }
+    }
+    const parsed = batchJudgmentSchema.safeParse({ judgments: generated.judgments });
+    const requested = new Set(batch.pairs.map((pair) => pair.pairId));
+    if (
+      !parsed.success ||
+      parsed.data.judgments.length !== requested.size ||
+      new Set(parsed.data.judgments.map((entry) => entry.pairId)).size !== requested.size ||
+      parsed.data.judgments.some((entry) => !requested.has(entry.pairId))
+    ) {
+      return blocked("Source review did not return every requested pair exactly once.");
+    }
+    const judgments = new Map(parsed.data.judgments.map((entry) => [entry.pairId, entry.judgment]));
+    return pairs.map((pair, index) => {
+      const assessment = validateSourceJudgment(
+        reviewPairInput(pair),
+        judgmentSchema.parse(
+          judgments.get(sourceReviewPairKey(pair.base, pair.page, pair.context)),
+        ),
+      );
+      // Attribute shared request tokens once, keeping historical replay totals additive.
+      if (index === 0 && generated.usage !== undefined) {
+        assessment.usage = {
+          inputTokens: generated.usage.inputTokens,
+          outputTokens: generated.usage.outputTokens,
+          totalTokens: generated.usage.totalTokens,
+        };
+      }
+      return assessment;
+    });
+  } catch (error) {
+    return blocked(
+      error instanceof Error ? providerReviewFailureReason(error) : providerReviewUnavailableReason,
+    );
+  }
+};
+
 // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Handle each provider context fallback without dropping either source or requirements.
 const assessReviewPair = async function* assessReviewPair(
   base: ProductSourceReviewInput,
   page: ProductReviewSourcePage,
   context: ReviewContext,
-  options: {
-    abortSignal?: AbortSignal;
-    journal?: SourceReviewJournal;
-    generate?: (
-      page: ProductReviewSourcePage,
-      context: ReviewContext,
-    ) => SourceJudgment | Promise<SourceJudgment>;
-  },
+  options: SourceReviewPagesOptions,
 ): AsyncGenerator<{ assessment: ProductSourceAssessment; page: ProductReviewSourcePage }> {
   options.abortSignal?.throwIfAborted();
   const pageInput: ProductSourceReviewInput = {
@@ -480,6 +701,7 @@ const assessReviewPair = async function* assessReviewPair(
   const key = sourceReviewPairKey(pageInput, page, context);
   const replay = async function* replay(
     record: SourceReviewJournalRecord,
+    reused = false,
   ): AsyncGenerator<{ assessment: ProductSourceAssessment; page: ProductReviewSourcePage }> {
     if (record.kind === "completed") {
       if (
@@ -489,6 +711,9 @@ const assessReviewPair = async function* assessReviewPair(
         record.assessment.modelId !== builderValidationModelId
       ) {
         throw new Error("The durable source review result does not match its recorded input.");
+      }
+      if (reused && options.invocation !== undefined) {
+        options.invocation.journalReuses += 1;
       }
       yield { assessment: record.assessment, page };
       return;
@@ -514,27 +739,44 @@ const assessReviewPair = async function* assessReviewPair(
   const prior = await options.journal?.read(key);
   options.abortSignal?.throwIfAborted();
   if (prior !== undefined) {
-    yield* replay(prior);
+    yield* replay(prior, key !== options.skipReplayCountForKey);
     return;
   }
   const reviewOptions: Parameters<typeof assessProductSource>[1] = {
     abortSignal: options.abortSignal,
+    invocation: options.invocation,
+    onRequest: options.onRequest,
+    sessionId: options.sessionId,
   };
   if (options.generate) {
     const { generate } = options;
     reviewOptions.generate = async () => await generate(page, context);
   }
-  const assessment = await assessProductSource(pageInput, reviewOptions);
+  let assessment: ProductSourceAssessment;
+  if (options.generate === undefined) {
+    const [generatedAssessment] = await generateReviewBatch(
+      [{ base, context, page, pageIndex: 0 }],
+      options,
+    );
+    assessment = generatedAssessment;
+  } else {
+    assessment = await assessProductSource(pageInput, reviewOptions);
+  }
   options.abortSignal?.throwIfAborted();
   if (
     !assessment.reviewCompleted &&
-    assessment.reason.startsWith(
+    (assessment.reason.startsWith(
       "The model provider rejected this source review prompt for context size.",
-    )
+    ) ||
+      assessment.reason === serializedPromptTooLarge ||
+      assessment.reason === providerOutputCapacityRejectedReason)
   ) {
     if (page.content.length > 1 && page.content.length >= context.text.length) {
       const split = splitReviewPage(page);
       if (split) {
+        if (options.invocation !== undefined) {
+          options.invocation.splits += 1;
+        }
         yield* replay(await persist({ kind: splitSourceDecision }));
         return;
       }
@@ -542,6 +784,9 @@ const assessReviewPair = async function* assessReviewPair(
     if (context.text.length > 1) {
       const split = splitReviewContext(context);
       if (split) {
+        if (options.invocation !== undefined) {
+          options.invocation.splits += 1;
+        }
         yield* replay(await persist({ kind: "split-context" }));
         return;
       }
@@ -549,6 +794,9 @@ const assessReviewPair = async function* assessReviewPair(
     if (page.content.length > 1) {
       const split = splitReviewPage(page);
       if (split) {
+        if (options.invocation !== undefined) {
+          options.invocation.splits += 1;
+        }
         yield* replay(await persist({ kind: splitSourceDecision }));
         return;
       }
@@ -584,6 +832,17 @@ interface SourceReviewPagesOptions {
     context: ReviewContext,
   ) => SourceJudgment | Promise<SourceJudgment>;
   reviewAppSpecParts?: () => AsyncIterable<string>;
+  generateBatch?: (
+    batch: SourceReviewBatch,
+  ) => SourceReviewBatchResult | Promise<SourceReviewBatchResult>;
+  sessionId?: string;
+  invocation?: SourceReviewInvocation;
+  onInvocation?: (invocation: SourceReviewInvocation) => void;
+  onRequest?: (request: SourceReviewRequest) => void;
+  /** A canonical result just committed in this invocation is not a journal reuse. */
+  skipReplayCountForKey?: string;
+  /** Internal SDK protocol fixture; this is never accepted from tool inputs. */
+  testModel?: LanguageModel;
 }
 
 interface ReviewPairResult {
@@ -612,17 +871,137 @@ async function* sourceReviewPairs(
       if (shouldStop()) {
         return;
       }
-      yield { context, page, pageIndex };
+      yield { base: { ...base, omissions: [...base.omissions] }, context, page, pageIndex };
     }
     pageIndex += 1;
   }
 }
 
+/** Filter durable work before paying for a batch, then checkpoint valid sibling results. */
+/* oxlint-disable eslint/no-await-in-loop, react-doctor/async-await-in-loop -- Replay and first-writer commits are ordered security boundaries, not independent operations. */
+// oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- Preserve ordered durable results across pair replay, provider splitting and canonical first-writer results.
+const assessReviewBatch = async (
+  pairs: readonly ReviewPairDescriptor[],
+  options: SourceReviewPagesOptions,
+  // oxlint-disable-next-line sonarjs/cognitive-complexity -- Keep replay, split recovery and ordered canonical commits in one coherent transaction boundary.
+): Promise<ReviewPairResult[]> => {
+  options.abortSignal?.throwIfAborted();
+  if (pairs.length === 1) {
+    const [pair] = pairs;
+    const results: ReviewPairResult[] = [];
+    for await (const result of assessReviewPair(pair.base, pair.page, pair.context, options)) {
+      results.push({
+        ...result,
+        context: pair.context,
+        pageIndex: pair.pageIndex,
+        sourcePage: pair.page,
+      });
+      if (!result.assessment.reviewCompleted) {
+        break;
+      }
+    }
+    return results;
+  }
+  const results = new Map<ReviewPairDescriptor, ReviewPairResult[]>();
+  const unfinished: ReviewPairDescriptor[] = [];
+  for (const pair of pairs) {
+    options.abortSignal?.throwIfAborted();
+    const prior = await options.journal?.read(
+      sourceReviewPairKey(pair.base, pair.page, pair.context),
+    );
+    if (prior === undefined) {
+      unfinished.push(pair);
+    } else {
+      results.set(pair, await assessReviewBatch([pair], options));
+    }
+  }
+  if (unfinished.length > 0) {
+    options.abortSignal?.throwIfAborted();
+    const assessments = await generateReviewBatch(unfinished, options);
+    options.abortSignal?.throwIfAborted();
+    if (
+      assessments[0]?.reason.startsWith(
+        "The model provider rejected this source review prompt for context size.",
+      ) ||
+      assessments[0]?.reason === serializedPromptTooLarge ||
+      assessments[0]?.reason === providerOutputCapacityRejectedReason
+    ) {
+      if (options.invocation !== undefined) {
+        options.invocation.splits += 1;
+      }
+      const middle = Math.max(1, Math.floor(unfinished.length / 2));
+      const splitResults = await assessReviewBatch(unfinished.slice(0, middle), options);
+      if (splitResults.every(({ assessment }) => assessment.reviewCompleted)) {
+        splitResults.push(...(await assessReviewBatch(unfinished.slice(middle), options)));
+      }
+      // Preserve original order when completed journal work preceded the rejected batch.
+      for (const pair of unfinished) {
+        results.set(
+          pair,
+          splitResults.filter(
+            (result) => result.sourcePage === pair.page && result.context === pair.context,
+          ),
+        );
+      }
+    } else {
+      for (const [index, pair] of unfinished.entries()) {
+        options.abortSignal?.throwIfAborted();
+        const assessment = assessments[index];
+        const { journal } = options;
+        if (assessment.reviewCompleted && journal !== undefined) {
+          const key = sourceReviewPairKey(pair.base, pair.page, pair.context);
+          const stored = await journal.put(key, { assessment, kind: "completed" });
+          // Reuse the existing replay validation and first-writer semantics, without
+          // counting this invocation's own just-written record as reused work.
+          const canonical: ReviewPairResult[] = [];
+          for await (const result of assessReviewPair(pair.base, pair.page, pair.context, {
+            ...options,
+            journal: {
+              put: async (putKey, record) => await journal.put(putKey, record),
+              read: async (readKey) => (readKey === key ? stored : await journal.read(readKey)),
+            },
+            skipReplayCountForKey: key,
+          })) {
+            canonical.push({
+              ...result,
+              context: pair.context,
+              pageIndex: pair.pageIndex,
+              sourcePage: pair.page,
+            });
+          }
+          results.set(pair, canonical);
+          continue;
+        }
+        results.set(pair, [
+          {
+            assessment,
+            context: pair.context,
+            page: pair.page,
+            pageIndex: pair.pageIndex,
+            sourcePage: pair.page,
+          },
+        ]);
+      }
+    }
+  }
+  return pairs.flatMap((pair) => results.get(pair) ?? []);
+};
+
+/* oxlint-enable eslint/no-await-in-loop, react-doctor/async-await-in-loop */
+
+const progressFor = ({ page, context }: Pick<ReviewPairDescriptor, "page" | "context">) => ({
+  contextIndex: context.index,
+  contextKind: context.kind,
+  contextOffset: context.startOffset,
+  path: page.path,
+  startLine: page.startLine,
+});
+
 /**
  * Each wave bounds live prompts and provider load, never the amount of review coverage.
  * @yields {ReviewPairResult} Checkpointed pair results in original source/context order.
  */
-// oxlint-disable-next-line eslint/func-style -- Ordered yielding preserves the existing aggregation and digest protocol.
+// oxlint-disable-next-line eslint/func-style, eslint/complexity, sonarjs/cognitive-complexity -- Ordered admission, fill deadlines and draining preserve the existing cancellation protocol.
 async function* concurrentSourceReviewPairs(
   base: ProductSourceReviewInput,
   pages: ProductReviewSourcePages,
@@ -650,43 +1029,25 @@ async function* concurrentSourceReviewPairs(
     }
   };
   options.abortSignal?.addEventListener("abort", stop, { once: true });
-  const review = async (
-    page: ProductReviewSourcePage,
-    context: ReviewContext,
-    pageIndex: number,
-  ) => {
-    // Source iteration may append omissions while another pair awaits its journal.
-    const pairBase = { ...base, omissions: [...base.omissions] };
-    const progress = {
-      contextIndex: context.index,
-      contextKind: context.kind,
-      contextOffset: context.startOffset,
-      path: page.path,
-      startLine: page.startLine,
-    };
-    options.onProgress?.({ ...progress, phase: "context_started" });
-    const results: ReviewPairResult[] = [];
-    for await (const result of assessReviewPair(pairBase, page, context, options)) {
-      options.onProgress?.({
-        ...progress,
-        phase: "context_result",
-        status: result.assessment.status,
-      });
-      results.push({ ...result, context, pageIndex, sourcePage: page });
-      if (!result.assessment.reviewCompleted) {
-        stop();
-        break;
-      }
-    }
-    return results;
-  };
   const settledReview = async (
-    page: ProductReviewSourcePage,
-    context: ReviewContext,
-    pageIndex: number,
+    pairs: ReviewPairDescriptor[],
   ): Promise<PromiseSettledResult<ReviewPairResult[]>> => {
     try {
-      return { status: "fulfilled", value: await review(page, context, pageIndex) };
+      for (const pair of pairs) {
+        options.onProgress?.({ ...progressFor(pair), phase: "context_started" });
+      }
+      const results = await assessReviewBatch(pairs, options);
+      for (const result of results) {
+        options.onProgress?.({
+          ...progressFor(result),
+          phase: "context_result",
+          status: result.assessment.status,
+        });
+        if (!result.assessment.reviewCompleted) {
+          stop();
+        }
+      }
+      return { status: "fulfilled", value: results };
     } catch (error) {
       stop();
       return { reason: error, status: "rejected" };
@@ -703,22 +1064,84 @@ async function* concurrentSourceReviewPairs(
       yield* result.value;
     }
   };
+  const launch = (pairs: ReviewPairDescriptor[]) => {
+    pending.push(settledReview(pairs));
+  };
+  let building: ReviewPairDescriptor[] = [];
+  let batchFillDeadline: number | null = null;
+  let descriptorRead: ReturnType<typeof readDescriptor> | null = null;
   try {
-    // oxlint-disable-next-line eslint/no-unmodified-loop-condition -- Owned pair completions and caller abort update admission asynchronously.
+    // oxlint-disable-next-line eslint/no-unmodified-loop-condition, sonarjs/too-many-break-or-continue-in-loop -- Separate backpressure, flush and cancellation branches preserve ordered admission.
     while (!stopped) {
       options.abortSignal?.throwIfAborted();
+      if (pending.length === concurrency) {
+        yield* drain();
+        continue;
+      }
       // A stalled source/AppSpec transport must not hide a pair failure or cancellation.
       // Promise.race observes a late read rejection without admitting any more pair work.
       // oxlint-disable-next-line eslint/no-await-in-loop -- One descriptor read at a time preserves stream ordering.
-      const next = await Promise.race([readDescriptor(), wake.promise]);
+      descriptorRead ??= readDescriptor();
+      // A deadline anchored to the first pair tolerates normal transport latency
+      // while allowing a stalled input to release the work already admitted.
+      const flushSignal = Promise.withResolvers<"flush">();
+      const flush = building.length === 0 ? undefined : flushSignal.promise;
+      const flushTimer =
+        building.length === 0
+          ? undefined
+          : setTimeout(
+              () => {
+                flushSignal.resolve("flush");
+              },
+              Math.max(0, (batchFillDeadline ?? Date.now()) - Date.now()),
+            );
+      // oxlint-disable-next-line eslint/no-await-in-loop -- One descriptor read at a time preserves input order and bounded buffering.
+      const next = await Promise.race([
+        descriptorRead,
+        wake.promise,
+        ...(flush === undefined ? [] : [flush]),
+      ]);
+      clearTimeout(flushTimer);
+      if (next === "flush") {
+        launch(building);
+        building = [];
+        batchFillDeadline = null;
+        continue;
+      }
       if (stopped || next === null || next.done === true) {
+        if (!stopped && building.length > 0) {
+          launch(building);
+        }
         break;
       }
-      const { context, page, pageIndex } = next.value;
+      descriptorRead = null;
+      const pair = next.value;
       // Attach rejection handling immediately, including while source iteration awaits I/O.
-      pending.push(settledReview(page, context, pageIndex));
-      if (pending.length === concurrency) {
-        yield* drain();
+      if (options.generate !== undefined) {
+        launch([pair]);
+        continue;
+      }
+      const candidate = [...building, pair];
+      if (
+        building.length > 0 &&
+        serializedSourceReviewBatchBytes(batchForPairs(candidate)) > sourceReviewPromptBytes
+      ) {
+        launch(building);
+        building = [pair];
+        batchFillDeadline = Date.now() + 250;
+      } else {
+        if (building.length === 0) {
+          batchFillDeadline = Date.now() + 250;
+        }
+        building = candidate;
+      }
+      if (
+        pending.length < concurrency &&
+        serializedSourceReviewBatchBytes(batchForPairs(building)) >= sourceReviewPromptBytes
+      ) {
+        launch(building);
+        building = [];
+        batchFillDeadline = null;
       }
     }
     yield* drain();
@@ -742,7 +1165,7 @@ async function* concurrentSourceReviewPairs(
 
 /** Assess every source page/requirement excerpt with ordered, checkpointed concurrent calls. */
 // oxlint-disable-next-line eslint/complexity, sonarjs/cognitive-complexity -- A complete assessment checks every page/context pair and rejects any incomplete pair.
-export const assessProductSourcePages = async (
+const assessProductSourcePagesWork = async (
   input: Omit<ProductSourceReviewInput, "files">,
   pages: ProductReviewSourcePages,
   options: SourceReviewPagesOptions = {},
@@ -859,4 +1282,18 @@ export const assessProductSourcePages = async (
     status: uniqueFindings.length > 0 ? "failed" : "unassessed",
     usage,
   };
+};
+
+export const assessProductSourcePages = async (
+  input: Omit<ProductSourceReviewInput, "files">,
+  pages: ProductReviewSourcePages,
+  options: SourceReviewPagesOptions = {},
+): Promise<ProductSourceAssessment> => {
+  const invocation = emptySourceReviewInvocation();
+  try {
+    const assessment = await assessProductSourcePagesWork(input, pages, { ...options, invocation });
+    return { ...assessment, invocation };
+  } finally {
+    options.onInvocation?.(invocation);
+  }
 };

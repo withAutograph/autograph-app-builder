@@ -21,6 +21,7 @@ import type { AcceptedAppSpec, StoredPrototypeArtifact } from "./workflow-state"
 import { acceptedAppSpecTextParts } from "./accepted-app-spec-content";
 import type { TargetApplyReceipt } from "../repository/target-apply";
 import { sourceReviewJournalForSession } from "./source-review-journal-runtime";
+import { emptySourceReviewInvocation } from "./product-source-review-batches";
 
 export interface AppliedSourceObservation {
   source: Pick<ProductSourceReviewInput, "files" | "omissions" | "sourceDigest">;
@@ -145,7 +146,7 @@ export const reviewAppliedProductSource = async (input: {
       if (latest.treeDigest === observed.treeDigest) {
         input.abortSignal?.throwIfAborted();
         logPhase("retained_review_reused");
-        return retained;
+        return { ...retained, invocation: emptySourceReviewInvocation() };
       }
       logPhase("source_changed_during_review");
       return unavailableSourceAssessment(
@@ -179,6 +180,16 @@ export const reviewAppliedProductSource = async (input: {
         sessionAuth: input.sessionAuth,
         sessionId: input.sessionId ?? "",
       }),
+      onInvocation(invocation) {
+        console.info(
+          JSON.stringify({
+            callId: input.callId,
+            event: "app_builder.source_review_invocation",
+            sessionId: input.sessionId,
+            ...invocation,
+          }),
+        );
+      },
       onProgress(progress) {
         console.info(
           JSON.stringify({
@@ -188,6 +199,17 @@ export const reviewAppliedProductSource = async (input: {
           }),
         );
       },
+      onRequest(completedRequest) {
+        console.info(
+          JSON.stringify({
+            callId: input.callId,
+            event: "app_builder.source_review_request_finished",
+            sessionId: input.sessionId,
+            ...completedRequest,
+          }),
+        );
+      },
+      sessionId: input.sessionId,
     };
     if (input.appSpec.version === 2) {
       reviewOptions.reviewAppSpecParts = () =>

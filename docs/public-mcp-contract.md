@@ -23,6 +23,15 @@ handling, lost-response recovery, and cooperative cancellation settlement.
 The internal Eve routes, adapter session identifiers, storage records, and
 transport protocol remain implementation details.
 
+The [complete-app phases](full-app-authoring.md#build-phases-and-delivery) are
+initial version and build approval, build, independent review, and requested
+delivery. They do not map one-to-one to public tool calls or model API requests.
+Polling through `autograph_get` reads progress; model usage must be attributed
+from actual generation attempts rather than public request counts. Ordinary
+product answers and effect approvals continue through `autograph_send` and
+`autograph_respond` in the saved session. The five tools do not expose private
+stage forcing, nor does private build approval authorize deployment or publication.
+
 `autograph_get` without `sessionId` or `clientRequestId` returns a tenant-scoped
 paginated recent session index. With `sessionId`, it retains absolute-cursor
 event pagination. With the original start's `clientRequestId`, it

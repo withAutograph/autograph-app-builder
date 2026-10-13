@@ -195,6 +195,10 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    `change_set_status` and `accept_change_set` after validation to record the
    current reviewed changes;
    review is neither publication nor proof of working user interactions.
+   Reuse current executed behavioral evidence for the scenarios it actually
+   covers; run additional scenarios only for missing coverage or changed behavior.
+   A new tool invocation or business phase alone is not a reason to repeat an
+   independent model judgment or an already covered browser test.
    Successful validation automatically runs the independent source assessment
    against the original request and accepted plan. An unchanged later review
    reuses that assessment; you do not need a separate tool call to obtain it.
@@ -300,8 +304,12 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
 
    Deliver the actual private preview with a concise account of what works,
    what was checked, and any remaining incomplete or unverified outcomes.
-   Publication is optional and separately authorized; do not make a repository
-   or pull-request offer a required completion step. The configured output
+   When the brief includes deployment or submission, carry that requested delivery
+   through supported capabilities and effect approvals; report operator handoff
+   work or unavailable capabilities precisely. A private preview alone does not
+   complete a requested hosted outcome. Publication is optional when the brief
+   does not request it, and separately authorized; do not make an unsolicited
+   repository or pull-request offer a required completion step. The configured output
    directory is a publication destination, so an empty destination does not
    mean the private implementation is missing. If the user requests publication,
    obtain the separate effect-based approval for the named destination and
