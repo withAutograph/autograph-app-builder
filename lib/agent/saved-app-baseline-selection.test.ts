@@ -334,10 +334,23 @@ describe("saved projected app baseline selection", () => {
         ...input,
         baseline: {
           ...selected,
-          selection: { ...selected.selection, selectedByCallId: "other-selection" },
+          selection: { ...selected.selection, appId: "other-app" },
         },
       }),
     ).toBeNull();
+  });
+
+  it("does not turn tracing metadata into a source admission gate", async () => {
+    const selected = baseline();
+    mocks.baseline = {
+      ...selected,
+      selection: { ...selected.selection, selectedByCallId: "refreshed-observation" },
+    };
+    await expect(execute("a".repeat(40))).resolves.toMatchObject({
+      selectionCorrection: { kind: "saved-app-baseline-commit" },
+    });
+    expect(mocks.inspectBranch).not.toHaveBeenCalled();
+    expect(mocks.prepare).not.toHaveBeenCalled();
   });
 
   it("reports actual baseline receipt summary separately from platform sourceSha", async () => {

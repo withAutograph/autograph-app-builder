@@ -31,7 +31,7 @@ export const productQuestionInputSchema = z
       .min(2)
       .max(3)
       .optional(),
-    question: z.string().min(1).max(2_000),
+    question: z.string().min(1).max(2000),
   })
   .superRefine((input, context) => {
     if (

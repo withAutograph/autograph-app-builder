@@ -26,9 +26,20 @@ const hasProjectedReceipt = (input: SavedBaselineSource): boolean => {
     return false;
   }
   const { receipt, selection } = baseline;
-  const selectionKeys = ["appId", "historical", "selectedByCallId", "sessionId", "source"] as const;
-  return selectionKeys.every(
-    (key) => JSON.stringify(receipt[key]) === JSON.stringify(selection[key]),
+  const sameSelector =
+    receipt.source.kind === "commit"
+      ? selection.source.kind === "commit" &&
+        receipt.source.commitSha === selection.source.commitSha
+      : selection.source.kind === "merged-pr" &&
+        receipt.source.pullRequestNumber === selection.source.pullRequestNumber;
+  return (
+    receipt.appId === selection.appId &&
+    receipt.sessionId === selection.sessionId &&
+    receipt.historical.owner === selection.historical.owner &&
+    receipt.historical.name === selection.historical.name &&
+    receipt.historical.repositoryId === selection.historical.repositoryId &&
+    receipt.historical.commitSha === selection.historical.commitSha &&
+    sameSelector
   );
 };
 
