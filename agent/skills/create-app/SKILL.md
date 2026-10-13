@@ -191,20 +191,27 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    returned diagnostics and status; do not invent extra validation capabilities
    or treat a pending attempt as passed. Successful commands establish
    technical validation, not product acceptance. Use `get_validation_log` with
-   each returned cursor when a repair excerpt is truncated. Use
-   `change_set_status` and `accept_change_set` after validation to record the
-   current reviewed changes;
-   review is neither publication nor proof of working user interactions.
+   each returned cursor when a repair excerpt is truncated. Inspect the current
+   changes with `change_set_status`; final acceptance below records their review.
+   Review is neither publication nor proof of working user interactions.
    Reuse current executed behavioral evidence for the scenarios it actually
    covers; run additional scenarios only for missing coverage or changed behavior.
    A new tool invocation or business phase alone is not a reason to repeat an
    independent model judgment or an already covered browser test.
-   Successful validation automatically runs the independent source assessment
-   against the original request and accepted plan. An unchanged later review
-   reuses that assessment; you do not need a separate tool call to obtain it.
-   Repair cited product contradictions
-   through `validate_app_creation` with corrected implementation files, then
-   review again. An unavailable or clean source review never proves runtime
+   Successful validation defers independent source assessment until final
+   `accept_change_set`. A deferred or unassessed source assessment is expected;
+   do not repeat validation merely to obtain review. Once the implementation and
+   required behavioral checks are ready, inspect `change_set_status` and call
+   `accept_change_set` to assess current source against the original request and
+   accepted plan. A matching completed assessment is reused; interrupted matching
+   work resumes from the journal. Complete this independent review before
+   declaring the private preview finished, as well as before publication. You
+   may start the private preview to complete missing behavioral checks before
+   final acceptance; keep that incomplete preview explicitly inspectable.
+   Repair cited product contradictions through `validate_app_creation` with
+   corrected implementation files, then accept the repaired change set again.
+   A review interruption alone does not require another technical validation.
+   An unavailable or clean source review never proves runtime
    success. Keep incomplete previews inspectable and report remaining checks;
    do not replace a requested backend outcome with a simulated transition.
    Before initial draft publication, run `prepare_github_draft_review` and read

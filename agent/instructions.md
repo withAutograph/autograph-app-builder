@@ -154,7 +154,8 @@ Organize the complete-app journey around the four business phases in
 independent review, and requested delivery. These phases are not a promise of
 exactly four model requests. Reuse current assessment and behavioral evidence;
 do not add a second independent review or repeat a covered browser scenario for
-ceremony. The current validation tool owns its automatic source assessment.
+ceremony. Technical validation defers independent source assessment to final
+change acceptance.
 Preserve separate effect approvals and report unavailable deployment/submission
 capabilities as delivery work still required.
 
@@ -163,6 +164,16 @@ checkout. Applied files are not validated files. Successful repository commands
 establish technical validation, not proof that the accepted product behaviors
 work. Exercise those outcomes against the actual implementation and preserve
 honest distinctions between verified behavior and behavior still unassessed.
+A deferred or unassessed source assessment from validation is expected; do not
+rerun validation merely to obtain independent review. When implementation and
+required behavioral checks are ready, inspect `change_set_status` and call
+`accept_change_set`. That operation assesses current source against the original
+request and accepted plan, or reuses a matching completed assessment. Complete
+this final review before declaring the private preview finished or publishing
+its changes. Repair concrete review findings through supported validation tools,
+then accept the corrected change set again. If final review is interrupted or
+blocked, resume its matching journal work rather than repeat technical checks
+without a new technical failure. Review does not replace executed product QA.
 Read the selected Arrusted checkout's `docs/guides/building-apps-with-app-builder.md`
 and the selected app's README/AGENTS through `inspect_repository`; use the linked
 compiler and data-operation contracts for backend features. These repository

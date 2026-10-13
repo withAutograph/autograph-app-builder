@@ -1,7 +1,25 @@
 # Product source review
 
-After successful app validation, Builder reads selected app source, changed paths,
-and root manifests through the Sandbox byte stream. It hashes each complete file
+Independent source review runs at final `accept_change_set`, after implementation
+and technical validation are ready. `validate_app_creation` continues to run the
+repository commands, runtime preparation, release capture and applicable
+persistent-backend browser tests, but returns deferred/unassessed source evidence.
+The deferred result has `status: "unassessed"`, `reviewCompleted: false` and
+empty findings. It uses the existing apply receipt's source digest as a known
+binding; it does not claim a fresh source observation. That deferral is expected
+and does not require another validation attempt.
+
+Final acceptance reads current source and performs the independent assessment
+before private preview completion or publication. A matching completed assessment
+is reused; an interrupted matching assessment resumes its journal work. Source
+repairs still require current technical validation before final acceptance. An
+interrupted review alone is not a reason to rerun repository checks. Product
+behavior still requires executed evidence; source review cannot establish it.
+Final findings or an unavailable assessment remain explicit in the result and
+must not be presented as a clean completed review.
+
+At final review, Builder reads selected app source, changed paths and root
+manifests through the Sandbox byte stream. It hashes each complete file
 against the observed overlay and divides source into bounded pages. A long line
 is split with its original starting line and column recorded. Pages are transport
 units, not file or repository size ceilings.
