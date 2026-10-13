@@ -1,3 +1,4 @@
+import { HostedCheckpointObservationConflictError } from "./hosted-checkpoint-observation-conflict-error";
 import { continueApprovedHostedBuild } from "./approved-build-controller";
 import { assertHostedBuildDecisionOwner } from "./approved-build-owner";
 import { createHash } from "node:crypto";
@@ -1752,6 +1753,15 @@ export function createHostedEveSessionService(input: {
             : continueApprovedWork(sessionId, result);
         }
       } catch (error) {
+        if (error instanceof HostedCheckpointObservationConflictError) {
+          // The losing spool is discarded by the store and this read's finally.
+          // Read the committed owner-scoped winner without replaying its loser.
+          const winner = await requireSession(sessionId);
+          const result = await resultFromDurableCheckpoint(sessionId, winner, cursor, limit);
+          return inputValue.continueWork === false
+            ? result
+            : continueApprovedWork(sessionId, result);
+        }
         if (error instanceof HostedSessionReadTimeoutError) {
           if (session.checkpoint === undefined && session.checkpointRef === undefined) {
             throw error;

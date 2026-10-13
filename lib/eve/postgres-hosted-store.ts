@@ -1,3 +1,4 @@
+import { HostedCheckpointObservationConflictError } from "./hosted-checkpoint-observation-conflict-error";
 import { approvedBuildDecisionSchema } from "../agent/approved-build-continuation";
 import { and, count, desc, eq, inArray, lte, ne, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
@@ -501,7 +502,7 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
             return durable;
           }
           if (durable.checkpointDigest !== input.expectedCheckpointDigest) {
-            throw new Error("Hosted paged checkpoint observation raced another update.");
+            throw new HostedCheckpointObservationConflictError();
           }
           await checkpointHistory.publishInTransaction(transaction, {
             checkpointDigest: staged.checkpointDigest,

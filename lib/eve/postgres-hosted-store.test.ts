@@ -1,4 +1,7 @@
-import { createHash } from "node:crypto";
+import { HostedCheckpointObservationConflictError } from "./hosted-checkpoint-observation-conflict-error";
+// oxlint-disable-next-line sonarjs/no-wildcard-import -- Spy on only the checkpoint factory terminal boundary.
+import * as checkpointHistory from "./postgres-hosted-checkpoint-history";
+import { createHash, randomUUID } from "node:crypto";
 import { getTableName } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
@@ -6,7 +9,7 @@ import type { PgTable } from "drizzle-orm/pg-core";
 
 import { readFile } from "node:fs/promises";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { toDurableHostedSessionRecord } from "./hosted-store";
 import type { HostedCheckpointPage, HostedSessionRecord } from "./hosted-store";
@@ -706,4 +709,75 @@ describe("published checkpoint reference reads across concurrent pointer advance
     );
     await expect(fixture.read()).rejects.toThrow("chunk digest mismatch");
   });
+});
+
+const lockedSessionQuery = {
+  from: () => ({
+    where: () => ({
+      limit: () => ({
+        // oxlint-disable-next-line eslint/require-await -- Terminal locked SELECT double preserves its async contract.
+        for: async () => [sessionRow],
+      }),
+    }),
+  }),
+};
+
+it("throws the specific observation digest conflict and discards only its staged checkpoint", async () => {
+  const readTransaction = { select: () => lockedSessionQuery };
+  const database = {
+    transaction: async (
+      execute: (transaction: typeof readTransaction) => Promise<HostedSessionRecord>,
+    ) => await execute(readTransaction),
+  };
+  // SAFETY: This double implements the locked session SELECT used before the store's digest comparison; history I/O is separately doubled below.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- The terminal database fake implements only the verified prepublication conflict path.
+  const db = database as unknown as Parameters<typeof createPostgresHostedEveStore>[0];
+  const history = checkpointHistory.createPostgresHostedCheckpointHistory(db);
+  const staged = {
+    checkpointDigest: checkpointA.digest,
+    checkpointId: randomUUID(),
+    checkpointProgressDigest: checkpointA.digest,
+    eventCount: 1,
+    itemCount: 2,
+  };
+  const stage = vi.fn<typeof history.stage>().mockResolvedValue(staged);
+  const discardStage = vi.fn<typeof history.discardStage>().mockResolvedValue(true);
+  const publish = vi.fn<typeof history.publishInTransaction>();
+  const factory = vi
+    .spyOn(checkpointHistory, "createPostgresHostedCheckpointHistory")
+    .mockReturnValue({ ...history, discardStage, publishInTransaction: publish, stage });
+  try {
+    const store = createPostgresHostedEveStore(db);
+    if (store.observeSessionPaged === undefined) {
+      throw new Error("Expected the PostgreSQL paged observation writer.");
+    }
+    await expect(
+      store.observeSessionPaged({
+        events: (async function* stagedEvents() {
+          yield {
+            index: 0,
+            text: staged.checkpointId,
+            turnId: "turn_1",
+            type: "assistant_message" as const,
+          };
+        })(),
+        expectedCheckpointDigest: checkpointB.digest,
+        metadata: { capturedAtEpochMs: 3000, status: "working", version: 1 },
+        nowEpochMs: 3000,
+        principal,
+        resumability: "live",
+        sessionId: sessionRecord.sessionId,
+        stage: "planning",
+      }),
+    ).rejects.toBeInstanceOf(HostedCheckpointObservationConflictError);
+    expect(stage).toHaveBeenCalledOnce();
+    expect(publish).not.toHaveBeenCalled();
+    expect(discardStage).toHaveBeenCalledExactlyOnceWith({
+      checkpointId: staged.checkpointId,
+      principal,
+      sessionId: sessionRecord.sessionId,
+    });
+  } finally {
+    factory.mockRestore();
+  }
 });
