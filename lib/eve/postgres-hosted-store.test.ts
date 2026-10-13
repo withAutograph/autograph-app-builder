@@ -1,10 +1,22 @@
+import { createHash } from "node:crypto";
+import { getTableName } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { PgTable } from "drizzle-orm/pg-core";
+
 import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
+import { toDurableHostedSessionRecord } from "./hosted-store";
+import type { HostedCheckpointPage, HostedSessionRecord } from "./hosted-store";
 import { hostedEveOperationScopes } from "./hosted-auth";
 import type { HostedPrincipal } from "./hosted-auth";
-import { parseHostedOperationRow, parseHostedSessionRow } from "./postgres-hosted-store";
+import {
+  createPostgresHostedEveStore,
+  parseHostedOperationRow,
+  parseHostedSessionRow,
+} from "./postgres-hosted-store";
 
 const principal: HostedPrincipal = {
   audience: "eve-hosted",
@@ -432,5 +444,266 @@ describe("PostgreSQL hosted Eve row authority", () => {
       expect(migration).toContain(required);
     }
     expect(migration).not.toMatch(/\b(?:DROP|TRUNCATE|DELETE|UPDATE)\b/iu);
+  });
+});
+
+const checkpointA = {
+  digest: `sha256:${"a".repeat(64)}`,
+  eventCount: 1,
+  id: "123e4567-e89b-42d3-a456-426614174001",
+};
+const checkpointB = {
+  digest: `sha256:${"b".repeat(64)}`,
+  eventCount: 2,
+  id: "123e4567-e89b-42d3-a456-426614174002",
+};
+
+const ownedCheckpointRow = (
+  checkpointRef = checkpointA,
+  owner = principal,
+  sessionId = sessionRecord.sessionId,
+) => {
+  const record = {
+    ...toDurableHostedSessionRecord({ ...sessionRecord, principal: owner, sessionId }),
+    checkpointDigest: checkpointRef.digest,
+    checkpointProgressDigest: checkpointRef.digest,
+    checkpointRef,
+  };
+  return {
+    ...sessionRow,
+    adapterGeneration: record.adapterGeneration,
+    audience: owner.audience,
+    checkpointDigest: record.checkpointDigest,
+    checkpointId: checkpointRef.id,
+    checkpointProgressDigest: record.checkpointProgressDigest,
+    issuer: owner.issuer,
+    lastProgressAt: new Date(record.lastProgressAtEpochMs),
+    ownerUserId: owner.ownerUserId,
+    record,
+    resumabilityState: record.resumability,
+    sessionId,
+    stage: record.stage,
+    title: record.title,
+    workspaceId: owner.workspaceId,
+  };
+};
+
+type CheckpointFixtureRow = Record<
+  string,
+  string | number | Date | null | HostedSessionRecord | readonly string[]
+>;
+
+const terminalReadRows = (rows: CheckpointFixtureRow[]) => ({
+  // oxlint-disable-next-line eslint/require-await -- Terminal database double preserves the async read contract.
+  limit: async (limit: number) => rows.slice(0, limit),
+  // oxlint-disable-next-line eslint/require-await -- Terminal database double preserves the async read contract.
+  orderBy: async () => rows,
+});
+
+/** Terminal query doubles exercise the real store, history reader, and Drizzle predicates. */
+const checkpointReadFixture = () => {
+  const dialect = new PgDialect();
+  const queries: { params: unknown[]; sql: string }[] = [];
+  const rows = new Map<string, CheckpointFixtureRow[]>();
+  rows.set("agent_session", [ownedCheckpointRow()]);
+  rows.set("agent_session_checkpoint_manifest", [
+    {
+      ...principal,
+      checkpointDigest: checkpointA.digest,
+      checkpointId: checkpointA.id,
+      eventCount: checkpointA.eventCount,
+      publishedAt: new Date(3000),
+      sessionId: sessionRecord.sessionId,
+    },
+  ]);
+  const metadata: HostedCheckpointPage["metadata"] = {
+    capturedAtEpochMs: 3000,
+    status: "working",
+    version: 1,
+  };
+  const event: HostedCheckpointPage["events"][number] = {
+    index: 0,
+    text: "Checkpoint A retained history",
+    turnId: "turn_1",
+    type: "assistant_message",
+  };
+  const items = [metadata, event].map((value, index) => {
+    const bytes = Buffer.from(JSON.stringify(value));
+    const digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+    return {
+      ...principal,
+      byteLength: bytes.byteLength,
+      checkpointId: checkpointA.id,
+      chunkDigest: digest,
+      digest,
+      itemIndex: index - 1,
+      partCount: 1,
+      partIndex: 0,
+      payload: bytes.toString("base64"),
+      sessionId: sessionRecord.sessionId,
+    };
+  });
+  rows.set("agent_session_checkpoint_item", items);
+  rows.set("agent_session_checkpoint_chunk", items);
+  const selectRows = (table: PgTable, predicate: SQL) => {
+    const query = dialect.sqlToQuery(predicate);
+    queries.push(query);
+    const name = getTableName(table);
+    const keys = ["issuer", "audience", "workspaceId", "ownerUserId", "sessionId"];
+    if (name !== "agent_session") {
+      keys.push("checkpointId");
+    }
+    if (name === "agent_session_checkpoint_item" || name === "agent_session_checkpoint_chunk") {
+      keys.push("itemIndex");
+    }
+    const selected = (rows.get(name) ?? []).filter((row) =>
+      keys.every((key, index) => row[key] === query.params[index]),
+    );
+    return terminalReadRows(selected);
+  };
+  const database = {
+    select: () => ({
+      from: (table: PgTable) => ({
+        where: (predicate: SQL) => selectRows(table, predicate),
+      }),
+    }),
+  };
+  // SAFETY: This terminal double implements every SELECT chain reached by these read-only store/history calls.
+  const store = createPostgresHostedEveStore(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Writes and provider calls are not exercised by this fixture.
+    database as Parameters<typeof createPostgresHostedEveStore>[0],
+  );
+  const read = async (
+    overrides: Partial<Parameters<NonNullable<typeof store.readCheckpointPage>>[0]> = {},
+  ) => {
+    if (store.readCheckpointPage === undefined) {
+      throw new Error("Expected the PostgreSQL checkpoint reader.");
+    }
+    return await store.readCheckpointPage({
+      checkpointRef: checkpointA,
+      cursor: 0,
+      limit: 1,
+      principal,
+      sessionId: sessionRecord.sessionId,
+      ...overrides,
+    });
+  };
+  return { event, metadata, queries, read, rows, store };
+};
+
+describe("published checkpoint reference reads across concurrent pointer advancement", () => {
+  it("reads captured A after the owned session advances to B, retaining A's metadata and event", async () => {
+    const fixture = checkpointReadFixture();
+    const captured = await fixture.store.getSession(principal, sessionRecord.sessionId);
+    if (captured?.version !== 2 || captured.checkpointRef === undefined) {
+      throw new Error("Expected a captured durable checkpoint reference.");
+    }
+    // Model a concurrent committed publication at the terminal database boundary.
+    fixture.rows.set("agent_session", [ownedCheckpointRow(checkpointB)]);
+    expect(await fixture.read({ checkpointRef: captured.checkpointRef })).toEqual({
+      checkpointDigest: checkpointA.digest,
+      cursor: 1,
+      events: [fixture.event],
+      metadata: fixture.metadata,
+      totalEvents: 1,
+    });
+    expect(await fixture.store.getSession(principal, sessionRecord.sessionId)).toMatchObject({
+      checkpointRef: checkpointB,
+    });
+    const historyQueries = fixture.queries.filter(({ sql }) => sql.includes("checkpoint_manifest"));
+    expect(historyQueries.length).toBeGreaterThan(0);
+    for (const query of historyQueries) {
+      expect(query.params).toEqual([
+        principal.issuer,
+        principal.audience,
+        principal.workspaceId,
+        principal.ownerUserId,
+        sessionRecord.sessionId,
+        checkpointA.id,
+      ]);
+      for (const column of [
+        "issuer",
+        "audience",
+        "workspace_id",
+        "owner_user_id",
+        "session_id",
+        "checkpoint_id",
+      ]) {
+        expect(query.sql).toContain(`"${column}" =`);
+      }
+    }
+  });
+
+  it.each(["issuer", "audience", "workspaceId", "ownerUserId"] as const)(
+    "rejects a foreign %s even when that principal has its own same-ID durable session",
+    async (field) => {
+      const fixture = checkpointReadFixture();
+      const foreign = { ...principal, [field]: `${principal[field]}/foreign` };
+      fixture.rows.set("agent_session", [ownedCheckpointRow(checkpointB, foreign)]);
+      await expect(fixture.read({ principal: foreign })).rejects.toThrow("selected reference");
+      await expect(fixture.read()).rejects.toThrow("session was not found");
+    },
+  );
+
+  it("rejects another owned session's reference and a missing session", async () => {
+    const fixture = checkpointReadFixture();
+    fixture.rows.set("agent_session", [ownedCheckpointRow(checkpointB, principal, "session_2")]);
+    await expect(fixture.read({ sessionId: "session_2" })).rejects.toThrow("selected reference");
+    await expect(fixture.read()).rejects.toThrow("session was not found");
+  });
+
+  it("requires a durable session version", async () => {
+    const fixture = checkpointReadFixture();
+    fixture.rows.set("agent_session", [sessionRow]);
+    await expect(fixture.read()).rejects.toThrow("not durable");
+  });
+
+  it.each(["unpublished", "missing", "no-event-count"] as const)(
+    "rejects a %s manifest",
+    async (kind) => {
+      const fixture = checkpointReadFixture();
+      const manifests = fixture.rows.get("agent_session_checkpoint_manifest") ?? [];
+      fixture.rows.set(
+        "agent_session_checkpoint_manifest",
+        kind === "missing"
+          ? []
+          : manifests.map((manifest) => ({
+              ...manifest,
+              ...(kind === "unpublished" ? { publishedAt: null } : { eventCount: null }),
+            })),
+      );
+      await expect(fixture.read()).rejects.toThrow("selected reference");
+    },
+  );
+
+  it("rejects supplied digest and event-count mismatches", async () => {
+    const fixture = checkpointReadFixture();
+    await expect(
+      fixture.read({ checkpointRef: { ...checkpointA, digest: checkpointB.digest } }),
+    ).rejects.toThrow("selected reference");
+    await expect(
+      fixture.read({ checkpointRef: { ...checkpointA, eventCount: 2 } }),
+    ).rejects.toThrow("selected reference");
+  });
+
+  it("rejects malformed supplied references and corrupted retained chunks", async () => {
+    const fixture = checkpointReadFixture();
+    await expect(
+      fixture.read({ checkpointRef: { ...checkpointA, id: "invalid" } }),
+    ).rejects.toThrow();
+    await expect(
+      fixture.read({ checkpointRef: { ...checkpointA, digest: "invalid" } }),
+    ).rejects.toThrow();
+    await expect(
+      fixture.read({ checkpointRef: { ...checkpointA, eventCount: -1 } }),
+    ).rejects.toThrow();
+    fixture.rows.set(
+      "agent_session_checkpoint_chunk",
+      (fixture.rows.get("agent_session_checkpoint_chunk") ?? []).map((chunk) => ({
+        ...chunk,
+        chunkDigest: checkpointB.digest,
+      })),
+    );
+    await expect(fixture.read()).rejects.toThrow("chunk digest mismatch");
   });
 });
