@@ -117,9 +117,9 @@ describe("UI preview revision recovery", () => {
     expect(receipt).not.toHaveProperty("acceptedUIReference.sourceDigest");
     expect(receipt).not.toHaveProperty("sourceFiles");
     expect(receipt).not.toHaveProperty("permissions");
-    expect(receipt.appSpec).not.toHaveProperty("content");
-    expect(receipt.appSpec).not.toHaveProperty("walkthrough");
-    expect(receipt.appSpec).not.toHaveProperty("approvalReceipt");
+    expect(receipt).not.toHaveProperty("appSpec.content");
+    expect(receipt).not.toHaveProperty("appSpec.walkthrough");
+    expect(receipt).not.toHaveProperty("appSpec.approvalReceipt");
   });
   it("leaves the accepted UI reference absent for legacy AppSpecs without one", () => {
     mocks.state = {
@@ -140,7 +140,8 @@ describe("UI preview revision recovery", () => {
 
     const receipt = status.execute({}, context);
     expect(receipt).not.toHaveProperty("acceptedUIReference");
-    expect(receipt.appSpec).not.toHaveProperty("uiRevision");
+    expect(receipt).toHaveProperty("appSpec");
+    expect(receipt).not.toHaveProperty("appSpec.uiRevision");
     expect(receipt).not.toHaveProperty("uiPreview");
   });
   it("keeps an early component-backed UI receipt distinct from accepted AppSpec metadata", () => {
