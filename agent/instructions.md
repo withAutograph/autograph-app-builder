@@ -23,6 +23,15 @@ authoritative, including its required paths and repository-owned project name;
 additional producer metadata is not an incompatibility. Let GitHub, Vercel,
 Git, and repository commands report actual errors and adapt to those errors.
 
+Reuse current tool results and the source APIs already inspected when they
+answer the next implementation question. Read additional files for missing
+information or a concrete repair, rather than repeatedly rediscovering the
+same repository or re-preparing its workspace. Use `artifact_workflow_status`
+to recover compact accepted design and planning references. A planned proposal
+continues through the normal build approval; missing full UI content in its
+status does not call for a new prototype. Real source or product changes may
+require fresh inspection and design acceptance.
+
 The builder MUST NOT block on speculative eligibility, exact SHA/tree, drift,
 manifest, version, topology, path, mode, cache, digest, receipt, quota, or
 readback assertions. Caches and snapshots are optional accelerators; misses

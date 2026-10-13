@@ -21,6 +21,14 @@ describe("shared app delivery guidance", () => {
     expect(result).toContain("Call validate_app_creation next");
   });
 
+  it("continues a planned implementation without regenerating its accepted design", () => {
+    const guidance = completionGuidance({ phase: "planned" });
+    expect(guidance).toContain("apply_app_creation and its normal build approval");
+    expect(guidance).toContain("Reuse the accepted UI reference");
+    expect(guidance).toContain("not a reason to regenerate the prototype");
+    expect(guidance).toContain("Genuine product revisions still follow the design acceptance flow");
+  });
+
   it("keeps command success distinct from product verification", () => {
     const result = completionGuidance({ phase: "validated" });
     expect(result).toContain("Repository commands passed");
