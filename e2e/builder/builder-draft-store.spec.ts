@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { expect, test } from "playwright/test";
 
+import { activeBuilderModelId } from "../../lib/integrations/active-model";
 import { createBuilderDraftStore } from "../../lib/db/builder-drafts";
 import * as schema from "../../lib/db/schema";
 import type { BuilderDraftRecord } from "../../lib/builder-drafts/contracts";
@@ -27,12 +28,12 @@ function record(brief: string): BuilderDraftRecord {
         brief,
         buildDestination: "codex",
         connections: [],
-        modelId: "openai/gpt-6-luna",
+        modelId: activeBuilderModelId,
         privateRepository: true,
         repository: "saved-app",
       },
       gitScope: "",
-      model: "openai/gpt-6-luna",
+      model: activeBuilderModelId,
       repositoryEditedByUser: true,
       search: "",
       showMoreConnections: false,

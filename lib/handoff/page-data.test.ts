@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { activeBuilderModelId } from "../integrations/active-model";
 import { builderHandoffRecordSchema } from "./contracts";
 import type { BuilderHandoffRecord } from "./contracts";
 import { BuilderHandoffUnavailableError } from "./service";
@@ -58,7 +59,7 @@ const prepared = builderHandoffRecordSchema.parse({
     appName: "Vendor Review",
     brief: "Review new vendors.",
     connections: [],
-    modelId: "openai/gpt-6-luna",
+    modelId: activeBuilderModelId,
     providers: {
       githubInstallationId: "123",
       vercelInstallationId: "icfg_selected",

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { activeBuilderModelId } from "../integrations/active-model";
 import { builderHandoffIntentSchema } from "../handoff/contracts";
 import type { OperatorOwnerContext, OperatorSelection } from "./hosted-operator-contract";
 import { readHostedOperatorPublicGateway } from "./hosted-operator-gateway";
@@ -22,7 +23,7 @@ const intent = builderHandoffIntentSchema.parse({
   appName: "Vendor Onboarding",
   brief: "Review vendors.",
   connections: [],
-  modelId: "openai/gpt-6-luna",
+  modelId: activeBuilderModelId,
   providers: { vercelInstallationId: "icfg_1" },
   provisioning: {
     appId: selection.appId,

@@ -2,6 +2,7 @@ import { generateKeyPair, SignJWT } from "jose";
 import type { MessageStreamEvent } from "eve/client";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
+import { activeBuilderModelId } from "../integrations/active-model";
 import { durableHostedSessionRecordSchema, hostedSessionRecordSchema } from "../eve/hosted-store";
 import type { HostedEveStore, HostedSessionRecord } from "../eve/hosted-store";
 import type { HostedEveTransport } from "../eve/hosted-service";
@@ -195,7 +196,7 @@ const makeFixture = (
     appName: "Vendor Onboarding",
     brief: "Review vendors.",
     connections: [],
-    modelId: "openai/gpt-6-luna" as const,
+    modelId: activeBuilderModelId,
     providers: { vercelInstallationId: "icfg_1" },
     provisioning: {
       appId: selection.appId,
