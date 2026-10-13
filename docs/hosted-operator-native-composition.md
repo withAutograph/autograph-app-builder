@@ -14,13 +14,18 @@ own PostgreSQL database and runtime role, while the shared Auth realm has a
 separate database. The one native Neon scope in current configuration is the
 physical context containing those distinct databases.
 
-Current native readers accept only nondefault Neon branches with `parent-schema`
-or `schema-only` provenance. A new synthetic project's clean default `main`,
-built from reviewed source with temporary qualification contexts derived from
-it, is the proposed baseline; it requires a reviewed synthetic-origin enrollment
-and readback change before operator use. Do not broadly permit default branches,
-reset current Production storage, or treat a branch rename as migration. See the
-[database target and safe sequence](plans/2026-10-07-hosted-operator-deployment-and-spend-review-qualification.md).
+Without deployment-owned `syntheticEnrollment`, native readers require nondefault
+Neon branches with `parent-schema` or `schema-only` provenance. Explicit synthetic
+enrollment supports a dedicated project's default `main` root with `parent-data`
+or `schema-only` provenance. Provider readback must match the enrolled project ID,
+owner and creation metadata, plus the root's branch ID, creation metadata,
+initialization source, ready state and `default: true`. Enrolled children also
+require verified lineage and fork metadata back to that root.
+
+Operator use can select the enrolled root directly; creating a child is optional.
+Default branches remain unavailable without explicit synthetic enrollment. Preserve
+current Production storage and treat migration as a separate approved operation.
+See the [database target and safe sequence](plans/2026-10-07-hosted-operator-deployment-and-spend-review-qualification.md).
 
 The deployment-owned configuration selects three distinct projects: app-only
 Next, Gateway/Auth-only, and private operator. It supplies exact native project,
