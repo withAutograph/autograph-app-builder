@@ -298,6 +298,20 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
    cannot exercise. Prepare required sandbox-local data first. Report the exact
    cases the tests covered and any missing behavior separately.
 
+   Builder chooses synthetic verification actors and their tenant/role fixture
+   topology from accepted permissions and required coverage. Do not ask the user
+   to map test actors, labels, memberships or roles. Derive the profiles needed
+   for allowed and denied actions, tenant isolation, self-action denial,
+   revocation, concurrency and history when those behaviors apply. An empty
+   app-role set means no app assignment. Actor labels and counts are fixture
+   choices, not product quotas. Preserve the real owner's existing tenant and
+   membership. Creating real accounts, granting access or provisioning resources
+   still requires the specific effect review. Questions about real people,
+   product role meaning or tenant business rules remain material product choices.
+   Synthetic unit fixtures do not prove real hosted authentication or access:
+   when an accepted walkthrough requires actual hosted actors, exercise them
+   through the authorized hosted path and report their independent readbacks.
+
    When validation returns `productionHandoff`, follow
    [Production handoff](../../../docs/production-readiness-handoff.md) for
    reviewed Auth identity, explicit QA access and runtime binding delivery.
