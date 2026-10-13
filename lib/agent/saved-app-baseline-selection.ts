@@ -32,15 +32,15 @@ const hasProjectedReceipt = (input: SavedBaselineSource): boolean => {
         receipt.source.commitSha === selection.source.commitSha
       : selection.source.kind === "merged-pr" &&
         receipt.source.pullRequestNumber === selection.source.pullRequestNumber;
-  return (
-    receipt.appId === selection.appId &&
-    receipt.sessionId === selection.sessionId &&
-    receipt.historical.owner === selection.historical.owner &&
-    receipt.historical.name === selection.historical.name &&
-    receipt.historical.repositoryId === selection.historical.repositoryId &&
-    receipt.historical.commitSha === selection.historical.commitSha &&
-    sameSelector
-  );
+  return [
+    receipt.appId === selection.appId,
+    receipt.sessionId === selection.sessionId,
+    receipt.historical.owner === selection.historical.owner,
+    receipt.historical.name === selection.historical.name,
+    receipt.historical.repositoryId === selection.historical.repositoryId,
+    receipt.historical.commitSha === selection.historical.commitSha,
+    sameSelector,
+  ].every(Boolean);
 };
 
 /** Correct only an already projected app commit mistakenly supplied as its platform branch. */
