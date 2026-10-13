@@ -8,6 +8,7 @@ import {
   validateUiPreview,
 } from "@/lib/agent/ui-preview";
 import { renderUiPreview } from "@/lib/agent/ui-preview-renderer";
+import { hostedUiPreviewReceipt } from "@/lib/agent/ui-preview-delivery";
 import { recordPrototypeArtifactRevision } from "@/lib/agent/prototype-artifacts";
 import { recordDurablePrototypeContent } from "@/lib/agent/prototype-artifacts-v2";
 import { createHostedPrototypeChunkStore } from "@/lib/agent/hosted-prototype-chunk-store";
@@ -48,7 +49,7 @@ const readyPrototypeDatabase = async () => {
 
 export default defineTool({
   description:
-    "Create or revise the Browser prototype from readable, formatted React source composed only from current Arrusted public components and compositions. Before the first call, inspect-repository must establish the exact public exports and props. Use capitalized component/composition/icon imports and inventory each exact name and source in the manifest; never infer an icon name. Lowercase package helpers are unsupported preview imports. Never author raw button, input, select, textarea, dialog, or table JSX. Keep catalogGaps empty. Export a default screen component from each screen entry. Navigation must set location.hash to an exact manifest screen route. Every enabled action must produce its intended fixture-backed visible result. Follow design-app interaction guidance and verify the rendered controls in the Browser. When revising, set baseRevision to the prior UI preview revision returned by this tool. File count and content size are unrestricted. For a source bundle that does not fit one Eve event, declare sourceFiles with each file's UTF-8 byte length and SHA-256, then send one file chunk per call using sourceChunk. Start at chunkIndex 0 and byte offset 0; continue with the returned transferId, transferRevision, nextFilePath, nextFileOffsetBytes, and nextChunkIndex. Keep each serialized event within Eve's actual envelope by reducing chunk size as needed. The source bundle is validated and rendered only after every declared file digest matches. The renderer includes the actual Arrusted theme automatically and installs missing repository dependencies as needed. If the returned receipt says requiresChunkedRead, read the stored prototype with get_prototype_artifact using its artifactDigest and artifactRevision, then continue from each returned nextOffsetBytes until complete before opening the Browser preview.",
+    "Create or revise the Browser prototype from readable, formatted React source composed only from current Arrusted public components and compositions. Before the first call, inspect-repository must establish the exact public exports and props. Use capitalized component/composition/icon imports and inventory each exact name and source in the manifest; never infer an icon name. Lowercase package helpers are unsupported preview imports. Never author raw button, input, select, textarea, dialog, or table JSX. Keep catalogGaps empty. Export a default screen component from each screen entry. Navigation must set location.hash to an exact manifest screen route. Every enabled action must produce its intended fixture-backed visible result. Follow design-app interaction guidance and verify the rendered controls in the Browser. When revising, set baseRevision to the prior UI preview revision returned by this tool. File count and content size are unrestricted. For a source bundle that does not fit one Eve event, declare sourceFiles with each file's UTF-8 byte length and SHA-256, then send one file chunk per call using sourceChunk. Start at chunkIndex 0 and byte offset 0; continue with the returned transferId, transferRevision, nextFilePath, nextFileOffsetBytes, and nextChunkIndex. Keep each serialized event within Eve's actual envelope by reducing chunk size as needed. The source bundle is validated and rendered only after every declared file digest matches. The renderer includes the actual Arrusted theme automatically and installs missing repository dependencies as needed. For hosted-browser-stream delivery, browserReady means verified stored content is ready to open, not that rendering was observed. Open the authenticated Browser preview URL from the public session result directly and verify the controls; no get_prototype_artifact drain is required for viewing or planning. requiresChunkedRead describes deliberate raw export only for that hosted receipt. For an oversized local/legacy receipt without hosted-browser-stream delivery, retain the chunked get_prototype_artifact read using artifactDigest, artifactRevision and nextOffsetBytes until complete to expose its preview content.",
   // oxlint-disable-next-line eslint/complexity -- The staged v2 writer preserves the complete legacy preview path.
   async execute(input, ctx) {
     let previewInput = uiPreviewInputEnvelopeSchema.parse(input);
@@ -176,27 +177,12 @@ export default defineTool({
     });
     uiPreviewTransferState.update(() => null);
     if (durableResult !== undefined) {
-      return {
-        appId: uiPreview.appId,
-        artifactDigest: durableResult.artifact.digest,
-        artifactRevision: durableResult.artifact.revision,
-        chunkCount: durableResult.artifact.chunkCount,
-        complete: true,
-        contentBytes: durableResult.artifact.contentBytes,
-        digest: durableResult.artifact.digest,
-        fidelity: "arrusted-component-catalog" as const,
-        functionality: "fixtures-only" as const,
-        mediaType: "text/html" as const,
-        path: artifactPath,
-        recordedByCallId: ctx.callId,
-        requiresChunkedRead: true,
+      return hostedUiPreviewReceipt({
+        callId: ctx.callId,
+        preview: uiPreview,
+        result: durableResult,
         reused: prior?.revision === revision,
-        revision: uiPreview.revision,
-        routes: uiPreview.routes,
-        sessionId: ctx.session.id,
-        totalBytes: durableResult.artifact.contentBytes,
-        version: 2 as const,
-      };
+      });
     }
     const result = {
       appId: uiPreview.appId,

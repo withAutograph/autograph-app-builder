@@ -11,6 +11,8 @@ const phaseGuidance: Partial<Record<AppBuilderWorkflowState["phase"], string>> =
     "Dependencies are ready but no canonical implementation proposal exists yet. Retry accept_app_spec with the accepted artifact and, for an existing app, exact existingAppChanges before requesting build approval.",
   identity_resolved:
     "The target app was identified but no canonical implementation proposal exists yet. Retry accept_app_spec with the accepted artifact and exact existingAppChanges before requesting build approval.",
+  planned:
+    "The accepted AppSpec and canonical implementation proposal are ready. Continue with apply_app_creation and its normal build approval for the planned private implementation. Reuse the accepted UI reference; omission of the full UI object from planning metadata is not a reason to regenerate the prototype. Genuine product revisions still follow the design acceptance flow.",
   reviewed:
     "The change set was reviewed after repository validation. Review does not establish product behavior or a reachable app preview.",
   ui_accepted:
