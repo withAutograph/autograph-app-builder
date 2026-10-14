@@ -221,6 +221,7 @@ const assertUnexpired = (plan: HostedOperatorPlan, now: number) => {
 const requireOperator = (record: HostedRuntimeJournalRecord) =>
   hostedOperatorRecordSchema.parse(record.operator);
 type OperatorHttpResponse =
+  | OperatorSelection
   | NeonAuthorizationResult
   | z.infer<typeof operatorAuthIdentityInputSchema>
   | OperatorPublicResult
