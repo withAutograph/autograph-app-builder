@@ -63,6 +63,8 @@ import { createHostedOperatorAuthReadiness } from "./hosted-operator-auth-readin
 import { createHostedOperatorGatewayBindings } from "./hosted-operator-gateway-bindings";
 import { createHostedOperatorDeploymentDelivery } from "./hosted-operator-deployment-delivery";
 import { createHostedOperatorPublicGateway } from "./hosted-operator-public-gateway";
+import { resolvePublishedAppDelivery } from "./hosted-operator-published-app-delivery";
+import type { CompiledOperatorReleaseSelection } from "./hosted-operator-artifact-selection";
 import { createHostedOperatorEnvironmentBindings } from "./hosted-operator-environment-bindings";
 import { createHostedOperatorAppReadiness } from "./hosted-operator-app-readiness";
 
@@ -357,6 +359,7 @@ const resolveParticipantPlan = async (
     Partial<HostedOperatorNormalActorPlanningPorts>,
   participantsBootstrapPrepared: boolean,
   participantsCompleted: boolean,
+  selectedRelease?: CompiledOperatorReleaseSelection,
 ): Promise<HostedOperatorPlan> => {
   if (!participantsBootstrapPrepared) {
     return base;
@@ -399,9 +402,7 @@ const resolveParticipantPlan = async (
     throw new HostedOperatorError("operator_unavailable");
   }
   const application = selectedApplication(configuration, context);
-  if (application.repoId === undefined || application.gitSha === undefined) {
-    throw new HostedOperatorError("operator_unavailable");
-  }
+  const delivery = resolvePublishedAppDelivery(application, selectedRelease);
   const organizations = await controlPlane.readNormalActorOrganizationProofs({
     ...context,
     plan: base,
@@ -458,12 +459,14 @@ const resolveParticipantPlan = async (
       accountApprovalId: preparation.accountApprovalId,
       accountApprovedByCallId: preparation.accountApprovedByCallId,
     },
-    delivery: {
-      branch: application.branch,
-      gitSha: application.gitSha,
-      projectId: application.projectId,
-      repoId: application.repoId,
-    },
+    delivery,
+    deploymentBoundary:
+      base.deploymentBoundary === undefined
+        ? undefined
+        : {
+            ...base.deploymentBoundary,
+            app: { ...base.deploymentBoundary.app, branch: delivery.branch },
+          },
     effects,
   });
 };
@@ -480,6 +483,7 @@ export const resolveFullPlan = async (
   transportIo: Parameters<typeof createHostedOperatorRealmHttpTransport>[2] = {},
   participantsBootstrapPrepared = false,
   participantsCompleted = false,
+  selectedRelease?: CompiledOperatorReleaseSelection,
 ): Promise<HostedOperatorPlan> => {
   if (base.normalActorProgram !== undefined) {
     return await resolveParticipantPlan(
@@ -490,6 +494,7 @@ export const resolveFullPlan = async (
       controlPlane,
       participantsBootstrapPrepared,
       participantsCompleted,
+      selectedRelease,
     );
   }
 
@@ -500,9 +505,7 @@ export const resolveFullPlan = async (
   const application = selectedApplication(configuration, context);
   // Bootstrap prepares owned Auth and database resources before app publication.
   // Only the app delivery plan needs the actual published Git source.
-  if (application.repoId === undefined || application.gitSha === undefined) {
-    throw new HostedOperatorError("operator_unavailable");
-  }
+  const delivery = resolvePublishedAppDelivery(application, selectedRelease);
   const privateProof = await controlPlane.readCapturedRealmIdentityProof(context);
   const transport = createHostedOperatorRealmHttpTransport(
     configuration,
@@ -606,12 +609,14 @@ export const resolveFullPlan = async (
       { actorId: verified.identity.actorId, organizationId, roles: application.accessRoles },
     ],
     authMembership,
-    delivery: {
-      branch: application.branch,
-      gitSha: application.gitSha,
-      projectId: application.projectId,
-      repoId: application.repoId,
-    },
+    delivery,
+    deploymentBoundary:
+      base.deploymentBoundary === undefined
+        ? undefined
+        : {
+            ...base.deploymentBoundary,
+            app: { ...base.deploymentBoundary.app, branch: delivery.branch },
+          },
     effects: [
       ...effects,
       ...base.effects.filter((effect) =>
@@ -1130,6 +1135,7 @@ export const composeHostedOperatorDependencies = (
           participantsBootstrapPrepared,
           current?.record.status === "participants-prepared" ||
             current?.record.operator?.plan.stage === "app",
+          selection,
         ),
     );
   };
@@ -1713,6 +1719,7 @@ export const composeHostedOperatorDependencies = (
       },
       context: input,
       phase: "bootstrap-planning",
+      approvedAppBranch: boundary.app.branch,
       readVercelCredential: async ({ authority, installationId }) =>
         await controlPlane.readCredential(authority, installationId),
     });
@@ -1808,6 +1815,7 @@ export const composeHostedOperatorDependencies = (
           },
         },
         context: input,
+        approvedAppBranch: input.plan.deploymentBoundary.app.branch,
         readVercelCredential: async ({ authority, installationId }) =>
           await controlPlane.readCredential(authority, installationId),
       });

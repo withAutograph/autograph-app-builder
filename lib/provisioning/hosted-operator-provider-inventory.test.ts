@@ -403,6 +403,30 @@ describe("private read-only operator provider inventory", () => {
     );
     expect(publicCall?.[1]?.headers).toBeUndefined();
   });
+  it("observes the approved publication branch independently of the resource branch", async () => {
+    const f = fixture();
+    const branch = "codex/generated-app";
+    f.payloads.set("/v13/deployments/dpl_app", {
+      gitSource: { ref: branch },
+      id: "dpl_app",
+      ownerId: "team_owner",
+      projectId: "prj_app",
+      readyState: "READY",
+      target: null,
+      url: "app.example.test",
+    });
+    const configured = { ...configuration, app: { ...configuration.app, branch } };
+    await expect(
+      readHostedOperatorProviderInventory({ ...f.input, configuration: configured }),
+    ).rejects.toThrow("resource_mismatch");
+    const observed = await readHostedOperatorProviderInventory({
+      ...f.input,
+      configuration: configured,
+      approvedAppBranch: branch,
+    });
+    expect(observed.app.branch).toBe(branch);
+    expect(context.target.branch).toBe("feature/preview");
+  });
   it("rejects foreign ownership and mismatched exact preview branches", async () => {
     const f = fixture();
     f.payloads.set("/v9/projects/prj_gateway", { accountId: "other-team", id: "prj_gateway" });

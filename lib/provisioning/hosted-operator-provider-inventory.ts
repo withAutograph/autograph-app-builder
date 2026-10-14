@@ -156,6 +156,8 @@ export const readHostedOperatorProviderInventory = async (input: {
   configuration: OperatorInventoryConfiguration;
   /** Trusted composition only: project inventory before first approved delivery. */
   phase?: "bootstrap-planning";
+  /** The app ref from the already approved delivery plan; resource identity stays unchanged. */
+  approvedAppBranch?: string;
   context: HostedOperatorContext;
   fetch?: typeof fetch;
   readVercelCredential: CredentialReader;
@@ -170,7 +172,7 @@ export const readHostedOperatorProviderInventory = async (input: {
         new Set([config.app.projectId, config.gateway.projectId, config.operator.projectId])
           .size !== 3,
       app_project: config.app.projectId !== target.projectId,
-      app_branch: config.app.branch !== target.branch,
+      app_branch: config.app.branch !== (input.approvedAppBranch ?? target.branch),
       app_environment: config.app.environment !== "preview",
       gateway_environment: config.gateway.environment !== "preview",
     };
