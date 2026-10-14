@@ -1,6 +1,7 @@
 import {
   createHostedOperatorConsentDiagnostic,
   reportOperatorPlanningMismatch,
+  observeOperatorPlanStage,
 } from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorConsentOwner } from "./hosted-operator-consent-owner";
 import {
@@ -263,8 +264,13 @@ const handlePlanOperation = async (
   appId: string,
   now: () => number,
 ) => {
-  const plan = hostedOperatorPlanSchema.parse(
-    await deps.plan({ ...context, action: input.operation }),
+  const proposed = await observeOperatorPlanStage(
+    context.target.sessionId,
+    "plan_composition",
+    async () => await deps.plan({ ...context, action: input.operation }),
+  );
+  const plan = await observeOperatorPlanStage(context.target.sessionId, "plan_validation", () =>
+    hostedOperatorPlanSchema.parse(proposed),
   );
   const failed = {
     plan_action: plan.action !== input.operation,
@@ -275,7 +281,9 @@ const handlePlanOperation = async (
     reportOperatorPlanningMismatch(context.target.sessionId, "plan_result", failed);
     throw new HostedOperatorError("resource_mismatch");
   }
-  await deps.assertAuthorized({ ...context, plan });
+  await observeOperatorPlanStage(context.target.sessionId, "plan_authorization", async () => {
+    await deps.assertAuthorized({ ...context, plan });
+  });
   assertUnexpired(plan, now());
   const planDigest = operatorPlanDigest(plan);
   const operator = {
@@ -285,12 +293,17 @@ const handlePlanOperation = async (
     planDigest,
     receipts: [],
   };
-  await deps.store.reserve({
-    ...context,
-    approvedByCallId: "operator:unapproved-plan",
-    now: new Date(now()),
-    operator,
-  });
+  await observeOperatorPlanStage(
+    context.target.sessionId,
+    "plan_reservation",
+    async () =>
+      await deps.store.reserve({
+        ...context,
+        approvedByCallId: "operator:unapproved-plan",
+        now: new Date(now()),
+        operator,
+      }),
+  );
   const prior = await deps.store.read(context);
   const retainedCandidate =
     prior?.record.retainedAuth === undefined && prior?.record.operator?.planDigest !== planDigest
@@ -601,11 +614,22 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         return response(selection);
       }
       appId = input.selection.appId;
-      const authorized = await deps.authorize(request, input.selection, input.ownerContext);
-      const context = normalizeOperatorContext(authorized);
-      if (!sameOperatorSelection(selectionFor(context.target), input.selection)) {
-        throw new HostedOperatorError("authorization_required");
-      }
+      const authorizeContext = async () => {
+        const authorized = await deps.authorize(request, input.selection, input.ownerContext);
+        const ownedContext = normalizeOperatorContext(authorized);
+        if (!sameOperatorSelection(selectionFor(ownedContext.target), input.selection)) {
+          throw new HostedOperatorError("authorization_required");
+        }
+        return ownedContext;
+      };
+      const context =
+        input.action === "plan"
+          ? await observeOperatorPlanStage(
+              input.selection.sessionId,
+              "plan_owner_authorization",
+              authorizeContext,
+            )
+          : await authorizeContext();
       const read = async () => await deps.store.read(context);
       const update = async (
         change: (record: HostedRuntimeJournalRecord) => HostedRuntimeJournalRecord,

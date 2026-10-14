@@ -33,7 +33,11 @@ import type {
   ProtectedHostedOperatorDependencies,
 } from "./hosted-operator-service";
 import { openHostedOperatorCompositionResources } from "./hosted-operator-source-configuration";
-import { reportOperatorPlanningMismatch } from "./hosted-operator-consent-diagnostic";
+import {
+  reportOperatorPlanningMismatch,
+  observeOperatorPlanStage,
+} from "./hosted-operator-consent-diagnostic";
+import type { OperatorPlanStage } from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 import { readOwnedOperatorPlanningSelection } from "./hosted-operator-planning-authority";
 import {
@@ -447,8 +451,13 @@ export const composeHostedOperatorDependencies = (
   const plan = async (
     context: HostedOperatorContext & { action: "prepare" | "cleanup" },
   ): Promise<HostedOperatorPlan> => {
+    const observe = async <T>(stage: OperatorPlanStage, run: () => T | Promise<T>) =>
+      await observeOperatorPlanStage(context.target.sessionId, stage, run);
     const application = selectedApplication(configuration, context);
-    const current = await controlPlane.store.read(context);
+    const current = await observe(
+      "journal_read",
+      async () => await controlPlane.store.read(context),
+    );
     if (context.action === "cleanup") {
       if (current?.record.operator === undefined) {
         throw new HostedOperatorError(OPERATION_IN_PROGRESS);
@@ -492,25 +501,36 @@ export const composeHostedOperatorDependencies = (
         stage: "app",
       });
     }
-    const selected = await readOwnedOperatorPlanningSelection({ context, controlPlane });
-    if (selected.selection === undefined) {
-      throw new HostedOperatorError("operator_unavailable");
-    }
-    await controlPlane.readGeneratedRelease(context, selected.selection);
-    const planning = createNativePreviewNeonPlanningAuthority({
-      context,
-      controlPlane,
-      nativeStore: configuration.nativeNeon.configuration.nativeStore,
-      scope: configuration.nativeNeon.scope,
+    const selected = await observe(
+      "accepted_spec",
+      async () => await readOwnedOperatorPlanningSelection({ context, controlPlane }),
+    );
+    const selection = await observe("release_selection", () => {
+      if (selected.selection === undefined) {
+        throw new HostedOperatorError("operator_unavailable");
+      }
+      return selected.selection;
     });
-    const neon = createPreviewNeonMcpReader({
-      ...planning,
-      assertApprovedScope: async (...args) => {
-        await planning.assertPlanningScope(...args);
-      },
-      configuration: configuration.nativeNeon.configuration,
+    await observe(
+      "release_read",
+      async () => await controlPlane.readGeneratedRelease(context, selection),
+    );
+    await observe("neon_planning", async () => {
+      const planning = createNativePreviewNeonPlanningAuthority({
+        context,
+        controlPlane,
+        nativeStore: configuration.nativeNeon.configuration.nativeStore,
+        scope: configuration.nativeNeon.scope,
+      });
+      const neon = createPreviewNeonMcpReader({
+        ...planning,
+        assertApprovedScope: async (...args) => {
+          await planning.assertPlanningScope(...args);
+        },
+        configuration: configuration.nativeNeon.configuration,
+      });
+      await neon.inspectPlanningTarget(context, configuration.nativeNeon.scope);
     });
-    await neon.inspectPlanningTarget(context, configuration.nativeNeon.scope);
     const recordedGateway = current?.record.operator?.gatewayDeliveryCandidates?.find(
       (candidate) =>
         candidate.deploymentId === current.record.operator?.deliveredGatewayDeploymentId &&
@@ -524,33 +544,45 @@ export const composeHostedOperatorDependencies = (
             deploymentId: recordedGateway.deploymentId,
             gatewayOrigin: recordedGateway.origin,
           };
-    const inventory = await readHostedOperatorProviderInventory({
-      assertCurrentOwner: async () => {
-        await controlPlane.assertPlanningAuthorized(context);
-      },
-      configuration: {
-        app: { ...application, environment: "preview" },
-        gateway: gatewayReference,
-        operator: configuration.operator,
-        verification: {
-          gatewayOrigin: gatewayReference.gatewayOrigin,
-          publicOrigin: configuration.gateway.publicOrigin,
-        },
-      },
-      context,
-      phase: "bootstrap-planning",
-      readVercelCredential: async ({ authority, installationId }) =>
-        await controlPlane.readCredential(authority, installationId),
-    });
+    const inventory = await observe(
+      "provider_inventory",
+      async () =>
+        await readHostedOperatorProviderInventory({
+          assertCurrentOwner: async () => {
+            await controlPlane.assertPlanningAuthorized(context);
+          },
+          configuration: {
+            app: { ...application, environment: "preview" },
+            gateway: gatewayReference,
+            operator: configuration.operator,
+            verification: {
+              gatewayOrigin: gatewayReference.gatewayOrigin,
+              publicOrigin: configuration.gateway.publicOrigin,
+            },
+          },
+          context,
+          phase: "bootstrap-planning",
+          readVercelCredential: async ({ authority, installationId }) =>
+            await controlPlane.readCredential(authority, installationId),
+        }),
+    );
     const native = configuration.nativeNeon.scope;
-    const activeAuth = await controlPlane.readActiveSharedAuth(context);
+    const activeAuth = await observe(
+      "shared_auth_read",
+      async () => await controlPlane.readActiveSharedAuth(context),
+    );
+    const adoptionSource = application.authAdoptionSource;
     const adopted =
-      activeAuth !== undefined || application.authAdoptionSource === undefined
+      activeAuth !== undefined || adoptionSource === undefined
         ? undefined
-        : await controlPlane.readSharedAuthAdoption({
-            context,
-            source: application.authAdoptionSource,
-          });
+        : await observe(
+            "auth_adoption_read",
+            async () =>
+              await controlPlane.readSharedAuthAdoption({
+                context,
+                source: adoptionSource,
+              }),
+          );
     if (
       current?.record.operator?.plan.authAdoption !== undefined &&
       adopted === undefined &&
@@ -561,30 +593,41 @@ export const composeHostedOperatorDependencies = (
     let authSchema = activeAuth?.authSchema ?? current?.record.operator?.plan.authSchema;
     if (adopted !== undefined) {
       // Re-envelope the exact source artifact through the existing target-owned artifact API.
-      const artifactRef = await controlPlane.publishAuthPlan(context, {
-        content: adopted.content,
-        planDigest: adopted.authSchema.planDigest,
-        targetDigest: adopted.authSchema.targetDigest,
-      });
+      const artifactRef = await observe(
+        "auth_schema_publish",
+        async () =>
+          await controlPlane.publishAuthPlan(context, {
+            content: adopted.content,
+            planDigest: adopted.authSchema.planDigest,
+            targetDigest: adopted.authSchema.targetDigest,
+          }),
+      );
       authSchema = { ...adopted.authSchema, artifactRef };
     } else if (authSchema === undefined) {
-      const proposed = await proposal({
-        assertCurrentOwner: async () => {
-          await controlPlane.assertPlanningAuthorized(context);
-        },
-        resource: {
-          database: configuration.authDatabase.database,
-          environment: "preview",
-          hostname: native.hostname,
-          migratorRole: configuration.authDatabase.migratorRole,
-          neon: { branchId: native.branchId, projectId: native.projectId },
-          port: 5432,
-          runtimeRole: configuration.authDatabase.runtimeRole,
-          schema: "public",
-          version: 1,
-        },
-      });
-      const artifactRef = await controlPlane.publishAuthPlan(context, proposed);
+      const proposed = await observe(
+        "auth_schema_proposal",
+        async () =>
+          await proposal({
+            assertCurrentOwner: async () => {
+              await controlPlane.assertPlanningAuthorized(context);
+            },
+            resource: {
+              database: configuration.authDatabase.database,
+              environment: "preview",
+              hostname: native.hostname,
+              migratorRole: configuration.authDatabase.migratorRole,
+              neon: { branchId: native.branchId, projectId: native.projectId },
+              port: 5432,
+              runtimeRole: configuration.authDatabase.runtimeRole,
+              schema: "public",
+              version: 1,
+            },
+          }),
+      );
+      const artifactRef = await observe(
+        "auth_schema_publish",
+        async () => await controlPlane.publishAuthPlan(context, proposed),
+      );
       authSchema = {
         artifactRef,
         installer: {
@@ -595,119 +638,124 @@ export const composeHostedOperatorDependencies = (
         targetDigest: proposed.targetDigest,
       };
     }
-    const worker = configuration.sandbox.workers[context.target.appId];
-    if (worker === undefined) {
-      throw new HostedOperatorError("operator_unavailable");
-    }
-    const base = hostedOperatorPlanSchema.parse({
-      access: [],
-      action: "prepare",
-      appDatabase: application.appDatabase,
-      authAdoption: activeAuth?.adoption ?? adopted?.adoption,
-      authDatabase: configuration.authDatabase,
-      authSchema,
-      bootstrap: {
-        endpointId: native.endpointId,
-        maintenanceDatabase: native.maintenanceDatabase,
-        role: native.maintenanceRole,
-      },
-      contextId: selected.currentSpec.appSpecDigest,
-      cost: {
-        class: "shared-recovery-group",
-        description:
-          adopted === undefined && activeAuth === undefined
-            ? "Preview-only resources and Auth bootstrap. Explicit normal Git delivery retries may create duplicate owned Preview deployments and provider usage charges. No human login or app preparation is established by schema readiness."
-            : "Adopt the reviewed shared Auth credentials after independent Auth readiness and canonical Gateway checks, then prepare this app’s separate database and bindings. Retain shared Auth users, sessions, credentials, and sibling Gateway settings.",
-        owner: context.authority.ownerUserId,
-      },
-      deploymentBoundary: {
-        app: {
-          branch: inventory.app.branch,
-          deploymentId: inventory.app.deploymentId,
-          environment: inventory.app.environment,
-          projectId: inventory.app.projectId,
+    const worker = await observe("worker_selection", () => {
+      const selectedWorker = configuration.sandbox.workers[context.target.appId];
+      if (selectedWorker === undefined) {
+        throw new HostedOperatorError("operator_unavailable");
+      }
+      return selectedWorker;
+    });
+    const base = await observe("plan_construction", () =>
+      hostedOperatorPlanSchema.parse({
+        access: [],
+        action: "prepare",
+        appDatabase: application.appDatabase,
+        authAdoption: activeAuth?.adoption ?? adopted?.adoption,
+        authDatabase: configuration.authDatabase,
+        authSchema,
+        bootstrap: {
+          endpointId: native.endpointId,
+          maintenanceDatabase: native.maintenanceDatabase,
+          role: native.maintenanceRole,
         },
-        authority: context.authority,
-        gateway: {
+        contextId: selected.currentSpec.appSpecDigest,
+        cost: {
+          class: "shared-recovery-group",
+          description:
+            adopted === undefined && activeAuth === undefined
+              ? "Preview-only resources and Auth bootstrap. Explicit normal Git delivery retries may create duplicate owned Preview deployments and provider usage charges. No human login or app preparation is established by schema readiness."
+              : "Adopt the reviewed shared Auth credentials after independent Auth readiness and canonical Gateway checks, then prepare this app’s separate database and bindings. Retain shared Auth users, sessions, credentials, and sibling Gateway settings.",
+          owner: context.authority.ownerUserId,
+        },
+        deploymentBoundary: {
+          app: {
+            branch: inventory.app.branch,
+            deploymentId: inventory.app.deploymentId,
+            environment: inventory.app.environment,
+            projectId: inventory.app.projectId,
+          },
+          authority: context.authority,
+          gateway: {
+            branch: inventory.gateway.branch,
+            deploymentId: inventory.gateway.deploymentId,
+            environment: inventory.gateway.environment,
+            projectId: inventory.gateway.projectId,
+          },
+          operator: {
+            deploymentId: inventory.operator.deploymentId,
+            environment: inventory.operator.environment,
+            projectId: inventory.operator.projectId,
+          },
+          teamId: configuration.teamId,
+          verification: {
+            gatewayOrigin: inventory.verification.gatewayOrigin,
+            jwksUrl: inventory.verification.jwksUrl,
+            publicOrigin: inventory.verification.publicOrigin,
+          },
+        },
+        effects: [
+          {
+            description:
+              adopted === undefined && activeAuth === undefined
+                ? "Prepare or observe the exact owned shared Auth database and roles."
+                : "Verify the approved shared Auth and Gateway ownership, then activate an independent encrypted Auth credential copy; never recreate or rotate shared Auth.",
+            id: "auth-resources",
+            kind: "resources",
+            resourceId: configuration.authDatabase.resourceId,
+          },
+          {
+            description: "Prepare or observe the exact owned app database and roles.",
+            id: "app-resources",
+            kind: "resources",
+            resourceId: application.appDatabase.resourceId,
+          },
+          {
+            description:
+              adopted === undefined && activeAuth === undefined
+                ? "Independently replan and migrate the approved shared Auth target."
+                : "Require independent read-only Auth schema adoption; migration and recreation remain blocked.",
+            id: AUTH_SCHEMA_EFFECT,
+            kind: "install",
+          },
+        ],
+        installer: { reference: worker.id, sha256: worker.sha256 },
+        neon: {
+          branchId: native.branchId,
+          connectionRef: configuration.nativeNeon.configuration.connector,
+          endpoint: native.hostname,
+          projectId: native.projectId,
+          source: "synthetic-only",
+        },
+        publicGateway: {
           branch: inventory.gateway.branch,
-          deploymentId: inventory.gateway.deploymentId,
-          environment: inventory.gateway.environment,
+          origin: inventory.verification.gatewayOrigin,
           projectId: inventory.gateway.projectId,
         },
-        operator: {
-          deploymentId: inventory.operator.deploymentId,
-          environment: inventory.operator.environment,
-          projectId: inventory.operator.projectId,
+        release: {
+          artifactRef: selection.artifactRef,
+          id: selection.releaseId,
+          sha256: selection.manifestSha256,
         },
-        teamId: configuration.teamId,
-        verification: {
-          gatewayOrigin: inventory.verification.gatewayOrigin,
-          jwksUrl: inventory.verification.jwksUrl,
-          publicOrigin: inventory.verification.publicOrigin,
+        resourcesInstaller: {
+          reference: configuration.sandbox.resourcesWorker.id,
+          sha256: configuration.sandbox.resourcesWorker.sha256,
         },
-      },
-      effects: [
-        {
-          description:
-            adopted === undefined && activeAuth === undefined
-              ? "Prepare or observe the exact owned shared Auth database and roles."
-              : "Verify the approved shared Auth and Gateway ownership, then activate an independent encrypted Auth credential copy; never recreate or rotate shared Auth.",
-          id: "auth-resources",
-          kind: "resources",
-          resourceId: configuration.authDatabase.resourceId,
+        retention: {
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          policy:
+            "Retain shared Auth; cleanup only owned app resources under a new concrete approval.",
         },
-        {
-          description: "Prepare or observe the exact owned app database and roles.",
-          id: "app-resources",
-          kind: "resources",
-          resourceId: application.appDatabase.resourceId,
+        selection: {
+          appId: context.target.appId,
+          branch: context.target.branch,
+          environment: "preview",
+          projectId: context.target.projectId,
+          sessionId: context.target.sessionId,
         },
-        {
-          description:
-            adopted === undefined && activeAuth === undefined
-              ? "Independently replan and migrate the approved shared Auth target."
-              : "Require independent read-only Auth schema adoption; migration and recreation remain blocked.",
-          id: AUTH_SCHEMA_EFFECT,
-          kind: "install",
-        },
-      ],
-      installer: { reference: worker.id, sha256: worker.sha256 },
-      neon: {
-        branchId: native.branchId,
-        connectionRef: configuration.nativeNeon.configuration.connector,
-        endpoint: native.hostname,
-        projectId: native.projectId,
-        source: "synthetic-only",
-      },
-      publicGateway: {
-        branch: inventory.gateway.branch,
-        origin: inventory.verification.gatewayOrigin,
-        projectId: inventory.gateway.projectId,
-      },
-      release: {
-        artifactRef: selected.selection.artifactRef,
-        id: selected.selection.releaseId,
-        sha256: selected.selection.manifestSha256,
-      },
-      resourcesInstaller: {
-        reference: configuration.sandbox.resourcesWorker.id,
-        sha256: configuration.sandbox.resourcesWorker.sha256,
-      },
-      retention: {
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        policy:
-          "Retain shared Auth; cleanup only owned app resources under a new concrete approval.",
-      },
-      selection: {
-        appId: context.target.appId,
-        branch: context.target.branch,
-        environment: "preview",
-        projectId: context.target.projectId,
-        sessionId: context.target.sessionId,
-      },
-      stage: "auth-bootstrap",
-      version: 1,
-    });
+        stage: "auth-bootstrap",
+        version: 1,
+      }),
+    );
     let readonlyAttesters: NonNullable<HostedOperatorPlan["gatewayBindings"]>["readonlyAttesters"];
     if (
       configuration.workloadPolicy.environment === "production" &&
@@ -764,7 +812,10 @@ export const composeHostedOperatorDependencies = (
         repoId: configuration.gateway.repoId,
       },
     });
-    return await resolveFullPlan(gatewayPlan, context, configuration, controlPlane);
+    return await observe(
+      "identity_plan_resolution",
+      async () => await resolveFullPlan(gatewayPlan, context, configuration, controlPlane),
+    );
   };
 
   const workerInput = async (input: HostedOperatorEffectContext) => {

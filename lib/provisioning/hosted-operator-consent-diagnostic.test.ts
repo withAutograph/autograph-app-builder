@@ -706,3 +706,27 @@ describe("operator planning mismatch diagnostics", () => {
     await Promise.resolve();
   });
 });
+
+it("preserves a plan owner authorization rejection with only the fixed private stage", async () => {
+  const error = new HostedOperatorError("authorization_required");
+  const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+  await expect(
+    observeOperatorPlanStage(
+      "private-owner-session",
+      "plan_owner_authorization",
+      () => {
+        throw error;
+      },
+      sink,
+    ),
+  ).rejects.toBe(error);
+  expect(sink).toHaveBeenCalledWith(
+    expect.objectContaining({
+      planningFailure: {
+        stage: "plan_owner_authorization",
+        errorClass: "operator_error",
+        code: "authorization_required",
+      },
+    }),
+  );
+});

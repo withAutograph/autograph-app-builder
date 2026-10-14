@@ -16,6 +16,7 @@ const operatorPlanStage = z.enum([
   "worker_selection",
   "plan_construction",
   "identity_plan_resolution",
+  "plan_owner_authorization",
   "plan_composition",
   "plan_validation",
   "plan_authorization",
