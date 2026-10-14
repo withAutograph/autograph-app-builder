@@ -300,7 +300,10 @@ const sameAuthPreparation = (prior: HostedOperatorPlan, next: HostedOperatorPlan
 
 const retainCompletedAuth = (record: HostedRuntimeJournalRecord): HostedRuntimeJournalRecord => ({
   ...record,
-  retainedAuth: record.retainedAuth ?? retainedOperatorAuthFromJournal(record),
+  retainedAuth:
+    record.operator?.plan.stage === AUTH_BOOTSTRAP_STAGE
+      ? (retainedOperatorAuthFromJournal(record) ?? record.retainedAuth)
+      : (record.retainedAuth ?? retainedOperatorAuthFromJournal(record)),
 });
 
 const handlePlanOperation = async (
@@ -359,7 +362,9 @@ const handlePlanOperation = async (
   );
   const prior = await deps.store.read(context);
   const retainedCandidate =
-    prior?.record.retainedAuth === undefined && prior?.record.operator?.planDigest !== planDigest
+    (prior?.record.retainedAuth === undefined ||
+      prior.record.operator?.plan.stage === AUTH_BOOTSTRAP_STAGE) &&
+    prior?.record.operator?.planDigest !== planDigest
       ? prior && retainedOperatorAuthFromJournal(prior.record)
       : undefined;
   if (retainedCandidate !== undefined) {
@@ -430,7 +435,10 @@ const handlePlanOperation = async (
       ) {
         throw new HostedOperatorError("operation_in_progress");
       }
-      const retainedAuth = record.retainedAuth ?? retainedCandidate;
+      const retainedAuth =
+        record.operator.plan.stage === AUTH_BOOTSTRAP_STAGE
+          ? (retainedCandidate ?? record.retainedAuth)
+          : (record.retainedAuth ?? retainedCandidate);
       if (record.accountPreparation !== undefined) {
         const preparation = record.accountPreparation;
         if (

@@ -586,7 +586,7 @@ describe("protected hosted operator boundary", () => {
     const receipts = f.row?.record.operator?.receipts;
     expect(receipts).toHaveLength(3);
     expect(f.row?.record.environmentBound).toBe(false);
-    const retainedAuth = structuredClone(f.row?.record.retainedAuth);
+    let retainedAuth = structuredClone(f.row?.record.retainedAuth);
     expect(retainedAuth).toMatchObject({
       approvalId: "durable-human-decision",
       approvedByCallId: first.callId,
@@ -594,6 +594,23 @@ describe("protected hosted operator boundary", () => {
       plan: bootstrapPlan,
       planDigest: first.planDigest,
       receipts,
+    });
+    // A separately approved completed bootstrap supersedes the earlier bootstrap's
+    // delivery provenance, while account preparation keeps its own approval epoch.
+    const renewedBootstrap = hostedOperatorPlanSchema.parse({
+      ...bootstrapPlan,
+      release: { ...bootstrapPlan.release, id: "refreshed-auth-bootstrap" },
+    });
+    f.deps.plan = async () => renewedBootstrap;
+    const refreshed = await prepared(f);
+    expect(refreshed.operationRef).not.toBe(first.operationRef);
+    expect((await f.client.request(refreshed)).status).toBe("auth-schema-prepared");
+    retainedAuth = structuredClone(f.row?.record.retainedAuth);
+    expect(retainedAuth).toMatchObject({
+      approvedByCallId: refreshed.callId,
+      operationRef: refreshed.operationRef,
+      plan: renewedBootstrap,
+      planDigest: refreshed.planDigest,
     });
     const fullPlan = hostedOperatorPlanSchema.parse({
       ...plan,
@@ -606,7 +623,7 @@ describe("protected hosted operator boundary", () => {
     f.deps.plan = async () => fullPlan;
     const currentApproval = f.deps.readApproval;
     f.deps.readApproval = async (input) =>
-      input.planDigest === first.planDigest ? await currentApproval(input) : null;
+      input.planDigest === refreshed.planDigest ? await currentApproval(input) : null;
     const renewed = await prepared(f);
     expect(await f.client.request(renewed)).toMatchObject({
       code: "authorization_required",
