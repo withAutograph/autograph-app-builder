@@ -118,6 +118,7 @@ describe("canonical schema predecessor recovery", () => {
     mocks.read.mockImplementation(async () => {});
     await expect(prepareCanonicalSchemaPredecessorsForSession(input)).rejects.toMatchObject({
       code: "canonical_schema_predecessor_unavailable",
+      recovery: { reason: "missing-history", stage: "retained-lookup" },
     });
     expect(input.sandbox.writeBinaryFile).not.toHaveBeenCalled();
   });
@@ -127,9 +128,9 @@ describe("canonical schema predecessor recovery", () => {
       files: { ...files, "app-artifact.json": Buffer.from("mutated checkout schema") },
       selection,
     });
-    await expect(prepareCanonicalSchemaPredecessorsForSession(input)).rejects.toBeInstanceOf(
-      SchemaPredecessorError,
-    );
+    await expect(prepareCanonicalSchemaPredecessorsForSession(input)).rejects.toMatchObject({
+      recovery: { reason: "artifact-mismatch", stage: "match" },
+    });
     expect(input.sandbox.writeBinaryFile).not.toHaveBeenCalled();
   });
   it("accepts only the owned CLI absence receipt without creating a runtime or reading private state", async () => {
@@ -161,6 +162,12 @@ describe("canonical schema predecessor recovery", () => {
     });
     await expect(prepareCanonicalSchemaPredecessorsForSession(input)).rejects.toMatchObject({
       code: "canonical_schema_predecessor_unavailable",
+      recovery: {
+        command: "mise run app:runtime installed spend-review local",
+        exitCode: 1,
+        reason: "command-failed",
+        stage: "probe",
+      },
     });
     expect(mocks.read).not.toHaveBeenCalled();
     expect(input.sandbox.writeBinaryFile).not.toHaveBeenCalled();
@@ -192,5 +199,81 @@ describe("canonical schema predecessor recovery", () => {
       compiled: { releaseId: "new-v3", schemaSha256: "d".repeat(64) },
       prepared,
     });
+  });
+
+  it("diagnoses a thrown installed-runtime probe without retaining private provider error details", async () => {
+    const input = fixture();
+    input.sandbox.run.mockRejectedValue(
+      new Error(
+        "postgres://private-user:private-password@private-host/private-db token=private-token",
+      ),
+    );
+    const recovery = prepareCanonicalSchemaPredecessorsForSession(input);
+    await expect(recovery).rejects.toMatchObject({
+      recovery: {
+        command: "mise run app:runtime installed spend-review local",
+        exitCode: null,
+        reason: "execution-failed",
+        stage: "probe",
+      },
+    });
+    await expect(recovery).rejects.toThrow("observation command failed before schema compilation");
+    try {
+      await recovery;
+    } catch (error) {
+      expect(error).toBeInstanceOf(SchemaPredecessorError);
+      expect(JSON.stringify(error)).not.toContain("private-");
+    }
+    expect(mocks.read).not.toHaveBeenCalled();
+    expect(input.sandbox.writeBinaryFile).not.toHaveBeenCalled();
+  });
+
+  it.each(["invalid-json", "invalid-shape", "foreign-app"] as const)(
+    "diagnoses %s installed receipt without lookup or writes",
+    async (kind) => {
+      const input = fixture();
+      let stdout = JSON.stringify({ ...receipt, appId: "other-app" });
+      if (kind === "invalid-json") {
+        stdout = "private-invalid-receipt";
+      } else if (kind === "invalid-shape") {
+        stdout = JSON.stringify({ privateTenant: "private-receipt-secret" });
+      }
+      input.sandbox.run.mockResolvedValue({ exitCode: 0, stderr: "", stdout });
+      await expect(prepareCanonicalSchemaPredecessorsForSession(input)).rejects.toMatchObject({
+        recovery: {
+          command: "mise run app:runtime installed spend-review local",
+          exitCode: 0,
+          reason: kind === "foreign-app" ? "app-mismatch" : "invalid-receipt",
+          stage: "receipt",
+        },
+      });
+      expect(mocks.read).not.toHaveBeenCalled();
+      expect(input.sandbox.writeBinaryFile).not.toHaveBeenCalled();
+    },
+  );
+
+  it("distinguishes retained-store lookup failure from actual absent immutable history", async () => {
+    const input = fixture();
+    mocks.read.mockRejectedValue(new Error("private artifact authority unavailable"));
+    const recovery = prepareCanonicalSchemaPredecessorsForSession(input);
+    await expect(recovery).rejects.toMatchObject({
+      recovery: { reason: "lookup-failed", stage: "retained-lookup" },
+    });
+    await expect(recovery).rejects.toThrow("lookup failed");
+    expect(input.sandbox.writeBinaryFile).not.toHaveBeenCalled();
+  });
+
+  it("diagnoses restoration write failure without attempting a database command", async () => {
+    const input = fixture();
+    mocks.read.mockResolvedValue({ files, selection });
+    input.sandbox.writeBinaryFile.mockRejectedValue(new Error("private write location"));
+    await expect(prepareCanonicalSchemaPredecessorsForSession(input)).rejects.toMatchObject({
+      recovery: { reason: "write-failed", stage: "restore" },
+    });
+    expect(input.sandbox.run).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        command: "mise run app:runtime installed spend-review local",
+      }),
+    );
   });
 });
