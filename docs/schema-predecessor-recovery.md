@@ -8,12 +8,15 @@ preserves app product files and checked releases, and retains the current
 dependency closure. Compilation invalidates current validation and behavior
 eligibility before those writes; retained observations remain history.
 
-For an existing local runtime, Builder calls the repository-owned read-only
-`mise run app:runtime installed <app> local` against its existing checkpoint.
-The runtime reads actual active release IDs and base artifact hashes. Builder
-uses those facts or a previously retained matching immutable artifact reference
-to read the exact owner/session-scoped compiled release. It never chooses a
-historical version by ordering or reconstructs lost compiled bytes.
+For an existing local runtime, Builder calls
+`mise run app:runtime resume-installed <app> local` against its existing
+checkpoint. This resumes only the already-recorded local PostgreSQL cluster;
+it does not initialize or replace a database. The runtime then reads actual
+active release IDs and base artifact hashes. A missing checkpoint remains
+`not-prepared`. Builder uses the receipt or a previously retained matching
+immutable artifact reference to read the exact owner/session-scoped compiled
+release. It never chooses a historical version by ordering or reconstructs lost
+compiled bytes.
 
 The checked release is restored from its retained members, and its exact schema
 artifact is supplied outside the mutable checkout using
