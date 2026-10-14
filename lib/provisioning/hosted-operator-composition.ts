@@ -73,7 +73,11 @@ const AUTH_MEMBERSHIP = "auth-membership";
 const OPERATION_IN_PROGRESS = "operation_in_progress";
 const RECONCILIATION_REQUIRED = "reconciliation_required";
 type ControlPlane = Awaited<ReturnType<typeof createHostedOperatorControlPlane>> &
-  HostedOperatorNormalActorPorts;
+  HostedOperatorNormalActorPorts & {
+    readNormalActorRuntimeBindings: NonNullable<
+      ProtectedHostedOperatorDependencies["normalActorRuntimeBindings"]
+    >;
+  };
 export interface HostedOperatorNormalActorPlanningPorts {
   readNormalActorPreparation: (context: HostedOperatorContext) => Promise<
     | {
@@ -1754,6 +1758,8 @@ export const composeHostedOperatorDependencies = (
       controlPlane,
     ),
     bindings,
+    normalActorRuntimeBindings: async (input) =>
+      await controlPlane.readNormalActorRuntimeBindings(input),
     executeEffect,
     neonAuthorization: createHostedOperatorNeonAuthorization({
       assertCurrentOwner: consentOwner.assertCurrent,
