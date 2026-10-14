@@ -13,6 +13,12 @@ import { createPreviewNeonMcpReader } from "./hosted-operator-native-preview-neo
 import type { PreviewNeonMcpDependencies } from "./hosted-operator-native-preview-neon-mcp";
 import type { HostedOperatorContext } from "./hosted-operator-service";
 
+import { HostedOperatorError } from "./hosted-operator-contract";
+import type {
+  HostedOperatorConsentDiagnostic,
+  HostedOperatorConsentDiagnosticSink,
+} from "./hosted-operator-consent-diagnostic";
+
 const scope = {
   branchId: "br-synthetic",
   endpointId: "ep-synthetic",
@@ -61,6 +67,10 @@ let provenance = "schema-only";
 let revoked = false;
 let wrongEndpoint = false;
 let wrongCredential = false;
+let invalidMetadataTool = "";
+type NeonFixtureMetadata = z.infer<ReturnType<typeof z.json>>;
+const toolResponseText = (name: string, value: NeonFixtureMetadata) =>
+  JSON.stringify(name === invalidMetadataTool ? {} : value);
 const called: { name: string; arguments: Record<string, string> }[] = [];
 const projectOidc = "fixture-project-oidc";
 const privateMcpBearer = "fixture-private-owner-token";
@@ -208,7 +218,9 @@ beforeAll(async () => {
           JSON.stringify({
             id: message.id,
             jsonrpc: "2.0",
-            result: { content: [{ text: JSON.stringify(value), type: "text" }] },
+            result: {
+              content: [{ text: toolResponseText(name, value), type: "text" }],
+            },
           }),
         );
       });
@@ -238,6 +250,7 @@ beforeEach(() => {
   revoked = false;
   wrongEndpoint = false;
   wrongCredential = false;
+  invalidMetadataTool = "";
   called.length = 0;
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -292,7 +305,10 @@ const fixtureFetch: typeof fetch = async (input, init) => {
     request.end();
   });
 };
-const fixture = () => {
+const fixture = (
+  ioOverrides: Partial<NonNullable<PreviewNeonMcpDependencies["io"]>> = {},
+  diagnosticSink?: HostedOperatorConsentDiagnosticSink,
+) => {
   vi.stubGlobal("fetch", fixtureFetch);
   const approved = vi.fn(async () => {
     await Promise.resolve();
@@ -310,6 +326,9 @@ const fixture = () => {
       vercelProjectId: configuration.nativeStore.sourceProjectId,
     };
   });
+  const close = vi.fn(async () => {
+    await Promise.resolve();
+  });
   const io: NonNullable<PreviewNeonMcpDependencies["io"]> = {
     createAuthProvider: connectAuthProvider,
     createClient: async (config) => {
@@ -318,10 +337,12 @@ const fixture = () => {
       }
       expect(new URL(config.transport.url).searchParams.get("projectId")).toBe(scope.projectId);
       expect(config.transport.redirect).toBe("error");
-      return await createMCPClient({
+      const client = await createMCPClient({
         ...config,
         transport: { ...config.transport, fetch: fixtureFetch, url: `${origin}/mcp` },
       });
+      close.mockImplementation(async () => await client.close());
+      return { callTool: client.callTool.bind(client), close };
     },
     getOidc: async () => await Promise.resolve(projectOidc),
     readSqlIdentity: async (privateUrl) => {
@@ -337,17 +358,207 @@ const fixture = () => {
   };
   return {
     approved,
+    close,
     owner,
     planning,
     reader: createPreviewNeonMcpReader({
       assertApprovedScope: approved,
       assertPlanningScope: planning,
       configuration,
-      io,
+      diagnosticSink,
+      io: { ...io, ...ioOverrides },
       readCurrentOwnerNativeStore: owner,
     }),
   };
 };
+describe("private Neon reader failure diagnostics", () => {
+  it.each([
+    ["describe_project", "neon_project_metadata"],
+    ["get_postgres_endpoint", "neon_endpoint_metadata"],
+    ["get_postgres_database", "neon_database_metadata"],
+    ["get_postgres_role", "neon_role_metadata"],
+    ["get_connection_string", "neon_connection_credential"],
+  ])("classifies %s parsing without changing public errors or cleanup", async (tool, stage) => {
+    const diagnostics: HostedOperatorConsentDiagnostic[] = [];
+    invalidMetadataTool = tool;
+    const f = fixture({}, (event) => {
+      diagnostics.push(event);
+    });
+    const operation =
+      tool === "get_connection_string"
+        ? f.reader.withMaintenanceCredential(context, scope, async () => {})
+        : f.reader.inspectPlanningTarget(context, scope);
+    await expect(operation).rejects.toThrow(
+      /^Protected Preview Neon MCP credential is unavailable\.$/u,
+    );
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ planningFailure: { stage, errorClass: "validation_error" } }),
+      ]),
+    );
+    expect(f.close).toHaveBeenCalledTimes(1);
+    if (tool !== "get_connection_string") {
+      expect(called.some((call) => call.name === "get_connection_string")).toBe(false);
+    }
+    const serialized = JSON.stringify(diagnostics);
+    expect(serialized).not.toContain(uri);
+    expect(serialized).not.toContain(projectOidc);
+    expect(serialized).not.toContain(privateMcpBearer);
+    expect(serialized).not.toContain(context.target.sessionId);
+    expect(serialized).not.toContain(scope.hostname);
+  });
+
+  it("labels configuration parsing and denied current ownership before tools", async () => {
+    const diagnostics: HostedOperatorConsentDiagnostic[] = [];
+    const f = fixture({}, (event) => {
+      diagnostics.push(event);
+    });
+    await expect(
+      f.reader.inspectPlanningTarget(context, { ...scope, projectId: "" }),
+    ).rejects.toThrow(/^Protected Preview Neon MCP credential is unavailable\.$/u);
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          planningFailure: { stage: "neon_configuration", errorClass: "validation_error" },
+        }),
+      ]),
+    );
+    f.planning.mockRejectedValue(new HostedOperatorError("authorization_required"));
+    await expect(f.reader.inspectPlanningTarget(context, scope)).rejects.toThrow(
+      /^Protected Preview Neon MCP credential is unavailable\.$/u,
+    );
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          planningFailure: {
+            stage: "neon_owner_guard",
+            errorClass: "operator_error",
+            code: "authorization_required",
+          },
+        }),
+      ]),
+    );
+    expect(f.close).not.toHaveBeenCalled();
+    expect(called).toEqual([]);
+  });
+
+  it("reports a plain client error privately and preserves the opaque original error", async () => {
+    const diagnostics: HostedOperatorConsentDiagnostic[] = [];
+    const f = fixture(
+      {
+        createClient: async () => {
+          await Promise.resolve();
+          throw new Error(`private client failure ${privateMcpBearer}`);
+        },
+      },
+      (event) => {
+        diagnostics.push(event);
+      },
+    );
+    await expect(f.reader.inspectPlanningTarget(context, scope)).rejects.toThrow(
+      /^Protected Preview Neon MCP credential is unavailable\.$/u,
+    );
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          planningFailure: { stage: "neon_mcp_client", errorClass: "unexpected" },
+        }),
+      ]),
+    );
+    expect(JSON.stringify(diagnostics)).not.toContain(privateMcpBearer);
+    expect(f.close).not.toHaveBeenCalled();
+    expect(called).toEqual([]);
+  });
+
+  it("labels provider authorization and OIDC failure without exposing their errors", async () => {
+    const diagnostics: HostedOperatorConsentDiagnostic[] = [];
+    const sink: HostedOperatorConsentDiagnosticSink = (event) => {
+      diagnostics.push(event);
+    };
+    const denied = fixture(
+      {
+        createAuthProvider: () => {
+          throw new HostedOperatorError("authorization_required");
+        },
+      },
+      sink,
+    );
+    await expect(denied.reader.inspectPlanningTarget(context, scope)).rejects.toThrow(
+      /^Protected Preview Neon MCP credential is unavailable\.$/u,
+    );
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          planningFailure: {
+            stage: "neon_connect_broker",
+            errorClass: "operator_error",
+            code: "authorization_required",
+          },
+        }),
+      ]),
+    );
+    const oidc = fixture(
+      {
+        getOidc: async () => {
+          await Promise.resolve();
+          throw new Error(projectOidc);
+        },
+      },
+      sink,
+    );
+    await expect(oidc.reader.inspectPlanningTarget(context, scope)).rejects.toThrow(
+      /^Protected Preview Neon MCP credential is unavailable\.$/u,
+    );
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          planningFailure: { stage: "neon_oidc", errorClass: "unexpected" },
+        }),
+      ]),
+    );
+    expect(JSON.stringify(diagnostics)).not.toContain(projectOidc);
+    expect(called).toEqual([]);
+  });
+
+  it("keeps branch provenance rejection and cleanup unchanged", async () => {
+    provenance = "parent-data";
+    const diagnostics: HostedOperatorConsentDiagnostic[] = [];
+    const f = fixture({}, (event) => {
+      diagnostics.push(event);
+    });
+    await expect(f.reader.inspectPlanningTarget(context, scope)).rejects.toThrow(
+      /^Protected Preview Neon MCP credential is unavailable\.$/u,
+    );
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          planningFailure: { stage: "neon_branch_metadata", errorClass: "unexpected" },
+        }),
+      ]),
+    );
+    expect(f.close).toHaveBeenCalledTimes(1);
+    expect(called.some((call) => call.name === "get_connection_string")).toBe(false);
+  });
+
+  it("preserves the original reader failure when the diagnostic sink throws", async () => {
+    const f = fixture(
+      {
+        createClient: async () => {
+          await Promise.resolve();
+          throw new Error("private client failure");
+        },
+      },
+      () => {
+        throw new Error("private sink failure");
+      },
+    );
+    await expect(f.reader.inspectPlanningTarget(context, scope)).rejects.toThrow(
+      /^Protected Preview Neon MCP credential is unavailable\.$/u,
+    );
+    expect(called).toEqual([]);
+  });
+});
+
 describe("private Preview Neon OAuth MCP credentials", () => {
   it("reads planning metadata through the actual broker without an approved SQL effect or URI acquisition", async () => {
     const f = fixture();

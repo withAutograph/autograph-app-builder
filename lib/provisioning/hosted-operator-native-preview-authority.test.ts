@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { HostedOperatorConsentMetadata } from "./hosted-operator-consent-diagnostic";
 import { describe, expect, it, vi } from "vitest";
 import { hostedOperatorPlanSchema, operatorPlanDigest } from "./hosted-operator-contract";
 import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
@@ -274,6 +275,82 @@ const fixture = () => {
   };
 };
 describe("concrete native Preview owner and approval callbacks", () => {
+  it("reports only the observed failed store HTTP status and preserves authorization denial", async () => {
+    const f = fixture();
+    const diagnostics: HostedOperatorConsentMetadata[] = [];
+    const reader = createNativePreviewNeonPlanningAuthority({
+      context: f.effect,
+      controlPlane: {
+        assertPlanningAuthorized: async () => {
+          await Promise.resolve();
+        },
+        readCredential: f.controlPlane.readCredential,
+      },
+      fetch: async (request, init) => {
+        const url = new URL(request instanceof Request ? request.url : request);
+        if (url.pathname === "/v1/storage/stores") {
+          return Response.json(
+            { privateToken: "must-not-log-response", credential: "postgres://secret@private" },
+            { status: 403 },
+          );
+        }
+        return await f.fetcher(request, init);
+      },
+      diagnosticSink: (event) => {
+        diagnostics.push(event);
+      },
+      nativeStore,
+      scope,
+    });
+    await expect(reader.readCurrentOwnerNativeStore(f.effect, nativeStore)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          httpStatus: 403,
+          planningFailure: { stage: "neon_native_store", errorClass: "unexpected" },
+        }),
+      ]),
+    );
+    const serialized = JSON.stringify(diagnostics);
+    for (const privateValue of [
+      "must-not-log-response",
+      "postgres://secret@private",
+      "synthetic-owner-oauth",
+      target.sessionId,
+      nativeStore.resourceId,
+    ]) {
+      expect(serialized).not.toContain(privateValue);
+    }
+  });
+  it("preserves native resource denial when the private diagnostic sink throws", async () => {
+    const f = fixture();
+    const reader = createNativePreviewNeonPlanningAuthority({
+      context: f.effect,
+      controlPlane: {
+        assertPlanningAuthorized: async () => {
+          await Promise.resolve();
+        },
+        readCredential: f.controlPlane.readCredential,
+      },
+      fetch: async (request, init) => {
+        const url = new URL(request instanceof Request ? request.url : request);
+        if (url.pathname === "/v1/storage/stores") {
+          return Response.json({}, { status: 403 });
+        }
+        return await f.fetcher(request, init);
+      },
+      diagnosticSink: () => {
+        throw new Error("diagnostic sink unavailable");
+      },
+      nativeStore,
+      scope,
+    });
+    await expect(reader.readCurrentOwnerNativeStore(f.effect, nativeStore)).rejects.toMatchObject({
+      code: "authorization_required",
+    });
+  });
   it("reads owner-authorized planning scope and actual native store without inventing an approved plan", async () => {
     const f = fixture();
     const assertPlanningAuthorized = vi.fn(async () => {

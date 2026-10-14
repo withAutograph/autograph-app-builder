@@ -22,6 +22,12 @@ import {
 } from "./hosted-operator-synthetic-neon-provenance";
 import type { NativePreviewNeonInitSource } from "./hosted-operator-synthetic-neon-provenance";
 
+import { observeOperatorPlanStage } from "./hosted-operator-consent-diagnostic";
+import type {
+  HostedOperatorConsentDiagnosticSink,
+  OperatorPlanStage,
+} from "./hosted-operator-consent-diagnostic";
+
 const readTools = [
   "describe_project",
   "get_branch",
@@ -53,6 +59,7 @@ const decoded = (
   return z.json().parse(JSON.parse(result.content[0]?.text ?? ""));
 };
 export interface PreviewNeonMcpDependencies {
+  diagnosticSink?: HostedOperatorConsentDiagnosticSink;
   configuration: Omit<NativePreviewNeonConfiguration, "connectorInstallationId">;
   assertApprovedScope: NativePreviewNeonDependencies["assertApprovedScope"];
   /** Separate current owner/configured-scope guard; never an approved SQL effect or credential grant. */
@@ -89,17 +96,24 @@ const runReader = async <T>(
   kind: "metadata" | "credential",
   consume: (material: ReaderMaterial) => Promise<T>,
 ): Promise<T> => {
+  const observe = async <Result>(stage: OperatorPlanStage, run: () => Result | Promise<Result>) =>
+    await observeOperatorPlanStage(context.target.sessionId, stage, run, deps.diagnosticSink);
   let client: Pick<MCPClient, "callTool" | "close"> | undefined;
   try {
-    const scope = Object.freeze(scopeSchema.parse(frozenScope));
-    const parsedConfiguration = configurationSchema
-      .omit({ connectorInstallationId: true })
-      .parse(deps.configuration);
-    const configuration = Object.freeze({
-      ...parsedConfiguration,
-      nativeStore: Object.freeze({ ...parsedConfiguration.nativeStore }),
-      operator: Object.freeze({ ...parsedConfiguration.operator }),
-      syntheticEnrollment: snapshotSyntheticNeonEnrollment(parsedConfiguration.syntheticEnrollment),
+    const { scope, configuration } = await observe("neon_configuration", () => {
+      const parsedScope = Object.freeze(scopeSchema.parse(frozenScope));
+      const parsedConfiguration = configurationSchema
+        .omit({ connectorInstallationId: true })
+        .parse(deps.configuration);
+      const frozenConfiguration = Object.freeze({
+        ...parsedConfiguration,
+        nativeStore: Object.freeze({ ...parsedConfiguration.nativeStore }),
+        operator: Object.freeze({ ...parsedConfiguration.operator }),
+        syntheticEnrollment: snapshotSyntheticNeonEnrollment(
+          parsedConfiguration.syntheticEnrollment,
+        ),
+      });
+      return { scope: parsedScope, configuration: frozenConfiguration };
     });
     const ownerContext =
       context.ownerContext === undefined
@@ -124,29 +138,31 @@ const runReader = async <T>(
       target: Object.freeze({ ...context.target }),
     });
     const assertOwner = async () => {
-      if (kind === "metadata") {
-        if (deps.assertPlanningScope === undefined) {
+      await observe("neon_owner_guard", async () => {
+        if (kind === "metadata") {
+          if (deps.assertPlanningScope === undefined) {
+            throw unavailable();
+          }
+          await deps.assertPlanningScope(current, scope);
+        } else {
+          await deps.assertApprovedScope(current, scope);
+        }
+        const store = await deps.readCurrentOwnerNativeStore(current, configuration.nativeStore);
+        const checks = [
+          current.target.environment === "preview",
+          configuration.operator.projectId !== current.target.projectId,
+          configuration.nativeStore.sourceProjectId !== current.target.projectId,
+          store.ownerId === current.target.scopeId,
+          store.ownerId === configuration.operator.ownerId,
+          store.configurationId === configuration.nativeStore.configurationId,
+          store.resourceId === configuration.nativeStore.resourceId,
+          store.vercelProjectId === configuration.nativeStore.sourceProjectId,
+          store.neonProjectId === scope.projectId,
+        ];
+        if (!checks.every(Boolean)) {
           throw unavailable();
         }
-        await deps.assertPlanningScope(current, scope);
-      } else {
-        await deps.assertApprovedScope(current, scope);
-      }
-      const store = await deps.readCurrentOwnerNativeStore(current, configuration.nativeStore);
-      const checks = [
-        current.target.environment === "preview",
-        configuration.operator.projectId !== current.target.projectId,
-        configuration.nativeStore.sourceProjectId !== current.target.projectId,
-        store.ownerId === current.target.scopeId,
-        store.ownerId === configuration.operator.ownerId,
-        store.configurationId === configuration.nativeStore.configurationId,
-        store.resourceId === configuration.nativeStore.resourceId,
-        store.vercelProjectId === configuration.nativeStore.sourceProjectId,
-        store.neonProjectId === scope.projectId,
-      ];
-      if (!checks.every(Boolean)) {
-        throw unavailable();
-      }
+      });
     };
     const io = deps.io ?? defaultIo;
     const params = {
@@ -160,20 +176,25 @@ const runReader = async <T>(
     };
     const oidc = async () => {
       await assertOwner();
-      const token = await io.getOidc();
-      const op = configuration.operator;
-      await io.verifyOidc(token, {
-        audience: op.audience,
-        environment: op.environment,
-        issuer: op.issuer,
-        ownerId: op.ownerId,
-        projectId: op.projectId,
+      const token = await observe("neon_oidc", async () => {
+        const currentToken = await io.getOidc();
+        const op = configuration.operator;
+        await io.verifyOidc(currentToken, {
+          audience: op.audience,
+          environment: op.environment,
+          issuer: op.issuer,
+          ownerId: op.ownerId,
+          projectId: op.projectId,
+        });
+        return currentToken;
       });
       await assertOwner();
       return token;
     };
     await assertOwner();
-    const broker = io.createAuthProvider(configuration.connector, params, { vercelToken: oidc });
+    const broker = await observe("neon_connect_broker", () =>
+      io.createAuthProvider(configuration.connector, params, { vercelToken: oidc }),
+    );
     const authProvider = {
       ...broker,
       redirectToAuthorization: async () => {
@@ -183,10 +204,13 @@ const runReader = async <T>(
       tokens: async () => {
         await assertOwner();
         deleteTokenCacheEntry(configuration.connector, params);
-        const tokens = await broker.tokens();
-        if (tokens === undefined) {
-          throw unavailable();
-        }
+        const tokens = await observe("neon_connect_broker", async () => {
+          const currentTokens = await broker.tokens();
+          if (currentTokens === undefined) {
+            throw unavailable();
+          }
+          return currentTokens;
+        });
         await assertOwner();
         return tokens;
       },
@@ -196,61 +220,84 @@ const runReader = async <T>(
     for (const category of ["projects", "branches", "endpoints"]) {
       url.searchParams.append("category", category);
     }
-    client = await io.createClient({
-      clientName: "protected-preview-neon-reader",
-      transport: { authProvider, redirect: "error", type: "http", url: url.href },
-    });
+    client = await observe(
+      "neon_mcp_client",
+      async () =>
+        await io.createClient({
+          clientName: "protected-preview-neon-reader",
+          transport: { authProvider, redirect: "error", type: "http", url: url.href },
+        }),
+    );
     await assertOwner();
     const call = async (name: NativeReadTool, argumentsInput: Record<string, string>) => {
       await assertOwner();
       if (client === undefined) {
         throw unavailable();
       }
-      const result = decoded(await client.callTool({ arguments: argumentsInput, name }));
+      const stages: Record<NativeReadTool, OperatorPlanStage> = {
+        describe_project: "neon_project_metadata",
+        get_branch: "neon_branch_metadata",
+        get_postgres_endpoint: "neon_endpoint_metadata",
+        get_postgres_database: "neon_database_metadata",
+        get_postgres_role: "neon_role_metadata",
+        get_connection_string: "neon_connection_credential",
+      };
+      const currentClient = client;
+      const result = await observe(stages[name], async () =>
+        decoded(await currentClient.callTool({ arguments: argumentsInput, name })),
+      );
       await assertOwner();
       return result;
     };
     const readProject = async () => await call("describe_project", { project_id: scope.projectId });
     // Keep the existing exact project check for the legacy MCP reader as well.
     if (configuration.syntheticEnrollment === undefined) {
-      const project = z.object({ id: z.string() }).parse(await readProject());
-      if (project.id !== scope.projectId) {
-        throw unavailable();
-      }
+      await observe("neon_project_metadata", async () => {
+        const project = z.object({ id: z.string() }).parse(await readProject());
+        if (project.id !== scope.projectId) {
+          throw unavailable();
+        }
+      });
     }
     const verifyProvenance = async () =>
-      await readNativePreviewNeonProvenance({
-        enrollment: configuration.syntheticEnrollment,
-        readBranch: async (branchId) =>
-          await call("get_branch", { branch_id: branchId, project_id: scope.projectId }),
-        readProject,
-        scope: { branchId: scope.branchId, projectId: scope.projectId },
-      });
-    const verifyEndpoint = async () => {
-      const endpoint = z
-        .object({
-          branch_id: z.string(),
-          host: z.string(),
-          id: z.string(),
-          project_id: z.string(),
-          type: z.literal("read_write"),
-        })
-        .parse(
-          await call("get_postgres_endpoint", {
-            endpoint_id: scope.endpointId,
-            project_id: scope.projectId,
+      await observe(
+        "neon_branch_metadata",
+        async () =>
+          await readNativePreviewNeonProvenance({
+            enrollment: configuration.syntheticEnrollment,
+            readBranch: async (branchId) =>
+              await call("get_branch", { branch_id: branchId, project_id: scope.projectId }),
+            readProject,
+            scope: { branchId: scope.branchId, projectId: scope.projectId },
           }),
-        );
-      if (
-        [
-          endpoint.id !== scope.endpointId,
-          endpoint.project_id !== scope.projectId,
-          endpoint.branch_id !== scope.branchId,
-          endpoint.host !== scope.hostname,
-        ].some(Boolean)
-      ) {
-        throw unavailable();
-      }
+      );
+    const verifyEndpoint = async () => {
+      await observe("neon_endpoint_metadata", async () => {
+        const endpoint = z
+          .object({
+            branch_id: z.string(),
+            host: z.string(),
+            id: z.string(),
+            project_id: z.string(),
+            type: z.literal("read_write"),
+          })
+          .parse(
+            await call("get_postgres_endpoint", {
+              endpoint_id: scope.endpointId,
+              project_id: scope.projectId,
+            }),
+          );
+        if (
+          [
+            endpoint.id !== scope.endpointId,
+            endpoint.project_id !== scope.projectId,
+            endpoint.branch_id !== scope.branchId,
+            endpoint.host !== scope.hostname,
+          ].some(Boolean)
+        ) {
+          throw unavailable();
+        }
+      });
     };
     const initSource = await verifyProvenance();
     await verifyEndpoint();
@@ -260,26 +307,30 @@ const runReader = async <T>(
         await verifyEndpoint();
       }
     };
-    const database = z.object({ branch_id: z.string(), name: z.string() }).parse(
-      await call("get_postgres_database", {
-        branch_id: scope.branchId,
-        database_name: scope.maintenanceDatabase,
-        project_id: scope.projectId,
-      }),
-    );
-    if (database.name !== scope.maintenanceDatabase || database.branch_id !== scope.branchId) {
-      throw unavailable();
-    }
-    const role = z.object({ branch_id: z.string(), name: z.string() }).parse(
-      await call("get_postgres_role", {
-        branch_id: scope.branchId,
-        project_id: scope.projectId,
-        role_name: scope.maintenanceRole,
-      }),
-    );
-    if (role.name !== scope.maintenanceRole || role.branch_id !== scope.branchId) {
-      throw unavailable();
-    }
+    await observe("neon_database_metadata", async () => {
+      const database = z.object({ branch_id: z.string(), name: z.string() }).parse(
+        await call("get_postgres_database", {
+          branch_id: scope.branchId,
+          database_name: scope.maintenanceDatabase,
+          project_id: scope.projectId,
+        }),
+      );
+      if (database.name !== scope.maintenanceDatabase || database.branch_id !== scope.branchId) {
+        throw unavailable();
+      }
+    });
+    await observe("neon_role_metadata", async () => {
+      const role = z.object({ branch_id: z.string(), name: z.string() }).parse(
+        await call("get_postgres_role", {
+          branch_id: scope.branchId,
+          project_id: scope.projectId,
+          role_name: scope.maintenanceRole,
+        }),
+      );
+      if (role.name !== scope.maintenanceRole || role.branch_id !== scope.branchId) {
+        throw unavailable();
+      }
+    });
     await revalidateEnrollment();
     if (kind === "metadata") {
       await assertOwner();
@@ -287,36 +338,38 @@ const runReader = async <T>(
       await assertOwner();
       return result;
     }
-    const credential = z
-      .object({
-        branchId: z.string(),
-        computeId: z.string(),
-        databaseName: z.string(),
-        projectId: z.string(),
-        roleName: z.string(),
-        uri: z.string(),
-      })
-      .parse(
-        await call("get_connection_string", {
-          branch_id: scope.branchId,
-          compute_id: scope.endpointId,
-          database_name: scope.maintenanceDatabase,
-          project_id: scope.projectId,
-          role_name: scope.maintenanceRole,
-        }),
-      );
-    if (
-      [
-        credential.projectId !== scope.projectId,
-        credential.branchId !== scope.branchId,
-        credential.computeId !== scope.endpointId,
-        credential.databaseName !== scope.maintenanceDatabase,
-        credential.roleName !== scope.maintenanceRole,
-      ].some(Boolean)
-    ) {
-      throw unavailable();
-    }
-    const maintenanceUrl = privateMaintenanceUrl(credential.uri, scope);
+    const maintenanceUrl = await observe("neon_connection_credential", async () => {
+      const credential = z
+        .object({
+          branchId: z.string(),
+          computeId: z.string(),
+          databaseName: z.string(),
+          projectId: z.string(),
+          roleName: z.string(),
+          uri: z.string(),
+        })
+        .parse(
+          await call("get_connection_string", {
+            branch_id: scope.branchId,
+            compute_id: scope.endpointId,
+            database_name: scope.maintenanceDatabase,
+            project_id: scope.projectId,
+            role_name: scope.maintenanceRole,
+          }),
+        );
+      if (
+        [
+          credential.projectId !== scope.projectId,
+          credential.branchId !== scope.branchId,
+          credential.computeId !== scope.endpointId,
+          credential.databaseName !== scope.maintenanceDatabase,
+          credential.roleName !== scope.maintenanceRole,
+        ].some(Boolean)
+      ) {
+        throw unavailable();
+      }
+      return privateMaintenanceUrl(credential.uri, scope);
+    });
     await revalidateEnrollment();
     await assertOwner();
     const sqlIdentity = await io.readSqlIdentity(maintenanceUrl);
