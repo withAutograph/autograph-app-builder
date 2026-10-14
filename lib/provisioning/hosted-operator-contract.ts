@@ -532,6 +532,12 @@ export type WorkerEffectCheckpointFrame = z.infer<typeof workerEffectCheckpointF
 export const operatorRealmIdentityLinkSchema = z
   .strictObject({
     audience: httpsPublicOrigin,
+    browserSession: z
+      .strictObject({
+        operationRef: z.uuid(),
+        participantProgramDigest: digest,
+      })
+      .optional(),
     authResourceId: id,
     bootstrapPlanDigest: digest,
     browserOrigin: httpsPublicOrigin,

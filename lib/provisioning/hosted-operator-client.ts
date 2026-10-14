@@ -7,6 +7,7 @@ import { createHostedOperatorConsentDiagnostic } from "./hosted-operator-consent
 import type { HostedOperatorConsentMetadata } from "./hosted-operator-consent-diagnostic";
 import { neonAuthorizationResultSchema } from "./hosted-operator-neon-authorization";
 import { z } from "zod";
+import { normalActorIdentityManifestSchema } from "./hosted-operator-normal-actor-program";
 import { exactForwardedSessionAuthority } from "../hosted/session-authority";
 import { createVercelWorkloadIdentity } from "../eve/vercel-workload-identity";
 import { hostedRuntimeProofSchema } from "./hosted-runtime-journal";
@@ -28,6 +29,13 @@ import {
 const bindingSchema = z.strictObject({
   environment: z.record(z.string(), z.string()),
   nativePreview: operatorNativePreviewSchema.optional(),
+  normalActors: z
+    .strictObject({
+      origin: z.url(),
+      identities: normalActorIdentityManifestSchema,
+      files: z.record(z.string(), z.string()),
+    })
+    .optional(),
   operationRef: z.uuid(),
   plan: hostedOperatorPlanSchema,
   proof: hostedRuntimeProofSchema,
@@ -182,6 +190,9 @@ export const createHostedOperatorClient = (input: {
       }
       if (value.nativePreview) {
         assertOperatorNativePreview(value.nativePreview, value.plan, request.operationRef);
+      }
+      if (value.normalActors && value.normalActors.origin !== value.nativePreview?.publicOrigin) {
+        throw new HostedOperatorError("resource_mismatch");
       }
       return {
         ...value,

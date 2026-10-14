@@ -6,6 +6,10 @@ import { HostedOperatorError } from "./hosted-operator-contract";
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/u);
 const id = z.string().min(1).max(512);
+export const realmBrowserSessionCorrelationSchema = z.strictObject({
+  operationRef: z.uuid(),
+  participantProgramDigest: hash,
+});
 export const realmPhysicalResourceSchema = z.strictObject({
   database: id,
   environment: z.enum(["local", "preview", "production"]),
@@ -19,6 +23,11 @@ export const realmPhysicalResourceSchema = z.strictObject({
 });
 export const realmLinkClaimsSchema = z.strictObject({
   aud: z.url(),
+  browserSession: realmBrowserSessionCorrelationSchema
+    .extend({
+      normalCookieSha256: hash,
+    })
+    .optional(),
   authResourceId: id,
   bootstrapPlanDigest: hash,
   exp: z.number().int().nonnegative(),
@@ -34,6 +43,7 @@ export const realmLinkClaimsSchema = z.strictObject({
 });
 export const pendingRealmIdentityLinkSchema = z.object({
   audience: z.url(),
+  browserSession: realmBrowserSessionCorrelationSchema.optional(),
   authResourceId: id,
   bootstrapPlanDigest: hash,
   browserOrigin: z.url(),
@@ -103,6 +113,10 @@ const verifySignedRealmIdentityProof = async (input: {
     claims.bootstrapPlanDigest === pending.bootstrapPlanDigest,
     claims.nonceSha256 === pending.nonceSha256,
     claims.organizationId === pending.organizationId,
+    (claims.browserSession === undefined) === (pending.browserSession === undefined),
+    claims.browserSession?.operationRef === pending.browserSession?.operationRef,
+    claims.browserSession?.participantProgramDigest ===
+      pending.browserSession?.participantProgramDigest,
     claims.iat <= Math.floor(now.getTime() / 1000),
     claims.exp > claims.iat,
     claims.exp - claims.iat <= 240,
@@ -229,6 +243,10 @@ export const createRealmIdentityBrowserUrl = (input: {
   url.searchParams.set("authResourceId", link.authResourceId);
   if (link.organizationId !== null) {
     url.searchParams.set("organizationId", link.organizationId);
+  }
+  if (link.browserSession) {
+    url.searchParams.set("operationRef", link.browserSession.operationRef);
+    url.searchParams.set("participantProgramDigest", link.browserSession.participantProgramDigest);
   }
   return url.toString();
 };
