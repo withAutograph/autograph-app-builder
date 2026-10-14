@@ -133,7 +133,7 @@ export const runAppBrowserTests = async (input: {
 
 export default defineTool({
   description:
-    "Run the selected app's repository-owned test-e2e mise task in its approved private checkout. Use this when the app defines that task and the accepted behavior requires browser interaction that the JSON behavior verifier cannot exercise. Prepare sandbox-local data first when the app requires it. This runs real browser tests and returns the exact command, exit status, and bounded redacted output; it does not publish or deploy. Passing tests are evidence for the scenarios asserted by those tests, not proof of every product outcome.",
+    "Run the selected app's repository-owned test-e2e mise task in its approved private checkout. Use this when the app defines that task and the accepted behavior requires browser interaction that the JSON behavior verifier cannot exercise. Protected normal actor sessions, when supplied by the runtime binding, are restored privately at their verified browser origin. Prepare sandbox-local data first only for local app tasks that require it. This runs real browser tests and returns the exact command, exit status, and bounded redacted output; it does not publish or deploy. Passing tests are evidence for the scenarios asserted by those tests, not proof of every product outcome.",
   async execute(input, ctx) {
     const state = appBuilderWorkflowState.get();
     const sandbox = await ctx.getSandbox();

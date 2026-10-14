@@ -18,6 +18,8 @@ import { getVercelPreviewProvider } from "../sandbox/vercel-preview-provider";
 import { sanitizeValidationDiagnosticText } from "../repository/validation-output-sanitize";
 import { preparedRuntimeSelections } from "./prepared-runtime-selection";
 import type { PreparedRuntimeSelection } from "./prepared-runtime-selection";
+import { normalActorBrowserFiles } from "./normal-actor-browser-state";
+import type { NormalActorRuntimeProjection } from "../provisioning/hosted-operator-normal-actor-program";
 
 interface RuntimeCommand {
   exitCode: number | null;
@@ -121,6 +123,7 @@ export const restorePreparedRuntimeExecution = async (input: {
   appId: string;
   browserTestBaseUrl?: string;
   root: string;
+  normalActors?: NormalActorRuntimeProjection;
   binding: NonNullable<Awaited<ReturnType<typeof readHostedRuntimeExecutionBinding>>>;
   provider: RuntimeTransport;
   observeInstallation: (files: PrivateRuntimeFiles) => Promise<HostedRuntimeProof>;
@@ -133,24 +136,70 @@ export const restorePreparedRuntimeExecution = async (input: {
       ...input.binding.environment,
     }),
   };
+  const normalActors =
+    input.normalActors === undefined
+      ? undefined
+      : normalActorBrowserFiles(
+          input.normalActors,
+          input.binding.stateDirectory,
+          input.browserTestBaseUrl ?? input.normalActors.origin,
+        );
+  const safePrivateError = (error: Error) => {
+    if (!normalActors) {
+      return error;
+    }
+    let detail = error.message;
+    for (const value of [...normalActors.privateValues].toSorted(
+      (left, right) => right.length - left.length,
+    )) {
+      detail = detail.replaceAll(value, "[REDACTED]");
+    }
+    return new Error(sanitizeValidationDiagnosticText(detail));
+  };
+  const runCommand = async (commandInput: Parameters<RuntimeTransport["runCommand"]>[0]) => {
+    try {
+      return await input.provider.runCommand(commandInput);
+    } catch (error) {
+      throw safePrivateError(
+        error instanceof Error ? error : new Error("normal_actor_runtime_failed"),
+      );
+    }
+  };
   const restore = async () => {
-    // Remove installer files left by an older consumer before reusing its app Sandbox.
-    await input.provider.fs.rm(`${input.binding.stateDirectory}/state.json`, {
-      force: true,
-      signal: input.signal,
-    });
-    await input.provider.fs.mkdir(input.binding.stateDirectory, {
-      recursive: true,
-      signal: input.signal,
-    });
-    await input.provider.writeFiles(
-      Object.entries(files).flatMap(([name, content]) =>
-        name === "environment.json" || name === "identities.json" || name.endsWith(".storage.json")
-          ? [{ content, mode: 0o600, path: `${input.binding.stateDirectory}/${name}` }]
-          : [],
-      ),
-      { signal: input.signal },
-    );
+    try {
+      // Remove installer files left by an older consumer before reusing its app Sandbox.
+      await input.provider.fs.rm(`${input.binding.stateDirectory}/state.json`, {
+        force: true,
+        signal: input.signal,
+      });
+      await input.provider.fs.mkdir(input.binding.stateDirectory, {
+        recursive: true,
+        signal: input.signal,
+      });
+      await input.provider.writeFiles(
+        Object.entries(files).flatMap(([name, content]) =>
+          name === "environment.json" ||
+          name === "identities.json" ||
+          name.endsWith(".storage.json")
+            ? [{ content, mode: 0o600, path: `${input.binding.stateDirectory}/${name}` }]
+            : [],
+        ),
+        { signal: input.signal },
+      );
+      if (normalActors) {
+        for (const directory of new Set(
+          normalActors.files.map((file) => file.path.slice(0, file.path.lastIndexOf("/"))),
+        )) {
+          // oxlint-disable-next-line eslint/no-await-in-loop -- Create private parent directories before writing captured files.
+          await input.provider.fs.mkdir(directory, { recursive: true, signal: input.signal });
+        }
+        await input.provider.writeFiles(normalActors.files, { signal: input.signal });
+      }
+    } catch (error) {
+      throw safePrivateError(
+        error instanceof Error ? error : new Error("normal_actor_runtime_failed"),
+      );
+    }
   };
   await restore();
   const proof = {
@@ -158,7 +207,7 @@ export const restorePreparedRuntimeExecution = async (input: {
     appId: input.appId,
     environment: "preview" as const,
   };
-  const described = await input.provider.runCommand({
+  const described = await runCommand({
     args: ["run", "app:describe", input.appId],
     cmd: "mise",
     cwd: input.root,
@@ -178,7 +227,7 @@ export const restorePreparedRuntimeExecution = async (input: {
   ) {
     throw new HostedRuntimeProviderError("resource_mismatch");
   }
-  const secretValues = new Set<string>();
+  const secretValues = new Set<string>(normalActors?.privateValues);
   const jsonSchema = z.json();
   const collect = (value: z.infer<typeof jsonSchema>, key = "") => {
     // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The recursive value is already parsed by z.json at its protected file boundary.
@@ -220,9 +269,9 @@ export const restorePreparedRuntimeExecution = async (input: {
     return safe;
   };
   return {
-    ...(input.browserTestBaseUrl === undefined
+    ...((input.browserTestBaseUrl ?? input.normalActors?.origin) === undefined
       ? {}
-      : { browserTestBaseUrl: input.browserTestBaseUrl }),
+      : { browserTestBaseUrl: input.browserTestBaseUrl ?? input.normalActors?.origin }),
     environmentPath,
     installationProof: {
       ...proof,
@@ -231,12 +280,19 @@ export const restorePreparedRuntimeExecution = async (input: {
       observedAt: new Date().toISOString(),
     },
     async prepareAuthenticatedOrigin(origin) {
+      if (input.normalActors) {
+        if (origin !== input.normalActors.origin) {
+          throw new Error("normal_actor_browser_origin_mismatch");
+        }
+        await restore();
+        return;
+      }
       files = runtimeFilesForOrigin(files, origin);
       await input.binding.persistFiles(files);
       await restore();
     },
     async runTask({ task, shard, environment, onChunk, signal }) {
-      const command = await input.provider.runCommand({
+      const command = await runCommand({
         args: [
           "run",
           "app:runtime",
@@ -255,6 +311,12 @@ export const restorePreparedRuntimeExecution = async (input: {
             ),
           ),
           APP_RUNTIME_STATE_DIR: input.binding.stateDirectory,
+          ...(task === "test-e2e" && normalActors
+            ? {
+                APP_TEST_BASE_URL: normalActors.origin,
+                APP_TEST_IDENTITIES_FILE: normalActors.identitiesPath,
+              }
+            : {}),
         },
         signal: signal ?? input.signal,
       });
@@ -297,7 +359,9 @@ export const restorePreparedRuntimeExecution = async (input: {
         return { exitCode: result.exitCode, stderr, stdout };
       } catch (error) {
         await command.kill("SIGTERM", { abortSignal: AbortSignal.timeout(20_000) });
-        throw error;
+        throw safePrivateError(
+          error instanceof Error ? error : new Error("normal_actor_runtime_failed"),
+        );
       } finally {
         logs.close();
       }
@@ -477,6 +541,7 @@ export const resolvePreparedRuntimeExecution = async (
   return await restorePreparedRuntimeExecution({
     appId: input.appId,
     browserTestBaseUrl: projection?.nativePreview?.publicOrigin,
+    normalActors: projection?.normalActors,
     binding,
     observeInstallation: async (files) =>
       projection
