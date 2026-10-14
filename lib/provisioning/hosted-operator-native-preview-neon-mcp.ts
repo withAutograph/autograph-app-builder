@@ -71,6 +71,12 @@ export interface PreviewNeonMcpDependencies {
     scope: NativePreviewNeonScope,
     binding?: Readonly<NativePreviewNeonStoreBinding>,
   ) => Promise<void>;
+  /** Actual approved effect owner/approval/fence/lease/credential observation; never a planning grant. */
+  assertApprovedOwner?: (
+    context: HostedOperatorContext,
+    scope: NativePreviewNeonScope,
+    binding: Readonly<NativePreviewNeonStoreBinding>,
+  ) => Promise<void>;
   readCurrentOwnerNativeStore: NativePreviewNeonDependencies["readCurrentOwnerNativeStore"];
   io?: {
     getOidc: typeof getVercelOidcToken;
@@ -171,17 +177,17 @@ const runReader = async <T>(
         }
       });
     };
-    const localPlanningOwner = kind === "metadata" ? deps.assertPlanningOwner : undefined;
+    const localOwner = kind === "metadata" ? deps.assertPlanningOwner : deps.assertApprovedOwner;
     const assertOwner = async () => {
-      if (localPlanningOwner === undefined) {
+      if (localOwner === undefined) {
         await assertProviderScope();
         return;
       }
       await observe("neon_owner_guard", async () => {
-        await localPlanningOwner(current, scope, configuration.nativeStore);
+        await localOwner(current, scope, configuration.nativeStore);
       });
     };
-    if (localPlanningOwner !== undefined) {
+    if (localOwner !== undefined) {
       await assertProviderScope();
     }
     const io = deps.io ?? defaultIo;
@@ -250,7 +256,8 @@ const runReader = async <T>(
     );
     await assertOwner();
     const call = async (name: NativeReadTool, argumentsInput: Record<string, string>) => {
-      await assertOwner();
+      const guard = name === "get_connection_string" ? assertProviderScope : assertOwner;
+      await guard();
       if (client === undefined) {
         throw unavailable();
       }
@@ -266,7 +273,7 @@ const runReader = async <T>(
       const result = await observe(stages[name], async () =>
         decoded(await currentClient.callTool({ arguments: argumentsInput, name })),
       );
-      await assertOwner();
+      await guard();
       return result;
     };
     const readProject = async () => await call("describe_project", { project_id: scope.projectId });
@@ -356,7 +363,7 @@ const runReader = async <T>(
       await assertOwner();
       const result = await consume({ initSource, kind, scope });
       await assertOwner();
-      if (localPlanningOwner !== undefined) {
+      if (localOwner !== undefined) {
         await assertProviderScope();
       }
       return result;
@@ -394,8 +401,9 @@ const runReader = async <T>(
       return privateMaintenanceUrl(credential.uri, scope);
     });
     await revalidateEnrollment();
-    await assertOwner();
+    await assertProviderScope();
     const sqlIdentity = await io.readSqlIdentity(maintenanceUrl);
+    await assertProviderScope();
     if (
       sqlIdentity.role !== scope.maintenanceRole ||
       sqlIdentity.database !== scope.maintenanceDatabase
@@ -403,14 +411,15 @@ const runReader = async <T>(
       throw unavailable();
     }
     await revalidateEnrollment();
-    await assertOwner();
+    await assertProviderScope();
     const result = await consume({
       initSource,
       kind: "credential",
       maintenanceUrl,
       scope,
     });
-    await assertOwner();
+    // This is also the final full credential-wave boundary.
+    await assertProviderScope();
     return result;
   } catch {
     throw unavailable();

@@ -309,6 +309,7 @@ const fixture = (
   ioOverrides: Partial<NonNullable<PreviewNeonMcpDependencies["io"]>> = {},
   diagnosticSink?: HostedOperatorConsentDiagnosticSink,
   useLocalPlanningOwner = false,
+  useLocalApprovedOwner = false,
 ) => {
   vi.stubGlobal("fetch", fixtureFetch);
   const events: string[] = [];
@@ -317,6 +318,11 @@ const fixture = (
     await Promise.resolve();
   });
   const approved = vi.fn(async () => {
+    events.push("approved-scope");
+    await Promise.resolve();
+  });
+  const approvedOwner = vi.fn(async () => {
+    events.push("approved-owner");
     await Promise.resolve();
   });
   const planning = vi.fn(async () => {
@@ -380,11 +386,14 @@ const fixture = (
       return await Promise.resolve(projectOidc);
     },
     readSqlIdentity: async (privateUrl) => {
+      events.push("sql-start");
       expect(privateUrl).toContain("sslmode=verify-full");
-      return await Promise.resolve({
+      const identity = await Promise.resolve({
         database: scope.maintenanceDatabase,
         role: scope.maintenanceRole,
       });
+      events.push("sql-end");
+      return identity;
     },
     verifyOidc: async () => {
       events.push("oidc-end");
@@ -393,6 +402,7 @@ const fixture = (
   };
   return {
     approved,
+    approvedOwner,
     close,
     events,
     owner,
@@ -400,6 +410,7 @@ const fixture = (
     planning,
     reader: createPreviewNeonMcpReader({
       assertApprovedScope: approved,
+      ...(useLocalApprovedOwner ? { assertApprovedOwner: approvedOwner } : {}),
       assertPlanningScope: planning,
       assertPlanningOwner: useLocalPlanningOwner ? planningOwner : undefined,
       configuration,
@@ -826,5 +837,114 @@ describe("private Preview Neon OAuth MCP credentials", () => {
       f.reader.withMaintenanceCredential(production, scope, async () => {}),
     ).rejects.toThrow();
     expect(called).toEqual([]);
+  });
+});
+
+describe("approved credential observation boundaries", () => {
+  it("uses the approved local guard for token and metadata reads and full scope for URI, SQL and consume", async () => {
+    const f = fixture({}, undefined, true, true);
+    const consume = vi.fn(async () => {
+      f.events.push("consume-start");
+      await Promise.resolve();
+      f.events.push("consume-end");
+      return "ready";
+    });
+    await expect(f.reader.withMaintenanceCredential(context, scope, consume)).resolves.toBe(
+      "ready",
+    );
+    expect(f.planningOwner).not.toHaveBeenCalled();
+    expect(f.planning).not.toHaveBeenCalled();
+    expect(f.approvedOwner).toHaveBeenCalledWith(context, scope, configuration.nativeStore);
+    expect(f.approved).toHaveBeenCalledWith(context, scope);
+    expect(f.events.slice(0, 2)).toEqual(["approved-scope", "native-store"]);
+    expect(f.events.slice(-2)).toEqual(["approved-scope", "native-store"]);
+    for (const operation of ["tool:get_connection_string", "sql", "consume"]) {
+      const start = operation.startsWith("tool:")
+        ? `tool-start:${operation.slice(5)}`
+        : `${operation}-start`;
+      const end = operation.startsWith("tool:")
+        ? `tool-end:${operation.slice(5)}`
+        : `${operation}-end`;
+      const startIndex = f.events.indexOf(start);
+      const endIndex = f.events.indexOf(end, startIndex + 1);
+      expect(startIndex).toBeGreaterThan(0);
+      expect(endIndex).toBeGreaterThan(startIndex);
+      expect(f.events.slice(0, startIndex)).toContain("approved-scope");
+      expect(f.events.slice(endIndex + 1)).toContain("approved-scope");
+    }
+    expect(consume).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains full approved scope when the optional observation guard is absent", async () => {
+    const f = fixture({}, undefined, true);
+    await expect(
+      f.reader.withMaintenanceCredential(
+        context,
+        scope,
+        async () => await Promise.resolve("ready"),
+      ),
+    ).resolves.toBe("ready");
+    expect(f.approvedOwner).not.toHaveBeenCalled();
+    expect(f.planningOwner).not.toHaveBeenCalled();
+    expect(f.approved).toHaveBeenCalledWith(context, scope);
+    expect(f.owner).toHaveBeenCalled();
+  });
+
+  it("retains the original owned scope across asynchronous caller changes", async () => {
+    const selectedContext = structuredClone(context);
+    const selectedScope = { ...scope };
+    const f = fixture(
+      {
+        getOidc: async () => {
+          selectedContext.target.projectId = "foreign-project";
+          selectedScope.branchId = "foreign-branch";
+          return await Promise.resolve(projectOidc);
+        },
+      },
+      undefined,
+      false,
+      true,
+    );
+    const consume = vi.fn(async (material: { scope: typeof scope; maintenanceUrl: string }) => {
+      expect(material.scope).toEqual(scope);
+      expect(material.maintenanceUrl).toContain(scope.hostname);
+      return await Promise.resolve("ready");
+    });
+    await expect(
+      f.reader.withMaintenanceCredential(selectedContext, selectedScope, consume),
+    ).resolves.toBe("ready");
+    expect(f.approvedOwner).toHaveBeenCalledWith(context, scope, configuration.nativeStore);
+    expect(f.approved).toHaveBeenCalledWith(context, scope);
+  });
+
+  it.each([
+    "token-end",
+    "tool-end:get_postgres_role",
+    "tool-end:get_connection_string",
+    "sql-end",
+    "consume-end",
+  ])("rejects actual approved owner revocation at %s", async (boundary) => {
+    const f = fixture({}, undefined, false, true);
+    const assertLive = async () => {
+      await Promise.resolve();
+      if (f.events.includes(boundary)) {
+        throw new Error("approved owner revoked");
+      }
+    };
+    f.approved.mockImplementation(assertLive);
+    f.approvedOwner.mockImplementation(assertLive);
+    const consume = vi.fn(async () => {
+      f.events.push("consume-start");
+      await Promise.resolve();
+      f.events.push("consume-end");
+      return "must-not-escape";
+    });
+    await expect(f.reader.withMaintenanceCredential(context, scope, consume)).rejects.toThrow(
+      /^Protected Preview Neon MCP credential is unavailable\.$/u,
+    );
+    expect(f.events).toContain(boundary);
+    if (boundary !== "consume-end") {
+      expect(consume).not.toHaveBeenCalled();
+    }
   });
 });
