@@ -164,7 +164,112 @@ describe("canonical schema predecessor recovery", () => {
       code: "canonical_schema_predecessor_unavailable",
       recovery: {
         command: "mise run app:runtime installed spend-review local",
+        diagnostic: "private runtime unavailable",
+        diagnosticLength: 27,
+        diagnosticPresent: true,
+        diagnosticTruncated: false,
         exitCode: 1,
+        outputPresence: { stderr: true, stdout: false },
+        reason: "command-failed",
+        stage: "probe",
+      },
+    });
+    expect(mocks.read).not.toHaveBeenCalled();
+    expect(input.sandbox.writeBinaryFile).not.toHaveBeenCalled();
+  });
+  it("retains only a capped safe summary and output-presence flags for failed commands", async () => {
+    const input = fixture();
+    const jwt = `eyJ${"a".repeat(12)}.eyJ${"b".repeat(12)}.eyJ${"c".repeat(12)}`;
+    input.sandbox.run.mockResolvedValue({
+      exitCode: 1,
+      stderr: [
+        "runtime probe failed",
+        "DATABASE_URL=postgres://private-user:private-password@private-host/private-db?token=secret",
+        "Authorization: Bearer private-bearer",
+        `session=${jwt}`,
+        'provider response: {"receipt":"private-provider-payload","secret":"hidden"}',
+        'provider error: { "nested": {',
+        '  "inner": "private-inner-canary"',
+        "  },",
+        '  "privateOuter": "private-outer-canary"',
+        "} trailing text",
+        "provider error: {",
+        "  message: 'unexpected } token',",
+        "  project: 'private-project-canary',",
+        "}",
+        "provider error details:",
+        "{",
+        '  "installationId": "private-installation-id",',
+        '  "payload": {"token": "private-nested-token"}',
+        "}",
+        `diagnostic ${"x".repeat(1200)}\u0001`,
+      ].join("\n"),
+      stdout: JSON.stringify({ receipt: "never expose stdout receipt" }),
+    });
+    const pending = prepareCanonicalSchemaPredecessorsForSession(input);
+    let failure: SchemaPredecessorError | undefined;
+    try {
+      await pending;
+    } catch (error) {
+      if (error instanceof SchemaPredecessorError) {
+        failure = error;
+      } else {
+        throw error;
+      }
+    }
+    expect(failure).toBeInstanceOf(SchemaPredecessorError);
+    if (!failure) {
+      throw new Error("Expected predecessor probe failure.");
+    }
+    expect(failure.recovery).toMatchObject({
+      command: "mise run app:runtime installed spend-review local",
+      diagnosticPresent: true,
+      diagnosticTruncated: true,
+      exitCode: 1,
+      outputPresence: { stderr: true, stdout: true },
+      reason: "command-failed",
+      stage: "probe",
+    });
+    expect(failure.recovery?.diagnosticLength).toBeGreaterThan(800);
+    if (failure.recovery?.diagnostic === undefined) {
+      throw new Error("Expected a bounded command diagnostic.");
+    }
+    const serialized = JSON.stringify(failure);
+    expect(serialized).not.toContain("private-user");
+    expect(serialized).not.toContain("private-password");
+    expect(serialized).not.toContain("private-host");
+    expect(serialized).not.toContain("private-db");
+    expect(serialized).not.toContain("private-bearer");
+    expect(serialized).not.toContain(jwt);
+    expect(serialized).not.toContain("private-provider-payload");
+    expect(serialized).not.toContain("private-inner-canary");
+    expect(serialized).not.toContain("private-outer-canary");
+    expect(serialized).not.toContain("private-project-canary");
+    expect(serialized).not.toContain("private-installation-id");
+    expect(serialized).not.toContain("private-nested-token");
+    expect(serialized).not.toContain("never expose stdout receipt");
+    expect(serialized).not.toContain("hidden");
+    expect(serialized).not.toContain("\u0001");
+    expect(serialized).toContain("DATABASE_URL=[REDACTED]");
+    expect(serialized).toContain("Authorization: [REDACTED]");
+    expect(serialized).toContain("[JWT REDACTED]");
+    expect(serialized).toContain("[structured output redacted]");
+    expect(serialized).toContain("[truncated]");
+    expect(serialized.length).toBeLessThan(2000);
+    expect(mocks.read).not.toHaveBeenCalled();
+    expect(input.sandbox.writeBinaryFile).not.toHaveBeenCalled();
+  });
+  it("marks a failed probe with no returned output instead of implying output was captured", async () => {
+    const input = fixture();
+    input.sandbox.run.mockResolvedValue({ exitCode: 1, stderr: "", stdout: "" });
+    await expect(prepareCanonicalSchemaPredecessorsForSession(input)).rejects.toMatchObject({
+      recovery: {
+        command: "mise run app:runtime installed spend-review local",
+        diagnosticLength: 0,
+        diagnosticPresent: false,
+        diagnosticTruncated: false,
+        exitCode: 1,
+        outputPresence: { stderr: false, stdout: false },
         reason: "command-failed",
         stage: "probe",
       },
@@ -209,21 +314,34 @@ describe("canonical schema predecessor recovery", () => {
       ),
     );
     const recovery = prepareCanonicalSchemaPredecessorsForSession(input);
-    await expect(recovery).rejects.toMatchObject({
-      recovery: {
-        command: "mise run app:runtime installed spend-review local",
-        exitCode: null,
-        reason: "execution-failed",
-        stage: "probe",
-      },
-    });
-    await expect(recovery).rejects.toThrow("observation command failed before schema compilation");
+    let failure: SchemaPredecessorError | undefined;
     try {
       await recovery;
     } catch (error) {
-      expect(error).toBeInstanceOf(SchemaPredecessorError);
-      expect(JSON.stringify(error)).not.toContain("private-");
+      if (error instanceof SchemaPredecessorError) {
+        failure = error;
+      } else {
+        throw error;
+      }
     }
+    expect(failure).toBeInstanceOf(SchemaPredecessorError);
+    if (!failure) {
+      throw new Error("Expected predecessor probe failure.");
+    }
+    expect(failure.recovery).toMatchObject({
+      command: "mise run app:runtime installed spend-review local",
+      diagnosticPresent: true,
+      diagnosticTruncated: false,
+      exitCode: null,
+      outputPresence: { stderr: false, stdout: false },
+      reason: "execution-failed",
+      stage: "probe",
+    });
+    expect(failure.recovery?.diagnosticLength).toBeGreaterThan(0);
+    expect(failure.message).toContain("observation command failed before schema compilation");
+    expect(JSON.stringify(failure)).not.toContain("private-");
+    expect(JSON.stringify(failure)).toContain("[URL REDACTED]");
+    expect(JSON.stringify(failure)).toContain("token=[REDACTED]");
     expect(mocks.read).not.toHaveBeenCalled();
     expect(input.sandbox.writeBinaryFile).not.toHaveBeenCalled();
   });

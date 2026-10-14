@@ -5,6 +5,7 @@ import { z } from "zod";
 import { runSequentially } from "../async-sequential";
 import { localRuntimeEnvironmentPath } from "../repository/runtime-environment";
 import { safeSourcePath } from "../repository/source-path";
+import { boundedCommandDiagnostic } from "./command-output";
 import {
   canonicalSchemaPredecessorState,
   rememberCanonicalSchemaRelease,
@@ -63,6 +64,11 @@ export interface SchemaPredecessorRecovery {
     | "write-failed";
   command?: string;
   exitCode?: number | null;
+  diagnostic?: string;
+  diagnosticPresent?: boolean;
+  diagnosticLength?: number;
+  diagnosticTruncated?: boolean;
+  outputPresence?: { stdout: boolean; stderr: boolean };
 }
 /* oxlint-enable sonarjs/max-union-size */
 const recoveryProblem = (recovery: SchemaPredecessorRecovery | undefined): string => {
@@ -82,6 +88,25 @@ const recoveryProblem = (recovery: SchemaPredecessorRecovery | undefined): strin
       "The retained compiled release lookup failed under the current owner and saved session. Restore private artifact access, then retry; this failure does not establish missing artifact history.",
   };
   return problems[recovery.stage];
+};
+const recoveryDiagnosticFields = (
+  summary: ReturnType<typeof boundedCommandDiagnostic>,
+): Pick<
+  SchemaPredecessorRecovery,
+  "diagnostic" | "diagnosticLength" | "diagnosticPresent" | "diagnosticTruncated"
+> => {
+  const fields: Pick<
+    SchemaPredecessorRecovery,
+    "diagnostic" | "diagnosticLength" | "diagnosticPresent" | "diagnosticTruncated"
+  > = {
+    diagnosticLength: summary.length,
+    diagnosticPresent: summary.present,
+    diagnosticTruncated: summary.truncated,
+  };
+  if (summary.present) {
+    fields.diagnostic = summary.diagnostic;
+  }
+  return fields;
 };
 export class SchemaPredecessorError extends Error {
   readonly code: "canonical_schema_predecessor_unavailable" | "schema_release_identity_reused";
@@ -161,19 +186,41 @@ export const prepareCanonicalSchemaPredecessorsForSession = async (
       env: { APP_RUNTIME_STATE_DIR: directory },
       workingDirectory: input.root,
     });
-  } catch {
+  } catch (error) {
     input.signal?.throwIfAborted();
+    const summary = boundedCommandDiagnostic(
+      error instanceof Error ? error.message : String(error),
+    );
     throw new SchemaPredecessorError("canonical_schema_predecessor_unavailable", {
       command,
+      ...recoveryDiagnosticFields(summary),
       exitCode: null,
+      outputPresence: { stderr: false, stdout: false },
       reason: "execution-failed",
       stage: "probe",
     });
   }
   if (observed.exitCode !== 0) {
+    const stdoutPresent = observed.stdout.length > 0;
+    const stderrPresent = observed.stderr.length > 0;
+    const stderr = boundedCommandDiagnostic(observed.stderr);
+    let summary = stderr;
+    if (!stderr.present) {
+      if (stdoutPresent) {
+        summary = boundedCommandDiagnostic(
+          "Command produced stdout; suppressed because it may contain a receipt.",
+        );
+      } else if (stderrPresent) {
+        summary = boundedCommandDiagnostic(
+          "Command produced stderr, but its contents were redacted.",
+        );
+      }
+    }
     throw new SchemaPredecessorError("canonical_schema_predecessor_unavailable", {
       command,
+      ...recoveryDiagnosticFields(summary),
       exitCode: observed.exitCode,
+      outputPresence: { stderr: stderrPresent, stdout: stdoutPresent },
       reason: "command-failed",
       stage: "probe",
     });

@@ -234,6 +234,40 @@ describe("private app schema release compilation", () => {
       expect(JSON.stringify(result)).not.toContain("private-session");
     },
   );
+  it("surfaces only the bounded predecessor command summary and never runs the compiler on probe failure", async () => {
+    const recovery = {
+      command: "mise run app:runtime installed spend-review local",
+      diagnostic: "could not connect to local runtime; DATABASE_URL=[REDACTED]",
+      exitCode: 1,
+      outputPresence: { stderr: true, stdout: true },
+      reason: "command-failed" as const,
+      stage: "probe" as const,
+    };
+    hooks.predecessor.mockRejectedValue(
+      new SchemaPredecessorError("canonical_schema_predecessor_unavailable", recovery),
+    );
+    const sandbox = { run: vi.fn(), writeBinaryFile: vi.fn() };
+    const ctx = {
+      abortSignal: new AbortController().signal,
+      callId: "predecessor-diagnostic",
+      getSandbox: async () => await Promise.resolve(sandbox),
+      session: { auth: { owned: "private-session" }, id: "saved-private-session" },
+    };
+    // SAFETY: The existing identity defineTool fixture exposes the real execute method; every consumed context field is supplied.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The production compile tool never reads other Eve context fields in this fixture.
+    const result = await compileTool.execute({}, ctx as never);
+    expect(result).toMatchObject({
+      command: recovery.command,
+      compilerExecuted: false,
+      exitCode: 1,
+      recovery,
+      status: "failed",
+    });
+    expect(JSON.stringify(result)).toContain("failed before schema compilation");
+    expect(sandbox.run).not.toHaveBeenCalled();
+    expect(sandbox.writeBinaryFile).not.toHaveBeenCalled();
+  });
+
   it("retains restoration diagnostics after the compiler has actually completed", async () => {
     const recovery = { reason: "write-failed" as const, stage: "restore" as const };
     const result = await compileAppSchemaRelease({
