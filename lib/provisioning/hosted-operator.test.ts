@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { observeOperatorExecutionStage } from "./hosted-operator-consent-diagnostic";
+import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
 import { composeHostedOperatorAuthorizationDependencies } from "./hosted-operator-composition";
 /* oxlint-disable eslint/require-await, eslint/no-await-in-loop, sonarjs/no-hardcoded-passwords, unicorn/no-await-expression-member -- Synthetic service adapters and credentials only; plan replacements run sequentially against one journal. */
 import { once } from "node:events";
@@ -2368,5 +2370,151 @@ describe("private observation within the approved operator effect", () => {
     };
     expect((await f.client.request(request)).code).toBe(expectedCode);
     expect(observed).toBe(false);
+  });
+});
+
+describe("closed prepare pre-effect diagnostics", () => {
+  it.each([
+    "owner_authorization",
+    "journal_read",
+    "provider_authorization",
+    "approval_authorization",
+    "approval_read",
+    "lease_claim",
+  ] as const)("reports %s without changing public errors or entering effects", async (stage) => {
+    const f = fixture();
+    const request = await prepared(f);
+    f.approve();
+    const before = structuredClone(f.row);
+    const privateError = new TypeError("private-sdk-request private-token private-user-id");
+    const fail = async () => {
+      throw privateError;
+    };
+    switch (stage) {
+      case "owner_authorization": {
+        f.deps.authorize = fail;
+        break;
+      }
+      case "journal_read": {
+        f.deps.store.read = fail;
+        break;
+      }
+      case "provider_authorization": {
+        f.deps.assertAuthorized = fail;
+        break;
+      }
+      case "approval_authorization": {
+        f.deps.assertAuthorized = vi
+          .fn<ProtectedHostedOperatorDependencies["assertAuthorized"]>()
+          .mockImplementationOnce(async () => {})
+          .mockRejectedValue(privateError);
+        break;
+      }
+      case "approval_read": {
+        f.deps.readApproval = fail;
+        break;
+      }
+      case "lease_claim": {
+        f.deps.store.compareAndSet = fail;
+        break;
+      }
+      default: {
+        throw new Error("Unexpected closed execution stage");
+      }
+    }
+    const lease = vi.spyOn(f.deps, "withResourceLease");
+    const approval = vi.spyOn(f.deps, "readApproval");
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      expect(await f.client.request(request)).toMatchObject({
+        status: "blocked",
+        code: "operator_unavailable",
+      });
+      expect(log.mock.calls).toContainEqual([
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({
+          boundary: "operator",
+          stage: "operator_request",
+          executionFailure: { stage, errorClass: "type_error" },
+        }),
+      ]);
+      expect(JSON.stringify(log.mock.calls)).not.toContain("planningFailure");
+      const output = JSON.stringify(log.mock.calls);
+      for (const privateValue of [
+        privateError.message,
+        "private-token",
+        "private-user-id",
+        selection.sessionId,
+        request.callId,
+        request.operationRef,
+        request.planDigest,
+      ]) {
+        expect(output).not.toContain(privateValue);
+      }
+      expect(f.row).toEqual(before);
+      expect(lease).not.toHaveBeenCalled();
+      expect(f.deps.executeEffect).not.toHaveBeenCalled();
+      if (
+        [
+          "owner_authorization",
+          "journal_read",
+          "provider_authorization",
+          "approval_authorization",
+        ].includes(stage)
+      ) {
+        expect(approval).not.toHaveBeenCalled();
+      }
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("retains authoritative approval validation and its original denial", async () => {
+    const f = fixture();
+    const request = await prepared(f);
+    const before = structuredClone(f.row);
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      expect(await f.client.request(request)).toMatchObject({ code: "authorization_required" });
+      expect(log.mock.calls).toContainEqual([
+        "[builder:hosted-neon-consent]",
+        expect.objectContaining({
+          executionFailure: {
+            stage: "approval_read",
+            errorClass: "operator_error",
+            code: "authorization_required",
+          },
+        }),
+      ]);
+      expect(f.row).toEqual(before);
+      expect(f.deps.executeEffect).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("preserves the exact thrown SDK error and ignores diagnostic sink failures", async () => {
+    const privateError = Object.assign(new Error("private-sdk-request private-token"), {
+      code: "42501",
+    });
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>(() => {
+      throw new Error("private-sink-failure");
+    });
+    await expect(
+      observeOperatorExecutionStage(
+        selection.sessionId,
+        "approval_read",
+        () => {
+          throw privateError;
+        },
+        sink,
+      ),
+    ).rejects.toBe(privateError);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executionFailure: { stage: "approval_read", errorClass: "unexpected", sqlState: "42501" },
+      }),
+    );
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(privateError.message);
   });
 });
