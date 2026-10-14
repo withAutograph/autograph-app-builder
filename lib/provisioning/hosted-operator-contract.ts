@@ -816,7 +816,7 @@ export const operatorAuthSchemaPreparationSchema = z.strictObject({
   targetDigest: digest,
 });
 export type OperatorAuthSchemaPreparation = z.infer<typeof operatorAuthSchemaPreparationSchema>;
-export const retainedAppDeliverySchema = z.strictObject({
+export const retainedAppDeliverySchema = z.object({
   branch: id,
   delivery: hostedOperatorPlanDataSchema.shape.delivery,
   deliveryCandidates: operatorDeploymentCandidatesSchema,

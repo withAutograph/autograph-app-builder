@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { selectExactCompiledOperatorRelease } from "./hosted-operator-artifact-selection";
+import {
+  compiledOperatorReleaseSelectionSchema,
+  selectExactCompiledOperatorRelease,
+} from "./hosted-operator-artifact-selection";
 import type { CompiledOperatorReleaseSelection } from "./hosted-operator-artifact-selection";
 
 const release = (letter: string): CompiledOperatorReleaseSelection => ({
@@ -78,4 +81,42 @@ describe("exact retained compiled release identity", () => {
       selectExactCompiledOperatorRelease([release("c")], { artifactRef: release("a").artifactRef }),
     ).toBeUndefined();
   });
+});
+
+it("accepts additive source and selection metadata without changing exact release selection", () => {
+  const selected = release("a");
+  const input = {
+    ...selected,
+    advisory: "Release label",
+    publishedSource: {
+      branch: "codex/reviewed-app",
+      changeSetDigest: "b".repeat(64),
+      gitSha: "c".repeat(40),
+      gitTree: "d".repeat(40),
+      repositoryId: "owned-repository",
+      reviewDigest: "e".repeat(64),
+      advisory: { label: "Published source" },
+    },
+  };
+  const parsed = compiledOperatorReleaseSelectionSchema.parse(input);
+  expect(
+    selectExactCompiledOperatorRelease([input], {
+      appSpecDigest: selected.appSpecDigest,
+      artifactRef: selected.artifactRef,
+    }),
+  ).toMatchObject({ ...selected, publishedSource: { gitSha: input.publishedSource.gitSha } });
+  expect(parsed).not.toHaveProperty("advisory");
+  expect(parsed.publishedSource).not.toHaveProperty("advisory");
+  expect(
+    selectExactCompiledOperatorRelease([input], {
+      appSpecDigest: "f".repeat(64),
+      artifactRef: selected.artifactRef,
+    }),
+  ).toBeUndefined();
+  expect(() =>
+    compiledOperatorReleaseSelectionSchema.parse({
+      ...input,
+      publishedSource: { ...input.publishedSource, reviewDigest: "invalid" },
+    }),
+  ).toThrow();
 });

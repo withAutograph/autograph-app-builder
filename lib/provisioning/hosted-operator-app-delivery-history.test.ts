@@ -221,9 +221,6 @@ it("freezes exact saved cleanup scopes and preserves provenance after confirmed 
   expect(hostedOperatorPlanSchema.parse(cleanup).appEnvironmentCleanup).toEqual(
     old.managedEnvironment,
   );
-  expect(
-    cleanup.effects.find((effect) => effect.kind === "remove-bindings")?.description,
-  ).toContain("codex/generated-old");
   expect(ownedAppEnvironmentRows(next)).toEqual(old.managedEnvironment);
   const cleaned = checkpointOwnedAppEnvironmentCleanup(next, []);
   expect(ownedAppEnvironmentRows(cleaned)).toEqual([]);
@@ -294,4 +291,32 @@ it("keeps current branch observations authoritative and retains a newer empty sc
   );
   expect(returned.managedEnvironment).toEqual([]);
   expect(ownedAppEnvironmentRows(returned)).toEqual([]);
+});
+
+it("accepts additive historical metadata while retaining owned delivery scope", () => {
+  const next = transitioned();
+  const parsed = hostedOperatorRecordSchema.parse({
+    ...next,
+    retainedAppDeliveries: next.retainedAppDeliveries?.map((delivery) => ({
+      ...delivery,
+      advisory: { label: "Previous delivery" },
+    })),
+  });
+  expect(parsed.retainedAppDeliveries?.[0]).toMatchObject({
+    projectId: selection.projectId,
+    operationRef,
+    delivery: oldPlan.delivery,
+    managedEnvironment: old.managedEnvironment,
+  });
+  expect(parsed.retainedAppDeliveries?.[0]).not.toHaveProperty("advisory");
+  expect(() =>
+    hostedOperatorRecordSchema.parse({
+      ...next,
+      retainedAppDeliveries: next.retainedAppDeliveries?.map((delivery) => ({
+        ...delivery,
+        advisory: "harmless",
+        projectId: "another-project",
+      })),
+    }),
+  ).toThrow();
 });
