@@ -590,13 +590,6 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
       message: "Resources and effects must have distinct identities.",
     });
   }
-  if (plan.publicGateway && plan.publicGateway.branch !== plan.selection.branch) {
-    ctx.addIssue({
-      code: "custom",
-      message: "Public Gateway origin must be bound to the selected Preview branch.",
-      path: ["publicGateway"],
-    });
-  }
   if (plan.deploymentBoundary !== undefined) {
     const boundary = plan.deploymentBoundary;
     const jwks = new URL(boundary.verification.jwksUrl);
@@ -605,7 +598,7 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
         .size !== 3,
       boundary.app.projectId !== plan.selection.projectId,
       boundary.app.branch !== plan.selection.branch,
-      boundary.gateway.branch !== plan.selection.branch,
+      boundary.gateway.branch !== plan.publicGateway?.branch,
       plan.publicGateway === undefined,
       boundary.gateway.projectId !== plan.publicGateway?.projectId,
       boundary.verification.publicOrigin !== plan.publicGateway?.origin,
