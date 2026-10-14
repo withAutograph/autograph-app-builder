@@ -102,6 +102,39 @@ const operatorExecutionFailure = operatorPlanningFailure
   });
 export type OperatorExecutionFailure = z.infer<typeof operatorExecutionFailure>;
 
+const runtimePreparationStage = z.enum([
+  "approval_evaluation",
+  "approval_module_loading",
+  "module_loading",
+  "input_validation",
+  "client_resolution",
+  "prior_approval",
+  "operator_execute",
+  "identity_read",
+  "result_mapping",
+]);
+export type RuntimePreparationStage = z.infer<typeof runtimePreparationStage>;
+const runtimePreparationFailure = z.strictObject({
+  stage: runtimePreparationStage,
+  errorClass: z.enum([
+    "operator_error",
+    "validation_error",
+    "type_error",
+    "abort_error",
+    "timeout_error",
+    "unexpected",
+  ]),
+  code: operatorPublicResultSchema.shape.code.unwrap().optional(),
+  moduleCode: z
+    .enum([
+      "ERR_MODULE_NOT_FOUND",
+      "MODULE_NOT_FOUND",
+      "ERR_PACKAGE_PATH_NOT_EXPORTED",
+      "ERR_UNKNOWN_FILE_EXTENSION",
+    ])
+    .optional(),
+});
+
 const boundary = z.enum(["builder", "operator"]);
 const phase = z.enum(["inline", "check", "start", "complete"]);
 const stage = z.enum([
@@ -312,6 +345,19 @@ const metadata = z.strictObject({
       module: z.enum(["database", "handoff", "session", "membership"]),
     })
     .optional(),
+  operatorAction: z
+    .enum([
+      "plan",
+      "execute",
+      "status",
+      "bindings",
+      "auth-identity-input",
+      "resolve-preview-target",
+      "neon-authorization",
+    ])
+    .optional(),
+  preparationStage: runtimePreparationStage.optional(),
+  preparationFailure: runtimePreparationFailure.optional(),
   phase,
   planningFailure: operatorPlanningFailure.optional(),
   executionFailure: operatorExecutionFailure.optional(),
@@ -564,5 +610,80 @@ export const reportOperatorNeonMcpFailure = (
     });
   } catch {
     /* Diagnostics cannot change credential authorization or expose hostile exception properties. */
+  }
+};
+
+/** Closed preparation failure only; hostile exception fields and failing sinks never affect behavior. */
+export const reportRuntimePreparationFailure = (
+  sessionId: string,
+  preparationStage: RuntimePreparationStage,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Untrusted caught exceptions enter only closed classification schemas.
+  error: unknown,
+  sink?: HostedOperatorConsentDiagnosticSink,
+): void => {
+  const failure: z.infer<typeof runtimePreparationFailure> = {
+    stage: preparationStage,
+    errorClass: "unexpected",
+  };
+  try {
+    if (error instanceof HostedOperatorError) {
+      failure.errorClass = "operator_error";
+    } else if (error instanceof z.ZodError) {
+      failure.errorClass = "validation_error";
+    } else if (error instanceof TypeError) {
+      failure.errorClass = "type_error";
+    }
+    if (
+      failure.errorClass === "unexpected" &&
+      (error instanceof Error || error instanceof DOMException)
+    ) {
+      const name = z.enum(["AbortError", "TimeoutError"]).safeParse(error.name);
+      if (name.success) {
+        failure.errorClass = name.data === "AbortError" ? "abort_error" : "timeout_error";
+      }
+    }
+    const code: unknown = Object.getOwnPropertyDescriptor(error, "code")?.value;
+    const operatorCode = runtimePreparationFailure.shape.code.safeParse(code);
+    if (failure.errorClass === "operator_error" && operatorCode.success) {
+      failure.code = operatorCode.data;
+    }
+    const moduleCode = runtimePreparationFailure.shape.moduleCode.safeParse(code);
+    if (moduleCode.success) {
+      failure.moduleCode = moduleCode.data;
+    }
+  } catch {
+    /* Exception introspection must never replace the original result. */
+  }
+  try {
+    createHostedOperatorConsentDiagnostic(
+      sessionId,
+      sink,
+    )({
+      boundary: "builder",
+      outcome: "setup_unavailable",
+      phase: "inline",
+      stage: "operator_request",
+      preparationFailure: failure,
+    });
+  } catch {
+    /* Failure reporting is advisory. */
+  }
+};
+
+/** Step entry evidence with no invocation payload. */
+export const reportRuntimePreparationStarted = (
+  sessionId: string,
+  preparationStage: RuntimePreparationStage,
+): void => {
+  try {
+    createHostedOperatorConsentDiagnostic(sessionId)({
+      boundary: "builder",
+      outcome: "started",
+      phase: "inline",
+      stage: "operator_request",
+      preparationStage,
+    });
+  } catch {
+    /* Diagnostics never prevent entry into the original step. */
   }
 };

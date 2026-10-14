@@ -8,6 +8,7 @@ import {
   reportOperatorPlanningMismatch,
   observeOperatorPlanStage,
   observeOperatorExecutionStage,
+  reportRuntimePreparationFailure,
 } from "./hosted-operator-consent-diagnostic";
 import type {
   HostedOperatorConsentDiagnosticSink,
@@ -768,4 +769,71 @@ it("does not let a diagnostic sink failure replace the original execution failur
       },
     ),
   ).rejects.toBe(error);
+});
+
+it.each([
+  [
+    "module_loading",
+    Object.assign(new Error(secret), { code: "ERR_MODULE_NOT_FOUND" }),
+    "unexpected",
+    undefined,
+    "ERR_MODULE_NOT_FOUND",
+  ],
+  ["input_validation", new z.ZodError([]), "validation_error", undefined, undefined],
+  [
+    "prior_approval",
+    new HostedOperatorError("resource_mismatch"),
+    "operator_error",
+    "resource_mismatch",
+    undefined,
+  ],
+  ["operator_execute", new TypeError(secret), "type_error", undefined, undefined],
+  ["operator_execute", new DOMException(secret, "AbortError"), "abort_error", undefined, undefined],
+  [
+    "prior_approval",
+    new DOMException(secret, "TimeoutError"),
+    "timeout_error",
+    undefined,
+    undefined,
+  ],
+] as const)(
+  "reports closed preparation classification at %s without private values",
+  (stage, error, errorClass, code, moduleCode) => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    reportRuntimePreparationFailure("private-session", stage, error, sink);
+    expect(sink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        boundary: "builder",
+        preparationFailure: {
+          stage,
+          errorClass,
+          ...(code === undefined ? {} : { code }),
+          ...(moduleCode === undefined ? {} : { moduleCode }),
+        },
+      }),
+    );
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+    expect(JSON.stringify(sink.mock.calls)).not.toContain("private-session");
+  },
+);
+it("keeps preparation failure reporting nonthrowing for hostile errors and throwing sinks", () => {
+  const hostile = new Proxy(
+    {},
+    {
+      getOwnPropertyDescriptor() {
+        throw new Error(secret);
+      },
+    },
+  );
+  const sink = vi.fn<HostedOperatorConsentDiagnosticSink>(() => {
+    throw new Error(secret);
+  });
+  expect(() => {
+    reportRuntimePreparationFailure("private-session", "client_resolution", hostile, sink);
+  }).not.toThrow();
+  expect(sink).toHaveBeenCalledWith(
+    expect.objectContaining({
+      preparationFailure: { stage: "client_resolution", errorClass: "unexpected" },
+    }),
+  );
 });

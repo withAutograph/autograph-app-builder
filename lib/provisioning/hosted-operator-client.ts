@@ -69,6 +69,20 @@ export const createHostedOperatorClient = (input: {
         ? request
         : { ...request, ownerContext: input.ownerContext };
     const body = operatorRequestSchema.parse(bodyInput);
+    const isConsentRequest = body.action === "neon-authorization";
+    const diagnosticSessionId =
+      body.action === "neon-authorization" || body.action === "resolve-preview-target"
+        ? body.sessionId
+        : body.selection.sessionId;
+    const diagnosticPhase = isConsentRequest ? body.phase : "inline";
+    const report = createHostedOperatorConsentDiagnostic(diagnosticSessionId);
+    report({
+      boundary: "builder",
+      stage: "operator_request",
+      outcome: "started",
+      phase: diagnosticPhase,
+      operatorAction: body.action,
+    });
     const token = await input.token();
     const response = await (input.fetch ?? fetch)(new URL("/v1/runtime", url), {
       body: JSON.stringify(body),
@@ -81,13 +95,6 @@ export const createHostedOperatorClient = (input: {
       redirect: "error",
       signal,
     });
-    const isConsentRequest = body.action === "neon-authorization";
-    const diagnosticSessionId =
-      body.action === "neon-authorization" || body.action === "resolve-preview-target"
-        ? body.sessionId
-        : body.selection.sessionId;
-    const diagnosticPhase = isConsentRequest ? body.phase : "inline";
-    const report = createHostedOperatorConsentDiagnostic(diagnosticSessionId);
     const emit = (accessClass: NonNullable<HostedOperatorConsentMetadata["accessClass"]>) => {
       const vercelError = response.headers.get("x-vercel-error");
       let outcome: HostedOperatorConsentMetadata["outcome"] = "operator_access_denied";
@@ -100,6 +107,7 @@ export const createHostedOperatorClient = (input: {
       const metadata: HostedOperatorConsentMetadata = {
         accessClass,
         boundary: "builder",
+        operatorAction: body.action,
         httpStatus: response.status,
         outcome,
         phase: diagnosticPhase,

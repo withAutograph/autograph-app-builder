@@ -1,3 +1,8 @@
+import {
+  reportRuntimePreparationFailure,
+  reportRuntimePreparationStarted,
+} from "../provisioning/hosted-operator-consent-diagnostic";
+import type { RuntimePreparationStage } from "../provisioning/hosted-operator-consent-diagnostic";
 import type { WorkflowStepToolContext } from "eve/tools";
 import type {
   HostedOperatorError as HostedOperatorErrorType,
@@ -55,8 +60,10 @@ export const prepareHostedRuntimeWithOperator = async (
   const participantPlan =
     input.plan.stage === "auth-participants" && input.plan.normalActorProgram !== undefined;
   let identityRequested = false;
+  let stage: RuntimePreparationStage = "input_validation";
   const requestIdentity = async () => {
     identityRequested = true;
+    stage = "identity_read";
     return await operator.authIdentityInput(
       {
         action: "auth-identity-input",
@@ -82,6 +89,7 @@ export const prepareHostedRuntimeWithOperator = async (
     ) {
       throw createResourceMismatch();
     }
+    stage = "operator_execute";
     const result = await operator.request(
       {
         action: "execute",
@@ -92,6 +100,7 @@ export const prepareHostedRuntimeWithOperator = async (
       },
       ctx.abortSignal,
     );
+    stage = "result_mapping";
     if (
       result.operationRef !== undefined &&
       ["prepared", "pending", "auth-schema-prepared", "participants-prepared"].includes(
@@ -115,6 +124,7 @@ export const prepareHostedRuntimeWithOperator = async (
     const identityInput = needsIdentity ? await requestIdentity() : null;
     return { identityInput, result };
   } catch (error) {
+    reportRuntimePreparationFailure(ctx.session.id, stage, error);
     const result = {
       appId: input.appId,
       authenticatedBehavior: "unassessed" as const,
@@ -145,6 +155,8 @@ export async function prepareHostedRuntimeStep(
 ) {
   "use step";
   let isHostedOperatorError = noHostedOperatorError;
+  let stage: RuntimePreparationStage = "module_loading";
+  reportRuntimePreparationStarted(ctx.session.id, stage);
   const blockedPreparation = (error: Error) => ({
     identityInput: null,
     result: {
@@ -164,16 +176,20 @@ export async function prepareHostedRuntimeStep(
     ]);
     isHostedOperatorError = (error): error is HostedOperatorErrorType =>
       error instanceof contract.HostedOperatorError;
+    stage = "input_validation";
     const approvalInput = priorApprovalModule.hostedRuntimePreparationInputSchema.parse(input);
+    stage = "client_resolution";
     const operator = await clientModule.hostedOperatorClientForSession(
       ctx.session.auth,
       ctx.session.id,
     );
+    stage = "prior_approval";
     const retainedApproval = await priorApprovalModule.readHostedRuntimePriorApproval(
       approvalInput,
       ctx,
       operator,
     );
+    stage = "operator_execute";
     return await prepareHostedRuntimeWithOperator(
       approvalInput,
       { ...ctx, callId: retainedApproval?.callId ?? ctx.callId },
@@ -193,6 +209,7 @@ export async function prepareHostedRuntimeStep(
       },
     );
   } catch (error) {
+    reportRuntimePreparationFailure(ctx.session.id, stage, error);
     return blockedPreparation(
       error instanceof Error ? error : new Error("Unknown hosted runtime preparation failure"),
     );

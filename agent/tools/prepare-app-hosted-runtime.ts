@@ -1,3 +1,7 @@
+import {
+  reportRuntimePreparationFailure,
+  reportRuntimePreparationStarted,
+} from "../../lib/provisioning/hosted-operator-consent-diagnostic";
 import type { ToolInputRequest, WorkflowToolContext } from "eve/tools";
 import { defineWorkflowTool } from "eve/tools";
 import type { ApprovalContext, ApprovalStatus } from "eve/tools/approval";
@@ -77,10 +81,12 @@ export const evaluateHostedRuntimePreparationApproval = async (
   if (ctx.toolInput === undefined) {
     return "user-approval";
   }
+  reportRuntimePreparationStarted(ctx.session.id, "approval_evaluation");
   try {
     const retained = await readPrior(ctx.toolInput, ctx);
     return retained === null ? "user-approval" : "not-applicable";
-  } catch {
+  } catch (error) {
+    reportRuntimePreparationFailure(ctx.session.id, "approval_evaluation", error);
     return {
       type: "denied",
       reason:
@@ -94,13 +100,15 @@ export async function hostedRuntimePreparationApproval(
   ctx: ApprovalContext<HostedRuntimeApprovalEnvelope>,
 ): Promise<ApprovalStatus> {
   "use step";
+  reportRuntimePreparationStarted(ctx.session.id, "approval_module_loading");
   try {
     const prior = await import("../../lib/agent/hosted-runtime-prior-approval");
     return await evaluateHostedRuntimePreparationApproval(
       ctx,
       prior.readHostedRuntimePriorApproval,
     );
-  } catch {
+  } catch (error) {
+    reportRuntimePreparationFailure(ctx.session.id, "approval_module_loading", error);
     return {
       type: "denied",
       reason: "Saved preparation authority is unavailable. Retry when access is restored.",
