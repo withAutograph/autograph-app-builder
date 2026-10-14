@@ -5,7 +5,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 import { HostedOperatorError, hostedOperatorPlanSchema } from "./hosted-operator-contract";
-import type { HostedOperatorWorkerEffectContext } from "./hosted-operator-service";
+import type {
+  HostedOperatorWorkerEffectContext,
+  RecordWorkerCheckpoint,
+} from "./hosted-operator-service";
 import {
   buildProtectedInstallContext,
   buildResourceBootstrapContext,
@@ -912,7 +915,12 @@ describe("resource bootstrap launcher", () => {
     const f = makeFixture();
     const input = { ...resourceInput(), readbackOnly: true as const };
     const resourceContext = buildResourceBootstrapContext(input);
-    const bindWorkerContext = vi.fn(async () => {});
+    const recordWorkerCheckpoint: RecordWorkerCheckpoint = async (checkpoint) => {
+      f.records.push(checkpoint);
+    };
+    const bindWorkerContext = vi.fn<HostedOperatorWorkerEffectContext["bindWorkerContext"]>(
+      async () => recordWorkerCheckpoint,
+    );
     const digest = createHash("sha256").update(JSON.stringify(resourceContext)).digest("hex");
     const original = f.sandbox.runCommand.getMockImplementation()!;
     f.sandbox.runCommand.mockImplementation(async (options) => {
