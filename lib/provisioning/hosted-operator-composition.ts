@@ -1,3 +1,4 @@
+import { inspectParticipantBootstrapPreparation } from "./hosted-operator-participant-bootstrap";
 import { createHostedOperatorConsentOwner } from "./hosted-operator-consent-owner";
 import {
   createHostedOperatorNeonAuthorization,
@@ -1103,33 +1104,9 @@ export const composeHostedOperatorDependencies = (
         repoId: configuration.gateway.repoId,
       },
     });
-    let participantsBootstrapPrepared = false;
-    if (
+    const participantsBootstrapPrepared =
       gatewayPlan.normalActorProgram !== undefined &&
-      current?.record.operator?.authPreparation !== undefined
-    ) {
-      const known = current.record.operator;
-      const gateway = known.gatewayDeliveryCandidates?.find(
-        (candidate) =>
-          candidate.deploymentId === known.deliveredGatewayDeploymentId &&
-          candidate.readyState === "READY",
-      );
-      if (
-        gateway !== undefined &&
-        known.plan.effects.every((effect) =>
-          known.receipts.some((observedReceipt) => observedReceipt.effectId === effect.id),
-        )
-      ) {
-        await authReadiness.verify({
-          ...context,
-          plan: known.plan,
-          assertCurrent: async () => {
-            await controlPlane.assertPlanningAuthorized(context);
-          },
-        });
-        participantsBootstrapPrepared = true;
-      }
-    }
+      inspectParticipantBootstrapPreparation(gatewayPlan, current?.record).gatewayPrepared;
     return await observe(
       "identity_plan_resolution",
       async () =>
