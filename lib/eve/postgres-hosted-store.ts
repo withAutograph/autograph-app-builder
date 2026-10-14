@@ -1,15 +1,5 @@
-import { HostedCheckpointObservationConflictError } from "./hosted-checkpoint-observation-conflict-error";
-import { approvedBuildDecisionSchema } from "../agent/approved-build-continuation";
-import { and, count, desc, eq, inArray, lte, ne, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import { z } from "zod";
-
-import type * as databaseSchema from "../db/schema";
-import { agentOperations, agentSessions } from "../db/schema";
-import { eveSessionResultSchema, sessionStatusSchema } from "../mcp/contracts";
-import { hostedPrincipalSchema, tenantKeyFor } from "./hosted-auth";
-import type { HostedPrincipal } from "./hosted-auth";
 import {
+  isProvedSessionLimitResponse,
   hostedOperationRecordSchema,
   hostedCheckpointRefSchema,
   durableHostedSessionRecordSchema,
@@ -22,6 +12,17 @@ import {
   succeededStartAlias,
   assertExistingStartSession,
 } from "./hosted-store";
+import { HostedCheckpointObservationConflictError } from "./hosted-checkpoint-observation-conflict-error";
+import { approvedBuildDecisionSchema } from "../agent/approved-build-continuation";
+import { and, count, desc, eq, inArray, lte, ne, sql } from "drizzle-orm";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { z } from "zod";
+
+import type * as databaseSchema from "../db/schema";
+import { agentOperations, agentSessions } from "../db/schema";
+import { eveSessionResultSchema, sessionStatusSchema } from "../mcp/contracts";
+import { hostedPrincipalSchema, tenantKeyFor } from "./hosted-auth";
+import type { HostedPrincipal } from "./hosted-auth";
 import type { HostedEveStore, HostedOperationRecord, HostedSessionRecord } from "./hosted-store";
 import { mergePrivateHostedApprovalReceipts } from "./private-hosted-approval";
 import { createPostgresHostedCheckpointHistory } from "./postgres-hosted-checkpoint-history";
@@ -997,7 +998,21 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           operation.state === "submission_unknown" &&
           operation.internalBuildContinuation?.deliveredTurnId !== undefined &&
           operation.internalBuildContinuation.deliveredMessageSequence !== undefined;
-        if (operation.state !== "reserved" && !replayableStart && !deliveredInternal) {
+        const current =
+          operation.internalSessionLimitResponse !== undefined && operation.sessionId !== undefined
+            ? await sessionById(transaction, principal, operation.sessionId, true)
+            : null;
+        const provedResponse = isProvedSessionLimitResponse(
+          operation,
+          current,
+          input.sessionLimitResolution,
+        );
+        if (
+          operation.state !== "reserved" &&
+          !replayableStart &&
+          !deliveredInternal &&
+          !(operation.state === "submission_unknown" && provedResponse)
+        ) {
           throw new Error(OPERATION_CANNOT_SETTLE);
         }
         const result = eveSessionResultSchema.parse(input.result);

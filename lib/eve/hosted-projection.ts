@@ -1,3 +1,4 @@
+import { privateInputStateSchema } from "./session-limit-input";
 import { z } from "zod";
 
 import {
@@ -19,6 +20,7 @@ import type { InternalEveEvent } from "./public-events";
 const hostedSnapshotSchema = z
   .object({
     events: z.array(z.unknown()),
+    privateInputState: privateInputStateSchema.optional(),
     prototype: publicPrototypeSchema.optional(),
     status: sessionStatusSchema,
     uiPreview: publicUiPreviewSchema.optional(),

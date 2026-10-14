@@ -1,4 +1,9 @@
 import {
+  internalSessionLimitResponseSchema,
+  provesSessionLimitResponse,
+  privateInputStateSchema,
+} from "./session-limit-input";
+import {
   approvedBuildDecisionSchema,
   internalBuildContinuationSchema,
 } from "../agent/approved-build-continuation";
@@ -91,6 +96,7 @@ export const hostedSessionCheckpointSchema = z
     // New checkpoints and every public projection omit this retired field.
     implementationPlan: z.unknown().optional(),
     inputRequests: z.array(publicInputRequestSchema).max(32).optional(),
+    privateInputState: privateInputStateSchema.optional(),
     prototype: publicPrototypeSchema.optional(),
     status: sessionStatusSchema,
     truncatedBeforeIndex: z.number().int().nonnegative().optional(),
@@ -464,6 +470,7 @@ const hostedOperationCommonShape = {
   clientRequestId: z.string().min(1).max(200),
   createdAtEpochMs: z.number().int().nonnegative(),
   internalBuildContinuation: internalBuildContinuationSchema.optional(),
+  internalSessionLimitResponse: internalSessionLimitResponseSchema.optional(),
   kind: hostedOperationKindSchema,
   operationId: z.string().min(1).max(200),
   principal: hostedPrincipalSchema,
@@ -563,7 +570,11 @@ export const hostedOperationRecordSchema = z
         });
       }
     }
-  });
+  })
+  .refine(
+    (record) => record.internalSessionLimitResponse === undefined || record.kind === "respond",
+    "Only RESPOND can bind framework continuation input.",
+  );
 
 export type HostedOperationRecord = z.infer<typeof hostedOperationRecordSchema>;
 const START_ALIAS_CANNOT_BIND = "The original start request cannot bind this canonical result.";
@@ -630,6 +641,33 @@ export const isDeliveredInternalContinuation = (operation: HostedOperationRecord
   operation.state === "submission_unknown" &&
   operation.internalBuildContinuation?.deliveredTurnId !== undefined &&
   operation.internalBuildContinuation.deliveredMessageSequence !== undefined;
+
+/** Unknown RESPOND is terminal only with exact typed resolution and the current owned adapter binding. */
+export const isProvedSessionLimitResponse = (
+  operation: HostedOperationRecord,
+  current: HostedSessionRecord | null,
+  proof: z.infer<typeof privateInputStateSchema> | undefined,
+): boolean => {
+  if (
+    operation.kind !== "respond" ||
+    operation.internalSessionLimitResponse === undefined ||
+    current === null ||
+    proof === undefined
+  )
+    return false;
+  if (
+    operation.sessionId !== current.sessionId ||
+    tenantKeyFor(operation.principal) !== tenantKeyFor(current.principal)
+  )
+    return false;
+  const durable = toDurableHostedSessionRecord(current);
+  const marker = operation.internalSessionLimitResponse;
+  return (
+    durable.adapterSessionId === marker.adapterSessionId &&
+    durable.adapterGeneration === marker.adapterGeneration &&
+    provesSessionLimitResponse(marker, privateInputStateSchema.parse(proof))
+  );
+};
 
 const maySettleHostedOperation = (operation: HostedOperationRecord): boolean =>
   operation.state === "reserved" ||
@@ -730,6 +768,7 @@ export interface HostedEveStore {
     requestDigest: string;
     result: z.infer<typeof eveSessionResultSchema>;
     session?: HostedSessionRecord;
+    sessionLimitResolution?: z.infer<typeof privateInputStateSchema>;
     nowEpochMs: number;
   }) => Promise<HostedOperationRecord>;
   settleSucceededPaged?: (input: {
@@ -950,7 +989,14 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     if (operation === undefined || operation.requestDigest !== input.requestDigest) {
       throw new Error("Hosted operation cannot settle at this digest.");
     }
-    if (!maySettleHostedOperation(operation)) {
+    const provedResponse = await this.provedSessionLimitResponse(
+      operation,
+      input.sessionLimitResolution,
+    );
+    if (
+      !maySettleHostedOperation(operation) &&
+      !(operation.state === "submission_unknown" && provedResponse)
+    ) {
       throw new Error("Hosted operation cannot settle at this digest.");
     }
     const result = eveSessionResultSchema.parse(input.result);
@@ -1266,6 +1312,16 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     });
     this.sessions.set(key, structuredClone(replaced));
     return structuredClone(replaced);
+  }
+
+  private async provedSessionLimitResponse(
+    operation: HostedOperationRecord,
+    proof: z.infer<typeof privateInputStateSchema> | undefined,
+  ): Promise<boolean> {
+    if (operation.internalSessionLimitResponse === undefined || operation.sessionId === undefined)
+      return false;
+    const current = await this.getSession(operation.principal, operation.sessionId);
+    return isProvedSessionLimitResponse(operation, current, proof);
   }
 
   private requireReserved(input: {

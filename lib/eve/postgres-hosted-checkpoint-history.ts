@@ -1,3 +1,4 @@
+import { privateInputStateSchema } from "./session-limit-input";
 import { createHash, randomUUID } from "node:crypto";
 
 import { and, asc, eq, gt, isNull, lt, sql } from "drizzle-orm";
@@ -51,6 +52,7 @@ export const pagedCheckpointMetadataSchema = z.strictObject({
   // published atomically with the complete public event prefix.
   nativeObservationState: nativeObservationStateSchema.optional(),
   privateApprovalCaptureState: privateHostedApprovalCaptureStateSchema.optional(),
+  privateInputState: privateInputStateSchema.optional(),
   prototype: publicPrototypeSchema.optional(),
   prototypeRef: publicPrototypeReferenceSchema.optional(),
   status: sessionStatusSchema,

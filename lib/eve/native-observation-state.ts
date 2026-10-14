@@ -1,3 +1,4 @@
+import { privateInputStateSchema } from "./session-limit-input";
 import { z } from "zod";
 import {
   publicInputRequestSchema,
@@ -31,6 +32,7 @@ export const nativeObservationStateSchema = z.strictObject({
   invalidInput: z.boolean(),
   nextNativeIndex: z.number().int().nonnegative(),
   pendingRequests: z.array(publicInputRequestSchema),
+  privateInputState: privateInputStateSchema.optional(),
   prototypeProjector: installedPrototypeProjectorStateSchema,
   prototypeReference: installedPrototypeReferenceStateSchema,
   publicEventCount: z.number().int().nonnegative(),
