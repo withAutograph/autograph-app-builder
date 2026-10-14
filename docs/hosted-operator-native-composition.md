@@ -33,6 +33,12 @@ branch references; native Neon store/project/branch/endpoint;
 actual operator/workload OIDC identities; immutable Sandbox image and worker
 IDs/SHA256s; Auth/app database and role names; public browser/issuer origins;
 and restricted application roles. Secrets and SQL URLs are never plan inputs.
+The private planning tool resolves the configured Preview project and branch
+through the protected operator. Resolution rechecks the original session owner,
+membership and current provider project access; it performs no resource effects
+and needs no compiled release. Repository deployment metadata cannot substitute
+for this target. An explicit conflicting project or branch remains rejected,
+with only the authorized target returned privately for recovery.
 Existing Gateway signing and Better Auth secrets, actual provider-injected
 `VERCEL_DEPLOYMENT_ID`, and independently observed
 `AUTH_PRODUCTION_DATABASE_IDENTITY` are setup prerequisites. No Production

@@ -20,6 +20,7 @@ import {
   operatorPublicResultSchema,
   operatorAuthIdentityInputSchema,
   operatorRequestSchema,
+  operatorSelectionSchema,
   restrictedOperatorEnvironment,
   sameOperatorSelection,
 } from "./hosted-operator-contract";
@@ -73,7 +74,10 @@ export const createHostedOperatorClient = (input: {
       signal,
     });
     const isConsentRequest = body.action === "neon-authorization";
-    const diagnosticSessionId = isConsentRequest ? body.sessionId : body.selection.sessionId;
+    const diagnosticSessionId =
+      body.action === "neon-authorization" || body.action === "resolve-preview-target"
+        ? body.sessionId
+        : body.selection.sessionId;
     const diagnosticPhase = isConsentRequest ? body.phase : "inline";
     const report = createHostedOperatorConsentDiagnostic(diagnosticSessionId);
     const emit = (accessClass: NonNullable<HostedOperatorConsentMetadata["accessClass"]>) => {
@@ -108,8 +112,7 @@ export const createHostedOperatorClient = (input: {
         await reportHostedOperatorCallerWorkload({
           httpStatus: response.status,
           phase: diagnosticPhase,
-          sessionId:
-            body.action === "neon-authorization" ? body.sessionId : body.selection.sessionId,
+          sessionId: diagnosticSessionId,
           token,
         });
       }
@@ -207,11 +210,27 @@ export const createHostedOperatorClient = (input: {
         throw new HostedOperatorError("operator_unavailable");
       }
     },
+    async resolvePreviewTarget(
+      request: Extract<OperatorRequest, { action: "resolve-preview-target" }>,
+      signal?: AbortSignal,
+    ) {
+      const raw = await send(request, signal);
+      const blocked = operatorPublicResultSchema.safeParse(raw);
+      if (blocked.success) {
+        throw new HostedOperatorError(blocked.data.code ?? "operator_unavailable");
+      }
+      const selection = operatorSelectionSchema.parse(raw);
+      if (selection.appId !== request.appId || selection.sessionId !== request.sessionId) {
+        throw new HostedOperatorError("resource_mismatch");
+      }
+      return selection;
+    },
     ownerContext: input.ownerContext,
     async request(
       request: Exclude<
         OperatorRequest,
-        { action: "bindings" | "auth-identity-input" | "neon-authorization" }
+        | { action: "bindings" | "auth-identity-input" | "neon-authorization" }
+        | { action: "resolve-preview-target" }
       >,
       signal?: AbortSignal,
     ) {

@@ -2133,3 +2133,74 @@ describe("native bindings integration", () => {
     expect(refreshed.nativePreview?.gateway).toEqual(replacement);
   });
 });
+
+describe("read-only configured Preview target resolution", () => {
+  const resolveRequest = () =>
+    new Request("https://operator.example/v1/runtime", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "resolve-preview-target",
+        appId: selection.appId,
+        sessionId: selection.sessionId,
+        ownerContext,
+      }),
+    });
+  it("returns only the authorized nonsecret selection without journal or effect calls", async () => {
+    const f = fixture();
+    f.deps.resolvePreviewTarget = vi.fn(async () => ({ authority, ownerContext, target }));
+    const planCall = vi.spyOn(f.deps, "plan");
+    const journalRead = vi.spyOn(f.deps.store, "read");
+    const effectCall = vi.spyOn(f.deps, "executeEffect");
+    const result = await createProtectedHostedOperatorHandler(f.deps)(resolveRequest());
+    expect(await result.json()).toEqual(selection);
+    expect(planCall).not.toHaveBeenCalled();
+    expect(journalRead).not.toHaveBeenCalled();
+    expect(effectCall).not.toHaveBeenCalled();
+    expect(f.row).toBeUndefined();
+  });
+  it("fails only a resolver request when the adapter does not implement metadata resolution", async () => {
+    const f = fixture();
+    const result = await createProtectedHostedOperatorHandler(f.deps)(resolveRequest());
+    expect(await result.json()).toMatchObject({
+      appId: selection.appId,
+      status: "blocked",
+      code: "protected_operator_required",
+    });
+  });
+  it.each(["appId", "sessionId"] as const)(
+    "does not disclose a result for another %s",
+    async (field) => {
+      const f = fixture();
+      f.deps.resolvePreviewTarget = async () => ({
+        authority,
+        target: { ...target, [field]: "other" },
+      });
+      const result = await createProtectedHostedOperatorHandler(f.deps)(resolveRequest());
+      expect(await result.json()).toMatchObject({
+        status: "blocked",
+        code: "authorization_required",
+      });
+    },
+  );
+  it("does not disclose a Production target", async () => {
+    const f = fixture();
+    const invalidTarget = { ...target };
+    Object.defineProperty(invalidTarget, "environment", { value: "production" });
+    f.deps.resolvePreviewTarget = async () => ({ authority, target: invalidTarget });
+    const result = await createProtectedHostedOperatorHandler(f.deps)(resolveRequest());
+    expect(await result.json()).toMatchObject({ status: "blocked" });
+  });
+  it("preserves authorization denial and creates no journal", async () => {
+    const f = fixture();
+    f.deps.resolvePreviewTarget = async () => {
+      throw new HostedOperatorError("authorization_required");
+    };
+    const result = await createProtectedHostedOperatorHandler(f.deps)(resolveRequest());
+    expect(await result.json()).toMatchObject({
+      status: "blocked",
+      code: "authorization_required",
+    });
+    expect(f.row).toBeUndefined();
+  });
+});
