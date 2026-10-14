@@ -1467,3 +1467,34 @@ it("preserves interleaved pending prototype calls across private serializable ch
     expect(projector.current()).toEqual(latestInstalledPrototype(events.slice(0, index + 1)));
   }
 });
+
+it("marks a typed framework session limit privately and keeps it out of public confirmations", () => {
+  const projected = projectInstalledEveEvent(
+    installedEvent({
+      data: {
+        requests: [
+          {
+            action: { input: {}, kind: "tool-call", toolName: "session_limit_continuation" },
+            allowFreeform: false,
+            kind: "session-limit",
+            options: [
+              { id: "continue", label: "Continue" },
+              { id: "stop", label: "Stop" },
+            ],
+            prompt: "Framework session budget",
+            requestId: "native-framework-limit",
+          },
+        ],
+      },
+      type: "input.requested",
+    }),
+    3,
+  );
+  expect(projected).toHaveLength(1);
+  expect(projected[0]).toMatchObject({
+    frameworkSessionLimit: true,
+    index: 3,
+    type: "input.requested",
+  });
+  expect(toPublicEvent(projected[0])).toBeNull();
+});
