@@ -1265,10 +1265,13 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                 ),
               };
               // Always inspect before first execution as well as uncertain retry. Provider timeouts cannot create new identities.
-              const observed = await deps.reconcile(effectInput);
-              if (observed.status === "unknown") {
-                throw new HostedOperatorError("reconciliation_required");
-              }
+              const observed = await observePrepare("effect_reconciliation", async () => {
+                const result = await deps.reconcile(effectInput);
+                if (result.status === "unknown") {
+                  throw new HostedOperatorError("reconciliation_required");
+                }
+                return result;
+              });
               let receipt: OperatorReceipt;
               if (observed.status === "applied") {
                 receipt = observed.receipt;
