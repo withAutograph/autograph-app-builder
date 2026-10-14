@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { defineState } from "eve/context";
 
+import type { AppDescription } from "@/lib/repository/app-description";
 import type { UiPreviewInput, UiPreviewTransfer } from "@/lib/agent/ui-preview";
 import type { PreparedSandboxWorkspace } from "@/lib/repository/supported-template";
 import type { TargetIdentity, TargetProposal } from "@/lib/repository/target-planning";
@@ -260,6 +261,7 @@ export interface ExistingDraftUpdateBinding {
 }
 
 type ReviewedPhase = WorkspacePhase & {
+  appBackendKind?: AppDescription["backend"]["kind"];
   appSpec: AcceptedAppSpec;
   dependencyReceipt: DependencyPreparationReceipt;
   identityReceipt: TargetIdentityReceipt;
@@ -353,6 +355,7 @@ export type AppBuilderWorkflowState =
   | ({
       version: typeof APP_BUILDER_WORKFLOW_VERSION;
       phase: "validated";
+      appBackendKind?: AppDescription["backend"]["kind"];
       appSpec: AcceptedAppSpec;
       dependencyReceipt: DependencyPreparationReceipt;
       identityReceipt: TargetIdentityReceipt;

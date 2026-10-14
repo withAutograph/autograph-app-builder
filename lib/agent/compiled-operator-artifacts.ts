@@ -26,6 +26,7 @@ import type {
   PublishedAppSource,
 } from "../provisioning/hosted-operator-artifact-selection";
 import { describeSelectedApp } from "../repository/app-description";
+import type { AppDescription } from "../repository/app-description";
 
 /** Validates an internal approved root before adapting the fixed repository-relative capture API. */
 export const compiledArtifactSandboxRelativePath = (root: string): string => {
@@ -184,8 +185,17 @@ const openCompiledArtifactStorage = async (
 
 /** Associate the verified Git result with the same owned selected release; no Git or deployment effect. */
 export const recordPublishedOperatorSourceForSession = async (
-  input: CompiledOperatorArtifactSessionInput & { publishedSource: PublishedAppSource },
-): Promise<CompiledOperatorReleaseSelection> => {
+  input: CompiledOperatorArtifactSessionInput & {
+    publishedSource: PublishedAppSource;
+    backendKind?: AppDescription["backend"]["kind"];
+  },
+): Promise<
+  { status: "not-required" } | { status: "recorded"; selection: CompiledOperatorReleaseSelection }
+> => {
+  if (input.backendKind === "static") {
+    assertApprovedCompilation(input);
+    return { status: "not-required" };
+  }
   const binding = await resolveCompiledArtifactSession(input);
   const storage = await openCompiledArtifactStorage(binding);
   const selected = await storage.selections.read(binding.context, input.appSpecDigest);
@@ -193,10 +203,11 @@ export const recordPublishedOperatorSourceForSession = async (
     throw operatorArtifactUnavailable();
   }
   await binding.assertCurrentOwner(binding.context);
-  return await storage.selections.record(binding.context, input.callId, {
+  const selection = await storage.selections.record(binding.context, input.callId, {
     ...selected,
     publishedSource: input.publishedSource,
   });
+  return { selection, status: "recorded" };
 };
 
 /** Read only the exact retained release named by actual installed identity or a saved owned reference. */

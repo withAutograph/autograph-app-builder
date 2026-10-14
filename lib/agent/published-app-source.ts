@@ -1,3 +1,4 @@
+import type { AppDescription } from "../repository/app-description";
 import type { ReconciliationReviewReceipt } from "../repository/github-draft-reconciliation";
 import type { ExistingDraftObservation } from "../repository/github-draft-update";
 import type { DraftPullRequestSuccessReceipt } from "../repository/github-publication";
@@ -40,6 +41,7 @@ export const recordPublishedAppSourceForSession = async (
   input: CompiledOperatorArtifactSessionInput & {
     publication: PublishedAppSourceResult;
     review: PublishedAppSourceReview;
+    backendKind?: AppDescription["backend"]["kind"];
     reconciliationReview?: Pick<ReconciliationReviewReceipt, "digest">;
   },
 ) => {

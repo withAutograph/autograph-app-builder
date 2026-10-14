@@ -60,9 +60,10 @@ export default defineTool({
       review: state.reviewReceipt,
     });
     try {
-      await recordPublishedAppSourceForSession({
+      const recording = await recordPublishedAppSourceForSession({
         appId: state.appSpec.appId,
         appSpecDigest: state.appSpec.digest,
+        backendKind: state.appBackendKind,
         root: state.applyReceipt.applyRoot,
         adapterSessionId: ctx.session.id,
         sessionAuth: ctx.session.auth,
@@ -70,7 +71,7 @@ export default defineTool({
         review: state.reviewReceipt,
         publication,
       });
-      return { ...publication, appSourceRecording: { status: "recorded" as const } };
+      return { ...publication, appSourceRecording: { status: recording.status } };
     } catch {
       return {
         ...publication,

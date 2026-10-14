@@ -8,6 +8,7 @@ import { expect, it } from "vitest";
 import { generateText, Output } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { z } from "zod";
+import type { AppDescription } from "../repository/app-description";
 import { createAppValidationTool } from "../../agent/tools/validate_app_creation";
 import { createChangeSetAcceptanceTool } from "../../agent/tools/accept_change_set";
 import { appBuilderWorkflowState, APP_BUILDER_WORKFLOW_VERSION, sha256 } from "./workflow-state";
@@ -21,6 +22,13 @@ import { assessProductSource, unavailableSourceAssessment } from "./product-sour
 import { deriveNormalizedChangeSet } from "../repository/reviewed-change-set";
 import { createTargetValidationAttempt, validationBinding } from "../repository/target-validation";
 import type { TargetApplyReceipt } from "../repository/target-apply";
+
+const staticDescription: AppDescription = {
+  app: { id: "example", routes: [], workspacePath: "apps/example" },
+  backend: { kind: "static" },
+  validation: { browser: null, check: { task: "check" }, test: { shards: 1, task: "test" } },
+  version: 1,
+};
 
 const appSpec = {
   acceptedByCallId: "accepted",
@@ -145,8 +153,7 @@ it("repeated intermediate validation executes technical checks and returns defer
       },
       async describeApp() {
         boundaries.push("describe");
-        // oxlint-disable-next-line typescript/no-confusing-void-expression, unicorn/no-useless-undefined -- The faithful describe port returns an absent description, matching its documented optional result.
-        return await Promise.resolve(z.undefined().parse(undefined));
+        return await Promise.resolve(staticDescription);
       },
       async executeValidation(input) {
         expect(input.environment).toEqual(compilerInput);
@@ -274,8 +281,7 @@ it("final acceptance runs an independent local model assessment and reuses only 
       },
       async describeApp() {
         validationBoundaries.push("describe");
-        // oxlint-disable-next-line typescript/no-confusing-void-expression, unicorn/no-useless-undefined -- Optional repository descriptions can be absent in the local fixture.
-        return await Promise.resolve(z.undefined().parse(undefined));
+        return await Promise.resolve(staticDescription);
       },
       async executeValidation() {
         validationBoundaries.push("commands");
@@ -299,7 +305,15 @@ it("final acceptance runs an independent local model assessment and reuses only 
       "browser",
     ]);
     expect(model.doGenerateCalls).toHaveLength(0);
+    expect(appBuilderWorkflowState.get()).toMatchObject({
+      phase: "validated",
+      appBackendKind: "static",
+    });
     const first = await tool.execute({}, context("final-first"));
+    expect(appBuilderWorkflowState.get()).toMatchObject({
+      phase: "reviewed",
+      appBackendKind: "static",
+    });
     expect(first).toMatchObject({
       sourceAssessment: { reviewCompleted: true, status: "unassessed" },
     });

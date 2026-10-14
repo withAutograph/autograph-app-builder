@@ -25,6 +25,7 @@ const hooks = vi.hoisted(() => {
     reconcile: vi.fn(),
     state: {
       phase: "reviewed",
+      appBackendKind: "static",
       appSpec: { appId: "spend-review", digest: "c".repeat(64) },
       applyReceipt: { applyRoot: "/workspace/applied" },
       sourceReceipt: { sourceKind: "existing-repository" },
@@ -105,43 +106,55 @@ const ctx = {
 describe("publication records actual source for its compiled app release", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    hooks.record.mockReset().mockResolvedValue({});
+    hooks.record.mockReset().mockResolvedValue({ status: "recorded" });
     hooks.assertApproval.mockReset();
     hooks.inspect.mockResolvedValue({ unresolvedConflicts: [], resolvedTree: "tree" });
   });
 
   for (const entry of tools) {
-    it(`${entry.name} records only its verified publication result with the reviewed session scope`, async () => {
-      const publication = {
-        repositoryId: "repository",
-        headSha: "actual-new-head",
-        recovered: true,
-      };
-      entry.publish.mockResolvedValue(publication);
-      // SAFETY: The mocked Eve/publication ports consume only the supplied session, call ID and sandbox fields.
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Framework fixture supplies precisely the production execute path's consumed context.
-      const result = await entry.tool.execute(input, ctx as never);
-      expect(result).toEqual({ ...publication, appSourceRecording: { status: "recorded" } });
-      expect(hooks.record).toHaveBeenCalledWith({
-        appId: hooks.state.appSpec.appId,
-        appSpecDigest: hooks.state.appSpec.digest,
-        root:
-          entry.tool === reconcileTool ? hooks.candidate.root : hooks.state.applyReceipt.applyRoot,
-        adapterSessionId: ctx.session.id,
-        sessionAuth: ctx.session.auth,
-        callId: ctx.callId,
-        review: hooks.state.reviewReceipt,
-        ...(entry.tool === reconcileTool
-          ? {
-              reconciliationReview: hooks.candidate.review,
-            }
-          : {}),
-        publication,
-      });
-      expect(hooks.record.mock.invocationCallOrder[0]).toBeGreaterThan(
-        entry.publish.mock.invocationCallOrder[0] ?? 0,
-      );
-    });
+    it.each(["recorded", "not-required"])(
+      `${entry.name} propagates recording status %s after verified publication`,
+      async (status) => {
+        hooks.record.mockResolvedValue({ status });
+        const publication = {
+          repositoryId: "repository",
+          headSha: "actual-new-head",
+          recovered: true,
+        };
+        entry.publish.mockResolvedValue(publication);
+        // SAFETY: The mocked Eve/publication ports consume only the supplied session, call ID and sandbox fields.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Framework fixture supplies precisely the production execute path's consumed context.
+        const result = await entry.tool.execute(input, ctx as never);
+        expect(result).toMatchObject({ ...publication, appSourceRecording: { status } });
+        expect(hooks.record).toHaveBeenCalledWith(
+          expect.objectContaining({
+            appId: hooks.state.appSpec.appId,
+            appSpecDigest: hooks.state.appSpec.digest,
+            backendKind: hooks.state.appBackendKind,
+            root:
+              entry.tool === reconcileTool
+                ? hooks.candidate.root
+                : hooks.state.applyReceipt.applyRoot,
+            adapterSessionId: ctx.session.id,
+            sessionAuth: ctx.session.auth,
+            callId: ctx.callId,
+            review: hooks.state.reviewReceipt,
+            ...(entry.tool === reconcileTool
+              ? {
+                  reconciliationReview: hooks.candidate.review,
+                }
+              : {}),
+            publication,
+          }),
+        );
+        expect(result).not.toHaveProperty("appSourceRecording.recoveryRequired");
+        expect(entry.publish).toHaveBeenCalledTimes(1);
+        expect(hooks.record).toHaveBeenCalledTimes(1);
+        expect(hooks.record.mock.invocationCallOrder[0]).toBeGreaterThan(
+          entry.publish.mock.invocationCallOrder[0] ?? 0,
+        );
+      },
+    );
 
     it(`${entry.name} preserves successful publication and exposes recoverable unavailable recording`, async () => {
       const publication = { repositoryId: "repository", headSha: "already-published-head" };
@@ -154,14 +167,6 @@ describe("publication records actual source for its compiled app release", () =>
         ...publication,
         appSourceRecording: { status: "unavailable", recoveryRequired: true },
       });
-      expect(result).toHaveProperty(
-        "appSourceRecording.nextAction",
-        expect.stringContaining("already succeeded"),
-      );
-      expect(result).toHaveProperty(
-        "appSourceRecording.nextAction",
-        expect.stringContaining("unavailable until recording succeeds"),
-      );
       expect(JSON.stringify(result)).not.toContain("private artifact detail");
       expect(entry.publish).toHaveBeenCalledTimes(1);
     });

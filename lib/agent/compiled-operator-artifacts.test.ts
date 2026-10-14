@@ -7,6 +7,7 @@ import {
   publishCompiledOperatorArtifactsForSession,
   recordPublishedOperatorSourceForSession,
 } from "./compiled-operator-artifacts";
+import type { AppDescription } from "../repository/app-description";
 import type { OperatorArtifactContext } from "../provisioning/hosted-operator-artifact-store";
 import type { CompiledOperatorReleaseSelection } from "../provisioning/hosted-operator-artifact-selection";
 import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
@@ -182,7 +183,7 @@ describe("owned compiled artifact workflow hook", () => {
     const input = frame();
     await expect(
       recordPublishedOperatorSourceForSession({ ...input, publishedSource }),
-    ).resolves.toEqual({ ...selected, publishedSource });
+    ).resolves.toMatchObject({ status: "recorded", selection: { ...selected, publishedSource } });
     const context = { authority, target: { appId: input.appId, sessionId: "durable-original" } };
     expect(mocks.readSelection).toHaveBeenCalledWith(context, digest);
     expect(mocks.record).toHaveBeenCalledWith(context, input.callId, {
@@ -192,24 +193,53 @@ describe("owned compiled artifact workflow hook", () => {
     expect(input.sandbox.run).not.toHaveBeenCalled();
     expect(input.sandbox.readBinaryFile).not.toHaveBeenCalled();
   });
-  it("does not manufacture a compiled tuple when publication has no selected release", async () => {
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing selected release is the actual reader's optional undefined result.
-    mocks.readSelection.mockResolvedValue(undefined);
-    await expect(
-      recordPublishedOperatorSourceForSession({
-        ...frame(),
-        publishedSource: {
-          branch: "reviewed-fixture",
-          changeSetDigest: digest,
-          gitSha: "a".repeat(40),
-          gitTree: "b".repeat(40),
-          repositoryId: "4242",
-          reviewDigest: digest,
-        },
-      }),
-    ).rejects.toThrow("artifact is unavailable");
+  it("does not require compiled storage for a descriptor-classified static app", async () => {
+    const input = frame();
+    const result = await recordPublishedOperatorSourceForSession({
+      ...input,
+      backendKind: "static",
+      publishedSource: {
+        branch: "reviewed-static",
+        changeSetDigest: digest,
+        gitSha: "a".repeat(40),
+        gitTree: "b".repeat(40),
+        repositoryId: "4242",
+        reviewDigest: digest,
+      },
+    });
+    expect(result.status).toBe("not-required");
+    expect(mocks.resolve).not.toHaveBeenCalled();
+    expect(mocks.readSelection).not.toHaveBeenCalled();
     expect(mocks.record).not.toHaveBeenCalled();
+    expect(input.sandbox.run).not.toHaveBeenCalled();
+    expect(input.sandbox.readBinaryFile).not.toHaveBeenCalled();
   });
+  const requiredOrUnknownBackends: (AppDescription["backend"]["kind"] | undefined)[] = [
+    "generated-postgres",
+    undefined,
+  ];
+  it.each(requiredOrUnknownBackends)(
+    "does not classify absent compiled selection as static for backend %s",
+    async (backendKind) => {
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing selected release is the actual reader's optional undefined result.
+      mocks.readSelection.mockResolvedValue(undefined);
+      await expect(
+        recordPublishedOperatorSourceForSession({
+          ...frame(),
+          backendKind,
+          publishedSource: {
+            branch: "reviewed-fixture",
+            changeSetDigest: digest,
+            gitSha: "a".repeat(40),
+            gitTree: "b".repeat(40),
+            repositoryId: "4242",
+            reviewDigest: digest,
+          },
+        }),
+      ).rejects.toThrow("artifact is unavailable");
+      expect(mocks.record).not.toHaveBeenCalled();
+    },
+  );
   it("does not record publication after the current owner changes during selection read", async () => {
     mocks.readSelection.mockImplementation(async () => {
       mocks.owner = { ...mocks.owner, adapterGeneration: 2 };

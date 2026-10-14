@@ -92,9 +92,10 @@ export default defineTool({
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
     const publication = await runtime.reconcileExistingDraft({ contentSource, proposal, review });
     try {
-      await recordPublishedAppSourceForSession({
+      const recording = await recordPublishedAppSourceForSession({
         appId: state.appSpec.appId,
         appSpecDigest: state.appSpec.digest,
+        backendKind: state.appBackendKind,
         root: candidate.root,
         adapterSessionId: ctx.session.id,
         sessionAuth: ctx.session.auth,
@@ -103,7 +104,7 @@ export default defineTool({
         reconciliationReview: review,
         publication,
       });
-      return { ...publication, appSourceRecording: { status: "recorded" as const } };
+      return { ...publication, appSourceRecording: { status: recording.status } };
     } catch {
       return {
         ...publication,

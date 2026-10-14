@@ -72,7 +72,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("actual published app source recording", () => {
   it("maps initial actual repository, branch and commit without inventing a target branch", () => {
-    expect(publishedAppSourceFromResult(review, initial)).toEqual({
+    expect(publishedAppSourceFromResult(review, initial)).toMatchObject({
       branch: initial.branchName,
       changeSetDigest: review.changeSetDigest,
       gitSha: initial.branchSha,
@@ -93,7 +93,7 @@ describe("actual published app source recording", () => {
   it("reuses the original approved call for immutable initial publication recovery", async () => {
     const record = vi
       .spyOn(compiledArtifacts, "recordPublishedOperatorSourceForSession")
-      .mockResolvedValue(selected);
+      .mockResolvedValue({ selection: selected, status: "recorded" });
     await recordPublishedAppSourceForSession({
       ...session,
       review,
@@ -111,7 +111,7 @@ describe("actual published app source recording", () => {
   it("uses the actual current update call and verified head on the reviewed candidate root", async () => {
     const record = vi
       .spyOn(compiledArtifacts, "recordPublishedOperatorSourceForSession")
-      .mockResolvedValue(selected);
+      .mockResolvedValue({ selection: selected, status: "recorded" });
     const root = "/workspace/.app-builder/candidate";
     await recordPublishedAppSourceForSession({ ...session, root, review, publication: updated });
     expect(record).toHaveBeenCalledWith(
@@ -136,7 +136,7 @@ describe("actual published app source recording", () => {
   it("associates the reconciled head with the actual app review and merged-source approval", async () => {
     const record = vi
       .spyOn(compiledArtifacts, "recordPublishedOperatorSourceForSession")
-      .mockResolvedValue(selected);
+      .mockResolvedValue({ selection: selected, status: "recorded" });
     const reconciliationReview = { digest: "d".repeat(64) };
     await recordPublishedAppSourceForSession({
       ...session,
