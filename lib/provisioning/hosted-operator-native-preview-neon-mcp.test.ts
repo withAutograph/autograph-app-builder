@@ -341,7 +341,9 @@ const fixture = (
         ...config,
         transport: { ...config.transport, fetch: fixtureFetch, url: `${origin}/mcp` },
       });
-      close.mockImplementation(async () => await client.close());
+      close.mockImplementation(async () => {
+        await client.close();
+      });
       return { callTool: client.callTool.bind(client), close };
     },
     getOidc: async () => await Promise.resolve(projectOidc),

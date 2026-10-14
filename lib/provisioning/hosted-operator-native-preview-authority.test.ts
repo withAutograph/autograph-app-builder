@@ -230,16 +230,33 @@ const fixture = () => {
     duringGet?.();
     if (url.pathname === `/v9/projects/${nativeStore.sourceProjectId}`) {
       return Response.json({
-        accountId: target.scopeId,
+        accountId: store.ownerId,
         id: nativeStore.sourceProjectId,
         name: "Fixture source project",
       });
     }
-    if (url.pathname === "/v1/storage/stores") {
-      return Response.json({ stores: [store] });
+    const projectIdentity = {
+      id: "env_neon_project",
+      key: "AUTOGRAPH_PREVIEW_SOURCE_NEON_PROJECT_ID",
+      target: ["preview"],
+      contentHint: {
+        type: "integration-store-secret",
+        storeId: store.id,
+        integrationConfigurationId: store.product.integrationConfigurationId,
+      },
+      value: store.externalResourceId,
+    };
+    if (url.pathname === `/v9/projects/${nativeStore.sourceProjectId}/env`) {
+      return Response.json({
+        envs: store.projectsMetadata.some(
+          (project) => project.projectId === nativeStore.sourceProjectId,
+        )
+          ? [projectIdentity]
+          : [],
+      });
     }
-    if (url.pathname === `/v1/storage/stores/${nativeStore.resourceId}`) {
-      return Response.json({ store });
+    if (url.pathname === `/v1/projects/${nativeStore.sourceProjectId}/env/env_neon_project`) {
+      return Response.json(projectIdentity);
     }
     throw new Error("Unexpected provider path");
   });
@@ -288,7 +305,7 @@ describe("concrete native Preview owner and approval callbacks", () => {
       },
       fetch: async (request, init) => {
         const url = new URL(request instanceof Request ? request.url : request);
-        if (url.pathname === "/v1/storage/stores") {
+        if (url.pathname === `/v9/projects/${nativeStore.sourceProjectId}/env`) {
           return Response.json(
             { privateToken: "must-not-log-response", credential: "postgres://secret@private" },
             { status: 403 },
@@ -336,7 +353,7 @@ describe("concrete native Preview owner and approval callbacks", () => {
       },
       fetch: async (request, init) => {
         const url = new URL(request instanceof Request ? request.url : request);
-        if (url.pathname === "/v1/storage/stores") {
+        if (url.pathname === `/v9/projects/${nativeStore.sourceProjectId}/env`) {
           return Response.json({}, { status: 403 });
         }
         return await f.fetcher(request, init);
