@@ -21,6 +21,17 @@ import type {
   RecordWorkerCheckpoint,
 } from "./hosted-operator-service";
 
+import { observeOperatorExecutionStage } from "./hosted-operator-consent-diagnostic";
+import type {
+  HostedOperatorConsentDiagnosticSink,
+  OperatorExecutionFailure,
+} from "./hosted-operator-consent-diagnostic";
+
+type LauncherExecution = Pick<
+  OperatorExecutionFailure,
+  "stage" | "mode" | "commandExit" | "protocol" | "workerFailure"
+>;
+
 const MAX_PROTOCOL_FRAME_BYTES = 1024 * 1024;
 const SPOOL_ROOT = "/vercel/sandbox/protected-installer";
 const INITIAL_SANDBOX_TIMEOUT_MS = 15 * 60_000;
@@ -897,6 +908,7 @@ const runSandboxWorker = async (
   configuration: HostedOperatorSandboxConfiguration,
   createSandbox: CreateSandbox,
   input: SandboxWorkerInput,
+  execution: LauncherExecution,
 ) => {
   const runId =
     input.readbackOnly === true ? randomUUID() : workerRunIdSchema.parse(input.workerAttemptId);
@@ -1185,6 +1197,7 @@ const runSandboxWorker = async (
         if (fact.failure_code === undefined) {
           throw resourceMismatch();
         }
+        execution.workerFailure = fact.failure_code;
         terminal = true;
         if (unknownSeen || fact.failure_code === "readback_unknown") {
           throw reconciliationRequired();
@@ -1213,7 +1226,7 @@ const runSandboxWorker = async (
   };
 
   const processAuthorityNotice = async (frameId: number) => {
-    if (frameId !== expectedAuthorityFrame || terminal || !started) {
+    if (frameId !== expectedAuthorityFrame || terminal) {
       throw resourceMismatch();
     }
     const directory = path.posix.join(SPOOL_ROOT, runId, "requests");
@@ -1231,6 +1244,9 @@ const runSandboxWorker = async (
     );
     const fence = fenceRequestSchema.safeParse(requestValue);
     if (fence.success) {
+      if (!started && input.readbackOnly !== true) {
+        throw resourceMismatch();
+      }
       const request = fence.data;
       if (
         unknownSeen ||
@@ -1257,6 +1273,9 @@ const runSandboxWorker = async (
       );
       expectedAuthorityFrame += 1;
       return;
+    }
+    if (!started) {
+      throw resourceMismatch();
     }
     const authorization = authorizationRequestSchema.safeParse(requestValue);
     if (authorization.success) {
@@ -1395,6 +1414,7 @@ const runSandboxWorker = async (
     }, JOURNAL_LEASE_RENEWAL_INTERVAL_MS);
     await input.assertCurrent();
     const create = createSandbox;
+    execution.stage = "sandbox_create";
     sandbox = await create({
       env: {},
       ...hostedOperatorSandboxSourceOptions(configuration),
@@ -1425,7 +1445,9 @@ const runSandboxWorker = async (
       })();
     }, SANDBOX_RENEWAL_INTERVAL_MS);
 
+    execution.stage = "worker_pin";
     await verifyWorkerPin(sandbox, worker, signal);
+    execution.stage = "spool_setup";
     await input.assertCurrent();
     const spool = path.posix.join(SPOOL_ROOT, runId);
     const startup = path.posix.join(spool, "startup");
@@ -1576,6 +1598,7 @@ const runSandboxWorker = async (
     )
       ? [releaseDirectory]
       : ["--release-directory", releaseDirectory];
+    execution.stage = "command_start";
     command = await sandbox.runCommand({
       args: [
         worker.subcommand,
@@ -1591,20 +1614,32 @@ const runSandboxWorker = async (
       env: {},
       signal,
     });
+    execution.stage = "command_stream";
     const runningCommand = command;
     for await (const log of runningCommand.logs({ signal })) {
       if (log.stream === "stderr") {
         continue;
       }
+      execution.stage = "worker_protocol";
       await processOutputChunk(log.data);
+      execution.stage = "command_stream";
     }
+    execution.stage = "worker_protocol";
     if (bufferedStdout.length !== 0) {
       throw resourceMismatch();
     }
+    execution.stage = "command_wait";
     const finished = await runningCommand.wait({ signal });
+    execution.commandExit = finished.exitCode === 0 ? "zero" : "nonzero";
     if (finished.exitCode !== 0 || !started || !succeeded || !terminal || unknownSeen) {
+      if (unknownSeen) {
+        execution.protocol = "unknown";
+      } else if (!started || !succeeded || !terminal) {
+        execution.protocol = "incomplete";
+      }
       throw unknownSeen ? reconciliationRequired() : unavailable();
     }
+    execution.stage = "readback";
     if (input.readbackOnly === true && (access || installReadback || membership)) {
       await input.assertCurrent();
       const observed = accessReadbackSchema.parse(
@@ -1661,6 +1696,9 @@ const runSandboxWorker = async (
       }
     }
     if (sandbox !== undefined) {
+      if (operationError === null) {
+        execution.stage = "sandbox_cleanup";
+      }
       try {
         await sandbox.fs.rm(path.posix.join(SPOOL_ROOT, runId), {
           force: true,
@@ -1686,7 +1724,10 @@ const runSandboxWorker = async (
 /** Creates a source-free, project-OIDC Sandbox and runs only a catalog-pinned installer. */
 export const createHostedOperatorSandboxLauncher = (
   configuration: HostedOperatorSandboxConfiguration,
-  dependencies: { createSandbox?: CreateSandbox } = {},
+  dependencies: {
+    createSandbox?: CreateSandbox;
+    diagnosticSink?: HostedOperatorConsentDiagnosticSink;
+  } = {},
 ) => {
   const createSandbox: CreateSandbox =
     dependencies.createSandbox ??
@@ -1698,11 +1739,23 @@ export const createHostedOperatorSandboxLauncher = (
           team: options.teamId,
         }),
       }));
+  const run = async (input: SandboxWorkerInput) => {
+    const execution: LauncherExecution = {
+      stage: "worker_preparation",
+      mode: input.readbackOnly === true ? "inspect" : "execute",
+    };
+    return await observeOperatorExecutionStage(
+      input.plan.selection.sessionId,
+      execution.stage,
+      async () => await runSandboxWorker(configuration, createSandbox, input, execution),
+      dependencies.diagnosticSink,
+      execution,
+    );
+  };
   return {
-    inspect: async (input: HostedOperatorSandboxReadbackInput) =>
-      await runSandboxWorker(configuration, createSandbox, input),
+    inspect: async (input: HostedOperatorSandboxReadbackInput) => await run(input),
     execute: async (input: HostedOperatorSandboxWorkerInput) => {
-      await runSandboxWorker(configuration, createSandbox, input);
+      await run(input);
     },
   };
 };
