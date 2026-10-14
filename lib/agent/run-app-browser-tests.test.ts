@@ -8,6 +8,8 @@ import { localRuntimeEnvironmentPath } from "../repository/runtime-environment";
 
 import { appBrowserTestCommand, runAppBrowserTests } from "../../agent/tools/run-app-browser-tests";
 
+import type { PreparedRuntimeExecution } from "./prepared-runtime-execution";
+
 type SandboxRunOptions = Parameters<SandboxSession["run"]>[0];
 
 describe("private app browser tests", () => {
@@ -103,51 +105,60 @@ describe("private app browser tests", () => {
     },
   );
 
-  it("runs against the restored hosted state and retains that binding across dependency recovery", async () => {
-    const run = vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "installed" });
-    const runTask = vi
-      .fn()
-      .mockResolvedValueOnce({
-        exitCode: 1,
-        stderr: "error while loading shared libraries: libglib-2.0.so.0",
-        stdout: "",
-      })
-      .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "8 passed" });
-    const { signal } = new AbortController();
-    const result = await runAppBrowserTests({
-      appId: "spend-review",
-      root: "/workspace/repository",
-      runtime: {
-        environmentPath: "/private-state/environment.json",
-        installationProof: {
-          actors: 8,
-          appId: "spend-review",
-          artifactHash: "a".repeat(64),
-          authenticatedBehavior: "unassessed",
-          branch: "builder/spend-review",
-          environment: "preview",
-          observation: "database-verification",
-          observedAt: "2026-09-29T12:00:00Z",
-          releaseId: "release_1",
-          tenants: 2,
+  it.each([undefined, "https://canonical.example.test"])(
+    "retains the hosted test origin %s across dependency recovery",
+    async (browserTestBaseUrl) => {
+      const run = vi.fn().mockResolvedValue({ exitCode: 0, stderr: "", stdout: "installed" });
+      const runTask = vi
+        .fn<PreparedRuntimeExecution["runTask"]>()
+        .mockResolvedValueOnce({
+          exitCode: 1,
+          stderr: "error while loading shared libraries: libglib-2.0.so.0",
+          stdout: "",
+        })
+        .mockResolvedValueOnce({ exitCode: 0, stderr: "", stdout: "8 passed" });
+      const { signal } = new AbortController();
+      const result = await runAppBrowserTests({
+        appId: "spend-review",
+        root: "/workspace/repository",
+        runtime: {
+          browserTestBaseUrl,
+          environmentPath: "/private-state/environment.json",
+          installationProof: {
+            actors: 8,
+            appId: "spend-review",
+            artifactHash: "a".repeat(64),
+            authenticatedBehavior: "unassessed",
+            branch: "builder/spend-review",
+            environment: "preview",
+            observation: "database-verification",
+            observedAt: "2026-09-29T12:00:00Z",
+            releaseId: "release_1",
+            tenants: 2,
+          },
+          prepareAuthenticatedOrigin: vi.fn(),
+          runTask,
+          stateDirectory: "/private-state",
         },
-        prepareAuthenticatedOrigin: vi.fn(),
-        runTask,
-        stateDirectory: "/private-state",
-      },
-      sandbox: { run },
-      signal,
-    });
-    expect(result).toMatchObject({ status: "passed", stdout: "8 passed" });
-    expect(runTask).toHaveBeenNthCalledWith(1, { signal, task: "test-e2e" });
-    expect(runTask).toHaveBeenNthCalledWith(2, { signal, task: "test-e2e" });
-    expect(runTask).toHaveBeenCalledTimes(2);
-    expect(run).toHaveBeenCalledTimes(1);
-    expect(run).toHaveBeenCalledWith({
-      command: 'sudo env PATH="$PATH" ./node_modules/.bin/playwright install-deps chromium',
-      workingDirectory: "/workspace/repository",
-    });
-  });
+        sandbox: { run },
+        signal,
+      });
+      expect(result).toMatchObject({ status: "passed", stdout: "8 passed" });
+      for (const [request] of runTask.mock.calls) {
+        expect(request.task).toBe("test-e2e");
+        expect(request.signal).toBe(signal);
+        expect(request.environment).toEqual(
+          browserTestBaseUrl === undefined ? undefined : { APP_TEST_BASE_URL: browserTestBaseUrl },
+        );
+      }
+      expect(runTask).toHaveBeenCalledTimes(2);
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(run).toHaveBeenCalledWith({
+        command: 'sudo env PATH="$PATH" ./node_modules/.bin/playwright install-deps chromium',
+        workingDirectory: "/workspace/repository",
+      });
+    },
+  );
   it("uses only the selected app's test-e2e task in the applied checkout", async () => {
     const run = vi.fn().mockResolvedValue({
       exitCode: 0,
