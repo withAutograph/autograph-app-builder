@@ -11,6 +11,7 @@ import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-githu
 import { publicationContentSourceForReviewedWorkflow } from "@/lib/agent/github-publication-content-source";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
 import { appBaselineState } from "@/lib/agent/app-baseline-state";
+import { recordPublishedAppSourceForSession } from "@/lib/agent/published-app-source";
 import { assertExistingAppReviewScope } from "@/lib/repository/reviewed-change-set";
 
 export default defineTool({
@@ -54,11 +55,35 @@ export default defineTool({
     const sandbox = await ctx.getSandbox();
     const contentSource = publicationContentSourceForReviewedWorkflow({ sandbox, state });
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
-    return await runtime.updateExistingDraft({
+    const publication = await runtime.updateExistingDraft({
       contentSource,
       proposal: binding.proposal,
       review: state.reviewReceipt,
     });
+    try {
+      const recording = await recordPublishedAppSourceForSession({
+        appId: state.appSpec.appId,
+        appSpecDigest: state.appSpec.digest,
+        backendKind: state.appBackendKind,
+        root: state.applyReceipt.applyRoot,
+        adapterSessionId: ctx.session.id,
+        sessionAuth: ctx.session.auth,
+        callId: ctx.callId,
+        review: state.reviewReceipt,
+        publication,
+      });
+      return { ...publication, appSourceRecording: { status: recording.status } };
+    } catch {
+      return {
+        ...publication,
+        appSourceRecording: {
+          status: "unavailable" as const,
+          recoveryRequired: true,
+          nextAction:
+            "Resume this approved draft update to record its source for Preview; the GitHub update already succeeded. Preview source preparation remains unavailable until recording succeeds.",
+        },
+      };
+    }
   },
   inputSchema: z.strictObject({
     approvalReceipt: approvalReceiptSchema,

@@ -67,12 +67,40 @@ const operatorExecutionStage = z.enum([
   "approval_authorization",
   "approval_read",
   "lease_claim",
+  "effect_reconciliation",
+  "worker_preparation",
+  "sandbox_create",
+  "worker_pin",
+  "spool_setup",
+  "command_start",
+  "command_stream",
+  "worker_protocol",
+  "command_wait",
+  "readback",
+  "sandbox_cleanup",
 ]);
 export type OperatorExecutionStage = z.infer<typeof operatorExecutionStage>;
 const operatorExecutionFailure = operatorPlanningFailure
   .omit({ stage: true, nativeStoreFailure: true })
-  .extend({ stage: operatorExecutionStage });
-type OperatorExecutionFailure = z.infer<typeof operatorExecutionFailure>;
+  .extend({
+    stage: operatorExecutionStage,
+    mode: z.enum(["inspect", "execute"]).optional(),
+    httpStatus: z.number().int().min(100).max(599).optional(),
+    commandExit: z.enum(["zero", "nonzero"]).optional(),
+    protocol: z.enum(["incomplete", "unknown"]).optional(),
+    workerFailure: z
+      .enum([
+        "startup_rejected",
+        "authority_denied",
+        "effect_failed",
+        "readback_unknown",
+        "protocol_failure",
+        "cancelled",
+        "timeout",
+      ])
+      .optional(),
+  });
+export type OperatorExecutionFailure = z.infer<typeof operatorExecutionFailure>;
 
 const boundary = z.enum(["builder", "operator"]);
 const phase = z.enum(["inline", "check", "start", "complete"]);
@@ -439,12 +467,17 @@ export const observeOperatorExecutionStage = async <T>(
   executionStage: OperatorExecutionStage,
   run: () => T | Promise<T>,
   sink?: HostedOperatorConsentDiagnosticSink,
+  execution?: Pick<
+    OperatorExecutionFailure,
+    "stage" | "mode" | "commandExit" | "protocol" | "workerFailure" | "httpStatus"
+  >,
 ): Promise<T> => {
   try {
     return await run();
   } catch (error) {
     const executionFailure: OperatorExecutionFailure = {
       stage: executionStage,
+      ...execution,
       errorClass: "unexpected",
     };
     try {

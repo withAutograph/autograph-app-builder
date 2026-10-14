@@ -7,6 +7,7 @@ import {
   operatorOwnerStoreImportErrorCodeSchema,
   reportOperatorPlanningMismatch,
   observeOperatorPlanStage,
+  observeOperatorExecutionStage,
 } from "./hosted-operator-consent-diagnostic";
 import type {
   HostedOperatorConsentDiagnosticSink,
@@ -729,4 +730,42 @@ it("preserves a plan owner authorization rejection with only the fixed private s
       },
     }),
   );
+});
+
+it("preserves execution failures and redacts arbitrary error properties", async () => {
+  const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+  const error = Object.assign(new Error(secret), { url: secret, output: secret });
+  await expect(
+    observeOperatorExecutionStage(
+      secret,
+      "readback",
+      () => {
+        throw error;
+      },
+      sink,
+      { stage: "readback", mode: "inspect", commandExit: "zero" },
+    ),
+  ).rejects.toBe(error);
+  expect(sink.mock.calls[0]?.[0].executionFailure).toMatchObject({
+    stage: "readback",
+    mode: "inspect",
+    commandExit: "zero",
+    errorClass: "unexpected",
+  });
+  expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+});
+it("does not let a diagnostic sink failure replace the original execution failure", async () => {
+  const error = new HostedOperatorError("operator_unavailable");
+  await expect(
+    observeOperatorExecutionStage(
+      secret,
+      "effect_reconciliation",
+      () => {
+        throw error;
+      },
+      () => {
+        throw new Error(secret);
+      },
+    ),
+  ).rejects.toBe(error);
 });

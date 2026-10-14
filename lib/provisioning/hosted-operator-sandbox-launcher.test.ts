@@ -5,12 +5,16 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 import { HostedOperatorError, hostedOperatorPlanSchema } from "./hosted-operator-contract";
-import type { HostedOperatorWorkerEffectContext } from "./hosted-operator-service";
+import type {
+  HostedOperatorWorkerEffectContext,
+  RecordWorkerCheckpoint,
+} from "./hosted-operator-service";
 import {
   buildProtectedInstallContext,
   buildResourceBootstrapContext,
   createHostedOperatorSandboxLauncher,
 } from "./hosted-operator-sandbox-launcher";
+import type { HostedOperatorConsentDiagnosticSink } from "./hosted-operator-consent-diagnostic";
 import type { GeneratedAppReleaseFiles } from "./hosted-operator-sandbox-launcher";
 
 const runId = "a79c7cc3-9236-4a09-9e4a-5f772d08a255";
@@ -106,6 +110,7 @@ const makeFixture = (
     effectId?: string;
     tenantId?: string | null;
     pinMatches?: boolean;
+    commandExitCode?: number;
     abortBeforeAuthority?: AbortController;
     delayCreate?: Promise<void>;
     generated?: boolean;
@@ -345,7 +350,7 @@ const makeFixture = (
               yield notice;
             }
           },
-          wait: vi.fn(async () => ({ exitCode: 0 })),
+          wait: vi.fn(async () => ({ exitCode: options.commandExitCode ?? 0 })),
         };
         return workerCommand;
       },
@@ -445,6 +450,7 @@ const makeFixture = (
     database: "appDatabase" | "authDatabase";
     directDatabaseUrl: string;
   };
+  const diagnostics = vi.fn<HostedOperatorConsentDiagnosticSink>();
   const launcher = createHostedOperatorSandboxLauncher(
     {
       projectId: "control-project",
@@ -480,13 +486,15 @@ const makeFixture = (
           }
         : {}),
     },
-    { createSandbox },
+    { createSandbox, diagnosticSink: diagnostics },
   );
   return {
+    diagnostics,
     assertCurrent,
     bindWorkerContext,
     createSandbox,
     files,
+    generatedFiles,
     input,
     launcher,
     records,
@@ -657,7 +665,11 @@ describe("hosted protected installer Sandbox launcher", () => {
       app_id: "spend-review",
       release_manifest_sha256: fixture.input.plan.release.sha256,
     });
-    expect(fixture.written.filter((file) => file.includes("/release/"))).toHaveLength(12);
+    for (const [name, content] of Object.entries(fixture.generatedFiles)) {
+      expect(
+        fixture.files.get(`/vercel/sandbox/protected-installer/${runId}/release/${name}`),
+      ).toEqual(content);
+    }
     expect(fixture.sandbox.runCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         args: [
@@ -894,18 +906,128 @@ describe("resource bootstrap launcher", () => {
       },
     },
   });
-  it("serializes the kind-first Node bootstrap ABI and no tenant authority", () => {
+  it.each([
+    { mutation: false, inspect: true },
+    { mutation: true, inspect: true },
+    { mutation: false, inspect: false },
+    { mutation: true, inspect: false },
+  ])("admits only a live read-only startup fence in mode %j", async ({ mutation, inspect }) => {
+    const f = makeFixture();
+    const input = { ...resourceInput(), readbackOnly: true as const };
+    const resourceContext = buildResourceBootstrapContext(input);
+    const recordWorkerCheckpoint: RecordWorkerCheckpoint = async (checkpoint) => {
+      f.records.push(checkpoint);
+    };
+    const bindWorkerContext = vi.fn<HostedOperatorWorkerEffectContext["bindWorkerContext"]>(
+      async () => recordWorkerCheckpoint,
+    );
+    const digest = createHash("sha256").update(JSON.stringify(resourceContext)).digest("hex");
+    const original = f.sandbox.runCommand.getMockImplementation()!;
+    f.sandbox.runCommand.mockImplementation(async (options) => {
+      if (!options.detached) return await original(options);
+      const transport = options.args!.at(3);
+      const spool = `/vercel/sandbox/protected-installer/${transport}`;
+      const request = {
+        approval_digest: resourceContext.operation.approval_digest,
+        tenant_id: null,
+        kind: mutation ? "authorize_effect" : "check_fence",
+        version: 1,
+        operation_id: resourceContext.operation.operation_id,
+        context_digest: digest,
+        fence_generation: input.fenceGeneration,
+        app_id: resourceContext.app_id,
+        installer_id: resourceContext.installer.id,
+        installer_sha256: resourceContext.installer.sha256,
+        release_id: resourceContext.release.id,
+        resource_id: resourceContext.resource.resource_id,
+        ...(mutation ? { effect_id: "neon.create_database", sequence: 1, tenant_id: null } : {}),
+      };
+      f.files.set(`${spool}/requests/1.json`, frame(request));
+      f.files.set(
+        `${spool}/requests/1.ready`,
+        frame({ version: 1, run_id: transport, frame_id: 1 }),
+      );
+      for (const [index, kind] of [
+        [1, "worker_started"],
+        [2, "worker_succeeded"],
+      ] as const) {
+        f.files.set(
+          `${spool}/lifecycle/${index}.json`,
+          frame({ version: 1, run_id: transport, kind }),
+        );
+        f.files.set(
+          `${spool}/lifecycle/${index}.ready`,
+          frame({ version: 1, run_id: transport, frame_id: index }),
+        );
+      }
+      f.files.set(
+        `${spool}/resource-observation.json`,
+        frame({
+          version: 1,
+          operation_id: resourceContext.operation.operation_id,
+          context_digest: digest,
+          fence_generation: input.fenceGeneration,
+          resource_id: resourceContext.resource.resource_id,
+          scope: resourceContext.resource.scope,
+          status: "applied",
+          readback_sha256: "9".repeat(64),
+        }),
+      );
+      return {
+        kill: vi.fn(async () => undefined),
+        logs: async function* () {
+          yield {
+            stream: "stdout",
+            data: `${JSON.stringify({ kind: "protected_installer_frame_ready", version: 1, run_id: transport, frame_id: 1 })}\n`,
+          };
+          for (const frameId of [1, 2])
+            yield {
+              stream: "stdout",
+              data: `${JSON.stringify({ kind: "protected_installer_lifecycle_ready", version: 1, run_id: transport, frame_id: frameId })}\n`,
+            };
+        },
+        wait: vi.fn(async () => ({ exitCode: 0 })),
+      };
+    });
+    const launcher = createHostedOperatorSandboxLauncher(
+      {
+        projectId: "project",
+        teamId: "team",
+        image: "image",
+        workers: {},
+        resourcesWorker: {
+          executablePath: "/opt/resource-worker",
+          id: "neon-resource-bootstrap-v1",
+          operationScope: "neon-resource-bootstrap-v1",
+          subcommand: "neon-resource-bootstrap",
+          sha256: workerDigest,
+        },
+      },
+      { createSandbox: f.createSandbox, diagnosticSink: f.diagnostics },
+    );
+    const run = () =>
+      inspect
+        ? launcher.inspect(input)
+        : launcher.execute({
+            ...resourceInput(),
+            bindWorkerContext,
+          });
+    if (mutation) {
+      await expect(run()).rejects.toMatchObject({ code: "resource_mismatch" });
+      expect(f.written.some((member) => member.endsWith("responses/1.json"))).toBe(false);
+      expect(f.diagnostics.mock.calls[0]?.[0].executionFailure?.stage).toBe("worker_protocol");
+    } else {
+      const result = await run();
+      if (inspect) expect(result).toMatchObject({ status: "applied" });
+      expect(f.written.some((member) => member.endsWith("responses/1.json"))).toBe(true);
+      expect(f.diagnostics).not.toHaveBeenCalled();
+    }
+    expect(f.records).toEqual([]);
+    expect(f.bindWorkerContext).not.toHaveBeenCalled();
+  });
+  it("selects the resource bootstrap protocol without tenant authority", () => {
     const bootstrapContext = buildResourceBootstrapContext(resourceInput());
-    expect(Object.keys(bootstrapContext)).toEqual([
-      "kind",
-      "version",
-      "operation",
-      "app_id",
-      "resource",
-      "release",
-      "installer",
-      "tenant_targets",
-    ]);
+    expect(bootstrapContext.kind).toBe("neon_resource_bootstrap");
     expect(bootstrapContext.resource).toMatchObject({
       scope: "app_database",
       bootstrap_role: "bootstrap_owner",
@@ -993,4 +1115,100 @@ describe("resource bootstrap launcher", () => {
     ).rejects.toThrow("checkpoint unavailable");
     expect(createSandbox).not.toHaveBeenCalled();
   });
+});
+
+it("reports a closed pin stage without exposing command output or credentials", async () => {
+  const f = makeFixture({ pinMatches: false });
+  await expect(f.launcher.execute(f.input)).rejects.toMatchObject({ code: "resource_mismatch" });
+  expect(f.diagnostics.mock.calls[0]?.[0].executionFailure).toMatchObject({
+    stage: "worker_pin",
+    mode: "execute",
+    errorClass: "operator_error",
+    code: "resource_mismatch",
+  });
+  expect(JSON.stringify(f.diagnostics.mock.calls)).not.toContain(f.input.directDatabaseUrl);
+});
+it("reports command exit as a closed class", async () => {
+  const f = makeFixture({ commandExitCode: 17 });
+  await expect(f.launcher.execute(f.input)).rejects.toMatchObject({ code: "operator_unavailable" });
+  expect(f.diagnostics.mock.calls[0]?.[0].executionFailure).toMatchObject({
+    stage: "command_wait",
+    commandExit: "nonzero",
+  });
+});
+it("preserves a failing sandbox setup result while redacting the SDK exception", async () => {
+  const f = makeFixture();
+  f.createSandbox.mockRejectedValueOnce(new Error("https://private.example bearer credential"));
+  await expect(f.launcher.execute(f.input)).rejects.toMatchObject({ code: "operator_unavailable" });
+  expect(f.diagnostics.mock.calls[0]?.[0].executionFailure).toMatchObject({
+    stage: "sandbox_create",
+  });
+  expect(JSON.stringify(f.diagnostics.mock.calls)).not.toContain("private.example");
+});
+
+it("reports only the worker's fixed lifecycle failure class", async () => {
+  const f = makeFixture({ unknown: true });
+  await expect(f.launcher.execute(f.input)).rejects.toMatchObject({
+    code: "reconciliation_required",
+  });
+  expect(f.diagnostics.mock.calls[0]?.[0].executionFailure).toMatchObject({
+    stage: "worker_protocol",
+    workerFailure: "readback_unknown",
+  });
+  expect(JSON.stringify(f.diagnostics.mock.calls)).not.toContain("installer private diagnostic");
+});
+
+it.each(["status", "statusCode"])(
+  "reports only the SDK's own numeric %s property",
+  async (field) => {
+    const f = makeFixture();
+    const error = Object.assign(new Error("private SDK response body"), {
+      [field]: 403,
+      body: "private-body",
+      cause: new Error("private-cause"),
+    });
+    f.createSandbox.mockRejectedValueOnce(error);
+    await expect(f.launcher.execute(f.input)).rejects.toMatchObject({
+      code: "operator_unavailable",
+    });
+    expect(f.diagnostics.mock.calls[0]?.[0].executionFailure).toMatchObject({
+      stage: "sandbox_create",
+      httpStatus: 403,
+    });
+    expect(JSON.stringify(f.diagnostics.mock.calls)).not.toContain("private");
+  },
+);
+it.each([99, 600, 403.5, "403", null, undefined, Number.NaN, Number.POSITIVE_INFINITY])(
+  "ignores an invalid SDK HTTP status %s",
+  async (status) => {
+    const f = makeFixture();
+    f.createSandbox.mockRejectedValueOnce(
+      Object.assign(new Error("private SDK error"), { status }),
+    );
+    await expect(f.launcher.execute(f.input)).rejects.toMatchObject({
+      code: "operator_unavailable",
+    });
+    expect(f.diagnostics.mock.calls[0]?.[0].executionFailure).not.toHaveProperty("httpStatus");
+  },
+);
+it("does not invoke hostile HTTP-status getters or inspect inherited status", async () => {
+  const f = makeFixture();
+  const getter = vi.fn(() => {
+    throw new Error("private getter");
+  });
+  const error = new Error("private SDK error");
+  Object.defineProperty(error, "status", { get: getter });
+  Object.defineProperty(error, "statusCode", { get: getter });
+  f.createSandbox.mockRejectedValueOnce(error);
+  await expect(f.launcher.execute(f.input)).rejects.toMatchObject({ code: "operator_unavailable" });
+  expect(getter).not.toHaveBeenCalled();
+  expect(f.diagnostics.mock.calls[0]?.[0].executionFailure).not.toHaveProperty("httpStatus");
+  const inherited = makeFixture();
+  inherited.createSandbox.mockRejectedValueOnce(Object.create({ status: 403 }));
+  await expect(inherited.launcher.execute(inherited.input)).rejects.toMatchObject({
+    code: "operator_unavailable",
+  });
+  expect(inherited.diagnostics.mock.calls[0]?.[0].executionFailure).not.toHaveProperty(
+    "httpStatus",
+  );
 });

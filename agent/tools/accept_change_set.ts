@@ -87,6 +87,7 @@ export const createChangeSetAcceptanceTool = (
         operation: "destination change-set acceptance",
         transition: () => ({
           appSpec: state.appSpec,
+          ...(state.appBackendKind === undefined ? {} : { appBackendKind: state.appBackendKind }),
           applyReceipt: state.applyReceipt,
           artifacts: state.artifacts,
           ...(state.publishedGitHubDraftProposalDigest === undefined

@@ -91,7 +91,9 @@ export const createHostedOperatorDeploymentDelivery = (deps: {
       delivery.projectId ===
         (deps.target === "gateway" ? input.plan.publicGateway?.projectId : input.target.projectId),
       delivery.branch ===
-        (deps.target === "gateway" ? input.plan.publicGateway?.branch : input.target.branch),
+        (deps.target === "gateway"
+          ? input.plan.publicGateway?.branch
+          : (input.plan.deploymentBoundary?.app.branch ?? input.target.branch)),
     ].every(Boolean);
     if (!validScope) {
       throw new HostedOperatorError("resource_mismatch");

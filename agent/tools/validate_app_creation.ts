@@ -298,6 +298,12 @@ export const createAppValidationTool = (
         signal: ctx.abortSignal,
       });
       validationPhase(ctx.callId, "validation_app_described", description !== undefined);
+      appBuilderWorkflowState.update(() => ({
+        ...base,
+        appBackendKind: description?.backend.kind,
+        phase: "validated",
+        validationReceipt: result.receipt,
+      }));
       validationPhase(ctx.callId, "capturing_validated_release");
       const captureFailure = await executionPorts.captureRelease(description, {
         adapterSessionId: ctx.session.id,

@@ -13,6 +13,7 @@ import {
 import { githubPublicationRuntimeForSession } from "@/lib/agent/deployment-github-publication-runtime";
 import { draftReconciliationState } from "@/lib/agent/draft-reconciliation-state";
 import { appBuilderWorkflowState } from "@/lib/agent/workflow-state";
+import { recordPublishedAppSourceForSession } from "@/lib/agent/published-app-source";
 import { inspectDraftReconciliation } from "@/lib/repository/sandbox-draft-reconciliation";
 
 export default defineTool({
@@ -89,7 +90,32 @@ export default defineTool({
       },
     };
     const runtime = await githubPublicationRuntimeForSession(ctx.session.auth);
-    return await runtime.reconcileExistingDraft({ contentSource, proposal, review });
+    const publication = await runtime.reconcileExistingDraft({ contentSource, proposal, review });
+    try {
+      const recording = await recordPublishedAppSourceForSession({
+        appId: state.appSpec.appId,
+        appSpecDigest: state.appSpec.digest,
+        backendKind: state.appBackendKind,
+        root: candidate.root,
+        adapterSessionId: ctx.session.id,
+        sessionAuth: ctx.session.auth,
+        callId: ctx.callId,
+        review: state.reviewReceipt,
+        reconciliationReview: review,
+        publication,
+      });
+      return { ...publication, appSourceRecording: { status: recording.status } };
+    } catch {
+      return {
+        ...publication,
+        appSourceRecording: {
+          status: "unavailable" as const,
+          recoveryRequired: true,
+          nextAction:
+            "Resume this approved draft reconciliation to record its source for Preview; the GitHub update already succeeded. Preview source preparation remains unavailable until recording succeeds.",
+        },
+      };
+    }
   },
   inputSchema: z.strictObject({
     approvalReceipt: approvalReceiptSchema,

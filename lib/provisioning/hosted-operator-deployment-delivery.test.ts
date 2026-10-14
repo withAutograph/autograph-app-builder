@@ -6,7 +6,7 @@ import type { HostedOperatorDeploymentContext } from "./hosted-operator-service"
 
 const authority = {
   audience: "https://builder.example/mcp",
-  issuer: "https://builder.example",
+  issuer: "https://builder.example/api/auth",
   ownerUserId: "owner",
   workspaceId: "workspace",
 };
@@ -66,7 +66,7 @@ const plan = hostedOperatorPlanSchema.parse({
   selection,
   version: 1,
 });
-const fixture = () => {
+const fixture = (deliveryPlan = plan) => {
   let ready = "BUILDING";
   let count = 0;
   let deny = false;
@@ -89,14 +89,14 @@ const fixture = () => {
     effect: plan.effects[4],
     fenceGeneration: 1,
     operationRef: "00000000-0000-4000-8000-000000000001",
-    plan,
+    plan: deliveryPlan,
     target,
     workerCheckpoints: [],
   };
   const meta = {
     autograph_operator_effect: "deliver",
     autograph_operator_operation: input.operationRef,
-    autograph_operator_plan: operatorPlanDigest(plan),
+    autograph_operator_plan: operatorPlanDigest(deliveryPlan),
   };
   const fetcher: typeof fetch = async (url, init) => {
     await Promise.resolve();
@@ -133,7 +133,7 @@ const fixture = () => {
     if (path === "/v13/deployments/dpl_new") {
       return Response.json({
         customEnvironment: null,
-        gitSource: { ref: "feature", repoId: "repo", sha, type: "github" },
+        gitSource: { ref: deliveryPlan.delivery?.branch, repoId: "repo", sha, type: "github" },
         id: "dpl_new",
         meta,
         oidcTokenClaims: { environment: "preview" },
@@ -200,6 +200,44 @@ it("does not infer absence from an empty deployment listing and records normal G
   const result = await f.writer.reconcile(f.input);
   expect(result.status).toBe("applied");
   expect(f.calls.filter((call) => call.method === "POST")).toHaveLength(1);
+});
+it("delivers the approved published ref while retaining the resource branch", async () => {
+  const branch = "codex/generated-app";
+  const publishedPlan = hostedOperatorPlanSchema.parse({
+    ...plan,
+    delivery: { ...plan.delivery, branch },
+    publicGateway: {
+      branch: "main",
+      projectId: "prj_gateway",
+      origin: "https://public.example.test",
+    },
+    deploymentBoundary: {
+      app: { branch, deploymentId: "dpl_previous", environment: "preview", projectId: "prj_app" },
+      gateway: {
+        branch: "main",
+        deploymentId: "dpl_gateway",
+        environment: "preview",
+        projectId: "prj_gateway",
+      },
+      operator: { deploymentId: "dpl_operator", environment: "preview", projectId: "prj_operator" },
+      authority,
+      teamId: "team",
+      verification: {
+        gatewayOrigin: "https://gateway.example.test",
+        publicOrigin: "https://public.example.test",
+        jwksUrl: "https://gateway.example.test/_platform/jwks.json",
+      },
+    },
+  });
+  const f = fixture(publishedPlan);
+  await f.writer.deliver(f.input);
+  expect(f.input.target.branch).toBe(selection.branch);
+  expect(f.calls.find((call) => call.method === "POST")?.body).toMatchObject({
+    gitSource: { ref: branch, sha },
+  });
+  f.setReady("READY");
+  const observed = await f.writer.reconcile(f.input);
+  expect(observed.status).toBe("applied");
 });
 it("denies after current authority is revoked before POST", async () => {
   const f = fixture();

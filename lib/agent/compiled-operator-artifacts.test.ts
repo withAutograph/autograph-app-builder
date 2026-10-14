@@ -5,7 +5,9 @@ import { z } from "zod";
 import {
   compiledArtifactSandboxRelativePath,
   publishCompiledOperatorArtifactsForSession,
+  recordPublishedOperatorSourceForSession,
 } from "./compiled-operator-artifacts";
+import type { AppDescription } from "../repository/app-description";
 import type { OperatorArtifactContext } from "../provisioning/hosted-operator-artifact-store";
 import type { CompiledOperatorReleaseSelection } from "../provisioning/hosted-operator-artifact-selection";
 import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
@@ -24,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   onRead: vi.fn<(index: number) => void | Promise<void>>(),
   owner: null as Record<string, unknown> | null,
   record: vi.fn(),
+  readSelection: vi.fn(),
   resolve: vi.fn(),
   rows: new Map<string, string>(),
   state: null as Record<string, unknown> | null,
@@ -62,7 +65,10 @@ vi.mock("../provisioning/hosted-operator-artifact-store", async (importOriginal)
 }));
 vi.mock("../provisioning/hosted-operator-artifact-selection", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  createPostgresOperatorArtifactSelections: () => ({ record: mocks.record }),
+  createPostgresOperatorArtifactSelections: () => ({
+    read: mocks.readSelection,
+    record: mocks.record,
+  }),
 }));
 
 const digest = "a".repeat(64);
@@ -131,6 +137,7 @@ describe("owned compiled artifact workflow hook", () => {
     mocks.onRead.mockReset();
     vi.spyOn(console, "info").mockImplementation(() => {});
     mocks.rows.clear();
+    mocks.readSelection.mockReset();
     mocks.state = {
       appSpec: { appId: "spend-review", digest },
       applyReceipt: { applyRoot: "/workspace/repository" },
@@ -153,6 +160,116 @@ describe("owned compiled artifact workflow hook", () => {
         selection: CompiledOperatorReleaseSelection,
       ) => selection,
     );
+  });
+  it("records published source on the selected tuple under the canonical public owner session", async () => {
+    const selected: CompiledOperatorReleaseSelection = {
+      appId: "spend-review",
+      appSpecDigest: digest,
+      artifactRef: `_protected-operator/artifacts/generated-release/spend-review/${digest}`,
+      manifestSha256: "b".repeat(64),
+      releaseId: "actual-selected-fixture",
+      schemaSha256: "c".repeat(64),
+      version: 1,
+    };
+    const publishedSource = {
+      branch: "app-builder/actual-reviewed-fixture",
+      changeSetDigest: "d".repeat(64),
+      gitSha: "e".repeat(40),
+      gitTree: "f".repeat(40),
+      repositoryId: "4242",
+      reviewDigest: "a".repeat(64),
+    };
+    mocks.readSelection.mockResolvedValue(selected);
+    const input = frame();
+    await expect(
+      recordPublishedOperatorSourceForSession({ ...input, publishedSource }),
+    ).resolves.toMatchObject({ status: "recorded", selection: { ...selected, publishedSource } });
+    const context = { authority, target: { appId: input.appId, sessionId: "durable-original" } };
+    expect(mocks.readSelection).toHaveBeenCalledWith(context, digest);
+    expect(mocks.record).toHaveBeenCalledWith(context, input.callId, {
+      ...selected,
+      publishedSource,
+    });
+    expect(input.sandbox.run).not.toHaveBeenCalled();
+    expect(input.sandbox.readBinaryFile).not.toHaveBeenCalled();
+  });
+  it("returns the static no-op without compiled workflow markers or hosted storage", async () => {
+    const input = frame();
+    mocks.state = null;
+    const result = await recordPublishedOperatorSourceForSession({
+      ...input,
+      backendKind: "static",
+      root: "/private/static-preview",
+      appSpecDigest: "f".repeat(64),
+      publishedSource: {
+        branch: "reviewed-static",
+        changeSetDigest: digest,
+        gitSha: "a".repeat(40),
+        gitTree: "b".repeat(40),
+        repositoryId: "4242",
+        reviewDigest: digest,
+      },
+    });
+    expect(result.status).toBe("not-required");
+    expect(mocks.resolve).not.toHaveBeenCalled();
+    expect(mocks.readSelection).not.toHaveBeenCalled();
+    expect(mocks.record).not.toHaveBeenCalled();
+    expect(input.sandbox.run).not.toHaveBeenCalled();
+    expect(input.sandbox.readBinaryFile).not.toHaveBeenCalled();
+  });
+  const requiredOrUnknownBackends: (AppDescription["backend"]["kind"] | undefined)[] = [
+    "generated-postgres",
+    undefined,
+  ];
+  it.each(requiredOrUnknownBackends)(
+    "does not classify absent compiled selection as static for backend %s",
+    async (backendKind) => {
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing selected release is the actual reader's optional undefined result.
+      mocks.readSelection.mockResolvedValue(undefined);
+      await expect(
+        recordPublishedOperatorSourceForSession({
+          ...frame(),
+          backendKind,
+          publishedSource: {
+            branch: "reviewed-fixture",
+            changeSetDigest: digest,
+            gitSha: "a".repeat(40),
+            gitTree: "b".repeat(40),
+            repositoryId: "4242",
+            reviewDigest: digest,
+          },
+        }),
+      ).rejects.toThrow("artifact is unavailable");
+      expect(mocks.record).not.toHaveBeenCalled();
+    },
+  );
+  it("does not record publication after the current owner changes during selection read", async () => {
+    mocks.readSelection.mockImplementation(async () => {
+      mocks.owner = { ...mocks.owner, adapterGeneration: 2 };
+      return {
+        appId: "spend-review",
+        appSpecDigest: digest,
+        artifactRef: `_protected-operator/artifacts/generated-release/spend-review/${digest}`,
+        manifestSha256: digest,
+        releaseId: "fixture",
+        schemaSha256: digest,
+        version: 1,
+      };
+    });
+    await expect(
+      recordPublishedOperatorSourceForSession({
+        ...frame(),
+        publishedSource: {
+          branch: "reviewed-fixture",
+          changeSetDigest: digest,
+          gitSha: "a".repeat(40),
+          gitTree: "b".repeat(40),
+          repositoryId: "4242",
+          reviewDigest: digest,
+        },
+      }),
+    ).rejects.toThrow();
+    expect(mocks.record).not.toHaveBeenCalled();
   });
   it("does not select a captured release rejected by the schema identity guard", async () => {
     const input = frame();

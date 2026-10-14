@@ -199,12 +199,33 @@ export const normalActorPreparationSchema = z.strictObject({
   accountApprovedByCallId: id,
 });
 export type NormalActorPreparation = z.infer<typeof normalActorPreparationSchema>;
+export const managedOperatorEnvironmentRowSchema = z
+  .strictObject({
+    branch: id,
+    comment: id,
+    id,
+    key: z.string().regex(/^[A-Z][A-Z0-9_]{0,199}$/u),
+    operationRef: z.uuid(),
+    pendingOperationRef: z.uuid().optional(),
+    pendingValueSha256: digest.optional(),
+    projectId: id,
+    valueSha256: digest.optional(),
+  })
+  .refine(
+    (row) => (row.pendingOperationRef === undefined) === (row.pendingValueSha256 === undefined),
+    "Pending Gateway value must bind its operation",
+  );
+export type ManagedOperatorEnvironmentRow = z.infer<typeof managedOperatorEnvironmentRowSchema>;
+export const managedOperatorEnvironmentRowsSchema = z.array(managedOperatorEnvironmentRowSchema);
+
+const REMOVE_APP_BINDINGS = "remove-bindings";
 const hostedOperatorPlanDataSchema = z.strictObject({
   access: z.array(
     z.strictObject({ actorId: id, organizationId: id, roles: z.array(sqlName).min(1) }),
   ),
   action: z.enum(["prepare", "cleanup"]),
   appDatabase: databaseResource,
+  appEnvironmentCleanup: managedOperatorEnvironmentRowsSchema.optional(),
   authAdoption: sharedAuthAdoptionSchema.optional(),
   authDatabase: databaseResource,
   authMembership: hostedOperatorAuthMembershipSchema.optional(),
@@ -253,7 +274,7 @@ const hostedOperatorPlanDataSchema = z.strictObject({
           "bindings",
           "delivery",
           "revoke",
-          "remove-bindings",
+          REMOVE_APP_BINDINGS,
           "retire",
         ]),
         resourceId: id.optional(),
@@ -331,6 +352,12 @@ const hostedOperatorPlanDataSchema = z.strictObject({
   stage: z.enum([AUTH_BOOTSTRAP_STAGE, AUTH_PARTICIPANTS_STAGE, "app"]).optional(),
   version: z.literal(1),
 });
+export const plannedAppBranch = (plan: z.infer<typeof hostedOperatorPlanDataSchema>) =>
+  plan.deploymentBoundary?.app.branch ?? plan.selection.branch;
+const boundaryAppBranch = (plan: z.infer<typeof hostedOperatorPlanDataSchema>) =>
+  plan.action === "cleanup"
+    ? plannedAppBranch(plan)
+    : (plan.delivery?.branch ?? plan.selection.branch);
 const validatePlanStage = (
   plan: z.infer<typeof hostedOperatorPlanDataSchema>,
   ctx: z.RefinementCtx,
@@ -338,7 +365,7 @@ const validatePlanStage = (
   if (
     plan.delivery !== undefined &&
     (plan.delivery.projectId !== plan.selection.projectId ||
-      plan.delivery.branch !== plan.selection.branch)
+      plan.delivery.branch !== plannedAppBranch(plan))
   ) {
     ctx.addIssue({
       code: "custom",
@@ -491,7 +518,7 @@ const authorizationPhases = (plan: z.infer<typeof hostedOperatorPlanDataSchema>)
   if (plan.stage === AUTH_PARTICIPANTS_STAGE) {
     return ["normal-accounts"];
   }
-  let phases = ["revoke", "remove-bindings", "retire"];
+  let phases = ["revoke", REMOVE_APP_BINDINGS, "retire"];
   if (plan.action === "prepare") {
     phases = ["resources", "install"];
     if (plan.authMembership !== undefined) {
@@ -537,8 +564,40 @@ const validateAuthAdoption = (
     }
   }
 };
+const validateAppEnvironmentCleanup = (
+  plan: z.infer<typeof hostedOperatorPlanDataSchema>,
+  ctx: z.RefinementCtx,
+) => {
+  if (plan.appEnvironmentCleanup !== undefined) {
+    const appKey = `${plan.selection.appId.toUpperCase().replaceAll("-", "_")}_DATABASE_URL`;
+    const keys = new Set([
+      appKey,
+      "PLATFORM_ORIGIN",
+      "PLATFORM_PUBLIC_ORIGIN",
+      "PLATFORM_JWKS_URL",
+      "PLATFORM_APP_BOUNDARY",
+    ]);
+    if (
+      plan.action !== "cleanup" ||
+      !plan.effects.some((effect) => effect.kind === REMOVE_APP_BINDINGS) ||
+      plan.appEnvironmentCleanup.some(
+        (row) =>
+          row.projectId !== plan.selection.projectId ||
+          !keys.has(row.key) ||
+          row.comment !== `App Builder protected operator ${row.operationRef}`,
+      )
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "App environment cleanup must name only the explicitly approved owned app rows.",
+      });
+    }
+  }
+};
 export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine((plan, ctx) => {
   validateAuthAdoption(plan, ctx);
+  validateAppEnvironmentCleanup(plan, ctx);
+
   if ((plan.bootstrap === undefined) !== (plan.resourcesInstaller === undefined)) {
     ctx.addIssue({
       code: "custom",
@@ -597,7 +656,7 @@ export const hostedOperatorPlanSchema = hostedOperatorPlanDataSchema.superRefine
       new Set([boundary.app.projectId, boundary.gateway.projectId, boundary.operator.projectId])
         .size !== 3,
       boundary.app.projectId !== plan.selection.projectId,
-      boundary.app.branch !== plan.selection.branch,
+      boundary.app.branch !== boundaryAppBranch(plan),
       boundary.gateway.branch !== plan.publicGateway?.branch,
       plan.publicGateway === undefined,
       boundary.gateway.projectId !== plan.publicGateway?.projectId,
@@ -757,24 +816,17 @@ export const operatorAuthSchemaPreparationSchema = z.strictObject({
   targetDigest: digest,
 });
 export type OperatorAuthSchemaPreparation = z.infer<typeof operatorAuthSchemaPreparationSchema>;
-export const managedOperatorEnvironmentRowSchema = z
-  .strictObject({
-    branch: id,
-    comment: id,
-    id,
-    key: z.string().regex(/^[A-Z][A-Z0-9_]{0,199}$/u),
-    operationRef: z.uuid(),
-    pendingOperationRef: z.uuid().optional(),
-    pendingValueSha256: digest.optional(),
-    projectId: id,
-    valueSha256: digest.optional(),
-  })
-  .refine(
-    (row) => (row.pendingOperationRef === undefined) === (row.pendingValueSha256 === undefined),
-    "Pending Gateway value must bind its operation",
-  );
-export type ManagedOperatorEnvironmentRow = z.infer<typeof managedOperatorEnvironmentRowSchema>;
-export const managedOperatorEnvironmentRowsSchema = z.array(managedOperatorEnvironmentRowSchema);
+export const retainedAppDeliverySchema = z.object({
+  branch: id,
+  delivery: hostedOperatorPlanDataSchema.shape.delivery,
+  deliveryCandidates: operatorDeploymentCandidatesSchema,
+  managedEnvironment: managedOperatorEnvironmentRowsSchema,
+  operationRef: z.uuid(),
+  planDigest: digest,
+  projectId: id,
+});
+export type RetainedAppDelivery = z.infer<typeof retainedAppDeliverySchema>;
+
 const hostedOperatorRecordDataSchema = z.strictObject({
   approvalId: id.optional(),
   authPreparation: operatorAuthSchemaPreparationSchema.optional(),
@@ -796,6 +848,7 @@ const hostedOperatorRecordDataSchema = z.strictObject({
   plan: hostedOperatorPlanSchema,
   planDigest: digest,
   receipts: z.array(operatorReceiptSchema),
+  retainedAppDeliveries: z.array(retainedAppDeliverySchema).optional(),
   workerCheckpoints: z.array(workerEffectCheckpointSchema).optional(),
 });
 const gatewayDeliveryOrigin = (operator: z.infer<typeof hostedOperatorRecordDataSchema>) =>
@@ -861,7 +914,7 @@ const validateOperatorMetadata = (
     candidates.some(
       (value) =>
         value.projectId !== operator.plan.selection.projectId ||
-        value.branch !== operator.plan.selection.branch,
+        value.branch !== plannedAppBranch(operator.plan),
     )
   ) {
     context.addIssue({
@@ -885,6 +938,39 @@ const validateOperatorMetadata = (
     });
   }
 };
+const validateRetainedAppDeliveries = (
+  operator: z.infer<typeof hostedOperatorRecordDataSchema>,
+  ownedKeys: Set<string>,
+  context: z.RefinementCtx,
+) => {
+  for (const [index, retained] of (operator.retainedAppDeliveries ?? []).entries()) {
+    const invalid = [
+      retained.projectId !== operator.plan.selection.projectId,
+      retained.delivery !== undefined &&
+        (retained.delivery.projectId !== retained.projectId ||
+          retained.delivery.branch !== retained.branch),
+      retained.deliveryCandidates.some(
+        (candidate) =>
+          candidate.projectId !== retained.projectId || candidate.branch !== retained.branch,
+      ),
+      retained.managedEnvironment.some(
+        (row) =>
+          row.projectId !== retained.projectId ||
+          row.branch !== retained.branch ||
+          !ownedKeys.has(row.key) ||
+          row.comment !== `App Builder protected operator ${row.operationRef}`,
+      ),
+    ].some(Boolean);
+    if (invalid) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Historical app delivery must retain its actual owned project, branch and row lineage.",
+        path: ["retainedAppDeliveries", index],
+      });
+    }
+  }
+};
 export const hostedOperatorRecordSchema = hostedOperatorRecordDataSchema.superRefine(
   (operator, context) => {
     validateOperatorMetadata(operator, context);
@@ -903,7 +989,7 @@ export const hostedOperatorRecordSchema = hostedOperatorRecordDataSchema.superRe
       environmentRows.some(
         (row) =>
           row.projectId !== operator.plan.selection.projectId ||
-          row.branch !== operator.plan.selection.branch ||
+          row.branch !== plannedAppBranch(operator.plan) ||
           !ownedKeys.has(row.key) ||
           row.comment !== `App Builder protected operator ${row.operationRef}`,
       )
@@ -914,6 +1000,7 @@ export const hostedOperatorRecordSchema = hostedOperatorRecordDataSchema.superRe
         path: ["managedEnvironment"],
       });
     }
+    validateRetainedAppDeliveries(operator, ownedKeys, context);
     const gatewayRows = operator.gatewayEnvironment ?? [];
     const gatewayKeys = new Set([
       "AUTH_DATABASE_RESOURCE",
@@ -1295,3 +1382,5 @@ export const assertOperatorNativePreview = (
     throw new HostedOperatorError("resource_mismatch");
   }
 };
+
+export type HostedOperatorRecord = z.infer<typeof hostedOperatorRecordSchema>;
