@@ -5,6 +5,7 @@ import { hostedOperatorPlanSchema } from "./hosted-operator-contract";
 import type { OperatorSelection } from "./hosted-operator-contract";
 import { hostedRuntimeJournalRecordSchema } from "./hosted-runtime-journal";
 import {
+  assertResourceCredentialCheckpoint,
   prepareHostedOperatorResourceCredentials,
   readHostedOperatorResourceBindings,
 } from "./hosted-operator-resource-credentials";
@@ -207,5 +208,43 @@ describe("owned installed resource bindings", () => {
     expect(decodeURIComponent(url.password)).toBe(password);
     expect(url.searchParams.get("sslmode")).toBe("verify-full");
     expect(url.hostname).toBe(plan.neon.endpoint);
+  });
+});
+
+describe("sealed resource credential checkpoint acknowledgment", () => {
+  it("accepts the actual journal parser roundtrip while preserving the same credentials", () => {
+    const prepared = prepareHostedOperatorResourceCredentials(input);
+    const persisted = hostedRuntimeJournalRecordSchema.parse({
+      ...input.record,
+      privateState: prepared.privateState,
+    });
+    expect(JSON.stringify(persisted.privateState)).not.toBe(JSON.stringify(prepared.privateState));
+    expect(() =>
+      assertResourceCredentialCheckpoint(persisted.privateState, prepared.privateState),
+    ).not.toThrow();
+    expect(
+      prepareHostedOperatorResourceCredentials({ ...input, record: persisted }).credentialsBytes,
+    ).toBe(prepared.credentialsBytes);
+  });
+
+  it.each(["encryptedToken", "keyVersion", "tokenIv", "tokenTag"] as const)(
+    "rejects a changed %s in the acknowledged envelope",
+    (field) => {
+      const prepared = prepareHostedOperatorResourceCredentials(input);
+      const changed = {
+        ...prepared.privateState,
+        [field]: `${prepared.privateState[field]}changed`,
+      };
+      expect(() => {
+        assertResourceCredentialCheckpoint(changed, prepared.privateState);
+      }).toThrow("operation_in_progress");
+    },
+  );
+
+  it("rejects a missing acknowledged envelope", () => {
+    const prepared = prepareHostedOperatorResourceCredentials(input);
+    expect(() => {
+      assertResourceCredentialCheckpoint(undefined, prepared.privateState);
+    }).toThrow("operation_in_progress");
   });
 });

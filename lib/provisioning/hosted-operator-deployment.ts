@@ -107,6 +107,7 @@ import {
   hostedOperatorOwnedOrganizationSpecSchema,
 } from "./hosted-operator-contract";
 import {
+  assertResourceCredentialCheckpoint,
   prepareHostedOperatorResourceCredentials,
   readHostedOperatorResourceBindings,
   readActiveHostedOperatorSharedAuth,
@@ -1111,9 +1112,7 @@ export const createHostedOperatorControlPlane = async (input: {
           effect: effectInput,
           store,
         });
-        if (JSON.stringify(acknowledged.privateState) !== JSON.stringify(prepared.privateState)) {
-          throw new HostedOperatorError("operation_in_progress");
-        }
+        assertResourceCredentialCheckpoint(acknowledged.privateState, prepared.privateState);
         return {
           bytes: Buffer.from(prepared.credentialsBytes, "utf-8"),
           privateState: prepared.privateState,
