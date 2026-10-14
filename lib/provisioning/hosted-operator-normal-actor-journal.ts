@@ -1,5 +1,5 @@
 /* oxlint-disable eslint/no-await-in-loop, sonarjs/expression-complexity -- CAS and encrypted capture require each exact approval, scope, nonce, proof and session binding. */
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomUUID, randomBytes } from "node:crypto";
 import { z } from "zod";
 import {
   decryptVersionedVercelToken,
@@ -10,6 +10,8 @@ import {
   hostedOperatorPlanSchema,
   normalActorPreparationSchema,
   operatorPlanDigest,
+  operatorRealmIdentityLinkSchema,
+  hostedOperatorOwnedOrganizationSpecSchema,
   sameOperatorSelection,
 } from "./hosted-operator-contract";
 import {
@@ -61,17 +63,48 @@ const captureReferenceSchema = z
     (value) => (value.sealed === undefined) === (value.normalCookieSha256 === undefined),
     "Capture completion requires sealed actual cookie bytes.",
   );
+export const normalActorPendingCaptureSchema = z.strictObject({
+  actorKey,
+  organizationId: z.string().min(1).optional(),
+  nonceSha256: digest,
+  expiresAt: z.iso.datetime({ offset: true }),
+});
+export type NormalActorPendingCapture = z.infer<typeof normalActorPendingCaptureSchema>;
+export const normalActorOrganizationProofSchema = z.strictObject({
+  organizationId: z.string().min(1),
+  ownerActorKey: actorKey,
+  owner: normalActorSessionRefSchema,
+  link: operatorRealmIdentityLinkSchema,
+  transportSource:
+    hostedOperatorOwnedOrganizationSpecSchema.shape.identityVerification.shape.transportSource,
+});
+export type NormalActorOrganizationProof = z.infer<typeof normalActorOrganizationProofSchema>;
+type OrganizationProofOwner = Pick<
+  NormalActorOrganizationProof,
+  "organizationId" | "ownerActorKey" | "owner"
+>;
+export type NormalActorOrganizationProofBinding = Pick<
+  NormalActorOrganizationProof["link"],
+  | "audience"
+  | "authResourceId"
+  | "bootstrapPlanDigest"
+  | "browserOrigin"
+  | "endpointOrigin"
+  | "issuer"
+> & { transportSource: NormalActorOrganizationProof["transportSource"] };
 export const normalActorAccountPreparationSchema = normalActorPreparationSchema.extend({
   program: normalActorProgramSchema,
   accountPlan: hostedOperatorPlanSchema,
   sealedState: sealedNormalActorStateSchema,
   captures: z.array(captureReferenceSchema),
+  organizationProofs: z.array(normalActorOrganizationProofSchema).optional(),
+  pendingCaptures: z.array(normalActorPendingCaptureSchema).optional(),
   accountsCompletedAt: z.iso.datetime({ offset: true }).optional(),
 });
 export type NormalActorAccountPreparation = z.infer<typeof normalActorAccountPreparationSchema>;
 export type NormalActorAccountProvenance = Omit<
   NormalActorAccountPreparation,
-  "sealedState" | "captures" | "accountsCompletedAt"
+  "sealedState" | "captures" | "accountsCompletedAt" | "organizationProofs" | "pendingCaptures"
 >;
 export const normalActorCapturedPayloadSchema = z.strictObject({
   version: z.literal(1),
@@ -183,6 +216,42 @@ const hasOrganizationAccountSessions = (
   );
 };
 
+const organizationProofAad = (
+  context: HostedOperatorContext,
+  preparation: NormalActorAccountPreparation,
+  input: OrganizationProofOwner,
+) =>
+  JSON.stringify({
+    ...stateScope(context, preparation),
+    organizationId: input.organizationId,
+    ownerActorKey: input.ownerActorKey,
+    realmSessionId: input.owner.realmSessionId,
+    purpose: "normal-actor-organization-proof-nonce-v1",
+  });
+const assertOrganizationProofOwner = (
+  preparation: NormalActorAccountPreparation,
+  state: NormalActorState,
+  input: OrganizationProofOwner,
+) => {
+  const organization = preparation.program.organizations.find(
+    (entry) => entry.organizationId === input.organizationId,
+  );
+  const candidate = state.organizationSessions?.find(
+    (entry) =>
+      entry.actorKey === input.ownerActorKey && entry.organizationId === input.organizationId,
+  );
+  if (
+    ![
+      organization?.ownerActorKey === input.ownerActorKey,
+      candidate?.session.actorId === input.owner.actorId,
+      candidate?.session.realmSessionId === input.owner.realmSessionId,
+      candidate?.session.reference === input.owner.reference,
+      input.owner.origin === preparation.program.origin,
+    ].every(Boolean)
+  ) {
+    throw new Error("normal_actor_organization_proof_mismatch");
+  }
+};
 /** Actual owner journal CAS; raw normal sessions are decrypted only in this private capability. */
 export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
   const read = async (context: HostedOperatorContext) => {
@@ -284,6 +353,281 @@ export const createNormalActorJournal = (ports: NormalActorJournalPorts) => {
       return result.preparation === undefined || result.state === undefined
         ? undefined
         : { preparation: result.preparation, state: result.state };
+    },
+    async registerPendingCapture(context: HostedOperatorContext, input: NormalActorPendingCapture) {
+      const pending = normalActorPendingCaptureSchema.parse(input);
+      const preparation = await mutate(context, (row) => {
+        const current = row.record.accountPreparation;
+        const link = row.record.operator?.identityLink;
+        if (current === undefined || link === undefined) {
+          throw new Error("normal_actor_capture_pending_mismatch");
+        }
+        const actor = current.program.actors.find(
+          (entry) => entry.actorKey === pending.actorKey && entry.account === "capture-existing",
+        );
+        const matches = [
+          actor !== undefined,
+          pending.organizationId === undefined ||
+            current.program.memberships.some(
+              (member) =>
+                member.actorKey === pending.actorKey &&
+                member.organizationId === pending.organizationId,
+            ),
+          link.consumedAt === undefined,
+          link.nonceSha256 === pending.nonceSha256,
+          link.ownerSessionId === context.target.sessionId,
+          link.browserSession?.operationRef === current.accountOperationRef,
+          link.browserSession?.participantProgramDigest === current.programDigest,
+          link.bootstrapPlanDigest === current.accountPlanDigest,
+          Date.parse(pending.expiresAt) > ports.now(),
+          Date.parse(pending.expiresAt) <= Date.parse(link.expiresAt),
+        ].every(Boolean);
+        if (!matches) {
+          throw new Error("normal_actor_capture_pending_mismatch");
+        }
+        const existing = current.pendingCaptures?.find(
+          (entry) => entry.nonceSha256 === pending.nonceSha256,
+        );
+        if (existing !== undefined) {
+          if (
+            existing.actorKey !== pending.actorKey ||
+            existing.organizationId !== pending.organizationId ||
+            existing.expiresAt !== pending.expiresAt
+          ) {
+            throw new Error("normal_actor_capture_pending_mismatch");
+          }
+          return current;
+        }
+        return {
+          ...current,
+          pendingCaptures: [
+            ...(current.pendingCaptures ?? []).filter(
+              (entry) => Date.parse(entry.expiresAt) > ports.now(),
+            ),
+            pending,
+          ],
+        };
+      });
+      const retained = preparation.pendingCaptures?.find(
+        (entry) => entry.nonceSha256 === pending.nonceSha256,
+      );
+      if (retained === undefined) {
+        throw new Error("normal_actor_capture_pending_mismatch");
+      }
+      return retained;
+    },
+    async readPendingCapture(context: HostedOperatorContext, nonceSha256: string) {
+      const current = await read(context);
+      const pending = current.preparation?.pendingCaptures?.find(
+        (entry) => entry.nonceSha256 === digest.parse(nonceSha256),
+      );
+      const link = current.row.record.operator?.identityLink;
+      if (pending === undefined || link === undefined || current.preparation === undefined) {
+        // oxlint-disable-next-line unicorn/no-useless-undefined -- Missing pending correlation is an explicit optional capability result.
+        return undefined;
+      }
+      const matches = [
+        link.consumedAt === undefined,
+        link.nonceSha256 === pending.nonceSha256,
+        link.ownerSessionId === context.target.sessionId,
+        link.browserSession?.operationRef === current.preparation.accountOperationRef,
+        link.browserSession?.participantProgramDigest === current.preparation.programDigest,
+        Date.parse(pending.expiresAt) > ports.now(),
+        Date.parse(link.expiresAt) > ports.now(),
+      ].every(Boolean);
+      return matches ? pending : undefined;
+    },
+    async prepareOrganizationProof(
+      context: HostedOperatorContext,
+      input: OrganizationProofOwner & {
+        binding: NormalActorOrganizationProofBinding;
+      },
+    ) {
+      const preparation = await mutate(context, (row) => {
+        const current = row.record.accountPreparation;
+        if (current === undefined) {
+          throw new Error("normal_actor_journal_unavailable");
+        }
+        const state = decryptNormalActorState({
+          ...stateScope(context, current),
+          config: ports.keyring,
+          sealed: current.sealedState,
+        });
+        assertOrganizationProofOwner(current, state, input);
+        if (
+          input.binding.browserOrigin !== current.program.origin ||
+          input.binding.issuer !== current.program.origin ||
+          input.binding.authResourceId !== current.accountPlan.authDatabase.resourceId
+        ) {
+          throw new Error("normal_actor_organization_proof_mismatch");
+        }
+        const existing = current.organizationProofs?.find(
+          (entry) => entry.organizationId === input.organizationId,
+        );
+        if (existing !== undefined) {
+          const same = [
+            existing.ownerActorKey === input.ownerActorKey,
+            existing.owner.actorId === input.owner.actorId,
+            existing.owner.realmSessionId === input.owner.realmSessionId,
+            existing.link.audience === input.binding.audience,
+            existing.link.authResourceId === input.binding.authResourceId,
+            existing.link.bootstrapPlanDigest === input.binding.bootstrapPlanDigest,
+            existing.link.browserOrigin === input.binding.browserOrigin,
+            existing.link.endpointOrigin === input.binding.endpointOrigin,
+            existing.link.issuer === input.binding.issuer,
+            existing.transportSource.audience === input.binding.transportSource.audience,
+            existing.transportSource.issuer === input.binding.transportSource.issuer,
+            existing.transportSource.ownerId === input.binding.transportSource.ownerId,
+            existing.transportSource.projectId === input.binding.transportSource.projectId,
+            existing.transportSource.environment === input.binding.transportSource.environment,
+          ].every(Boolean);
+          if (!same) {
+            throw new Error("normal_actor_organization_proof_mismatch");
+          }
+          if (
+            existing.link.consumedAt !== undefined ||
+            Date.parse(existing.link.expiresAt) > ports.now()
+          ) {
+            return current;
+          }
+        }
+        const nonce = randomBytes(32).toString("hex");
+        const expiresAt = new Date(
+          Math.min(ports.now() + 240_000, Date.parse(input.owner.expiresAt)),
+        ).toISOString();
+        if (Date.parse(expiresAt) <= ports.now()) {
+          throw new Error("normal_actor_session_required");
+        }
+        const { transportSource, ...linkBinding } = input.binding;
+        const next = normalActorOrganizationProofSchema.parse({
+          transportSource,
+          organizationId: input.organizationId,
+          ownerActorKey: input.ownerActorKey,
+          owner: input.owner,
+          link: {
+            ...linkBinding,
+            organizationId: null,
+            ownerSessionId: context.target.sessionId,
+            nonceSha256: createHash("sha256").update(nonce).digest("hex"),
+            expiresAt,
+            sealedNonce: {
+              ...encryptVercelToken({
+                associatedData: organizationProofAad(context, current, input),
+                key: ports.keyring.tokenKey,
+                token: nonce,
+              }),
+              keyVersion: ports.keyring.tokenKeyVersion,
+            },
+          },
+        });
+        return {
+          ...current,
+          organizationProofs: [
+            ...(current.organizationProofs ?? []).filter(
+              (entry) => entry.organizationId !== input.organizationId,
+            ),
+            next,
+          ],
+        };
+      });
+      const retained = preparation.organizationProofs?.find(
+        (entry) => entry.organizationId === input.organizationId,
+      );
+      if (retained === undefined) {
+        throw new Error("normal_actor_organization_proof_mismatch");
+      }
+      if (retained.link.consumedAt !== undefined) {
+        return { record: retained };
+      }
+      if (retained.link.sealedNonce === undefined) {
+        throw new Error("normal_actor_organization_proof_mismatch");
+      }
+      const nonce = digest.parse(
+        decryptVersionedVercelToken({
+          ...retained.link.sealedNonce,
+          associatedData: organizationProofAad(context, preparation, retained),
+          config: ports.keyring,
+        }),
+      );
+      if (createHash("sha256").update(nonce).digest("hex") !== retained.link.nonceSha256) {
+        throw new Error("normal_actor_organization_proof_mismatch");
+      }
+      return { record: retained, nonce };
+    },
+    async completeOrganizationProof(
+      context: HostedOperatorContext,
+      input: {
+        organizationId: string;
+        nonceSha256: string;
+        proofRef: string;
+        proofSha256: string;
+        actorId: string;
+        realmSessionId: string;
+        capturedAt: string;
+      },
+    ) {
+      const preparation = await mutate(context, (row) => {
+        const current = row.record.accountPreparation;
+        const retained = current?.organizationProofs?.find(
+          (entry) => entry.organizationId === input.organizationId,
+        );
+        if (current === undefined || retained === undefined) {
+          throw new Error("normal_actor_organization_proof_mismatch");
+        }
+        const state = decryptNormalActorState({
+          ...stateScope(context, current),
+          config: ports.keyring,
+          sealed: current.sealedState,
+        });
+        assertOrganizationProofOwner(current, state, retained);
+        const same = [
+          retained.link.nonceSha256 === input.nonceSha256,
+          retained.owner.actorId === input.actorId,
+          retained.owner.realmSessionId === input.realmSessionId,
+          input.proofRef ===
+            `_protected-operator/artifacts/realm-identity-proof/${context.target.appId}/${input.proofSha256}`,
+        ].every(Boolean);
+        if (!same) {
+          throw new Error("normal_actor_organization_proof_mismatch");
+        }
+        if (retained.link.consumedAt !== undefined) {
+          if (
+            retained.link.proofRef !== input.proofRef ||
+            retained.link.proofSha256 !== input.proofSha256
+          ) {
+            throw new Error("normal_actor_organization_proof_mismatch");
+          }
+          return current;
+        }
+        if (
+          Date.parse(input.capturedAt) > ports.now() ||
+          Date.parse(retained.link.expiresAt) <= Date.parse(input.capturedAt)
+        ) {
+          throw new Error("normal_actor_session_required");
+        }
+        const next = normalActorOrganizationProofSchema.parse({
+          ...retained,
+          link: {
+            ...retained.link,
+            consumedAt: input.capturedAt,
+            proofRef: input.proofRef,
+            proofSha256: input.proofSha256,
+          },
+        });
+        return {
+          ...current,
+          organizationProofs: current.organizationProofs?.map((entry) =>
+            entry.organizationId === input.organizationId ? next : entry,
+          ),
+        };
+      });
+      const retained = preparation.organizationProofs?.find(
+        (entry) => entry.organizationId === input.organizationId,
+      );
+      if (retained === undefined) {
+        throw new Error("normal_actor_organization_proof_mismatch");
+      }
+      return retained;
     },
     async checkpoint(context: HostedOperatorContext, state: NormalActorState) {
       return await mutate(context, (row) => {

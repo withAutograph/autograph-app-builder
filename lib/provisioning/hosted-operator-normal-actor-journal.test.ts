@@ -275,15 +275,10 @@ describe("retained actual normal actor journal", () => {
     const snapshot = structuredClone(value.row);
     await guard.assertMutationAuthority(effect, snapshot);
     expect(value.row).toEqual(snapshot);
-    await expect(
-      guard.assertMutationAuthority(
-        { ...effect, leaseId: "55555555-5555-4555-8555-555555555555" },
-        snapshot,
-      ),
-    ).rejects.toThrow();
-    await expect(
-      guard.assertMutationAuthority({ ...effect, fenceGeneration: 2 }, snapshot),
-    ).rejects.toThrow();
+    const changedLease = { ...effect, leaseId: "55555555-5555-4555-8555-555555555555" };
+    const changedFence = { ...effect, fenceGeneration: 2 };
+    await expect(guard.assertMutationAuthority(changedLease, snapshot)).rejects.toThrow();
+    await expect(guard.assertMutationAuthority(changedFence, snapshot)).rejects.toThrow();
     await expect(guard.assertMutationAuthority(context, snapshot)).rejects.toThrow();
     expect(value.writes).toBe(0);
   });
@@ -336,6 +331,195 @@ describe("retained actual normal actor journal", () => {
     ];
     const allSessions = await value.journal.checkpoint(context, state);
     expect(allSessions.accountsCompletedAt).toBeDefined();
+  });
+
+  it("registers a pending human capture only against the actual canonical first-approval link", async () => {
+    const selectedPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      gatewayBindings: {
+        authBrowserOrigin: program.origin,
+        builderCallbackOrigin: "https://builder.example.test",
+        operatorOrigin: "https://operator.example.test",
+        catalogAppIds: [target.appId],
+        sourceWorkload: {
+          issuer: "https://oidc.vercel.com",
+          audience: "https://gateway.example.test",
+          ownerId: "team",
+          projectId: "prj_gateway",
+          environment: "preview",
+          subject: "gateway",
+        },
+      },
+    });
+    const selectedPreparation = {
+      ...preparationInput,
+      accountPlan: selectedPlan,
+      accountPlanDigest: operatorPlanDigest(selectedPlan),
+    };
+    const value = fixture(selectedPreparation);
+    await value.journal.retain(context, selectedPreparation);
+    const nonceSha256 = "c".repeat(64);
+    const expiresAt = new Date(Date.now() + 60_000).toISOString();
+    const link = {
+      audience: "https://operator.example.test",
+      authResourceId: plan.authDatabase.resourceId,
+      bootstrapPlanDigest: selectedPreparation.accountPlanDigest,
+      browserOrigin: program.origin,
+      endpointOrigin: "https://gateway.example.test",
+      issuer: program.origin,
+      nonceSha256,
+      ownerSessionId: target.sessionId,
+      organizationId: null,
+      expiresAt,
+      browserSession: {
+        operationRef: accountOperationRef,
+        participantProgramDigest: preparationInput.programDigest,
+      },
+    };
+    value.row = {
+      revision: value.row.revision + 1,
+      record: hostedRuntimeJournalRecordSchema.parse({
+        ...value.row.record,
+        leaseId: undefined,
+        operator: { ...value.row.record.operator, identityLink: link },
+      }),
+    };
+    const input = { actorKey: "owner", nonceSha256, expiresAt };
+    expect(await value.journal.registerPendingCapture(context, input)).toEqual(input);
+    expect(await value.journal.readPendingCapture(context, nonceSha256)).toEqual(input);
+    await expect(
+      value.journal.registerPendingCapture(context, { ...input, actorKey: "different-owner" }),
+    ).rejects.toThrow("normal_actor_capture_pending_mismatch");
+    await expect(
+      value.journal.registerPendingCapture(context, {
+        ...input,
+        organizationId: "unapproved-organization",
+      }),
+    ).rejects.toThrow("normal_actor_capture_pending_mismatch");
+    await expect(
+      value.journal.registerPendingCapture(context, { ...input, nonceSha256: "d".repeat(64) }),
+    ).rejects.toThrow("normal_actor_capture_pending_mismatch");
+    value.row = {
+      revision: value.row.revision + 1,
+      record: hostedRuntimeJournalRecordSchema.parse({
+        ...value.row.record,
+        operator: {
+          ...value.row.record.operator,
+          identityLink: {
+            ...link,
+            consumedAt: new Date().toISOString(),
+            proofRef: "confirmed-proof",
+            proofSha256: "e".repeat(64),
+          },
+        },
+      }),
+    };
+    expect(await value.journal.readPendingCapture(context, nonceSha256)).toBeUndefined();
+  });
+
+  it("binds organization proof nonce to the actual candidate and retains consumed proof metadata immutably", async () => {
+    const selectedProgram = normalActorProgramSchema.parse({
+      ...program,
+      organizations: [
+        { organizationId: "org-one", ownerActorKey: "owner", name: "One", slug: "one" },
+      ],
+      memberships: [{ actorKey: "owner", organizationId: "org-one", role: "owner" }],
+    });
+    const selectedPlan = hostedOperatorPlanSchema.parse({
+      ...plan,
+      normalActorProgram: selectedProgram,
+    });
+    const selectedPreparation = {
+      ...preparationInput,
+      program: selectedProgram,
+      programDigest: normalActorProgramDigest(selectedProgram),
+      accountPlan: selectedPlan,
+      accountPlanDigest: operatorPlanDigest(selectedPlan),
+    };
+    const value = fixture(selectedPreparation);
+    await value.journal.retain(context, selectedPreparation);
+    const owner = {
+      reference: "22222222-2222-4222-8222-222222222222",
+      actorId: "actual-owner",
+      realmSessionId: "actual-org-session",
+      origin: program.origin,
+      expiresAt: "2030-01-01T00:00:00.000Z",
+    };
+    const state = initialNormalActorState(selectedProgram, accountOperationRef);
+    state.actors = [
+      {
+        actorKey: "owner",
+        signup: "complete",
+        session: owner,
+        storageState: { cookies: [], origins: [] },
+      },
+    ];
+    state.organizationSessions = [
+      {
+        actorKey: "owner",
+        organizationId: "org-one",
+        selection: "pending",
+        session: owner,
+        storageState: { cookies: [], origins: [] },
+      },
+    ];
+    await value.journal.checkpoint(context, state);
+    const binding = {
+      audience: "https://operator.example.test",
+      authResourceId: plan.authDatabase.resourceId,
+      bootstrapPlanDigest: "d".repeat(64),
+      browserOrigin: program.origin,
+      endpointOrigin: program.origin,
+      issuer: program.origin,
+      transportSource: {
+        audience: "https://operator.example.test",
+        issuer: "https://oidc.vercel.com",
+        ownerId: "team",
+        projectId: "prj_operator",
+        environment: "preview" as const,
+      },
+    };
+    const input = { organizationId: "org-one", ownerActorKey: "owner", owner, binding };
+    const pending = await value.journal.prepareOrganizationProof(context, input);
+    expect(pending.nonce).toMatch(/^[a-f0-9]{64}$/u);
+    expect(JSON.stringify(value.row.record.accountPreparation)).not.toContain(pending.nonce);
+    expect(await value.journal.prepareOrganizationProof(context, input)).toEqual(pending);
+    await expect(
+      value.journal.prepareOrganizationProof(context, {
+        ...input,
+        owner: { ...owner, realmSessionId: "different-session" },
+      }),
+    ).rejects.toThrow("normal_actor_organization_proof_mismatch");
+    const proofSha256 = "e".repeat(64);
+    const completion = {
+      organizationId: "org-one",
+      nonceSha256: pending.record.link.nonceSha256,
+      proofSha256,
+      proofRef: `_protected-operator/artifacts/realm-identity-proof/${target.appId}/${proofSha256}`,
+      actorId: owner.actorId,
+      realmSessionId: owner.realmSessionId,
+      capturedAt: new Date().toISOString(),
+    };
+    const consumed = await value.journal.completeOrganizationProof(context, completion);
+    expect(consumed.link.proofSha256).toBe(proofSha256);
+    await expect(
+      value.journal.completeOrganizationProof(context, {
+        ...completion,
+        proofSha256: "f".repeat(64),
+        proofRef: `_protected-operator/artifacts/realm-identity-proof/${target.appId}/${"f".repeat(64)}`,
+      }),
+    ).rejects.toThrow("normal_actor_organization_proof_mismatch");
+    const retried = await value.journal.prepareOrganizationProof(context, input);
+    expect(retried.record).toEqual(consumed);
+    await expect(
+      value.journal.prepareOrganizationProof(context, {
+        ...input,
+        binding: {
+          ...binding,
+          transportSource: { ...binding.transportSource, projectId: "different-project" },
+        },
+      }),
+    ).rejects.toThrow("normal_actor_organization_proof_mismatch");
   });
 
   it("keeps the original account approval and encryption scope across app replanning and CAS retry", async () => {
