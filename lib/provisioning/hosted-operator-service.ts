@@ -1,3 +1,4 @@
+import type { projectNormalActorRuntime } from "./hosted-operator-normal-actor-runtime-projection";
 import {
   createHostedOperatorConsentDiagnostic,
   reportOperatorPlanningMismatch,
@@ -194,6 +195,10 @@ export interface ProtectedHostedOperatorDependencies {
   >;
   /** Pinned trusted installer + verified declarative artifact only. Guard immediately before every effect; checkpoint credentials before allocation. */
   executeEffect: (input: HostedOperatorWorkerEffectContext) => Promise<OperatorReceipt>;
+  /** Private actual normal sessions only, after prepared approval and native Preview verification. */
+  normalActorRuntimeBindings?: (
+    input: Context & { plan: HostedOperatorPlan; operationRef: string },
+  ) => Promise<ReturnType<typeof projectNormalActorRuntime> | undefined>;
   /** Independently read installed identities/release/provider bindings, with no mutation. */
   verify: (
     input: Context & { plan: HostedOperatorPlan; privateState?: PrivateState },
@@ -554,11 +559,6 @@ const handleBindingsOperation = async (input: {
     await deps.bindings({ ...context, plan, privateState: current.record.privateState }),
     context.authority,
   );
-  await deps.assertAuthorized({ ...context, plan });
-  const latest = await read();
-  if (latest?.revision !== current.revision) {
-    throw new HostedOperatorError("operation_in_progress");
-  }
   const app = operator.deliveryCandidates?.find(
     (candidate) => candidate.deploymentId === operator.deliveredDeploymentId,
   );
@@ -580,9 +580,36 @@ const handleBindingsOperation = async (input: {
       : undefined;
   if (nativePreview) {
     assertOperatorNativePreview(nativePreview, plan, operationRef, input.now());
-    return response({ environment, nativePreview, operationRef, plan, proof });
   }
-  return response({ environment, operationRef, plan, proof });
+  let normalActors: ReturnType<typeof projectNormalActorRuntime> | undefined;
+  if (plan.normalActorProgram !== undefined) {
+    if (nativePreview === undefined || deps.normalActorRuntimeBindings === undefined) {
+      throw new HostedOperatorError("auth_identity_required");
+    }
+    if (plan.normalActorProgram.origin !== nativePreview.publicOrigin) {
+      throw new HostedOperatorError("resource_mismatch");
+    }
+    normalActors = await deps.normalActorRuntimeBindings({ ...context, plan, operationRef });
+    if (normalActors === undefined) {
+      throw new HostedOperatorError("auth_identity_required");
+    }
+    if (normalActors.origin !== nativePreview.publicOrigin) {
+      throw new HostedOperatorError("resource_mismatch");
+    }
+  }
+  await deps.assertAuthorized({ ...context, plan });
+  const latest = await read();
+  if (latest?.revision !== current.revision) {
+    throw new HostedOperatorError("operation_in_progress");
+  }
+  return response({
+    environment,
+    ...(nativePreview === undefined ? {} : { nativePreview }),
+    ...(normalActors === undefined ? {} : { normalActors }),
+    operationRef,
+    plan,
+    proof,
+  });
 };
 
 const normalizeOperatorContext = (authorized: Context): Context => {
