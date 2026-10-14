@@ -364,6 +364,16 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
   block preparation; do not replace them.
   Keep credentials out of inputs and output. Never mutate `amp.yaml`,
   deploy, promote, alias, activate, or claim admission or Production readiness.
+- When accepted requirements need several authenticated participants, derive
+  `normalActorProgram` for `plan-app-hosted-runtime` from those accounts,
+  organizations, memberships and app roles. Use the verified native public
+  origin. Preserve the program and original public session through resource
+  preparation, approved normal account preparation and the resolved access/app
+  plan. Ordinary sign-in replies resume the same approved preparation; never
+  ask the evaluator to insert fixture users, repair grants or drive private
+  stages. Keep passwords and session state out of tool inputs and conversation.
+  Read `docs/hosted-app-runtime.md` for the normal-account handoff. Do not invent
+  actor quotas, source-layout assertions or regular-app-change gates.
 - If the complete command reports stale, conflicting, or ambiguous recovery
   state, reconcile it automatically when safe. Otherwise translate the visible
   product effect into one recommended product choice or an unavailable outcome
