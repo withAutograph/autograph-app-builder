@@ -4,6 +4,15 @@ import { isDeepStrictEqual } from "node:util";
 import postgres from "postgres";
 import { hostedTenantAuthoritySchema } from "../db/hosted-admin";
 import { z } from "zod";
+import { createRemoteJWKSet, customFetch } from "jose";
+import { createHostedOperatorNormalAuthTransport } from "./hosted-operator-normal-auth-transport";
+import { createHostedOperatorRealmHttpTransport } from "./hosted-operator-realm-http-transport";
+import { createHostedOperatorNormalActorOperations } from "./hosted-operator-normal-actor-operations";
+import type { NormalActorOperationsDependencies } from "./hosted-operator-normal-actor-operations";
+import { createHostedOperatorNormalActorProofCollector } from "./hosted-operator-normal-actor-proof";
+import { createNormalActorOrganizationWorkers } from "./hosted-operator-normal-actor-worker";
+import { createNormalActorRuntimeBindings } from "./hosted-operator-normal-actor-runtime-bindings";
+import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 import { createNormalActorJournal } from "./hosted-operator-normal-actor-journal";
 import type { NormalActorAccountPreparation } from "./hosted-operator-normal-actor-journal";
 import { createRealmIdentityBrowserUrl } from "./hosted-operator-auth-identity";
@@ -94,6 +103,7 @@ import {
   projectPendingRealmIdentityLink,
   selectHostedOperatorOwnedOrganizationSpec,
   retainedOperatorAuthSchema,
+  hostedOperatorOwnedOrganizationSpecSchema,
 } from "./hosted-operator-contract";
 import {
   prepareHostedOperatorResourceCredentials,
@@ -348,6 +358,7 @@ const membershipSpecForEffect = (input: HostedOperatorEffectContext) => {
 export const createHostedOperatorControlPlane = async (input: {
   environment?: Readonly<Record<string, string | undefined>>;
   workloadPolicy: OperatorWorkloadPolicy;
+  sourceConfiguration: HostedOperatorSourceConfiguration;
   fetch?: typeof fetch;
 }) => {
   const environment = input.environment ?? process.env;
@@ -851,7 +862,7 @@ export const createHostedOperatorControlPlane = async (input: {
       store,
     });
 
-    return {
+    const controlPlane = {
       normalActorJournalPorts,
       assertAuthorized: owner.assertAuthorized,
       async assertMembershipCapture(inputContext: HostedOperatorEffectContext) {
@@ -1536,6 +1547,248 @@ export const createHostedOperatorControlPlane = async (input: {
         });
       },
       withResourceLease,
+    };
+    const configuration = structuredClone(input.sourceConfiguration);
+    const assertCurrentPlan: NormalActorOperationsDependencies["assertCurrentPlan"] = async (
+      currentInput,
+    ) => {
+      await owner.assertArtifactAuthorized(currentInput);
+      const snapshot = await store.read(currentInput);
+      if (snapshot === undefined || snapshot.record.operator === undefined) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      const { operator } = snapshot.record;
+      const planDigest = operatorPlanDigest(currentInput.plan);
+      const samePlan = [
+        operator.planDigest === planDigest,
+        operator.planDigest === operatorPlanDigest(operator.plan),
+        currentInput.operationRef === undefined ||
+          operator.operationRef === currentInput.operationRef,
+      ].every(Boolean);
+      if (!samePlan) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      const approval = await readApproval({
+        ...currentInput,
+        action: currentInput.plan.action,
+        callId: snapshot.record.approvedByCallId,
+        planDigest,
+      });
+      const approved = [
+        approval?.approved,
+        approval?.approvalId === operator.approvalId,
+        approval?.callId === snapshot.record.approvedByCallId,
+        approval?.planDigest === planDigest,
+        approval?.action === currentInput.plan.action,
+      ].every(Boolean);
+      if (!approved) {
+        throw new HostedOperatorError("authorization_required");
+      }
+      await owner.assertArtifactAuthorized(currentInput);
+      const latest = await store.read(currentInput);
+      if (latest === undefined || latest.record.operator === undefined) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+      const remainsApproved = [
+        latest.record.operator.planDigest === planDigest,
+        latest.record.operator.operationRef === operator.operationRef,
+        latest.record.operator.approvalId === operator.approvalId,
+        latest.record.approvedByCallId === snapshot.record.approvedByCallId,
+      ].every(Boolean);
+      if (!remainsApproved) {
+        throw new HostedOperatorError("operation_in_progress");
+      }
+    };
+    const normalRealmFetch: NormalActorOperationsDependencies["normalRealmFetch"] = async ({
+      context,
+      origin,
+    }) =>
+      await createHostedOperatorNormalAuthTransport(
+        {
+          configuration,
+          context,
+          origin,
+          assertPlanningAuthorized: owner.assertPlanningAuthorized,
+          assertCurrentOwner: owner.assertArtifactAuthorized,
+        },
+        { fetch: input.fetch },
+      );
+    const sharedNormalActorDependencies = {
+      journalPorts: normalActorJournalPorts,
+      assertCurrentPlan,
+      normalRealmFetch,
+    };
+    const collectOrganizationOwnerProof = createHostedOperatorNormalActorProofCollector({
+      journalPorts: normalActorJournalPorts,
+      assertPlanningAuthorized: owner.assertPlanningAuthorized,
+      normalRealmFetch,
+      ownedArtifacts: async (context) => {
+        await owner.assertArtifactAuthorized(context);
+        return ownedArtifacts(context);
+      },
+      resolveRealmBinding: async ({ context, preparation }) => {
+        const known = await readKnownAuthBootstrap(context);
+        const current = await normalActorJournal.read(context);
+        const candidate = known.operator.gatewayDeliveryCandidates?.find(
+          (entry) =>
+            entry.deploymentId === known.operator.deliveredGatewayDeploymentId &&
+            entry.readyState === "READY",
+        );
+        const boundary = preparation.accountPlan.deploymentBoundary;
+        const bindings = preparation.accountPlan.gatewayBindings;
+        const samePreparation = [
+          current !== undefined,
+          current?.preparation.accountOperationRef === preparation.accountOperationRef,
+          current?.preparation.accountPlanDigest === preparation.accountPlanDigest,
+          current?.preparation.programDigest === preparation.programDigest,
+          known.operator.operationRef === preparation.accountOperationRef,
+          known.operator.planDigest === preparation.accountPlanDigest,
+          candidate?.origin === boundary?.verification.gatewayOrigin,
+        ].every(Boolean);
+        if (
+          !samePreparation ||
+          candidate === undefined ||
+          boundary === undefined ||
+          bindings === undefined
+        ) {
+          throw new HostedOperatorError("auth_identity_required");
+        }
+        const transport = createHostedOperatorRealmHttpTransport(
+          configuration,
+          "operator",
+          {
+            fetch: input.fetch,
+          },
+          candidate.origin,
+        );
+        const resource = preparation.accountPlan.authDatabase;
+        return {
+          audience: bindings.operatorOrigin,
+          authResourceId: resource.resourceId,
+          bootstrapPlanDigest: preparation.accountPlanDigest,
+          builderCallbackOrigin: configuration.builderCallbackOrigin,
+          endpointOrigin: candidate.origin,
+          issuer: preparation.program.origin,
+          resource: {
+            version: 1,
+            database: resource.database,
+            environment: "preview",
+            hostname: preparation.accountPlan.neon.endpoint,
+            migratorRole: resource.migratorRole,
+            runtimeRole: resource.runtimeRole,
+            port: 5432,
+            schema: "public",
+            neon: {
+              branchId: preparation.accountPlan.neon.branchId,
+              projectId: preparation.accountPlan.neon.projectId,
+            },
+          },
+          getKey: createRemoteJWKSet(new URL(`${candidate.origin}/_platform/jwks.json`), {
+            [customFetch]: transport,
+          }),
+          readback: async (request) => await transport(request),
+          transportSource: configuration.nativeNeon.configuration.operator,
+        };
+      },
+    });
+    const organizationWorkers = createNormalActorOrganizationWorkers({
+      configuration,
+      assertAuthorized: owner.assertAuthorized,
+      readResourceBindings: async (effect) => await controlPlane.readResourceBindings(effect),
+      readGeneratedRelease: async (context, release) => {
+        await owner.assertArtifactAuthorized(context);
+        const current = await store.read(context);
+        const plan = current?.record.operator?.plan;
+        if (plan === undefined || !isDeepStrictEqual(plan.release, release)) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        const selection = await controlPlane.readGeneratedSelection(context, plan.contextId);
+        const sameRelease = [
+          selection !== undefined,
+          selection?.releaseId === release.id,
+          selection?.manifestSha256 === release.sha256,
+          selection?.artifactRef === release.artifactRef,
+        ].every(Boolean);
+        if (!sameRelease || selection === undefined) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        return await controlPlane.readGeneratedRelease(context, selection);
+      },
+      readOrganizationProof: async (context, selected) => {
+        const retained = await normalActorJournal.read(context);
+        const declaredOrganization = retained?.preparation.program.organizations.find(
+          (entry) => entry.organizationId === selected.organizationId,
+        );
+        const captured = retained?.preparation.organizationProofs?.find(
+          (entry) => entry.organizationId === selected.organizationId,
+        );
+        if (
+          retained === undefined ||
+          declaredOrganization === undefined ||
+          captured === undefined
+        ) {
+          throw new HostedOperatorError("auth_identity_required");
+        }
+        const spec = hostedOperatorOwnedOrganizationSpecSchema.parse({
+          kind: "create-owned-organization",
+          organizationId: declaredOrganization.organizationId,
+          name: declaredOrganization.name,
+          slug: declaredOrganization.slug,
+          actorId: captured.owner.actorId,
+          bootstrapPlanDigest: captured.link.bootstrapPlanDigest,
+          identityCapture: {
+            capturedAt: captured.link.consumedAt,
+            realmSessionId: captured.owner.realmSessionId,
+          },
+          identityNonceSha256: captured.link.nonceSha256,
+          identityProof: { reference: captured.link.proofRef, sha256: captured.link.proofSha256 },
+          identityVerification: {
+            audience: captured.link.audience,
+            issuer: captured.link.issuer,
+            jwksUrl: `${captured.link.endpointOrigin}/_platform/jwks.json`,
+            transportSource: captured.transportSource,
+          },
+        });
+        const artifacts = ownedArtifacts(context);
+        const content = await artifacts.store.read(
+          artifacts.context,
+          spec.identityProof.reference,
+          0,
+        );
+        if (content === undefined) {
+          throw new HostedOperatorError("auth_identity_required");
+        }
+        const bytes = Buffer.from(content, "base64");
+        const proof = bytes.toString("utf-8");
+        const matches = [
+          bytes.length <= 16_384,
+          bytes.toString("base64") === content,
+          Buffer.from(proof, "utf-8").equals(bytes),
+          createHash("sha256").update(bytes).digest("hex") === spec.identityProof.sha256,
+          captured.owner.actorId === selected.owner.actorId,
+          captured.owner.realmSessionId === selected.owner.realmSessionId,
+          captured.owner.reference === selected.owner.reference,
+        ].every(Boolean);
+        if (!matches) {
+          throw new HostedOperatorError("resource_mismatch");
+        }
+        await owner.assertArtifactAuthorized(context);
+        return { preparation: retained.preparation, spec, proof };
+      },
+    });
+    const normalActors = createHostedOperatorNormalActorOperations({
+      ...sharedNormalActorDependencies,
+      assertPlanningAuthorized: owner.assertPlanningAuthorized,
+      prepareActorCapture: async (capture) => await controlPlane.prepareNormalActorCapture(capture),
+      collectOrganizationOwnerProof,
+      ...organizationWorkers,
+    });
+    return {
+      ...controlPlane,
+      ...normalActors,
+      readNormalActorRuntimeBindings: createNormalActorRuntimeBindings(
+        sharedNormalActorDependencies,
+      ),
     };
   };
   try {

@@ -159,6 +159,7 @@ export const openHostedOperatorCompositionResources = async (
   const configuration = readHostedOperatorSourceConfiguration(environment);
   const controlPlane = await createHostedOperatorControlPlane({
     environment,
+    sourceConfiguration: configuration,
     workloadPolicy: configuration.workloadPolicy satisfies OperatorWorkloadPolicy,
   });
   return { configuration, controlPlane };
