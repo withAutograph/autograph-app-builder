@@ -608,13 +608,29 @@ describe("metadata owner observation boundaries", () => {
     expect(f.owner).toHaveBeenCalledTimes(2);
     expect(f.events.slice(0, 2)).toEqual(["provider-scope", "native-store"]);
     expect(f.events.slice(-2)).toEqual(["provider-scope", "native-store"]);
-    for (const [index, event] of f.events.entries()) {
-      if (event.startsWith("tool-start:") || event === "token-start" || event === "oidc-start") {
-        expect(f.events[index - 1]).toBe("local-owner");
+    // Connect can overlap token and OIDC lifetimes. Ownership brackets each
+    // operation, while unrelated operations may interleave between those guards.
+    const starts = f.events.flatMap((event, index) => {
+      if (event.startsWith("tool-start:")) {
+        return [{ operation: event.slice("tool-start:".length), index }];
       }
-      if (event.startsWith("tool-end:") || event === "token-end" || event === "oidc-end") {
-        expect(f.events[index + 1]).toBe("local-owner");
+      if (event === "token-start") {
+        return [{ operation: "token", index }];
       }
+      if (event === "oidc-start") {
+        return [{ operation: "oidc", index }];
+      }
+      return [];
+    });
+    for (const { operation, index } of starts) {
+      const end =
+        operation === "token" || operation === "oidc"
+          ? `${operation}-end`
+          : `tool-end:${operation}`;
+      const endIndex = f.events.indexOf(end, index + 1);
+      expect(endIndex).toBeGreaterThan(index);
+      expect(f.events.slice(0, index)).toContain("local-owner");
+      expect(f.events.slice(endIndex + 1)).toContain("local-owner");
     }
     expect(f.events).toContain("token-start");
     expect(f.events).toContain("oidc-start");
@@ -663,6 +679,7 @@ describe("metadata owner observation boundaries", () => {
     expect(f.planning).toHaveBeenCalledTimes(1);
     expect(called).toEqual([]);
     expect(f.events).not.toContain("token-start");
+    expect(f.events).not.toContain("oidc-start");
   });
 
   it("denies metadata when local ownership is revoked during a tool call", async () => {
@@ -678,6 +695,25 @@ describe("metadata owner observation boundaries", () => {
     expect(f.planning).toHaveBeenCalledTimes(1);
     expect(f.close).toHaveBeenCalledTimes(1);
   });
+
+  it.each(["token-end", "oidc-end"])(
+    "denies metadata when local ownership is revoked before returning from %s",
+    async (boundary) => {
+      const f = fixture({}, undefined, true);
+      f.planningOwner.mockImplementation(async () => {
+        await Promise.resolve();
+        if (f.events.includes(boundary)) {
+          throw new Error("revoked during private credential observation");
+        }
+      });
+      await expect(f.reader.inspectPlanningTarget(context, scope)).rejects.toThrow(
+        /^Protected Preview Neon MCP credential is unavailable\.$/u,
+      );
+      expect(f.events).toContain(boundary);
+      expect(called).toEqual([]);
+      expect(f.planning).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("retains approved scope and native binding checks for credential acquisition", async () => {
     const f = fixture({}, undefined, true);
