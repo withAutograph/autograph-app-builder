@@ -3877,6 +3877,8 @@ export default defineConfig({
     "anti-slop/no-conditional-empty-object-spread": "off",
     "eslint/sort-keys": "off",
     "sonarjs/no-undefined-assignment": "off",
+    // Returning an existing Promise is valid; requiring async changes no protected behavior.
+    "typescript/promise-function-async": "off",
   },
   ignorePatterns: core.ignorePatterns,
   jsPlugins: jsPlugins.jsPlugins,

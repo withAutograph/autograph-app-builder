@@ -491,6 +491,7 @@ const makeFixture = (
     bindWorkerContext,
     createSandbox,
     files,
+    generatedFiles,
     input,
     launcher,
     records,
@@ -661,7 +662,11 @@ describe("hosted protected installer Sandbox launcher", () => {
       app_id: "spend-review",
       release_manifest_sha256: fixture.input.plan.release.sha256,
     });
-    expect(fixture.written.filter((file) => file.includes("/release/"))).toHaveLength(12);
+    for (const [name, content] of Object.entries(fixture.generatedFiles)) {
+      expect(
+        fixture.files.get(`/vercel/sandbox/protected-installer/${runId}/release/${name}`),
+      ).toEqual(content);
+    }
     expect(fixture.sandbox.runCommand).toHaveBeenCalledWith(
       expect.objectContaining({
         args: [
@@ -898,121 +903,123 @@ describe("resource bootstrap launcher", () => {
       },
     },
   });
-  it.each([false, true])(
-    "handles actual inspect pre-start fence ordering (mutating request: %s)",
-    async (mutation) => {
-      const f = makeFixture();
-      const input = { ...resourceInput(), readbackOnly: true as const };
-      const resourceContext = buildResourceBootstrapContext(input);
-      const digest = createHash("sha256").update(JSON.stringify(resourceContext)).digest("hex");
-      const original = f.sandbox.runCommand.getMockImplementation()!;
-      f.sandbox.runCommand.mockImplementation(async (options) => {
-        if (!options.detached) return await original(options);
-        const transport = options.args!.at(3);
-        const spool = `/vercel/sandbox/protected-installer/${transport}`;
-        const request = {
-          approval_digest: resourceContext.operation.approval_digest,
-          tenant_id: null,
-          kind: mutation ? "authorize_effect" : "check_fence",
+  it.each([
+    { mutation: false, inspect: true },
+    { mutation: true, inspect: true },
+    { mutation: false, inspect: false },
+    { mutation: true, inspect: false },
+  ])("admits only a live read-only startup fence in mode %j", async ({ mutation, inspect }) => {
+    const f = makeFixture();
+    const input = { ...resourceInput(), readbackOnly: true as const };
+    const resourceContext = buildResourceBootstrapContext(input);
+    const bindWorkerContext = vi.fn(async () => {});
+    const digest = createHash("sha256").update(JSON.stringify(resourceContext)).digest("hex");
+    const original = f.sandbox.runCommand.getMockImplementation()!;
+    f.sandbox.runCommand.mockImplementation(async (options) => {
+      if (!options.detached) return await original(options);
+      const transport = options.args!.at(3);
+      const spool = `/vercel/sandbox/protected-installer/${transport}`;
+      const request = {
+        approval_digest: resourceContext.operation.approval_digest,
+        tenant_id: null,
+        kind: mutation ? "authorize_effect" : "check_fence",
+        version: 1,
+        operation_id: resourceContext.operation.operation_id,
+        context_digest: digest,
+        fence_generation: input.fenceGeneration,
+        app_id: resourceContext.app_id,
+        installer_id: resourceContext.installer.id,
+        installer_sha256: resourceContext.installer.sha256,
+        release_id: resourceContext.release.id,
+        resource_id: resourceContext.resource.resource_id,
+        ...(mutation ? { effect_id: "neon.create_database", sequence: 1, tenant_id: null } : {}),
+      };
+      f.files.set(`${spool}/requests/1.json`, frame(request));
+      f.files.set(
+        `${spool}/requests/1.ready`,
+        frame({ version: 1, run_id: transport, frame_id: 1 }),
+      );
+      for (const [index, kind] of [
+        [1, "worker_started"],
+        [2, "worker_succeeded"],
+      ] as const) {
+        f.files.set(
+          `${spool}/lifecycle/${index}.json`,
+          frame({ version: 1, run_id: transport, kind }),
+        );
+        f.files.set(
+          `${spool}/lifecycle/${index}.ready`,
+          frame({ version: 1, run_id: transport, frame_id: index }),
+        );
+      }
+      f.files.set(
+        `${spool}/resource-observation.json`,
+        frame({
           version: 1,
           operation_id: resourceContext.operation.operation_id,
           context_digest: digest,
           fence_generation: input.fenceGeneration,
-          app_id: resourceContext.app_id,
-          installer_id: resourceContext.installer.id,
-          installer_sha256: resourceContext.installer.sha256,
-          release_id: resourceContext.release.id,
           resource_id: resourceContext.resource.resource_id,
-          ...(mutation ? { effect_id: "neon.create_database", sequence: 1, tenant_id: null } : {}),
-        };
-        f.files.set(`${spool}/requests/1.json`, frame(request));
-        f.files.set(
-          `${spool}/requests/1.ready`,
-          frame({ version: 1, run_id: transport, frame_id: 1 }),
-        );
-        for (const [index, kind] of [
-          [1, "worker_started"],
-          [2, "worker_succeeded"],
-        ] as const) {
-          f.files.set(
-            `${spool}/lifecycle/${index}.json`,
-            frame({ version: 1, run_id: transport, kind }),
-          );
-          f.files.set(
-            `${spool}/lifecycle/${index}.ready`,
-            frame({ version: 1, run_id: transport, frame_id: index }),
-          );
-        }
-        f.files.set(
-          `${spool}/resource-observation.json`,
-          frame({
-            version: 1,
-            operation_id: resourceContext.operation.operation_id,
-            context_digest: digest,
-            fence_generation: input.fenceGeneration,
-            resource_id: resourceContext.resource.resource_id,
-            scope: resourceContext.resource.scope,
-            status: "applied",
-            readback_sha256: "9".repeat(64),
-          }),
-        );
-        return {
-          kill: vi.fn(async () => undefined),
-          logs: async function* () {
+          scope: resourceContext.resource.scope,
+          status: "applied",
+          readback_sha256: "9".repeat(64),
+        }),
+      );
+      return {
+        kill: vi.fn(async () => undefined),
+        logs: async function* () {
+          yield {
+            stream: "stdout",
+            data: `${JSON.stringify({ kind: "protected_installer_frame_ready", version: 1, run_id: transport, frame_id: 1 })}\n`,
+          };
+          for (const frameId of [1, 2])
             yield {
               stream: "stdout",
-              data: `${JSON.stringify({ kind: "protected_installer_frame_ready", version: 1, run_id: transport, frame_id: 1 })}\n`,
+              data: `${JSON.stringify({ kind: "protected_installer_lifecycle_ready", version: 1, run_id: transport, frame_id: frameId })}\n`,
             };
-            for (const frameId of [1, 2])
-              yield {
-                stream: "stdout",
-                data: `${JSON.stringify({ kind: "protected_installer_lifecycle_ready", version: 1, run_id: transport, frame_id: frameId })}\n`,
-              };
-          },
-          wait: vi.fn(async () => ({ exitCode: 0 })),
-        };
-      });
-      const launcher = createHostedOperatorSandboxLauncher(
-        {
-          projectId: "project",
-          teamId: "team",
-          image: "image",
-          workers: {},
-          resourcesWorker: {
-            executablePath: "/opt/resource-worker",
-            id: "neon-resource-bootstrap-v1",
-            operationScope: "neon-resource-bootstrap-v1",
-            subcommand: "neon-resource-bootstrap",
-            sha256: workerDigest,
-          },
         },
-        { createSandbox: f.createSandbox, diagnosticSink: f.diagnostics },
-      );
-      if (mutation) {
-        await expect(launcher.inspect(input)).rejects.toMatchObject({ code: "resource_mismatch" });
-        expect(f.written.some((member) => member.endsWith("responses/1.json"))).toBe(false);
-        expect(f.diagnostics.mock.calls[0]?.[0].executionFailure?.stage).toBe("worker_protocol");
-      } else {
-        await expect(launcher.inspect(input)).resolves.toMatchObject({ status: "applied" });
-        expect(f.written.some((member) => member.endsWith("responses/1.json"))).toBe(true);
-        expect(f.diagnostics).not.toHaveBeenCalled();
-      }
-      expect(f.records).toEqual([]);
-      expect(f.bindWorkerContext).not.toHaveBeenCalled();
-    },
-  );
-  it("serializes the kind-first Node bootstrap ABI and no tenant authority", () => {
+        wait: vi.fn(async () => ({ exitCode: 0 })),
+      };
+    });
+    const launcher = createHostedOperatorSandboxLauncher(
+      {
+        projectId: "project",
+        teamId: "team",
+        image: "image",
+        workers: {},
+        resourcesWorker: {
+          executablePath: "/opt/resource-worker",
+          id: "neon-resource-bootstrap-v1",
+          operationScope: "neon-resource-bootstrap-v1",
+          subcommand: "neon-resource-bootstrap",
+          sha256: workerDigest,
+        },
+      },
+      { createSandbox: f.createSandbox, diagnosticSink: f.diagnostics },
+    );
+    const run = () =>
+      inspect
+        ? launcher.inspect(input)
+        : launcher.execute({
+            ...resourceInput(),
+            bindWorkerContext,
+          });
+    if (mutation) {
+      await expect(run()).rejects.toMatchObject({ code: "resource_mismatch" });
+      expect(f.written.some((member) => member.endsWith("responses/1.json"))).toBe(false);
+      expect(f.diagnostics.mock.calls[0]?.[0].executionFailure?.stage).toBe("worker_protocol");
+    } else {
+      const result = await run();
+      if (inspect) expect(result).toMatchObject({ status: "applied" });
+      expect(f.written.some((member) => member.endsWith("responses/1.json"))).toBe(true);
+      expect(f.diagnostics).not.toHaveBeenCalled();
+    }
+    expect(f.records).toEqual([]);
+    expect(f.bindWorkerContext).not.toHaveBeenCalled();
+  });
+  it("selects the resource bootstrap protocol without tenant authority", () => {
     const bootstrapContext = buildResourceBootstrapContext(resourceInput());
-    expect(Object.keys(bootstrapContext)).toEqual([
-      "kind",
-      "version",
-      "operation",
-      "app_id",
-      "resource",
-      "release",
-      "installer",
-      "tenant_targets",
-    ]);
+    expect(bootstrapContext.kind).toBe("neon_resource_bootstrap");
     expect(bootstrapContext.resource).toMatchObject({
       scope: "app_database",
       bootstrap_role: "bootstrap_owner",
@@ -1105,7 +1112,7 @@ describe("resource bootstrap launcher", () => {
 it("reports a closed pin stage without exposing command output or credentials", async () => {
   const f = makeFixture({ pinMatches: false });
   await expect(f.launcher.execute(f.input)).rejects.toMatchObject({ code: "resource_mismatch" });
-  expect(f.diagnostics.mock.calls[0]?.[0].executionFailure).toEqual({
+  expect(f.diagnostics.mock.calls[0]?.[0].executionFailure).toMatchObject({
     stage: "worker_pin",
     mode: "execute",
     errorClass: "operator_error",

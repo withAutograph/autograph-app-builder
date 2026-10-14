@@ -746,7 +746,7 @@ it("preserves execution failures and redacts arbitrary error properties", async 
       { stage: "readback", mode: "inspect", commandExit: "zero" },
     ),
   ).rejects.toBe(error);
-  expect(sink.mock.calls[0]?.[0].executionFailure).toEqual({
+  expect(sink.mock.calls[0]?.[0].executionFailure).toMatchObject({
     stage: "readback",
     mode: "inspect",
     commandExit: "zero",

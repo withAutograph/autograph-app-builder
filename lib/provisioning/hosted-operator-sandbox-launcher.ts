@@ -1244,9 +1244,6 @@ const runSandboxWorker = async (
     );
     const fence = fenceRequestSchema.safeParse(requestValue);
     if (fence.success) {
-      if (!started && input.readbackOnly !== true) {
-        throw resourceMismatch();
-      }
       const request = fence.data;
       if (
         unknownSeen ||
