@@ -163,7 +163,10 @@ export const resolveFullPlan = async (
   base: HostedOperatorPlan,
   context: HostedOperatorContext,
   configuration: HostedOperatorSourceConfiguration,
-  controlPlane: ControlPlane,
+  controlPlane: Pick<
+    ControlPlane,
+    "assertPlanningAuthorized" | "readCapturedRealmIdentity" | "readCapturedRealmIdentityProof"
+  >,
   transportIo: Parameters<typeof createHostedOperatorRealmHttpTransport>[2] = {},
 ): Promise<HostedOperatorPlan> => {
   const captured = await controlPlane.readCapturedRealmIdentity(context);
@@ -171,6 +174,11 @@ export const resolveFullPlan = async (
     return base;
   }
   const application = selectedApplication(configuration, context);
+  // Bootstrap prepares owned Auth and database resources before app publication.
+  // Only the app delivery plan needs the actual published Git source.
+  if (application.repoId === undefined || application.gitSha === undefined) {
+    throw new HostedOperatorError("operator_unavailable");
+  }
   const privateProof = await controlPlane.readCapturedRealmIdentityProof(context);
   const transport = createHostedOperatorRealmHttpTransport(
     configuration,
