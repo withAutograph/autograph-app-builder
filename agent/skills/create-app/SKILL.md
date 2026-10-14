@@ -382,6 +382,15 @@ pullRequestNumber } }` for a named merged PR, or `{ kind: "commit", commitSha }`
   support through the repository workflow; never ask the evaluator to copy
   cookies or repair the app. Keep assertions about product behavior and access,
   without exact internal call counts, opaque IDs or incidental DOM positions.
+- After publishing or updating the reviewed draft PR, check `appSourceRecording`.
+  `recorded` associates the actual published branch, commit and tree with this
+  session's compiled release. Use that association for hosted Preview planning;
+  never substitute the latest repository commit or manually supplied source IDs.
+  If recording is `unavailable`, the GitHub publication already succeeded.
+  Resume the same approved publication/update/reconciliation through its existing
+  idempotent recovery to record the source before preparing Preview. Preserve
+  the original session and reviewed release, report the recording blocker, and
+  do not start another outward effect or claim Preview source readiness.
 - If the complete command reports stale, conflicting, or ambiguous recovery
   state, reconcile it automatically when safe. Otherwise translate the visible
   product effect into one recommended product choice or an unavailable outcome
