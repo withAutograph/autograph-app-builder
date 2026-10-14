@@ -286,6 +286,67 @@ describe("participant bootstrap planning evidence", () => {
     expect(inspectParticipantBootstrapPreparation(desired, record).auth).toBeDefined();
     expect(inspectParticipantBootstrapPreparation(desired, record).gatewayPrepared).toBe(false);
   });
+  it("accepts a newer completed deployment that updates a row owned by its original operation", () => {
+    const desired = desiredPlan();
+    const record = completedRecord();
+    const { operator } = record;
+    const candidate = operator?.gatewayDeliveryCandidates?.[0];
+    if (operator === undefined || candidate === undefined) {
+      throw new Error("fixture operator missing");
+    }
+    const newOperation = "00000000-0000-4000-8000-000000000004";
+    operator.operationRef = newOperation;
+    candidate.operationRef = newOperation;
+    const observed = hostedRuntimeJournalRecordSchema.parse(record);
+    expect(observed.operator?.gatewayEnvironment?.[0].operationRef).toBe(operationRef);
+    expect(inspectParticipantBootstrapPreparation(desired, observed).gatewayPrepared).toBe(true);
+  });
+  it.each(["changed-owner", "changed-id", "missing-known-row"])(
+    "requires the current row to match its completed observed provenance: %s",
+    (change) => {
+      const desired = desiredPlan();
+      const record = completedRecord();
+      const { operator } = record;
+      const row = operator?.gatewayEnvironment?.[0];
+      if (operator === undefined || row === undefined) {
+        throw new Error("fixture row missing");
+      }
+      record.retainedAuth = retainedOperatorAuthFromJournal(record);
+      operator.plan = hostedOperatorPlanSchema.parse({
+        ...desired,
+        stage: "auth-participants",
+        effects: [
+          { id: "normal-accounts", kind: "normal-accounts", description: "Normal accounts" },
+        ],
+      });
+      operator.planDigest = operatorPlanDigest(operator.plan);
+      operator.operationRef = "00000000-0000-4000-8000-000000000002";
+      operator.receipts = [
+        { effectId: "normal-accounts", observedAt, resourceVersion: "accounts-readback" },
+      ];
+      record.status = "participants-prepared";
+      if (change === "changed-owner") {
+        row.operationRef = "00000000-0000-4000-8000-000000000003";
+        row.comment = `App Builder protected operator ${row.operationRef}`;
+      }
+      if (change === "changed-id") {
+        row.id = "another-owned-row";
+      }
+      if (change === "missing-known-row") {
+        const retained = record.retainedAuth;
+        if (retained === undefined) {
+          throw new Error("fixture retained Auth missing");
+        }
+        retained.gatewayEnvironment = [];
+      }
+      expect(
+        inspectParticipantBootstrapPreparation(
+          desired,
+          hostedRuntimeJournalRecordSchema.parse(record),
+        ).gatewayPrepared,
+      ).toBe(false);
+    },
+  );
   it("makes participant contents irrelevant to the capture configuration", () => {
     const desired = desiredPlan();
     const changed = hostedOperatorPlanSchema.parse({

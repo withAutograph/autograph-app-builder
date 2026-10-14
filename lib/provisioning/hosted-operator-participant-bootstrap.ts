@@ -59,12 +59,13 @@ export const inspectParticipantBootstrapPreparation = (
     if (known.plan.gatewayBindings === undefined || known.plan.gatewayDelivery === undefined) {
       return false;
     }
+    // Updating an owned provider row preserves its original creator operation.
+    // Its observed value belongs to the completed binding receipt below.
     const binding = record.operator?.gatewayEnvironment?.find((row) =>
       [
         row.key === "PLATFORM_REALM_OPERATOR_LINK_CONFIG",
         row.projectId === desired.gatewayDelivery?.projectId,
         row.branch === desired.gatewayDelivery?.branch,
-        row.operationRef === known.operationRef,
         row.pendingOperationRef === undefined,
         row.pendingValueSha256 === undefined,
         row.valueSha256 === desiredValue,
