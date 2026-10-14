@@ -1759,6 +1759,7 @@ export const composeHostedOperatorDependencies = (
     }),
     plan,
     readApproval: controlPlane.readApproval,
+    readApprovedPlan: controlPlane.readApprovedPlan,
     reconcile,
     store: controlPlane.store,
     verify: async (input) => {

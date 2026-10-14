@@ -21,6 +21,7 @@ import type { PrivateHostedApprovalReceipt } from "../eve/private-hosted-approva
 import {
   createHostedOperatorOwnerAuthority,
   createHostedOperatorReadApproval,
+  createHostedOperatorReadApprovedPlan,
 } from "./hosted-operator-owner";
 import {
   hostedRuntimeJournalRecordSchema,
@@ -1304,5 +1305,85 @@ describe("hosted operator owner authority", () => {
     await expect(
       readApproval({ ...context, action: "prepare", callId: receipt.callId, planDigest }),
     ).rejects.toThrow();
+  });
+});
+
+describe("canonical original approved plan reader", () => {
+  const operationRef = "f58de890-c49f-4e5c-86d2-03d2d44166b9";
+  const receipt = privateHostedApprovalReceiptSchema.parse({
+    callId: "original-call",
+    format: "autograph-hosted-approval-v1",
+    outcome: "approved",
+    requestId: "original-approval",
+    responderPrincipalId: principal.ownerUserId,
+    sequence: 1,
+    toolInput: {
+      appId: selection.appId,
+      branch: selection.branch,
+      environment: selection.environment,
+      operationRef,
+      plan,
+      planDigest: operatorPlanDigest(plan),
+      projectId: selection.projectId,
+    },
+    toolName: "prepare-app-hosted-runtime",
+    turnId: "turn-original",
+  });
+  const setup = async () => {
+    const f = makeFixture();
+    f.currentSession.privateApprovalReceipts = [receipt];
+    const context = await f.authority.authorize(request(), selection, ownerContext);
+    const read = createHostedOperatorReadApprovedPlan({
+      eve: f.eve,
+      assertCanonicalOwner: f.authority.assertArtifactAuthorized,
+    });
+    const proposed = {
+      ...plan,
+      retention: { ...plan.retention, expiresAt: "2099-12-31T23:59:59Z" },
+    };
+    return {
+      f,
+      read,
+      input: { ...context, plan: proposed, now: Date.parse("2026-10-14T00:00:00Z") },
+    };
+  };
+  it("selects the actual original owner approval without extending its expiry", async () => {
+    const { read, input } = await setup();
+    expect(await read(input)).toEqual({
+      operationRef,
+      plan,
+      planDigest: receipt.toolInput.planDigest,
+    });
+  });
+  it("never reuses changed effects or expired original authority", async () => {
+    const { read, input } = await setup();
+    expect(await read({ ...input, plan: { ...input.plan, contextId: "changed" } })).toBeNull();
+    expect(await read({ ...input, now: Date.parse(plan.retention.expiresAt) })).toBeNull();
+  });
+  it("denies latest cancellation, foreign responder and revoked canonical membership", async () => {
+    const { f, read, input } = await setup();
+    f.currentSession.privateApprovalReceipts = [
+      receipt,
+      { ...receipt, sequence: 2, requestId: "cancelled-request", outcome: "cancelled" },
+    ];
+    await expect(read(input)).rejects.toMatchObject({ code: "authorization_required" });
+    f.currentSession.privateApprovalReceipts = [{ ...receipt, responderPrincipalId: "foreign" }];
+    await expect(read(input)).rejects.toMatchObject({ code: "authorization_required" });
+    f.currentSession.privateApprovalReceipts = [receipt];
+    vi.spyOn(f.membership, "isMember").mockResolvedValue(false);
+    await expect(read(input)).rejects.toMatchObject({ code: "authorization_required" });
+  });
+  it("denies restoration over a different actually approved replacement operation", async () => {
+    const { f, read, input } = await setup();
+    const replacement = {
+      ...receipt,
+      requestId: "new-approval",
+      sequence: 0,
+      toolInput: { ...receipt.toolInput, operationRef: "fcc825bc-d683-422c-8b58-0d0a065ceb57" },
+    };
+    f.currentSession.privateApprovalReceipts = [replacement, receipt];
+    await expect(read({ ...input, currentOperation: replacement.toolInput })).rejects.toMatchObject(
+      { code: "operation_in_progress" },
+    );
   });
 });
