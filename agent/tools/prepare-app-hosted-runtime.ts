@@ -89,9 +89,11 @@ export const evaluateHostedRuntimePreparationApproval = async (
   }
 };
 
-export const hostedRuntimePreparationApproval = async (
+// oxlint-disable-next-line eslint/func-style -- The Workflow SDK requires a top-level async function for the step boundary.
+export async function hostedRuntimePreparationApproval(
   ctx: ApprovalContext<HostedRuntimeApprovalEnvelope>,
-): Promise<ApprovalStatus> => {
+): Promise<ApprovalStatus> {
+  "use step";
   try {
     const prior = await import("../../lib/agent/hosted-runtime-prior-approval");
     return await evaluateHostedRuntimePreparationApproval(
@@ -104,7 +106,7 @@ export const hostedRuntimePreparationApproval = async (
       reason: "Saved preparation authority is unavailable. Retry when access is restored.",
     };
   }
-};
+}
 
 export default defineWorkflowTool({
   approval: hostedRuntimePreparationApproval,

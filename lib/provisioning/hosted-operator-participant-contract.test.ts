@@ -346,14 +346,20 @@ describe("participant plan and approval contract", () => {
 });
 
 describe("independently approved App and Gateway Preview branches", () => {
-  const independentlyBound = () => ({
-    ...base,
-    publicGateway: { ...base.publicGateway, branch: "shared-auth-preview" },
-    deploymentBoundary: {
-      ...base.deploymentBoundary,
-      gateway: { ...base.deploymentBoundary.gateway, branch: "shared-auth-preview" },
-    },
-  });
+  const independentlyBound = () => {
+    const boundary = base.deploymentBoundary;
+    if (boundary === undefined || base.publicGateway === undefined) {
+      throw new Error("The branch fixture requires its actual Gateway deployment boundary.");
+    }
+    return {
+      ...base,
+      publicGateway: { ...base.publicGateway, branch: "shared-auth-preview" },
+      deploymentBoundary: {
+        ...boundary,
+        gateway: { ...boundary.gateway, branch: "shared-auth-preview" },
+      },
+    };
+  };
   it("accepts distinct branches bound to their own exact deployment identities", () => {
     const parsed = hostedOperatorPlanSchema.parse(independentlyBound());
     expect(parsed.selection.branch).toBe(base.selection.branch);
