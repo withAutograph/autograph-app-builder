@@ -981,21 +981,20 @@ describe("installed Eve 0.68 projection", () => {
       4,
     );
 
-    expect(projected).toEqual([
-      {
-        index: 4,
-        request: {
-          allowFreeform: false,
-          description:
-            "Build the stock exception queue, detail panel, and resolution workflow shown in the preview.",
-          kind: "approval",
-          requestId: "req_build",
-          title: "Build this app?",
-        },
-        type: "input.requested",
+    expect(
+      projected.map(toPublicEvent).find((event) => event?.type === "input_required"),
+    ).toMatchObject({
+      request: {
+        allowFreeform: false,
+        description:
+          "Build the stock exception queue, detail panel, and resolution workflow shown in the preview.",
+        kind: "approval",
+        requestId: "req_build",
+        title: "Build this app?",
       },
-    ]);
-    expect(JSON.stringify(projected)).not.toContain("apply_app_creation");
+      type: "input_required",
+    });
+    expect(JSON.stringify(projected.map(toPublicEvent))).not.toContain("apply_app_creation");
   });
 
   it("fails closed without exposing a malformed receipt or raw arguments", () => {
@@ -1157,34 +1156,32 @@ describe("installed Eve 0.68 projection", () => {
         type: "assistant.message",
       },
     ]);
-    expect(
-      projectInstalledEveEvent(
-        installedEvent({
-          data: {
-            requests: [
-              {
-                kind: "tool-approval",
-                prompt: "Apply change?",
-                requestId: "req_1",
-              },
-            ],
-          },
-          type: "input.requested",
-        }),
-        3,
-      ),
-    ).toEqual([
-      {
-        index: 3,
-        request: {
-          allowFreeform: false,
-          kind: "approval",
-          requestId: "req_1",
-          title: "Apply change?",
+    const projectedInput = projectInstalledEveEvent(
+      installedEvent({
+        data: {
+          requests: [
+            {
+              kind: "tool-approval",
+              prompt: "Apply change?",
+              requestId: "req_1",
+            },
+          ],
         },
         type: "input.requested",
+      }),
+      3,
+    );
+    expect(
+      projectedInput.map(toPublicEvent).find((event) => event?.type === "input_required"),
+    ).toMatchObject({
+      request: {
+        allowFreeform: false,
+        kind: "approval",
+        requestId: "req_1",
+        title: "Apply change?",
       },
-    ]);
+      type: "input_required",
+    });
     expect(
       projectInstalledEveEvent(
         installedEvent({
@@ -1466,4 +1463,31 @@ it("preserves interleaved pending prototype calls across private serializable ch
     );
     expect(projector.current()).toEqual(latestInstalledPrototype(events.slice(0, index + 1)));
   }
+});
+
+it("keeps a typed framework session limit out of public confirmations", () => {
+  const projected = projectInstalledEveEvent(
+    installedEvent({
+      data: {
+        requests: [
+          {
+            action: { input: {}, kind: "tool-call", toolName: "session_limit_continuation" },
+            allowFreeform: false,
+            kind: "session-limit",
+            options: [
+              { id: "continue", label: "Continue" },
+              { id: "stop", label: "Stop" },
+            ],
+            prompt: "Framework session budget",
+            requestId: "native-framework-limit",
+          },
+        ],
+      },
+      type: "input.requested",
+    }),
+    3,
+  );
+  expect(projected.map(toPublicEvent).some((event) => event?.type === "input_required")).toBe(
+    false,
+  );
 });

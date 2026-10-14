@@ -1285,12 +1285,13 @@ export const projectInstalledEveEvent = (
             },
             { index, status: "failed", type: "status" },
           ]
-        : projectedRequests.map((request, requestIndex) => ({
-            frameworkSessionLimit: isFrameworkSessionLimitInput(event.data.requests[requestIndex]),
-            index,
-            request,
-            type: "input.requested" as const,
-          }));
+        : projectedRequests.map((request, requestIndex) => {
+            const projected: InternalEveEvent = { index, request, type: "input.requested" };
+            if (isFrameworkSessionLimitInput(event.data.requests[requestIndex])) {
+              projected.frameworkSessionLimit = true;
+            }
+            return projected;
+          });
     }
     case "input.resolved": {
       return [

@@ -108,7 +108,6 @@ import type {
 } from "./hosted-submission-diagnostic";
 
 const guardDecisions: readonly ("continue" | "stop")[] = ["continue", "stop"];
-const projectSnapshot = projectHostedSnapshot;
 const HOSTED_START_REQUEST_TIMEOUT_MS = 300_000;
 const HOSTED_IDLE_RESERVATION_GRACE_MS = 300_000;
 const HOSTED_PROGRESS_NOTICE_MS = 60_000;
@@ -836,6 +835,42 @@ export function createHostedEveSessionService(input: {
   onSubmissionDiagnostic?: HostedSubmissionDiagnosticSink;
   sessionTimeoutPolicy?: HostedSessionTimeoutPolicy;
 }): EveSessionService {
+  // Presentation reuses private state already captured by this owned read/mutation. It never
+  // causes a second checkpoint read or changes the requested public cursor.
+  const presentationInputs = new Map<string, PrivateInputState | undefined>();
+  const capturedInputs = new Map<
+    string,
+    {
+      adapterGeneration: number;
+      adapterSessionId: string;
+      checkpointDigest?: string;
+      state?: PrivateInputState;
+    }
+  >();
+  const rememberCheckpointInputs = (
+    record: HostedSessionRecord,
+    metadata: HostedPagedCheckpointMetadata,
+  ) => {
+    const durable = toDurableHostedSessionRecord(record);
+    const state = metadata.nativeObservationState?.privateInputState ?? metadata.privateInputState;
+    capturedInputs.set(durable.sessionId, {
+      adapterGeneration: durable.adapterGeneration,
+      adapterSessionId: durable.adapterSessionId,
+      checkpointDigest: durable.checkpointDigest,
+      state,
+    });
+    presentationInputs.set(durable.sessionId, state);
+  };
+  const projectSnapshot = (
+    sessionId: string,
+    snapshot: HostedEngineSnapshot,
+    cursor = 0,
+    limit = 100,
+  ) => {
+    const result = projectHostedSnapshot(sessionId, snapshot, cursor, limit);
+    presentationInputs.set(sessionId, snapshot.privateInputState);
+    return result;
+  };
   const principal = hostedPrincipalSchema.parse(input.principal);
   const now = input.now ?? Date.now;
   const sessionTimeoutPolicy = hostedSessionTimeoutPolicySchema.parse(
@@ -944,13 +979,21 @@ export function createHostedEveSessionService(input: {
     session: HostedSessionRecord,
   ): Promise<PrivateInputState | undefined> => {
     const durable = toDurableHostedSessionRecord(session);
+    if (durable.checkpointRef === undefined) {
+      presentationInputs.set(durable.sessionId, durable.checkpoint?.privateInputState);
+      return durable.checkpoint?.privateInputState;
+    }
+    const captured = capturedInputs.get(durable.sessionId);
+    if (
+      captured?.adapterSessionId === durable.adapterSessionId &&
+      captured.adapterGeneration === durable.adapterGeneration &&
+      captured.checkpointDigest === durable.checkpointDigest
+    ) {
+      return captured.state;
+    }
     // oxlint-disable-next-line eslint/no-use-before-define -- The checkpoint reader is initialized before any service call.
     const metadata = await readCheckpointMetadata(session);
-    return (
-      metadata?.nativeObservationState?.privateInputState ??
-      metadata?.privateInputState ??
-      durable.checkpoint?.privateInputState
-    );
+    return metadata?.nativeObservationState?.privateInputState ?? metadata?.privateInputState;
   };
   const respondOperationId = (clientRequestId: string) =>
     stableId("op", {
@@ -1725,6 +1768,7 @@ export function createHostedEveSessionService(input: {
         sessionId,
       });
       const { metadata } = page;
+      rememberCheckpointInputs(record, metadata);
       return eveSessionResultSchema.parse({
         cursor: page.cursor,
         events: page.events,
@@ -1776,6 +1820,7 @@ export function createHostedEveSessionService(input: {
     ) {
       throw new HostedSessionRecoveryUnavailableError();
     }
+    rememberCheckpointInputs(record, page.metadata);
     return page.metadata;
   };
 
@@ -1897,7 +1942,7 @@ export function createHostedEveSessionService(input: {
         const nativeObservationState =
           parsedNativeState?.adapterSessionId === session.adapterSessionId &&
           !(
-            parsedNativeState.pendingRequests.length > 0 &&
+            parsedNativeState.pendingRequests.some((request) => request.kind === "question") &&
             parsedNativeState.privateInputState === undefined
           )
             ? parsedNativeState
@@ -3242,15 +3287,8 @@ export function createHostedEveSessionService(input: {
       });
     },
   } satisfies EveSessionService;
-  const present = async (result: EveSessionResult): Promise<EveSessionResult> => {
-    if (result.sessionId === "") {
-      return result;
-    }
-    return presentSessionLimitState(
-      result,
-      await privateInputsForSession(await requireSession(result.sessionId)),
-    );
-  };
+  const present = (result: EveSessionResult): EveSessionResult =>
+    presentSessionLimitState(result, presentationInputs.get(result.sessionId));
   // Keep canonical mutation/preflight results complete privately; sanitize every public result.
   return {
     ...service,
@@ -3264,4 +3302,4 @@ export function createHostedEveSessionService(input: {
   };
 }
 
-export const hostedEveProjectionForTesting = projectSnapshot;
+export { projectHostedSnapshot as hostedEveProjectionForTesting } from "./hosted-projection";
