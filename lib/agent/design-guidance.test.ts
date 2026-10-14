@@ -6,15 +6,20 @@ import {
 } from "../sandbox/hosted-managed-seeds";
 import { uiPreviewInputSchema, validateUiPreview } from "./ui-preview";
 
+const hostedGuidance = (skillPath: string): string | undefined => {
+  const content = readHostedManagedSeedFiles().find(
+    (file) => file.path === `${HOSTED_MANAGED_SKILLS_TARGET}/${skillPath}`,
+  )?.content;
+  if (content === undefined) {
+    return undefined;
+  }
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- The loader contract explicitly permits strings and Uint8Array bytes; decode both supported representations.
+  return typeof content === "string" ? content : new TextDecoder().decode(content);
+};
+
 describe("high-fidelity design guidance", () => {
   it("provides a first-preview example accepted by the unchanged preview contract", () => {
-    const reference = readHostedManagedSeedFiles()
-      .find(
-        (file) =>
-          file.path ===
-          `${HOSTED_MANAGED_SKILLS_TARGET}/design-app/references/ui-preview-authoring.md`,
-      )
-      ?.content.toString("utf-8");
+    const reference = hostedGuidance("design-app/references/ui-preview-authoring.md");
     if (reference === undefined) {
       throw new Error("Hosted preview authoring guidance is unavailable.");
     }
@@ -49,9 +54,6 @@ describe("high-fidelity design guidance", () => {
     "design-app/references/ui-preview-authoring.md",
     "create-app/SKILL.md",
   ])("makes hosted guidance available for transfer: %s", (skillPath) => {
-    const file = readHostedManagedSeedFiles().find(
-      (entry) => entry.path === `${HOSTED_MANAGED_SKILLS_TARGET}/${skillPath}`,
-    );
-    expect(file?.content.byteLength).toBeGreaterThan(0);
+    expect(hostedGuidance(skillPath)?.length).toBeGreaterThan(0);
   });
 });
