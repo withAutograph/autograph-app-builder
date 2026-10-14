@@ -54,7 +54,9 @@ const operatorPlanningFailure = z.strictObject({
   errorClass: z.enum(["operator_error", "validation_error", "type_error", "unexpected"]),
   code: operatorPublicResultSchema.shape.code.unwrap().optional(),
   sqlState: operatorPlanningSqlState.optional(),
-  nativeStoreFailure: z.enum(["connection_required", "provider_unavailable", "resource_mismatch"]).optional(),
+  nativeStoreFailure: z
+    .enum(["connection_required", "provider_unavailable", "resource_mismatch"])
+    .optional(),
 });
 type OperatorPlanningFailure = z.infer<typeof operatorPlanningFailure>;
 
