@@ -149,7 +149,7 @@ describe("normal Auth client", () => {
       storageState: participant.exportStorageState(),
       fetch: localFetch,
     });
-    expect(await resumed.getSession()).toEqual(actor);
+    expect(await resumed.getSession()).toEqual({ ...actor, activeOrganizationId: created.id });
     const reconciliation = createHostedOperatorNormalAuthClient({
       origin,
       fetch: localFetch,
@@ -160,6 +160,67 @@ describe("normal Auth client", () => {
     const reconciled = await reconciliation.getSession();
     expect(reconciled?.actorId).toBe(actor.actorId);
     expect(requests.every((request) => new URL(request.url).origin === origin)).toBe(true);
+  });
+
+  it("selects independent actual organization sessions through the ordinary endpoint", async () => {
+    const auth = betterAuth({
+      secret: "normal-auth-local-fixture-long-enough-secret",
+      baseURL: origin,
+      emailAndPassword: { enabled: true },
+      plugins: [organization()],
+      logger: { disabled: true },
+    });
+    const localFetch: typeof fetch = async (target, init) =>
+      await auth.handler(new Request(target, init));
+    const owner = createHostedOperatorNormalAuthClient({
+      origin,
+      fetch: localFetch,
+      assertApprovedEffect: approved,
+    });
+    await owner.signUp({ name: "Owner", email: "owner@example.com", password });
+    const ids: string[] = [];
+    for (const slug of ["first", "second"]) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Ordinary organization creation changes this single fixture owner session.
+      const response = await auth.handler(
+        new Request(`${origin}/api/auth/organization/create`, {
+          method: "POST",
+          headers: {
+            origin,
+            "content-type": "application/json",
+            cookie: owner
+              .exportStorageState()
+              .cookies.map((cookie) => `${cookie.name}=${cookie.value}`)
+              .join("; "),
+          },
+          body: JSON.stringify({ name: slug, slug }),
+        }),
+      );
+      // oxlint-disable-next-line eslint/no-await-in-loop -- The next ordinary creation follows this actual response.
+      ids.push(z.object({ id: z.string() }).parse(await response.json()).id);
+    }
+    const sessions = await Promise.all(
+      ids.map(async (organizationId) => {
+        const client = createHostedOperatorNormalAuthClient({
+          origin,
+          fetch: localFetch,
+          assertApprovedEffect: approved,
+        });
+        await client.signIn({ email: "owner@example.com", password });
+        await client.setActiveOrganization({ organizationId });
+        return { client, session: await client.getSession() };
+      }),
+    );
+    expect(new Set(sessions.map((entry) => entry.session?.sessionId)).size).toBe(2);
+    expect(await sessions[0]?.client.getSession()).toMatchObject({ activeOrganizationId: ids[0] });
+    expect(await sessions[1]?.client.getSession()).toMatchObject({ activeOrganizationId: ids[1] });
+    const readOnly = createHostedOperatorNormalAuthClient({
+      origin,
+      fetch: localFetch,
+      storageState: sessions[0]?.client.exportStorageState(),
+    });
+    await expect(
+      readOnly.setActiveOrganization({ organizationId: ids[1] ?? "missing" }),
+    ).rejects.toMatchObject({ code: "approval_required", operation: "set_active_organization" });
   });
 
   it("preserves separate cookies, Expires commas, host-only/domain scope, paths and deletion across private resume", async () => {

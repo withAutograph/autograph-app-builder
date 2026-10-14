@@ -22,7 +22,12 @@ const membersSchema = z.object({
 });
 const sessionSchema = z
   .object({
-    session: z.object({ id, userId: id, expiresAt: z.iso.datetime({ offset: true }) }),
+    session: z.object({
+      id,
+      userId: id,
+      expiresAt: z.iso.datetime({ offset: true }),
+      activeOrganizationId: id.nullable().optional(),
+    }),
     user: z.object({ id, email }),
   })
   .nullable();
@@ -32,6 +37,7 @@ export interface NormalAuthSession {
   sessionId: string;
   email: string;
   expiresAt: string;
+  activeOrganizationId?: string | null;
 }
 export type NormalAuthInvitation = z.infer<typeof invitationSchema>;
 export type NormalAuthMember = z.infer<typeof memberSchema>;
@@ -42,13 +48,15 @@ export type NormalAuthOperation =
   | "invite_member"
   | "accept_invitation"
   | "list_invitations"
-  | "list_members";
+  | "list_members"
+  | "set_active_organization";
 
 /** Private orchestration port: none of these credential/session values are public tool results. */
 export interface NormalAuthClient {
   signUp: (input: { email: string; password: string; name: string }) => Promise<void>;
   signIn: (input: { email: string; password: string }) => Promise<void>;
   getSession: () => Promise<NormalAuthSession | null>;
+  setActiveOrganization: (input: { organizationId: string }) => Promise<void>;
   inviteMember: (input: {
     organizationId: string;
     email: string;
@@ -78,6 +86,7 @@ const errorCodes = z.enum([
   "ORGANIZATION_NOT_FOUND",
   "MEMBER_NOT_FOUND",
   "YOU_ARE_NOT_A_MEMBER_OF_THIS_ORGANIZATION",
+  "USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION",
   "YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION",
   "EMAIL_VERIFICATION_REQUIRED_BEFORE_ACCEPTING_OR_REJECTING_INVITATION",
   "YOU_ARE_NOT_ALLOWED_TO_INVITE_USERS_TO_THIS_ORGANIZATION",
@@ -350,7 +359,24 @@ export const createHostedOperatorNormalAuthClient = (options: {
         sessionId: value.session.id,
         email: value.user.email,
         expiresAt: value.session.expiresAt,
+        ...(value.session.activeOrganizationId === undefined
+          ? {}
+          : { activeOrganizationId: value.session.activeOrganizationId }),
       };
+    },
+    async setActiveOrganization(input) {
+      const parsed = parseInput(organizationInput, input, "set_active_organization");
+      const organization = await request(
+        "set_active_organization",
+        "organization/set-active",
+        z.object({ id }),
+        parsed,
+      );
+      if (organization.id !== parsed.organizationId) {
+        throw new NormalAuthClientError("invalid_response", {
+          operation: "set_active_organization",
+        });
+      }
     },
     async inviteMember(input) {
       return await request(
