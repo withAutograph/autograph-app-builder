@@ -2204,3 +2204,152 @@ describe("read-only configured Preview target resolution", () => {
     expect(f.row).toBeUndefined();
   });
 });
+
+const observationFixture = () => {
+  const f = fixture();
+  let currentTime = Date.parse("2026-10-14T16:45:00.000Z");
+  let providerAuthorizationReads = 0;
+  let canonicalOwnerReads = 0;
+  let durableApprovalReads = 0;
+  let physicalFenceReads = 0;
+  let approvalId = "durable-human-decision";
+  const fullAuthorization = f.deps.assertAuthorized;
+  const { readApproval } = f.deps;
+  const { withResourceLease } = f.deps;
+  f.deps.now = () => currentTime;
+  f.deps.assertAuthorized = async (input) => {
+    // This existing adapter represents the provider-backed full authorization path.
+    providerAuthorizationReads += 1;
+    await fullAuthorization(input);
+  };
+  f.deps.assertCanonicalOwner = async (input) => {
+    canonicalOwnerReads += 1;
+    await fullAuthorization({ ...input, plan });
+  };
+  f.deps.readApproval = async (input) => {
+    durableApprovalReads += 1;
+    const approval = await readApproval(input);
+    return approval === null ? null : { ...approval, approvalId };
+  };
+  f.deps.withResourceLease = async (input, run) =>
+    await withResourceLease(
+      input,
+      async (assertFence) =>
+        await run(async () => {
+          physicalFenceReads += 1;
+          await assertFence();
+        }),
+    );
+  const handler = createProtectedHostedOperatorHandler(f.deps);
+  const client = createHostedOperatorClient({
+    endpoint: "https://operator.example",
+    fetch: async (url, init) =>
+      await handler(new Request(url instanceof Request ? url.url : url, init)),
+    ownerContext,
+    token: async () => "fixture-service-identity",
+  });
+  return {
+    ...f,
+    client,
+    base: f,
+    counters: () => ({
+      providerAuthorizationReads,
+      canonicalOwnerReads,
+      durableApprovalReads,
+      physicalFenceReads,
+    }),
+    changeApproval: () => {
+      approvalId = "different-durable-human-decision";
+    },
+    advance: (duration: number) => {
+      currentTime += duration;
+    },
+  };
+};
+
+describe("private observation within the approved operator effect", () => {
+  it("rechecks canonical owner, durable approval, physical fence and actual lease without adding provider authorization reads", async () => {
+    const f = observationFixture();
+    const request = await prepared(f);
+    f.approve();
+    const original = f.deps.executeEffect;
+    let observations = 0;
+    f.deps.executeEffect = async (input) => {
+      const before = f.counters();
+      const revision = f.base.row?.revision;
+      if (input.assertCurrentObservation === undefined) {
+        throw new Error("Missing observation guard");
+      }
+      await input.assertCurrentObservation();
+      const after = f.counters();
+      expect(after.providerAuthorizationReads).toBe(before.providerAuthorizationReads);
+      expect(after.canonicalOwnerReads).toBe(before.canonicalOwnerReads + 1);
+      expect(after.durableApprovalReads).toBe(before.durableApprovalReads + 1);
+      expect(after.physicalFenceReads).toBe(before.physicalFenceReads + 1);
+      expect(f.base.row?.revision).toBeGreaterThan(revision ?? 0);
+      observations += 1;
+      return await original(input);
+    };
+    expect((await f.client.request(request)).status).toBe("prepared");
+    expect(observations).toBeGreaterThan(0);
+    // Ordinary outer lifecycle/full mutation guards still perform provider checks.
+    expect(f.counters().providerAuthorizationReads).toBeGreaterThan(0);
+  });
+  it.each([
+    ["owner revoked", "authorization_required"],
+    ["approval replaced", "authorization_required"],
+    ["execution lease expired", "operation_in_progress"],
+    ["physical fence lost", "operation_in_progress"],
+    ["frozen plan expired", "authorization_required"],
+  ])("rejects %s before permitting private observation", async (failure, expectedCode) => {
+    const f = observationFixture();
+    const request = await prepared(f);
+    f.approve();
+    let observed = false;
+    f.deps.executeEffect = async (input) => {
+      switch (failure) {
+        case "owner revoked": {
+          f.revoke();
+          break;
+        }
+        case "approval replaced": {
+          f.changeApproval();
+          break;
+        }
+        case "execution lease expired": {
+          f.advance(60_001);
+          break;
+        }
+        case "physical fence lost": {
+          f.loseFence();
+          break;
+        }
+        case "frozen plan expired": {
+          f.advance(366 * 24 * 60 * 60 * 1000);
+          break;
+        }
+        default: {
+          throw new Error("Unknown observation failure");
+        }
+      }
+      const before = f.counters().providerAuthorizationReads;
+      if (input.assertCurrentObservation === undefined) {
+        throw new Error("Missing observation guard");
+      }
+      try {
+        await input.assertCurrentObservation();
+        observed = true;
+      } finally {
+        expect(f.counters().providerAuthorizationReads).toBe(before);
+      }
+      return {
+        effectId: input.effect.id,
+        fenceGeneration: input.fenceGeneration,
+        observedAt: new Date().toISOString(),
+        resourceVersion: "unreachable",
+      };
+    };
+    expect((await f.client.request(request)).code).toBe(expectedCode);
+    expect(observed).toBe(false);
+  });
+});

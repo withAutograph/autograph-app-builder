@@ -136,7 +136,7 @@ interface RecordedRequest {
   body?: Record<string, z.infer<typeof z.json>>;
 }
 
-const fixture = (configurationId?: string | null) => {
+const fixture = (configurationId?: string | null, observationGuards = false) => {
   const rows: Record<string, z.infer<typeof z.json>>[] = [
     {
       id: "auth-secret",
@@ -208,6 +208,8 @@ const fixture = (configurationId?: string | null) => {
   let losePatchResponse = false;
   let emptyMutationResponse = false;
   const assertCurrent = vi.fn(async () => {});
+  const assertCurrentObservation = vi.fn(async () => {});
+  const assertCanonicalOwner = vi.fn(async () => {});
   const checkpointGatewayEnvironment = vi.fn(
     async (next: readonly ManagedOperatorEnvironmentRow[]) => {
       journal = structuredClone([...next]);
@@ -216,6 +218,7 @@ const fixture = (configurationId?: string | null) => {
   );
   input = {
     assertCurrent,
+    ...(observationGuards ? { assertCurrentObservation } : {}),
     authority,
     checkpoint: vi.fn(async () => {}),
     checkpointGatewayEnvironment,
@@ -319,6 +322,7 @@ const fixture = (configurationId?: string | null) => {
   }));
   const writer = createHostedOperatorGatewayBindings({
     assertAuthorized,
+    ...(observationGuards ? { assertCanonicalOwner } : {}),
     readCanonicalGatewayRows,
     fetch: fetcher,
     readAuthRuntimeUrl,
@@ -326,7 +330,9 @@ const fixture = (configurationId?: string | null) => {
   });
   return {
     assertAuthorized,
+    assertCanonicalOwner,
     assertCurrent,
+    assertCurrentObservation,
     checkpointGatewayEnvironment,
     fetcher,
     input,
@@ -486,6 +492,102 @@ it.each([undefined, null, "", target.installationId])(
     expect(f.requests.filter((row) => row.method === "POST")).toHaveLength(5);
   },
 );
+
+it("uses canonical observation guards for GETs and full guards around every write and the bind", async () => {
+  const f = fixture(undefined, true);
+  await f.writer.bind(f.input);
+  expect(f.requests).toHaveLength(47);
+  expect(f.assertAuthorized).toHaveBeenCalledTimes(22);
+  expect(f.assertCurrent).toHaveBeenCalledTimes(22);
+  expect(f.assertCurrentObservation).toHaveBeenCalledTimes(194);
+  expect(f.assertCanonicalOwner).toHaveBeenCalledTimes(194);
+  expect(f.readCredential).toHaveBeenCalledTimes(47);
+});
+
+it("fully brackets a read-only replay while checking current observation authority on every read", async () => {
+  const f = fixture(undefined, true);
+  await f.writer.bind(f.input);
+  f.requests.length = 0;
+  f.assertAuthorized.mockClear();
+  f.assertCurrent.mockClear();
+  f.assertCurrentObservation.mockClear();
+  await f.writer.bind(f.input);
+  expect(f.requests).toHaveLength(29);
+  expect(f.assertAuthorized).toHaveBeenCalledTimes(2);
+  expect(f.assertCurrent).toHaveBeenCalledTimes(2);
+  expect(f.assertCurrentObservation).toHaveBeenCalledTimes(122);
+});
+
+it("falls back to full guards when the observation callback is absent", async () => {
+  const f = fixture(undefined, true);
+  delete f.input.assertCurrentObservation;
+  await f.writer.bind(f.input);
+  expect(f.assertCurrentObservation).not.toHaveBeenCalled();
+  expect(f.assertCanonicalOwner).not.toHaveBeenCalled();
+  expect(f.assertAuthorized).toHaveBeenCalledTimes(216);
+});
+
+it("falls back to full guards when the canonical callback is absent", async () => {
+  const f = fixture();
+  f.input.assertCurrentObservation = f.assertCurrentObservation;
+  await f.writer.bind(f.input);
+  expect(f.assertCurrentObservation).not.toHaveBeenCalled();
+  expect(f.assertAuthorized).toHaveBeenCalledTimes(216);
+});
+
+it.each(["observation", "canonical"] as const)(
+  "rejects changed %s authority before a Gateway GET or write",
+  async (boundary) => {
+    const f = fixture(undefined, true);
+    const deny = boundary === "observation" ? f.assertCurrentObservation : f.assertCanonicalOwner;
+    deny.mockRejectedValue(new Error("authority changed"));
+    await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+    expect(f.requests).toHaveLength(0);
+  },
+);
+
+it("retains full JIT authorization before the first outward write", async () => {
+  const f = fixture(undefined, true);
+  f.assertAuthorized.mockResolvedValueOnce().mockRejectedValue(new Error("provider grant revoked"));
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+  expect(f.assertCurrentObservation).toHaveBeenCalled();
+});
+
+it("rechecks observation authority after a Gateway response arrives", async () => {
+  const f = fixture(undefined, true);
+  const request = f.fetcher.getMockImplementation()!;
+  f.fetcher.mockImplementationOnce(async (...args) => {
+    const response = await request(...args);
+    f.assertCurrentObservation.mockRejectedValue(new Error("physical fence lost"));
+    return response;
+  });
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests).toHaveLength(1);
+  expect(f.requests[0]?.method).toBe("GET");
+});
+
+it("rejects a provider grant lost at the final full replay boundary", async () => {
+  const f = fixture(undefined, true);
+  await f.writer.bind(f.input);
+  f.requests.length = 0;
+  f.assertAuthorized.mockResolvedValueOnce().mockRejectedValue(new Error("provider grant revoked"));
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests).toHaveLength(29);
+  expect(f.requests.every((request) => request.method === "GET")).toBe(true);
+});
+
+it("still requires a fresh active credential on each observation request", async () => {
+  const f = fixture(undefined, true);
+  const credential = await f.readCredential();
+  f.readCredential.mockResolvedValue({
+    ...credential,
+    binding: { ...credential.binding, active: false },
+  });
+  await expect(f.writer.bind(f.input)).rejects.toThrow("operator_unavailable");
+  expect(f.requests).toHaveLength(0);
+  expect(f.assertCurrentObservation).toHaveBeenCalled();
+});
 
 it("creates Gateway rows with fresh metadata and only selected row reads before each write", async () => {
   const f = fixture();

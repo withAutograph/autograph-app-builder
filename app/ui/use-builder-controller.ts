@@ -141,6 +141,15 @@ export function useBuilderController({
   // value during that narrow window.
   const formSnapshot = useRef<BuilderForm>(initialForm);
   const localFormMutationVersion = useRef(0);
+  const draftReadInFlight = useRef<
+    | {
+        action: () => Promise<BuilderDraftPageData | undefined>;
+        draftId: string;
+        localMutationVersion: number;
+        promise: Promise<BuilderDraftPageData | undefined>;
+      }
+    | undefined
+  >(globalThis.undefined);
   const setForm = useCallback(
     (update: SetStateAction<BuilderForm>) => {
       localFormMutationVersion.current += 1;
@@ -470,7 +479,11 @@ export function useBuilderController({
         record: BuilderDraftRecord;
       },
       expectedLocalMutationVersion?: number,
+      signal?: AbortSignal,
     ) => {
+      if (signal?.aborted) {
+        return;
+      }
       // A polling request can begin before a user edit and return a server
       // snapshot that predates that edit. It is not an incoming concurrent
       // draft and must never reset the newer RHF state.
@@ -484,6 +497,9 @@ export function useBuilderController({
         return;
       }
       await discardSupersededByRemoteRevision(remote.revision);
+      if (signal?.aborted) {
+        return;
+      }
       // A newer server snapshot or save acknowledgement can settle while
       // device outbox I/O is pending. Never move the applied revision backward.
       if (remote.revision <= draftRevision.current) {
@@ -702,13 +718,21 @@ export function useBuilderController({
     };
   }, [builderForm, discardPendingDraft, restorePending, resumePending]);
   useEffect(() => {
-    let disposed = false;
+    const controller = new AbortController();
     let wasHidden = document.visibilityState === "hidden";
-    const checkForServerDraft = async () => {
-      if (document.visibilityState === "hidden" || !navigator.onLine) {
+    let reading = false;
+    let refreshAfterRead = false;
+    const checkForServerDraft = async (afterVisibilityChange = false) => {
+      if (controller.signal.aborted || document.visibilityState === "hidden" || !navigator.onLine) {
         return;
       }
-      const localMutationVersion = localFormMutationVersion.current;
+      if (reading) {
+        // A return to the page needs a read begun after that return. Coalesce
+        // visibility events into one follow-up; interval ticks join this read.
+        refreshAfterRead ||= afterVisibilityChange;
+        return;
+      }
+      const localDraftId = activeDraftId.current;
       // A completed foreground action can become visible to this read before
       // its acknowledgement advances draftRevision. Do not reinterpret that
       // device-local save as a remote revision and replace edits made while
@@ -716,22 +740,48 @@ export function useBuilderController({
       if (pendingActionExpectedRevisions.current.size > 0) {
         return;
       }
+      const action = loadActiveBuilderDraftAction;
+      if (!action) {
+        return;
+      }
+      reading = true;
       try {
-        if (!loadActiveBuilderDraftAction) {
-          return;
+        let flight = draftReadInFlight.current;
+        if (flight?.action !== action || flight.draftId !== localDraftId) {
+          flight = {
+            action,
+            draftId: localDraftId,
+            localMutationVersion: localFormMutationVersion.current,
+            promise: action(),
+          };
+          draftReadInFlight.current = flight;
         }
-        const remote = await loadActiveBuilderDraftAction();
+        let remote: BuilderDraftPageData | undefined;
+        try {
+          remote = await flight.promise;
+        } finally {
+          if (draftReadInFlight.current === flight) {
+            draftReadInFlight.current = undefined;
+          }
+        }
         if (
-          disposed ||
+          controller.signal.aborted ||
           !remote ||
+          activeDraftId.current !== localDraftId ||
           pendingActionExpectedRevisions.current.size > 0 ||
-          localFormMutationVersion.current !== localMutationVersion
+          localFormMutationVersion.current !== flight.localMutationVersion
         ) {
           return;
         }
-        await applyAuthoritativeDraft(remote, localMutationVersion);
+        await applyAuthoritativeDraft(remote, flight.localMutationVersion, controller.signal);
       } catch {
         // Autosave owns retry/error presentation; sync polling stays quiet.
+      } finally {
+        reading = false;
+        if (refreshAfterRead && !controller.signal.aborted) {
+          refreshAfterRead = false;
+          void checkForServerDraft();
+        }
       }
     };
     const onVisible = () => {
@@ -742,8 +792,10 @@ export function useBuilderController({
       // Browsers can emit an initial visible event while the builder hydrates.
       // The server-rendered snapshot is already authoritative for that first
       // paint; only refresh after this document has actually been backgrounded.
-      if (wasHidden) {
-        void checkForServerDraft();
+      const returned = wasHidden;
+      wasHidden = false;
+      if (returned) {
+        void checkForServerDraft(true);
       }
     };
     const timer = setInterval(() => {
@@ -751,7 +803,9 @@ export function useBuilderController({
     }, 10_000);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
-      disposed = true;
+      // Server Actions do not expose transport cancellation. Abort this
+      // effect's result handling; a later effect can join the same live read.
+      controller.abort();
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };

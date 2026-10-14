@@ -207,6 +207,7 @@ const referenceRow = (
 
 export const createHostedOperatorGatewayBindings = (deps: {
   assertAuthorized: ProtectedHostedOperatorDependencies["assertAuthorized"];
+  assertCanonicalOwner?: ProtectedHostedOperatorDependencies["assertCanonicalOwner"];
   readCredential: CredentialReader;
   readAuthRuntimeUrl: (input: GatewayManagedEnvironmentContext) => Promise<string>;
   /** Reauthorize and reread the approved source journal; never infer ownership from provider comments. */
@@ -236,9 +237,17 @@ export const createHostedOperatorGatewayBindings = (deps: {
     const approvedCanonical = structuredClone(input.plan.authAdoption?.gatewayEnvironment);
     // Written values are accepted only for writes acknowledged by this invocation, until checkpointed.
     const acknowledgedValues = new Map<string, string>();
-    const guard = async () => {
+    const fullGuard = async () => {
       await input.assertCurrent();
       await deps.assertAuthorized(input);
+    };
+    const guard = async () => {
+      if (input.assertCurrentObservation === undefined || deps.assertCanonicalOwner === undefined) {
+        await fullGuard();
+        return;
+      }
+      await input.assertCurrentObservation();
+      await deps.assertCanonicalOwner(input);
     };
     const request = async (
       route: string,
@@ -252,7 +261,8 @@ export const createHostedOperatorGatewayBindings = (deps: {
         value: string;
       },
     ) => {
-      await guard();
+      const requestGuard = method === "GET" ? guard : fullGuard;
+      await requestGuard();
       const credential = await deps.readCredential(input.authority, target.installationId);
       if (
         credential?.binding.active !== true ||
@@ -262,7 +272,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       ) {
         throw new HostedOperatorError("authorization_required");
       }
-      await guard();
+      await requestGuard();
       const url = new URL(route, "https://api.vercel.com");
       url.searchParams.set("teamId", target.scopeId);
       const options: RequestInit = {
@@ -281,7 +291,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       }
       const response = await (deps.fetch ?? fetch)(url, options);
       try {
-        await guard();
+        await requestGuard();
         if (!response.ok) {
           throw unavailable();
         }
@@ -289,7 +299,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
           return null;
         }
         const value: unknown = await response.json();
-        await guard();
+        await requestGuard();
         return value;
       } finally {
         if (!response.bodyUsed) {
@@ -803,6 +813,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
       branch,
       checkpoint,
       comment,
+      fullGuard,
       guard,
       inspect,
       inspectIteration,
@@ -823,6 +834,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
           throw unavailable();
         }
         const io = open(input);
+        await io.fullGuard();
         let { expected, known, rows, values } = await io.inspect(false);
         const creatingRows = rows.length === 0;
         await io.checkpoint(rows, known, values, expected);
@@ -879,6 +891,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
           await io.checkpoint(rows, known, values, expected);
         }
         ({ known, rows, values } = await io.inspect(true));
+        await io.fullGuard();
         return {
           rows: io.referenceRows(rows, known, values),
         };
@@ -894,7 +907,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
     > {
       try {
         const io = open(input);
+        await io.fullGuard();
         const { expected, known, rows, values } = await io.inspect(true);
+        await io.fullGuard();
         if (rows.length === 0) {
           return { status: "absent" };
         }
@@ -913,6 +928,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
     async verifyCanonicalOwnership(input: GatewayManagedEnvironmentContext) {
       try {
         const io = open(input, true);
+        await io.fullGuard();
         if (io.approvedCanonical === undefined) {
           throw unavailable();
         }
@@ -920,7 +936,7 @@ export const createHostedOperatorGatewayBindings = (deps: {
         if (rows.length !== managedKeys.length) {
           throw unavailable();
         }
-        await io.guard();
+        await io.fullGuard();
         return { rows: structuredClone(io.approvedCanonical) };
       } catch {
         throw unavailable();
@@ -931,11 +947,12 @@ export const createHostedOperatorGatewayBindings = (deps: {
         throw unavailable();
       }
       const io = open(input);
+      await io.fullGuard();
       const { rows, known, expected, values } = await io.inspect(true);
       if (rows.length !== Object.keys(expected).length) {
         throw unavailable();
       }
-      await io.guard();
+      await io.fullGuard();
       return {
         rows: io.referenceRows(rows, known, values),
       };
