@@ -2,6 +2,8 @@ import { getToken } from "@vercel/connect";
 import { getVercelOidcToken, verifyVercelOidcToken } from "@vercel/oidc";
 import postgres from "postgres";
 import { z } from "zod";
+import { maintenanceUriMismatchSchema } from "./hosted-operator-consent-diagnostic";
+import type { OperatorMaintenanceUriMismatch } from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorContext } from "./hosted-operator-service";
 import {
   readNativePreviewNeonProvenance,
@@ -123,26 +125,70 @@ const defaultIo: NativePreviewNeonIo = {
     await verifyVercelOidcToken(token, options);
   },
 };
-export const privateMaintenanceUrl = (uri: string, scope: NativePreviewNeonScope) => {
-  const url = new URL(uri);
-  const checks = [
-    ["postgres:", "postgresql:"].includes(url.protocol),
-    url.hostname === scope.hostname,
-    !url.hostname.includes("-pooler."),
-    ["", "5432"].includes(url.port),
-    decodeURIComponent(url.username) === scope.maintenanceRole,
-    url.password !== "",
-    decodeURIComponent(url.pathname.slice(1)) === scope.maintenanceDatabase,
-    url.hash === "",
-    ["require", verifiedTls].includes(url.searchParams.get("sslmode") ?? ""),
-    url.searchParams.getAll("sslmode").length === 1,
-    [...url.searchParams.keys()].every((key) => ["sslmode", "channel_binding"].includes(key)),
-    url.searchParams.getAll("channel_binding").length <= 1,
-    !url.searchParams.has("channel_binding") ||
-      url.searchParams.get("channel_binding") === "require",
-  ];
-  if (!checks.every(Boolean)) {
+export const privateMaintenanceUrl = (
+  uri: string,
+  scope: NativePreviewNeonScope,
+  options?: {
+    /** The Neon MCP host tool always requests its SDK's default pooled URI. */
+    allowOwnedPooler?: boolean;
+    reportMismatch?: (fields: OperatorMaintenanceUriMismatch[]) => void;
+  },
+) => {
+  const reject = (fields: OperatorMaintenanceUriMismatch[]): never => {
+    try {
+      options?.reportMismatch?.(fields);
+    } catch {
+      /* Diagnostics cannot change the original rejection. */
+    }
     throw unavailable();
+  };
+  let url: URL;
+  try {
+    url = new URL(uri);
+  } catch {
+    return reject(["url"]);
+  }
+  let role: string;
+  let database: string;
+  try {
+    role = decodeURIComponent(url.username);
+    database = decodeURIComponent(url.pathname.slice(1));
+  } catch {
+    return reject(["encoding"]);
+  }
+  const sameOwnedPooler =
+    options?.allowOwnedPooler === true &&
+    !scope.hostname.includes("-pooler.") &&
+    url.hostname === scope.hostname.replace(".", "-pooler.");
+  const checks: Record<OperatorMaintenanceUriMismatch, boolean> = {
+    url: true,
+    encoding: true,
+    protocol: ["postgres:", "postgresql:"].includes(url.protocol),
+    hostname: url.hostname === scope.hostname || sameOwnedPooler,
+    pooled_hostname: !url.hostname.includes("-pooler.") || sameOwnedPooler,
+    port: ["", "5432"].includes(url.port),
+    role: role === scope.maintenanceRole,
+    password: url.password !== "",
+    database: database === scope.maintenanceDatabase,
+    fragment: url.hash === "",
+    tls_mode: ["require", verifiedTls].includes(url.searchParams.get("sslmode") ?? ""),
+    tls_count: url.searchParams.getAll("sslmode").length === 1,
+    query_keys: [...url.searchParams.keys()].every((key) =>
+      ["sslmode", "channel_binding"].includes(key),
+    ),
+    channel_binding_count: url.searchParams.getAll("channel_binding").length <= 1,
+    channel_binding_value:
+      !url.searchParams.has("channel_binding") ||
+      url.searchParams.get("channel_binding") === "require",
+  };
+  const mismatches = maintenanceUriMismatchSchema.options.filter((field) => !checks[field]);
+  if (mismatches.length > 0) {
+    return reject(mismatches);
+  }
+  // Neon derives the pooler host by adding -pooler to this exact endpoint's first DNS label.
+  // Only an exact verified pair may share a credential; all other hostnames are rejected above.
+  if (sameOwnedPooler) {
+    url.hostname = scope.hostname;
   }
   url.searchParams.set("sslmode", verifiedTls);
   return url.toString();
