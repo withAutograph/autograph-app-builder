@@ -10,6 +10,7 @@ import {
   assertNormalActorState,
   normalActorProgramDigest,
   normalActorProgramSchema,
+  normalActorStateSchema,
 } from "./hosted-operator-normal-actor-program";
 import type { NormalActorProgram, NormalActorState } from "./hosted-operator-normal-actor-program";
 
@@ -40,23 +41,39 @@ const aad = (scope: NormalActorStateScope): string => {
     purpose: "normal-auth-actor-state-v1",
   });
 };
-export const encryptNormalActorState = (input: NormalActorStateScope & {
-  config: VercelTokenKeyringConfig;
-  state: NormalActorState;
-}): SealedNormalActorState => {
+export const encryptNormalActorState = (
+  input: NormalActorStateScope & {
+    config: VercelTokenKeyringConfig;
+    state: NormalActorState;
+  },
+): SealedNormalActorState => {
   const state = assertNormalActorState(input.program, input.state, input.operationRef);
   return {
-    ...encryptVercelToken({ associatedData: aad(input), key: input.config.tokenKey, token: JSON.stringify(state) }),
+    ...encryptVercelToken({
+      associatedData: aad(input),
+      key: input.config.tokenKey,
+      token: JSON.stringify(state),
+    }),
     keyVersion: input.config.tokenKeyVersion,
   };
 };
-export const decryptNormalActorState = (input: NormalActorStateScope & {
-  config: VercelTokenKeyringConfig;
-  sealed: SealedNormalActorState;
-}): NormalActorState => {
+export const decryptNormalActorState = (
+  input: NormalActorStateScope & {
+    config: VercelTokenKeyringConfig;
+    sealed: SealedNormalActorState;
+  },
+): NormalActorState => {
   try {
     const sealed = sealedNormalActorStateSchema.parse(input.sealed);
-    const state = JSON.parse(decryptVersionedVercelToken({ ...sealed, associatedData: aad(input), config: input.config }));
+    const state = normalActorStateSchema.parse(
+      JSON.parse(
+        decryptVersionedVercelToken({
+          ...sealed,
+          associatedData: aad(input),
+          config: input.config,
+        }),
+      ),
+    );
     return assertNormalActorState(input.program, state, input.operationRef);
   } catch {
     // Ciphertext/parser diagnostics can contain normal session credentials.
