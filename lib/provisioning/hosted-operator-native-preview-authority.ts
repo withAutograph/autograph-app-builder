@@ -368,7 +368,9 @@ export const createNativePreviewNeonPlanningAuthority = (input: {
   controlPlane: Pick<
     Awaited<ReturnType<typeof createHostedOperatorControlPlane>>,
     "assertPlanningAuthorized" | "readCredential"
-  >;
+  > & {
+    assertCanonicalOwner?: (context: HostedOperatorContext) => Promise<void>;
+  };
   context: HostedOperatorContext;
   nativeStore: Readonly<NativePreviewNeonStoreBinding>;
   scope: Readonly<NativePreviewNeonScope>;
@@ -392,24 +394,78 @@ export const createNativePreviewNeonPlanningAuthority = (input: {
     }
     await input.controlPlane.assertPlanningAuthorized(requested);
   };
+  const assertScope = (requestedScope: NativePreviewNeonScope) => {
+    const matches = [
+      requestedScope.projectId === scope.projectId,
+      requestedScope.branchId === scope.branchId,
+      requestedScope.endpointId === scope.endpointId,
+      requestedScope.hostname === scope.hostname,
+      requestedScope.maintenanceDatabase === scope.maintenanceDatabase,
+      requestedScope.maintenanceRole === scope.maintenanceRole,
+    ].every(Boolean);
+    if (!matches) {
+      throw fail();
+    }
+  };
+  const assertCanonicalOwnerAndCredential = async (requested: HostedOperatorContext) => {
+    const requestedOwner = requested.ownerContext;
+    const pinnedOwner = context.ownerContext;
+    const matches = [
+      hostedRuntimeIdentity(requested.authority, requested.target).digest ===
+        hostedRuntimeIdentity(context.authority, context.target).digest,
+      requested.target.environment === "preview",
+      requestedOwner?.kind === pinnedOwner?.kind,
+      requestedOwner?.sessionId === pinnedOwner?.sessionId,
+      requestedOwner?.adapterSessionId === pinnedOwner?.adapterSessionId,
+      requestedOwner?.adapterGeneration === pinnedOwner?.adapterGeneration,
+      (requestedOwner?.kind === "handoff" ? requestedOwner.sourceHandoffId : undefined) ===
+        (pinnedOwner?.kind === "handoff" ? pinnedOwner.sourceHandoffId : undefined),
+    ].every(Boolean);
+    if (!matches) {
+      throw fail();
+    }
+    const assertCanonicalOwner =
+      input.controlPlane.assertCanonicalOwner ?? input.controlPlane.assertPlanningAuthorized;
+    await assertCanonicalOwner(requested);
+    const credential = await input.controlPlane.readCredential(
+      requested.authority,
+      requested.target.installationId,
+    );
+    const credentialMatches = [
+      credential?.binding.active === true,
+      credential?.binding.installationId === context.target.installationId,
+      credential?.binding.scopeId === context.target.scopeId,
+      credential?.binding.scopeType === context.target.scopeType,
+    ].every(Boolean);
+    if (!credentialMatches) {
+      throw fail();
+    }
+    await assertCanonicalOwner(requested);
+  };
   return {
     async assertPlanningScope(
       requested: HostedOperatorContext,
       requestedScope: NativePreviewNeonScope,
     ) {
       await assertCurrentOwner(requested);
-      const matches = [
-        requestedScope.projectId === scope.projectId,
-        requestedScope.branchId === scope.branchId,
-        requestedScope.endpointId === scope.endpointId,
-        requestedScope.hostname === scope.hostname,
-        requestedScope.maintenanceDatabase === scope.maintenanceDatabase,
-        requestedScope.maintenanceRole === scope.maintenanceRole,
-      ].every(Boolean);
-      if (!matches) {
+      assertScope(requestedScope);
+      await assertCurrentOwner(requested);
+    },
+    /** Every metadata guard refreshes canonical ownership and the active installation without provider HTTP. */
+    async assertPlanningOwner(
+      requested: HostedOperatorContext,
+      requestedScope: NativePreviewNeonScope,
+      binding: NativePreviewNeonStoreBinding = nativeStore,
+    ) {
+      await assertCanonicalOwnerAndCredential(requested);
+      assertScope(requestedScope);
+      if (
+        !sameStore(binding, nativeStore) ||
+        binding.sourceProjectId === requested.target.projectId
+      ) {
         throw fail();
       }
-      await assertCurrentOwner(requested);
+      await assertCanonicalOwnerAndCredential(requested);
     },
     async readCurrentOwnerNativeStore(
       requested: HostedOperatorContext,

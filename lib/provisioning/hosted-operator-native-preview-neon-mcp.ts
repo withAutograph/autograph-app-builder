@@ -14,6 +14,7 @@ import type {
   NativePreviewNeonConfiguration,
   NativePreviewNeonDependencies,
   NativePreviewNeonScope,
+  NativePreviewNeonStoreBinding,
 } from "./hosted-operator-native-preview-neon";
 import type { HostedOperatorContext } from "./hosted-operator-service";
 import {
@@ -64,6 +65,12 @@ export interface PreviewNeonMcpDependencies {
   assertApprovedScope: NativePreviewNeonDependencies["assertApprovedScope"];
   /** Separate current owner/configured-scope guard; never an approved SQL effect or credential grant. */
   assertPlanningScope?: NativePreviewNeonDependencies["assertApprovedScope"];
+  /** Fresh local canonical owner/credential guard for each read; full provider scope still brackets metadata. */
+  assertPlanningOwner?: (
+    context: HostedOperatorContext,
+    scope: NativePreviewNeonScope,
+    binding?: Readonly<NativePreviewNeonStoreBinding>,
+  ) => Promise<void>;
   readCurrentOwnerNativeStore: NativePreviewNeonDependencies["readCurrentOwnerNativeStore"];
   io?: {
     getOidc: typeof getVercelOidcToken;
@@ -137,7 +144,7 @@ const runReader = async <T>(
       ownerContext,
       target: Object.freeze({ ...context.target }),
     });
-    const assertOwner = async () => {
+    const assertProviderScope = async () => {
       await observe("neon_owner_guard", async () => {
         if (kind === "metadata") {
           if (deps.assertPlanningScope === undefined) {
@@ -164,6 +171,19 @@ const runReader = async <T>(
         }
       });
     };
+    const localPlanningOwner = kind === "metadata" ? deps.assertPlanningOwner : undefined;
+    const assertOwner = async () => {
+      if (localPlanningOwner === undefined) {
+        await assertProviderScope();
+        return;
+      }
+      await observe("neon_owner_guard", async () => {
+        await localPlanningOwner(current, scope, configuration.nativeStore);
+      });
+    };
+    if (localPlanningOwner !== undefined) {
+      await assertProviderScope();
+    }
     const io = deps.io ?? defaultIo;
     const params = {
       resources: ["https://mcp.neon.tech/mcp"],
@@ -336,6 +356,9 @@ const runReader = async <T>(
       await assertOwner();
       const result = await consume({ initSource, kind, scope });
       await assertOwner();
+      if (localPlanningOwner !== undefined) {
+        await assertProviderScope();
+      }
       return result;
     }
     const maintenanceUrl = await observe("neon_connection_credential", async () => {

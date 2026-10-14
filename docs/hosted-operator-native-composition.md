@@ -46,6 +46,16 @@ artifact read freshly checks the canonical session, app linkage, and membership;
 provider project grants are checked at planning and execution boundaries, rather
 than once for every immutable archive chunk. Do not
 compare the repository workspace ID with the tenant workspace ID.
+Read-only Neon metadata inspection checks the current provider project grant and
+native source binding before the observation and again before returning its
+result. Every OIDC, token and tool step still rechecks canonical session ownership,
+active workspace membership, app/adapter identity and the active owner-scoped
+installation credential. These local checks do not repeat the provider inventory
+read. This prevents one observation from amplifying Vercel project requests into
+HTTP 429 failures. Authority is not retained between observations; credential
+acquisition and approved effects keep their existing approval, fence and current
+provider checks.
+
 Private planning failures report only a closed stage, error class, known code,
 and hashed session identity. They preserve the original result or error and never
 log error messages, stacks, provider responses, credentials, or app content.
