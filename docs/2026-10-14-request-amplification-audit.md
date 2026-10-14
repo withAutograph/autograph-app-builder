@@ -129,6 +129,40 @@ Published version-matched sources:
 - [AI SDK retry defaults](https://unpkg.com/ai@7.0.105/src/util/prepare-retries.ts)
 - [AI SDK retry error](https://unpkg.com/ai@7.0.105/src/util/retry-error.ts)
 
+## Approved Neon credential observations
+
+The approved credential path had a separate amplification from the read-only
+planning path. One owner guard recursively performed 60 full provider-authority
+checks plus three native-binding GETs. An enrolled-root acquisition used
+`35 + 4A` such guards with the default Connect callback, where `A` is the actual
+broker token-call count. This is source composition, not a hosted HTTP total;
+the installed MCP client's token-call count remains unmeasured locally.
+
+The repair uses an approved observation callback only when the real service
+observation guard and canonical-owner capability are available. It retains the
+original approval, exact resource/operation, pending attempt, active credential,
+live lease and physical fence. Full provider/native binding checks surround the
+wave and immediately surround URI acquisition, SQL identity and credential
+consumption. All four provenance observations and fresh Connect token exchanges
+remain. Missing capabilities retain the full authorization path.
+
+Synthetic counters against the authority implementation show:
+
+| Observation                                   | Full provider-authority checks | Native-binding GETs |
+| --------------------------------------------- | -----------------------------: | ------------------: |
+| Existing paired full scope/native store guard |                             60 |                   3 |
+| Repaired paired full scope/native store guard |                              8 |                   3 |
+| Repaired per-tool/token approved owner guard  |                              0 |                   0 |
+
+The paired comparison retains 45 approval reads, 15 explicit journal reads,
+30 service fence/lease checks and three fresh credential reads. These fixture
+counts do not prove real PostgreSQL locking, live HTTP totals or hosted recovery.
+The new metadata guard still performs current approval/canonical owner checks
+and reads the active installation credential. No authority/token cache, provider
+quota, request cap or relaxed effect approval was introduced. Measure actual
+attempts at the IO boundaries on the next approved original-session run, using
+aggregate counters without credentials, raw URLs or response payloads.
+
 ## Remaining audit work
 
 Provider binding and source reconciliation reductions, live attribution of
