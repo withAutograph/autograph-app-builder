@@ -344,3 +344,47 @@ describe("participant plan and approval contract", () => {
     );
   });
 });
+
+describe("independently approved App and Gateway Preview branches", () => {
+  const independentlyBound = () => ({
+    ...base,
+    publicGateway: { ...base.publicGateway, branch: "shared-auth-preview" },
+    deploymentBoundary: {
+      ...base.deploymentBoundary,
+      gateway: { ...base.deploymentBoundary.gateway, branch: "shared-auth-preview" },
+    },
+  });
+  it("accepts distinct branches bound to their own exact deployment identities", () => {
+    const parsed = hostedOperatorPlanSchema.parse(independentlyBound());
+    expect(parsed.selection.branch).toBe(base.selection.branch);
+    expect(parsed.deploymentBoundary?.app.branch).toBe(base.selection.branch);
+    expect(parsed.publicGateway?.branch).toBe("shared-auth-preview");
+    expect(parsed.deploymentBoundary?.gateway.branch).toBe("shared-auth-preview");
+  });
+  it.each(["branch", "projectId"] as const)(
+    "rejects an independently approved Gateway with a mismatched own %s",
+    (field) => {
+      const input = independentlyBound();
+      const mismatched = {
+        ...input,
+        deploymentBoundary: {
+          ...input.deploymentBoundary,
+          gateway: { ...input.deploymentBoundary.gateway, [field]: "unapproved-gateway" },
+        },
+      };
+      expect(hostedOperatorPlanSchema.safeParse(mismatched).success).toBe(false);
+    },
+  );
+  it("still binds the App deployment to the selected App branch", () => {
+    const input = independentlyBound();
+    expect(
+      hostedOperatorPlanSchema.safeParse({
+        ...input,
+        deploymentBoundary: {
+          ...input.deploymentBoundary,
+          app: { ...input.deploymentBoundary.app, branch: "unapproved-app" },
+        },
+      }).success,
+    ).toBe(false);
+  });
+});

@@ -156,32 +156,27 @@ export async function prepareHostedRuntimeStep(
   });
 
   try {
-    const [clientModule, contract, state] = await Promise.all([
+    const [clientModule, contract, state, priorApprovalModule] = await Promise.all([
       import("../../lib/provisioning/hosted-operator-client"),
       import("../../lib/provisioning/hosted-operator-contract"),
       import("../../lib/agent/prepared-runtime-selection"),
+      import("../../lib/agent/hosted-runtime-prior-approval"),
     ]);
     isHostedOperatorError = (error): error is HostedOperatorErrorType =>
       error instanceof contract.HostedOperatorError;
-    const { z } = await import("zod");
-    const approvalInput = z
-      .strictObject({
-        appId: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u),
-        branch: z.string().min(1),
-        environment: z.literal("preview"),
-        operationRef: z.uuid(),
-        plan: contract.hostedOperatorPlanSchema,
-        planDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-        projectId: z.string().min(1),
-      })
-      .parse(input);
+    const approvalInput = priorApprovalModule.hostedRuntimePreparationInputSchema.parse(input);
     const operator = await clientModule.hostedOperatorClientForSession(
       ctx.session.auth,
       ctx.session.id,
     );
-    return await prepareHostedRuntimeWithOperator(
+    const retainedApproval = await priorApprovalModule.readHostedRuntimePriorApproval(
       approvalInput,
       ctx,
+      operator,
+    );
+    return await prepareHostedRuntimeWithOperator(
+      approvalInput,
+      { ...ctx, callId: retainedApproval?.callId ?? ctx.callId },
       operator,
       (selection) => {
         state.preparedRuntimeSelections.update((selections) => ({

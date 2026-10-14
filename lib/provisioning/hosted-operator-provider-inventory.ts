@@ -171,7 +171,6 @@ export const readHostedOperatorProviderInventory = async (input: {
           .size !== 3,
       app_project: config.app.projectId !== target.projectId,
       app_branch: config.app.branch !== target.branch,
-      gateway_branch: config.gateway.branch !== target.branch,
       app_environment: config.app.environment !== "preview",
       gateway_environment: config.gateway.environment !== "preview",
     };

@@ -60,6 +60,20 @@ const operatorPlanningFailure = z.strictObject({
 });
 type OperatorPlanningFailure = z.infer<typeof operatorPlanningFailure>;
 
+const operatorExecutionStage = z.enum([
+  "owner_authorization",
+  "journal_read",
+  "provider_authorization",
+  "approval_authorization",
+  "approval_read",
+  "lease_claim",
+]);
+export type OperatorExecutionStage = z.infer<typeof operatorExecutionStage>;
+const operatorExecutionFailure = operatorPlanningFailure
+  .omit({ stage: true, nativeStoreFailure: true })
+  .extend({ stage: operatorExecutionStage });
+type OperatorExecutionFailure = z.infer<typeof operatorExecutionFailure>;
+
 const boundary = z.enum(["builder", "operator"]);
 const phase = z.enum(["inline", "check", "start", "complete"]);
 const stage = z.enum([
@@ -225,6 +239,7 @@ const metadata = z.strictObject({
     .optional(),
   phase,
   planningFailure: operatorPlanningFailure.optional(),
+  executionFailure: operatorExecutionFailure.optional(),
   planningMismatch: z
     .strictObject({
       boundary: operatorPlanningMismatchBoundary,
@@ -363,6 +378,61 @@ export const observeOperatorPlanStage = async <T>(
         stage: "operator_request",
         outcome: "setup_unavailable",
         planningFailure,
+      });
+    } catch {
+      /* Reporting cannot change the original rejection. */
+    }
+    throw error;
+  }
+};
+
+/** Observe a private execution boundary without changing its result or rejection. */
+export const observeOperatorExecutionStage = async <T>(
+  sessionId: string,
+  executionStage: OperatorExecutionStage,
+  run: () => T | Promise<T>,
+  sink?: HostedOperatorConsentDiagnosticSink,
+): Promise<T> => {
+  try {
+    return await run();
+  } catch (error) {
+    const executionFailure: OperatorExecutionFailure = {
+      stage: executionStage,
+      errorClass: "unexpected",
+    };
+    try {
+      if (error instanceof HostedOperatorError) {
+        executionFailure.errorClass = "operator_error";
+        const code: unknown = Object.getOwnPropertyDescriptor(error, "code")?.value;
+        const parsedCode = operatorPublicResultSchema.shape.code.unwrap().safeParse(code);
+        if (parsedCode.success) {
+          executionFailure.code = parsedCode.data;
+        }
+      } else if (error instanceof z.ZodError) {
+        executionFailure.errorClass = "validation_error";
+      } else if (error instanceof TypeError) {
+        executionFailure.errorClass = "type_error";
+      }
+      if (executionFailure.errorClass === "unexpected") {
+        const code: unknown = Object.getOwnPropertyDescriptor(error, "code")?.value;
+        const parsedSqlState = operatorPlanningSqlState.safeParse(code);
+        if (parsedSqlState.success) {
+          executionFailure.sqlState = parsedSqlState.data;
+        }
+      }
+    } catch {
+      /* Hostile error objects cannot change the original rejection. */
+    }
+    try {
+      createHostedOperatorConsentDiagnostic(
+        sessionId,
+        sink,
+      )({
+        boundary: "operator",
+        phase: "inline",
+        stage: "operator_request",
+        outcome: "setup_unavailable",
+        executionFailure,
       });
     } catch {
       /* Reporting cannot change the original rejection. */

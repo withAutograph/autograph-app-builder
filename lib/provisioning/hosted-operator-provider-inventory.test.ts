@@ -518,3 +518,38 @@ describe("private read-only operator provider inventory", () => {
     expect(f.fetcher).not.toHaveBeenCalled();
   });
 });
+
+describe("independently approved Gateway inventory branch", () => {
+  const independent = () => {
+    const f = fixture();
+    const branch = "shared-auth-preview";
+    f.input.configuration = { ...configuration, gateway: { ...configuration.gateway, branch } };
+    const path = "/v13/deployments/dpl_gateway";
+    f.payloads.set(path, { ...f.payloads.get(path), gitSource: { ref: branch } });
+    return f;
+  };
+  it("verifies the Gateway provider ref against its own branch while preserving the selected App branch", async () => {
+    const f = independent();
+    const observed = await readHostedOperatorProviderInventory(f.input);
+    expect(observed.app.branch).toBe(context.target.branch);
+    expect(observed.gateway.branch).toBe("shared-auth-preview");
+    expect(observed.gateway.projectId).toBe(configuration.gateway.projectId);
+    expect(observed.gateway.deploymentId).toBe(configuration.gateway.deploymentId);
+  });
+  it.each([
+    { gitSource: { ref: context.target.branch } },
+    { projectId: configuration.app.projectId },
+    { ownerId: "foreign-owner" },
+    { target: "production" },
+  ])(
+    "rejects a Gateway provider tuple that differs from its own approved identity %#",
+    async (mismatch) => {
+      const f = independent();
+      const path = "/v13/deployments/dpl_gateway";
+      f.payloads.set(path, { ...f.payloads.get(path), ...mismatch });
+      await expect(readHostedOperatorProviderInventory(f.input)).rejects.toThrow(
+        "resource_mismatch",
+      );
+    },
+  );
+});

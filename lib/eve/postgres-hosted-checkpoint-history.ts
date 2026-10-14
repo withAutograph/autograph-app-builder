@@ -310,10 +310,12 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
       sessionId: string;
       checkpointId: string;
       itemIndex: number;
+      transaction?: Transaction;
     }) {
+      const reader = input.transaction ?? database;
       const principal = hostedPrincipalSchema.parse(input.principal);
       const key = tenant(principal, input.sessionId, input.checkpointId);
-      const manifests = await database
+      const manifests = await reader
         .select()
         .from(agentSessionCheckpointManifests)
         .where(manifestWhere(key))
@@ -321,7 +323,7 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
       if (manifests[0]?.publishedAt === null || manifests[0] === undefined) {
         return null;
       }
-      const items = await database
+      const items = await reader
         .select()
         .from(agentSessionCheckpointItems)
         .where(
@@ -340,7 +342,7 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
       if (item === undefined) {
         throw new Error("Hosted checkpoint item is missing.");
       }
-      const chunks = await database
+      const chunks = await reader
         .select()
         .from(agentSessionCheckpointChunks)
         .where(
@@ -387,6 +389,7 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
       checkpointId: string;
       cursor: number;
       limit: number;
+      transaction?: Transaction;
     }) {
       const validCursor = Number.isSafeInteger(input.cursor) && input.cursor >= 0;
       const validLimit =
@@ -396,9 +399,10 @@ export function createPostgresHostedCheckpointHistory(database: Database) {
           "Hosted checkpoint page needs a nonnegative cursor and a limit from 1 to 250.",
         );
       }
+      const reader = input.transaction ?? database;
       const principal = hostedPrincipalSchema.parse(input.principal);
       const key = tenant(principal, input.sessionId, input.checkpointId);
-      const manifests = await database
+      const manifests = await reader
         .select()
         .from(agentSessionCheckpointManifests)
         .where(manifestWhere(key))

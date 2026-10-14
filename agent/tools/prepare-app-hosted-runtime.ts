@@ -1,9 +1,10 @@
 import type { ToolInputRequest, WorkflowToolContext } from "eve/tools";
 import { defineWorkflowTool } from "eve/tools";
-import { always } from "eve/tools/approval";
+import type { ApprovalContext, ApprovalStatus } from "eve/tools/approval";
 import { z } from "zod";
 
 import { prepareHostedRuntimeStep } from "../../lib/agent/prepare-app-hosted-runtime-step";
+import type { readHostedRuntimePriorApproval } from "../../lib/agent/hosted-runtime-prior-approval";
 import type { HostedRuntimeApprovalEnvelope } from "../../lib/agent/prepare-app-hosted-runtime-step";
 
 export const hostedRuntimeApprovalInputSchema = z.strictObject({
@@ -68,10 +69,47 @@ export const continueHostedRuntimePreparation = async (
   return prepared.result;
 };
 
+/** A technical retry reuses server-owned human authority for the exact unchanged operation. */
+export const evaluateHostedRuntimePreparationApproval = async (
+  ctx: ApprovalContext<HostedRuntimeApprovalEnvelope>,
+  readPrior: typeof readHostedRuntimePriorApproval,
+): Promise<ApprovalStatus> => {
+  if (ctx.toolInput === undefined) {
+    return "user-approval";
+  }
+  try {
+    const retained = await readPrior(ctx.toolInput, ctx);
+    return retained === null ? "user-approval" : "not-applicable";
+  } catch {
+    return {
+      type: "denied",
+      reason:
+        "The current owner and saved approval could not be verified. Retry the same preparation when access is restored.",
+    };
+  }
+};
+
+export const hostedRuntimePreparationApproval = async (
+  ctx: ApprovalContext<HostedRuntimeApprovalEnvelope>,
+): Promise<ApprovalStatus> => {
+  try {
+    const prior = await import("../../lib/agent/hosted-runtime-prior-approval");
+    return await evaluateHostedRuntimePreparationApproval(
+      ctx,
+      prior.readHostedRuntimePriorApproval,
+    );
+  } catch {
+    return {
+      type: "denied",
+      reason: "Saved preparation authority is unavailable. Retry when access is restored.",
+    };
+  }
+};
+
 export default defineWorkflowTool({
-  approval: always(),
+  approval: hostedRuntimePreparationApproval,
   description:
-    "After approval of the concrete protected operator plan, prepare exactly its named Preview resources/access. Pass the plan and operation reference returned by plan-app-hosted-runtime. The protected service independently verifies the durable approval and current owner authority, resumes the same journal and reports actual effects. No installer credential or repository script is sent to an app Sandbox. This does not deploy or activate Production.",
+    "After approval of the concrete protected operator plan, prepare exactly its named Preview resources/access. Pass the plan and operation reference returned by plan-app-hosted-runtime. Technical retries of the identical operation reuse its server-owned durable human approval. Changed plans require fresh approval. The protected service independently verifies the original approval and current owner authority, resumes the same journal and reports actual effects. No installer credential or repository script is sent to an app Sandbox. This does not deploy or activate Production.",
   async execute(input: HostedRuntimeApprovalEnvelope, ctx) {
     "use workflow";
     return await continueHostedRuntimePreparation(input, ctx, prepareHostedRuntimeStep);

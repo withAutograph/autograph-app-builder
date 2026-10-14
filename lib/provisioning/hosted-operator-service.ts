@@ -3,7 +3,9 @@ import {
   createHostedOperatorConsentDiagnostic,
   reportOperatorPlanningMismatch,
   observeOperatorPlanStage,
+  observeOperatorExecutionStage,
 } from "./hosted-operator-consent-diagnostic";
+import type { OperatorExecutionStage } from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorConsentOwner } from "./hosted-operator-consent-owner";
 import {
   neonAuthorizationInputSchema,
@@ -300,7 +302,10 @@ const sameAuthPreparation = (prior: HostedOperatorPlan, next: HostedOperatorPlan
 
 const retainCompletedAuth = (record: HostedRuntimeJournalRecord): HostedRuntimeJournalRecord => ({
   ...record,
-  retainedAuth: record.retainedAuth ?? retainedOperatorAuthFromJournal(record),
+  retainedAuth:
+    record.operator?.plan.stage === AUTH_BOOTSTRAP_STAGE
+      ? (retainedOperatorAuthFromJournal(record) ?? record.retainedAuth)
+      : (record.retainedAuth ?? retainedOperatorAuthFromJournal(record)),
 });
 
 const handlePlanOperation = async (
@@ -359,7 +364,9 @@ const handlePlanOperation = async (
   );
   const prior = await deps.store.read(context);
   const retainedCandidate =
-    prior?.record.retainedAuth === undefined && prior?.record.operator?.planDigest !== planDigest
+    (prior?.record.retainedAuth === undefined ||
+      prior.record.operator?.plan.stage === AUTH_BOOTSTRAP_STAGE) &&
+    prior?.record.operator?.planDigest !== planDigest
       ? prior && retainedOperatorAuthFromJournal(prior.record)
       : undefined;
   if (retainedCandidate !== undefined) {
@@ -430,7 +437,10 @@ const handlePlanOperation = async (
       ) {
         throw new HostedOperatorError("operation_in_progress");
       }
-      const retainedAuth = record.retainedAuth ?? retainedCandidate;
+      const retainedAuth =
+        record.operator.plan.stage === AUTH_BOOTSTRAP_STAGE
+          ? (retainedCandidate ?? record.retainedAuth)
+          : (record.retainedAuth ?? retainedCandidate);
       if (record.accountPreparation !== undefined) {
         const preparation = record.accountPreparation;
         if (
@@ -723,6 +733,14 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         }
         return ownedContext;
       };
+      const authorizeExecutionContext = async () =>
+        input.action === "execute"
+          ? await observeOperatorExecutionStage(
+              input.selection.sessionId,
+              "owner_authorization",
+              authorizeContext,
+            )
+          : await authorizeContext();
       const context =
         input.action === "plan"
           ? await observeOperatorPlanStage(
@@ -730,7 +748,7 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
               "plan_owner_authorization",
               authorizeContext,
             )
-          : await authorizeContext();
+          : await authorizeExecutionContext();
       const read = async () => await deps.store.read(context);
       const update = async (
         change: (record: HostedRuntimeJournalRecord) => HostedRuntimeJournalRecord,
@@ -738,7 +756,10 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       if (input.action === "plan") {
         return await handlePlanOperation(deps, context, input, appId, now);
       }
-      const current = await read();
+      const current =
+        input.action === "execute"
+          ? await observeOperatorExecutionStage(context.target.sessionId, "journal_read", read)
+          : await read();
       const operator = current?.record.operator;
       if (
         !operator ||
@@ -748,7 +769,13 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         throw new HostedOperatorError("resource_mismatch");
       }
       const { plan, planDigest, operationRef } = operator;
-      await deps.assertAuthorized({ ...context, plan });
+      const observePrepare = async <T>(stage: OperatorExecutionStage, run: () => T | Promise<T>) =>
+        input.action === "execute" && plan.action === "prepare"
+          ? await observeOperatorExecutionStage(context.target.sessionId, stage, run)
+          : await run();
+      await observePrepare("provider_authorization", async () => {
+        await deps.assertAuthorized({ ...context, plan });
+      });
       const publicStatus = (record: HostedRuntimeJournalRecord): OperatorPublicResult => {
         let status: OperatorPublicResult["status"] = "pending";
         if (
@@ -802,29 +829,39 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
       if (input.planDigest !== planDigest) {
         throw new HostedOperatorError("resource_mismatch");
       }
-      const assertApproval = async (observation = false) => {
+      const assertApproval = async (observation = false, diagnose = false) => {
         assertUnexpired(plan, now());
-        await (observation && deps.assertCanonicalOwner !== undefined
-          ? deps.assertCanonicalOwner(context)
-          : deps.assertAuthorized({ ...context, plan }));
-        const approval = await deps.readApproval({
-          ...context,
-          action: plan.action,
-          callId: input.callId,
-          planDigest,
-        });
-        if (
-          approval?.approved !== true ||
-          approval.approvalId === "" ||
-          approval.callId !== input.callId ||
-          approval.planDigest !== planDigest ||
-          approval.action !== plan.action
-        ) {
-          throw new HostedOperatorError("authorization_required");
-        }
-        return approval;
+        const authorizeApproval = async () => {
+          await (observation && deps.assertCanonicalOwner !== undefined
+            ? deps.assertCanonicalOwner(context)
+            : deps.assertAuthorized({ ...context, plan }));
+        };
+        await (diagnose
+          ? observePrepare("approval_authorization", authorizeApproval)
+          : authorizeApproval());
+        const readApproval = async () => {
+          const currentApproval = await deps.readApproval({
+            ...context,
+            action: plan.action,
+            callId: input.callId,
+            planDigest,
+          });
+          if (
+            currentApproval?.approved !== true ||
+            currentApproval.approvalId === "" ||
+            currentApproval.callId !== input.callId ||
+            currentApproval.planDigest !== planDigest ||
+            currentApproval.action !== plan.action
+          ) {
+            throw new HostedOperatorError("authorization_required");
+          }
+          return currentApproval;
+        };
+        return diagnose
+          ? await observePrepare("approval_read", readApproval)
+          : await readApproval();
       };
-      const approval = await assertApproval();
+      const approval = await assertApproval(false, true);
       if (plan.stage === AUTH_PARTICIPANTS_STAGE) {
         if (deps.ensureNormalActorCapture === undefined) {
           throw new HostedOperatorError("operator_unavailable");
@@ -863,28 +900,32 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
         }
       }
       const leaseId = randomUUID();
-      let claimed = await update((record) => {
-        if (
-          record.operator?.operationRef !== operationRef ||
-          record.operator.planDigest !== planDigest
-        ) {
-          throw new HostedOperatorError("resource_mismatch");
-        }
-        if (
-          record.leaseId !== undefined &&
-          record.leaseExpiresAt !== undefined &&
-          Date.parse(record.leaseExpiresAt) > now()
-        ) {
-          throw new HostedOperatorError("operation_in_progress");
-        }
-        return {
-          ...record,
-          approvedByCallId: input.callId,
-          leaseExpiresAt: new Date(now() + 60_000).toISOString(),
-          leaseId,
-          operator: { ...record.operator, approvalId: approval.approvalId },
-        };
-      });
+      let claimed = await observePrepare(
+        "lease_claim",
+        async () =>
+          await update((record) => {
+            if (
+              record.operator?.operationRef !== operationRef ||
+              record.operator.planDigest !== planDigest
+            ) {
+              throw new HostedOperatorError("resource_mismatch");
+            }
+            if (
+              record.leaseId !== undefined &&
+              record.leaseExpiresAt !== undefined &&
+              Date.parse(record.leaseExpiresAt) > now()
+            ) {
+              throw new HostedOperatorError("operation_in_progress");
+            }
+            return {
+              ...record,
+              approvedByCallId: input.callId,
+              leaseExpiresAt: new Date(now() + 60_000).toISOString(),
+              leaseId,
+              operator: { ...record.operator, approvalId: approval.approvalId },
+            };
+          }),
+      );
       let fenceGeneration = requireOperator(claimed.record).fenceGeneration;
       if (fenceGeneration === undefined) {
         const allocated = await deps.store.reserveFenceGeneration({

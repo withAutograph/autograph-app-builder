@@ -1,3 +1,9 @@
+import {
+  resourceApprovalResponseMarkerSchema,
+  resourceApprovalResponseProofSchema,
+  provesResourceApprovalResponse,
+} from "./resource-approval-response";
+import type { ResourceApprovalResponseProof } from "./resource-approval-response";
 import { digest } from "./hosted-operation-identifiers";
 import type { NativeDeliveryState, SendDelivery } from "./native-delivery-state";
 import {
@@ -483,6 +489,7 @@ const hostedOperationCommonShape = {
   operationId: z.string().min(1).max(200),
   principal: hostedPrincipalSchema,
   requestDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  resourceApprovalResponse: resourceApprovalResponseMarkerSchema.optional(),
   resumeSessionId: z.string().min(1).max(200).optional(),
   sendDelivery: sendDeliverySchema.optional(),
   startAlias: hostedStartAliasSchema.optional(),
@@ -580,6 +587,12 @@ export const hostedOperationRecordSchema = z
       }
     }
   })
+  .refine(
+    (record) =>
+      record.resourceApprovalResponse === undefined ||
+      (record.kind === "respond" && record.internalSessionLimitResponse === undefined),
+    "Only ordinary RESPOND can bind a resource approval batch.",
+  )
   .refine(
     (record) => record.internalSessionLimitResponse === undefined || record.kind === "respond",
     "Only RESPOND can bind framework continuation input.",
@@ -684,6 +697,57 @@ export const isProvedSessionLimitResponse = (
     durable.adapterGeneration === marker.adapterGeneration &&
     provesSessionLimitResponse(marker, privateInputStateSchema.parse(proof))
   );
+};
+
+/** The checkpoint is read by the store; caller proof supplies only the original request and binding. */
+export const isProvedResourceApprovalResponse = (
+  operation: HostedOperationRecord,
+  current: HostedSessionRecord | null,
+  proofInput: ResourceApprovalResponseProof | undefined,
+  metadata: HostedPagedCheckpointMetadata | null,
+): boolean => {
+  const parsed = resourceApprovalResponseProofSchema.safeParse(proofInput);
+  if (!parsed.success || current?.version !== 2 || metadata === null) return false;
+  const proof = parsed.data;
+  const native = metadata.nativeObservationState;
+  if (current.checkpointRef === undefined || native === undefined) return false;
+  const invalidBinding = [
+    operation.kind !== "respond",
+    operation.internalSessionLimitResponse !== undefined,
+    operation.sessionId !== current.sessionId,
+    tenantKeyFor(operation.principal) !== tenantKeyFor(current.principal),
+    current.adapterSessionId !== proof.adapterSessionId,
+    current.adapterGeneration !== proof.adapterGeneration,
+    current.checkpointDigest !== proof.checkpointDigest,
+    metadata.coldReadProgress !== undefined,
+    native.adapterSessionId !== current.adapterSessionId,
+    native.publicEventCount !== current.checkpointRef.eventCount,
+  ].some(Boolean);
+  if (invalidBinding) return false;
+  const marker = operation.resourceApprovalResponse;
+  if (marker === undefined) {
+    // Historical reservations did not save a binding. Only a never-replaced original adapter can prove one.
+    if (
+      current.adapterGeneration !== 1 ||
+      current.adapterSessionId !== current.originAdapterSessionId
+    )
+      return false;
+  } else if (
+    marker.adapterSessionId !== current.adapterSessionId ||
+    marker.adapterGeneration !== current.adapterGeneration
+  )
+    return false;
+  return provesResourceApprovalResponse({
+    clientRequestId: operation.clientRequestId,
+    requestDigest: operation.requestDigest,
+    sessionId: current.sessionId,
+    ownerUserId: current.principal.ownerUserId,
+    marker,
+    proof,
+    state: native.privateInputState,
+    capture: metadata.privateApprovalCaptureState,
+    receipts: current.privateApprovalReceipts ?? [],
+  });
 };
 
 const SEND_BINDING_UNAVAILABLE = "Canonical SEND acknowledgement binding is unavailable.";
@@ -853,6 +917,7 @@ export interface HostedEveStore {
     session?: HostedSessionRecord;
     sessionLimitResolution?: z.infer<typeof privateInputStateSchema>;
     sendDeliveryResolution?: NativeDeliveryState;
+    resourceApprovalResolution?: ResourceApprovalResponseProof;
     nowEpochMs: number;
   }) => Promise<HostedOperationRecord>;
   settleSucceededPaged?: (input: {
@@ -1088,11 +1153,17 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     if (operation === undefined || operation.requestDigest !== input.requestDigest) {
       throw new Error("Hosted operation cannot settle at this digest.");
     }
-    const [provedResponse, provedSend] = await Promise.all([
+    const [provedResponse, provedSend, provedApproval] = await Promise.all([
       this.provedSessionLimitResponse(operation, input.sessionLimitResolution),
       this.provedSendDelivery(operation, input.sendDeliveryResolution),
+      this.provedResourceApprovalResponse(operation, input.resourceApprovalResolution),
     ]);
-    if (!maySettleHostedOperation(operation, provedResponse || provedSend)) {
+    if (
+      !maySettleHostedOperation(
+        operation,
+        [provedResponse, provedSend, provedApproval].some(Boolean),
+      )
+    ) {
       throw new Error("Hosted operation cannot settle at this digest.");
     }
     const result = eveSessionResultSchema.parse(input.result);
@@ -1408,6 +1479,44 @@ export class InMemoryHostedEveStore implements HostedEveStore {
     });
     this.sessions.set(key, structuredClone(replaced));
     return structuredClone(replaced);
+  }
+
+  readCheckpointPage?: HostedEveStore["readCheckpointPage"];
+
+  private async provedResourceApprovalResponse(
+    operation: HostedOperationRecord,
+    proof: ResourceApprovalResponseProof | undefined,
+  ): Promise<boolean> {
+    if (proof === undefined) return false;
+    const current =
+      operation.sessionId === undefined
+        ? null
+        : await this.getSession(operation.principal, operation.sessionId);
+    if (
+      current?.version !== 2 ||
+      current.checkpointRef === undefined ||
+      this.readCheckpointPage === undefined
+    )
+      throw new Error("Resource approval settlement is not proved.");
+    const page = await this.readCheckpointPage({
+      principal: operation.principal,
+      sessionId: current.sessionId,
+      checkpointRef: current.checkpointRef,
+      cursor: 0,
+      limit: 1,
+    });
+    // oxlint-disable-next-line react-doctor/server-sequential-independent-await -- Re-read authoritative state after checkpoint I/O to reject concurrent replacement.
+    const latest = await this.getSession(operation.principal, current.sessionId);
+    const unchangedOperation = this.operations.get(
+      InMemoryHostedEveStore.operationKey(operation.principal, operation.operationId),
+    );
+    const valid =
+      page.checkpointDigest === current.checkpointRef.digest &&
+      page.totalEvents === current.checkpointRef.eventCount &&
+      isProvedResourceApprovalResponse(operation, latest, proof, page.metadata) &&
+      digest(unchangedOperation) === digest(operation);
+    if (!valid) throw new Error("Resource approval settlement is not proved.");
+    return true;
   }
 
   private async provedSendDelivery(
