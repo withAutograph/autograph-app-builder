@@ -2,10 +2,7 @@ import {
   captureResourceApprovalResponse,
   resourceApprovalResponseProofSchema,
 } from "./resource-approval-response";
-import type {
-  ResourceApprovalResponseMarker,
-  ResourceApprovalResponseProof,
-} from "./resource-approval-response";
+import type { ResourceApprovalResponseMarker } from "./resource-approval-response";
 import { provesNativeDelivery } from "./native-delivery-state";
 import type { NativeDeliveryState, SendDelivery } from "./native-delivery-state";
 import {
@@ -1090,7 +1087,7 @@ export function createHostedEveSessionService(input: {
   };
   const reconcileResourceApprovalOperation = async (
     operation: HostedOperationRecord,
-    request: ResourceApprovalResponseProof["request"],
+    request: unknown,
   ): Promise<EveSessionResult | undefined> => {
     const parsed = resourceApprovalResponseProofSchema.shape.request.safeParse(request);
     if (
