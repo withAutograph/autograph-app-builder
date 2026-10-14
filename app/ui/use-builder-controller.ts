@@ -145,6 +145,7 @@ export function useBuilderController({
     | {
         action: () => Promise<BuilderDraftPageData | undefined>;
         draftId: string;
+        localMutationVersion: number;
         promise: Promise<BuilderDraftPageData | undefined>;
       }
     | undefined
@@ -731,7 +732,6 @@ export function useBuilderController({
         refreshAfterRead ||= afterVisibilityChange;
         return;
       }
-      const localMutationVersion = localFormMutationVersion.current;
       const localDraftId = activeDraftId.current;
       // A completed foreground action can become visible to this read before
       // its acknowledgement advances draftRevision. Do not reinterpret that
@@ -751,6 +751,7 @@ export function useBuilderController({
           flight = {
             action,
             draftId: localDraftId,
+            localMutationVersion: localFormMutationVersion.current,
             promise: action(),
           };
           draftReadInFlight.current = flight;
@@ -768,11 +769,11 @@ export function useBuilderController({
           !remote ||
           activeDraftId.current !== localDraftId ||
           pendingActionExpectedRevisions.current.size > 0 ||
-          localFormMutationVersion.current !== localMutationVersion
+          localFormMutationVersion.current !== flight.localMutationVersion
         ) {
           return;
         }
-        await applyAuthoritativeDraft(remote, localMutationVersion, controller.signal);
+        await applyAuthoritativeDraft(remote, flight.localMutationVersion, controller.signal);
       } catch {
         // Autosave owns retry/error presentation; sync polling stays quiet.
       } finally {

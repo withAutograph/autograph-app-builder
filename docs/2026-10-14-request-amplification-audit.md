@@ -18,12 +18,12 @@ The delivery coordinator observed HTTP 429 from the Vercel app-project check at
 The following request counts were reported from the coordinator's synthetic
 fixtures; they are not live-provider measurements repeated by this audit.
 
-| Logical observation             | Reported fixture requests                                           | Current evidence and follow-up                                                                                                                                                                                   |
-| ------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Gateway resource binding        | 130 fresh / 94 replay before repair; 29 ready after repair          | Ready repair source `736e700f1ee2c36d2ca5a94de15349640f7e9686`; hosted reduction still needs measurement.                                                                                                        |
-| App binding                     | 22 fresh / 12 replay                                                | Fixture counts; reduction remains queued.                                                                                                                                                                        |
-| Source candidate reconciliation | Repeated project and team reads within `P + 3D` candidate work      | Source inspection identifies repetition; the provider request total depends on candidate paths. Repair and hosted measurement remain queued.                                                                     |
-| Read-only Neon metadata         | Full provider and native-binding checks now bracket one observation | PR #742 preserves fresh canonical owner, membership, adapter and active installation checks around each OIDC, token and tool step. Credential acquisition and approved effects retain their full current checks. |
+| Logical observation             | Reported fixture requests                                              | Current evidence and follow-up                                                                                                                                                                                   |
+| ------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gateway resource binding        | 130 fresh / 94 replay before repair; 47 ready / 29 replay after repair | Ready repair source `b81bde301c9577a0130d7692f9264f5928894892`; hosted reduction still needs measurement.                                                                                                        |
+| App binding                     | 22 fresh / 12 replay                                                   | Fixture counts; reduction remains queued.                                                                                                                                                                        |
+| Source candidate reconciliation | Repeated project and team reads within `P + 3D` candidate work         | Source inspection identifies repetition; the provider request total depends on candidate paths. Repair and hosted measurement remain queued.                                                                     |
+| Read-only Neon metadata         | Full provider and native-binding checks now bracket one observation    | PR #742 preserves fresh canonical owner, membership, adapter and active installation checks around each OIDC, token and tool step. Credential acquisition and approved effects retain their full current checks. |
 
 Coalesce requests only within the actual logical operation. Keep fresh full
 provider checks before and after a read-only observation, and keep just-in-time
@@ -42,7 +42,9 @@ Next's client dispatcher serializes Server Actions; these invocations can queue
 behind the active read and user actions rather than execute concurrently.
 
 The repair shares one active read for the same action and local draft within the
-mounted controller. Timer ticks coalesce while it runs. A return from a hidden
+mounted controller. The shared request retains the local mutation version from
+its actual start; a joining effect cannot give older data the authority of a newer
+edit version. Timer ticks coalesce while it runs. A return from a hidden
 page queues one fresh follow-up after settlement, so a read begun before the
 return does not suppress the newer observation. Repeated visible events do not
 queue extra work. Success and failure release the active read; ordinary polling
@@ -54,9 +56,11 @@ The Server Action interface has no HTTP cancellation parameter; this repair does
 not claim to cancel an already dispatched server request. Changing the transport
 would be a separate change.
 
-Local acceptance: all 33 tests in `app/ui/app-builder.test.tsx` pass, including
+Local acceptance: all 35 tests in `app/ui/app-builder.test.tsx` pass, including
 slow reads across timer ticks and rerenders, visibility coalescing with newer
-remote results, recovery after read failure, and pending work after unmount.
+remote results, recovery after read failure, pending work after unmount, and
+local edits made while an older read is joined after effect restart or while
+outbox reconciliation is pending.
 Focused type-aware lint passes. Repository-wide TypeScript checking still reports
 unrelated missing MCP/Hono dependencies and provisioning fixture type errors;
 it is not a passing acceptance claim for the whole repository.
