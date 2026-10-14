@@ -99,6 +99,48 @@ const requestHeaders = {
 const getSession = `${origin}/api/auth/get-session?disableRefresh=true&disableCookieCache=true`;
 
 describe("normal Auth native transport", () => {
+  it("uses the actual configured Builder workload for private owner capture readback", async () => {
+    const native = io();
+    const builderWorkload = {
+      audience: "https://vercel.com/team",
+      issuer: "https://oidc.vercel.com/team",
+      ownerId: "team",
+      projectId: "builder-project",
+      environment: "production" as const,
+      subject: "owner:team:project:builder:environment:production",
+    };
+    const transport = await createHostedOperatorNormalAuthTransport(
+      {
+        ...dependencies(),
+        sourceHost: "builder",
+        configuration: { ...configuration, workloadPolicy: builderWorkload },
+      },
+      native,
+    );
+    await transport(
+      new URL("/api/auth/get-session?disableRefresh=true&disableCookieCache=true", origin),
+      { headers: requestHeaders },
+    );
+    expect(native.getOidc).toHaveBeenCalledWith({
+      project: builderWorkload.projectId,
+      team: builderWorkload.ownerId,
+    });
+    expect(native.verifyOidc).toHaveBeenCalledWith("private-native-token", {
+      audience: builderWorkload.audience,
+      issuer: builderWorkload.issuer,
+      ownerId: builderWorkload.ownerId,
+      projectId: builderWorkload.projectId,
+      environment: builderWorkload.environment,
+    });
+  });
+  it("requires a configured Builder workload rather than borrowing Operator identity", async () => {
+    const native = io();
+    await expect(
+      createHostedOperatorNormalAuthTransport({ ...dependencies(), sourceHost: "builder" }, native),
+    ).rejects.toThrow();
+    expect(native.getOidc).not.toHaveBeenCalled();
+  });
+
   it("preserves real normal cookies and Auth-issued response cookies while using verified native OIDC protection", async () => {
     const calls = io();
     const owner = dependencies();

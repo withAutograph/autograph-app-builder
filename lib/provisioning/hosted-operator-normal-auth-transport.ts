@@ -87,6 +87,7 @@ export type NormalAuthTransportConfiguration = Pick<
   HostedOperatorSourceConfiguration,
   "applications" | "operator" | "teamId"
 > & {
+  workloadPolicy?: HostedOperatorSourceConfiguration["workloadPolicy"];
   gateway: Pick<HostedOperatorSourceConfiguration["gateway"], "publicOrigin">;
   nativeNeon: {
     configuration: Pick<
@@ -99,6 +100,7 @@ export interface NormalAuthTransportDependencies {
   configuration: NormalAuthTransportConfiguration;
   context: HostedOperatorContext;
   origin: string;
+  sourceHost?: "operator" | "builder";
   /** Full owner/provider target check once before opening this exact-origin capability. */
   assertPlanningAuthorized: (context: HostedOperatorContext) => Promise<void>;
   /** Bind owner.assertArtifactAuthorized: fresh session/membership checks without provider lookup. */
@@ -148,7 +150,13 @@ export const createHostedOperatorNormalAuthTransport = async (
   }
   await dependencies.assertPlanningAuthorized(context);
   await dependencies.assertCurrentOwner(context);
-  const source = configuration.nativeNeon.configuration.operator;
+  const source =
+    dependencies.sourceHost === "builder"
+      ? configuration.workloadPolicy
+      : configuration.nativeNeon.configuration.operator;
+  if (source === undefined || source.ownerId !== configuration.teamId) {
+    throw mismatch();
+  }
   const verifyOidc =
     io.verifyOidc ??
     (async (token: string, options: Parameters<typeof verifyVercelOidcToken>[1]) => {
@@ -159,8 +167,8 @@ export const createHostedOperatorNormalAuthTransport = async (
     const { original, url, method, headers } = approvedRequest(input, init, origin.origin);
     await dependencies.assertCurrentOwner(context);
     const token = await (io.getOidc ?? getVercelOidcToken)({
-      project: configuration.operator.projectId,
-      team: configuration.teamId,
+      project: source.projectId,
+      team: source.ownerId,
     });
     await verifyOidc(token, {
       audience: source.audience,

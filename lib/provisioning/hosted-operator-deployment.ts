@@ -9,7 +9,6 @@ import type { NormalActorAccountPreparation } from "./hosted-operator-normal-act
 import { createRealmIdentityBrowserUrl } from "./hosted-operator-auth-identity";
 import { readHostedOperatorProviderInventory } from "./hosted-operator-provider-inventory";
 import { createNormalActorJournalAuthority } from "./hosted-operator-normal-actor-authority";
-import { createNormalActorJournal } from "./hosted-operator-normal-actor-journal";
 import { confirmNormalActorCapture } from "./hosted-operator-normal-actor-confirmation";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { and, eq, sql } from "drizzle-orm";
