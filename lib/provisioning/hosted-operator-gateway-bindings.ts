@@ -1,6 +1,7 @@
 /* oxlint-disable eslint/no-await-in-loop, sonarjs/expression-complexity, sonarjs/no-nested-functions, react-doctor/async-await-in-loop -- Provider writes and their durable readbacks are deliberately sequential. */
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
+import { createHostedOperatorRealmLinkConfig } from "./hosted-operator-realm-link-config";
 import { z } from "zod";
 import type { readActiveVercelInstallationToken } from "../integrations/postgres-vercel-installation";
 import {
@@ -47,19 +48,6 @@ type CredentialReader = (
   authority: GatewayManagedEnvironmentContext["authority"],
   installationId: string,
 ) => ReturnType<typeof readActiveVercelInstallationToken>;
-
-const exactHttpsOrigin = (value: string) => {
-  const url = new URL(value);
-  if (
-    url.protocol !== "https:" ||
-    url.origin !== value ||
-    url.username !== "" ||
-    url.password !== ""
-  ) {
-    throw unavailable();
-  }
-  return value;
-};
 
 const authResource = (input: GatewayManagedEnvironmentContext) => {
   const { authDatabase, neon } = input.plan;
@@ -480,21 +468,9 @@ export const createHostedOperatorGatewayBindings = (deps: {
         PLATFORM_AUTH_DATABASE_URL: runtimeUrl,
         PLATFORM_GATEWAY_PROJECT_BINDINGS: JSON.stringify(projection),
         PLATFORM_GATEWAY_PROTECTED_APPLICATIONS: JSON.stringify(protectedApplicationIds),
-        PLATFORM_REALM_OPERATOR_LINK_CONFIG: JSON.stringify({
-          browserOrigin: exactHttpsOrigin(gateway.authBrowserOrigin),
-          builderCallbackOrigin: exactHttpsOrigin(gateway.builderCallbackOrigin),
-          builderCallbackPath: "/api/hosted-operator/realm-identity",
-          operatorOrigin: exactHttpsOrigin(gateway.operatorOrigin),
-          readonlyAttesters: input.plan.gatewayBindings?.readonlyAttesters,
-          ...(input.plan.normalActorProgram === undefined
-            ? {}
-            : {
-                browserSessionCapture: {
-                  path: "/api/hosted-operator/realm-browser-session",
-                  sender: gateway.sourceWorkload,
-                },
-              }),
-        }),
+        PLATFORM_REALM_OPERATOR_LINK_CONFIG: JSON.stringify(
+          createHostedOperatorRealmLinkConfig(input.plan),
+        ),
       };
     };
     let activeSharedAuth = false;
