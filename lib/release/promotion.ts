@@ -95,7 +95,7 @@ const promotionReceiptUnsignedSchema = z
         receipt: safePath,
         receiptSha256: hash,
         root: safePath,
-        version: z.literal("0.2.13"),
+        version: z.string().min(1),
       })
       .strict(),
     platform: z
@@ -428,6 +428,7 @@ export async function verifyPromotionCandidate(input: {
     JSON.parse(packageReceiptBytes.toString("utf-8")),
   );
   if (
+    packageReceipt.version !== receipt.package.version ||
     packageReceipt.source.sha !== receipt.builder.commit ||
     packageReceipt.source.tree !== receipt.builder.tree ||
     packageReceipt.endpoint !== receipt.endpoint ||
