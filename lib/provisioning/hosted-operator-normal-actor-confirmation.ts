@@ -82,7 +82,9 @@ export const confirmNormalActorCapture = (
       capture !== undefined && capture.sealed !== undefined,
       capture?.actorKey === payload.actorKey,
       sameOrganization,
-      link.organizationId === (payload.organizationId ?? null),
+      // Participant proof authenticates the account before target organizations exist.
+      // The approved target organization is correlated privately by capture metadata.
+      link.organizationId === null,
       capture?.nonceSha256 === input.nonceSha256,
       capture?.proofSha256 === input.proofSha256,
       capture?.normalCookieSha256 === normalActorCaptureCookieDigest(payload.normalCookie),

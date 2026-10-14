@@ -405,7 +405,7 @@ describe("human confirmation of private actual actor capture", () => {
     const link = input.record.operator!.identityLink!;
     link.browserSession!.participantProgramDigest = programDigest;
     link.bootstrapPlanDigest = planDigest;
-    link.organizationId = organizationId;
+    link.organizationId = null;
     const result = confirmNormalActorCapture(input);
     const actual = decryptNormalActorState({
       ...scopedScope,
@@ -416,6 +416,11 @@ describe("human confirmation of private actual actor capture", () => {
       { actorKey: "owner", organizationId, selection: "pending", session },
     ]);
     expect(actual.organizationSessions![0].storageState.cookies[0].value).toBe(normalCookie.value);
+  });
+  it("rejects a participant proof claiming organization membership before provisioning", () => {
+    const input = fixture();
+    input.record.operator!.identityLink!.organizationId = "future-organization";
+    expect(() => confirmNormalActorCapture(input)).toThrow("normal_actor_confirmation_unavailable");
   });
   it("preserves server parent-domain scope and raw encoded bytes", () => {
     const input = fixture();
