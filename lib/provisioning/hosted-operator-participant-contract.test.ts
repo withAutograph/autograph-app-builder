@@ -7,6 +7,7 @@ import {
   selectHostedOperatorOwnedOrganizationSpec,
 } from "./hosted-operator-contract";
 import type { HostedOperatorOwnedOrganizationSpec } from "./hosted-operator-contract";
+import { createHostedOperatorPublicGateway } from "./hosted-operator-public-gateway";
 import {
   normalActorProgramDigest,
   normalActorProgramSchema,
@@ -127,6 +128,50 @@ const participantPlan = () =>
       },
     ],
   });
+
+describe("public Gateway origin projection", () => {
+  const generatedOrigin = "https://gateway-generated-team.vercel.app";
+  const publicOrigin = "https://gateway-git-main-team.vercel.app";
+  const inventory = {
+    gateway: { branch: "feature", projectId: "gateway-project" },
+    verification: {
+      gatewayOrigin: generatedOrigin,
+      jwksUrl: `${generatedOrigin}/_platform/jwks.json`,
+      publicOrigin,
+    },
+  };
+
+  it("accepts a participant program on the public alias while retaining generated transport and JWKS", () => {
+    const plan = participantPlan();
+    const observed = structuredClone(inventory);
+    const result = hostedOperatorPlanSchema.parse({
+      ...plan,
+      publicGateway: createHostedOperatorPublicGateway(inventory),
+      normalActorProgram: { ...program, origin: publicOrigin },
+      deploymentBoundary: { ...plan.deploymentBoundary, verification: inventory.verification },
+    });
+    expect(result.publicGateway).toEqual({
+      branch: "feature",
+      projectId: "gateway-project",
+      origin: publicOrigin,
+    });
+    expect(result.deploymentBoundary?.verification.gatewayOrigin).toBe(generatedOrigin);
+    expect(result.deploymentBoundary?.verification.jwksUrl).toBe(inventory.verification.jwksUrl);
+    expect(inventory).toEqual(observed);
+  });
+
+  it("still rejects a participant program using the generated transport instead of the public alias", () => {
+    const plan = participantPlan();
+    expect(
+      hostedOperatorPlanSchema.safeParse({
+        ...plan,
+        publicGateway: createHostedOperatorPublicGateway(inventory),
+        normalActorProgram: { ...program, origin: generatedOrigin },
+        deploymentBoundary: { ...plan.deploymentBoundary, verification: inventory.verification },
+      }).success,
+    ).toBe(false);
+  });
+});
 const organization = (
   organizationId: string,
   actorId: string,

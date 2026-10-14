@@ -62,6 +62,7 @@ import { createHostedOperatorSandboxLauncher } from "./hosted-operator-sandbox-l
 import { createHostedOperatorAuthReadiness } from "./hosted-operator-auth-readiness";
 import { createHostedOperatorGatewayBindings } from "./hosted-operator-gateway-bindings";
 import { createHostedOperatorDeploymentDelivery } from "./hosted-operator-deployment-delivery";
+import { createHostedOperatorPublicGateway } from "./hosted-operator-public-gateway";
 import { createHostedOperatorEnvironmentBindings } from "./hosted-operator-environment-bindings";
 import { createHostedOperatorAppReadiness } from "./hosted-operator-app-readiness";
 
@@ -1014,11 +1015,7 @@ export const composeHostedOperatorDependencies = (
           projectId: native.projectId,
           source: "synthetic-only",
         },
-        publicGateway: {
-          branch: inventory.gateway.branch,
-          origin: inventory.verification.gatewayOrigin,
-          projectId: inventory.gateway.projectId,
-        },
+        publicGateway: createHostedOperatorPublicGateway(inventory),
         release: {
           artifactRef: selection.artifactRef,
           id: selection.releaseId,
