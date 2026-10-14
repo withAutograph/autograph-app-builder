@@ -62,6 +62,42 @@ export const operatorWorkloadFailureSchema = z.strictObject({
 });
 export type OperatorWorkloadFailure = z.infer<typeof operatorWorkloadFailureSchema>;
 
+const operatorPlanningMismatchBoundary = z.enum([
+  "application_selection",
+  "inventory_configuration",
+  "inventory_project",
+  "inventory_deployment",
+  "gateway_origin",
+  "plan_result",
+]);
+export type OperatorPlanningMismatchBoundary = z.infer<typeof operatorPlanningMismatchBoundary>;
+const operatorPlanningMismatchField = z.enum([
+  "application_missing",
+  "app_project",
+  "app_branch",
+  "team",
+  "project_separation",
+  "gateway_branch",
+  "app_environment",
+  "gateway_environment",
+  "native_store_binding",
+  "project_identity",
+  "project_owner",
+  "deployment_project",
+  "deployment_identity",
+  "deployment_owner",
+  "deployment_ready",
+  "deployment_environment",
+  "deployment_branch",
+  "deployment_missing",
+  "public_origin",
+  "gateway_origin",
+  "plan_action",
+  "plan_selection",
+  "gateway_plan",
+]);
+export type OperatorPlanningMismatchField = z.infer<typeof operatorPlanningMismatchField>;
+
 const callerEnvironment = z.enum(["development", "preview", "production"]);
 export const operatorCallerWorkloadSchema = z.strictObject({
   environmentMatches: z.boolean().optional(),
@@ -129,6 +165,12 @@ const metadata = z.strictObject({
     })
     .optional(),
   phase,
+  planningMismatch: z
+    .strictObject({
+      boundary: operatorPlanningMismatchBoundary,
+      fields: z.array(operatorPlanningMismatchField),
+    })
+    .optional(),
   probeVariant: z.enum(["both_headers", "trusted_oidc_only"]).optional(),
   stage,
   vercelError: z.literal("TRUSTED_SOURCES_ENVIRONMENT_MISMATCH").optional(),
@@ -183,4 +225,33 @@ export const createHostedOperatorConsentDiagnostic = (
       /* Diagnostics never change authorization or pause behavior. */
     }
   };
+};
+
+/** Report failed comparisons using fixed labels, without receiving their values. */
+export const reportOperatorPlanningMismatch = (
+  sessionId: string,
+  mismatchBoundary: OperatorPlanningMismatchBoundary,
+  failed: Partial<Record<OperatorPlanningMismatchField, boolean>>,
+  sink?: HostedOperatorConsentDiagnosticSink,
+): void => {
+  try {
+    const fields = operatorPlanningMismatchField.options.filter(
+      (field) => Object.hasOwn(failed, field) && failed[field] === true,
+    );
+    if (fields.length === 0) {
+      return;
+    }
+    createHostedOperatorConsentDiagnostic(
+      sessionId,
+      sink,
+    )({
+      boundary: "operator",
+      phase: "inline",
+      stage: "operator_request",
+      outcome: "setup_unavailable",
+      planningMismatch: { boundary: mismatchBoundary, fields },
+    });
+  } catch {
+    /* Diagnostics never change planning or authorization behavior. */
+  }
 };

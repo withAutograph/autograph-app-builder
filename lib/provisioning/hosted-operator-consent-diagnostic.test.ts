@@ -3,10 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createHostedOperatorConsentDiagnostic,
   operatorOwnerStoreImportErrorCodeSchema,
+  reportOperatorPlanningMismatch,
 } from "./hosted-operator-consent-diagnostic";
 import type {
   HostedOperatorConsentDiagnosticSink,
   HostedOperatorConsentMetadata,
+  OperatorPlanningMismatchBoundary,
+  OperatorPlanningMismatchField,
 } from "./hosted-operator-consent-diagnostic";
 
 const secret = "private-owner repo https://vercel.com/consent?pkce=private bearer-secret";
@@ -223,4 +226,174 @@ it("rejects arbitrary probe variants and accepts only closed transport metadata"
   report(hostile);
   expect(sink).toHaveBeenCalledOnce();
   expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+});
+
+describe("operator planning mismatch diagnostics", () => {
+  const fields: OperatorPlanningMismatchField[] = [
+    "application_missing",
+    "app_project",
+    "app_branch",
+    "team",
+    "project_separation",
+    "gateway_branch",
+    "app_environment",
+    "gateway_environment",
+    "project_identity",
+    "project_owner",
+    "deployment_project",
+    "deployment_identity",
+    "deployment_owner",
+    "deployment_ready",
+    "deployment_environment",
+    "deployment_branch",
+    "deployment_missing",
+    "public_origin",
+    "gateway_origin",
+    "plan_action",
+    "plan_selection",
+    "gateway_plan",
+  ];
+
+  it.each([
+    "application_selection",
+    "inventory_configuration",
+    "inventory_project",
+    "inventory_deployment",
+    "gateway_origin",
+    "plan_result",
+  ] as const)("reports fixed labels and a session hash at %s", (boundary) => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    reportOperatorPlanningMismatch(
+      secret,
+      boundary,
+      Object.fromEntries(fields.map((field) => [field, true])),
+      sink,
+    );
+    expect(sink).toHaveBeenCalledOnce();
+    expect(sink.mock.calls[0]?.[0]).toMatchObject({
+      event: "builder.hosted_neon_consent",
+      sessionIdHash: `sha256:${createHash("sha256").update(secret).digest("hex")}`,
+      boundary: "operator",
+      phase: "inline",
+      stage: "operator_request",
+      outcome: "setup_unavailable",
+      planningMismatch: { boundary },
+    });
+    expect(new Set(sink.mock.calls[0]?.[0].planningMismatch?.fields)).toEqual(new Set(fields));
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+  });
+
+  it("collects only true known labels without accessing unknown values", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const failed = { team: true, app_project: false, payload: secret };
+    Object.defineProperty(failed, "gateway_origin", { value: secret });
+    Object.defineProperty(failed, secret, {
+      get() {
+        throw new Error(secret);
+      },
+    });
+    reportOperatorPlanningMismatch(secret, "inventory_configuration", failed, sink);
+    expect(sink.mock.calls[0]?.[0].planningMismatch).toEqual({
+      boundary: "inventory_configuration",
+      fields: ["team"],
+    });
+    expect(JSON.stringify(sink.mock.calls)).not.toContain(secret);
+    reportOperatorPlanningMismatch(secret, "plan_result", {}, sink);
+    reportOperatorPlanningMismatch(secret, "plan_result", { plan_action: false }, sink);
+    const inherited: Partial<Record<OperatorPlanningMismatchField, boolean>> = {};
+    Object.setPrototypeOf(inherited, { team: true });
+    reportOperatorPlanningMismatch(secret, "plan_result", inherited, sink);
+    expect(sink).toHaveBeenCalledOnce();
+  });
+
+  it("rejects private or unknown labels in the strict metadata", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const report = createHostedOperatorConsentDiagnostic(secret, sink);
+    for (const [field, invalid] of [
+      ["boundary", secret],
+      ["fields", [secret]],
+      ["payload", secret],
+    ] as const) {
+      const metadata: HostedOperatorConsentMetadata = {
+        ...value,
+        planningMismatch: { boundary: "plan_result", fields: ["team"] },
+      };
+      Object.defineProperty(metadata.planningMismatch, field, { enumerable: true, value: invalid });
+      report(metadata);
+    }
+    const selection = { boundary: "plan_result" } satisfies {
+      boundary: OperatorPlanningMismatchBoundary;
+    };
+    Object.defineProperty(selection, "boundary", { value: secret });
+    reportOperatorPlanningMismatch(secret, selection.boundary, { team: true }, sink);
+    expect(sink).not.toHaveBeenCalled();
+  });
+
+  it("does not throw or expose hostile getters or proxies", () => {
+    const sink = vi.fn<HostedOperatorConsentDiagnosticSink>();
+    const hostile: Partial<Record<OperatorPlanningMismatchField, boolean>> = {};
+    Object.defineProperty(hostile, "team", {
+      get() {
+        throw new Error(secret);
+      },
+    });
+    const target: Partial<Record<OperatorPlanningMismatchField, boolean>> = {};
+    const proxy = new Proxy(target, {
+      getOwnPropertyDescriptor() {
+        throw new Error(secret);
+      },
+    });
+    const invalid = { failed: {} } satisfies {
+      failed: Partial<Record<OperatorPlanningMismatchField, boolean>>;
+    };
+    Object.defineProperty(invalid, "failed", { value: null });
+    for (const failed of [hostile, proxy, invalid.failed]) {
+      expect(() => {
+        reportOperatorPlanningMismatch(secret, "inventory_configuration", failed, sink);
+      }).not.toThrow();
+    }
+    const report = createHostedOperatorConsentDiagnostic(secret, sink);
+    const metadata: HostedOperatorConsentMetadata = {
+      ...value,
+      planningMismatch: { boundary: "plan_result", fields: ["team"] },
+    };
+    Object.defineProperty(metadata.planningMismatch, "boundary", {
+      get() {
+        throw new Error(secret);
+      },
+    });
+    expect(() => {
+      report(metadata);
+    }).not.toThrow();
+    expect(sink).not.toHaveBeenCalled();
+  });
+
+  it("does not throw for sink or console failures", async () => {
+    for (const sink of [
+      () => {
+        throw new Error(secret);
+      },
+      async () => {
+        await Promise.resolve();
+        throw new Error(secret);
+      },
+    ]) {
+      expect(() => {
+        reportOperatorPlanningMismatch(secret, "plan_result", { plan_action: true }, sink);
+      }).not.toThrow();
+    }
+    const log = vi.spyOn(console, "info").mockImplementation(() => {
+      throw new Error(secret);
+    });
+    try {
+      expect(() => {
+        reportOperatorPlanningMismatch(secret, "plan_result", { plan_action: true });
+      }).not.toThrow();
+      expect(log).toHaveBeenCalledOnce();
+      expect(JSON.stringify(log.mock.calls)).not.toContain(secret);
+    } finally {
+      log.mockRestore();
+    }
+    await Promise.resolve();
+  });
 });

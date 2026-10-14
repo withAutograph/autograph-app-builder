@@ -32,6 +32,7 @@ import type {
   ProtectedHostedOperatorDependencies,
 } from "./hosted-operator-service";
 import { openHostedOperatorCompositionResources } from "./hosted-operator-source-configuration";
+import { reportOperatorPlanningMismatch } from "./hosted-operator-consent-diagnostic";
 import type { HostedOperatorSourceConfiguration } from "./hosted-operator-source-configuration";
 import { readOwnedOperatorPlanningSelection } from "./hosted-operator-planning-authority";
 import {
@@ -65,12 +66,19 @@ const selectedApplication = (
   context: HostedOperatorContext,
 ) => {
   const selected = configuration.applications[context.target.appId];
-  if (
-    selected === undefined ||
-    selected.projectId !== context.target.projectId ||
-    selected.branch !== context.target.branch ||
-    context.target.scopeId !== configuration.teamId
-  ) {
+  if (selected === undefined) {
+    reportOperatorPlanningMismatch(context.target.sessionId, "application_selection", {
+      application_missing: true,
+    });
+    throw new HostedOperatorError(RESOURCE_MISMATCH);
+  }
+  const failed = {
+    app_project: selected.projectId !== context.target.projectId,
+    app_branch: selected.branch !== context.target.branch,
+    team: context.target.scopeId !== configuration.teamId,
+  };
+  if (Object.values(failed).some(Boolean)) {
+    reportOperatorPlanningMismatch(context.target.sessionId, "application_selection", failed);
     throw new HostedOperatorError(RESOURCE_MISMATCH);
   }
   return selected;
