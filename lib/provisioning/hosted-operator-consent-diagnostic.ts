@@ -21,6 +21,19 @@ const operatorPlanStage = z.enum([
   "plan_validation",
   "plan_authorization",
   "plan_reservation",
+  "neon_configuration",
+  "neon_owner_guard",
+  "neon_oidc",
+  "neon_connect_broker",
+  "neon_mcp_client",
+  "neon_project_metadata",
+  "neon_branch_metadata",
+  "neon_endpoint_metadata",
+  "neon_database_metadata",
+  "neon_role_metadata",
+  "neon_connection_credential",
+  "neon_source_project_access",
+  "neon_native_store",
 ]);
 export type OperatorPlanStage = z.infer<typeof operatorPlanStage>;
 const operatorPlanningSqlState = z.enum([
@@ -41,6 +54,7 @@ const operatorPlanningFailure = z.strictObject({
   errorClass: z.enum(["operator_error", "validation_error", "type_error", "unexpected"]),
   code: operatorPublicResultSchema.shape.code.unwrap().optional(),
   sqlState: operatorPlanningSqlState.optional(),
+  nativeStoreFailure: z.enum(["connection_required", "provider_unavailable", "resource_mismatch"]).optional(),
 });
 type OperatorPlanningFailure = z.infer<typeof operatorPlanningFailure>;
 
