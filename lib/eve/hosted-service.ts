@@ -1,3 +1,11 @@
+import {
+  captureResourceApprovalResponse,
+  resourceApprovalResponseProofSchema,
+} from "./resource-approval-response";
+import type {
+  ResourceApprovalResponseMarker,
+  ResourceApprovalResponseProof,
+} from "./resource-approval-response";
 import { provesNativeDelivery } from "./native-delivery-state";
 import type { NativeDeliveryState, SendDelivery } from "./native-delivery-state";
 import {
@@ -38,6 +46,7 @@ import { hostedPrincipalSchema, requireHostedOperationScope, tenantKeyFor } from
 import type { HostedPrincipal } from "./hosted-auth";
 import {
   isProvedSendDelivery,
+  isProvedResourceApprovalResponse,
   hostedOperationRecordSchema,
   DEFAULT_HOSTED_SESSION_TIMEOUT_POLICY,
   durableHostedSessionRecordSchema,
@@ -1079,6 +1088,67 @@ export function createHostedEveSessionService(input: {
     });
     return verified.state === "succeeded" ? verified.result : undefined;
   };
+  const reconcileResourceApprovalOperation = async (
+    operation: HostedOperationRecord,
+    request: ResourceApprovalResponseProof["request"],
+  ): Promise<EveSessionResult | undefined> => {
+    const parsed = resourceApprovalResponseProofSchema.shape.request.safeParse(request);
+    if (
+      !parsed.success ||
+      operation.sessionId === undefined ||
+      operation.internalSessionLimitResponse !== undefined
+    ) {
+      return undefined;
+    }
+    const before = toDurableHostedSessionRecord(await requireSession(operation.sessionId));
+    if (
+      operation.resourceApprovalResponse === undefined &&
+      (before.adapterGeneration !== 1 || before.adapterSessionId !== before.originAdapterSessionId)
+    ) {
+      return undefined;
+    }
+    await assertSendOwner(before);
+    // oxlint-disable-next-line eslint/no-use-before-define -- Reconciliation observes only and never dispatches RESPOND again.
+    const result = await readSession({
+      continueWork: false,
+      recoverUnavailable: false,
+      cursor: 0,
+      limit: 100,
+      sessionId: operation.sessionId,
+    });
+    const current = toDurableHostedSessionRecord(await requireSession(operation.sessionId));
+    const proof = resourceApprovalResponseProofSchema.safeParse({
+      adapterGeneration: current.adapterGeneration,
+      adapterSessionId: current.adapterSessionId,
+      checkpointDigest: current.checkpointDigest,
+      request: parsed.data,
+    });
+    if (!proof.success) {
+      return undefined;
+    }
+    // oxlint-disable-next-line eslint/no-use-before-define -- The initialized checkpoint reader is used only during a service call.
+    const metadata = await readCheckpointMetadata(current);
+    if (!isProvedResourceApprovalResponse(operation, current, proof.data, metadata)) {
+      return undefined;
+    }
+    await assertSendOwner(current);
+    const settled = await input.store.settleSucceeded({
+      principal,
+      operationId: operation.operationId,
+      requestDigest: operation.requestDigest,
+      result,
+      resourceApprovalResolution: proof.data,
+      nowEpochMs: now(),
+    });
+    const verified = requireOwnedOperation(settled, {
+      clientRequestId: operation.clientRequestId,
+      kind: "respond",
+      operationId: operation.operationId,
+      requestDigest: operation.requestDigest,
+      sessionId: operation.sessionId,
+    });
+    return verified.state === "succeeded" ? verified.result : undefined;
+  };
   const respondOperationId = (clientRequestId: string) =>
     stableId("op", {
       clientRequestId,
@@ -1361,6 +1431,7 @@ export function createHostedEveSessionService(input: {
     sessionId?: string;
     resumeSessionId?: string;
     internalSessionLimitResponse?: InternalSessionLimitResponse;
+    resourceApprovalResponse?: ResourceApprovalResponseMarker;
     dispatch: (operationId: string) => Promise<{
       result: EveSessionResult;
       sendDeliveryResolution?: NativeDeliveryState;
@@ -1397,6 +1468,9 @@ export function createHostedEveSessionService(input: {
       ...(options.internalSessionLimitResponse === undefined
         ? {}
         : { internalSessionLimitResponse: options.internalSessionLimitResponse }),
+      ...(options.resourceApprovalResponse === undefined
+        ? {}
+        : { resourceApprovalResponse: options.resourceApprovalResponse }),
       operationId,
       principal,
       requestDigest,
@@ -1492,6 +1566,18 @@ export function createHostedEveSessionService(input: {
                   sessionId: operation.sessionId ?? "",
                 });
                 const settled = await reconcileSessionLimitOperation(operation, result);
+                if (settled !== undefined) {
+                  return settled;
+                }
+              }
+              if (
+                operation.kind === "respond" &&
+                operation.internalSessionLimitResponse === undefined
+              ) {
+                const settled = await reconcileResourceApprovalOperation(
+                  operation,
+                  options.request,
+                );
                 if (settled !== undefined) {
                   return settled;
                 }
@@ -2544,7 +2630,23 @@ export function createHostedEveSessionService(input: {
         });
       }
     }
+    // Preserve original resource approval authority before dispatch when the full private batch is available.
+    const approvalRequest = resourceApprovalResponseProofSchema.shape.request.safeParse(request);
+    const approvalMetadata =
+      marker === undefined && approvalRequest.success && (state?.pending.length ?? 0) > 0
+        ? await readCheckpointMetadata(session)
+        : null;
+    const resourceApprovalResponse =
+      marker === undefined && approvalRequest.success
+        ? captureResourceApprovalResponse(
+            toDurableHostedSessionRecord(session),
+            state,
+            approvalMetadata?.privateApprovalCaptureState,
+            approvalRequest.data,
+          )
+        : undefined;
     return mutate({
+      ...(resourceApprovalResponse === undefined ? {} : { resourceApprovalResponse }),
       ...(marker === undefined ? {} : { internalSessionLimitResponse: marker }),
       async dispatch(operationId) {
         const paged =

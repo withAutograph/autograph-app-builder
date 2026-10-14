@@ -1,5 +1,6 @@
 import {
   isProvedSessionLimitResponse,
+  isProvedResourceApprovalResponse,
   isProvedSendDelivery,
   bindSendDelivery,
   hostedOperationRecordSchema,
@@ -1032,7 +1033,9 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           operation.internalBuildContinuation?.deliveredTurnId !== undefined &&
           operation.internalBuildContinuation.deliveredMessageSequence !== undefined;
         const current =
-          (operation.internalSessionLimitResponse !== undefined || operation.kind === "send") &&
+          (operation.internalSessionLimitResponse !== undefined ||
+            operation.kind === "send" ||
+            input.resourceApprovalResolution !== undefined) &&
           operation.sessionId !== undefined
             ? await sessionById(transaction, principal, operation.sessionId, true)
             : null;
@@ -1042,6 +1045,37 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           input.sessionLimitResolution,
         );
         const provedSend = isProvedSendDelivery(operation, current, input.sendDeliveryResolution);
+        let provedApproval = false;
+        if (
+          input.resourceApprovalResolution !== undefined &&
+          current?.version === 2 &&
+          current.checkpointRef !== undefined
+        ) {
+          const page = await checkpointHistory.readPage({
+            principal,
+            sessionId: current.sessionId,
+            checkpointId: current.checkpointRef.id,
+            cursor: current.checkpointRef.eventCount,
+            limit: 1,
+            transaction,
+          });
+          if (
+            page !== null &&
+            page.checkpointDigest === current.checkpointRef.digest &&
+            page.totalEvents === current.checkpointRef.eventCount
+          ) {
+            provedApproval = isProvedResourceApprovalResponse(
+              operation,
+              current,
+              input.resourceApprovalResolution,
+              page.metadata,
+            );
+          }
+        }
+
+        if (input.resourceApprovalResolution !== undefined && !provedApproval) {
+          throw new Error("Resource approval settlement is not proved.");
+        }
         if (
           operation.kind === "send" &&
           operation.internalBuildContinuation === undefined &&
@@ -1053,7 +1087,10 @@ export function createPostgresHostedEveStore(database: Database): HostedEveStore
           operation.state !== "reserved" &&
           !replayableStart &&
           !deliveredInternal &&
-          !(operation.state === "submission_unknown" && (provedResponse || provedSend))
+          !(
+            operation.state === "submission_unknown" &&
+            (provedResponse || provedSend || provedApproval)
+          )
         ) {
           throw new Error(OPERATION_CANNOT_SETTLE);
         }
