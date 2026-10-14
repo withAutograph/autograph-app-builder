@@ -419,7 +419,7 @@ export const createHostedOperatorControlPlane = async (input: {
         if (JSON.stringify(requested) !== JSON.stringify(artifactContext)) {
           throw new HostedOperatorError("authorization_required");
         }
-        await owner.assertPlanningAuthorized(context);
+        await owner.assertArtifactAuthorized(context);
       };
       const artifactStore = createPostgresOperatorArtifactStore({ assertCurrentOwner, database });
       return {

@@ -41,7 +41,10 @@ for this target. An explicit conflicting project or branch remains rejected,
 with only the authorized target returned privately for recovery.
 The accepted spec's workspace ID identifies the repository execution workspace.
 The canonical session principal and owner authority identify the tenant workspace;
-artifact reads retain that tenant scope and the original public session. Do not
+artifact reads retain that tenant scope and the original public session. Each
+artifact read freshly checks the canonical session, app linkage, and membership;
+provider project grants are checked at planning and execution boundaries, rather
+than once for every immutable archive chunk. Do not
 compare the repository workspace ID with the tenant workspace ID.
 Private planning failures report only a closed stage, error class, known code,
 and hashed session identity. They preserve the original result or error and never

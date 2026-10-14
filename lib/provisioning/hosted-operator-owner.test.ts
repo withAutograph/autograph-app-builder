@@ -258,20 +258,24 @@ const makeFixture = (
       return activeMember;
     }),
   };
-  // oxlint-disable-next-line eslint/require-await -- credential fixture is a direct in-memory result.
-  const readVercelCredential = vi.fn(async () => ({
-    binding: {
-      active: true,
-      displayName: "Acme",
-      installationId: "icfg_1",
-      plan: "pro",
-      scopeId: "team_1",
-      scopeType: "team" as const,
-      slug: "acme",
-      updatedAt: new Date(),
-    },
-    token: "credential-never-exposed",
-  }));
+  const readVercelCredential = vi.fn<
+    Parameters<typeof createHostedOperatorOwnerAuthority>[0]["readVercelCredential"]
+  >(async () => {
+    await Promise.resolve();
+    return {
+      binding: {
+        active: true,
+        displayName: "Acme",
+        installationId: "icfg_1",
+        plan: "pro",
+        scopeId: "team_1",
+        scopeType: "team" as const,
+        slug: "acme",
+        updatedAt: new Date(),
+      },
+      token: "credential-never-exposed",
+    };
+  });
   // oxlint-disable-next-line eslint/require-await -- provider response fixture is produced locally.
   const fetch = vi.fn(async () =>
     Response.json({
@@ -484,6 +488,148 @@ const retainedApprovalFixture = () => {
     record,
   };
 };
+
+const expectNoProviderReads = (fixture: ReturnType<typeof makeFixture>) => {
+  expect(fixture.listVercelInstallations).not.toHaveBeenCalled();
+  expect(fixture.readVercelCredential).not.toHaveBeenCalled();
+  expect(fixture.fetch).not.toHaveBeenCalled();
+};
+
+describe("hosted operator artifact ownership", () => {
+  const contextFor = (owner: OperatorOwnerContext = ownerContext) => ({
+    authority: owner.authority,
+    ownerContext: owner,
+    target: hostedRuntimeTargetSchema.parse({
+      ...selection,
+      installationId: "icfg_1",
+      scopeId: "team_1",
+      scopeType: "team",
+    }),
+  });
+
+  it.each(["direct", "handoff"] as const)(
+    "reads current %s artifact ownership independently of provider grants",
+    async (kind) => {
+      const fixture = makeFixture(kind === "direct" ? directSessionRecord() : undefined);
+      const context = contextFor(kind === "direct" ? directOwnerContext : ownerContext);
+      await fixture.authority.assertArtifactAuthorized(context);
+      expectNoProviderReads(fixture);
+      expect(fixture.eve.getSession).toHaveBeenCalledWith(principal, ownerContext.sessionId);
+      expect(fixture.membership.isMember).toHaveBeenCalledWith({
+        principal,
+        workspaceId: principal.workspaceId,
+      });
+      vi.mocked(fixture.membership.isMember).mockResolvedValue(false);
+      await expect(fixture.authority.assertArtifactAuthorized(context)).rejects.toThrow();
+      expectNoProviderReads(fixture);
+    },
+  );
+
+  it.each(["direct", "handoff"] as const)(
+    "rejects foreign or stale %s identity before exposing artifact bytes",
+    async (kind) => {
+      const fixture = makeFixture(kind === "direct" ? directSessionRecord() : undefined);
+      const owner = kind === "direct" ? directOwnerContext : ownerContext;
+      const context = contextFor(owner);
+      const mismatches = [
+        { ...context, authority: { ...context.authority, ownerUserId: "foreign" } },
+        { ...context, target: { ...context.target, appId: "foreign-app" } },
+        { ...context, target: { ...context.target, sessionId: "foreign-session" } },
+        {
+          ...context,
+          ownerContext: { ...owner, authority: { ...owner.authority, workspaceId: "foreign" } },
+        },
+        {
+          ...context,
+          ownerContext: { ...owner, principal: { ...principal, scopes: ["foreign"] } },
+        },
+        {
+          ...context,
+          ownerContext: { ...owner, sessionId: "foreign-session" },
+          target: { ...context.target, sessionId: "foreign-session" },
+        },
+        { ...context, ownerContext: { ...owner, adapterSessionId: "foreign-adapter" } },
+        { ...context, ownerContext: { ...owner, adapterGeneration: 2 } },
+      ];
+      const readArtifact = vi.fn();
+      for (const mismatch of mismatches) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- Each rejected ownership check completes before the next attempt.
+        await expect(
+          (async () => {
+            await fixture.authority.assertArtifactAuthorized(mismatch);
+            readArtifact();
+          })(),
+        ).rejects.toThrow();
+      }
+      expect(readArtifact).not.toHaveBeenCalled();
+      expectNoProviderReads(fixture);
+    },
+  );
+
+  it("supports legacy v1 handoff ownership without provider access", async () => {
+    const fixture = makeFixture(
+      hostedSessionRecordSchema.parse({
+        adapterSessionId: ownerContext.adapterSessionId,
+        createdAtEpochMs: 100,
+        principal,
+        sessionId: ownerContext.sessionId,
+        status: "waiting",
+        updatedAtEpochMs: 100,
+        version: 1,
+      }),
+    );
+    await fixture.authority.assertArtifactAuthorized(contextFor());
+    await expect(
+      fixture.authority.assertArtifactAuthorized(contextFor(directOwnerContext)),
+    ).rejects.toThrow();
+    expectNoProviderReads(fixture);
+  });
+
+  it("rechecks canonical session and handoff linkage on every read", async () => {
+    const fixture = makeFixture();
+    const context = contextFor();
+    await fixture.authority.assertArtifactAuthorized(context);
+    fixture.currentSession.sourceHandoffId = "e0920c75-1fba-4a55-b12c-eef55396c03b";
+    await expect(fixture.authority.assertArtifactAuthorized(context)).rejects.toThrow();
+    fixture.currentSession.sourceHandoffId = handoffId;
+    const handoff = await fixture.handoffs.read({ authority: ownerContext.authority, handoffId });
+    if (handoff === undefined) {
+      throw new Error("Missing fixture handoff.");
+    }
+    for (const changed of [
+      { ...handoff, handoffId: "e0920c75-1fba-4a55-b12c-eef55396c03b" },
+      { ...handoff, sessionId: "foreign-session" },
+      { ...handoff, authority: { ...handoff.authority, ownerUserId: "foreign" } },
+      { ...handoff, intent: { ...handoff.intent, appId: "foreign-app" } },
+    ]) {
+      vi.mocked(fixture.handoffs.read).mockResolvedValue(changed);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Each attempt replaces the same canonical store response.
+      await expect(fixture.authority.assertArtifactAuthorized(context)).rejects.toThrow();
+    }
+    expectNoProviderReads(fixture);
+  });
+
+  it.each(["direct", "handoff"] as const)(
+    "retains live project grant enforcement for %s planning",
+    async (kind) => {
+      const fixture = makeFixture(kind === "direct" ? directSessionRecord() : undefined);
+      const context = contextFor(kind === "direct" ? directOwnerContext : ownerContext);
+      fixture.fetch.mockResolvedValue(
+        Response.json({ error: { code: "forbidden" } }, { status: 403 }),
+      );
+      await fixture.authority.assertArtifactAuthorized(context);
+      await expect(fixture.authority.assertPlanningAuthorized(context)).rejects.toThrow();
+      expect(fixture.readVercelCredential).toHaveBeenCalled();
+      expect(fixture.fetch).toHaveBeenCalled();
+      fixture.fetch.mockClear();
+      fixture.listVercelInstallations.mockResolvedValue([]);
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- Absence is the credential reader contract.
+      vi.mocked(fixture.readVercelCredential).mockResolvedValue(undefined);
+      await expect(fixture.authority.assertPlanningAuthorized(context)).rejects.toThrow();
+      expect(fixture.fetch).not.toHaveBeenCalled();
+    },
+  );
+});
 
 describe("hosted operator owner authority", () => {
   it("reads the original exact prepare approval after source app cleanup", async () => {
