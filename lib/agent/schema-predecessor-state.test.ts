@@ -2,6 +2,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   canonicalSchemaPredecessorState,
+  compiledSchemaPredecessorState,
+  rememberCompiledSchemaPredecessors,
   rememberCanonicalSchemaRelease,
 } from "./schema-predecessor-state";
 import type { CompiledOperatorReleaseSelection } from "../provisioning/hosted-operator-artifact-selection";
@@ -29,6 +31,20 @@ const selection: CompiledOperatorReleaseSelection = {
 describe("immutable compiled predecessor references", () => {
   beforeEach(() => {
     canonicalSchemaPredecessorState.update(() => []);
+    compiledSchemaPredecessorState.update(() => ({}));
+  });
+  it("replaces only the selected app's last successful input without retaining bytes", () => {
+    const other = { ...selection, appId: "other-app" };
+    rememberCompiledSchemaPredecessors("other-app", [other]);
+    rememberCompiledSchemaPredecessors("spend-review", [selection]);
+    rememberCompiledSchemaPredecessors("spend-review", []);
+    expect(compiledSchemaPredecessorState.get()).toEqual({
+      "other-app": { predecessors: [other] },
+      "spend-review": { predecessors: [] },
+    });
+    expect(() => {
+      rememberCompiledSchemaPredecessors("other-app", [selection]);
+    }).toThrow();
   });
   it("retains the original recorded reference across repeat compilation of the same identity", () => {
     rememberCanonicalSchemaRelease(selection);

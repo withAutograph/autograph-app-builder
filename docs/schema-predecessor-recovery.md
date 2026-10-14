@@ -28,6 +28,23 @@ release and returns `schema_release_identity_reused` before recording a current
 operator selection. The internal build agent authors the new ID and compiles
 again; this recovery never changes authored CUE or the generated pointer itself.
 
+After a successful compilation and capture, Builder retains the original
+predecessor references in the owned session. Validation reuses those inputs for
+`app:check` and `app:test`, including prepared runtime execution. Runtime
+preparation may install the newly compiled release; that does not replace the
+compiler's original transition basis. Actual missing predecessor files are
+restored through the existing owned artifact reader. Without a saved compilation
+input, validation keeps the repository's normal behavior and compilation can
+capture its inputs on the next ordinary Builder repair.
+
+Older captures can recover a self predecessor when the owned archive matching
+the current checked manifest declares the target schema itself as a predecessor.
+Arrusted excludes that target release from its normal prior-release inventory,
+so this proves an explicit compiler input. Recovery restores only the external
+schema artifact and preserves the current checked release. An unproven legacy
+basis falls back to ordinary repository validation; it does not introduce an
+ordering requirement or block the next compiler-owned repair.
+
 Missing or ambiguous retained history and unreadable installed identity return
 `canonical_schema_predecessor_unavailable`. They do not authorize a database
 reset, replacement app, cross-session artifact lookup or fabricated predecessor.

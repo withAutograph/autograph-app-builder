@@ -134,6 +134,10 @@ it("repeated intermediate validation executes technical checks and returns defer
     initial();
     let technicalRuns = 0;
     const boundaries: string[] = [];
+    const compilerInput = {
+      APP_SCHEMA_TRANSITION_PREDECESSOR_FILES:
+        '["/private/original-predecessor/app-artifact.json"]',
+    };
     const tool = createAppValidationTool({
       async captureRelease() {
         boundaries.push("capture");
@@ -145,6 +149,7 @@ it("repeated intermediate validation executes technical checks and returns defer
         return await Promise.resolve(z.undefined().parse(undefined));
       },
       async executeValidation(input) {
+        expect(input.environment).toEqual(compilerInput);
         technicalRuns += 1;
         boundaries.push("commands");
         return await Promise.resolve({
@@ -159,6 +164,9 @@ it("repeated intermediate validation executes technical checks and returns defer
             version: 3,
           },
         });
+      },
+      async prepareSchemaInput() {
+        return await Promise.resolve({ environment: compilerInput });
       },
       async validateBackend() {
         boundaries.push("browser");
