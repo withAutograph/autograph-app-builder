@@ -1,4 +1,12 @@
 import { recoverOriginalApprovedPlan } from "./hosted-operator-approved-plan";
+import { isDeepStrictEqual } from "node:util";
+import {
+  retainAppDeliveryHistory,
+  ownedAppEnvironmentRows,
+  planOwnedAppEnvironmentCleanup,
+  checkpointOwnedAppEnvironmentCleanup,
+  checkpointActiveAppEnvironment,
+} from "./hosted-operator-app-delivery-history";
 import type { projectNormalActorRuntime } from "./hosted-operator-normal-actor-runtime-projection";
 import {
   createHostedOperatorConsentDiagnostic,
@@ -337,8 +345,11 @@ const handlePlanOperation = async (
           : { normalActorProgram: input.normalActorProgram }),
       }),
   );
+  const cleanupPrior = input.operation === "cleanup" ? await deps.store.read(context) : undefined;
   const plan = await observeOperatorPlanStage(context.target.sessionId, "plan_validation", () =>
-    hostedOperatorPlanSchema.parse(proposed),
+    hostedOperatorPlanSchema.parse(
+      planOwnedAppEnvironmentCleanup(proposed, cleanupPrior?.record.operator),
+    ),
   );
   const failed = {
     plan_action: plan.action !== input.operation,
@@ -481,7 +492,7 @@ const handlePlanOperation = async (
       if (sameAuthPreparation(record.operator.plan, plan)) {
         nextOperator.authPreparation = record.operator.authPreparation;
       }
-      nextOperator.deliveryCandidates = record.operator.deliveryCandidates;
+      Object.assign(nextOperator, retainAppDeliveryHistory(record.operator, nextOperator));
       nextOperator.gatewayDeliveryCandidates = record.operator.gatewayDeliveryCandidates;
       nextOperator.deliveredGatewayDeploymentId = record.operator.deliveredGatewayDeploymentId;
       if (record.operator.gatewayEnvironment !== undefined) {
@@ -507,9 +518,6 @@ const handlePlanOperation = async (
             priorEffect.resourceId === nextEffect.resourceId
           );
         });
-      }
-      if (record.operator.managedEnvironment !== undefined) {
-        nextOperator.managedEnvironment = record.operator.managedEnvironment;
       }
       const next = {
         ...record,
@@ -1197,29 +1205,58 @@ export const createProtectedHostedOperatorHandler = (deps: ProtectedHostedOperat
                   record = (
                     await ownedUpdate((value) => {
                       const currentOperator = requireOperator(value);
-                      const priorRows = currentOperator.managedEnvironment ?? [];
+                      const priorRows =
+                        plan.appEnvironmentCleanup === undefined
+                          ? (currentOperator.managedEnvironment ?? [])
+                          : ownedAppEnvironmentRows(currentOperator);
                       if (
                         managedEnvironment.some(
                           (row) =>
                             row.operationRef !== operationRef &&
-                            !priorRows.some(
-                              (prior) => JSON.stringify(prior) === JSON.stringify(row),
-                            ),
+                            !priorRows.some((prior) => isDeepStrictEqual(prior, row)),
                         )
                       ) {
                         throw new HostedOperatorError("resource_mismatch");
                       }
-                      return { ...value, operator: { ...currentOperator, managedEnvironment } };
+                      if (plan.appEnvironmentCleanup !== undefined) {
+                        if (
+                          managedEnvironment.some(
+                            (row) => !priorRows.some((prior) => isDeepStrictEqual(prior, row)),
+                          )
+                        ) {
+                          throw new HostedOperatorError("resource_mismatch");
+                        }
+                        return {
+                          ...value,
+                          operator: checkpointOwnedAppEnvironmentCleanup(
+                            currentOperator,
+                            managedEnvironment,
+                          ),
+                        };
+                      }
+                      return {
+                        ...value,
+                        operator: checkpointActiveAppEnvironment(
+                          currentOperator,
+                          managedEnvironment,
+                        ),
+                      };
                     })
                   ).record;
-                  effectInput.managedEnvironment = requireOperator(record).managedEnvironment;
+                  effectInput.managedEnvironment =
+                    plan.appEnvironmentCleanup === undefined
+                      ? requireOperator(record).managedEnvironment
+                      : ownedAppEnvironmentRows(requireOperator(record));
                 },
                 deliveryCandidates: requireOperator(record).deliveryCandidates,
                 effect,
                 fenceGeneration,
                 gatewayDeliveryCandidates: requireOperator(record).gatewayDeliveryCandidates,
                 gatewayEnvironmentRows: requireOperator(record).gatewayEnvironment,
-                managedEnvironment: requireOperator(record).managedEnvironment,
+                managedEnvironment:
+                  plan.appEnvironmentCleanup === undefined
+                    ? requireOperator(record).managedEnvironment
+                    : ownedAppEnvironmentRows(requireOperator(record)),
                 operationRef,
                 plan,
                 privateState: record.privateState,

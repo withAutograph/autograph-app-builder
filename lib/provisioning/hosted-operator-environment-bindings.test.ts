@@ -143,6 +143,7 @@ const fixture = (configurationId?: string | null) => {
   let journal: ManagedOperatorEnvironmentRow[] = [];
   let unknownPost = false;
   let failedRead = false;
+  let failedDeleteId: string | undefined;
   const assertCurrent = vi.fn(async () => {});
   const checkpointManagedEnvironment = vi.fn(
     async (next: readonly ManagedOperatorEnvironmentRow[]) => {
@@ -214,6 +215,9 @@ const fixture = (configurationId?: string | null) => {
       return Response.json(rows[index]);
     }
     if (method === "DELETE") {
+      if (rows[index]?.id === failedDeleteId) {
+        throw new Error("private unknown deletion");
+      }
       rows.splice(index, 1);
       return new Response(null, { status: 204 });
     }
@@ -246,6 +250,9 @@ const fixture = (configurationId?: string | null) => {
     readCredential,
     requests,
     rows,
+    setFailedDelete: (id: string) => {
+      failedDeleteId = id;
+    },
     setFailedRead: () => {
       failedRead = true;
     },
@@ -501,3 +508,88 @@ it.each([
     expect(f.requests.every((request) => request.method === "GET")).toBe(true);
   },
 );
+
+const historicalCleanupFixture = () => {
+  const f = fixture();
+  const operationRef = "00000000-0000-4000-8000-000000000001";
+  const saved = ["codex/old", "codex/new"].map((branch, index) => ({
+    branch,
+    comment: `App Builder protected operator ${operationRef}`,
+    id: `historical-${index}`,
+    key: "SPEND_REVIEW_DATABASE_URL",
+    operationRef,
+    projectId: target.projectId,
+  }));
+  f.rows.push(
+    ...saved.map((row) => ({
+      id: row.id,
+      key: row.key,
+      gitBranch: row.branch,
+      comment: row.comment,
+      target: ["preview"],
+      type: "encrypted",
+    })),
+    {
+      id: "other-branch",
+      key: saved[0].key,
+      gitBranch: "codex/unrelated",
+      comment: "another owner",
+      target: ["preview"],
+      type: "encrypted",
+    },
+  );
+  f.input.plan = hostedOperatorPlanSchema.parse({
+    ...plan,
+    action: "cleanup",
+    appEnvironmentCleanup: saved,
+    effects: [
+      { id: "revoke", kind: "revoke", description: "Revoke access" },
+      { id: "remove", kind: "remove-bindings", description: "Remove exact saved rows" },
+      {
+        id: "retire",
+        kind: "retire",
+        description: "Retire owned resources",
+      },
+    ],
+  });
+  f.input.effect = f.input.plan.effects.find((effect) => effect.kind === "remove-bindings")!;
+  f.input.managedEnvironment = saved;
+  return { ...f, saved };
+};
+it("cleans exact approved historical IDs across branches without touching unrelated rows", async () => {
+  const f = historicalCleanupFixture();
+  expect(await f.writer.remove(f.input, values)).toEqual({ rows: [] });
+  expect(f.rows.map((row) => row.id)).toEqual(["unrelated", "other-branch"]);
+  expect(f.input.managedEnvironment).toEqual([]);
+});
+it("retains unknown deletion facts after checkpointing only confirmed earlier removals", async () => {
+  const f = historicalCleanupFixture();
+  f.setFailedDelete(f.saved[1].id);
+  await expect(f.writer.remove(f.input, values)).rejects.toMatchObject({
+    code: "operator_unavailable",
+  });
+  expect(f.input.managedEnvironment).toEqual([f.saved[1]]);
+  expect(f.rows.some((row) => row.id === f.saved[1].id)).toBe(true);
+});
+it("refuses a changed provider ownership tag before historical deletion", async () => {
+  const f = historicalCleanupFixture();
+  f.rows.find((row) => row.id === f.saved[0].id)!.comment = "another owner";
+  await expect(f.writer.remove(f.input, values)).rejects.toMatchObject({
+    code: "operator_unavailable",
+  });
+  expect(f.requests.some((request) => request.method === "DELETE")).toBe(false);
+  expect(f.input.managedEnvironment).toEqual(f.saved);
+});
+
+it("accepts semantically identical approved row references with reordered fields", async () => {
+  const f = historicalCleanupFixture();
+  f.input.managedEnvironment = f.saved.map((row) => ({
+    projectId: row.projectId,
+    operationRef: row.operationRef,
+    key: row.key,
+    id: row.id,
+    comment: row.comment,
+    branch: row.branch,
+  }));
+  expect(await f.writer.remove(f.input, values)).toEqual({ rows: [] });
+});

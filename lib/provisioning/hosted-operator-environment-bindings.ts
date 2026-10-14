@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 /* oxlint-disable eslint/no-await-in-loop, sonarjs/expression-complexity, sonarjs/no-nested-functions, react-doctor/async-await-in-loop, react-doctor/js-cache-property-access -- Provider effects and durable checkpoints are intentionally sequential. */
 import { z } from "zod";
 import type { readActiveVercelInstallationToken } from "../integrations/postgres-vercel-installation";
@@ -184,8 +185,52 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
       await input.checkpointManagedEnvironment(rows.map(reference));
       await guard();
     };
+    const inspectCleanup = async () => {
+      const approved = input.plan.appEnvironmentCleanup;
+      if (
+        approved === undefined ||
+        input.plan.action !== "cleanup" ||
+        input.effect.kind !== "remove-bindings"
+      ) {
+        throw unavailable();
+      }
+      const known = input.managedEnvironment ?? [];
+      if (known.some((row) => !approved.some((allowed) => isDeepStrictEqual(allowed, row)))) {
+        throw unavailable();
+      }
+      const listed = await list();
+      return known.filter((row) => {
+        const actual = listed.find((item) => item.id === row.id);
+        if (!actual) {
+          return false;
+        }
+        if (
+          row.projectId !== target.projectId ||
+          actual.key !== row.key ||
+          actual.gitBranch !== row.branch ||
+          actual.comment !== row.comment ||
+          actual.type !== "encrypted" ||
+          actual.target.length !== 1 ||
+          actual.target[0] !== "preview" ||
+          (actual.configurationId !== undefined &&
+            actual.configurationId !== null &&
+            actual.configurationId !== "" &&
+            actual.configurationId !== target.installationId)
+        ) {
+          throw unavailable();
+        }
+        return true;
+      });
+    };
+    const checkpointCleanup = async (rows: ManagedOperatorEnvironmentRow[]) => {
+      await guard();
+      await input.checkpointManagedEnvironment(rows);
+      await guard();
+    };
     return {
       checkpoint,
+      checkpointCleanup,
+      inspectCleanup,
       comment,
       expected,
       guard,
@@ -268,6 +313,11 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
     > {
       try {
         const io = open(input, values);
+        if (input.plan.appEnvironmentCleanup !== undefined) {
+          const rows = await io.inspectCleanup();
+          await io.checkpointCleanup(rows);
+          return rows.length === 0 ? { status: "absent" } : { rows, status: "applied" };
+        }
         const rows = await io.inspect();
         if (rows.length === 0) {
           return { status: "absent" };
@@ -286,6 +336,26 @@ export const createHostedOperatorEnvironmentBindings = (deps: {
           throw unavailable();
         }
         const io = open(input, values);
+        if (input.plan.appEnvironmentCleanup !== undefined) {
+          let remaining = await io.inspectCleanup();
+          await io.checkpointCleanup(remaining);
+          for (const row of remaining) {
+            const current = await io.inspectCleanup();
+            if (!current.some((item) => item.id === row.id)) {
+              continue;
+            }
+            await io.request(
+              `/v9/projects/${encodeURIComponent(row.projectId)}/env/${encodeURIComponent(row.id)}`,
+              "DELETE",
+            );
+            remaining = await io.inspectCleanup();
+            if (remaining.some((item) => item.id === row.id)) {
+              throw unavailable();
+            }
+            await io.checkpointCleanup(remaining);
+          }
+          return { rows: remaining };
+        }
         let rows = await io.inspect(false);
         const known = input.managedEnvironment ?? [];
         if (rows.some((row) => !known.some((item) => item.id === row.id && item.key === row.key))) {
